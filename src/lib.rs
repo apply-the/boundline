@@ -1,4 +1,6 @@
 pub mod adapters;
+pub mod cli;
+pub mod demo;
 pub mod domain;
 pub mod orchestrator;
 pub mod registry;

@@ -1,11 +1,13 @@
 # synod
 
-Synod is a delivery orchestrator built on top of Canon. Its core job is to turn
-bounded engineering intent into working code through controlled, inspectable
-execution. Advanced strategy layers such as councils or provider-routing
-complexity may arrive later, but they are not the baseline identity of the system.
+Synod is a bounded delivery orchestrator. The current repository implements the
+core Rust orchestrator plus a local developer CLI for `doctor`, `demo`, `run`,
+and `inspect`, so contributors can exercise the runtime without reading the test
+suite first.
 
-Canon is not the brain. Canon is the governed ledger and contract engine that Synod uses to make runs auditable, traceable, and reproducible.
+Canon remains part of the longer-term architecture discussion below, but the
+currently implemented developer experience runs fully locally and does not call
+Canon at runtime.
 
 ## Separation
 
@@ -30,7 +32,7 @@ Current specs normally defer councils, provider abstraction complexity,
 distributed agent systems, long-term memory, UI or UX work, and deployment
 pipelines until they are explicitly reprioritized.
 
-## Architecture
+## Long-term Architecture
 
 ```mermaid
 flowchart TD
@@ -39,7 +41,7 @@ flowchart TD
 	C --> D[.canon/<br/>Runs, artifacts, evidence, decisions]
 ```
 
-## Runtime Flow
+## Long-term Runtime Flow
 
 1. Synod receives a task and selects strategy, agents, and providers.
 2. Synod opens a governed run in Canon with risk, zone, and ownership.
@@ -53,13 +55,14 @@ Canon stays stable as the contract and source of truth. Synod evolves quickly as
 
 ## Implemented Core
 
-The current repository implements the delivery orchestrator core as a Rust library crate.
+The current repository implements the delivery orchestrator core as a Rust library crate plus a local CLI binary.
 
 - `synod::Orchestrator`: runs one bounded task through a sequential execution loop.
 - `synod::StaticPlanner`: provides deterministic initial plans and queued replans for tests.
 - `synod::AgentRegistry` and `synod::ToolRegistry`: register named execution endpoints.
 - `synod::FileTraceStore`: persists execution traces under `<workspace>/.synod/traces/`.
 - `synod::TaskRunRequest` and `synod::TaskRunResponse`: define the run contract used by tests and future delivery flows.
+- `synod` CLI binary: exposes `doctor`, `demo`, `run`, and `inspect` over the existing core.
 
 The current implementation covers:
 
@@ -68,6 +71,15 @@ The current implementation covers:
 - bounded retries and bounded replanning
 - deterministic terminal states
 - persisted JSON traces for successful and non-successful runs
+
+## Developer CLI
+
+The local `synod` binary exposes `doctor`, `demo`, `run`, and `inspect` over
+the existing orchestrator core. It keeps the developer experience local,
+deterministic, and trace-backed under `<workspace>/.synod/traces/`.
+
+For the full command walkthrough and example flows, see
+[`specs/002-developer-ux-orchestrator/quickstart.md`](specs/002-developer-ux-orchestrator/quickstart.md).
 
 ## Local Validation
 
