@@ -1,0 +1,17 @@
+#[path = "contract/orchestrator_run.rs"]
+mod orchestrator_run;
+
+#[path = "contract/endpoint_execution.rs"]
+mod endpoint_execution;
+
+#[path = "contract/trace_record.rs"]
+mod trace_record;
+
+#[path = "contract/cli_command_contract.rs"]
+mod cli_command_contract;
+
+#[path = "contract/diagnostics_report_contract.rs"]
+mod diagnostics_report_contract;
+
+#[path = "contract/trace_summary_contract.rs"]
+mod trace_summary_contract;
