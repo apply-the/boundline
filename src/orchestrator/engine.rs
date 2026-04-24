@@ -506,6 +506,14 @@ mod tests {
 
             Ok(PathBuf::from(format!("/tmp/{}.json", trace.task_id)))
         }
+
+        fn load(&self, _path: &std::path::Path) -> Result<ExecutionTrace, TraceStoreError> {
+            Err(TraceStoreError::Read(Error::other("test trace store does not load traces")))
+        }
+
+        fn latest(&self) -> Result<Option<PathBuf>, TraceStoreError> {
+            Ok(None)
+        }
     }
 
     fn build_request(limits: RunLimits) -> TaskRunRequest {

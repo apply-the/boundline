@@ -15,3 +15,6 @@ mod planner_behaviors;
 
 #[path = "unit/task_context_state.rs"]
 mod task_context_state;
+
+#[path = "unit/cli_output.rs"]
+mod cli_output;

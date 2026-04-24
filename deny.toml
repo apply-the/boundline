@@ -1,0 +1,26 @@
+[graph]
+all-features = true
+
+[licenses]
+allow = [
+    "Apache-2.0",
+    "MIT",
+    "Unicode-3.0",
+]
+confidence-threshold = 0.93
+private = { ignore = true }
+
+[advisories]
+ignore = []
+version = 2
+yanked = "warn"
+
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"
+
+[sources]
+allow-git = []
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+unknown-git = "deny"
+unknown-registry = "deny"
