@@ -45,6 +45,10 @@ impl TaskContext {
             .map_err(|error| TaskContextError::InvalidRunLimits(error.to_string()))
     }
 
+    pub fn belongs_to_workspace(&self, workspace_ref: &str) -> bool {
+        self.workspace_ref == workspace_ref
+    }
+
     pub fn push_history_ref(&mut self, history_ref: impl Into<String>) {
         self.history_refs.push(history_ref.into());
     }

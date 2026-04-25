@@ -7,24 +7,25 @@ description: "Recommend the next bounded Synod action"
 Shared guidance: `assistant/README.md`
 
 ## Intent
-Recommend the next bounded Synod action after a run, failure, or inspection.
+Ask Synod for the next recommended session command.
 
 ## Required Context
-- `workspace_ref` or `trace_ref`
+- `workspace_ref`
 - Latest known outcome when already available
 
 ## Shell-Enabled Path
-If current evidence is incomplete and a workspace is available, run `cargo run --bin synod -- inspect --workspace <workspace>` once to gather the latest trace summary. Then recommend one next command.
+If the workspace is known, run `cargo run --bin synod -- next --workspace <workspace>` exactly once and use the reported recommendation.
 
 ## Chat-Only Path
-If shell execution is unavailable and evidence is missing, provide this exact copyable command:
+If shell execution is unavailable, provide this exact copyable command:
 
-`cargo run --bin synod -- inspect --workspace <workspace>`
+`cargo run --bin synod -- next --workspace <workspace>`
 
 Wait for pasted output and then recommend exactly one next command.
 
 ## Output Interpretation
-Summarize terminal status, recovery signals, blocking issues, and the single most useful next action.
+Summarize `latest_status`, `explanation`, and the CLI-reported `next_command`. Preserve `latest_trace_ref` when present so `/synod-inspect` can reuse it.
 
 ## Next-Step Routing
-Allowed follow-up commands: `/synod-run`, `/synod-step`, `/synod-status`, `/synod-inspect`, `/synod-start`.
+Prefer the CLI-reported `next_command`; if it points to inspect, route to `/synod-inspect`, and if the session is missing or invalid, route to `/synod-start`.
+Allowed follow-up commands: `/synod-step`, `/synod-inspect`, `/synod-status`, `/synod-plan`, `/synod-start`.

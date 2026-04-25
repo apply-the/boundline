@@ -3,13 +3,14 @@
 Shared guidance: `assistant/README.md`
 
 ## Intent
-Inspect a specific or latest Synod trace from chat and summarize the outcome without requiring raw trace-file reading.
+Inspect a specific or session-resolved Synod trace and summarize the outcome.
 
 ## Required Context
 - `trace_ref` or `workspace_ref`
+- Preserve any confirmed `latest_trace_ref` from prior turns
 
 ## Shell-Enabled Path
-If `trace_ref` is known, run `cargo run --bin synod -- inspect --trace <trace>`. Otherwise, if `workspace_ref` is known, run `cargo run --bin synod -- inspect --workspace <workspace>`.
+If `trace_ref` is known, run `cargo run --bin synod -- inspect --trace <trace>`. Otherwise, if `workspace_ref` is known, run `cargo run --bin synod -- inspect --workspace <workspace>`. Workspace-based inspect may reuse the active session's `latest_trace_ref` before falling back to the latest workspace trace.
 
 ## Chat-Only Path
 Ask only for the missing `trace_ref` or `workspace_ref`, then provide one exact copyable command:
@@ -20,10 +21,11 @@ or
 
 `cargo run --bin synod -- inspect --workspace <workspace>`
 
-Wait for pasted output before continuing. If trace reading fails, ask for a corrected trace reference or workspace and provide the replacement inspect command.
+Wait for pasted output before continuing. If workspace-based inspect reports a session error, route to `/synod-start`. If trace reading fails, ask for a corrected trace reference or workspace and provide the replacement inspect command.
 
 ## Output Interpretation
-Summarize terminal status, key step results, recovery signals, trace reference, and the most useful next command.
+Summarize `inspection_target`, `trace`, `terminal_status`, `terminal_reason`, and the CLI-reported `next_command`.
 
 ## Next-Step Routing
+If workspace-based inspect reports a session error, route to `/synod-start`. Otherwise prefer the CLI-reported `next_command`.
 Allowed follow-up commands: `/synod-next`, `/synod-run`, `/synod-step`, `/synod-status`, `/synod-start`.

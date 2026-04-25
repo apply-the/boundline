@@ -21,3 +21,12 @@ mod assistant_command_pack_contract;
 
 #[path = "contract/assistant_command_definition_contract.rs"]
 mod assistant_command_definition_contract;
+
+#[path = "contract/session_record_contract.rs"]
+mod session_record_contract;
+
+#[path = "contract/session_command_contract.rs"]
+mod session_command_contract;
+
+#[path = "contract/assistant_session_continuity_contract.rs"]
+mod assistant_session_continuity_contract;
