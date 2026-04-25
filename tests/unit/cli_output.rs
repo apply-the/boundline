@@ -1,19 +1,28 @@
 use std::path::PathBuf;
 
+use serde_json::Map;
+use synod::FileTraceStore;
+use synod::adapters::trace_store::TraceStore;
 use synod::cli::diagnostics::{DiagnosticsCheck, DiagnosticsReport, DiagnosticsStatus};
+use synod::cli::inspect::{
+    InspectCommandError, TraceSummaryError, execute_inspect, render_error, summarize_trace,
+};
 use synod::cli::output::{
-    CommandExitCode, command_name, render_diagnostics, render_trace_summary,
+    CommandExitCode, command_name, next_command_after_inspect, next_command_after_run,
+    render_diagnostics, render_inspect_failure, render_run_trace, render_trace_summary,
     validation_error_message,
 };
 use synod::cli::{
     CliValidationError, CommandExitStatus, CommandName, DeveloperCommand, DeveloperCommandSession,
 };
-use synod::domain::limits::TerminalCondition;
+use synod::domain::limits::{RunLimits, TerminalCondition};
 use synod::domain::step::{StepKind, StepStatus};
-use synod::domain::task::{TaskStatus, TerminalReason};
+use synod::domain::task::{TaskRunResponse, TaskStatus, TerminalReason};
+use synod::domain::task_context::TaskContext;
 use synod::domain::trace::{
-    TraceEventType, TraceRecoveryEvent, TraceStepSummary, TraceSummaryView,
+    ExecutionTrace, TraceEventType, TraceRecoveryEvent, TraceStepSummary, TraceSummaryView,
 };
+use uuid::Uuid;
 
 #[test]
 fn exit_codes_match_the_command_contract() {
@@ -92,6 +101,32 @@ fn diagnostics_renderer_lists_check_names_and_actions() {
 }
 
 #[test]
+fn next_command_helpers_match_assistant_routing_expectations() {
+    assert_eq!(next_command_after_run(TaskStatus::Succeeded), "/synod-status");
+    assert_eq!(next_command_after_run(TaskStatus::Failed), "/synod-next");
+    assert_eq!(next_command_after_inspect(TaskStatus::Succeeded), "/synod-next");
+}
+
+#[test]
+fn inspect_failure_renderer_exposes_correction_cues() {
+    let rendered = render_inspect_failure(
+        "explicit-trace",
+        Some("/tmp/missing-trace.json"),
+        None,
+        "failed to read the requested trace",
+        "cargo run --bin synod -- inspect --trace <trace>",
+    );
+
+    assert!(rendered.contains("inspect: trace read failure"));
+    assert!(rendered.contains("inspection_target: explicit-trace"));
+    assert!(rendered.contains("trace: /tmp/missing-trace.json"));
+    assert!(rendered.contains("next_command: /synod-inspect"));
+    assert!(
+        rendered.contains("corrected_command: cargo run --bin synod -- inspect --trace <trace>")
+    );
+}
+
+#[test]
 fn trace_summary_renderer_mentions_steps_recovery_and_terminal_reason() {
     let summary = TraceSummaryView {
         trace_ref: "/tmp/workspace/.synod/traces/task.json".to_string(),
@@ -126,12 +161,452 @@ fn trace_summary_renderer_mentions_steps_recovery_and_terminal_reason() {
         duration: Some(42),
     };
 
-    let rendered = render_trace_summary(&summary);
+    let rendered = render_trace_summary(
+        &summary,
+        "explicit-trace",
+        next_command_after_inspect(summary.terminal_status),
+    );
 
+    assert!(rendered.contains("inspection_target: explicit-trace"));
     assert!(rendered.contains("trace: /tmp/workspace/.synod/traces/task.json"));
     assert!(rendered.contains("step analyze (agent) succeeded [1 attempt(s)]"));
     assert!(rendered.contains("step code (agent) succeeded [2 attempt(s)]"));
     assert!(rendered.contains("retry: retrying step code within remaining retry budget"));
     assert!(rendered.contains("terminal_reason: goal satisfied after step verify"));
+    assert!(rendered.contains("next_command: /synod-next"));
     assert!(rendered.contains("duration_ms: 42"));
+}
+
+#[test]
+fn inspect_failure_renderer_includes_workspace_ref_when_provided() {
+    let rendered = render_inspect_failure(
+        "latest-workspace-trace",
+        None,
+        Some("/tmp/my-workspace"),
+        "failed to read the requested trace",
+        "cargo run --bin synod -- inspect --workspace <workspace>",
+    );
+
+    assert!(rendered.contains("inspect: trace read failure"));
+    assert!(rendered.contains("inspection_target: latest-workspace-trace"));
+    assert!(rendered.contains("workspace_ref: /tmp/my-workspace"));
+    assert!(rendered.contains("next_command: /synod-inspect"));
+    assert!(
+        rendered.contains(
+            "corrected_command: cargo run --bin synod -- inspect --workspace <workspace>"
+        )
+    );
+}
+
+#[test]
+fn render_error_with_missing_trace_reference_uses_explicit_trace_correction() {
+    let rendered = render_error(None, None, &InspectCommandError::MissingTraceReference);
+
+    assert!(rendered.contains("inspect: trace read failure"));
+    assert!(rendered.contains("terminal_reason: inspect requires --trace or --workspace"));
+    assert!(rendered.contains("next_command: /synod-inspect"));
+    assert!(rendered.contains("corrected_command: cargo run --bin synod -- inspect --trace"));
+}
+
+#[test]
+fn render_error_with_workspace_path_uses_workspace_correction_cues() {
+    let rendered = render_error(
+        None,
+        Some(std::path::Path::new("/tmp/my-workspace")),
+        &InspectCommandError::MissingLatestTrace,
+    );
+
+    assert!(rendered.contains("inspect: trace read failure"));
+    assert!(rendered.contains("inspection_target: latest-workspace-trace"));
+    assert!(rendered.contains("terminal_reason: failed to read the requested trace"));
+    assert!(rendered.contains("workspace_ref: /tmp/my-workspace"));
+    assert!(rendered.contains("next_command: /synod-inspect"));
+    assert!(
+        rendered.contains(
+            "corrected_command: cargo run --bin synod -- inspect --workspace <workspace>"
+        )
+    );
+}
+
+#[test]
+fn render_error_with_summary_failure_uses_summary_terminal_reason() {
+    let rendered = render_error(
+        Some(std::path::Path::new("/tmp/trace.json")),
+        None,
+        &InspectCommandError::Summary(TraceSummaryError::MissingTerminalStatus),
+    );
+
+    assert!(rendered.contains("inspect: trace read failure"));
+    assert!(rendered.contains("terminal_reason: failed to summarize the requested trace"));
+    assert!(rendered.contains("next_command: /synod-inspect"));
+}
+
+fn minimal_trace(task_id: &str) -> ExecutionTrace {
+    let mut trace = ExecutionTrace::new(task_id, "session-unit", "Unit test goal");
+    trace.terminal_status = Some(TaskStatus::Succeeded);
+    trace.terminal_reason = Some(TerminalReason::new(
+        TerminalCondition::GoalSatisfied,
+        "goal satisfied in unit test",
+        None,
+    ));
+    trace
+}
+
+fn minimal_response(status: TaskStatus, reason_msg: &str) -> TaskRunResponse {
+    TaskRunResponse {
+        task_id: "task-unit".to_string(),
+        terminal_status: status,
+        terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, reason_msg, None),
+        final_context: TaskContext::new(
+            "session-unit",
+            "/tmp/workspace",
+            RunLimits::default(),
+            Map::new(),
+        ),
+        plan_revision: 1,
+        trace_location: "/tmp/.synod/traces/task-unit.json".to_string(),
+    }
+}
+
+#[test]
+fn render_run_trace_includes_next_command_and_trace_fields() {
+    let response = minimal_response(TaskStatus::Succeeded, "goal satisfied");
+    let rendered = render_run_trace("run", None, &response, "/synod-status");
+
+    assert!(rendered.contains("next_command: /synod-status"), "{rendered}");
+    assert!(rendered.contains("terminal_status: succeeded"), "{rendered}");
+    assert!(rendered.contains("trace: /tmp/.synod/traces/task-unit.json"), "{rendered}");
+}
+
+#[test]
+fn render_run_trace_with_trace_events_includes_retry_and_replan_lines() {
+    use serde_json::json;
+    use synod::domain::trace::TraceEvent;
+
+    let mut trace = ExecutionTrace::new("task-events", "session", "Goal with events");
+    trace.terminal_status = Some(TaskStatus::Succeeded);
+    trace.terminal_reason =
+        Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None));
+    trace.events.push(TraceEvent {
+        event_id: "e1".to_string(),
+        event_type: TraceEventType::RetryScheduled,
+        step_id: Some("analyze".to_string()),
+        plan_revision: 0,
+        payload: json!({"reason": "transient error, retrying"}),
+        recorded_at: 0,
+    });
+    trace.events.push(TraceEvent {
+        event_id: "e2".to_string(),
+        event_type: TraceEventType::Replanned,
+        step_id: Some("analyze".to_string()),
+        plan_revision: 1,
+        payload: json!({"reason": "goal shifted, replanning"}),
+        recorded_at: 1,
+    });
+
+    let response = minimal_response(TaskStatus::Succeeded, "done");
+    let rendered = render_run_trace("run", Some(&trace), &response, "/synod-status");
+
+    assert!(rendered.contains("retry for analyze: transient error, retrying"), "{rendered}");
+    assert!(rendered.contains("replan after analyze: goal shifted, replanning"), "{rendered}");
+    assert!(rendered.contains("next_command: /synod-status"), "{rendered}");
+}
+
+#[test]
+fn execute_inspect_explicit_trace_covers_inspection_target_and_next_command() {
+    use std::fs;
+
+    let dir = std::env::temp_dir().join(format!("synod-unit-inspect-{}", Uuid::new_v4()));
+    fs::create_dir_all(&dir).unwrap();
+
+    let trace = minimal_trace("task-explicit");
+    let store = FileTraceStore::new(&dir);
+    let trace_path = store.persist(&trace).unwrap();
+
+    let report = execute_inspect(Some(&trace_path), None).unwrap();
+    let output = &report.terminal_output;
+
+    assert!(output.contains("inspection_target: explicit-trace"), "{output}");
+    assert!(output.contains("next_command: /synod-next"), "{output}");
+}
+
+#[test]
+fn execute_inspect_workspace_covers_latest_workspace_trace_target() {
+    use std::fs;
+
+    let workspace = std::env::temp_dir().join(format!("synod-unit-ws-{}", Uuid::new_v4()));
+    fs::create_dir_all(&workspace).unwrap();
+
+    let trace = minimal_trace("task-workspace");
+    let store = FileTraceStore::for_workspace(&workspace);
+    store.persist(&trace).unwrap();
+
+    let report = execute_inspect(None, Some(&workspace)).unwrap();
+    let output = &report.terminal_output;
+
+    assert!(output.contains("inspection_target: latest-workspace-trace"), "{output}");
+    assert!(output.contains("next_command: /synod-next"), "{output}");
+}
+
+#[test]
+fn summarize_trace_handles_tool_and_decision_step_kinds() {
+    use serde_json::json;
+    use synod::domain::trace::TraceEvent;
+
+    let mut trace = ExecutionTrace::new("task-steps", "session", "Steps test");
+    trace.terminal_status = Some(TaskStatus::Succeeded);
+    trace.terminal_reason =
+        Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "all steps done", None));
+    trace.events.push(TraceEvent {
+        event_id: "e1".to_string(),
+        event_type: TraceEventType::StepStarted,
+        step_id: Some("fetch".to_string()),
+        plan_revision: 0,
+        payload: json!({"step_kind": "tool"}),
+        recorded_at: 0,
+    });
+    trace.events.push(TraceEvent {
+        event_id: "e2".to_string(),
+        event_type: TraceEventType::StepCompleted,
+        step_id: Some("fetch".to_string()),
+        plan_revision: 0,
+        payload: json!({"status": "succeeded"}),
+        recorded_at: 1,
+    });
+    trace.events.push(TraceEvent {
+        event_id: "e3".to_string(),
+        event_type: TraceEventType::StepStarted,
+        step_id: Some("decide".to_string()),
+        plan_revision: 0,
+        payload: json!({"step_kind": "decision"}),
+        recorded_at: 2,
+    });
+    trace.events.push(TraceEvent {
+        event_id: "e4".to_string(),
+        event_type: TraceEventType::StepCompleted,
+        step_id: Some("decide".to_string()),
+        plan_revision: 0,
+        payload: json!({"status": "failed"}),
+        recorded_at: 3,
+    });
+
+    let summary = summarize_trace(PathBuf::from("/tmp/trace.json"), &trace).unwrap();
+    let fetch = summary.executed_steps.iter().find(|s| s.step_id == "fetch").unwrap();
+    let decide = summary.executed_steps.iter().find(|s| s.step_id == "decide").unwrap();
+
+    assert_eq!(fetch.step_kind, StepKind::Tool);
+    assert_eq!(decide.step_kind, StepKind::Decision);
+    assert_eq!(decide.final_status, StepStatus::Failed);
+}
+
+#[test]
+fn summarize_trace_with_unknown_step_status_yields_running_final_status_and_completed_headline() {
+    use serde_json::json;
+    use synod::domain::trace::TraceEvent;
+
+    let mut trace = ExecutionTrace::new("task-unk", "session", "Unknown status test");
+    trace.terminal_status = Some(TaskStatus::Succeeded);
+    trace.terminal_reason =
+        Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None));
+    trace.events.push(TraceEvent {
+        event_id: "e1".to_string(),
+        event_type: TraceEventType::StepStarted,
+        step_id: Some("step1".to_string()),
+        plan_revision: 0,
+        payload: json!({"step_kind": "agent"}),
+        recorded_at: 0,
+    });
+    trace.events.push(TraceEvent {
+        event_id: "e2".to_string(),
+        event_type: TraceEventType::StepCompleted,
+        step_id: Some("step1".to_string()),
+        plan_revision: 0,
+        payload: json!({"status": "unknown_status"}),
+        recorded_at: 1,
+    });
+
+    let summary = summarize_trace(PathBuf::from("/tmp/trace.json"), &trace).unwrap();
+    let step = &summary.executed_steps[0];
+
+    assert_eq!(step.final_status, StepStatus::Running);
+    assert_eq!(step.headline, "completed");
+}
+
+#[test]
+fn execute_inspect_with_no_args_returns_missing_trace_reference_error() {
+    let result = execute_inspect(None, None);
+    assert!(matches!(result, Err(InspectCommandError::MissingTraceReference)), "{result:?}");
+}
+
+#[test]
+fn execute_inspect_with_empty_workspace_returns_missing_latest_trace_error() {
+    use std::fs;
+    let workspace = std::env::temp_dir().join(format!("synod-unit-empty-{}", Uuid::new_v4()));
+    fs::create_dir_all(&workspace).unwrap();
+
+    let result = execute_inspect(None, Some(&workspace));
+    assert!(matches!(result, Err(InspectCommandError::MissingLatestTrace)), "{result:?}");
+}
+
+#[test]
+fn summarize_trace_errors_on_unknown_step_kind() {
+    use serde_json::json;
+    use synod::domain::trace::TraceEvent;
+
+    let mut trace = ExecutionTrace::new("task-badkind", "session", "Bad kind test");
+    trace.terminal_status = Some(TaskStatus::Succeeded);
+    trace.terminal_reason =
+        Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None));
+    trace.events.push(TraceEvent {
+        event_id: "e1".to_string(),
+        event_type: TraceEventType::StepStarted,
+        step_id: Some("step1".to_string()),
+        plan_revision: 0,
+        payload: json!({"step_kind": "invalid_kind"}),
+        recorded_at: 0,
+    });
+
+    let result = summarize_trace(PathBuf::from("/tmp/trace.json"), &trace);
+    assert!(matches!(result, Err(TraceSummaryError::UnknownStepKind(_))), "{result:?}");
+}
+
+#[test]
+fn summarize_trace_errors_when_step_kind_payload_is_missing() {
+    use serde_json::json;
+    use synod::domain::trace::TraceEvent;
+
+    let mut trace = ExecutionTrace::new("task-nokind", "session", "Missing kind test");
+    trace.terminal_status = Some(TaskStatus::Succeeded);
+    trace.terminal_reason =
+        Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None));
+    trace.events.push(TraceEvent {
+        event_id: "e1".to_string(),
+        event_type: TraceEventType::StepStarted,
+        step_id: Some("step1".to_string()),
+        plan_revision: 0,
+        payload: json!({}),
+        recorded_at: 0,
+    });
+
+    let result = summarize_trace(PathBuf::from("/tmp/trace.json"), &trace);
+    assert!(matches!(result, Err(TraceSummaryError::MissingStepKind(_))), "{result:?}");
+}
+
+#[test]
+fn unimplemented_message_formats_the_command_name() {
+    use synod::cli::output::unimplemented_message;
+
+    let msg = unimplemented_message(&DeveloperCommand::Doctor { workspace: PathBuf::from("/tmp") });
+    assert_eq!(msg, "`doctor` is not implemented yet");
+}
+
+#[test]
+fn command_names_render_for_all_four_subcommands() {
+    assert_eq!(
+        command_name(&DeveloperCommand::Doctor { workspace: PathBuf::from("/tmp") }),
+        "doctor"
+    );
+    assert_eq!(
+        command_name(&DeveloperCommand::Run {
+            workspace: PathBuf::from("/tmp"),
+            goal: "x".to_string(),
+        }),
+        "run"
+    );
+    assert_eq!(
+        command_name(&DeveloperCommand::Inspect { trace: None, workspace: None }),
+        "inspect"
+    );
+}
+
+#[test]
+fn render_trace_summary_handles_all_terminal_status_variants() {
+    let statuses = [
+        (TaskStatus::Planned, "planned"),
+        (TaskStatus::Running, "running"),
+        (TaskStatus::Exhausted, "exhausted"),
+        (TaskStatus::Aborted, "aborted"),
+        (TaskStatus::Failed, "failed"),
+    ];
+
+    for (status, expected) in statuses {
+        let summary = TraceSummaryView {
+            trace_ref: "/tmp/trace.json".to_string(),
+            goal: "test".to_string(),
+            executed_steps: vec![],
+            recovery_events: vec![],
+            terminal_status: status,
+            terminal_reason: TerminalReason::new(
+                TerminalCondition::GoalSatisfied,
+                "reason text",
+                None,
+            ),
+            duration: None,
+        };
+        let rendered = render_trace_summary(&summary, "explicit-trace", "/synod-next");
+        assert!(
+            rendered.contains(&format!("terminal_status: {expected}")),
+            "status {status:?}: {rendered}"
+        );
+    }
+}
+
+#[test]
+fn render_trace_summary_covers_replan_recovery_label_and_decision_step_kind() {
+    let summary = TraceSummaryView {
+        trace_ref: "/tmp/trace.json".to_string(),
+        goal: "test".to_string(),
+        executed_steps: vec![TraceStepSummary {
+            step_id: "decide".to_string(),
+            step_kind: StepKind::Decision,
+            attempts: 1,
+            final_status: StepStatus::Succeeded,
+            headline: "succeeded after 1 attempt(s)".to_string(),
+        }],
+        recovery_events: vec![TraceRecoveryEvent {
+            event_type: TraceEventType::Replanned,
+            trigger: "goal shifted".to_string(),
+            related_step_id: None,
+        }],
+        terminal_status: TaskStatus::Succeeded,
+        terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None),
+        duration: None,
+    };
+
+    let rendered = render_trace_summary(&summary, "latest-workspace-trace", "/synod-next");
+
+    assert!(rendered.contains("step decide (decision)"), "{rendered}");
+    assert!(rendered.contains("replan: goal shifted"), "{rendered}");
+}
+
+#[test]
+fn render_trace_summary_covers_pending_running_and_skipped_step_statuses() {
+    let statuses = [
+        (StepStatus::Pending, "pending"),
+        (StepStatus::Running, "running"),
+        (StepStatus::Skipped, "skipped"),
+    ];
+
+    for (status, expected) in statuses {
+        let summary = TraceSummaryView {
+            trace_ref: "/tmp/trace.json".to_string(),
+            goal: "test".to_string(),
+            executed_steps: vec![TraceStepSummary {
+                step_id: "step1".to_string(),
+                step_kind: StepKind::Agent,
+                attempts: 1,
+                final_status: status,
+                headline: format!("{expected} after 1 attempt(s)"),
+            }],
+            recovery_events: vec![],
+            terminal_status: TaskStatus::Succeeded,
+            terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None),
+            duration: None,
+        };
+        let rendered = render_trace_summary(&summary, "explicit-trace", "/synod-next");
+        assert!(
+            rendered.contains(&format!("(agent) {expected} [1")),
+            "status {status:?}: {rendered}"
+        );
+    }
 }

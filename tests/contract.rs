@@ -15,3 +15,9 @@ mod diagnostics_report_contract;
 
 #[path = "contract/trace_summary_contract.rs"]
 mod trace_summary_contract;
+
+#[path = "contract/assistant_command_pack_contract.rs"]
+mod assistant_command_pack_contract;
+
+#[path = "contract/assistant_command_definition_contract.rs"]
+mod assistant_command_definition_contract;

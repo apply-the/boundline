@@ -167,7 +167,7 @@ mod tests {
         let workspace = temp_workspace();
         fs::write(
             workspace.join("Cargo.toml"),
-            "[package]\nname = \"synod\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+            "[package]\nname = \"synod\"\nversion = \"0.3.0\"\nedition = \"2024\"\n",
         )
         .unwrap();
         let report = diagnose_workspace(&workspace);
