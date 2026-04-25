@@ -18,3 +18,9 @@ mod cli_diagnostics;
 
 #[path = "integration/cli_trace_inspection.rs"]
 mod cli_trace_inspection;
+
+#[path = "integration/assistant_shell_enabled_flow.rs"]
+mod assistant_shell_enabled_flow;
+
+#[path = "integration/assistant_chat_fallback.rs"]
+mod assistant_chat_fallback;

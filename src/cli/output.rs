@@ -53,7 +53,10 @@ pub fn validation_error_message(error: &CliValidationError) -> String {
 
 pub fn render_diagnostics(report: &DiagnosticsReport) -> String {
     let readiness = if report.ready { "ready" } else { "not ready" };
-    let mut lines = vec![format!("doctor: {readiness} for workspace {}", report.workspace_ref)];
+    let mut lines = vec![
+        format!("doctor: {readiness} for workspace {}", report.workspace_ref),
+        format!("assistant_hint: Diagnostic output format is optimized for chat parsing."),
+    ];
 
     for check in &report.checks {
         let status = match check.status {
@@ -77,6 +80,7 @@ pub fn render_run_trace(
     command_name: &str,
     trace: Option<&ExecutionTrace>,
     response: &TaskRunResponse,
+    next_command: &str,
 ) -> String {
     let mut lines = vec![format!("{command_name}: {}", response.terminal_reason.message)];
 
@@ -123,12 +127,20 @@ pub fn render_run_trace(
     lines.push(format!("terminal_status: {}", task_status_text(response.terminal_status)));
     lines.push(format!("terminal_reason: {}", response.terminal_reason.message));
     lines.push(format!("trace: {}", response.trace_location));
+    lines.push(format!("next_command: {next_command}"));
     lines.join("\n")
 }
 
-pub fn render_trace_summary(summary: &TraceSummaryView) -> String {
-    let mut lines =
-        vec![format!("trace: {}", summary.trace_ref), format!("goal: {}", summary.goal)];
+pub fn render_trace_summary(
+    summary: &TraceSummaryView,
+    inspection_target: &str,
+    next_command: &str,
+) -> String {
+    let mut lines = vec![
+        format!("inspection_target: {inspection_target}"),
+        format!("trace: {}", summary.trace_ref),
+        format!("goal: {}", summary.goal),
+    ];
 
     for step in &summary.executed_steps {
         lines.push(format!(
@@ -151,12 +163,54 @@ pub fn render_trace_summary(summary: &TraceSummaryView) -> String {
 
     lines.push(format!("terminal_status: {}", task_status_text(summary.terminal_status)));
     lines.push(format!("terminal_reason: {}", summary.terminal_reason.message));
+    lines.push(format!("next_command: {next_command}"));
 
     if let Some(duration) = summary.duration {
         lines.push(format!("duration_ms: {duration}"));
     }
 
     lines.join("\n")
+}
+
+pub fn render_inspect_failure(
+    inspection_target: &str,
+    trace_ref: Option<&str>,
+    workspace_ref: Option<&str>,
+    terminal_reason: &str,
+    corrected_command: &str,
+) -> String {
+    let mut lines = vec![
+        "inspect: trace read failure".to_string(),
+        format!("inspection_target: {inspection_target}"),
+        format!("terminal_reason: {terminal_reason}"),
+    ];
+
+    if let Some(trace_ref) = trace_ref {
+        lines.push(format!("trace: {trace_ref}"));
+    }
+
+    if let Some(workspace_ref) = workspace_ref {
+        lines.push(format!("workspace_ref: {workspace_ref}"));
+    }
+
+    lines.push("next_command: /synod-inspect".to_string());
+    lines.push(format!("corrected_command: {corrected_command}"));
+    lines.join("\n")
+}
+
+pub const fn next_command_after_run(status: TaskStatus) -> &'static str {
+    match status {
+        TaskStatus::Succeeded => "/synod-status",
+        TaskStatus::Planned
+        | TaskStatus::Running
+        | TaskStatus::Failed
+        | TaskStatus::Exhausted
+        | TaskStatus::Aborted => "/synod-next",
+    }
+}
+
+pub const fn next_command_after_inspect(_: TaskStatus) -> &'static str {
+    "/synod-next"
 }
 
 fn task_status_text(status: TaskStatus) -> &'static str {

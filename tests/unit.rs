@@ -18,3 +18,6 @@ mod task_context_state;
 
 #[path = "unit/cli_output.rs"]
 mod cli_output;
+
+#[path = "unit/assistant_assets.rs"]
+mod assistant_assets;

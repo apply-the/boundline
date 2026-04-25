@@ -1,0 +1,212 @@
+use std::fs;
+use std::path::{Path, PathBuf};
+
+const REQUIRED_SECTIONS: &[&str] = &[
+    "## Intent",
+    "## Required Context",
+    "## Shell-Enabled Path",
+    "## Chat-Only Path",
+    "## Output Interpretation",
+    "## Next-Step Routing",
+];
+
+#[test]
+fn test_start_and_plan_definition_sections_and_backend_mappings() {
+    let assets = [
+        (
+            asset_path("assistant/claude/commands/synod-start.md"),
+            &["cargo run --bin synod -- doctor --workspace <workspace>", "/synod-run"][..],
+        ),
+        (
+            asset_path("assistant/codex/commands/synod-start.md"),
+            &["cargo run --bin synod -- doctor --workspace <workspace>", "/synod-run"][..],
+        ),
+        (
+            asset_path("assistant/copilot/prompts/synod-start.prompt.md"),
+            &["cargo run --bin synod -- doctor --workspace <workspace>", "/synod-run"][..],
+        ),
+        (
+            asset_path("assistant/claude/commands/synod-plan.md"),
+            &["No direct CLI invocation is required", "/synod-run"][..],
+        ),
+        (
+            asset_path("assistant/codex/commands/synod-plan.md"),
+            &["No direct CLI invocation is required", "/synod-run"][..],
+        ),
+        (
+            asset_path("assistant/copilot/prompts/synod-plan.prompt.md"),
+            &["No direct CLI invocation is required", "/synod-run"][..],
+        ),
+    ];
+
+    for (path, snippets) in assets {
+        let content = read_asset(&path);
+        assert_required_sections(&path, &content);
+        assert_required_snippets(&path, &content, snippets);
+    }
+}
+
+#[test]
+fn test_step_run_status_and_next_definition_sections_and_backend_mappings() {
+    let assets = [
+        (
+            asset_path("assistant/claude/commands/synod-step.md"),
+            &[
+                "No direct CLI invocation is required",
+                "cargo run --bin synod -- inspect --workspace <workspace>",
+                "/synod-status",
+                "/synod-next",
+            ][..],
+        ),
+        (
+            asset_path("assistant/codex/commands/synod-step.md"),
+            &[
+                "No direct CLI invocation is required",
+                "cargo run --bin synod -- inspect --workspace <workspace>",
+                "/synod-status",
+                "/synod-next",
+            ][..],
+        ),
+        (
+            asset_path("assistant/copilot/prompts/synod-step.prompt.md"),
+            &[
+                "No direct CLI invocation is required",
+                "cargo run --bin synod -- inspect --workspace <workspace>",
+                "/synod-status",
+                "/synod-next",
+            ][..],
+        ),
+        (
+            asset_path("assistant/claude/commands/synod-run.md"),
+            &[
+                "cargo run --bin synod -- run --workspace <workspace> --goal \"<goal>\"",
+                "/synod-next",
+            ][..],
+        ),
+        (
+            asset_path("assistant/codex/commands/synod-run.md"),
+            &[
+                "cargo run --bin synod -- run --workspace <workspace> --goal \"<goal>\"",
+                "/synod-next",
+            ][..],
+        ),
+        (
+            asset_path("assistant/copilot/prompts/synod-run.prompt.md"),
+            &[
+                "cargo run --bin synod -- run --workspace <workspace> --goal \"<goal>\"",
+                "/synod-next",
+            ][..],
+        ),
+        (
+            asset_path("assistant/claude/commands/synod-status.md"),
+            &["cargo run --bin synod -- inspect --workspace <workspace>", "/synod-next"][..],
+        ),
+        (
+            asset_path("assistant/codex/commands/synod-status.md"),
+            &["cargo run --bin synod -- inspect --workspace <workspace>", "/synod-next"][..],
+        ),
+        (
+            asset_path("assistant/copilot/prompts/synod-status.prompt.md"),
+            &["cargo run --bin synod -- inspect --workspace <workspace>", "/synod-next"][..],
+        ),
+        (
+            asset_path("assistant/claude/commands/synod-next.md"),
+            &[
+                "cargo run --bin synod -- inspect --workspace <workspace>",
+                "/synod-run",
+                "/synod-step",
+            ][..],
+        ),
+        (
+            asset_path("assistant/codex/commands/synod-next.md"),
+            &[
+                "cargo run --bin synod -- inspect --workspace <workspace>",
+                "/synod-run",
+                "/synod-step",
+            ][..],
+        ),
+        (
+            asset_path("assistant/copilot/prompts/synod-next.prompt.md"),
+            &[
+                "cargo run --bin synod -- inspect --workspace <workspace>",
+                "/synod-run",
+                "/synod-step",
+            ][..],
+        ),
+    ];
+
+    for (path, snippets) in assets {
+        let content = read_asset(&path);
+        assert_required_sections(&path, &content);
+        assert_required_snippets(&path, &content, snippets);
+    }
+}
+
+#[test]
+fn test_inspect_definition_sections_and_trace_read_failure_expectations() {
+    let assets = [
+        (
+            asset_path("assistant/claude/commands/synod-inspect.md"),
+            &[
+                "cargo run --bin synod -- inspect --trace <trace>",
+                "cargo run --bin synod -- inspect --workspace <workspace>",
+                "trace reading fails",
+                "/synod-next",
+            ][..],
+        ),
+        (
+            asset_path("assistant/codex/commands/synod-inspect.md"),
+            &[
+                "cargo run --bin synod -- inspect --trace <trace>",
+                "cargo run --bin synod -- inspect --workspace <workspace>",
+                "trace reading fails",
+                "/synod-next",
+            ][..],
+        ),
+        (
+            asset_path("assistant/copilot/prompts/synod-inspect.prompt.md"),
+            &[
+                "cargo run --bin synod -- inspect --trace <trace>",
+                "cargo run --bin synod -- inspect --workspace <workspace>",
+                "trace reading fails",
+                "/synod-next",
+            ][..],
+        ),
+    ];
+
+    for (path, snippets) in assets {
+        let content = read_asset(&path);
+        assert_required_sections(&path, &content);
+        assert_required_snippets(&path, &content, snippets);
+    }
+}
+
+fn asset_path(relative_path: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join(relative_path)
+}
+
+fn read_asset(path: &Path) -> String {
+    fs::read_to_string(path).unwrap_or_else(|error| {
+        panic!("failed to read assistant asset {}: {error}", path.display())
+    })
+}
+
+fn assert_required_sections(path: &Path, content: &str) {
+    for section in REQUIRED_SECTIONS {
+        assert!(
+            content.contains(section),
+            "assistant asset {} is missing required section {section}",
+            path.display()
+        );
+    }
+}
+
+fn assert_required_snippets(path: &Path, content: &str, snippets: &[&str]) {
+    for snippet in snippets {
+        assert!(
+            content.contains(snippet),
+            "assistant asset {} is missing required mapping snippet {snippet}",
+            path.display()
+        );
+    }
+}
