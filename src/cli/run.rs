@@ -7,6 +7,7 @@ use crate::cli::CommandExitStatus;
 use crate::cli::output;
 use crate::demo::endpoints::{DemoRuntimeError, build_demo_runtime};
 use crate::demo::profile::DemoRunProfile;
+use crate::demo::workspace::{DemoWorkspaceError, reset_demo_workspace};
 use crate::domain::task::TaskStatus;
 use crate::orchestrator::engine::{Orchestrator, OrchestratorError};
 
@@ -26,6 +27,20 @@ pub fn execute_custom_run(
     goal: impl Into<String>,
 ) -> Result<RunCommandReport, RunCommandError> {
     execute_profile("run", DemoRunProfile::default_run(goal), workspace)
+}
+
+/// Run the test-fix loop demo: seed an isolated demo workspace under `root`,
+/// drive `analyze → code → verify` to a passing state through the existing
+/// orchestrator, and return the rendered output plus trace path.
+pub fn execute_run_demo(workspace_root: &Path) -> Result<RunCommandReport, RunCommandError> {
+    let workspace = reset_demo_workspace(workspace_root)?;
+    let profile = DemoRunProfile::test_fix_loop(&workspace);
+    let mut report = execute_profile("run-demo", profile, &workspace.root)?;
+    report.terminal_output.push('\n');
+    report
+        .terminal_output
+        .push_str(&format!("final source file: {}", workspace.target_file.display()));
+    Ok(report)
 }
 
 fn execute_profile(
@@ -68,4 +83,6 @@ pub enum RunCommandError {
     DemoRuntime(#[from] DemoRuntimeError),
     #[error("failed to run the orchestrator demo: {0}")]
     Orchestrator(#[from] OrchestratorError),
+    #[error("failed to seed the demo workspace: {0}")]
+    DemoWorkspace(#[from] DemoWorkspaceError),
 }

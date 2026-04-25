@@ -47,6 +47,7 @@ pub fn command_name(command: &DeveloperCommand) -> &'static str {
         DeveloperCommand::Plan { .. } => "plan",
         DeveloperCommand::Step { .. } => "step",
         DeveloperCommand::Demo { .. } => "demo",
+        DeveloperCommand::RunDemo { .. } => "run-demo",
         DeveloperCommand::Run { .. } => "run",
         DeveloperCommand::Inspect { .. } => "inspect",
         DeveloperCommand::Status { .. } => "status",

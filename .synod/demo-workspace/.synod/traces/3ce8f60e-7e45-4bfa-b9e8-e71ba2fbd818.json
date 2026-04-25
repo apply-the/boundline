@@ -1,0 +1,336 @@
+{
+  "task_id": "3ce8f60e-7e45-4bfa-b9e8-e71ba2fbd818",
+  "session_id": "run-demo-1777130017787",
+  "goal": "Fix the seeded failing test in the demo workspace",
+  "started_at": 1777130017787,
+  "ended_at": 1777130017792,
+  "terminal_status": "succeeded",
+  "terminal_reason": {
+    "condition": "goal_satisfied",
+    "message": "goal satisfied after step verify#replan-1",
+    "details": {
+      "step_id": "verify#replan-1"
+    }
+  },
+  "events": [
+    {
+      "event_id": "3e20c5dd-6761-4c94-b8b3-8c3b9d65d145",
+      "event_type": "task_started",
+      "step_id": null,
+      "plan_revision": 0,
+      "payload": {
+        "goal": "Fix the seeded failing test in the demo workspace",
+        "input": {
+          "mode": "test_fix_loop",
+          "workspace_root": "/Users/rt/workspace/synod/.synod/demo-workspace"
+        },
+        "limits": {
+          "max_replans": 1,
+          "max_retries": 1,
+          "max_steps": 8,
+          "terminal_precedence": [
+            "goal_satisfied",
+            "unrecoverable_error",
+            "task_not_credible",
+            "retry_budget_exhausted",
+            "replan_budget_exhausted",
+            "step_limit_exceeded",
+            "no_credible_next_step"
+          ]
+        }
+      },
+      "recorded_at": 1777130017787
+    },
+    {
+      "event_id": "975184f2-0f64-4c67-881f-484cd64d1fff",
+      "event_type": "step_started",
+      "step_id": "analyze",
+      "plan_revision": 0,
+      "payload": {
+        "attempt_number": 1,
+        "input": {
+          "goal": "Fix the seeded failing test in the demo workspace",
+          "phase": "analyze"
+        },
+        "step_kind": "agent"
+      },
+      "recorded_at": 1777130017787
+    },
+    {
+      "event_id": "bcc74c2f-bf77-41a3-8851-aa4c31895171",
+      "event_type": "step_completed",
+      "step_id": "analyze",
+      "plan_revision": 0,
+      "payload": {
+        "attempt_id": "594e7b54-c6f3-455e-b2cc-4ef90e273b65",
+        "evidence": null,
+        "output": {
+          "active_step": "analyze",
+          "analysis": "analyzed Fix the seeded failing test in the demo workspace",
+          "ready_for_code": true
+        },
+        "status": "succeeded"
+      },
+      "recorded_at": 1777130017787
+    },
+    {
+      "event_id": "dbf05f1d-8328-48a0-9050-6674628c3e14",
+      "event_type": "step_started",
+      "step_id": "code",
+      "plan_revision": 0,
+      "payload": {
+        "attempt_number": 1,
+        "input": {
+          "fixed_content": "//! Seeded partially-fixed module for the synod test-fix loop demo.\n\n// TODO-BUG: returns 1 instead of 0\npub fn answer() -> i32 {\n    // attempted partial fix; bug marker still present so tester will replan\n    1\n}\n",
+          "force_retry": true,
+          "goal": "Fix the seeded failing test in the demo workspace",
+          "phase": "code",
+          "target_file": "/Users/rt/workspace/synod/.synod/demo-workspace/src/buggy.rs"
+        },
+        "step_kind": "agent"
+      },
+      "recorded_at": 1777130017788
+    },
+    {
+      "event_id": "6a29f17c-2712-4d1d-8d0f-9b666c915ee5",
+      "event_type": "step_completed",
+      "step_id": "code",
+      "plan_revision": 0,
+      "payload": {
+        "attempt_id": "9619b69d-013b-47af-8b1b-74329cc220cd",
+        "error": {
+          "code": "deterministic_retry",
+          "message": "built-in demo intentionally triggers one retry before patch application"
+        },
+        "evidence": {
+          "attempts": 1,
+          "step_id": "code"
+        },
+        "recoverability": "retryable",
+        "status": "failed"
+      },
+      "recorded_at": 1777130017788
+    },
+    {
+      "event_id": "63c825d6-cd79-47c6-86b9-106801d233b1",
+      "event_type": "retry_scheduled",
+      "step_id": "code",
+      "plan_revision": 0,
+      "payload": {
+        "reason": "retrying step code within remaining retry budget",
+        "retry_count": 1
+      },
+      "recorded_at": 1777130017788
+    },
+    {
+      "event_id": "23190eef-59f0-4485-8792-7e143265c8fb",
+      "event_type": "step_started",
+      "step_id": "code",
+      "plan_revision": 0,
+      "payload": {
+        "attempt_number": 2,
+        "input": {
+          "fixed_content": "//! Seeded partially-fixed module for the synod test-fix loop demo.\n\n// TODO-BUG: returns 1 instead of 0\npub fn answer() -> i32 {\n    // attempted partial fix; bug marker still present so tester will replan\n    1\n}\n",
+          "force_retry": true,
+          "goal": "Fix the seeded failing test in the demo workspace",
+          "phase": "code",
+          "target_file": "/Users/rt/workspace/synod/.synod/demo-workspace/src/buggy.rs"
+        },
+        "step_kind": "agent"
+      },
+      "recorded_at": 1777130017788
+    },
+    {
+      "event_id": "57cdf783-8817-43ad-a602-88b018d5bbd2",
+      "event_type": "step_completed",
+      "step_id": "code",
+      "plan_revision": 0,
+      "payload": {
+        "attempt_id": "193f5cef-39a1-44c3-a1b1-1953a9d24525",
+        "evidence": null,
+        "output": {
+          "active_step": "code",
+          "patch_applied": true,
+          "updated_file": "/Users/rt/workspace/synod/.synod/demo-workspace/src/buggy.rs"
+        },
+        "status": "succeeded"
+      },
+      "recorded_at": 1777130017788
+    },
+    {
+      "event_id": "f1d8e9bd-113b-4689-ab32-fa6238419ed9",
+      "event_type": "step_started",
+      "step_id": "verify",
+      "plan_revision": 0,
+      "payload": {
+        "attempt_number": 1,
+        "input": {
+          "bug_marker": "// TODO-BUG: returns 1 instead of 0",
+          "force_replan": true,
+          "goal": "Fix the seeded failing test in the demo workspace",
+          "phase": "verify",
+          "target_file": "/Users/rt/workspace/synod/.synod/demo-workspace/src/buggy.rs"
+        },
+        "step_kind": "tool"
+      },
+      "recorded_at": 1777130017789
+    },
+    {
+      "event_id": "07a442ae-2d03-4f11-8767-861e722937a3",
+      "event_type": "step_completed",
+      "step_id": "verify",
+      "plan_revision": 0,
+      "payload": {
+        "attempt_id": "91779501-ca75-4371-987a-08de3134910b",
+        "error": {
+          "code": "deterministic_replan",
+          "message": "built-in test-fix loop intentionally requests a replan before convergence"
+        },
+        "evidence": {
+          "attempts": 1,
+          "step_id": "verify"
+        },
+        "recoverability": "replan_required",
+        "status": "failed"
+      },
+      "recorded_at": 1777130017789
+    },
+    {
+      "event_id": "cc097566-2446-4a05-88c1-206e394e4ae3",
+      "event_type": "replanned",
+      "step_id": "verify",
+      "plan_revision": 1,
+      "payload": {
+        "added_step_ids": [
+          "analyze#replan-1",
+          "code#replan-1",
+          "verify#replan-1"
+        ],
+        "from_revision": 0,
+        "reason": "replanning after step verify invalidated the current path",
+        "replaced_step_ids": [],
+        "replan_count": 1,
+        "to_revision": 1
+      },
+      "recorded_at": 1777130017789
+    },
+    {
+      "event_id": "53ca0119-3d06-4ea7-af64-a5d9cd78c284",
+      "event_type": "step_started",
+      "step_id": "analyze#replan-1",
+      "plan_revision": 1,
+      "payload": {
+        "attempt_number": 1,
+        "input": {
+          "goal": "Re-analyze after partial fix",
+          "phase": "analyze"
+        },
+        "step_kind": "agent"
+      },
+      "recorded_at": 1777130017789
+    },
+    {
+      "event_id": "3bcf64a3-e574-418a-9a8c-91e4e5c63ce3",
+      "event_type": "step_completed",
+      "step_id": "analyze#replan-1",
+      "plan_revision": 1,
+      "payload": {
+        "attempt_id": "7d1a9de7-6528-423c-8f41-83fad6d869c8",
+        "evidence": null,
+        "output": {
+          "active_step": "analyze#replan-1",
+          "analysis": "analyzed Re-analyze after partial fix",
+          "ready_for_code": true
+        },
+        "status": "succeeded"
+      },
+      "recorded_at": 1777130017790
+    },
+    {
+      "event_id": "d1e31bda-8f24-40ef-9554-47b29649bdad",
+      "event_type": "step_started",
+      "step_id": "code#replan-1",
+      "plan_revision": 1,
+      "payload": {
+        "attempt_number": 1,
+        "input": {
+          "fixed_content": "//! Seeded fixed module for the synod test-fix loop demo.\n\npub fn answer() -> i32 {\n    0\n}\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n\n    #[test]\n    fn answer_should_be_zero() {\n        assert_eq!(answer(), 0);\n    }\n}\n",
+          "goal": "Apply the full fix",
+          "phase": "code",
+          "target_file": "/Users/rt/workspace/synod/.synod/demo-workspace/src/buggy.rs"
+        },
+        "step_kind": "agent"
+      },
+      "recorded_at": 1777130017790
+    },
+    {
+      "event_id": "e014db14-7bd5-4b08-8040-6d6aea7f8a64",
+      "event_type": "step_completed",
+      "step_id": "code#replan-1",
+      "plan_revision": 1,
+      "payload": {
+        "attempt_id": "4eb0e0bb-db86-4d33-a784-92a11a95c950",
+        "evidence": null,
+        "output": {
+          "active_step": "code#replan-1",
+          "patch_applied": true,
+          "updated_file": "/Users/rt/workspace/synod/.synod/demo-workspace/src/buggy.rs"
+        },
+        "status": "succeeded"
+      },
+      "recorded_at": 1777130017791
+    },
+    {
+      "event_id": "73734934-99a2-44fe-8604-67fad964cf1f",
+      "event_type": "step_started",
+      "step_id": "verify#replan-1",
+      "plan_revision": 1,
+      "payload": {
+        "attempt_number": 1,
+        "input": {
+          "bug_marker": "// TODO-BUG: returns 1 instead of 0",
+          "goal": "Verify the full fix",
+          "phase": "verify",
+          "target_file": "/Users/rt/workspace/synod/.synod/demo-workspace/src/buggy.rs"
+        },
+        "step_kind": "tool"
+      },
+      "recorded_at": 1777130017792
+    },
+    {
+      "event_id": "14c2e3a2-17a7-486c-88d6-a9852b27b515",
+      "event_type": "step_completed",
+      "step_id": "verify#replan-1",
+      "plan_revision": 1,
+      "payload": {
+        "attempt_id": "d9dbe735-c547-422b-8020-169b3202ca23",
+        "evidence": null,
+        "output": {
+          "goal_satisfied": true,
+          "tests_passed": true,
+          "verified_file": "/Users/rt/workspace/synod/.synod/demo-workspace/src/buggy.rs"
+        },
+        "status": "succeeded"
+      },
+      "recorded_at": 1777130017792
+    },
+    {
+      "event_id": "e577360f-17f1-4294-85e7-cb1a3fa5f3dd",
+      "event_type": "terminal_recorded",
+      "step_id": null,
+      "plan_revision": 1,
+      "payload": {
+        "terminal_reason": {
+          "condition": "goal_satisfied",
+          "details": {
+            "step_id": "verify#replan-1"
+          },
+          "message": "goal satisfied after step verify#replan-1"
+        },
+        "terminal_status": "succeeded"
+      },
+      "recorded_at": 1777130017792
+    }
+  ],
+  "trace_location": "/Users/rt/workspace/synod/.synod/demo-workspace/.synod/traces/3ce8f60e-7e45-4bfa-b9e8-e71ba2fbd818.json"
+}

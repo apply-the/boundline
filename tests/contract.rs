@@ -28,5 +28,8 @@ mod session_record_contract;
 #[path = "contract/session_command_contract.rs"]
 mod session_command_contract;
 
+#[path = "contract/run_demo_contract.rs"]
+mod run_demo_contract;
+
 #[path = "contract/assistant_session_continuity_contract.rs"]
 mod assistant_session_continuity_contract;

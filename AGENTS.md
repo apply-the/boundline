@@ -9,6 +9,8 @@ Auto-generated from all feature plans. Last updated: 2026-04-25
 - Repository-stored assistant asset files under `assistant/` and existing workspace-local traces under `<workspace>/.synod/traces/` for status and inspection backends (003-assistant-command-packs)
 - Rust 1.95.0, edition 2024 for the existing CLI and orchestrator backend + Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`); no new runtime dependencies for this slice (004-session-model-unification)
 - Workspace-local JSON session record at `<workspace>/.synod/session.json` plus the existing file-backed traces under `<workspace>/.synod/traces/` (004-session-model-unification)
+- Rust 1.95.0, edition 2024 + Existing runtime dependencies only (`clap`, `serde`, (005-test-fix-loop-demo)
+- On-disk demo workspace under `<repo>/.synod/demo-workspace/` for the (005-test-fix-loop-demo)
 
 - Rust 1.95.0, edition 2024 + Rust standard library plus `serde`, `serde_json`, `thiserror`, `tracing`, and `uuid` for structured state, trace serialization, error handling, instrumentation, and stable identifiers (001-delivery-orchestrator-core)
 
@@ -36,9 +38,9 @@ Crate versioning follows Semantic Versioning.
 Before 1.0.0, breaking changes MAY occur in minor versions.
 
 ## Recent Changes
+- 005-test-fix-loop-demo: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies only (`clap`, `serde`,
 - 004-session-model-unification: Added Rust 1.95.0, edition 2024 for the existing CLI and orchestrator backend + Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`); no new runtime dependencies for this slice
 - 003-assistant-command-packs: Added Rust 1.95.0, edition 2024 for the existing CLI backend plus repository-managed Markdown prompt assets for assistant command packs + Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`); no new runtime dependencies for this slice
-- 002-developer-ux-orchestrator: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies (`serde`, `serde_json`, `thiserror`, `tracing`, `uuid`) plus `clap` 4.x for a stable subcommand-based CLI surface
 
 
 <!-- MANUAL ADDITIONS START -->

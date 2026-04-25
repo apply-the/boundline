@@ -22,6 +22,7 @@ pub enum CommandName {
     Doctor,
     Demo,
     Run,
+    RunDemo,
     Inspect,
     Start,
     Capture,
@@ -37,6 +38,7 @@ impl CommandName {
             Self::Doctor => "doctor",
             Self::Demo => "demo",
             Self::Run => "run",
+            Self::RunDemo => "run-demo",
             Self::Inspect => "inspect",
             Self::Start => "start",
             Self::Capture => "capture",
@@ -90,6 +92,11 @@ pub enum DeveloperCommand {
         #[arg(long)]
         workspace: PathBuf,
     },
+    #[command(name = "run-demo")]
+    RunDemo {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
     Run {
         #[arg(long)]
         workspace: Option<PathBuf>,
@@ -121,6 +128,7 @@ impl DeveloperCommand {
             Self::Plan { .. } => CommandName::Plan,
             Self::Step { .. } => CommandName::Step,
             Self::Demo { .. } => CommandName::Demo,
+            Self::RunDemo { .. } => CommandName::RunDemo,
             Self::Run { .. } => CommandName::Run,
             Self::Inspect { .. } => CommandName::Inspect,
             Self::Status { .. } => CommandName::Status,
@@ -204,6 +212,16 @@ impl DeveloperCommandSession {
                 exit_status: None,
                 trace_location: None,
             },
+            DeveloperCommand::RunDemo { workspace } => Self {
+                command_name: CommandName::RunDemo,
+                workspace_ref: workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
+                goal: None,
+                trace_ref: None,
+                started_at: current_timestamp_millis(),
+                completed_at: None,
+                exit_status: None,
+                trace_location: None,
+            },
             DeveloperCommand::Run { workspace, goal } => Self {
                 command_name: CommandName::Run,
                 workspace_ref: workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
@@ -276,7 +294,8 @@ impl DeveloperCommandSession {
             | CommandName::Plan
             | CommandName::Step
             | CommandName::Status
-            | CommandName::Next => {}
+            | CommandName::Next
+            | CommandName::RunDemo => {}
         }
 
         if matches!(self.command_name, CommandName::Capture)
@@ -367,6 +386,21 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
             }
 
             match run::execute_demo(workspace) {
+                Ok(report) => DispatchOutcome {
+                    exit_status: report.exit_status,
+                    output: report.terminal_output,
+                    trace_location: report.trace_location,
+                },
+                Err(error) => DispatchOutcome {
+                    exit_status: CommandExitStatus::InvalidInvocation,
+                    output: error.to_string(),
+                    trace_location: None,
+                },
+            }
+        }
+        DeveloperCommand::RunDemo { workspace } => {
+            let root = workspace.clone().unwrap_or_else(default_run_demo_root);
+            match run::execute_run_demo(&root) {
                 Ok(report) => DispatchOutcome {
                     exit_status: report.exit_status,
                     output: report.terminal_output,
@@ -516,4 +550,11 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
             },
         },
     }
+}
+
+fn default_run_demo_root() -> PathBuf {
+    std::env::current_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join(".synod")
+        .join("demo-workspace")
 }

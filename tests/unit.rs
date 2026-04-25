@@ -27,3 +27,6 @@ mod session_record;
 
 #[path = "unit/session_store.rs"]
 mod session_store;
+
+#[path = "unit/demo_workspace.rs"]
+mod demo_workspace;

@@ -30,3 +30,9 @@ mod session_cli_flow;
 
 #[path = "integration/session_recovery.rs"]
 mod session_recovery;
+
+#[path = "integration/run_demo_flow.rs"]
+mod run_demo_flow;
+
+#[path = "integration/run_demo_edge_cases.rs"]
+mod run_demo_edge_cases;

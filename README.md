@@ -15,6 +15,20 @@ Canon remains part of the longer-term architecture discussion below, but the
 currently implemented developer experience runs fully locally and does not call
 Canon at runtime.
 
+## Try it: `synod run-demo`
+
+Want a working proof of execution? `synod run-demo` provisions an isolated
+demo workspace under `<cwd>/.synod/demo-workspace/`, plants one buggy source
+file plus one failing test, and drives the orchestrator through
+`analyze → code → verify` with one retry and one replan until the seeded test
+passes. See
+[specs/005-test-fix-loop-demo/quickstart.md](specs/005-test-fix-loop-demo/quickstart.md)
+for the full walkthrough.
+
+```sh
+cargo run --release -- run-demo
+```
+
 ## Separation
 
 - Synod: bounded task orchestration, agent and tool coordination, retries,

@@ -14,6 +14,11 @@ La slice `Spec 1.3 — Session & Interaction Model Unification` e ora disponibil
 - flusso esplicito `start -> capture -> plan -> step/run -> status/next -> inspect`
 - pack assistant allineati al modello di sessione e al riuso di `latest_trace_ref`
 
+La slice `Spec 1.4 — Test-Fix Loop Demo` aggiunge il comando `synod run-demo`,
+che prova end-to-end il loop `analyze → code → verify` con retry e replan su
+un workspace seeded sotto `.synod/demo-workspace/`. Vedi
+[specs/005-test-fix-loop-demo/quickstart.md](specs/005-test-fix-loop-demo/quickstart.md).
+
 Follow-up immediato:
 
 - continuare a costruire delivery flows sopra il modello di sessione condiviso
