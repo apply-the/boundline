@@ -21,3 +21,9 @@ mod cli_output;
 
 #[path = "unit/assistant_assets.rs"]
 mod assistant_assets;
+
+#[path = "unit/session_record.rs"]
+mod session_record;
+
+#[path = "unit/session_store.rs"]
+mod session_store;

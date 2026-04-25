@@ -2,6 +2,7 @@ use serde_json::Value;
 
 use crate::cli::diagnostics::{DiagnosticsReport, DiagnosticsStatus};
 use crate::cli::{CliValidationError, CommandExitStatus, DeveloperCommand};
+use crate::domain::session::{SessionStatus, SessionStatusView};
 use crate::domain::step::{StepKind, StepStatus};
 use crate::domain::task::{TaskRunResponse, TaskStatus};
 use crate::domain::trace::{ExecutionTrace, TraceEventType, TraceSummaryView};
@@ -41,9 +42,15 @@ pub fn unimplemented_message(command: &DeveloperCommand) -> String {
 pub fn command_name(command: &DeveloperCommand) -> &'static str {
     match command {
         DeveloperCommand::Doctor { .. } => "doctor",
+        DeveloperCommand::Start { .. } => "start",
+        DeveloperCommand::Capture { .. } => "capture",
+        DeveloperCommand::Plan { .. } => "plan",
+        DeveloperCommand::Step { .. } => "step",
         DeveloperCommand::Demo { .. } => "demo",
         DeveloperCommand::Run { .. } => "run",
         DeveloperCommand::Inspect { .. } => "inspect",
+        DeveloperCommand::Status { .. } => "status",
+        DeveloperCommand::Next { .. } => "next",
     }
 }
 
@@ -198,6 +205,52 @@ pub fn render_inspect_failure(
     lines.join("\n")
 }
 
+pub fn render_session_status(view: &SessionStatusView) -> String {
+    let mut lines = vec![
+        format!("session_id: {}", view.session_id),
+        format!("workspace_ref: {}", view.workspace_ref),
+    ];
+
+    if let Some(goal) = &view.goal {
+        lines.push(format!("goal: {goal}"));
+    }
+
+    if let Some(plan_revision) = view.plan_revision {
+        lines.push(format!("plan_revision: {plan_revision}"));
+    }
+
+    if let Some(current_step_index) = view.current_step_index {
+        lines.push(format!("current_step_index: {current_step_index}"));
+    }
+
+    if let Some(current_step_id) = &view.current_step_id {
+        lines.push(format!("current_step_id: {current_step_id}"));
+    }
+
+    lines.push(format!("latest_status: {}", session_status_text(view.latest_status)));
+
+    if let Some(latest_trace_ref) = &view.latest_trace_ref {
+        lines.push(format!("latest_trace_ref: {latest_trace_ref}"));
+    }
+
+    if let Some(next_command) = &view.next_command {
+        lines.push(format!("next_command: {next_command}"));
+    }
+
+    lines.push(format!("explanation: {}", view.explanation));
+    lines.join("\n")
+}
+
+pub fn render_session_error(action: &str, message: &str, next_command: Option<&str>) -> String {
+    let mut lines = vec![format!("{action}: session error"), format!("reason: {message}")];
+
+    if let Some(next_command) = next_command {
+        lines.push(format!("next_command: {next_command}"));
+    }
+
+    lines.join("\n")
+}
+
 pub const fn next_command_after_run(status: TaskStatus) -> &'static str {
     match status {
         TaskStatus::Succeeded => "/synod-status",
@@ -239,5 +292,19 @@ fn step_status_text(status: StepStatus) -> &'static str {
         StepStatus::Succeeded => "succeeded",
         StepStatus::Failed => "failed",
         StepStatus::Skipped => "skipped",
+    }
+}
+
+fn session_status_text(status: SessionStatus) -> &'static str {
+    match status {
+        SessionStatus::Initialized => "initialized",
+        SessionStatus::GoalCaptured => "goal_captured",
+        SessionStatus::Planned => "planned",
+        SessionStatus::Running => "running",
+        SessionStatus::Succeeded => "succeeded",
+        SessionStatus::Failed => "failed",
+        SessionStatus::Exhausted => "exhausted",
+        SessionStatus::Aborted => "aborted",
+        SessionStatus::Invalid => "invalid",
     }
 }

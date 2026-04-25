@@ -9,7 +9,7 @@ fn temp_workspace() -> PathBuf {
     fs::create_dir_all(&workspace).unwrap();
     fs::write(
         workspace.join("Cargo.toml"),
-        "[package]\nname = \"synod-fixture\"\nversion = \"0.3.0\"\nedition = \"2024\"\n",
+        "[package]\nname = \"synod-fixture\"\nversion = \"0.4.0\"\nedition = \"2024\"\n",
     )
     .unwrap();
     workspace

@@ -135,6 +135,46 @@ impl Task {
         self.status = status;
         self.terminal_reason = Some(reason);
     }
+
+    pub fn validate_persisted_state(&self) -> Result<(), TaskPersistenceError> {
+        if self.id.trim().is_empty() {
+            return Err(TaskPersistenceError::MissingTaskId);
+        }
+
+        if self.goal.trim().is_empty() {
+            return Err(TaskPersistenceError::MissingGoal);
+        }
+
+        self.context
+            .validate()
+            .map_err(|error| TaskPersistenceError::InvalidContext(error.to_string()))?;
+        self.plan
+            .validate()
+            .map_err(|error| TaskPersistenceError::InvalidPlan(error.to_string()))?;
+        self.limits
+            .validate()
+            .map_err(|error| TaskPersistenceError::InvalidRunLimits(error.to_string()))?;
+
+        if self.status.is_terminal() && self.terminal_reason.is_none() {
+            return Err(TaskPersistenceError::MissingTerminalReason(self.status));
+        }
+
+        if !self.status.is_terminal() && self.terminal_reason.is_some() {
+            return Err(TaskPersistenceError::UnexpectedTerminalReason(self.status));
+        }
+
+        if self.total_step_attempts < self.retry_count
+            || self.total_step_attempts < self.replan_count
+        {
+            return Err(TaskPersistenceError::InvalidAttemptCounters {
+                total_step_attempts: self.total_step_attempts,
+                retry_count: self.retry_count,
+                replan_count: self.replan_count,
+            });
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -163,4 +203,26 @@ impl From<TaskContextError> for TaskRequestError {
     fn from(value: TaskContextError) -> Self {
         Self::InvalidContext(value.to_string())
     }
+}
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum TaskPersistenceError {
+    #[error("task id must not be empty")]
+    MissingTaskId,
+    #[error("task goal must not be empty")]
+    MissingGoal,
+    #[error("persisted task run limits are invalid: {0}")]
+    InvalidRunLimits(String),
+    #[error("persisted task plan is invalid: {0}")]
+    InvalidPlan(String),
+    #[error("persisted task context is invalid: {0}")]
+    InvalidContext(String),
+    #[error("terminal task status {0:?} requires a terminal_reason")]
+    MissingTerminalReason(TaskStatus),
+    #[error("non-terminal task status {0:?} must not carry a terminal_reason")]
+    UnexpectedTerminalReason(TaskStatus),
+    #[error(
+        "total_step_attempts {total_step_attempts} must be greater than or equal to retry_count {retry_count} and replan_count {replan_count}"
+    )]
+    InvalidAttemptCounters { total_step_attempts: usize, retry_count: usize, replan_count: usize },
 }

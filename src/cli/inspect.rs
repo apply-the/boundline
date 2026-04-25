@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
+use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
 use crate::adapters::trace_store::{FileTraceStore, TraceStore, TraceStoreError};
 use crate::cli::CommandExitStatus;
 use crate::cli::output;
@@ -19,15 +20,17 @@ pub struct InspectCommandReport {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum InspectionTarget {
+pub enum TraceResolutionTarget {
     ExplicitTrace,
+    SessionTraceRef,
     LatestWorkspaceTrace,
 }
 
-impl InspectionTarget {
-    const fn as_str(self) -> &'static str {
+impl TraceResolutionTarget {
+    pub const fn as_str(self) -> &'static str {
         match self {
             Self::ExplicitTrace => "explicit-trace",
+            Self::SessionTraceRef => "session-trace-ref",
             Self::LatestWorkspaceTrace => "latest-workspace-trace",
         }
     }
@@ -60,6 +63,10 @@ pub fn render_error(
     workspace: Option<&Path>,
     error: &InspectCommandError,
 ) -> String {
+    if let InspectCommandError::InvalidSession(message) = error {
+        return output::render_session_error("inspect", message, Some("synod start"));
+    }
+
     let inspection_target = inspection_target_for(trace, workspace);
     let trace_ref = trace.map(|path| path.to_string_lossy().into_owned());
     let workspace_ref = workspace.map(|path| path.to_string_lossy().into_owned());
@@ -67,6 +74,10 @@ pub fn render_error(
         InspectCommandError::MissingTraceReference => "inspect requires --trace or --workspace",
         InspectCommandError::MissingLatestTrace | InspectCommandError::TraceStore(_) => {
             "failed to read the requested trace"
+        }
+        InspectCommandError::SessionStore(_) => "failed to read the active session",
+        InspectCommandError::InvalidSession(_) => {
+            unreachable!("invalid sessions are rendered separately")
         }
         InspectCommandError::Summary(_) => "failed to summarize the requested trace",
     };
@@ -180,11 +191,48 @@ pub fn summarize_trace(
 fn load_trace(
     trace: Option<&Path>,
     workspace: Option<&Path>,
-) -> Result<(InspectionTarget, PathBuf, ExecutionTrace), InspectCommandError> {
+) -> Result<(TraceResolutionTarget, PathBuf, ExecutionTrace), InspectCommandError> {
+    let session_trace_ref = workspace.map(resolve_session_trace_ref).transpose()?.flatten();
+    let (target, trace_path) = resolve_trace_path(trace, workspace, session_trace_ref.as_deref())?;
+
+    let trace = match target {
+        TraceResolutionTarget::LatestWorkspaceTrace => {
+            let workspace_path =
+                workspace.expect("workspace is required for latest workspace trace resolution");
+            let store = FileTraceStore::for_workspace(workspace_path);
+            store.load(&trace_path)?
+        }
+        TraceResolutionTarget::ExplicitTrace | TraceResolutionTarget::SessionTraceRef => {
+            let store = FileTraceStore::new(trace_path.parent().unwrap_or_else(|| Path::new(".")));
+            store.load(&trace_path)?
+        }
+    };
+
+    Ok((target, trace_path, trace))
+}
+
+fn resolve_session_trace_ref(workspace: &Path) -> Result<Option<String>, InspectCommandError> {
+    match FileSessionStore::for_workspace(workspace).load() {
+        Ok(Some(record)) => Ok(record.latest_trace_ref),
+        Ok(None) => Ok(None),
+        Err(SessionStoreError::InvalidRecord(message)) => Err(InspectCommandError::InvalidSession(
+            format!("active session is invalid: {message}"),
+        )),
+        Err(error) => Err(InspectCommandError::SessionStore(error)),
+    }
+}
+
+pub fn resolve_trace_path(
+    trace: Option<&Path>,
+    workspace: Option<&Path>,
+    session_trace_ref: Option<&str>,
+) -> Result<(TraceResolutionTarget, PathBuf), InspectCommandError> {
     if let Some(trace_path) = trace {
-        let store = FileTraceStore::new(trace_path.parent().unwrap_or_else(|| Path::new(".")));
-        let trace = store.load(trace_path)?;
-        return Ok((InspectionTarget::ExplicitTrace, trace_path.to_path_buf(), trace));
+        return Ok((TraceResolutionTarget::ExplicitTrace, trace_path.to_path_buf()));
+    }
+
+    if let Some(session_trace_ref) = session_trace_ref {
+        return Ok((TraceResolutionTarget::SessionTraceRef, PathBuf::from(session_trace_ref)));
     }
 
     let Some(workspace_path) = workspace else {
@@ -195,24 +243,25 @@ fn load_trace(
     let Some(trace_path) = store.latest()? else {
         return Err(InspectCommandError::MissingLatestTrace);
     };
-    let trace = store.load(&trace_path)?;
-    Ok((InspectionTarget::LatestWorkspaceTrace, trace_path, trace))
+    Ok((TraceResolutionTarget::LatestWorkspaceTrace, trace_path))
 }
 
-fn inspection_target_for(trace: Option<&Path>, workspace: Option<&Path>) -> InspectionTarget {
+fn inspection_target_for(trace: Option<&Path>, workspace: Option<&Path>) -> TraceResolutionTarget {
     if trace.is_some() {
-        InspectionTarget::ExplicitTrace
+        TraceResolutionTarget::ExplicitTrace
     } else if workspace.is_some() {
-        InspectionTarget::LatestWorkspaceTrace
+        TraceResolutionTarget::LatestWorkspaceTrace
     } else {
-        InspectionTarget::ExplicitTrace
+        TraceResolutionTarget::ExplicitTrace
     }
 }
 
-fn corrected_command(inspection_target: InspectionTarget) -> &'static str {
+fn corrected_command(inspection_target: TraceResolutionTarget) -> &'static str {
     match inspection_target {
-        InspectionTarget::ExplicitTrace => "cargo run --bin synod -- inspect --trace <trace>",
-        InspectionTarget::LatestWorkspaceTrace => {
+        TraceResolutionTarget::ExplicitTrace | TraceResolutionTarget::SessionTraceRef => {
+            "cargo run --bin synod -- inspect --trace <trace>"
+        }
+        TraceResolutionTarget::LatestWorkspaceTrace => {
             "cargo run --bin synod -- inspect --workspace <workspace>"
         }
     }
@@ -233,6 +282,10 @@ pub enum InspectCommandError {
     MissingTraceReference,
     #[error("no persisted trace could be found for the selected workspace")]
     MissingLatestTrace,
+    #[error("failed to read the active session: {0}")]
+    SessionStore(#[from] SessionStoreError),
+    #[error("{0}")]
+    InvalidSession(String),
     #[error("failed to read the requested trace: {0}")]
     TraceStore(#[from] TraceStoreError),
     #[error("failed to summarize the requested trace: {0}")]
