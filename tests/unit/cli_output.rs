@@ -36,9 +36,17 @@ fn exit_codes_match_the_command_contract() {
 
 #[test]
 fn command_names_render_from_subcommands() {
-    let command = DeveloperCommand::Demo { workspace: PathBuf::from("/tmp/workspace") };
-    assert_eq!(command_name(&command), "demo");
-    assert_eq!(command.name(), CommandName::Demo);
+    let command = DeveloperCommand::Flow {
+        name: "bug-fix".to_string(),
+        workspace: Some(PathBuf::from("/tmp/workspace")),
+    };
+    assert_eq!(command_name(&command), "flow");
+    assert_eq!(command.name(), CommandName::Flow);
+
+    let command =
+        DeveloperCommand::Run { workspace: Some(PathBuf::from("/tmp/workspace")), goal: None };
+    assert_eq!(command_name(&command), "run");
+    assert_eq!(command.name(), CommandName::Run);
 }
 
 #[test]
@@ -463,6 +471,10 @@ fn render_session_status_includes_goal_trace_and_next_command() {
         session_id: "session-status".to_string(),
         workspace_ref: "/tmp/session-workspace".to_string(),
         goal: Some("Ship a bounded change".to_string()),
+        active_flow: None,
+        current_stage_id: None,
+        current_stage_index: None,
+        total_stages: None,
         plan_revision: Some(2),
         current_step_id: Some("verify".to_string()),
         current_step_index: Some(1),

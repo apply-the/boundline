@@ -8,7 +8,7 @@ description: "Task list for implementing the developer UX for the orchestrator c
 **Input**: Design documents from `/specs/002-developer-ux-orchestrator/`
 **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/, quickstart.md
 
-**Tests**: Validation tasks are included because this feature defines executable CLI behavior, bounded failure handling, deterministic recovery visibility, and trace inspection guarantees.
+**Tests**: Validation tasks are included because this feature defines executable CLI behavior, bounded failure handling, deterministic fixture-backed execution, and trace inspection guarantees.
 
 **Organization**: Tasks are grouped by user story so each slice can deliver bounded, inspectable value independently.
 
@@ -29,47 +29,47 @@ description: "Task list for implementing the developer UX for the orchestrator c
 **Purpose**: Add the CLI package surface and create the new source and validation entry points described in the plan.
 
 - [X] T001 Add the CLI dependency and package wiring in `Cargo.toml`
-- [X] T002 [P] Create the CLI and demo module entrypoints in `src/bin/synod.rs`, `src/cli.rs`, and `src/demo.rs`
+- [X] T002 [P] Create the CLI and fixture module entrypoints in `src/bin/synod.rs`, `src/cli.rs`, and `src/fixture.rs`
 - [X] T003 [P] Extend the test harness registration for CLI coverage in `tests/contract.rs`, `tests/integration.rs`, and `tests/unit.rs`
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-**Purpose**: Build the shared command, deterministic fixture, trace-loading, and output primitives used by every story.
+**Purpose**: Build the shared command, workspace fixture, trace-loading, and output primitives used by every story.
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
 - [X] T004 Implement shared command parsing, command session types, and exit-code mapping in `src/cli.rs` and `src/cli/output.rs`
-- [X] T005 [P] Implement deterministic demo and default-run profile builders in `src/demo/profile.rs` and `src/demo/endpoints.rs`
+- [X] T005 [P] Implement deterministic workspace-fixture loading and execution adapters in `src/fixture.rs`
 - [X] T006 [P] Extend the trace store with trace read and latest-trace lookup support in `src/adapters/trace_store.rs` and `src/domain/trace.rs`
 - [X] T007 Implement shared workspace validation and actionable CLI error surfaces in `src/cli/diagnostics.rs` and `src/cli/output.rs`
-- [X] T008 [P] Create the new CLI contract and integration test files in `tests/contract/cli_command_contract.rs`, `tests/contract/diagnostics_report_contract.rs`, `tests/contract/trace_summary_contract.rs`, `tests/integration/cli_demo_flow.rs`, `tests/integration/cli_custom_run.rs`, `tests/integration/cli_diagnostics.rs`, and `tests/integration/cli_trace_inspection.rs`
+- [X] T008 [P] Create the new CLI contract and integration test files in `tests/contract/cli_command_contract.rs`, `tests/contract/diagnostics_report_contract.rs`, `tests/contract/trace_summary_contract.rs`, `tests/integration/fixture_vertical_slice.rs`, `tests/integration/cli_custom_run.rs`, `tests/integration/cli_diagnostics.rs`, and `tests/integration/cli_trace_inspection.rs`
 - [X] T009 [P] Create shared CLI output unit coverage scaffolding in `tests/unit/cli_output.rs` and `tests/unit.rs`
 
-**Checkpoint**: Foundation ready. The command surface, deterministic local fixtures, trace-loading helpers, and shared output rules exist for all user stories.
+**Checkpoint**: Foundation ready. The command surface, deterministic workspace fixtures, trace-loading helpers, and shared output rules exist for all user stories.
 
 ---
 
-## Phase 3: User Story 1 - Run a Guided Demo Task (Priority: P1) 🎯 MVP
+## Phase 3: User Story 1 - Run a Fixture-Backed Validation Slice (Priority: P1) 🎯 MVP
 
-**Goal**: Let a contributor verify local readiness and run a deterministic guided demo with visible step progression, visible recovery behavior, and an explicit terminal outcome.
+**Goal**: Let a contributor verify local readiness and run a deterministic fixture-backed red-to-green slice with visible step progression and an explicit terminal outcome.
 
-**Independent Test**: From a fresh local checkout, run `cargo run --bin synod -- doctor --workspace "$PWD"` and `cargo run --bin synod -- demo --workspace "$PWD"`, then confirm readiness is reported, demo step progression is visible, at least one recovery event is surfaced, and the command ends with an explicit terminal status and trace location.
+**Independent Test**: From a fresh local checkout, run `cargo run --bin synod -- doctor --workspace "$PWD"` and `cargo run --bin synod -- run --goal "Fix the failing fixture" --workspace "$PWD"`, then confirm readiness is reported, fixture step progression is visible, the failing verification command turns green, and the command ends with an explicit terminal status and trace location.
 
 ### Tests for User Story 1
 
-- [X] T010 [P] [US1] Implement the developer command contract tests for `doctor` and `demo` in `tests/contract/cli_command_contract.rs`
+- [X] T010 [P] [US1] Implement the developer command contract tests for `doctor` and fixture-backed `run` in `tests/contract/cli_command_contract.rs`
 - [X] T011 [P] [US1] Implement the diagnostics report contract tests in `tests/contract/diagnostics_report_contract.rs`
-- [X] T012 [P] [US1] Implement the doctor and guided demo integration scenarios in `tests/integration/cli_diagnostics.rs` and `tests/integration/cli_demo_flow.rs`
+- [X] T012 [P] [US1] Implement the doctor and fixture vertical-slice integration scenarios in `tests/integration/cli_diagnostics.rs` and `tests/integration/fixture_vertical_slice.rs`
 
 ### Implementation for User Story 1
 
 - [X] T013 [P] [US1] Implement the `doctor` command checks and diagnostics report rendering in `src/bin/synod.rs`, `src/cli.rs`, and `src/cli/diagnostics.rs`
-- [X] T014 [US1] Implement the deterministic guided demo command flow in `src/bin/synod.rs`, `src/cli.rs`, and `src/cli/run.rs`
-- [X] T015 [US1] Wire the demo profile and built-in execution endpoints into the existing orchestrator in `src/demo/profile.rs`, `src/demo/endpoints.rs`, and `src/orchestrator/planner.rs`
+- [X] T014 [US1] Implement the deterministic fixture-backed command flow in `src/bin/synod.rs`, `src/cli.rs`, and `src/cli/run.rs`
+- [X] T015 [US1] Wire the workspace fixture manifest and execution endpoints into the existing orchestrator in `src/fixture.rs`, `src/cli/run.rs`, and `src/orchestrator/planner.rs`
 - [X] T016 [US1] Surface readable step progression, recovery events, terminal outcomes, and trace locations in `src/cli/output.rs` and `src/cli/run.rs`
-- [X] T017 [US1] Export any CLI-facing library helpers needed by the binary in `src/lib.rs`, `src/cli.rs`, and `src/demo.rs`
+- [X] T017 [US1] Export any CLI-facing library helpers needed by the binary in `src/lib.rs`, `src/cli.rs`, and `src/fixture.rs`
 
 **Checkpoint**: User Story 1 is independently functional and delivers the first-run developer experience.
 
@@ -77,9 +77,9 @@ description: "Task list for implementing the developer UX for the orchestrator c
 
 ## Phase 4: User Story 2 - Run a Simple Custom Task (Priority: P2)
 
-**Goal**: Allow a developer to submit a bounded local goal through the CLI, execute the default developer flow, and receive explicit progress, terminal status, and trace output.
+**Goal**: Allow a developer to submit a bounded local goal through the CLI, execute the default fixture-backed analyze/code/verify slice, and receive explicit progress, terminal status, and trace output.
 
-**Independent Test**: Run `cargo run --bin synod -- run --goal "Summarize the current bounded developer flow" --workspace "$PWD"` and confirm the command validates the goal, executes the default bounded flow, reports progress, and leaves behind a trace that still explains non-success outcomes when the run fails.
+**Independent Test**: Run `cargo run --bin synod -- run --goal "Summarize the current bounded developer flow" --workspace "$PWD"` and confirm the command validates the goal, executes the fixture-backed bounded slice, reports progress, and leaves behind a trace that still explains non-success outcomes when the run fails.
 
 ### Tests for User Story 2
 
@@ -90,11 +90,11 @@ description: "Task list for implementing the developer UX for the orchestrator c
 ### Implementation for User Story 2
 
 - [X] T021 [P] [US2] Implement custom-run argument validation and request assembly in `src/bin/synod.rs` and `src/cli/run.rs`
-- [X] T022 [US2] Implement the default developer flow for custom goals in `src/cli/run.rs`, `src/demo/profile.rs`, and `src/demo/endpoints.rs`
+- [X] T022 [US2] Implement the default fixture-backed slice for custom goals in `src/cli/run.rs` and `src/fixture.rs`
 - [X] T023 [US2] Integrate custom-run progress, error, and trace reporting in `src/cli/output.rs` and `src/cli.rs`
 - [X] T024 [US2] Make custom runs surface explicit success and non-success exits with trace locations in `src/bin/synod.rs`, `src/cli/run.rs`, and `tests/integration/cli_custom_run.rs`
 
-**Checkpoint**: User Stories 1 and 2 both work, and the CLI can execute both a guided demo and a developer-supplied bounded objective.
+**Checkpoint**: User Stories 1 and 2 both work, and the CLI can execute both the documented fixture-backed slice and a developer-supplied bounded objective.
 
 ---
 
@@ -102,7 +102,7 @@ description: "Task list for implementing the developer UX for the orchestrator c
 
 **Goal**: Let a developer inspect a persisted trace through a readable command that reconstructs step order, recovery events, and the final terminal reason without reading raw trace data manually.
 
-**Independent Test**: Generate a trace with `demo` or `run`, then execute `cargo run --bin synod -- inspect --trace <trace-path>` and confirm the output reconstructs the executed step order, recovery path, and final terminal reason from the stored trace alone.
+**Independent Test**: Generate a trace with `run`, then execute `cargo run --bin synod -- inspect --trace <trace-path>` and confirm the output reconstructs the executed step order, recovery path, and final terminal reason from the stored trace alone.
 
 ### Tests for User Story 3
 
@@ -137,7 +137,7 @@ description: "Task list for implementing the developer UX for the orchestrator c
 - **Phase 1: Setup**: No dependencies; start immediately.
 - **Phase 2: Foundational**: Depends on Phase 1 and blocks all user story work.
 - **Phase 3: User Story 1**: Depends on Phase 2 and delivers the MVP developer experience.
-- **Phase 4: User Story 2**: Depends on Phase 3 because it reuses the CLI entrypoint, shared output surfaces, and deterministic default flow wiring established for the demo.
+- **Phase 4: User Story 2**: Depends on Phase 3 because it reuses the CLI entrypoint, shared output surfaces, and deterministic fixture wiring established for the documented red-to-green slice.
 - **Phase 5: User Story 3**: Depends on Phase 3 because it reuses the command entrypoint and consumes the persisted traces produced by the runnable command surface.
 - **Phase 6: Polish**: Depends on all desired user stories being complete.
 
@@ -171,11 +171,11 @@ description: "Task list for implementing the developer UX for the orchestrator c
 # Launch US1 validation tasks together:
 Task: "Implement the developer command contract tests in tests/contract/cli_command_contract.rs"
 Task: "Implement the diagnostics report contract tests in tests/contract/diagnostics_report_contract.rs"
-Task: "Implement the doctor and guided demo integration scenarios in tests/integration/cli_diagnostics.rs and tests/integration/cli_demo_flow.rs"
+Task: "Implement the doctor and fixture vertical-slice integration scenarios in tests/integration/cli_diagnostics.rs and tests/integration/fixture_vertical_slice.rs"
 
 # Launch independent implementation work after shared foundations are ready:
 Task: "Implement the doctor command checks and diagnostics report rendering in src/bin/synod.rs, src/cli.rs, and src/cli/diagnostics.rs"
-Task: "Wire the demo profile and built-in execution endpoints into src/demo/profile.rs, src/demo/endpoints.rs, and src/orchestrator/planner.rs"
+Task: "Wire the workspace fixture manifest and execution endpoints into src/fixture.rs, src/cli/run.rs, and src/orchestrator/planner.rs"
 ```
 
 ## Parallel Example: User Story 2
@@ -208,13 +208,13 @@ Task: "Implement the inspect command and trace selection in src/bin/synod.rs, sr
 1. Complete Phase 1: Setup.
 2. Complete Phase 2: Foundational.
 3. Complete Phase 3: User Story 1.
-4. Stop and validate `tests/contract/cli_command_contract.rs`, `tests/contract/diagnostics_report_contract.rs`, `tests/integration/cli_diagnostics.rs`, and `tests/integration/cli_demo_flow.rs`.
-5. Demo the first-run developer experience before expanding scope.
+4. Stop and validate `tests/contract/cli_command_contract.rs`, `tests/contract/diagnostics_report_contract.rs`, `tests/integration/cli_diagnostics.rs`, and `tests/integration/fixture_vertical_slice.rs`.
+5. Validate the first-run developer experience before expanding scope.
 
 ### Incremental Delivery
 
 1. Finish Setup and Foundational to establish the CLI entrypoint, deterministic local fixtures, trace-read helpers, and shared output rules.
-2. Ship US1 to prove onboarding and the guided demo path.
+2. Ship US1 to prove onboarding through the fixture-backed red-to-green slice.
 3. Ship US2 to prove bounded custom execution through the CLI.
 4. Ship US3 to prove readable trace inspection over persisted runs.
 5. Use Phase 6 to tighten docs, naming, diagnostics, and final validation without changing scope.
@@ -222,7 +222,7 @@ Task: "Implement the inspect command and trace selection in src/bin/synod.rs, sr
 ### Parallel Team Strategy
 
 1. One engineer can own package wiring and shared command/output foundations.
-2. A second engineer can implement deterministic demo/default flow builders while the first completes CLI parsing and trace helpers.
+2. A second engineer can implement workspace fixture loading and execution while the first completes CLI parsing and trace helpers.
 3. After US1 is stable, custom-run and trace-inspection work can overlap as long as shared files such as `src/bin/synod.rs`, `src/cli.rs`, and `src/cli/output.rs` are coordinated.
 
 ---

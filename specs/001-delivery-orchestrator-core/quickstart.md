@@ -82,7 +82,7 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-targets
 ```
 
-## Minimum Demo Scenarios
+## Minimum Validation Scenarios
 
 1. A three-step task that analyzes, changes, and verifies work, then exits successfully.
 2. A task with one recoverable tool failure that retries and succeeds without losing context.

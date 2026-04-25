@@ -217,7 +217,7 @@ Task: "Author Copilot inspection prompt file in assistant/copilot/prompts/"
 2. Complete Phase 2: Foundational.
 3. Complete Phase 3: User Story 1.
 4. Stop and validate `tests/contract/assistant_command_pack_contract.rs`, `tests/contract/assistant_command_definition_contract.rs`, `tests/integration/assistant_shell_enabled_flow.rs`, and `tests/integration/assistant_chat_fallback.rs` for the start/planning slice.
-5. Demo the onboarding path before expanding to workflow continuation and inspection.
+5. Validate the onboarding path before expanding to workflow continuation and inspection.
 
 ### Incremental Delivery
 

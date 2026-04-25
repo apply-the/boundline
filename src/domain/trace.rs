@@ -15,10 +15,15 @@ pub fn current_timestamp_millis() -> u64 {
 #[serde(rename_all = "snake_case")]
 pub enum TraceEventType {
     TaskStarted,
+    FlowSelected,
+    StageTransitioned,
     StepStarted,
     StepCompleted,
     RetryScheduled,
+    StageRetryScheduled,
     Replanned,
+    StageReplanned,
+    StageFailed,
     TerminalRecorded,
 }
 

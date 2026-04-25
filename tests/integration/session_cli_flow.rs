@@ -1,40 +1,13 @@
-use std::fs;
-use std::path::PathBuf;
-use std::process::{Command, Output};
-
+use crate::workspace_fixture::{run_synod_in, temp_fixture_workspace, terminal_text};
 use serde_json::json;
 use synod::adapters::trace_store::{FileTraceStore, TraceStore};
 use synod::domain::limits::TerminalCondition;
 use synod::domain::task::{TaskStatus, TerminalReason};
 use synod::domain::trace::{ExecutionTrace, TraceEventType};
-use uuid::Uuid;
-
-fn temp_workspace() -> PathBuf {
-    let workspace = std::env::temp_dir().join(format!("synod-session-flow-{}", Uuid::new_v4()));
-    fs::create_dir_all(&workspace).unwrap();
-    fs::write(
-        workspace.join("Cargo.toml"),
-        "[package]\nname = \"synod-fixture\"\nversion = \"0.4.0\"\nedition = \"2024\"\n",
-    )
-    .unwrap();
-    workspace
-}
-
-fn run_synod_in(workspace: &std::path::Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_synod")).args(args).current_dir(workspace).output().unwrap()
-}
-
-fn terminal_text(output: &Output) -> String {
-    format!(
-        "{}{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    )
-}
 
 #[test]
 fn start_persists_an_active_session_that_follow_up_commands_reuse_from_current_workspace() {
-    let workspace = temp_workspace();
+    let workspace = temp_fixture_workspace("synod-session-flow");
     let start = run_synod_in(&workspace, &["start"]);
     let start_text = terminal_text(&start);
 
@@ -52,15 +25,12 @@ fn start_persists_an_active_session_that_follow_up_commands_reuse_from_current_w
 
 #[test]
 fn capture_plan_step_and_run_keep_session_state_and_trace_synchronized() {
-    let workspace = temp_workspace();
+    let workspace = temp_fixture_workspace("synod-session-flow-state");
 
     let start = run_synod_in(&workspace, &["start"]);
     assert_eq!(start.status.code(), Some(0), "{}", terminal_text(&start));
 
-    let capture = run_synod_in(
-        &workspace,
-        &["capture", "--goal", "Summarize the current bounded developer flow"],
-    );
+    let capture = run_synod_in(&workspace, &["capture", "--goal", "Fix the failing add test"]);
     assert_eq!(capture.status.code(), Some(0), "{}", terminal_text(&capture));
 
     let plan = run_synod_in(&workspace, &["plan"]);
@@ -81,16 +51,11 @@ fn capture_plan_step_and_run_keep_session_state_and_trace_synchronized() {
 
 #[test]
 fn status_next_and_inspect_reuse_the_active_session_view_and_trace_reference() {
-    let workspace = temp_workspace();
+    let workspace = temp_fixture_workspace("synod-session-flow-inspect");
 
     assert_eq!(run_synod_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_synod_in(
-            &workspace,
-            &["capture", "--goal", "Summarize the current bounded developer flow"],
-        )
-        .status
-        .code(),
+        run_synod_in(&workspace, &["capture", "--goal", "Fix the failing add test"],).status.code(),
         Some(0)
     );
     assert_eq!(run_synod_in(&workspace, &["plan"]).status.code(), Some(0));
@@ -133,9 +98,6 @@ fn status_next_and_inspect_reuse_the_active_session_view_and_trace_reference() {
     let inspect_text = terminal_text(&inspect);
     assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
     assert!(inspect_text.contains("inspection_target: session-trace-ref"), "{inspect_text}");
-    assert!(
-        inspect_text.contains("goal: Summarize the current bounded developer flow"),
-        "{inspect_text}"
-    );
+    assert!(inspect_text.contains("goal: Fix the failing add test"), "{inspect_text}");
     assert!(!inspect_text.contains("goal: Foreign latest trace"), "{inspect_text}");
 }

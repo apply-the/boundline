@@ -20,11 +20,11 @@ pub struct Cli {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CommandName {
     Doctor,
-    Demo,
     Run,
     Inspect,
     Start,
     Capture,
+    Flow,
     Plan,
     Step,
     Status,
@@ -35,11 +35,11 @@ impl CommandName {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Doctor => "doctor",
-            Self::Demo => "demo",
             Self::Run => "run",
             Self::Inspect => "inspect",
             Self::Start => "start",
             Self::Capture => "capture",
+            Self::Flow => "flow",
             Self::Plan => "plan",
             Self::Step => "step",
             Self::Status => "status",
@@ -78,6 +78,11 @@ pub enum DeveloperCommand {
         #[arg(long)]
         goal: String,
     },
+    Flow {
+        name: String,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
     Plan {
         #[arg(long)]
         workspace: Option<PathBuf>,
@@ -85,10 +90,6 @@ pub enum DeveloperCommand {
     Step {
         #[arg(long)]
         workspace: Option<PathBuf>,
-    },
-    Demo {
-        #[arg(long)]
-        workspace: PathBuf,
     },
     Run {
         #[arg(long)]
@@ -118,9 +119,9 @@ impl DeveloperCommand {
             Self::Doctor { .. } => CommandName::Doctor,
             Self::Start { .. } => CommandName::Start,
             Self::Capture { .. } => CommandName::Capture,
+            Self::Flow { .. } => CommandName::Flow,
             Self::Plan { .. } => CommandName::Plan,
             Self::Step { .. } => CommandName::Step,
-            Self::Demo { .. } => CommandName::Demo,
             Self::Run { .. } => CommandName::Run,
             Self::Inspect { .. } => CommandName::Inspect,
             Self::Status { .. } => CommandName::Status,
@@ -174,6 +175,16 @@ impl DeveloperCommandSession {
                 exit_status: None,
                 trace_location: None,
             },
+            DeveloperCommand::Flow { name, workspace } => Self {
+                command_name: CommandName::Flow,
+                workspace_ref: workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
+                goal: Some(name.clone()),
+                trace_ref: None,
+                started_at: current_timestamp_millis(),
+                completed_at: None,
+                exit_status: None,
+                trace_location: None,
+            },
             DeveloperCommand::Plan { workspace } => Self {
                 command_name: CommandName::Plan,
                 workspace_ref: workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
@@ -187,16 +198,6 @@ impl DeveloperCommandSession {
             DeveloperCommand::Step { workspace } => Self {
                 command_name: CommandName::Step,
                 workspace_ref: workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
-                goal: None,
-                trace_ref: None,
-                started_at: current_timestamp_millis(),
-                completed_at: None,
-                exit_status: None,
-                trace_location: None,
-            },
-            DeveloperCommand::Demo { workspace } => Self {
-                command_name: CommandName::Demo,
-                workspace_ref: Some(workspace.to_string_lossy().into_owned()),
                 goal: None,
                 trace_ref: None,
                 started_at: current_timestamp_millis(),
@@ -249,7 +250,7 @@ impl DeveloperCommandSession {
 
     pub fn validate(&self) -> Result<(), CliValidationError> {
         match self.command_name {
-            CommandName::Doctor | CommandName::Demo => {
+            CommandName::Doctor => {
                 let workspace = self.workspace_ref.as_deref().unwrap_or_default();
                 if workspace.trim().is_empty() {
                     return Err(CliValidationError::MissingWorkspaceRef(self.command_name));
@@ -273,6 +274,7 @@ impl DeveloperCommandSession {
             }
             CommandName::Start
             | CommandName::Capture
+            | CommandName::Flow
             | CommandName::Plan
             | CommandName::Step
             | CommandName::Status
@@ -290,6 +292,12 @@ impl DeveloperCommandSession {
             && self.goal.as_deref().map(str::trim).unwrap_or_default().is_empty()
         {
             return Err(CliValidationError::MissingGoal(self.command_name));
+        }
+
+        if matches!(self.command_name, CommandName::Flow)
+            && self.goal.as_deref().map(str::trim).unwrap_or_default().is_empty()
+        {
+            return Err(CliValidationError::MissingFlowName);
         }
 
         Ok(())
@@ -313,6 +321,8 @@ pub enum CliValidationError {
     MissingWorkspaceRef(CommandName),
     #[error("{0} requires a non-empty --goal")]
     MissingGoal(CommandName),
+    #[error("flow requires a non-empty flow name")]
+    MissingFlowName,
     #[error("inspect requires --trace or --workspace")]
     MissingTraceSelection,
 }
@@ -354,29 +364,6 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                 },
                 output: output::render_diagnostics(&report),
                 trace_location: None,
-            }
-        }
-        DeveloperCommand::Demo { workspace } => {
-            let report = diagnostics::diagnose_workspace(workspace);
-            if !report.ready {
-                return DispatchOutcome {
-                    exit_status: CommandExitStatus::InvalidInvocation,
-                    output: output::render_diagnostics(&report),
-                    trace_location: None,
-                };
-            }
-
-            match run::execute_demo(workspace) {
-                Ok(report) => DispatchOutcome {
-                    exit_status: report.exit_status,
-                    output: report.terminal_output,
-                    trace_location: report.trace_location,
-                },
-                Err(error) => DispatchOutcome {
-                    exit_status: CommandExitStatus::InvalidInvocation,
-                    output: error.to_string(),
-                    trace_location: None,
-                },
             }
         }
         DeveloperCommand::Run { workspace, goal } => match goal {
@@ -453,6 +440,20 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
         },
         DeveloperCommand::Capture { workspace, goal } => {
             match session::execute_capture(workspace.as_deref(), goal) {
+                Ok(report) => DispatchOutcome {
+                    exit_status: report.exit_status,
+                    output: report.terminal_output,
+                    trace_location: None,
+                },
+                Err(error) => DispatchOutcome {
+                    exit_status: CommandExitStatus::NonSuccess,
+                    output: session::render_error(command.name().as_str(), &error),
+                    trace_location: None,
+                },
+            }
+        }
+        DeveloperCommand::Flow { name, workspace } => {
+            match session::execute_flow(workspace.as_deref(), name) {
                 Ok(report) => DispatchOutcome {
                     exit_status: report.exit_status,
                     output: report.terminal_output,

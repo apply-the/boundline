@@ -3,6 +3,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::domain::flow::SessionFlowState;
 use crate::domain::task::{Task, TaskPersistenceError, TaskStatus, TerminalReason};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -30,6 +31,7 @@ impl SessionStatus {
 pub enum SessionCommand {
     Start,
     Capture,
+    Flow,
     Plan,
     Step,
     Run,
@@ -43,6 +45,8 @@ pub struct ActiveSessionRecord {
     pub session_id: String,
     pub workspace_ref: String,
     pub goal: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_flow: Option<SessionFlowState>,
     pub active_task: Option<Task>,
     pub latest_status: SessionStatus,
     pub latest_terminal_reason: Option<TerminalReason>,
@@ -85,6 +89,12 @@ impl ActiveSessionRecord {
 
         if status_requires_task(self.latest_status) && self.active_task.is_none() {
             return Err(SessionValidationError::MissingActiveTask(self.latest_status));
+        }
+
+        if let Some(active_flow) = &self.active_flow {
+            active_flow
+                .validate()
+                .map_err(|error| SessionValidationError::InvalidFlowState(error.to_string()))?;
         }
 
         if self.latest_status.is_terminal() && self.latest_terminal_reason.is_none() {
@@ -163,6 +173,14 @@ pub struct SessionStatusView {
     pub session_id: String,
     pub workspace_ref: String,
     pub goal: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_flow: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_stage_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_stage_index: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total_stages: Option<usize>,
     pub plan_revision: Option<usize>,
     pub current_step_id: Option<String>,
     pub current_step_index: Option<usize>,
@@ -199,6 +217,39 @@ impl SessionStatusView {
             return Err(SessionValidationError::StatusViewGoalMismatch {
                 expected: record.goal.clone(),
                 actual: self.goal.clone(),
+            });
+        }
+
+        let expected_flow = record.active_flow.as_ref().map(|flow| flow.flow_name.clone());
+        if self.active_flow != expected_flow {
+            return Err(SessionValidationError::StatusViewFlowMismatch {
+                expected: expected_flow,
+                actual: self.active_flow.clone(),
+            });
+        }
+
+        let expected_stage_id =
+            record.active_flow.as_ref().map(|flow| flow.current_stage_id.clone());
+        if self.current_stage_id != expected_stage_id {
+            return Err(SessionValidationError::StatusViewStageMismatch {
+                expected: expected_stage_id,
+                actual: self.current_stage_id.clone(),
+            });
+        }
+
+        let expected_stage_index = record.active_flow.as_ref().map(|flow| flow.current_stage_index);
+        if self.current_stage_index != expected_stage_index {
+            return Err(SessionValidationError::StatusViewStageIndexMismatch {
+                expected: expected_stage_index,
+                actual: self.current_stage_index,
+            });
+        }
+
+        let expected_total_stages = record.active_flow.as_ref().map(|flow| flow.total_stages);
+        if self.total_stages != expected_total_stages {
+            return Err(SessionValidationError::StatusViewStageCountMismatch {
+                expected: expected_total_stages,
+                actual: self.total_stages,
             });
         }
 
@@ -260,6 +311,8 @@ pub enum SessionValidationError {
     MissingGoal(SessionStatus),
     #[error("status {0:?} requires an active task")]
     MissingActiveTask(SessionStatus),
+    #[error("session flow state is invalid: {0}")]
+    InvalidFlowState(String),
     #[error("status {0:?} requires a terminal reason")]
     MissingTerminalReason(SessionStatus),
     #[error("session task workspace_ref mismatch: expected {expected}, got {actual}")]
@@ -286,6 +339,14 @@ pub enum SessionValidationError {
     StatusViewStatusMismatch { expected: SessionStatus, actual: SessionStatus },
     #[error("status view goal mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewGoalMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view flow mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewFlowMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view stage mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewStageMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view stage index mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewStageIndexMismatch { expected: Option<usize>, actual: Option<usize> },
+    #[error("status view total stages mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewStageCountMismatch { expected: Option<usize>, actual: Option<usize> },
     #[error("status view trace mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewTraceMismatch { expected: Option<String>, actual: Option<String> },
     #[error("status view explanation must not be empty")]

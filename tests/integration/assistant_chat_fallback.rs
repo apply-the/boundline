@@ -1,36 +1,9 @@
 use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::path::Path;
 
 use uuid::Uuid;
 
-fn temp_workspace() -> PathBuf {
-    let workspace =
-        std::env::temp_dir().join(format!("synod-assistant-chat-fallback-{}", Uuid::new_v4()));
-    fs::create_dir_all(&workspace).unwrap();
-    fs::write(
-        workspace.join("Cargo.toml"),
-        "[package]\nname = \"synod-fixture\"\nversion = \"0.4.0\"\nedition = \"2024\"\n",
-    )
-    .unwrap();
-    workspace
-}
-
-fn run_synod(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_synod"))
-        .args(args)
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .output()
-        .unwrap()
-}
-
-fn terminal_text(output: &Output) -> String {
-    format!(
-        "{}{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    )
-}
+use crate::workspace_fixture::{run_synod, temp_broken_fixture_workspace, terminal_text};
 
 fn read_asset(relative_path: &str) -> String {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(relative_path);
@@ -204,8 +177,8 @@ fn chat_fallback_assets_offer_repo_root_copyable_commands_for_us3() {
 
 #[test]
 fn chat_fallback_non_success_session_native_run_output_preserves_trace_and_next_step_cues() {
-    let workspace = temp_workspace();
-    bootstrap_session(&workspace, "Force a non-success failure for the default developer flow");
+    let workspace = temp_broken_fixture_workspace("synod-assistant-chat-fallback-broken");
+    bootstrap_session(&workspace, "Attempt the fixture patch on a broken workspace");
     let workspace_ref = workspace.to_string_lossy().into_owned();
     let run_output = run_synod(&["run", "--workspace", &workspace_ref]);
     let run_text = terminal_text(&run_output);

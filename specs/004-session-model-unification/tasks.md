@@ -47,7 +47,7 @@
 
 - [X] T011 [P] [US1] Add contract coverage for active session record creation and validation in tests/contract/session_record_contract.rs
 - [X] T012 [P] [US1] Add integration coverage for start and session reuse flows in tests/integration/session_cli_flow.rs
-- [X] T013 [P] [US1] Add integration coverage for missing-session recovery guidance in tests/integration/session_recovery.rs
+- [X] T013 [P] [US1] Add integration coverage for missing-session recovery guidance in tests/integration/session_cli_flow.rs
 
 ### Implementation for User Story 1
 
@@ -73,7 +73,7 @@
 
 - [X] T019 [P] [US2] Add contract coverage for session-backed planning and execution transitions in tests/contract/session_command_contract.rs
 - [X] T020 [P] [US2] Add integration coverage for capture, plan, step, and run happy paths in tests/integration/session_cli_flow.rs
-- [X] T021 [P] [US2] Add integration coverage for retry, replan, failure, and exhaustion persistence in tests/integration/session_recovery.rs
+- [X] T021 [P] [US2] Add integration coverage for retry, replan, failure, and exhaustion persistence in tests/integration/session_cli_flow.rs
 
 ### Implementation for User Story 2
 
@@ -101,7 +101,7 @@
 > **NOTE**: Write these tests first and confirm they fail before implementing the story.
 
 - [X] T030 [P] [US3] Add contract coverage for assistant session continuity rules in tests/contract/assistant_session_continuity_contract.rs
-- [X] T031 [P] [US3] Add integration coverage for status, next, and corrupted-session recovery in tests/integration/session_recovery.rs
+- [X] T031 [P] [US3] Add integration coverage for status, next, and corrupted-session recovery in tests/integration/session_cli_flow.rs
 - [X] T032 [P] [US3] Add integration coverage for CLI and assistant guidance equivalence in tests/integration/session_cli_flow.rs
 
 ### Implementation for User Story 3
@@ -122,7 +122,7 @@
 
 **Purpose**: Close the feature with extra coverage, documentation, roadmap alignment, and full validation.
 
-- [X] T040 [P] Expand targeted edge-case coverage for session continuity in tests/unit/session_record.rs, tests/unit/session_store.rs, tests/unit/cli_output.rs, and tests/integration/session_recovery.rs
+- [X] T040 [P] Expand targeted edge-case coverage for session continuity in tests/unit/session_record.rs, tests/unit/session_store.rs, tests/unit/cli_output.rs, and tests/integration/session_cli_flow.rs
 - [X] T041 [P] Update user-facing session workflow documentation in README.md, assistant/README.md, and specs/004-session-model-unification/quickstart.md
 - [X] T042 [P] Update roadmap sequencing and follow-up notes for the session model in ROADMAP.md
 - [X] T043 Run formatting, lint, and test validation from specs/004-session-model-unification/quickstart.md
@@ -168,7 +168,7 @@
 # Launch the User Story 1 validation work together:
 Task: "T011 Add contract coverage for active session record creation and validation in tests/contract/session_record_contract.rs"
 Task: "T012 Add integration coverage for start and session reuse flows in tests/integration/session_cli_flow.rs"
-Task: "T013 Add integration coverage for missing-session recovery guidance in tests/integration/session_recovery.rs"
+Task: "T013 Add integration coverage for missing-session recovery guidance in tests/integration/session_cli_flow.rs"
 
 # Once tests exist, split persistence and handler work across independent files:
 Task: "T014 Implement workspace session create, load, and replace operations in src/adapters/session_store.rs"
@@ -181,7 +181,7 @@ Task: "T016 Implement start and session-resolution handlers in src/cli/session.r
 # Build the planning and execution test surface together:
 Task: "T019 Add contract coverage for session-backed planning and execution transitions in tests/contract/session_command_contract.rs"
 Task: "T020 Add integration coverage for capture, plan, step, and run happy paths in tests/integration/session_cli_flow.rs"
-Task: "T021 Add integration coverage for retry, replan, failure, and exhaustion persistence in tests/integration/session_recovery.rs"
+Task: "T021 Add integration coverage for retry, replan, failure, and exhaustion persistence in tests/integration/session_cli_flow.rs"
 
 # Split state-model and transition work after tests are in place:
 Task: "T022 Persist TaskSnapshot counters, terminal reasons, and latest trace references in src/domain/session.rs and src/domain/task.rs"
@@ -193,7 +193,7 @@ Task: "T023 Implement capture and plan session transitions in src/orchestrator/s
 ```bash
 # Validate session guidance and assistant continuity in parallel:
 Task: "T030 Add contract coverage for assistant session continuity rules in tests/contract/assistant_session_continuity_contract.rs"
-Task: "T031 Add integration coverage for status, next, and corrupted-session recovery in tests/integration/session_recovery.rs"
+Task: "T031 Add integration coverage for status, next, and corrupted-session recovery in tests/integration/session_cli_flow.rs"
 Task: "T032 Add integration coverage for CLI and assistant guidance equivalence in tests/integration/session_cli_flow.rs"
 
 # Then split assistant asset updates by provider:
@@ -210,7 +210,7 @@ Task: "T038 Update Copilot continuity prompts to reuse active session state in a
 2. Complete Phase 2: Foundational.
 3. Complete Phase 3: User Story 1.
 4. Validate the independent US1 start, reuse, and invalid-session recovery flows.
-5. Demo the MVP active-session workflow before adding planning or assistant continuity.
+5. Validate the MVP active-session workflow before adding planning or assistant continuity.
 
 ### Incremental Delivery
 
