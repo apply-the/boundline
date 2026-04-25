@@ -5,17 +5,19 @@ use synod::FileTraceStore;
 use synod::adapters::trace_store::TraceStore;
 use synod::cli::diagnostics::{DiagnosticsCheck, DiagnosticsReport, DiagnosticsStatus};
 use synod::cli::inspect::{
-    InspectCommandError, TraceSummaryError, execute_inspect, render_error, summarize_trace,
+    InspectCommandError, TraceResolutionTarget, TraceSummaryError, execute_inspect, render_error,
+    resolve_trace_path, summarize_trace,
 };
 use synod::cli::output::{
     CommandExitCode, command_name, next_command_after_inspect, next_command_after_run,
-    render_diagnostics, render_inspect_failure, render_run_trace, render_trace_summary,
-    validation_error_message,
+    render_diagnostics, render_inspect_failure, render_run_trace, render_session_status,
+    render_trace_summary, validation_error_message,
 };
 use synod::cli::{
     CliValidationError, CommandExitStatus, CommandName, DeveloperCommand, DeveloperCommandSession,
 };
 use synod::domain::limits::{RunLimits, TerminalCondition};
+use synod::domain::session::{SessionStatus, SessionStatusView};
 use synod::domain::step::{StepKind, StepStatus};
 use synod::domain::task::{TaskRunResponse, TaskStatus, TerminalReason};
 use synod::domain::task_context::TaskContext;
@@ -42,12 +44,20 @@ fn command_names_render_from_subcommands() {
 #[test]
 fn run_session_requires_a_non_empty_goal() {
     let command = DeveloperCommand::Run {
-        workspace: PathBuf::from("/tmp/workspace"),
-        goal: "   ".to_string(),
+        workspace: Some(PathBuf::from("/tmp/workspace")),
+        goal: Some("   ".to_string()),
     };
     let session = DeveloperCommandSession::from_command(&command);
 
-    assert_eq!(session.validate(), Err(CliValidationError::MissingGoal));
+    assert_eq!(session.validate(), Err(CliValidationError::MissingGoal(CommandName::Run)));
+}
+
+#[test]
+fn run_without_legacy_flags_is_valid_for_session_native_execution() {
+    let command = DeveloperCommand::Run { workspace: None, goal: None };
+    let session = DeveloperCommandSession::from_command(&command);
+
+    assert_eq!(session.validate(), Ok(()));
 }
 
 #[test]
@@ -124,6 +134,21 @@ fn inspect_failure_renderer_exposes_correction_cues() {
     assert!(
         rendered.contains("corrected_command: cargo run --bin synod -- inspect --trace <trace>")
     );
+}
+
+#[test]
+fn inspect_invalid_session_errors_reuse_session_guidance() {
+    let rendered = render_error(
+        None,
+        Some(std::path::Path::new("/tmp/workspace")),
+        &InspectCommandError::InvalidSession(
+            "active session is invalid: workspace_ref must not be empty".to_string(),
+        ),
+    );
+
+    assert!(rendered.contains("inspect: session error"), "{rendered}");
+    assert!(rendered.contains("reason: active session is invalid:"), "{rendered}");
+    assert!(rendered.contains("next_command: synod start"), "{rendered}");
 }
 
 #[test]
@@ -433,6 +458,54 @@ fn summarize_trace_with_unknown_step_status_yields_running_final_status_and_comp
 }
 
 #[test]
+fn render_session_status_includes_goal_trace_and_next_command() {
+    let view = SessionStatusView {
+        session_id: "session-status".to_string(),
+        workspace_ref: "/tmp/session-workspace".to_string(),
+        goal: Some("Ship a bounded change".to_string()),
+        plan_revision: Some(2),
+        current_step_id: Some("verify".to_string()),
+        current_step_index: Some(1),
+        latest_status: SessionStatus::Running,
+        latest_trace_ref: Some("/tmp/session-workspace/.synod/traces/task.json".to_string()),
+        next_command: Some("synod next".to_string()),
+        explanation: "the active session can keep executing from the current step".to_string(),
+    };
+
+    let rendered = render_session_status(&view);
+
+    assert!(rendered.contains("session_id: session-status"), "{rendered}");
+    assert!(rendered.contains("goal: Ship a bounded change"), "{rendered}");
+    assert!(rendered.contains("latest_status: running"), "{rendered}");
+    assert!(
+        rendered.contains("latest_trace_ref: /tmp/session-workspace/.synod/traces/task.json"),
+        "{rendered}"
+    );
+    assert!(rendered.contains("next_command: synod next"), "{rendered}");
+}
+
+#[test]
+fn resolve_trace_path_prefers_session_trace_ref_when_available() {
+    use std::fs;
+
+    let workspace =
+        std::env::temp_dir().join(format!("synod-unit-session-trace-{}", Uuid::new_v4()));
+    fs::create_dir_all(&workspace).unwrap();
+
+    let explicit_session_trace = workspace.join(".synod").join("traces").join("session-trace.json");
+    fs::create_dir_all(explicit_session_trace.parent().unwrap()).unwrap();
+    let store = FileTraceStore::new(explicit_session_trace.parent().unwrap());
+    let trace = minimal_trace("task-session-trace");
+    let persisted = store.persist(&trace).unwrap();
+
+    let (target, path) =
+        resolve_trace_path(None, Some(&workspace), Some(persisted.to_str().unwrap())).unwrap();
+
+    assert_eq!(target, TraceResolutionTarget::SessionTraceRef);
+    assert_eq!(path, persisted);
+}
+
+#[test]
 fn execute_inspect_with_no_args_returns_missing_trace_reference_error() {
     let result = execute_inspect(None, None);
     assert!(matches!(result, Err(InspectCommandError::MissingTraceReference)), "{result:?}");
@@ -508,8 +581,8 @@ fn command_names_render_for_all_four_subcommands() {
     );
     assert_eq!(
         command_name(&DeveloperCommand::Run {
-            workspace: PathBuf::from("/tmp"),
-            goal: "x".to_string(),
+            workspace: Some(PathBuf::from("/tmp")),
+            goal: Some("x".to_string()),
         }),
         "run"
     );

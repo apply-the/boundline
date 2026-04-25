@@ -15,34 +15,53 @@ fn test_start_and_plan_definition_sections_and_backend_mappings() {
     let assets = [
         (
             asset_path("assistant/claude/commands/synod-start.md"),
-            &["cargo run --bin synod -- doctor --workspace <workspace>", "/synod-run"][..],
+            &["cargo run --bin synod -- start --workspace <workspace>", "/synod-plan"][..],
+            &["cargo run --bin synod -- doctor --workspace <workspace>"][..],
         ),
         (
             asset_path("assistant/codex/commands/synod-start.md"),
-            &["cargo run --bin synod -- doctor --workspace <workspace>", "/synod-run"][..],
+            &["cargo run --bin synod -- start --workspace <workspace>", "/synod-plan"][..],
+            &["cargo run --bin synod -- doctor --workspace <workspace>"][..],
         ),
         (
             asset_path("assistant/copilot/prompts/synod-start.prompt.md"),
-            &["cargo run --bin synod -- doctor --workspace <workspace>", "/synod-run"][..],
+            &["cargo run --bin synod -- start --workspace <workspace>", "/synod-plan"][..],
+            &["cargo run --bin synod -- doctor --workspace <workspace>"][..],
         ),
         (
             asset_path("assistant/claude/commands/synod-plan.md"),
-            &["No direct CLI invocation is required", "/synod-run"][..],
+            &[
+                "cargo run --bin synod -- capture --workspace <workspace> --goal \"<goal>\"",
+                "cargo run --bin synod -- plan --workspace <workspace>",
+                "/synod-step",
+            ][..],
+            &["No direct CLI invocation is required"][..],
         ),
         (
             asset_path("assistant/codex/commands/synod-plan.md"),
-            &["No direct CLI invocation is required", "/synod-run"][..],
+            &[
+                "cargo run --bin synod -- capture --workspace <workspace> --goal \"<goal>\"",
+                "cargo run --bin synod -- plan --workspace <workspace>",
+                "/synod-step",
+            ][..],
+            &["No direct CLI invocation is required"][..],
         ),
         (
             asset_path("assistant/copilot/prompts/synod-plan.prompt.md"),
-            &["No direct CLI invocation is required", "/synod-run"][..],
+            &[
+                "cargo run --bin synod -- capture --workspace <workspace> --goal \"<goal>\"",
+                "cargo run --bin synod -- plan --workspace <workspace>",
+                "/synod-step",
+            ][..],
+            &["No direct CLI invocation is required"][..],
         ),
     ];
 
-    for (path, snippets) in assets {
+    for (path, required, forbidden) in assets {
         let content = read_asset(&path);
         assert_required_sections(&path, &content);
-        assert_required_snippets(&path, &content, snippets);
+        assert_required_snippets(&path, &content, required);
+        assert_forbidden_snippets(&path, &content, forbidden);
     }
 }
 
@@ -52,93 +71,118 @@ fn test_step_run_status_and_next_definition_sections_and_backend_mappings() {
         (
             asset_path("assistant/claude/commands/synod-step.md"),
             &[
-                "No direct CLI invocation is required",
-                "cargo run --bin synod -- inspect --workspace <workspace>",
-                "/synod-status",
-                "/synod-next",
+                "cargo run --bin synod -- step --workspace <workspace>",
+                "latest_trace_ref",
+                "next_command",
             ][..],
+            &["No direct CLI invocation is required by default"][..],
         ),
         (
             asset_path("assistant/codex/commands/synod-step.md"),
             &[
-                "No direct CLI invocation is required",
-                "cargo run --bin synod -- inspect --workspace <workspace>",
-                "/synod-status",
-                "/synod-next",
+                "cargo run --bin synod -- step --workspace <workspace>",
+                "latest_trace_ref",
+                "next_command",
             ][..],
+            &["No direct CLI invocation is required by default"][..],
         ),
         (
             asset_path("assistant/copilot/prompts/synod-step.prompt.md"),
             &[
-                "No direct CLI invocation is required",
-                "cargo run --bin synod -- inspect --workspace <workspace>",
-                "/synod-status",
-                "/synod-next",
+                "cargo run --bin synod -- step --workspace <workspace>",
+                "latest_trace_ref",
+                "next_command",
             ][..],
+            &["No direct CLI invocation is required by default"][..],
         ),
         (
             asset_path("assistant/claude/commands/synod-run.md"),
             &[
-                "cargo run --bin synod -- run --workspace <workspace> --goal \"<goal>\"",
-                "/synod-next",
+                "cargo run --bin synod -- run --workspace <workspace>",
+                "next_command",
+                "/synod-inspect",
             ][..],
+            &["cargo run --bin synod -- run --workspace <workspace> --goal \"<goal>\""][..],
         ),
         (
             asset_path("assistant/codex/commands/synod-run.md"),
             &[
-                "cargo run --bin synod -- run --workspace <workspace> --goal \"<goal>\"",
-                "/synod-next",
+                "cargo run --bin synod -- run --workspace <workspace>",
+                "next_command",
+                "/synod-inspect",
             ][..],
+            &["cargo run --bin synod -- run --workspace <workspace> --goal \"<goal>\""][..],
         ),
         (
             asset_path("assistant/copilot/prompts/synod-run.prompt.md"),
             &[
-                "cargo run --bin synod -- run --workspace <workspace> --goal \"<goal>\"",
-                "/synod-next",
+                "cargo run --bin synod -- run --workspace <workspace>",
+                "next_command",
+                "/synod-inspect",
             ][..],
+            &["cargo run --bin synod -- run --workspace <workspace> --goal \"<goal>\""][..],
         ),
         (
             asset_path("assistant/claude/commands/synod-status.md"),
-            &["cargo run --bin synod -- inspect --workspace <workspace>", "/synod-next"][..],
+            &[
+                "cargo run --bin synod -- status --workspace <workspace>",
+                "latest_trace_ref",
+                "next_command",
+            ][..],
+            &["cargo run --bin synod -- inspect --workspace <workspace>"][..],
         ),
         (
             asset_path("assistant/codex/commands/synod-status.md"),
-            &["cargo run --bin synod -- inspect --workspace <workspace>", "/synod-next"][..],
+            &[
+                "cargo run --bin synod -- status --workspace <workspace>",
+                "latest_trace_ref",
+                "next_command",
+            ][..],
+            &["cargo run --bin synod -- inspect --workspace <workspace>"][..],
         ),
         (
             asset_path("assistant/copilot/prompts/synod-status.prompt.md"),
-            &["cargo run --bin synod -- inspect --workspace <workspace>", "/synod-next"][..],
+            &[
+                "cargo run --bin synod -- status --workspace <workspace>",
+                "latest_trace_ref",
+                "next_command",
+            ][..],
+            &["cargo run --bin synod -- inspect --workspace <workspace>"][..],
         ),
         (
             asset_path("assistant/claude/commands/synod-next.md"),
             &[
-                "cargo run --bin synod -- inspect --workspace <workspace>",
-                "/synod-run",
-                "/synod-step",
+                "cargo run --bin synod -- next --workspace <workspace>",
+                "latest_trace_ref",
+                "next_command",
             ][..],
+            &["cargo run --bin synod -- inspect --workspace <workspace>"][..],
         ),
         (
             asset_path("assistant/codex/commands/synod-next.md"),
             &[
-                "cargo run --bin synod -- inspect --workspace <workspace>",
-                "/synod-run",
-                "/synod-step",
+                "cargo run --bin synod -- next --workspace <workspace>",
+                "latest_trace_ref",
+                "next_command",
             ][..],
+            &["cargo run --bin synod -- inspect --workspace <workspace>"][..],
         ),
         (
             asset_path("assistant/copilot/prompts/synod-next.prompt.md"),
             &[
-                "cargo run --bin synod -- inspect --workspace <workspace>",
-                "/synod-run",
-                "/synod-step",
+                "cargo run --bin synod -- next --workspace <workspace>",
+                "latest_trace_ref",
+                "next_command",
             ][..],
+            &["cargo run --bin synod -- inspect --workspace <workspace>"][..],
         ),
     ];
 
-    for (path, snippets) in assets {
+    for (path, required, forbidden) in assets {
         let content = read_asset(&path);
         assert_required_sections(&path, &content);
-        assert_required_snippets(&path, &content, snippets);
+        assert_required_snippets(&path, &content, required);
+        assert_forbidden_snippets(&path, &content, forbidden);
     }
 }
 
@@ -150,8 +194,9 @@ fn test_inspect_definition_sections_and_trace_read_failure_expectations() {
             &[
                 "cargo run --bin synod -- inspect --trace <trace>",
                 "cargo run --bin synod -- inspect --workspace <workspace>",
-                "trace reading fails",
-                "/synod-next",
+                "latest_trace_ref",
+                "/synod-start",
+                "next_command",
             ][..],
         ),
         (
@@ -159,8 +204,9 @@ fn test_inspect_definition_sections_and_trace_read_failure_expectations() {
             &[
                 "cargo run --bin synod -- inspect --trace <trace>",
                 "cargo run --bin synod -- inspect --workspace <workspace>",
-                "trace reading fails",
-                "/synod-next",
+                "latest_trace_ref",
+                "/synod-start",
+                "next_command",
             ][..],
         ),
         (
@@ -168,8 +214,9 @@ fn test_inspect_definition_sections_and_trace_read_failure_expectations() {
             &[
                 "cargo run --bin synod -- inspect --trace <trace>",
                 "cargo run --bin synod -- inspect --workspace <workspace>",
-                "trace reading fails",
-                "/synod-next",
+                "latest_trace_ref",
+                "/synod-start",
+                "next_command",
             ][..],
         ),
     ];
@@ -178,6 +225,16 @@ fn test_inspect_definition_sections_and_trace_read_failure_expectations() {
         let content = read_asset(&path);
         assert_required_sections(&path, &content);
         assert_required_snippets(&path, &content, snippets);
+    }
+}
+
+fn assert_forbidden_snippets(path: &Path, content: &str, snippets: &[&str]) {
+    for snippet in snippets {
+        assert!(
+            !content.contains(snippet),
+            "assistant asset {} still contains deprecated mapping snippet {snippet}",
+            path.display()
+        );
     }
 }
 

@@ -1,3 +1,5 @@
+use synod::cli;
+
 fn main() {
-    std::process::exit(synod::cli::execute());
+    std::process::exit(cli::execute());
 }
