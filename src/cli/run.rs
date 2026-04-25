@@ -48,7 +48,12 @@ fn execute_profile(
     } else {
         CommandExitStatus::NonSuccess
     };
-    let terminal_output = output::render_run_trace(command_name, trace.as_ref(), &response);
+    let terminal_output = output::render_run_trace(
+        command_name,
+        trace.as_ref(),
+        &response,
+        output::next_command_after_run(response.terminal_status),
+    );
 
     Ok(RunCommandReport {
         exit_status,

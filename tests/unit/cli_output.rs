@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use synod::cli::diagnostics::{DiagnosticsCheck, DiagnosticsReport, DiagnosticsStatus};
 use synod::cli::output::{
-    CommandExitCode, command_name, render_diagnostics, render_trace_summary,
-    validation_error_message,
+    CommandExitCode, command_name, next_command_after_inspect, next_command_after_run,
+    render_diagnostics, render_inspect_failure, render_trace_summary, validation_error_message,
 };
 use synod::cli::{
     CliValidationError, CommandExitStatus, CommandName, DeveloperCommand, DeveloperCommandSession,
@@ -92,6 +92,32 @@ fn diagnostics_renderer_lists_check_names_and_actions() {
 }
 
 #[test]
+fn next_command_helpers_match_assistant_routing_expectations() {
+    assert_eq!(next_command_after_run(TaskStatus::Succeeded), "/synod-status");
+    assert_eq!(next_command_after_run(TaskStatus::Failed), "/synod-next");
+    assert_eq!(next_command_after_inspect(TaskStatus::Succeeded), "/synod-next");
+}
+
+#[test]
+fn inspect_failure_renderer_exposes_correction_cues() {
+    let rendered = render_inspect_failure(
+        "explicit-trace",
+        Some("/tmp/missing-trace.json"),
+        None,
+        "failed to read the requested trace",
+        "cargo run --bin synod -- inspect --trace <trace>",
+    );
+
+    assert!(rendered.contains("inspect: trace read failure"));
+    assert!(rendered.contains("inspection_target: explicit-trace"));
+    assert!(rendered.contains("trace: /tmp/missing-trace.json"));
+    assert!(rendered.contains("next_command: /synod-inspect"));
+    assert!(
+        rendered.contains("corrected_command: cargo run --bin synod -- inspect --trace <trace>")
+    );
+}
+
+#[test]
 fn trace_summary_renderer_mentions_steps_recovery_and_terminal_reason() {
     let summary = TraceSummaryView {
         trace_ref: "/tmp/workspace/.synod/traces/task.json".to_string(),
@@ -126,12 +152,18 @@ fn trace_summary_renderer_mentions_steps_recovery_and_terminal_reason() {
         duration: Some(42),
     };
 
-    let rendered = render_trace_summary(&summary);
+    let rendered = render_trace_summary(
+        &summary,
+        "explicit-trace",
+        next_command_after_inspect(summary.terminal_status),
+    );
 
+    assert!(rendered.contains("inspection_target: explicit-trace"));
     assert!(rendered.contains("trace: /tmp/workspace/.synod/traces/task.json"));
     assert!(rendered.contains("step analyze (agent) succeeded [1 attempt(s)]"));
     assert!(rendered.contains("step code (agent) succeeded [2 attempt(s)]"));
     assert!(rendered.contains("retry: retrying step code within remaining retry budget"));
     assert!(rendered.contains("terminal_reason: goal satisfied after step verify"));
+    assert!(rendered.contains("next_command: /synod-next"));
     assert!(rendered.contains("duration_ms: 42"));
 }

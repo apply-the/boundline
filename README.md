@@ -1,5 +1,10 @@
 # synod
 
+[![CI](https://github.com/apply-the/synod/actions/workflows/ci.yml/badge.svg)](https://github.com/apply-the/synod/actions/workflows/ci.yml)
+[![Lint](https://github.com/apply-the/synod/actions/workflows/lint.yml/badge.svg)](https://github.com/apply-the/synod/actions/workflows/lint.yml)
+[![Vulnerabilities](https://github.com/apply-the/synod/actions/workflows/vulnerabilities.yml/badge.svg)](https://github.com/apply-the/synod/actions/workflows/vulnerabilities.yml)
+[![Coverage](https://codecov.io/gh/apply-the/synod/graph/badge.svg)](https://codecov.io/gh/apply-the/synod)
+
 Synod is a bounded delivery orchestrator. The current repository implements the
 core Rust orchestrator plus a local developer CLI for `doctor`, `demo`, `run`,
 and `inspect`, so contributors can exercise the runtime without reading the test
@@ -80,6 +85,19 @@ deterministic, and trace-backed under `<workspace>/.synod/traces/`.
 
 For the full command walkthrough and example flows, see
 [`specs/002-developer-ux-orchestrator/quickstart.md`](specs/002-developer-ux-orchestrator/quickstart.md).
+
+## Assistant Command Packs
+
+The repository also ships assistant-native command packs for Copilot, Codex, and Claude under `assistant/`.
+They wrap the existing local CLI instead of introducing a second runtime surface.
+
+- Shared installation and workflow guidance lives in `assistant/README.md`.
+- Claude and Codex use slash-style Markdown command files.
+- Copilot uses `.prompt.md` prompt files.
+- All fallback commands are runnable from the repository root with `cargo run --bin synod -- ...`.
+
+For the assistant workflow walkthrough, see
+[`specs/003-assistant-command-packs/quickstart.md`](specs/003-assistant-command-packs/quickstart.md).
 
 ## Local Validation
 
