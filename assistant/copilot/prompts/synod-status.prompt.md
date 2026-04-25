@@ -7,24 +7,24 @@ description: "Summarize the latest known status of a Synod workflow"
 Shared guidance: `assistant/README.md`
 
 ## Intent
-Summarize the latest known status of a workflow in a workspace.
+Summarize the active session state for a workspace without re-inspecting a trace by default.
 
 ## Required Context
 - `workspace_ref`
 
 ## Shell-Enabled Path
-Run `cargo run --bin synod -- inspect --workspace <workspace>` to inspect the latest trace in that workspace.
+Run `cargo run --bin synod -- status --workspace <workspace>` exactly once.
 
 ## Chat-Only Path
 If shell execution is unavailable, provide this exact copyable command:
 
-`cargo run --bin synod -- inspect --workspace <workspace>`
+`cargo run --bin synod -- status --workspace <workspace>`
 
 Then wait for pasted output.
 
 ## Output Interpretation
-Summarize final status, key step results, recovery events, and the trace reference when present.
+Summarize `latest_status`, `current_step_id`, any `latest_trace_ref`, and the CLI-reported `next_command`.
 
 ## Next-Step Routing
-On success, route to `/synod-next` or `/synod-inspect` if deeper inspection is needed.
-On non-success, route to `/synod-next` or `/synod-start` if readiness must be re-established.
+Prefer the CLI-reported `next_command`; if the session is missing or invalid, route to `/synod-start`.
+Allowed follow-up commands: `/synod-next`, `/synod-inspect`, `/synod-step`, `/synod-plan`, `/synod-start`, `/synod-status`.

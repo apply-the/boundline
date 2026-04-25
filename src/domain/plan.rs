@@ -57,6 +57,11 @@ impl Plan {
         self.steps.get_mut(self.current_step_index)
     }
 
+    pub fn reset_execution_position(&mut self) {
+        self.current_step_index = 0;
+        self.status = PlanStatus::Active;
+    }
+
     pub fn advance(&mut self) {
         if self.current_step_index < self.steps.len() {
             self.current_step_index += 1;

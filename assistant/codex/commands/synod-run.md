@@ -3,25 +3,25 @@
 Shared guidance: `assistant/README.md`
 
 ## Intent
-Execute a bounded Synod workflow with a confirmed workspace and goal.
+Resume the active Synod session until it reaches a terminal outcome.
 
 ## Required Context
 - `workspace_ref`
-- Goal phrased as one bounded developer outcome
+- Active session state; do not ask for a new goal when one is already captured
 
 ## Shell-Enabled Path
-Run `cargo run --bin synod -- run --workspace <workspace> --goal "<goal>"` exactly once.
+If the workspace is known, run `cargo run --bin synod -- run --workspace <workspace>` exactly once.
 
 ## Chat-Only Path
-If shell execution is unavailable, ask only for missing context and then provide this exact copyable command:
+If shell execution is unavailable, ask only for missing workspace context and then provide this exact copyable command:
 
-`cargo run --bin synod -- run --workspace <workspace> --goal "<goal>"`
+`cargo run --bin synod -- run --workspace <workspace>`
 
 Wait for the user to paste the output before continuing.
 
 ## Output Interpretation
-Summarize terminal status, key executed steps, recovery signals, trace location, and the most useful next command.
+Summarize `terminal_status`, `terminal_reason`, `trace`, and `next_command`. Preserve the returned trace reference for later `/synod-inspect` use.
 
 ## Next-Step Routing
-On success, prefer `/synod-status` or `/synod-inspect` when inspection is useful.
-On non-success, prefer `/synod-next` or `/synod-inspect`.
+Prefer the CLI-reported `next_command`; when inspection is needed, route to `/synod-inspect`.
+Allowed follow-up commands: `/synod-inspect`, `/synod-status`, `/synod-next`, `/synod-run`, `/synod-plan`, `/synod-start`.

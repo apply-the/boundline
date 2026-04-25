@@ -6,9 +6,10 @@
 [![Coverage](https://codecov.io/gh/apply-the/synod/graph/badge.svg)](https://codecov.io/gh/apply-the/synod)
 
 Synod is a bounded delivery orchestrator. The current repository implements the
-core Rust orchestrator plus a local developer CLI for `doctor`, `demo`, `run`,
-and `inspect`, so contributors can exercise the runtime without reading the test
-suite first.
+core Rust orchestrator plus a local developer CLI for `doctor`, `demo`,
+session-backed `start` / `capture` / `plan` / `step` / `run` / `status` /
+`next`, and `inspect`, so contributors can exercise the runtime without reading
+the test suite first.
 
 Canon remains part of the longer-term architecture discussion below, but the
 currently implemented developer experience runs fully locally and does not call
@@ -66,12 +67,14 @@ The current repository implements the delivery orchestrator core as a Rust libra
 - `synod::StaticPlanner`: provides deterministic initial plans and queued replans for tests.
 - `synod::AgentRegistry` and `synod::ToolRegistry`: register named execution endpoints.
 - `synod::FileTraceStore`: persists execution traces under `<workspace>/.synod/traces/`.
+- `synod::FileSessionStore` and `synod::SessionRuntime`: persist and resume active session state under `<workspace>/.synod/session.json`.
 - `synod::TaskRunRequest` and `synod::TaskRunResponse`: define the run contract used by tests and future delivery flows.
-- `synod` CLI binary: exposes `doctor`, `demo`, `run`, and `inspect` over the existing core.
+- `synod` CLI binary: exposes `doctor`, `demo`, `start`, `capture`, `plan`, `step`, `run`, `status`, `next`, and `inspect` over the existing core.
 
 The current implementation covers:
 
 - explicit bounded task lifecycle
+- persisted workspace-scoped active sessions
 - shared task context across steps
 - bounded retries and bounded replanning
 - deterministic terminal states
@@ -79,12 +82,20 @@ The current implementation covers:
 
 ## Developer CLI
 
-The local `synod` binary exposes `doctor`, `demo`, `run`, and `inspect` over
-the existing orchestrator core. It keeps the developer experience local,
-deterministic, and trace-backed under `<workspace>/.synod/traces/`.
+The local `synod` binary keeps the developer experience local, deterministic,
+and backed by both `<workspace>/.synod/session.json` and
+`<workspace>/.synod/traces/`.
+
+The primary session-native flow is:
+
+1. `synod start`
+2. `synod capture --goal "..."`
+3. `synod plan`
+4. `synod step` or `synod run`
+5. `synod status`, `synod next`, and `synod inspect --workspace <workspace>`
 
 For the full command walkthrough and example flows, see
-[`specs/002-developer-ux-orchestrator/quickstart.md`](specs/002-developer-ux-orchestrator/quickstart.md).
+[`specs/004-session-model-unification/quickstart.md`](specs/004-session-model-unification/quickstart.md).
 
 ## Assistant Command Packs
 

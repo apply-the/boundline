@@ -6,6 +6,19 @@ Canon resta fuori dal perimetro di questa roadmap: e il runtime che persiste art
 
 Fare evolvere Synod in un sistema capace di prendere un problema e trasformarlo in codice funzionante, con controllo qualita multi-agente.
 
+## Stato Attuale
+
+La slice `Spec 1.3 — Session & Interaction Model Unification` e ora disponibile nel CLI locale.
+
+- sessione attiva persistita in `.synod/session.json`
+- flusso esplicito `start -> capture -> plan -> step/run -> status/next -> inspect`
+- pack assistant allineati al modello di sessione e al riuso di `latest_trace_ref`
+
+Follow-up immediato:
+
+- continuare a costruire delivery flows sopra il modello di sessione condiviso
+- rafforzare UX e recovery guidata intorno a trace e session state
+
 ## Spec 1 — Delivery Orchestrator Core
 
 ### Outcome
@@ -51,6 +64,8 @@ Synod supporta flow espliciti per la delivery:
 ### Perche ora
 
 E il cuore del valore: portare codice in produzione, non solo analizzare.
+
+La nuova sessione condivisa del CLI riduce il costo di contesto per questi flow e rende praticabile una UX chat-first senza re-inserire goal o trace a ogni comando.
 
 ### In scope
 

@@ -20,34 +20,34 @@ Since an assistant may be executed in a context *without* shell access (e.g., st
 If the shell/terminal is *not* available:
 1. Provide the user with the correct CLI command.
 2. Provide a brief explanation of what the command does.
-3. Invite the user to run it manually and paste the output.
+3. Tell the user to run it manually, wait for it to finish, and paste the output.
 
 If the shell/terminal *is* available:
 1. Run the mapped CLI command directly from the repository root with `cargo run --bin synod -- ...`.
 2. Do not explain syntax.
-3. Observe the output and follow the next logical step silently until user interaction is required.
+3. Prefer CLI-reported `next_command` or `corrected_command` when present instead of inventing a follow-up.
 
 ## Workflows
 
 ### Starting a Workflow (User Story 1)
-- `/synod-start`: Confirms the workspace and runs `cargo run --bin synod -- doctor --workspace <workspace>` to summarize readiness and missing prerequisites.
-- `/synod-plan`: Clarifies a bounded goal and routes to `/synod-run`; no direct CLI invocation is required.
+- `/synod-start`: Confirms the workspace and runs `cargo run --bin synod -- start --workspace <workspace>` to initialize the active session.
+- `/synod-plan`: Clarifies a bounded goal, then runs `cargo run --bin synod -- capture --workspace <workspace> --goal "<goal>"` followed by `cargo run --bin synod -- plan --workspace <workspace>`.
 
 ### Continuing a Workflow (User Story 2)
-- `/synod-step`: Uses confirmed context or pasted inspection output to recommend one explicit next command without inventing hidden state.
-- `/synod-run`: Executes `cargo run --bin synod -- run --workspace <workspace> --goal "<goal>"` and summarizes `terminal_status`, `terminal_reason`, `trace`, and `next_command`.
-- `/synod-status`: Executes `cargo run --bin synod -- inspect --workspace <workspace>` and summarizes the latest trace for the current workspace.
-- `/synod-next`: Uses the latest inspection evidence to recommend the single most useful next command; when evidence is missing it first routes through `cargo run --bin synod -- inspect --workspace <workspace>`.
+- `/synod-step`: Executes `cargo run --bin synod -- step --workspace <workspace>` and summarizes `latest_status`, `latest_trace_ref`, and `next_command`.
+- `/synod-run`: Executes `cargo run --bin synod -- run --workspace <workspace>` and summarizes `terminal_status`, `terminal_reason`, `trace`, and `next_command`.
+- `/synod-status`: Executes `cargo run --bin synod -- status --workspace <workspace>` and summarizes the active session state for the current workspace.
+- `/synod-next`: Executes `cargo run --bin synod -- next --workspace <workspace>` and summarizes the CLI-reported next action for the active session.
 
 ### Inspecting Prior Runs (User Story 3)
-- `/synod-inspect`: Executes `cargo run --bin synod -- inspect --trace <trace>` for an explicit trace or `cargo run --bin synod -- inspect --workspace <workspace>` for the latest trace in a workspace.
+- `/synod-inspect`: Executes `cargo run --bin synod -- inspect --trace <trace>` for an explicit trace or `cargo run --bin synod -- inspect --workspace <workspace>` for the workspace-selected trace. Workspace-based inspect may reuse the active session's `latest_trace_ref` before falling back to the latest workspace trace.
 - Successful inspection summaries must expose `inspection_target`, `trace`, `terminal_status`, `terminal_reason`, and `next_command` so assistants can continue routing without dumping raw logs.
-- Trace-read failures must expose `terminal_reason`, `next_command: /synod-inspect`, and a `corrected_command` that tells the user how to retry with a corrected trace reference or workspace.
+- Trace-read failures must expose `terminal_reason`, `next_command: /synod-inspect`, and a `corrected_command` that tells the user how to retry with a corrected trace reference or workspace. Workspace-based inspect session errors should route back to `/synod-start`.
 
 ## Continuity Rules
-- Preserve confirmed `workspace_ref`, goal, and latest trace reference across assistant turns.
+- Preserve confirmed `workspace_ref`, captured goal, and latest trace reference across assistant turns.
 - Ask only for missing fields before recommending or executing a command.
-- In chat-only mode, wait for pasted output before updating the workflow state.
+- In chat-only mode, always provide exact copyable commands, wait for the user to run them, and update the workflow state only after pasted output.
 - Preserve `inspection_target` when the user is working from an explicit trace instead of the latest workspace trace.
 - When CLI output includes `next_command`, prefer that route instead of inventing a follow-up.
 - When CLI output includes `corrected_command`, reuse it instead of inventing a replacement inspect invocation.

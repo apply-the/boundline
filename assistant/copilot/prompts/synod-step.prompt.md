@@ -7,20 +7,25 @@ description: "Advance a Synod workflow by choosing one explicit next action"
 Shared guidance: `assistant/README.md`
 
 ## Intent
-Advance an active Synod workflow by choosing one explicit next action from the current context.
+Advance the active Synod session by executing exactly one planned step.
 
 ## Required Context
-- Confirmed workflow goal, or pasted inspection output that reveals the current state
-- Workspace reference when the next action depends on the latest recorded trace
+- `workspace_ref`
+- Captured goal or active session state; preserve confirmed context instead of asking for it again
 
 ## Shell-Enabled Path
-No direct CLI invocation is required by default. Use the confirmed context to choose exactly one next command. If the current state is unclear but the workspace is known, route to `/synod-status` or `/synod-next` instead of inventing state.
+If the workspace is known, run `cargo run --bin synod -- step --workspace <workspace>` exactly once. If the workspace or active session is missing, ask only for the missing context or route to `/synod-start` or `/synod-plan`.
 
 ## Chat-Only Path
-Ask only for the missing workflow context or for pasted output from `cargo run --bin synod -- inspect --workspace <workspace>`. Once enough evidence is available, recommend one concrete next command.
+If shell execution is unavailable, ask only for missing workspace details and then provide this exact copyable command:
+
+`cargo run --bin synod -- step --workspace <workspace>`
+
+Wait for pasted output before continuing.
 
 ## Output Interpretation
-Summarize the current state in one short paragraph, then state the single next bounded action.
+Summarize `latest_status`, any updated `latest_trace_ref`, and the CLI-reported `next_command`.
 
 ## Next-Step Routing
-Allowed follow-up commands: `/synod-run`, `/synod-status`, `/synod-next`, `/synod-inspect`, `/synod-start`.
+Prefer the CLI-reported `next_command`; if the session is missing or invalid, route to `/synod-start`.
+Allowed follow-up commands: `/synod-step`, `/synod-status`, `/synod-next`, `/synod-inspect`, `/synod-plan`, `/synod-start`.

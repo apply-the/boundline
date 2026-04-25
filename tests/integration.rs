@@ -24,3 +24,9 @@ mod assistant_shell_enabled_flow;
 
 #[path = "integration/assistant_chat_fallback.rs"]
 mod assistant_chat_fallback;
+
+#[path = "integration/session_cli_flow.rs"]
+mod session_cli_flow;
+
+#[path = "integration/session_recovery.rs"]
+mod session_recovery;

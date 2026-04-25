@@ -7,20 +7,31 @@ description: "Plan a Synod workflow"
 Shared guidance: `assistant/README.md`
 
 ## Intent
-Clarify and bound the user goal so the next step can move into execution without hidden planning.
+Capture the goal and plan the active session into a resumable task.
 
 ## Required Context
-- A broad user goal
-- Workspace readiness when it is already known
+- `workspace_ref`
+- A bounded goal, or the minimum missing detail needed to capture one
 
 ## Shell-Enabled Path
-No direct CLI invocation is required. Clarify the goal, keep it bounded, and route to `/synod-run` once the goal is actionable.
+If the workspace and bounded goal are known, run these commands exactly once and in order:
+
+`cargo run --bin synod -- capture --workspace <workspace> --goal "<goal>"`
+`cargo run --bin synod -- plan --workspace <workspace>`
+
+If either field is missing, ask only for the missing value before running them.
 
 ## Chat-Only Path
-Ask only for the missing goal details. Do not invent background work. Once the goal is bounded, route to `/synod-run` with the clarified wording.
+Ask only for the missing workspace or goal, then provide these exact copyable commands in order:
+
+`cargo run --bin synod -- capture --workspace <workspace> --goal "<goal>"`
+`cargo run --bin synod -- plan --workspace <workspace>`
+
+Tell the user to run them one at a time and paste the outputs before continuing.
 
 ## Output Interpretation
-Summarize the clarified goal, any missing constraints, and whether the workflow is ready to move into execution.
+Summarize the captured goal, resulting plan state, and the CLI-reported `next_command`.
 
 ## Next-Step Routing
-Allowed follow-up commands: `/synod-run`, `/synod-start`, `/synod-plan`.
+Prefer the CLI-reported `next_command`; otherwise move to `/synod-step` or `/synod-run` once planning succeeds.
+Allowed follow-up commands: `/synod-step`, `/synod-run`, `/synod-plan`, `/synod-start`.

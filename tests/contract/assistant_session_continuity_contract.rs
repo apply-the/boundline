@@ -1,0 +1,140 @@
+use std::fs;
+use std::path::{Path, PathBuf};
+
+fn asset_path(relative_path: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join(relative_path)
+}
+
+fn read_asset(relative_path: &str) -> String {
+    fs::read_to_string(asset_path(relative_path)).unwrap()
+}
+
+#[test]
+fn assistant_readme_documents_session_native_continuity_rules() {
+    let content = read_asset("assistant/README.md");
+
+    for snippet in [
+        "cargo run --bin synod -- start --workspace <workspace>",
+        "cargo run --bin synod -- capture --workspace <workspace> --goal \"<goal>\"",
+        "cargo run --bin synod -- plan --workspace <workspace>",
+        "cargo run --bin synod -- step --workspace <workspace>",
+        "cargo run --bin synod -- run --workspace <workspace>",
+        "cargo run --bin synod -- status --workspace <workspace>",
+        "cargo run --bin synod -- next --workspace <workspace>",
+        "Preserve confirmed `workspace_ref`, captured goal, and latest trace reference across assistant turns.",
+        "Workspace-based inspect may reuse the active session's `latest_trace_ref` before falling back to the latest workspace trace.",
+        "When CLI output includes `next_command`, prefer that route instead of inventing a follow-up.",
+    ] {
+        assert!(content.contains(snippet), "assistant/README.md missing {snippet}");
+    }
+}
+
+#[test]
+fn inspect_assets_document_session_trace_reuse_and_start_recovery() {
+    let assets = [
+        "assistant/claude/commands/synod-inspect.md",
+        "assistant/codex/commands/synod-inspect.md",
+        "assistant/copilot/prompts/synod-inspect.prompt.md",
+    ];
+
+    for path in assets {
+        let content = read_asset(path);
+        for snippet in ["latest_trace_ref", "/synod-start"] {
+            assert!(content.contains(snippet), "{path} missing {snippet}");
+        }
+    }
+}
+
+#[test]
+fn assistant_command_packs_expose_session_native_backend_mappings() {
+    let assets = [
+        (
+            "assistant/claude/commands/synod-start.md",
+            &["cargo run --bin synod -- start --workspace <workspace>"][..],
+        ),
+        (
+            "assistant/codex/commands/synod-start.md",
+            &["cargo run --bin synod -- start --workspace <workspace>"][..],
+        ),
+        (
+            "assistant/copilot/prompts/synod-start.prompt.md",
+            &["cargo run --bin synod -- start --workspace <workspace>"][..],
+        ),
+        (
+            "assistant/claude/commands/synod-plan.md",
+            &[
+                "cargo run --bin synod -- capture --workspace <workspace> --goal \"<goal>\"",
+                "cargo run --bin synod -- plan --workspace <workspace>",
+            ][..],
+        ),
+        (
+            "assistant/codex/commands/synod-plan.md",
+            &[
+                "cargo run --bin synod -- capture --workspace <workspace> --goal \"<goal>\"",
+                "cargo run --bin synod -- plan --workspace <workspace>",
+            ][..],
+        ),
+        (
+            "assistant/copilot/prompts/synod-plan.prompt.md",
+            &[
+                "cargo run --bin synod -- capture --workspace <workspace> --goal \"<goal>\"",
+                "cargo run --bin synod -- plan --workspace <workspace>",
+            ][..],
+        ),
+        (
+            "assistant/claude/commands/synod-step.md",
+            &["cargo run --bin synod -- step --workspace <workspace>"][..],
+        ),
+        (
+            "assistant/codex/commands/synod-step.md",
+            &["cargo run --bin synod -- step --workspace <workspace>"][..],
+        ),
+        (
+            "assistant/copilot/prompts/synod-step.prompt.md",
+            &["cargo run --bin synod -- step --workspace <workspace>"][..],
+        ),
+        (
+            "assistant/claude/commands/synod-run.md",
+            &["cargo run --bin synod -- run --workspace <workspace>"][..],
+        ),
+        (
+            "assistant/codex/commands/synod-run.md",
+            &["cargo run --bin synod -- run --workspace <workspace>"][..],
+        ),
+        (
+            "assistant/copilot/prompts/synod-run.prompt.md",
+            &["cargo run --bin synod -- run --workspace <workspace>"][..],
+        ),
+        (
+            "assistant/claude/commands/synod-status.md",
+            &["cargo run --bin synod -- status --workspace <workspace>"][..],
+        ),
+        (
+            "assistant/codex/commands/synod-status.md",
+            &["cargo run --bin synod -- status --workspace <workspace>"][..],
+        ),
+        (
+            "assistant/copilot/prompts/synod-status.prompt.md",
+            &["cargo run --bin synod -- status --workspace <workspace>"][..],
+        ),
+        (
+            "assistant/claude/commands/synod-next.md",
+            &["cargo run --bin synod -- next --workspace <workspace>"][..],
+        ),
+        (
+            "assistant/codex/commands/synod-next.md",
+            &["cargo run --bin synod -- next --workspace <workspace>"][..],
+        ),
+        (
+            "assistant/copilot/prompts/synod-next.prompt.md",
+            &["cargo run --bin synod -- next --workspace <workspace>"][..],
+        ),
+    ];
+
+    for (path, snippets) in assets {
+        let content = read_asset(path);
+        for snippet in snippets {
+            assert!(content.contains(snippet), "{path} missing {snippet}");
+        }
+    }
+}
