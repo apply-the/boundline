@@ -5,21 +5,21 @@
 
 ## Summary
 
-Add a minimal developer-facing CLI to the existing Rust package so contributors can run a deterministic guided demo, submit a simple local task, inspect recorded traces, and verify local readiness without writing integration code against the library directly. The plan keeps the existing orchestrator core as the execution engine, adds one local binary plus thin CLI and demo-profile modules, and preserves sequential bounded execution, persisted traces, and explicit failure handling.
+Add a minimal developer-facing CLI to the existing Rust package so contributors can run a deterministic fixture-backed vertical slice, submit a simple local task, inspect recorded traces, and verify local readiness without writing integration code against the library directly. The plan keeps the existing orchestrator core as the execution engine, adds one local binary plus thin CLI and fixture modules, and preserves sequential bounded execution, persisted traces, and explicit failure handling.
 
 ## Technical Context
 
 **Language/Version**: Rust 1.95.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies (`serde`, `serde_json`, `thiserror`, `tracing`, `uuid`) plus `clap` 4.x for a stable subcommand-based CLI surface  
 **Storage**: In-memory task state during execution and local file-backed traces under `<workspace>/.synod/traces/` through the existing trace store  
-**Testing**: `cargo test` with unit, integration, and contract tests, plus CLI-focused integration coverage over deterministic built-in demo and custom flows  
+**Testing**: `cargo test` with unit, integration, and contract tests, plus CLI-focused integration coverage over deterministic fixture-backed runs and custom goals  
 **Target Platform**: macOS and Linux developer workstations, plus Linux CI validation for formatting, linting, and tests  
 **Project Type**: Single Rust package with a reusable library crate and one local developer CLI binary  
-**Execution Model**: Synchronous CLI invocations layered over the existing sequential task loop with bounded retries, bounded replanning, and deterministic local demo/custom profiles  
+**Execution Model**: Synchronous CLI invocations layered over the existing sequential task loop with bounded retries, bounded replanning, and deterministic local workspace fixtures  
 **Observability Surface**: Human-readable CLI progress, explicit terminal exit codes, local readiness diagnostics, persisted JSON traces, and readable trace inspection summaries  
-**Performance Goals**: Contributors can reach a first demo run from a documented checkout in under 5 minutes, while diagnostics and trace inspection add only interactive local overhead, targeting sub-2-second completion for typical single-run summaries excluding orchestrated step execution time  
+**Performance Goals**: Contributors can reach a first fixture-backed run from a documented checkout in under 5 minutes, while diagnostics and trace inspection add only interactive local overhead, targeting sub-2-second completion for typical single-run summaries excluding orchestrated step execution time  
 **Constraints**: Reuse the current orchestrator core and trace store; keep the experience text-only and non-interactive after invocation; no Canon dependency, remote providers, background services, concurrency, or advanced configuration surface in this slice  
-**Scale/Scope**: One developer-triggered local run or trace inspection at a time, tens of steps per bounded run, one deterministic demo profile with at least one visible recovery path, and trace output sized for local debugging rather than fleet-scale operations
+**Scale/Scope**: One developer-triggered local run or trace inspection at a time, tens of steps per bounded run, one deterministic fixture-backed red-to-green slice, and trace output sized for local debugging rather than fleet-scale operations
 
 ## Constitution Check
 
@@ -47,9 +47,9 @@ specs/002-developer-ux-orchestrator/
 ├── data-model.md
 ├── quickstart.md
 ├── contracts/
-│   ├── demo-run-profile-contract.md
 │   ├── developer-command-contract.md
 │   ├── diagnostics-report-contract.md
+│   ├── workspace-fixture-contract.md
 │   └── trace-summary-contract.md
 └── tasks.md
 ```
@@ -68,10 +68,7 @@ src/
 │   ├── inspect.rs
 │   ├── output.rs
 │   └── run.rs
-├── demo.rs
-├── demo/
-│   ├── endpoints.rs
-│   └── profile.rs
+├── fixture.rs
 ├── adapters/
 │   ├── agent.rs
 │   ├── tool.rs
@@ -102,9 +99,9 @@ tests/
 │   └── trace_summary_contract.rs
 ├── integration/
 │   ├── cli_custom_run.rs
-│   ├── cli_demo_flow.rs
 │   ├── cli_diagnostics.rs
 │   ├── cli_trace_inspection.rs
+│   ├── fixture_vertical_slice.rs
 │   ├── retry_and_replan.rs
 │   ├── sequential_task_run.rs
 │   └── trace_capture.rs
@@ -118,7 +115,7 @@ tests/
     └── terminal_precedence.rs
 ```
 
-**Structure Decision**: Keep a single Rust package and add one local binary plus thin `cli` and `demo` modules inside the existing source tree. This preserves the current library-first architecture, avoids a second crate or workspace layer, and keeps new complexity limited to the developer command surface, deterministic demo wiring, and trace-summary formatting required by the spec.
+**Structure Decision**: Keep a single Rust package and add one local binary plus thin `cli` and `fixture` modules inside the existing source tree. This preserves the current library-first architecture, avoids a second crate or workspace layer, and keeps new complexity limited to the developer command surface, deterministic workspace-fixture execution, and trace-summary formatting required by the spec.
 
 ## Complexity Tracking
 

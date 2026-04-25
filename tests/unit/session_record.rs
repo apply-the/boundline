@@ -1,4 +1,5 @@
 use serde_json::json;
+use synod::domain::flow::built_in_flow;
 use synod::domain::limits::RunLimits;
 use synod::domain::plan::Plan;
 use synod::domain::session::{
@@ -31,6 +32,7 @@ fn session_record_round_trips_and_status_values_serialize() {
         session_id: "session-1".to_string(),
         workspace_ref: "/tmp/synod-session-record".to_string(),
         goal: Some("Deliver a session-backed CLI".to_string()),
+        active_flow: Some(built_in_flow("bug-fix").unwrap().initial_state()),
         active_task: Some(task),
         latest_status: SessionStatus::Planned,
         latest_terminal_reason: None,
@@ -60,6 +62,10 @@ fn session_record_round_trips_and_status_values_serialize() {
         session_id: record.session_id.clone(),
         workspace_ref: record.workspace_ref.clone(),
         goal: record.goal.clone(),
+        active_flow: Some("bug-fix".to_string()),
+        current_stage_id: Some("investigate".to_string()),
+        current_stage_index: Some(0),
+        total_stages: Some(3),
         plan_revision: Some(0),
         current_step_id: Some("analyze".to_string()),
         current_step_index: Some(0),
@@ -78,6 +84,7 @@ fn session_record_validation_rejects_workspace_mismatches_and_external_traces() 
         session_id: "session-2".to_string(),
         workspace_ref: "/tmp/synod-session-record".to_string(),
         goal: Some("Deliver a session-backed CLI".to_string()),
+        active_flow: None,
         active_task: Some(task),
         latest_status: SessionStatus::Planned,
         latest_terminal_reason: None,
@@ -107,6 +114,7 @@ fn terminal_session_requires_terminal_reason_and_consistent_view() {
         session_id: "session-terminal".to_string(),
         workspace_ref: "/tmp/synod-session-record".to_string(),
         goal: Some("Deliver a session-backed CLI".to_string()),
+        active_flow: None,
         active_task: Some(task),
         latest_status: SessionStatus::Succeeded,
         latest_terminal_reason: None,
@@ -127,6 +135,7 @@ fn goal_captured_sessions_require_a_goal_but_invalid_sessions_can_clear_context(
         session_id: "session-goal-captured".to_string(),
         workspace_ref: "/tmp/synod-session-record".to_string(),
         goal: None,
+        active_flow: None,
         active_task: None,
         latest_status: SessionStatus::GoalCaptured,
         latest_terminal_reason: None,
@@ -143,4 +152,27 @@ fn goal_captured_sessions_require_a_goal_but_invalid_sessions_can_clear_context(
     let invalid = ActiveSessionRecord { latest_status: SessionStatus::Invalid, ..missing_goal };
 
     invalid.validate().unwrap();
+}
+
+#[test]
+fn invalid_flow_state_is_rejected_by_session_validation() {
+    let record = ActiveSessionRecord {
+        session_id: "session-flow".to_string(),
+        workspace_ref: "/tmp/synod-session-record".to_string(),
+        goal: Some("Deliver a session-backed CLI".to_string()),
+        active_flow: Some(synod::domain::flow::SessionFlowState {
+            flow_name: "bug-fix".to_string(),
+            current_stage_id: "verify".to_string(),
+            current_stage_index: 0,
+            total_stages: 3,
+        }),
+        active_task: None,
+        latest_status: SessionStatus::GoalCaptured,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 20,
+    };
+
+    assert!(matches!(record.validate().unwrap_err(), SessionValidationError::InvalidFlowState(_)));
 }

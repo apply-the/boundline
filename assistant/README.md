@@ -31,13 +31,15 @@ If the shell/terminal *is* available:
 
 ### Starting a Workflow (User Story 1)
 - `/synod-start`: Confirms the workspace and runs `cargo run --bin synod -- start --workspace <workspace>` to initialize the active session.
-- `/synod-plan`: Clarifies a bounded goal, then runs `cargo run --bin synod -- capture --workspace <workspace> --goal "<goal>"` followed by `cargo run --bin synod -- plan --workspace <workspace>`.
+- `/synod-plan`: Clarifies a bounded goal, runs `cargo run --bin synod -- capture --workspace <workspace> --goal "<goal>"`, and then runs `cargo run --bin synod -- plan --workspace <workspace>`.
+
+If the user explicitly selects a built-in flow, assistants should run `cargo run --bin synod -- flow <bug-fix|change|delivery> --workspace <workspace>` after capture and before plan. There is no separate assistant command pack for `flow`; use the raw CLI subcommand directly.
 
 ### Continuing a Workflow (User Story 2)
-- `/synod-step`: Executes `cargo run --bin synod -- step --workspace <workspace>` and summarizes `latest_status`, `latest_trace_ref`, and `next_command`.
-- `/synod-run`: Executes `cargo run --bin synod -- run --workspace <workspace>` and summarizes `terminal_status`, `terminal_reason`, `trace`, and `next_command`.
-- `/synod-status`: Executes `cargo run --bin synod -- status --workspace <workspace>` and summarizes the active session state for the current workspace.
-- `/synod-next`: Executes `cargo run --bin synod -- next --workspace <workspace>` and summarizes the CLI-reported next action for the active session.
+- `/synod-step`: Executes `cargo run --bin synod -- step --workspace <workspace>` and summarizes `latest_status`, `latest_trace_ref`, `next_command`, and flow-stage fields when present.
+- `/synod-run`: Executes `cargo run --bin synod -- run --workspace <workspace>` and summarizes `terminal_status`, `terminal_reason`, `trace`, `next_command`, and any flow/stage lifecycle events.
+- `/synod-status`: Executes `cargo run --bin synod -- status --workspace <workspace>` and summarizes the active session state for the current workspace, including `active_flow`, `current_stage`, and `stage_progress` when available.
+- `/synod-next`: Executes `cargo run --bin synod -- next --workspace <workspace>` and summarizes the CLI-reported next action for the active session, including flow-stage context when available.
 
 ### Inspecting Prior Runs (User Story 3)
 - `/synod-inspect`: Executes `cargo run --bin synod -- inspect --trace <trace>` for an explicit trace or `cargo run --bin synod -- inspect --workspace <workspace>` for the workspace-selected trace. Workspace-based inspect may reuse the active session's `latest_trace_ref` before falling back to the latest workspace trace.
@@ -46,6 +48,7 @@ If the shell/terminal *is* available:
 
 ## Continuity Rules
 - Preserve confirmed `workspace_ref`, captured goal, and latest trace reference across assistant turns.
+- Preserve the selected flow name when the user has committed to `bug-fix`, `change`, or `delivery`.
 - Ask only for missing fields before recommending or executing a command.
 - In chat-only mode, always provide exact copyable commands, wait for the user to run them, and update the workflow state only after pasted output.
 - Preserve `inspection_target` when the user is working from an explicit trace instead of the latest workspace trace.

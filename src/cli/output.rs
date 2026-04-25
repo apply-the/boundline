@@ -44,9 +44,9 @@ pub fn command_name(command: &DeveloperCommand) -> &'static str {
         DeveloperCommand::Doctor { .. } => "doctor",
         DeveloperCommand::Start { .. } => "start",
         DeveloperCommand::Capture { .. } => "capture",
+        DeveloperCommand::Flow { .. } => "flow",
         DeveloperCommand::Plan { .. } => "plan",
         DeveloperCommand::Step { .. } => "step",
-        DeveloperCommand::Demo { .. } => "demo",
         DeveloperCommand::Run { .. } => "run",
         DeveloperCommand::Inspect { .. } => "inspect",
         DeveloperCommand::Status { .. } => "status",
@@ -97,6 +97,32 @@ pub fn render_run_trace(
         for event in &trace.events {
             match event.event_type {
                 TraceEventType::TaskStarted | TraceEventType::TerminalRecorded => {}
+                TraceEventType::FlowSelected => {
+                    let flow_name = event
+                        .payload
+                        .get("flow_name")
+                        .and_then(Value::as_str)
+                        .unwrap_or("unknown-flow");
+                    let stage_id = event
+                        .payload
+                        .get("current_stage_id")
+                        .and_then(Value::as_str)
+                        .unwrap_or("unknown-stage");
+                    lines.push(format!("flow {flow_name} selected at {stage_id}"));
+                }
+                TraceEventType::StageTransitioned => {
+                    let from_stage = event
+                        .payload
+                        .get("from_stage_id")
+                        .and_then(Value::as_str)
+                        .unwrap_or("unknown-stage");
+                    let to_stage = event
+                        .payload
+                        .get("to_stage_id")
+                        .and_then(Value::as_str)
+                        .unwrap_or("unknown-stage");
+                    lines.push(format!("stage {from_stage} -> {to_stage}"));
+                }
                 TraceEventType::StepStarted => {
                     let step_id = event.step_id.as_deref().unwrap_or("unknown-step");
                     let step_kind =
@@ -118,6 +144,15 @@ pub fn render_run_trace(
                         .unwrap_or("retry scheduled");
                     lines.push(format!("retry for {step_id}: {reason}"));
                 }
+                TraceEventType::StageRetryScheduled => {
+                    let step_id = event.step_id.as_deref().unwrap_or("unknown-step");
+                    let reason = event
+                        .payload
+                        .get("reason")
+                        .and_then(Value::as_str)
+                        .unwrap_or("retry scheduled");
+                    lines.push(format!("stage retry for {step_id}: {reason}"));
+                }
                 TraceEventType::Replanned => {
                     let step_id = event.step_id.as_deref().unwrap_or("unknown-step");
                     let reason = event
@@ -126,6 +161,28 @@ pub fn render_run_trace(
                         .and_then(Value::as_str)
                         .unwrap_or("replan scheduled");
                     lines.push(format!("replan after {step_id}: {reason}"));
+                }
+                TraceEventType::StageReplanned => {
+                    let step_id = event.step_id.as_deref().unwrap_or("unknown-step");
+                    let reason = event
+                        .payload
+                        .get("reason")
+                        .and_then(Value::as_str)
+                        .unwrap_or("replan scheduled");
+                    lines.push(format!("stage replan after {step_id}: {reason}"));
+                }
+                TraceEventType::StageFailed => {
+                    let stage_id = event
+                        .payload
+                        .get("stage_id")
+                        .and_then(Value::as_str)
+                        .unwrap_or("unknown-stage");
+                    let reason = event
+                        .payload
+                        .get("reason")
+                        .and_then(Value::as_str)
+                        .unwrap_or("stage failed");
+                    lines.push(format!("stage {stage_id} failed: {reason}"));
                 }
             }
         }
@@ -162,7 +219,12 @@ pub fn render_trace_summary(
     for recovery in &summary.recovery_events {
         let label = match recovery.event_type {
             TraceEventType::RetryScheduled => "retry",
+            TraceEventType::StageRetryScheduled => "stage_retry",
             TraceEventType::Replanned => "replan",
+            TraceEventType::StageReplanned => "stage_replan",
+            TraceEventType::FlowSelected => "flow",
+            TraceEventType::StageTransitioned => "stage",
+            TraceEventType::StageFailed => "stage_failure",
             _ => "recovery",
         };
         lines.push(format!("{label}: {}", recovery.trigger));
@@ -213,6 +275,20 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
 
     if let Some(goal) = &view.goal {
         lines.push(format!("goal: {goal}"));
+    }
+
+    if let Some(active_flow) = &view.active_flow {
+        lines.push(format!("active_flow: {active_flow}"));
+    }
+
+    if let Some(current_stage_id) = &view.current_stage_id {
+        lines.push(format!("current_stage: {current_stage_id}"));
+    }
+
+    if let (Some(current_stage_index), Some(total_stages)) =
+        (view.current_stage_index, view.total_stages)
+    {
+        lines.push(format!("stage_progress: {}/{}", current_stage_index + 1, total_stages));
     }
 
     if let Some(plan_revision) = view.plan_revision {

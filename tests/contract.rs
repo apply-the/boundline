@@ -1,3 +1,6 @@
+#[path = "support/workspace_fixture.rs"]
+mod workspace_fixture;
+
 #[path = "contract/orchestrator_run.rs"]
 mod orchestrator_run;
 
@@ -30,3 +33,12 @@ mod session_command_contract;
 
 #[path = "contract/assistant_session_continuity_contract.rs"]
 mod assistant_session_continuity_contract;
+
+#[path = "contract/flow_command_contract.rs"]
+mod flow_command_contract;
+
+#[path = "contract/flow_session_contract.rs"]
+mod flow_session_contract;
+
+#[path = "contract/flow_status_contract.rs"]
+mod flow_status_contract;
