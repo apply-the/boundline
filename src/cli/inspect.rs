@@ -18,11 +18,26 @@ pub struct InspectCommandReport {
     pub terminal_output: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InspectionTarget {
+    ExplicitTrace,
+    LatestWorkspaceTrace,
+}
+
+impl InspectionTarget {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::ExplicitTrace => "explicit-trace",
+            Self::LatestWorkspaceTrace => "latest-workspace-trace",
+        }
+    }
+}
+
 pub fn execute_inspect(
     trace: Option<&Path>,
     workspace: Option<&Path>,
 ) -> Result<InspectCommandReport, InspectCommandError> {
-    let (trace_ref, trace) = load_trace(trace, workspace)?;
+    let (inspection_target, trace_ref, trace) = load_trace(trace, workspace)?;
     let summary = summarize_trace(&trace_ref, &trace)?;
     let exit_status = if summary.terminal_status == TaskStatus::Succeeded {
         CommandExitStatus::Succeeded
@@ -32,8 +47,37 @@ pub fn execute_inspect(
 
     Ok(InspectCommandReport {
         exit_status,
-        terminal_output: output::render_trace_summary(&summary),
+        terminal_output: output::render_trace_summary(
+            &summary,
+            inspection_target.as_str(),
+            output::next_command_after_inspect(summary.terminal_status),
+        ),
     })
+}
+
+pub fn render_error(
+    trace: Option<&Path>,
+    workspace: Option<&Path>,
+    error: &InspectCommandError,
+) -> String {
+    let inspection_target = inspection_target_for(trace, workspace);
+    let trace_ref = trace.map(|path| path.to_string_lossy().into_owned());
+    let workspace_ref = workspace.map(|path| path.to_string_lossy().into_owned());
+    let terminal_reason = match error {
+        InspectCommandError::MissingTraceReference => "inspect requires --trace or --workspace",
+        InspectCommandError::MissingLatestTrace | InspectCommandError::TraceStore(_) => {
+            "failed to read the requested trace"
+        }
+        InspectCommandError::Summary(_) => "failed to summarize the requested trace",
+    };
+
+    output::render_inspect_failure(
+        inspection_target.as_str(),
+        trace_ref.as_deref(),
+        workspace_ref.as_deref(),
+        terminal_reason,
+        corrected_command(inspection_target),
+    )
 }
 
 pub fn summarize_trace(
@@ -136,11 +180,11 @@ pub fn summarize_trace(
 fn load_trace(
     trace: Option<&Path>,
     workspace: Option<&Path>,
-) -> Result<(PathBuf, ExecutionTrace), InspectCommandError> {
+) -> Result<(InspectionTarget, PathBuf, ExecutionTrace), InspectCommandError> {
     if let Some(trace_path) = trace {
         let store = FileTraceStore::new(trace_path.parent().unwrap_or_else(|| Path::new(".")));
         let trace = store.load(trace_path)?;
-        return Ok((trace_path.to_path_buf(), trace));
+        return Ok((InspectionTarget::ExplicitTrace, trace_path.to_path_buf(), trace));
     }
 
     let Some(workspace_path) = workspace else {
@@ -152,7 +196,26 @@ fn load_trace(
         return Err(InspectCommandError::MissingLatestTrace);
     };
     let trace = store.load(&trace_path)?;
-    Ok((trace_path, trace))
+    Ok((InspectionTarget::LatestWorkspaceTrace, trace_path, trace))
+}
+
+fn inspection_target_for(trace: Option<&Path>, workspace: Option<&Path>) -> InspectionTarget {
+    if trace.is_some() {
+        InspectionTarget::ExplicitTrace
+    } else if workspace.is_some() {
+        InspectionTarget::LatestWorkspaceTrace
+    } else {
+        InspectionTarget::ExplicitTrace
+    }
+}
+
+fn corrected_command(inspection_target: InspectionTarget) -> &'static str {
+    match inspection_target {
+        InspectionTarget::ExplicitTrace => "cargo run --bin synod -- inspect --trace <trace>",
+        InspectionTarget::LatestWorkspaceTrace => {
+            "cargo run --bin synod -- inspect --workspace <workspace>"
+        }
+    }
 }
 
 fn parse_step_kind(raw: &str) -> Result<StepKind, TraceSummaryError> {

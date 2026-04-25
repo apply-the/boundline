@@ -285,7 +285,7 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                 },
                 Err(error) => DispatchOutcome {
                     exit_status: CommandExitStatus::TraceReadFailure,
-                    output: error.to_string(),
+                    output: inspect::render_error(trace.as_deref(), workspace.as_deref(), &error),
                     trace_location: None,
                 },
             }
