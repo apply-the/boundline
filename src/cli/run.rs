@@ -5,9 +5,8 @@ use thiserror::Error;
 use crate::adapters::trace_store::{FileTraceStore, TraceStore};
 use crate::cli::CommandExitStatus;
 use crate::cli::output;
-use crate::demo::endpoints::{DemoRuntimeError, build_demo_runtime};
-use crate::demo::profile::DemoRunProfile;
 use crate::domain::task::TaskStatus;
+use crate::fixture::{FixtureRuntimeError, build_fixture_runtime, build_task_request};
 use crate::orchestrator::engine::{Orchestrator, OrchestratorError};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -17,29 +16,19 @@ pub struct RunCommandReport {
     pub trace_location: Option<String>,
 }
 
-pub fn execute_demo(workspace: &Path) -> Result<RunCommandReport, RunCommandError> {
-    execute_profile("demo", DemoRunProfile::guided_demo(), workspace)
-}
-
 pub fn execute_custom_run(
     workspace: &Path,
     goal: impl Into<String>,
 ) -> Result<RunCommandReport, RunCommandError> {
-    execute_profile("run", DemoRunProfile::default_run(goal), workspace)
-}
-
-fn execute_profile(
-    command_name: &str,
-    profile: DemoRunProfile,
-    workspace: &Path,
-) -> Result<RunCommandReport, RunCommandError> {
-    let runtime = build_demo_runtime(profile)?;
+    let goal = goal.into();
+    let runtime = build_fixture_runtime(workspace)?;
     let store = FileTraceStore::for_workspace(workspace);
     let trace_reader = store.clone();
-    let request = runtime.profile.to_task_request(
-        workspace.to_string_lossy().into_owned(),
-        format!("{command_name}-{}", crate::domain::trace::current_timestamp_millis()),
-    );
+    let request = build_task_request(
+        workspace,
+        goal,
+        format!("run-{}", crate::domain::trace::current_timestamp_millis()),
+    )?;
     let orchestrator = Orchestrator::new(runtime.planner, runtime.agents, runtime.tools, store);
     let response = orchestrator.run(request)?;
     let trace = trace_reader.load(Path::new(&response.trace_location)).ok();
@@ -49,7 +38,7 @@ fn execute_profile(
         CommandExitStatus::NonSuccess
     };
     let terminal_output = output::render_run_trace(
-        command_name,
+        "run",
         trace.as_ref(),
         &response,
         output::next_command_after_run(response.terminal_status),
@@ -64,8 +53,8 @@ fn execute_profile(
 
 #[derive(Debug, Error)]
 pub enum RunCommandError {
-    #[error("failed to build the developer demo runtime: {0}")]
-    DemoRuntime(#[from] DemoRuntimeError),
-    #[error("failed to run the orchestrator demo: {0}")]
+    #[error("failed to prepare the fixture-backed vertical slice: {0}")]
+    FixtureRuntime(#[from] FixtureRuntimeError),
+    #[error("failed to run the orchestrator vertical slice: {0}")]
     Orchestrator(#[from] OrchestratorError),
 }

@@ -8,9 +8,9 @@ Represents one invocation of the developer-facing command surface.
 
 | Field | Shape | Required | Notes |
 |-------|-------|----------|-------|
-| `command_name` | Enum | Yes | `demo`, `run`, `inspect`, or `doctor` |
-| `workspace_ref` | Path-like string | Yes | Local workspace used for diagnostics, execution, or trace lookup |
-| `goal` | Non-empty string | No | Present for `run`; derived from the demo profile for `demo` |
+| `command_name` | Enum | Yes | `run`, `inspect`, or `doctor` |
+| `workspace_ref` | Path-like string | No | Present for `doctor`, `run`, and workspace-local trace lookup |
+| `goal` | Non-empty string | No | Present for `run` |
 | `trace_ref` | Path-like string | No | Present for `inspect` when a trace is explicitly selected |
 | `started_at` | Timestamp | Yes | Command start time |
 | `completed_at` | Timestamp | No | Command completion time |
@@ -19,14 +19,14 @@ Represents one invocation of the developer-facing command surface.
 
 ### Validation Rules
 
-- `workspace_ref` must be present for all commands.
+- `workspace_ref` must be present for `doctor` and `run`.
 - `goal` must be present and non-empty for `run`.
-- `trace_ref` must be present for `inspect` unless the command uses a supported local default such as the latest trace in a workspace.
+- `trace_ref` or `workspace_ref` must be present for `inspect`.
 - `exit_status` must be populated when the command completes.
 
 ### Relationships
 
-- A `DeveloperCommandSession` may use one `DemoRunProfile`.
+- A `DeveloperCommandSession` may load one `WorkspaceFixture`.
 - A `DeveloperCommandSession` may create or inspect one `TraceSummaryView`.
 - A `DeveloperCommandSession` may emit one `DiagnosticsReport`.
 
@@ -36,30 +36,29 @@ Represents one invocation of the developer-facing command surface.
 
 `requested` -> `validating` -> `failed`
 
-## DemoRunProfile
+## WorkspaceFixture
 
-Represents the deterministic predefined task used by the guided demo command.
+Represents the deterministic repository-local manifest used by the run command.
 
 ### Fields
 
 | Field | Shape | Required | Notes |
 |-------|-------|----------|-------|
-| `name` | String | Yes | Stable profile name for the built-in demo |
-| `goal` | Non-empty string | Yes | Human-readable bounded objective |
-| `initial_input` | Structured payload | Yes | Seed input used to bootstrap the orchestrator request |
-| `step_outline` | Ordered list | Yes | Describes the intended analysis, change, and verification path |
-| `recovery_trigger_step` | Step identifier | Yes | The step where the demo intentionally shows a recoverable failure path |
-| `limits` | Run-limits snapshot | Yes | Bounded steps, retries, and replans used by the demo |
+| `name` | String | Yes | Stable fixture name for output and trace context |
+| `test_command` | Structured payload | Yes | Local verification command executed before and after patching |
+| `limits` | Run-limits snapshot | Yes | Bounded steps, retries, and replans used by the fixture-backed slice |
+| `file_patches` | Ordered list | Yes | Patch instructions with `path`, `find`, and `replace` |
 
 ### Validation Rules
 
-- `step_outline` must contain at least one executable step.
-- `recovery_trigger_step` must reference a step in `step_outline`.
-- `limits` must preserve bounded execution and leave room for exactly the recovery path the profile intends to demonstrate.
+- `test_command.program` must be present and runnable from the workspace.
+- `file_patches` must contain at least one patch instruction.
+- Each patch path must be relative to the workspace and each `find` pattern must be non-empty.
+- `limits` must satisfy the existing run-limit validation rules.
 
 ### Relationships
 
-- Used by `DeveloperCommandSession` when `command_name = demo`.
+- Used by `DeveloperCommandSession` when `command_name = run`.
 - Produces one orchestrator task run and one persisted trace.
 
 ## CustomRunRequest
@@ -74,7 +73,6 @@ Represents the bounded developer-supplied objective launched by the `run` comman
 | `workspace_ref` | Path-like string | Yes | Workspace used for trace persistence and context |
 | `limits` | Run-limits snapshot | Yes | Explicit or default bounded execution limits |
 | `initial_context` | Structured payload | No | Optional initial state made available before planning |
-| `profile_name` | String | No | Optional default developer flow selection when more than one local profile exists |
 
 ### Validation Rules
 
@@ -85,6 +83,7 @@ Represents the bounded developer-supplied objective launched by the `run` comman
 ### Relationships
 
 - Consumed by one `DeveloperCommandSession` with `command_name = run`.
+- Consumes one `WorkspaceFixture` loaded from `.synod/fixture.json`.
 - Produces one orchestrator task run and one persisted trace.
 
 ## TraceSummaryView
@@ -138,4 +137,4 @@ Represents the readiness result produced by the `doctor` command.
 ### Relationships
 
 - Produced by `DeveloperCommandSession` when `command_name = doctor`.
-- May be consumed before `demo` or `run` starts.
+- May be consumed before `run` starts.

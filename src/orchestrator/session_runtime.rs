@@ -6,8 +6,7 @@ use uuid::Uuid;
 
 use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
 use crate::adapters::trace_store::{FileTraceStore, TraceStore, TraceStoreError};
-use crate::demo::endpoints::{DemoRuntime, DemoRuntimeError, build_demo_runtime};
-use crate::demo::profile::{DemoProfileError, DemoRunProfile};
+use crate::domain::flow::{FlowStepMetadata, built_in_flow, supported_flow_names_csv};
 use crate::domain::limits::TerminalCondition;
 use crate::domain::session::{ActiveSessionRecord, SessionStatus};
 use crate::domain::step::{
@@ -17,6 +16,10 @@ use crate::domain::step::{
 use crate::domain::task::{Task, TaskRequestError, TaskRunResponse, TaskStatus, TerminalReason};
 use crate::domain::task_context::TaskContext;
 use crate::domain::trace::{ExecutionTrace, TraceEventType, current_timestamp_millis};
+use crate::fixture::{
+    FixtureRuntime, FixtureRuntimeError, build_fixture_plan_for_flow, build_fixture_runtime,
+    build_task_request,
+};
 use crate::orchestrator::planner::Planner;
 use crate::orchestrator::recovery::{RecoveryDecision, decide_recovery};
 use crate::orchestrator::terminal::{build_terminal_reason, task_status_for_condition};
@@ -89,14 +92,53 @@ impl SessionRuntime {
         Ok(())
     }
 
+    pub fn select_flow(
+        &self,
+        session: &mut ActiveSessionRecord,
+        flow_name: &str,
+    ) -> Result<(), SessionRuntimeError> {
+        let flow = built_in_flow(flow_name).ok_or_else(|| SessionRuntimeError::UnknownFlow {
+            requested: flow_name.to_string(),
+            supported: supported_flow_names_csv(),
+        })?;
+
+        if session.active_task.is_some() {
+            return Err(SessionRuntimeError::FlowReplacementRequiresReset {
+                current: session
+                    .active_flow
+                    .as_ref()
+                    .map(|existing_flow| existing_flow.flow_name.clone())
+                    .unwrap_or_else(|| "current-session".to_string()),
+                requested: flow.name.to_string(),
+            });
+        }
+
+        session.active_flow = Some(flow.initial_state());
+        session.active_task = None;
+        session.latest_trace_ref = None;
+        session.latest_terminal_reason = None;
+        session.latest_status = if session.goal.is_some() {
+            SessionStatus::GoalCaptured
+        } else {
+            SessionStatus::Initialized
+        };
+        session.updated_at = current_timestamp_millis();
+
+        Ok(())
+    }
+
     pub fn plan_task(&self, session: &mut ActiveSessionRecord) -> Result<(), SessionRuntimeError> {
         let goal = session.goal.clone().ok_or(SessionRuntimeError::MissingGoal)?;
-        let profile = DemoRunProfile::default_run(goal);
-        let request = profile.to_task_request(
-            self.workspace_ref.to_string_lossy().into_owned(),
-            session.session_id.clone(),
-        );
-        let plan = profile.to_plan().map_err(SessionRuntimeError::DemoProfile)?;
+        if let Some(active_flow) = &session.active_flow {
+            active_flow
+                .validate()
+                .map_err(|error| SessionRuntimeError::InvalidFlowState(error.to_string()))?;
+        }
+
+        let request = build_task_request(&self.workspace_ref, goal, session.session_id.clone())
+            .map_err(SessionRuntimeError::FixtureRuntime)?;
+        let plan = build_fixture_plan_for_flow(&self.workspace_ref, session.active_flow.as_ref())
+            .map_err(SessionRuntimeError::FixtureRuntime)?;
         let task = Task::new(Uuid::new_v4().to_string(), &request, plan)
             .map_err(SessionRuntimeError::TaskRequest)?;
 
@@ -134,7 +176,7 @@ impl SessionRuntime {
     fn build_runtime(
         &self,
         session: &ActiveSessionRecord,
-    ) -> Result<DemoRuntime, SessionRuntimeError> {
+    ) -> Result<FixtureRuntime, SessionRuntimeError> {
         let goal = session
             .goal
             .as_deref()
@@ -147,14 +189,13 @@ impl SessionRuntime {
             return Err(SessionRuntimeError::MissingGoal);
         }
 
-        build_demo_runtime(DemoRunProfile::default_run(goal))
-            .map_err(SessionRuntimeError::DemoRuntime)
+        build_fixture_runtime(&self.workspace_ref).map_err(SessionRuntimeError::FixtureRuntime)
     }
 
     fn execute_single_step(
         &self,
         session: &mut ActiveSessionRecord,
-        runtime: &DemoRuntime,
+        runtime: &FixtureRuntime,
     ) -> Result<Option<TaskRunResponse>, SessionRuntimeError> {
         let mut task = session.active_task.take().ok_or(SessionRuntimeError::MissingActiveTask)?;
 
@@ -186,7 +227,7 @@ impl SessionRuntime {
         session: &mut ActiveSessionRecord,
         task: &mut Task,
         trace: &mut ExecutionTrace,
-        runtime: &DemoRuntime,
+        runtime: &FixtureRuntime,
     ) -> Result<Option<TaskRunResponse>, SessionRuntimeError> {
         if task.total_step_attempts >= task.limits.max_steps {
             let reason = build_terminal_reason(
@@ -286,6 +327,24 @@ impl SessionRuntime {
                     return self.finalize_task(session, task, trace, reason).map(Some);
                 }
 
+                if let Some((from_stage, to_stage)) = self
+                    .advance_session_flow(session, task, step_index)
+                    .map_err(|error| SessionRuntimeError::InvalidFlowState(error.to_string()))?
+                {
+                    trace.record_event(
+                        TraceEventType::StageTransitioned,
+                        Some(step_snapshot.id.clone()),
+                        task.plan.revision,
+                        json!({
+                            "flow_name": from_stage.flow_name,
+                            "from_stage_id": from_stage.stage_id,
+                            "to_stage_id": to_stage.stage_id,
+                            "from_stage_index": from_stage.stage_index,
+                            "to_stage_index": to_stage.stage_index,
+                        }),
+                    );
+                }
+
                 task.plan.advance();
                 let trace_location = self.persist_trace(trace)?;
                 session.latest_status = SessionStatus::Running;
@@ -326,14 +385,28 @@ impl SessionRuntime {
                         task.retry_count += 1;
                         let step = &mut task.plan.steps[step_index];
                         step.status = StepStatus::Pending;
+                        let flow_payload =
+                            self.flow_payload_for_step(&step_snapshot).map_err(|error| {
+                                SessionRuntimeError::InvalidFlowState(error.to_string())
+                            })?;
+                        let mut payload = json!({
+                            "reason": reason,
+                            "retry_count": task.retry_count,
+                        });
+                        if let Some(flow_payload) = flow_payload.clone()
+                            && let Some(object) = payload.as_object_mut()
+                        {
+                            object.insert("flow".to_string(), flow_payload);
+                        }
                         trace.record_event(
-                            TraceEventType::RetryScheduled,
+                            if flow_payload.is_some() {
+                                TraceEventType::StageRetryScheduled
+                            } else {
+                                TraceEventType::RetryScheduled
+                            },
                             Some(step_snapshot.id.clone()),
                             task.plan.revision,
-                            json!({
-                                "reason": reason,
-                                "retry_count": task.retry_count,
-                            }),
+                            payload,
                         );
                         let trace_location = self.persist_trace(trace)?;
                         session.latest_status = SessionStatus::Running;
@@ -372,18 +445,32 @@ impl SessionRuntime {
                             }
                         };
 
+                        let flow_payload =
+                            self.flow_payload_for_step(&step_snapshot).map_err(|error| {
+                                SessionRuntimeError::InvalidFlowState(error.to_string())
+                            })?;
+                        let mut payload = json!({
+                            "reason": reason,
+                            "replan_count": task.replan_count,
+                            "from_revision": revision.from_revision,
+                            "to_revision": revision.to_revision,
+                            "replaced_step_ids": revision.replaced_step_ids,
+                            "added_step_ids": revision.added_step_ids,
+                        });
+                        if let Some(flow_payload) = flow_payload.clone()
+                            && let Some(object) = payload.as_object_mut()
+                        {
+                            object.insert("flow".to_string(), flow_payload);
+                        }
                         trace.record_event(
-                            TraceEventType::Replanned,
+                            if flow_payload.is_some() {
+                                TraceEventType::StageReplanned
+                            } else {
+                                TraceEventType::Replanned
+                            },
                             Some(step_snapshot.id.clone()),
                             revision.to_revision,
-                            json!({
-                                "reason": reason,
-                                "replan_count": task.replan_count,
-                                "from_revision": revision.from_revision,
-                                "to_revision": revision.to_revision,
-                                "replaced_step_ids": revision.replaced_step_ids,
-                                "added_step_ids": revision.added_step_ids,
-                            }),
+                            payload,
                         );
                         let trace_location = self.persist_trace(trace)?;
                         session.latest_status = SessionStatus::Running;
@@ -427,6 +514,19 @@ impl SessionRuntime {
                 "limits": task.limits,
             }),
         );
+        if let Some(active_flow) = &session.active_flow {
+            trace.record_event(
+                TraceEventType::FlowSelected,
+                None,
+                task.plan.revision,
+                json!({
+                    "flow_name": active_flow.flow_name,
+                    "current_stage_id": active_flow.current_stage_id,
+                    "current_stage_index": active_flow.current_stage_index,
+                    "total_stages": active_flow.total_stages,
+                }),
+            );
+        }
         let trace_location = self.persist_trace(&mut trace)?;
         session.latest_trace_ref = Some(trace_location);
 
@@ -453,9 +553,89 @@ impl SessionRuntime {
         })
     }
 
+    fn advance_session_flow(
+        &self,
+        session: &mut ActiveSessionRecord,
+        task: &Task,
+        completed_step_index: usize,
+    ) -> Result<
+        Option<(FlowStepMetadata, FlowStepMetadata)>,
+        crate::domain::flow::FlowValidationError,
+    > {
+        let Some(active_flow) = session.active_flow.as_mut() else {
+            return Ok(None);
+        };
+
+        let completed_step =
+            task.plan.steps.get(completed_step_index).expect("completed step index is valid");
+        let Some(completed_metadata) = FlowStepMetadata::from_step(completed_step)? else {
+            return Ok(None);
+        };
+
+        if completed_metadata.flow_name != active_flow.flow_name {
+            return Err(crate::domain::flow::FlowValidationError::StageIdMismatch {
+                flow_name: active_flow.flow_name.clone(),
+                expected: active_flow.current_stage_id.clone(),
+                actual: completed_metadata.stage_id,
+            });
+        }
+
+        if let Some(next_step) = task.plan.steps.get(completed_step_index + 1)
+            && let Some(next_metadata) = FlowStepMetadata::from_step(next_step)?
+            && next_metadata.stage_index != active_flow.current_stage_index
+        {
+            active_flow.current_stage_index = next_metadata.stage_index;
+            active_flow.current_stage_id = next_metadata.stage_id.clone();
+            return Ok(Some((completed_metadata, next_metadata)));
+        }
+
+        Ok(None)
+    }
+
+    fn flow_payload_for_step(
+        &self,
+        step: &Step,
+    ) -> Result<Option<Value>, crate::domain::flow::FlowValidationError> {
+        let Some(metadata) = FlowStepMetadata::from_step(step)? else {
+            return Ok(None);
+        };
+
+        Ok(Some(json!({
+            "flow_name": metadata.flow_name,
+            "stage_id": metadata.stage_id,
+            "stage_index": metadata.stage_index,
+            "total_stages": metadata.total_stages,
+        })))
+    }
+
+    fn record_stage_failure(
+        &self,
+        trace: &mut ExecutionTrace,
+        session: &ActiveSessionRecord,
+        step_id: &str,
+        plan_revision: usize,
+        reason: &TerminalReason,
+    ) {
+        let Some(active_flow) = &session.active_flow else {
+            return;
+        };
+
+        trace.record_event(
+            TraceEventType::StageFailed,
+            Some(step_id.to_string()),
+            plan_revision,
+            json!({
+                "flow_name": active_flow.flow_name,
+                "stage_id": active_flow.current_stage_id,
+                "stage_index": active_flow.current_stage_index,
+                "reason": reason.message,
+            }),
+        );
+    }
+
     fn execute_step(
         &self,
-        runtime: &DemoRuntime,
+        runtime: &FixtureRuntime,
         step: &Step,
         context: &TaskContext,
     ) -> StepExecutionResult {
@@ -468,7 +648,7 @@ impl SessionRuntime {
 
     fn execute_agent(
         &self,
-        runtime: &DemoRuntime,
+        runtime: &FixtureRuntime,
         step: &Step,
         context: &TaskContext,
     ) -> StepExecutionResult {
@@ -501,7 +681,7 @@ impl SessionRuntime {
 
     fn execute_tool(
         &self,
-        runtime: &DemoRuntime,
+        runtime: &FixtureRuntime,
         step: &Step,
         context: &TaskContext,
     ) -> StepExecutionResult {
@@ -586,6 +766,14 @@ impl SessionRuntime {
         reason: TerminalReason,
     ) -> Result<TaskRunResponse, SessionRuntimeError> {
         let terminal_status = task_status_for_condition(reason.condition);
+        if terminal_status != TaskStatus::Succeeded {
+            let step_id = task
+                .plan
+                .current_step()
+                .map(|step| step.id.clone())
+                .unwrap_or_else(|| "terminal".to_string());
+            self.record_stage_failure(trace, session, &step_id, task.plan.revision, &reason);
+        }
         trace.record_event(
             TraceEventType::TerminalRecorded,
             None,
@@ -631,16 +819,22 @@ pub enum SessionRuntimeError {
     TraceStore(#[from] TraceStoreError),
     #[error("active session has no captured goal")]
     MissingGoal,
+    #[error("unknown flow `{requested}`; supported flows: {supported}")]
+    UnknownFlow { requested: String, supported: String },
+    #[error(
+        "cannot replace active flow `{current}` with `{requested}` while work is still present"
+    )]
+    FlowReplacementRequiresReset { current: String, requested: String },
+    #[error("active session flow state is invalid: {0}")]
+    InvalidFlowState(String),
     #[error("active session has no planned task")]
     MissingActiveTask,
     #[error("active session is missing the persisted trace reference")]
     MissingTraceReference,
     #[error("active task is missing a terminal reason")]
     MissingTerminalReason,
-    #[error("demo profile is invalid: {0}")]
-    DemoProfile(#[source] DemoProfileError),
-    #[error("demo runtime is invalid: {0}")]
-    DemoRuntime(#[source] DemoRuntimeError),
+    #[error("fixture runtime is invalid: {0}")]
+    FixtureRuntime(#[source] FixtureRuntimeError),
     #[error("task request is invalid: {0}")]
     TaskRequest(#[source] TaskRequestError),
 }

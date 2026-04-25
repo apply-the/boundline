@@ -1,13 +1,14 @@
 pub mod adapters;
 pub mod cli;
-pub mod demo;
 pub mod domain;
+pub mod fixture;
 pub mod orchestrator;
 pub mod registry;
 
 pub use adapters::agent::FnAgentAdapter;
 pub use adapters::tool::FnToolAdapter;
 pub use adapters::trace_store::FileTraceStore;
+pub use domain::flow::{SessionFlowState, built_in_flow, supported_flow_names};
 pub use domain::limits::{RunLimits, TerminalCondition};
 pub use domain::plan::Plan;
 pub use domain::step::{

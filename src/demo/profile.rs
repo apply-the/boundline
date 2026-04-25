@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use thiserror::Error;
 
+use crate::domain::flow::{SessionFlowState, attach_stage_metadata, built_in_flow};
 use crate::domain::limits::RunLimits;
 use crate::domain::plan::Plan;
 use crate::domain::step::{Step, StepError, StepKind};
@@ -64,6 +65,130 @@ impl DemoRunProfile {
         profile
     }
 
+    pub fn for_session_flow(
+        goal: impl Into<String>,
+        flow_state: Option<&SessionFlowState>,
+    ) -> Result<Self, DemoProfileError> {
+        let goal = goal.into();
+        match flow_state {
+            Some(flow_state) => Self::for_flow(goal, &flow_state.flow_name),
+            None => Ok(Self::default_run(goal)),
+        }
+    }
+
+    pub fn for_flow(goal: impl Into<String>, flow_name: &str) -> Result<Self, DemoProfileError> {
+        let goal = goal.into();
+        let lowered_goal = goal.to_ascii_lowercase();
+
+        match flow_name {
+            "bug-fix" => Self::build_flow_profile(
+                flow_name,
+                goal.clone(),
+                vec![
+                    (
+                        "investigate-analyze",
+                        StepKind::Agent,
+                        Some("analyzer"),
+                        json!({"phase": "investigate", "goal": goal}),
+                    ),
+                    (
+                        "implement-code",
+                        StepKind::Agent,
+                        Some("coder"),
+                        json!({
+                            "phase": "implement",
+                            "goal": goal,
+                            "force_retry": lowered_goal.contains("retry") || lowered_goal.contains("recover"),
+                            "force_replan": lowered_goal.contains("replan"),
+                        }),
+                    ),
+                    (
+                        "verify-tests",
+                        StepKind::Tool,
+                        Some("tester"),
+                        json!({
+                            "phase": "verify",
+                            "goal": goal,
+                            "force_terminal_failure": lowered_goal.contains("fail") || lowered_goal.contains("non-success"),
+                        }),
+                    ),
+                ],
+                "implement-code",
+            ),
+            "change" => Self::build_flow_profile(
+                flow_name,
+                goal.clone(),
+                vec![
+                    (
+                        "understand-change-analyze",
+                        StepKind::Agent,
+                        Some("analyzer"),
+                        json!({"phase": "understand-change", "goal": goal}),
+                    ),
+                    (
+                        "implement-code",
+                        StepKind::Agent,
+                        Some("coder"),
+                        json!({
+                            "phase": "implement",
+                            "goal": goal,
+                            "force_retry": lowered_goal.contains("retry") || lowered_goal.contains("recover"),
+                            "force_replan": lowered_goal.contains("replan"),
+                        }),
+                    ),
+                    (
+                        "verify-tests",
+                        StepKind::Tool,
+                        Some("tester"),
+                        json!({
+                            "phase": "verify",
+                            "goal": goal,
+                            "force_terminal_failure": lowered_goal.contains("fail") || lowered_goal.contains("non-success"),
+                        }),
+                    ),
+                ],
+                "implement-code",
+            ),
+            "delivery" => Self::build_flow_profile(
+                flow_name,
+                goal.clone(),
+                vec![
+                    (
+                        "requirements-analyze",
+                        StepKind::Agent,
+                        Some("analyzer"),
+                        json!({"phase": "requirements", "goal": goal}),
+                    ),
+                    (
+                        "architecture-analyze",
+                        StepKind::Agent,
+                        Some("analyzer"),
+                        json!({"phase": "architecture", "goal": goal}),
+                    ),
+                    (
+                        "backlog-outline",
+                        StepKind::Agent,
+                        Some("coder"),
+                        json!({"phase": "backlog", "goal": goal}),
+                    ),
+                    (
+                        "implementation-code",
+                        StepKind::Agent,
+                        Some("coder"),
+                        json!({
+                            "phase": "implementation",
+                            "goal": goal,
+                            "force_retry": lowered_goal.contains("retry") || lowered_goal.contains("recover"),
+                            "force_replan": lowered_goal.contains("replan"),
+                        }),
+                    ),
+                ],
+                "implementation-code",
+            ),
+            other => Err(DemoProfileError::UnknownFlow(other.to_string())),
+        }
+    }
+
     fn build(name: impl Into<String>, goal: impl Into<String>, initial_input: Value) -> Self {
         let goal = goal.into();
 
@@ -99,6 +224,46 @@ impl DemoRunProfile {
                 ..RunLimits::default()
             },
         }
+    }
+
+    fn build_flow_profile(
+        flow_name: &str,
+        goal: String,
+        stage_steps: Vec<(&str, StepKind, Option<&str>, Value)>,
+        recovery_trigger_step: &str,
+    ) -> Result<Self, DemoProfileError> {
+        let flow = built_in_flow(flow_name)
+            .ok_or_else(|| DemoProfileError::UnknownFlow(flow_name.to_string()))?;
+        let step_outline = stage_steps
+            .into_iter()
+            .enumerate()
+            .map(|(stage_index, (step_id, step_kind, target_name, input))| {
+                Ok(DemoStepOutline {
+                    step_id: step_id.to_string(),
+                    step_kind,
+                    target_name: target_name.map(str::to_string),
+                    input: attach_stage_metadata(input, flow, stage_index)?,
+                })
+            })
+            .collect::<Result<Vec<_>, DemoProfileError>>()?;
+
+        Ok(Self {
+            name: format!("{flow_name}_flow"),
+            goal: goal.clone(),
+            initial_input: json!({
+                "mode": "flow",
+                "goal": goal,
+                "flow_name": flow.name,
+            }),
+            step_outline,
+            recovery_trigger_step: recovery_trigger_step.to_string(),
+            limits: RunLimits {
+                max_steps: 8,
+                max_retries: 1,
+                max_replans: 1,
+                ..RunLimits::default()
+            },
+        })
     }
 
     pub fn validate(&self) -> Result<(), DemoProfileError> {
@@ -191,10 +356,14 @@ pub enum DemoProfileError {
     MissingStepOutline,
     #[error("demo profile recovery trigger step '{0}' is not present in the step outline")]
     MissingRecoveryTriggerStep(String),
+    #[error("unknown flow `{0}`")]
+    UnknownFlow(String),
     #[error("demo profile run limits are invalid: {0}")]
     InvalidRunLimits(String),
     #[error("demo profile step is invalid: {0}")]
     InvalidStep(StepError),
+    #[error("flow metadata is invalid: {0}")]
+    InvalidFlowMetadata(#[from] crate::domain::flow::FlowValidationError),
     #[error("demo profile cannot build a plan: {0}")]
     InvalidPlan(crate::domain::plan::PlanError),
 }
@@ -235,5 +404,15 @@ mod tests {
 
         assert_eq!(code.input["force_replan"], json!(true));
         assert_eq!(verify.input["force_terminal_failure"], json!(true));
+    }
+
+    #[test]
+    fn flow_profile_tags_steps_with_delivery_flow_metadata() {
+        let profile = DemoRunProfile::for_flow("Fix retry-heavy checkout issue", "bug-fix").unwrap();
+
+        assert_eq!(profile.step_outline.len(), 3);
+        assert_eq!(profile.step_outline[0].input["delivery_flow"]["stage_id"], json!("investigate"));
+        assert_eq!(profile.step_outline[1].input["delivery_flow"]["stage_id"], json!("implement"));
+        assert_eq!(profile.step_outline[2].input["delivery_flow"]["stage_id"], json!("verify"));
     }
 }

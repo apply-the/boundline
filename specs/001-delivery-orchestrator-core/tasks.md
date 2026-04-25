@@ -219,7 +219,7 @@ Task: "Implement persisted trace inspection scenarios in tests/integration/trace
 2. Complete Phase 2: Foundational.
 3. Complete Phase 3: User Story 1.
 4. Stop and validate `tests/contract/orchestrator_run.rs` and `tests/integration/sequential_task_run.rs`.
-5. Demo the bounded sequential orchestrator before expanding scope.
+5. Validate the bounded sequential orchestrator before expanding scope.
 
 ### Incremental Delivery
 

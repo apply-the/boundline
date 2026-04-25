@@ -27,3 +27,9 @@ mod session_record;
 
 #[path = "unit/session_store.rs"]
 mod session_store;
+
+#[path = "unit/flow_definition.rs"]
+mod flow_definition;
+
+#[path = "unit/session_flow_state.rs"]
+mod session_flow_state;

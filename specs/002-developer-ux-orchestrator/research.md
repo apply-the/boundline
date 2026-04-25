@@ -24,13 +24,13 @@
   - Introduce a new trace database or index: rejected because it adds infrastructure outside the scope of a local developer UX slice.
   - Emit a separate command-specific trace format: rejected because it fragments observability and would duplicate recorded execution data.
 
-## Decision 4: Make the demo and default run paths deterministic with built-in adapters
+## Decision 4: Make the documented run path deterministic with workspace fixtures
 
-- **Decision**: Implement the guided demo and default custom run path with deterministic built-in agent and tool adapters plus a predefined recoverable failure branch.
-- **Rationale**: The spec requires contributors to see meaningful orchestration behavior quickly and repeatedly, including a visible recovery event. Deterministic built-in adapters keep the workflow stable, fast to debug, and independent of provider availability.
+- **Decision**: Implement the documented run path with a repository-local workspace fixture manifest plus deterministic built-in agent and tool adapters.
+- **Rationale**: The spec requires contributors to see meaningful orchestration behavior quickly and repeatedly without relying on synthetic onboarding surfaces or external providers. Workspace fixtures keep the workflow stable, fast to debug, and grounded in real red-to-green behavior.
 - **Alternatives considered**:
   - Use live model or shell integrations in the first release: rejected because they would make onboarding and validation nondeterministic.
-  - Make the demo a pure success-only path: rejected because the spec explicitly requires the recovery path to be visible and understandable.
+  - Hardcode a synthetic scripted run: rejected because it hides whether Synod can actually validate and change a real workspace.
 
 ## Decision 5: Provide a dedicated `doctor` command for local readiness
 
@@ -42,7 +42,7 @@
 
 ## Decision 6: Document the CLI as markdown command contracts
 
-- **Decision**: Define the developer command surface, demo profile, diagnostics report, and trace summary as markdown contracts under `specs/002-developer-ux-orchestrator/contracts/`.
+- **Decision**: Define the developer command surface, workspace fixture, diagnostics report, and trace summary as markdown contracts under `specs/002-developer-ux-orchestrator/contracts/`.
 - **Rationale**: The repository already documents interface boundaries as markdown contracts for the orchestrator core. The new feature exposes a local CLI, not a network API, so markdown contracts remain the smallest and clearest fit.
 - **Alternatives considered**:
   - OpenAPI or JSON Schema: rejected because the interface is a local CLI and human-readable command output, not an HTTP service.

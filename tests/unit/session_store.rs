@@ -37,6 +37,7 @@ fn build_record(workspace_ref: &str) -> ActiveSessionRecord {
         session_id: "session-1".to_string(),
         workspace_ref: workspace_ref.to_string(),
         goal: Some("Deliver a session-backed CLI".to_string()),
+        active_flow: None,
         active_task: Some(build_task(workspace_ref)),
         latest_status: SessionStatus::Planned,
         latest_terminal_reason: None,

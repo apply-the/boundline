@@ -82,8 +82,7 @@ src/
 │   ├── engine.rs
 │   ├── planner.rs
 │   └── session_runtime.rs
-└── demo/
-    └── profile.rs
+└── fixture.rs
 
 tests/
 ├── contract/
@@ -91,14 +90,13 @@ tests/
 │   ├── session_command_contract.rs
 │   └── session_record_contract.rs
 ├── integration/
-│   ├── session_cli_flow.rs
-│   └── session_recovery.rs
+│   └── session_cli_flow.rs
 └── unit/
     ├── session_record.rs
     └── session_store.rs
 ```
 
-**Structure Decision**: Add one domain model for session state, one file-backed session adapter, one CLI module for session-facing commands, and one orchestration adapter that reuses the existing planner and step execution rules without creating a second runtime. This keeps all new complexity inside the existing Rust crate and uses the current assistant asset surface as a thin continuity layer rather than a separate state system.
+**Structure Decision**: Add one domain model for session state, one file-backed session adapter, one CLI module for session-facing commands, and one orchestration adapter that reuses the existing planner and step execution rules without creating a second runtime. This keeps all new complexity inside the existing Rust crate and uses the current fixture-backed execution slice plus the assistant asset surface rather than a separate state system.
 
 ## Complexity Tracking
 

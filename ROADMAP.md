@@ -1,104 +1,41 @@
 # Synod Roadmap
 
-Canon resta fuori dal perimetro di questa roadmap: e il runtime che persiste artifact strutturati. Synod e il sistema che pensa, decide, orchestra ed esegue.
+Canon is outside the scope of this roadmap: it is the runtime that persists structured artifacts. Synod is the system that thinks, decides, orchestrates, and executes.
 
-## Obiettivo
+## Objective
 
-Fare evolvere Synod in un sistema capace di prendere un problema e trasformarlo in codice funzionante, con controllo qualita multi-agente.
+Evolve Synod into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Stato Attuale
+## Current Status
 
-La slice `Spec 1.3 — Session & Interaction Model Unification` e ora disponibile nel CLI locale.
+The `Spec 1.3 — Session & Interaction Model Unification` slice and `Spec 005 — Delivery Flows` are now available in the local CLI.
 
-- sessione attiva persistita in `.synod/session.json`
-- flusso esplicito `start -> capture -> plan -> step/run -> status/next -> inspect`
-- pack assistant allineati al modello di sessione e al riuso di `latest_trace_ref`
+- active session persisted in `.synod/session.json`
+- explicit flow `start -> capture -> flow -> plan -> step/run -> status/next -> inspect`
+- built-in `bug-fix`, `change`, and `delivery` flow definitions with stage-aware session state
+- flow-aware `status`, `next`, `run`, and `inspect` output with stage transition and recovery traces
+- fixture-backed red-to-green execution slice under `.synod/fixture.json`, replacing the old synthetic onboarding surface
+- assistant command packs aligned with the session model and reuse of `latest_trace_ref`
 
-Follow-up immediato:
+Immediate follow-up:
 
-- continuare a costruire delivery flows sopra il modello di sessione condiviso
-- rafforzare UX e recovery guidata intorno a trace e session state
+- expand the execution engine beyond the current fixture-backed red-to-green slice
+- add multi-agent review and voting on top of the execution output
 
-## Spec 1 — Delivery Orchestrator Core
-
-### Outcome
-
-Synod introduce un orchestratore centrale capace di eseguire task complessi come sequenze governate di step, non piu come singole invocazioni LLM.
-
-### Perche ora
-
-Senza orchestrator non puoi avere:
-
-- flow end-to-end
-- iterazioni
-- agent coordination
-
-### In scope
-
-- orchestrator loop: plan -> execute -> evaluate -> continue/stop
-- stato di sessione
-- step execution model
-- routing tra agenti
-- gestione errori e retry
-
-### Fuori scope
-
-- multi-agent voting avanzato
-- strategie avanzate
-- provider complexity
-
-### Risultato tangibile
-
-Synod passa da LLM wrapper a engine che porta a termine task multi-step.
-
-## Spec 2 — Delivery Flows (SDLC Backbone)
+## Spec 006 — Execution Engine (Code Delivery)
 
 ### Outcome
 
-Synod supporta flow espliciti per la delivery:
+Synod actually performs development work:
 
-- requirements -> architecture -> backlog -> implementation
-- change -> implementation
-- bug -> investigate -> fix
+- writes code
+- modifies files
+- runs tests
+- validates output
 
-### Perche ora
+### Why now
 
-E il cuore del valore: portare codice in produzione, non solo analizzare.
-
-La nuova sessione condivisa del CLI riduce il costo di contesto per questi flow e rende praticabile una UX chat-first senza re-inserire goal o trace a ogni comando.
-
-### In scope
-
-- definizione di flow predefiniti
-- step sequencing
-- handoff tra step
-- checkpoint e approval hooks
-- stato condiviso tra step
-
-### Fuori scope
-
-- adattivita avanzata
-- multi-strategy selection
-- voting
-
-### Risultato tangibile
-
-Un comando Synod puo eseguire un intero percorso di delivery, non solo uno step.
-
-## Spec 3 — Execution Engine (Code Delivery)
-
-### Outcome
-
-Synod esegue davvero lavoro di sviluppo:
-
-- scrive codice
-- modifica file
-- esegue test
-- valida output
-
-### Perche ora
-
-Senza execution reale, non deliveri.
+Without real execution, you do not deliver.
 
 ### In scope
 
@@ -107,57 +44,55 @@ Senza execution reale, non deliveri.
 - diff generation
 - test execution hooks
 - validation loop: generate -> run -> fix -> retry
-- gestione errori runtime
+- runtime error handling
 
-### Fuori scope
+### Out of scope
 
 - full CI/CD
 - deploy
-- governance profonda, che resta in Canon
+- deep governance, which remains in Canon
 
-### Risultato tangibile
+### Tangible result
 
-Synod puo prendere una slice e produrre codice funzionante, non solo suggerimenti.
+Synod can take a slice and produce working code, not just suggestions.
 
-## Spec 4 — Multi-Agent Review & Voting
+## Spec 007 — Multi-Agent Review & Voting
 
 ### Outcome
 
-Synod introduce councils multi-agente per validare output prima di considerarlo done.
+Synod introduces multi-agent councils to validate output before considering it done.
 
-### Perche ora
+### Why now
 
-Quando inizi a generare codice in automatico, ti serve controllo qualita serio.
+When you start generating code automatically, you need serious quality control.
 
 ### In scope
 
-- reviewer multipli
-- provider diversi: GPT, Claude, Gemini e altri
+- multiple reviewers
+- different providers: GPT, Claude, Gemini, etc.
 - structured findings
-- voting: majority e weighted
-- adjudication base
-- trigger su:
+- voting: majority and weighted
+- base adjudication
+- triggers on:
 - high risk
 - failing validation
 - PR generation
 
-### Fuori scope
+### Out of scope
 
-- governance artifact, che resta in Canon
+- artifact governance, which remains in Canon
 - full debate simulation
 
-### Risultato tangibile
+### Tangible result
 
-Synod non si fida di un singolo modello e produce output piu robusto.
+Synod does not rely on a single model and produces more robust output.
 
-## Sequenza Consigliata
+## Recommended Sequence
 
-1. Orchestrator Core
-2. Delivery Flows
-3. Execution Engine
-4. Review & Voting
+1. Spec 006 — Execution Engine
+2. Spec 007 — Review & Voting
 
-## Architettura Risultante
+## Resulting Architecture
 
 ```text
 User / Copilot / Claude
@@ -175,6 +110,6 @@ User / Copilot / Claude
  (artifact + governance)
 ```
 
-## In Una Frase
+## In One Sentence
 
-Synod deve diventare un sistema che prende un problema e lo trasforma in codice funzionante, con controllo qualita multi-agente.
+Synod must become a system that takes a problem and transforms it into working code, with multi-agent quality control.
