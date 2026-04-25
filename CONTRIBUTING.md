@@ -1,0 +1,102 @@
+# Contributing to synod
+
+## Overview
+
+Synod is a bounded delivery orchestrator. Contributions should keep that bias:
+
+- prefer small, inspectable changes over broad refactors
+- preserve explicit session state, traces, and CLI guidance
+- keep the local developer workflow deterministic
+- update tests and docs together with behavior changes
+
+## Prerequisites
+
+- Rust `1.95.0` from [rust-toolchain.toml](rust-toolchain.toml)
+- `rustfmt` and `clippy`
+- optional but recommended: `cargo-nextest` and `cargo-deny`
+
+To install the repository git hooks:
+
+```bash
+./scripts/install-hooks.sh
+```
+
+## Repository Layout
+
+- [src](src): library code, CLI, domain model, runtime, and fixture-backed execution
+- [tests](tests): top-level Cargo test harnesses plus `unit`, `integration`, and `contract` modules
+- [assistant](assistant): assistant command packs and shared assistant-facing docs
+- [specs](specs): feature specs, plans, research notes, contracts, quickstarts, and task breakdowns
+- [AGENTS.md](AGENTS.md): auto-generated development guidance derived from feature plans
+
+## Working Style
+
+### Small changes
+
+For a bug fix or small improvement:
+
+1. update the smallest possible code surface
+2. add or adjust the nearest test coverage
+3. update docs if the CLI, workflow, or operator guidance changes
+
+### Feature-sized changes
+
+For a non-trivial feature, work through the existing spec flow under [specs](specs):
+
+1. create or update the numbered feature directory
+2. keep `spec.md`, `plan.md`, and `tasks.md` aligned
+3. implement in dependency order
+4. close the loop with docs and validation
+
+Avoid unrelated refactors while landing feature work unless the refactor is required to make the change safe or testable.
+
+## Testing and Validation
+
+Run these commands from the repository root before opening a PR:
+
+```bash
+cargo fmt --all
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --all-targets
+```
+
+Additional validation when relevant:
+
+```bash
+cargo nextest run
+cargo deny check licenses advisories bans sources
+```
+
+### Test Layout Notes
+
+- Cargo discovers this repository's nested tests through the top-level harness files [tests/unit.rs](tests/unit.rs), [tests/integration.rs](tests/integration.rs), and [tests/contract.rs](tests/contract.rs).
+- If you add a new test module under `tests/unit`, `tests/integration`, or `tests/contract`, you must also register it in the matching top-level harness file.
+- Prefer narrow, behavior-scoped tests while iterating, then run the full suite before finalizing the change.
+
+## Docs Expectations
+
+If you change a user-visible command, session workflow, or flow behavior, update the relevant docs in the same change. Common files include:
+
+- [README.md](README.md)
+- [assistant/README.md](assistant/README.md)
+- [ROADMAP.md](ROADMAP.md)
+- the relevant feature quickstart under [specs](specs)
+
+If the crate surface or release scope materially changed, update the crate version in [Cargo.toml](Cargo.toml).
+
+## Pull Requests
+
+PRs should make it easy to review the behavioral delta. Include:
+
+- a short summary of what changed and why
+- the validation commands you ran
+- any updated specs or docs
+- any known follow-up work that was intentionally left out
+
+For CLI or trace-surface changes, include representative output snippets when that improves review clarity.
+
+## Versioning
+
+Synod follows Semantic Versioning.
+
+Before `1.0.0`, breaking changes may still land in minor releases, but version bumps should remain intentional and consistent with the user-visible scope of the change.

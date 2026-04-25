@@ -4,8 +4,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::adapters::trace_store::FileTraceStore;
-use crate::demo::endpoints::build_demo_runtime;
-use crate::demo::profile::DemoRunProfile;
+use crate::fixture::load_workspace_fixture;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -109,23 +108,22 @@ pub fn diagnose_workspace(workspace_ref: impl AsRef<Path>) -> DiagnosticsReport 
         }
     });
 
-    checks.push(
-        match (
-            build_demo_runtime(DemoRunProfile::guided_demo()),
-            build_demo_runtime(DemoRunProfile::default_run("Validate the default developer flow")),
-        ) {
-            (Ok(_), Ok(_)) => DiagnosticsCheck {
-                name: "built_in_flow".to_string(),
-                status: DiagnosticsStatus::Passed,
-                message: "built-in demo and default developer flow are available".to_string(),
-            },
-            (Err(error), _) | (_, Err(error)) => DiagnosticsCheck {
-                name: "built_in_flow".to_string(),
-                status: DiagnosticsStatus::Failed,
-                message: format!("built-in developer flow is unavailable: {error}"),
-            },
+    checks.push(match load_workspace_fixture(workspace) {
+        Ok(fixture) => DiagnosticsCheck {
+            name: "workspace_fixture".to_string(),
+            status: DiagnosticsStatus::Passed,
+            message: format!(
+                "workspace fixture '{}' is available at {}",
+                fixture.name,
+                workspace.join(".synod/fixture.json").display()
+            ),
         },
-    );
+        Err(error) => DiagnosticsCheck {
+            name: "workspace_fixture".to_string(),
+            status: DiagnosticsStatus::Failed,
+            message: format!("workspace fixture is unavailable: {error}"),
+        },
+    });
 
     let missing_prerequisites = checks
         .iter()
@@ -159,17 +157,30 @@ mod tests {
     fn temp_workspace() -> PathBuf {
         let workspace = std::env::temp_dir().join(format!("synod-diagnostics-{}", Uuid::new_v4()));
         fs::create_dir_all(&workspace).unwrap();
+        fs::create_dir_all(workspace.join(".synod")).unwrap();
+        fs::write(
+            workspace.join("Cargo.toml"),
+            "[package]\nname = \"synod\"\nversion = \"0.4.0\"\nedition = \"2024\"\n",
+        )
+        .unwrap();
+        fs::write(
+            workspace.join(".synod").join("fixture.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "name": "diagnostics-fixture",
+                "test_command": {"program": "cargo", "args": ["test", "--quiet"]},
+                "file_patches": [
+                    {"path": "src/lib.rs", "find": "left - right", "replace": "left + right"}
+                ]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
         workspace
     }
 
     #[test]
     fn diagnostics_report_marks_a_writable_workspace_as_ready() {
         let workspace = temp_workspace();
-        fs::write(
-            workspace.join("Cargo.toml"),
-            "[package]\nname = \"synod\"\nversion = \"0.4.0\"\nedition = \"2024\"\n",
-        )
-        .unwrap();
         let report = diagnose_workspace(&workspace);
 
         assert!(report.ready);

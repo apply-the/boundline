@@ -1,39 +1,10 @@
-use std::fs;
-use std::path::PathBuf;
-use std::process::{Command, Output};
-
-use uuid::Uuid;
-
-fn temp_workspace() -> PathBuf {
-    let workspace = std::env::temp_dir().join(format!("synod-cli-contract-{}", Uuid::new_v4()));
-    fs::create_dir_all(&workspace).unwrap();
-    fs::write(
-        workspace.join("Cargo.toml"),
-        "[package]\nname = \"synod-fixture\"\nversion = \"0.4.0\"\nedition = \"2024\"\n",
-    )
-    .unwrap();
-    workspace
-}
-
-fn run_synod(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_synod"))
-        .args(args)
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .output()
-        .unwrap()
-}
-
-fn terminal_text(output: &Output) -> String {
-    format!(
-        "{}{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    )
-}
+use crate::workspace_fixture::{
+    run_synod, temp_broken_fixture_workspace, temp_fixture_workspace, terminal_text,
+};
 
 #[test]
 fn doctor_uses_the_success_exit_code_for_a_ready_workspace() {
-    let workspace = temp_workspace();
+    let workspace = temp_fixture_workspace("synod-cli-contract-doctor");
     let output = run_synod(&["doctor", "--workspace", workspace.to_string_lossy().as_ref()]);
     let text = terminal_text(&output);
 
@@ -43,23 +14,21 @@ fn doctor_uses_the_success_exit_code_for_a_ready_workspace() {
 }
 
 #[test]
-fn demo_uses_the_success_exit_code_and_reports_trace_output() {
-    let workspace = temp_workspace();
-    let output = run_synod(&["demo", "--workspace", workspace.to_string_lossy().as_ref()]);
+fn demo_surface_is_not_exposed_as_a_cli_subcommand() {
+    let output = run_synod(&["demo"]);
     let text = terminal_text(&output);
 
-    assert_eq!(output.status.code(), Some(0), "{text}");
-    assert!(text.contains("retry") || text.contains("replan"), "{text}");
-    assert!(text.contains("trace"), "{text}");
+    assert_eq!(output.status.code(), Some(2), "{text}");
+    assert!(text.contains("unrecognized subcommand") || text.contains("error:"), "{text}");
 }
 
 #[test]
 fn run_uses_the_success_exit_code_for_a_simple_bounded_goal() {
-    let workspace = temp_workspace();
+    let workspace = temp_fixture_workspace("synod-cli-contract");
     let output = run_synod(&[
         "run",
         "--goal",
-        "Summarize the current bounded developer flow",
+        "Fix the failing add test",
         "--workspace",
         workspace.to_string_lossy().as_ref(),
     ]);
@@ -72,11 +41,11 @@ fn run_uses_the_success_exit_code_for_a_simple_bounded_goal() {
 
 #[test]
 fn run_uses_the_non_success_exit_code_when_execution_stops_before_success() {
-    let workspace = temp_workspace();
+    let workspace = temp_broken_fixture_workspace("synod-cli-contract-broken");
     let output = run_synod(&[
         "run",
         "--goal",
-        "Force a non-success failure for the default developer flow",
+        "Attempt the fixture patch on a broken workspace",
         "--workspace",
         workspace.to_string_lossy().as_ref(),
     ]);

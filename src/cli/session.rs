@@ -27,6 +27,7 @@ pub fn execute_start(
         session_id: Uuid::new_v4().to_string(),
         workspace_ref: workspace.to_string_lossy().into_owned(),
         goal: None,
+        active_flow: None,
         active_task: None,
         latest_status: SessionStatus::Initialized,
         latest_terminal_reason: None,
@@ -63,6 +64,27 @@ pub fn execute_capture(
             &record,
             Some("synod plan".to_string()),
             "captured the active goal for the current workspace session",
+        )),
+    })
+}
+
+pub fn execute_flow(
+    workspace: Option<&Path>,
+    name: &str,
+) -> Result<SessionCommandReport, SessionCommandError> {
+    let workspace = resolve_workspace(workspace)?;
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut record = load_active_session(&workspace)?;
+
+    runtime.select_flow(&mut record, name).map_err(map_runtime_error)?;
+    runtime.persist_session(&record).map_err(map_runtime_error)?;
+
+    Ok(SessionCommandReport {
+        exit_status: CommandExitStatus::Succeeded,
+        terminal_output: output::render_session_status(&build_status_view(
+            &record,
+            suggested_next_command(&record),
+            format!("selected the `{}` delivery flow for the active workspace session", name),
         )),
     })
 }
@@ -217,6 +239,15 @@ fn map_runtime_error(error: SessionRuntimeError) -> SessionCommandError {
     match error {
         SessionRuntimeError::MissingGoal => SessionCommandError::MissingCapturedGoal,
         SessionRuntimeError::MissingActiveTask => SessionCommandError::MissingPlannedTask,
+        SessionRuntimeError::UnknownFlow { requested, supported } => {
+            SessionCommandError::UnknownFlow { requested, supported }
+        }
+        SessionRuntimeError::FlowReplacementRequiresReset { current, requested } => {
+            SessionCommandError::FlowReplacementRequiresReset { current, requested }
+        }
+        SessionRuntimeError::InvalidFlowState(message) => {
+            SessionCommandError::InvalidFlowState(message)
+        }
         other => SessionCommandError::SessionRuntime(other),
     }
 }
@@ -255,6 +286,10 @@ fn build_status_view(
         session_id: record.session_id.clone(),
         workspace_ref: record.workspace_ref.clone(),
         goal: record.goal.clone(),
+        active_flow: record.active_flow.as_ref().map(|flow| flow.flow_name.clone()),
+        current_stage_id: record.active_flow.as_ref().map(|flow| flow.current_stage_id.clone()),
+        current_stage_index: record.active_flow.as_ref().map(|flow| flow.current_stage_index),
+        total_stages: record.active_flow.as_ref().map(|flow| flow.total_stages),
         plan_revision: record.active_task.as_ref().map(|task| task.plan.revision),
         current_step_id: record
             .active_task
@@ -295,6 +330,14 @@ pub enum SessionCommandError {
     MissingCapturedGoal,
     #[error("active session has no planned task")]
     MissingPlannedTask,
+    #[error("unknown flow `{requested}`; supported flows: {supported}")]
+    UnknownFlow { requested: String, supported: String },
+    #[error(
+        "cannot replace active flow `{current}` with `{requested}` while work is still present; start a new session to reset the flow"
+    )]
+    FlowReplacementRequiresReset { current: String, requested: String },
+    #[error("active session flow state is invalid: {0}")]
+    InvalidFlowState(String),
     #[error("session store operation failed: {0}")]
     SessionStore(#[from] SessionStoreError),
     #[error("session runtime operation failed: {0}")]
@@ -317,6 +360,17 @@ impl SessionCommandError {
             }
             Self::MissingCapturedGoal => "active session has no captured goal".to_string(),
             Self::MissingPlannedTask => "active session has no planned task".to_string(),
+            Self::UnknownFlow { requested, supported } => {
+                format!("unknown flow `{requested}`; supported flows: {supported}")
+            }
+            Self::FlowReplacementRequiresReset { current, requested } => {
+                format!(
+                    "cannot replace active flow `{current}` with `{requested}` while work is still present; start a new session to reset the flow"
+                )
+            }
+            Self::InvalidFlowState(message) => {
+                format!("active session flow state is invalid: {message}")
+            }
             Self::NotImplemented { command_name, .. } => {
                 format!("`{command_name}` session workflow is not implemented yet")
             }
@@ -333,6 +387,9 @@ impl SessionCommandError {
             | Self::InvalidActiveSession(_) => Some("synod start"),
             Self::MissingCapturedGoal => Some("synod capture --goal <goal>"),
             Self::MissingPlannedTask => Some("synod plan"),
+            Self::UnknownFlow { .. } => Some("synod flow bug-fix"),
+            Self::FlowReplacementRequiresReset { .. } => Some("synod start"),
+            Self::InvalidFlowState(_) => Some("synod start"),
             Self::NotImplemented { next_command, .. } => *next_command,
             Self::WorkspaceResolution(_) | Self::SessionStore(_) | Self::SessionRuntime(_) => None,
         }

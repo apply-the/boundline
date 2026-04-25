@@ -1,3 +1,6 @@
+#[path = "support/workspace_fixture.rs"]
+mod workspace_fixture;
+
 #[path = "integration/sequential_task_run.rs"]
 mod sequential_task_run;
 
@@ -7,8 +10,8 @@ mod retry_and_replan;
 #[path = "integration/trace_capture.rs"]
 mod trace_capture;
 
-#[path = "integration/cli_demo_flow.rs"]
-mod cli_demo_flow;
+#[path = "integration/fixture_vertical_slice.rs"]
+mod fixture_vertical_slice;
 
 #[path = "integration/cli_custom_run.rs"]
 mod cli_custom_run;
@@ -28,5 +31,5 @@ mod assistant_chat_fallback;
 #[path = "integration/session_cli_flow.rs"]
 mod session_cli_flow;
 
-#[path = "integration/session_recovery.rs"]
-mod session_recovery;
+#[path = "integration/flow_cli_run.rs"]
+mod flow_cli_run;

@@ -105,6 +105,44 @@ pub fn summarize_trace(
     for event in &trace.events {
         match event.event_type {
             TraceEventType::TaskStarted | TraceEventType::TerminalRecorded => {}
+            TraceEventType::FlowSelected => {
+                recovery_events.push(TraceRecoveryEvent {
+                    event_type: event.event_type,
+                    trigger: format!(
+                        "{} @ {}",
+                        event
+                            .payload
+                            .get("flow_name")
+                            .and_then(|value| value.as_str())
+                            .unwrap_or("unknown-flow"),
+                        event
+                            .payload
+                            .get("current_stage_id")
+                            .and_then(|value| value.as_str())
+                            .unwrap_or("unknown-stage")
+                    ),
+                    related_step_id: None,
+                });
+            }
+            TraceEventType::StageTransitioned => {
+                recovery_events.push(TraceRecoveryEvent {
+                    event_type: event.event_type,
+                    trigger: format!(
+                        "{} -> {}",
+                        event
+                            .payload
+                            .get("from_stage_id")
+                            .and_then(|value| value.as_str())
+                            .unwrap_or("unknown-stage"),
+                        event
+                            .payload
+                            .get("to_stage_id")
+                            .and_then(|value| value.as_str())
+                            .unwrap_or("unknown-stage")
+                    ),
+                    related_step_id: event.step_id.clone(),
+                });
+            }
             TraceEventType::StepStarted => {
                 let step_id = event
                     .step_id
@@ -162,7 +200,11 @@ pub fn summarize_trace(
                 executed_steps[index].final_status = final_status;
                 executed_steps[index].headline = headline;
             }
-            TraceEventType::RetryScheduled | TraceEventType::Replanned => {
+            TraceEventType::RetryScheduled
+            | TraceEventType::StageRetryScheduled
+            | TraceEventType::Replanned
+            | TraceEventType::StageReplanned
+            | TraceEventType::StageFailed => {
                 recovery_events.push(TraceRecoveryEvent {
                     event_type: event.event_type,
                     trigger: event

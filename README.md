@@ -6,10 +6,13 @@
 [![Coverage](https://codecov.io/gh/apply-the/synod/graph/badge.svg)](https://codecov.io/gh/apply-the/synod)
 
 Synod is a bounded delivery orchestrator. The current repository implements the
-core Rust orchestrator plus a local developer CLI for `doctor`, `demo`,
-session-backed `start` / `capture` / `plan` / `step` / `run` / `status` /
-`next`, and `inspect`, so contributors can exercise the runtime without reading
-the test suite first.
+core Rust orchestrator plus a local developer CLI for `doctor`, session-backed
+`start` / `capture` / `flow` / `plan` / `step` / `run` / `status` / `next`,
+and `inspect`. The current vertical slice is validated with isolated workspace
+fixtures under `.synod/fixture.json` that let Synod drive a real failing test
+to green across the built-in `bug-fix`, `change`, and `delivery` flows.
+
+For contributor setup and validation expectations, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Canon remains part of the longer-term architecture discussion below, but the
 currently implemented developer experience runs fully locally and does not call
@@ -69,7 +72,7 @@ The current repository implements the delivery orchestrator core as a Rust libra
 - `synod::FileTraceStore`: persists execution traces under `<workspace>/.synod/traces/`.
 - `synod::FileSessionStore` and `synod::SessionRuntime`: persist and resume active session state under `<workspace>/.synod/session.json`.
 - `synod::TaskRunRequest` and `synod::TaskRunResponse`: define the run contract used by tests and future delivery flows.
-- `synod` CLI binary: exposes `doctor`, `demo`, `start`, `capture`, `plan`, `step`, `run`, `status`, `next`, and `inspect` over the existing core.
+- `synod` CLI binary: exposes `doctor`, `start`, `capture`, `flow`, `plan`, `step`, `run`, `status`, `next`, and `inspect` over the existing core.
 
 The current implementation covers:
 
@@ -84,18 +87,28 @@ The current implementation covers:
 
 The local `synod` binary keeps the developer experience local, deterministic,
 and backed by both `<workspace>/.synod/session.json` and
-`<workspace>/.synod/traces/`.
+`<workspace>/.synod/traces/`. `doctor`, `plan`, and `run` expect a workspace
+fixture manifest at `<workspace>/.synod/fixture.json` for the current red-to-
+green bug-fix slice.
 
 The primary session-native flow is:
 
 1. `synod start`
 2. `synod capture --goal "..."`
-3. `synod plan`
-4. `synod step` or `synod run`
-5. `synod status`, `synod next`, and `synod inspect --workspace <workspace>`
+3. optional: `synod flow bug-fix|change|delivery`
+4. `synod plan`
+5. `synod step` or `synod run`
+6. `synod status`, `synod next`, and `synod inspect --workspace <workspace>`
+
+When a flow is selected, `status` and `next` surface `active_flow`,
+`current_stage`, and `stage_progress`. `run` and `inspect` also render flow and
+stage lifecycle events such as flow selection, stage transitions, stage retry,
+stage replan, and stage failure.
 
 For the full command walkthrough and example flows, see
-[`specs/004-session-model-unification/quickstart.md`](specs/004-session-model-unification/quickstart.md).
+[`specs/004-session-model-unification/quickstart.md`](specs/004-session-model-unification/quickstart.md)
+and
+[`specs/005-delivery-flows/quickstart.md`](specs/005-delivery-flows/quickstart.md).
 
 ## Assistant Command Packs
 
