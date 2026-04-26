@@ -8,6 +8,10 @@ pub mod registry;
 pub use adapters::agent::FnAgentAdapter;
 pub use adapters::tool::FnToolAdapter;
 pub use adapters::trace_store::FileTraceStore;
+pub use domain::execution::{
+    ChangeEvidence, ChangeStatus, ExecutionAttemptDefinition, ExecutionCommand,
+    ExecutionFailureMode, ValidationRecord, WorkspaceChange, WorkspaceExecutionProfile,
+};
 pub use domain::flow::{SessionFlowState, built_in_flow, supported_flow_names};
 pub use domain::limits::{RunLimits, TerminalCondition};
 pub use domain::plan::Plan;

@@ -88,6 +88,10 @@ impl TaskContext {
         );
     }
 
+    pub fn apply_state_patch(&mut self, state_patch: &Map<String, Value>) {
+        self.merge_into_state(state_patch);
+    }
+
     fn merge_into_state(&mut self, patch: &Map<String, Value>) {
         for (key, value) in patch {
             self.state.insert(key.clone(), value.clone());

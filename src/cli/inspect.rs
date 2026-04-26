@@ -190,10 +190,10 @@ pub fn summarize_trace(
                     .ok_or_else(|| TraceSummaryError::MissingStartedStep(step_id.clone()))?;
                 let headline = match final_status {
                     StepStatus::Succeeded => {
-                        format!("succeeded after {} attempt(s)", executed_steps[index].attempts)
+                        success_headline(&event.payload, executed_steps[index].attempts)
                     }
                     StepStatus::Failed => {
-                        format!("failed after {} attempt(s)", executed_steps[index].attempts)
+                        failure_headline(&event.payload, executed_steps[index].attempts)
                     }
                     _ => "completed".to_string(),
                 };
@@ -309,6 +309,48 @@ fn corrected_command(inspection_target: TraceResolutionTarget) -> &'static str {
     }
 }
 
+fn success_headline(payload: &serde_json::Value, attempts: usize) -> String {
+    if let Some(changed_files) = payload
+        .get("output")
+        .and_then(|output| output.get("changed_files"))
+        .and_then(|value| value.as_array())
+    {
+        let changed_files =
+            changed_files.iter().filter_map(|item| item.as_str()).collect::<Vec<_>>();
+        if !changed_files.is_empty() {
+            return format!("updated {} after {attempts} attempt(s)", changed_files.join(", "));
+        }
+    }
+
+    if let Some(validation) = payload.get("output").and_then(|output| output.get("validation")) {
+        let command =
+            validation.get("command").and_then(|value| value.as_str()).unwrap_or("validation");
+        let succeeded =
+            validation.get("succeeded").and_then(|value| value.as_bool()).unwrap_or(false);
+        return format!(
+            "validation {} after {attempts} attempt(s) via {command}",
+            if succeeded { "passed" } else { "failed" }
+        );
+    }
+
+    format!("succeeded after {attempts} attempt(s)")
+}
+
+fn failure_headline(payload: &serde_json::Value, attempts: usize) -> String {
+    if let Some(validation) =
+        payload.get("evidence").and_then(|evidence| evidence.get("validation_record"))
+    {
+        let command =
+            validation.get("command").and_then(|value| value.as_str()).unwrap_or("validation");
+        let exit_code = validation.get("exit_code").and_then(|value| value.as_i64()).unwrap_or(-1);
+        return format!(
+            "validation failed after {attempts} attempt(s) via {command} (exit_code={exit_code})"
+        );
+    }
+
+    format!("failed after {attempts} attempt(s)")
+}
+
 fn parse_step_kind(raw: &str) -> Result<StepKind, TraceSummaryError> {
     match raw {
         "agent" => Ok(StepKind::Agent),
@@ -348,4 +390,176 @@ pub enum TraceSummaryError {
     MissingStartedStep(String),
     #[error("trace step kind '{0}' is unknown")]
     UnknownStepKind(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::PathBuf;
+
+    use serde_json::json;
+    use uuid::Uuid;
+
+    use super::{
+        InspectCommandError, TraceResolutionTarget, TraceSummaryError, corrected_command,
+        failure_headline, inspection_target_for, render_error, resolve_session_trace_ref,
+        success_headline, summarize_trace,
+    };
+    use crate::adapters::session_store::SessionStoreError;
+    use crate::domain::limits::TerminalCondition;
+    use crate::domain::session::{ActiveSessionRecord, SessionStatus};
+    use crate::domain::task::{TaskStatus, TerminalReason};
+    use crate::domain::trace::{ExecutionTrace, TraceEventType};
+
+    fn temp_workspace(prefix: &str) -> PathBuf {
+        let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+        fs::create_dir_all(workspace.join(".synod")).unwrap();
+        workspace
+    }
+
+    fn terminal_trace() -> ExecutionTrace {
+        let mut trace = ExecutionTrace::new("task-inspect", "session-inspect", "Inspect trace");
+        trace.terminal_status = Some(TaskStatus::Failed);
+        trace.terminal_reason =
+            Some(TerminalReason::new(TerminalCondition::UnrecoverableError, "failed", None));
+        trace.ended_at = Some(trace.started_at + 1);
+        trace
+    }
+
+    #[test]
+    fn render_error_maps_session_store_and_summary_failures() {
+        let workspace = PathBuf::from("/tmp/workspace");
+        let session_error = InspectCommandError::SessionStore(SessionStoreError::Read(
+            std::io::Error::other("read failed"),
+        ));
+        let session_text = render_error(None, Some(workspace.as_path()), &session_error);
+        assert!(session_text.contains("failed to read the active session"), "{session_text}");
+
+        let summary_error = InspectCommandError::Summary(TraceSummaryError::MissingTerminalStatus);
+        let summary_text = render_error(None, Some(workspace.as_path()), &summary_error);
+        assert!(summary_text.contains("failed to summarize the requested trace"), "{summary_text}");
+    }
+
+    #[test]
+    fn summarize_trace_reports_missing_step_id_and_step_kind() {
+        let mut missing_step_id = terminal_trace();
+        missing_step_id.record_event(TraceEventType::StepStarted, None, 0, json!({}));
+        assert!(matches!(
+            summarize_trace("/tmp/trace.json", &missing_step_id).unwrap_err(),
+            TraceSummaryError::MissingStepId(TraceEventType::StepStarted)
+        ));
+
+        let mut missing_step_kind = terminal_trace();
+        missing_step_kind.record_event(
+            TraceEventType::StepStarted,
+            Some("verify".to_string()),
+            0,
+            json!({}),
+        );
+        assert!(matches!(
+            summarize_trace("/tmp/trace.json", &missing_step_kind).unwrap_err(),
+            TraceSummaryError::MissingStepKind(step_id) if step_id == "verify"
+        ));
+    }
+
+    #[test]
+    fn resolve_session_trace_ref_maps_invalid_records_to_invalid_session_errors() {
+        let workspace = temp_workspace("synod-inspect-invalid-session");
+        let invalid_record = ActiveSessionRecord {
+            session_id: "session-inspect".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: None,
+            active_flow: None,
+            active_task: None,
+            latest_status: SessionStatus::GoalCaptured,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 10,
+            updated_at: 20,
+        };
+        fs::write(
+            workspace.join(".synod/session.json"),
+            serde_json::to_vec_pretty(&invalid_record).unwrap(),
+        )
+        .unwrap();
+
+        assert!(matches!(
+            resolve_session_trace_ref(&workspace).unwrap_err(),
+            InspectCommandError::InvalidSession(message) if message.contains("active session is invalid")
+        ));
+    }
+
+    #[test]
+    fn inspection_helpers_cover_default_headlines_and_command_targets() {
+        assert_eq!(
+            inspection_target_for(Some(PathBuf::from("trace.json").as_path()), None),
+            TraceResolutionTarget::ExplicitTrace
+        );
+        assert_eq!(
+            inspection_target_for(None, Some(PathBuf::from("workspace").as_path())),
+            TraceResolutionTarget::LatestWorkspaceTrace
+        );
+        assert_eq!(
+            corrected_command(TraceResolutionTarget::SessionTraceRef),
+            "cargo run --bin synod -- inspect --trace <trace>"
+        );
+        assert_eq!(success_headline(&json!({}), 2), "succeeded after 2 attempt(s)");
+        assert_eq!(failure_headline(&json!({}), 1), "failed after 1 attempt(s)");
+    }
+
+    #[test]
+    fn summarize_trace_collects_recovery_events_and_headlines_from_validation_payloads() {
+        let mut trace = terminal_trace();
+        trace.record_event(
+            TraceEventType::StepStarted,
+            Some("verify".to_string()),
+            0,
+            json!({"step_kind": "tool"}),
+        );
+        trace.record_event(
+            TraceEventType::StepCompleted,
+            Some("verify".to_string()),
+            0,
+            json!({
+                "status": "failed",
+                "evidence": {
+                    "validation_record": {
+                        "command": "cargo test --quiet",
+                        "exit_code": 101,
+                        "stdout": "",
+                        "stderr": "",
+                        "succeeded": false
+                    }
+                }
+            }),
+        );
+        trace.record_event(
+            TraceEventType::StageRetryScheduled,
+            Some("verify".to_string()),
+            0,
+            json!({}),
+        );
+
+        let summary = summarize_trace("/tmp/trace.json", &trace).unwrap();
+
+        assert_eq!(
+            summary.executed_steps[0].headline,
+            "validation failed after 1 attempt(s) via cargo test --quiet (exit_code=101)"
+        );
+        assert_eq!(summary.recovery_events[0].related_step_id.as_deref(), Some("verify"));
+        assert_eq!(summary.recovery_events[0].trigger, "recovery event");
+
+        let success = success_headline(
+            &json!({
+                "output": {
+                    "validation": {
+                        "command": "cargo test --quiet",
+                        "succeeded": true
+                    }
+                }
+            }),
+            2,
+        );
+        assert_eq!(success, "validation passed after 2 attempt(s) via cargo test --quiet");
+    }
 }

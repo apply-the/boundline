@@ -134,6 +134,20 @@ pub fn render_run_trace(
                     let status =
                         event.payload.get("status").and_then(Value::as_str).unwrap_or("unknown");
                     lines.push(format!("step {step_id} {status}"));
+
+                    if let Some(changed_files) = event
+                        .payload
+                        .get("output")
+                        .and_then(|output| output.get("changed_files"))
+                        .and_then(value_as_string_list)
+                        && !changed_files.is_empty()
+                    {
+                        lines.push(format!("changed_files: {}", changed_files.join(", ")));
+                    }
+
+                    if let Some(validation_line) = validation_line_from_event(&event.payload) {
+                        lines.push(validation_line);
+                    }
                 }
                 TraceEventType::RetryScheduled => {
                     let step_id = event.step_id.as_deref().unwrap_or("unknown-step");
@@ -208,11 +222,12 @@ pub fn render_trace_summary(
 
     for step in &summary.executed_steps {
         lines.push(format!(
-            "step {} ({}) {} [{} attempt(s)]",
+            "step {} ({}) {} [{} attempt(s)] - {}",
             step.step_id,
             step_kind_text(step.step_kind),
             step_status_text(step.final_status),
             step.attempts,
+            step.headline,
         ));
     }
 
@@ -309,6 +324,16 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
         lines.push(format!("latest_trace_ref: {latest_trace_ref}"));
     }
 
+    if let Some(latest_changed_files) = &view.latest_changed_files
+        && !latest_changed_files.is_empty()
+    {
+        lines.push(format!("latest_changed_files: {}", latest_changed_files.join(", ")));
+    }
+
+    if let Some(latest_validation_status) = &view.latest_validation_status {
+        lines.push(format!("latest_validation_status: {latest_validation_status}"));
+    }
+
     if let Some(next_command) = &view.next_command {
         lines.push(format!("next_command: {next_command}"));
     }
@@ -340,6 +365,26 @@ pub const fn next_command_after_run(status: TaskStatus) -> &'static str {
 
 pub const fn next_command_after_inspect(_: TaskStatus) -> &'static str {
     "/synod-next"
+}
+
+fn value_as_string_list(value: &Value) -> Option<Vec<String>> {
+    value.as_array().map(|items| {
+        items.iter().filter_map(|item| item.as_str().map(str::to_string)).collect::<Vec<_>>()
+    })
+}
+
+fn validation_line_from_event(payload: &Value) -> Option<String> {
+    let validation =
+        payload.get("output").and_then(|output| output.get("validation")).or_else(|| {
+            payload.get("evidence").and_then(|evidence| evidence.get("validation_record"))
+        })?;
+    let command = validation.get("command").and_then(Value::as_str).unwrap_or("validation");
+    let succeeded = validation.get("succeeded").and_then(Value::as_bool).unwrap_or(false);
+    let exit_code = validation.get("exit_code").and_then(Value::as_i64).unwrap_or(-1);
+    Some(format!(
+        "validation: {} ({command}, exit_code={exit_code})",
+        if succeeded { "passed" } else { "failed" }
+    ))
 }
 
 fn task_status_text(status: TaskStatus) -> &'static str {
@@ -382,5 +427,143 @@ fn session_status_text(status: SessionStatus) -> &'static str {
         SessionStatus::Exhausted => "exhausted",
         SessionStatus::Aborted => "aborted",
         SessionStatus::Invalid => "invalid",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::{command_name, render_run_trace, render_session_status, render_trace_summary};
+    use crate::cli::DeveloperCommand;
+    use crate::domain::limits::{RunLimits, TerminalCondition};
+    use crate::domain::session::{SessionStatus, SessionStatusView};
+    use crate::domain::step::{StepKind, StepStatus};
+    use crate::domain::task::{TaskRunResponse, TaskStatus, TerminalReason};
+    use crate::domain::task_context::TaskContext;
+    use crate::domain::trace::{
+        ExecutionTrace, TraceEventType, TraceRecoveryEvent, TraceStepSummary, TraceSummaryView,
+    };
+
+    #[test]
+    fn command_name_covers_every_developer_subcommand() {
+        let commands = [
+            (DeveloperCommand::Doctor { workspace: "/tmp/workspace".into() }, "doctor"),
+            (DeveloperCommand::Start { workspace: None }, "start"),
+            (DeveloperCommand::Capture { workspace: None, goal: "goal".to_string() }, "capture"),
+            (DeveloperCommand::Flow { name: "bug-fix".to_string(), workspace: None }, "flow"),
+            (DeveloperCommand::Plan { workspace: None }, "plan"),
+            (DeveloperCommand::Step { workspace: None }, "step"),
+            (DeveloperCommand::Run { workspace: None, goal: None }, "run"),
+            (DeveloperCommand::Inspect { trace: None, workspace: None }, "inspect"),
+            (DeveloperCommand::Status { workspace: None }, "status"),
+            (DeveloperCommand::Next { workspace: None }, "next"),
+        ];
+
+        for (command, expected) in commands {
+            assert_eq!(command_name(&command), expected);
+        }
+    }
+
+    #[test]
+    fn render_run_trace_covers_stage_replan_and_stage_failure_fallbacks() {
+        let mut trace = ExecutionTrace::new("task-output", "session-output", "Render output");
+        trace.record_event(TraceEventType::StageReplanned, None, 0, json!({}));
+        trace.record_event(TraceEventType::StageFailed, None, 0, json!({}));
+
+        let response = TaskRunResponse {
+            task_id: "task-output".to_string(),
+            terminal_status: TaskStatus::Failed,
+            terminal_reason: TerminalReason::new(
+                TerminalCondition::UnrecoverableError,
+                "stage failed",
+                None,
+            ),
+            final_context: TaskContext::new(
+                "session-output",
+                "/tmp/workspace",
+                RunLimits::default(),
+                serde_json::Map::new(),
+            ),
+            plan_revision: 0,
+            trace_location: "/tmp/workspace/.synod/traces/task-output.json".to_string(),
+        };
+
+        let text = render_run_trace("run", Some(&trace), &response, "/synod-next");
+
+        assert!(text.contains("stage replan after unknown-step: replan scheduled"), "{text}");
+        assert!(text.contains("stage unknown-stage failed: stage failed"), "{text}");
+    }
+
+    #[test]
+    fn render_trace_summary_labels_flow_stage_and_stage_failure_events() {
+        let summary = TraceSummaryView {
+            trace_ref: "/tmp/workspace/.synod/traces/task-output.json".to_string(),
+            goal: "Render trace summary".to_string(),
+            executed_steps: vec![TraceStepSummary {
+                step_id: "verify".to_string(),
+                step_kind: StepKind::Tool,
+                attempts: 1,
+                final_status: StepStatus::Succeeded,
+                headline: "validation passed".to_string(),
+            }],
+            recovery_events: vec![
+                TraceRecoveryEvent {
+                    event_type: TraceEventType::FlowSelected,
+                    trigger: "bug-fix @ investigate".to_string(),
+                    related_step_id: None,
+                },
+                TraceRecoveryEvent {
+                    event_type: TraceEventType::StageTransitioned,
+                    trigger: "investigate -> implement".to_string(),
+                    related_step_id: None,
+                },
+                TraceRecoveryEvent {
+                    event_type: TraceEventType::StageFailed,
+                    trigger: "verify failed".to_string(),
+                    related_step_id: Some("verify".to_string()),
+                },
+            ],
+            terminal_status: TaskStatus::Failed,
+            terminal_reason: TerminalReason::new(
+                TerminalCondition::UnrecoverableError,
+                "trace failed",
+                None,
+            ),
+            duration: None,
+        };
+
+        let text = render_trace_summary(&summary, "latest-workspace-trace", "/synod-next");
+
+        assert!(text.contains("flow: bug-fix @ investigate"), "{text}");
+        assert!(text.contains("stage: investigate -> implement"), "{text}");
+        assert!(text.contains("stage_failure: verify failed"), "{text}");
+    }
+
+    #[test]
+    fn render_session_status_covers_invalid_status_without_changed_files() {
+        let view = SessionStatusView {
+            session_id: "session-output".to_string(),
+            workspace_ref: "/tmp/workspace".to_string(),
+            goal: None,
+            active_flow: None,
+            current_stage_id: None,
+            current_stage_index: None,
+            total_stages: None,
+            plan_revision: None,
+            current_step_id: None,
+            current_step_index: None,
+            latest_status: SessionStatus::Invalid,
+            latest_trace_ref: None,
+            latest_changed_files: Some(Vec::new()),
+            latest_validation_status: None,
+            next_command: None,
+            explanation: "session is invalid".to_string(),
+        };
+
+        let text = render_session_status(&view);
+
+        assert!(text.contains("latest_status: invalid"), "{text}");
+        assert!(!text.contains("latest_changed_files:"), "{text}");
     }
 }

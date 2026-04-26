@@ -71,6 +71,8 @@ fn session_record_round_trips_and_status_values_serialize() {
         current_step_index: Some(0),
         latest_status: SessionStatus::Planned,
         latest_trace_ref: record.latest_trace_ref.clone(),
+        latest_changed_files: None,
+        latest_validation_status: None,
         next_command: Some("synod step".to_string()),
         explanation: "the active plan is ready for explicit execution".to_string(),
     };

@@ -1,6 +1,6 @@
 # synod Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-04-25
+Auto-generated from all feature plans. Last updated: 2026-04-26
 
 ## Active Technologies
 - Rust 1.95.0, edition 2024 + Existing runtime dependencies (`serde`, `serde_json`, `thiserror`, `tracing`, `uuid`) plus `clap` 4.x for a stable subcommand-based CLI surface (002-developer-ux-orchestrator)
@@ -10,6 +10,8 @@ Auto-generated from all feature plans. Last updated: 2026-04-25
 - Rust 1.95.0, edition 2024 for the existing CLI and orchestrator backend + Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`); no new runtime dependencies for this slice (004-session-model-unification)
 - Workspace-local JSON session record at `<workspace>/.synod/session.json` plus the existing file-backed traces under `<workspace>/.synod/traces/` (004-session-model-unification)
 - Workspace-local JSON session record at `<workspace>/.synod/session.json` plus persisted execution traces under `<workspace>/.synod/traces/` (005-delivery-flows)
+- Rust 1.95.0, edition 2024 + Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`) plus Rust standard library process and filesystem APIs; no new runtime dependencies for the initial execution-engine slice (006-execution-engine)
+- Workspace-local JSON session record at `<workspace>/.synod/session.json`, persisted execution traces under `<workspace>/.synod/traces/`, and workspace execution manifests under `<workspace>/.synod/execution.json` with legacy fallback to `<workspace>/.synod/fixture.json` (006-execution-engine)
 
 - Rust 1.95.0, edition 2024 + Rust standard library plus `serde`, `serde_json`, `thiserror`, `tracing`, and `uuid` for structured state, trace serialization, error handling, instrumentation, and stable identifiers (001-delivery-orchestrator-core)
 
@@ -37,9 +39,9 @@ Crate versioning follows Semantic Versioning.
 Before 1.0.0, breaking changes MAY occur in minor versions.
 
 ## Recent Changes
+- 006-execution-engine: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`) plus Rust standard library process and filesystem APIs; no new runtime dependencies for the initial execution-engine slice
 - 005-delivery-flows: Added Rust 1.95.0, edition 2024 for the existing CLI and orchestrator backend + Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`); no new runtime dependencies for this slice
 - 004-session-model-unification: Added Rust 1.95.0, edition 2024 for the existing CLI and orchestrator backend + Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`); no new runtime dependencies for this slice
-- 003-assistant-command-packs: Added Rust 1.95.0, edition 2024 for the existing CLI backend plus repository-managed Markdown prompt assets for assistant command packs + Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`); no new runtime dependencies for this slice
 
 
 <!-- MANUAL ADDITIONS START -->
