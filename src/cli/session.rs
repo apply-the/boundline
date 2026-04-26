@@ -298,6 +298,22 @@ fn build_status_view(
         current_step_index: record.active_task.as_ref().map(|task| task.plan.current_step_index),
         latest_status: record.latest_status,
         latest_trace_ref: record.latest_trace_ref.clone(),
+        latest_changed_files: record.active_task.as_ref().and_then(|task| {
+            task.context.state.get("latest_changed_files").and_then(|value| {
+                value.as_array().map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|item| item.as_str().map(str::to_string))
+                        .collect::<Vec<_>>()
+                })
+            })
+        }),
+        latest_validation_status: record.active_task.as_ref().and_then(|task| {
+            task.context
+                .state
+                .get("latest_validation_status")
+                .and_then(|value| value.as_str().map(str::to_string))
+        }),
         next_command,
         explanation: explanation.into(),
     }
@@ -393,5 +409,231 @@ impl SessionCommandError {
             Self::NotImplemented { next_command, .. } => *next_command,
             Self::WorkspaceResolution(_) | Self::SessionStore(_) | Self::SessionRuntime(_) => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    use serde_json::json;
+    use uuid::Uuid;
+
+    use super::{
+        CommandExitStatus, SessionCommandError, execute_capture, execute_next, execute_plan,
+        execute_run, execute_start, execute_status, exit_status_for_session, exit_status_for_task,
+        map_runtime_error, map_store_error, render_error, resolve_workspace,
+        suggested_next_command,
+    };
+    use crate::adapters::session_store::SessionStoreError;
+    use crate::adapters::trace_store::TraceStoreError;
+    use crate::domain::session::SessionStatus;
+    use crate::domain::task::TaskStatus;
+    use crate::orchestrator::session_runtime::SessionRuntimeError;
+
+    const FIXTURE_CARGO_TOML: &str = r#"[package]
+name = "session_cli_fixture"
+version = "0.1.0"
+edition = "2024"
+"#;
+
+    const RED_LIB_RS: &str = "pub fn add(left: i32, right: i32) -> i32 {\n    left - right\n}\n";
+
+    const FIXTURE_TEST_RS: &str = r#"#[test]
+fn red_to_green_addition() {
+    assert_eq!(session_cli_fixture::add(2, 2), 4);
+}
+"#;
+
+    fn temp_workspace(prefix: &str) -> PathBuf {
+        let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+        fs::create_dir_all(&workspace).unwrap();
+        workspace
+    }
+
+    fn write_execution_workspace(prefix: &str) -> PathBuf {
+        let workspace = temp_workspace(prefix);
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::create_dir_all(workspace.join("tests")).unwrap();
+        fs::create_dir_all(workspace.join(".synod")).unwrap();
+        fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
+        fs::write(workspace.join("src/lib.rs"), RED_LIB_RS).unwrap();
+        fs::write(workspace.join("tests/red_to_green.rs"), FIXTURE_TEST_RS).unwrap();
+        fs::write(
+            workspace.join(".synod/execution.json"),
+            serde_json::to_string_pretty(&json!({
+                "name": "session-execution",
+                "read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
+                "validation_command": {
+                    "program": "cargo",
+                    "args": ["test", "--quiet"]
+                },
+                "attempts": [
+                    {
+                        "attempt_id": "fix-add",
+                        "summary": "Replace subtraction with addition",
+                        "failure_mode": "terminal",
+                        "changes": [
+                            {
+                                "path": "src/lib.rs",
+                                "find": "left - right",
+                                "replace": "left + right"
+                            }
+                        ]
+                    }
+                ]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        workspace
+    }
+
+    #[test]
+    fn resolve_workspace_and_status_helpers_cover_remaining_branches() {
+        let workspace = temp_workspace("synod-cli-session-resolve");
+        let child = workspace.join("child");
+        fs::create_dir_all(&child).unwrap();
+
+        let previous_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&workspace).unwrap();
+        let resolved = resolve_workspace(Some(Path::new("child"))).unwrap();
+        std::env::set_current_dir(previous_dir).unwrap();
+
+        assert_eq!(resolved, child.canonicalize().unwrap());
+        assert_eq!(exit_status_for_session(SessionStatus::Invalid), CommandExitStatus::NonSuccess);
+        assert_eq!(exit_status_for_task(TaskStatus::Failed), CommandExitStatus::NonSuccess);
+        assert_eq!(
+            suggested_next_command(&crate::domain::session::ActiveSessionRecord {
+                session_id: "session".to_string(),
+                workspace_ref: "/tmp/workspace".to_string(),
+                goal: None,
+                active_flow: None,
+                active_task: None,
+                latest_status: SessionStatus::Invalid,
+                latest_terminal_reason: None,
+                latest_trace_ref: None,
+                created_at: 1,
+                updated_at: 1,
+            }),
+            Some("synod start".to_string())
+        );
+    }
+
+    #[test]
+    fn store_and_runtime_error_mapping_cover_translated_variants() {
+        assert!(matches!(
+            map_store_error(SessionStoreError::InvalidRecord("bad session".to_string())),
+            SessionCommandError::InvalidActiveSession(message) if message == "bad session"
+        ));
+        assert!(matches!(
+            map_store_error(SessionStoreError::Read(std::io::Error::other("read failed"))),
+            SessionCommandError::SessionStore(_)
+        ));
+
+        assert!(matches!(
+            map_runtime_error(SessionRuntimeError::MissingGoal),
+            SessionCommandError::MissingCapturedGoal
+        ));
+        assert!(matches!(
+            map_runtime_error(SessionRuntimeError::MissingActiveTask),
+            SessionCommandError::MissingPlannedTask
+        ));
+        assert!(matches!(
+            map_runtime_error(SessionRuntimeError::UnknownFlow {
+                requested: "missing".to_string(),
+                supported: "bug-fix".to_string(),
+            }),
+            SessionCommandError::UnknownFlow { .. }
+        ));
+        assert!(matches!(
+            map_runtime_error(SessionRuntimeError::FlowReplacementRequiresReset {
+                current: "bug-fix".to_string(),
+                requested: "delivery".to_string(),
+            }),
+            SessionCommandError::FlowReplacementRequiresReset { .. }
+        ));
+        assert!(matches!(
+            map_runtime_error(SessionRuntimeError::InvalidFlowState("bad flow".to_string())),
+            SessionCommandError::InvalidFlowState(message) if message == "bad flow"
+        ));
+        assert!(matches!(
+            map_runtime_error(SessionRuntimeError::TraceStore(TraceStoreError::Read(
+                std::io::Error::other("trace read failed")
+            ))),
+            SessionCommandError::SessionRuntime(_)
+        ));
+    }
+
+    #[test]
+    fn session_command_error_helpers_cover_messages_and_next_commands() {
+        let unknown_flow = SessionCommandError::UnknownFlow {
+            requested: "missing".to_string(),
+            supported: "bug-fix, change, delivery".to_string(),
+        };
+        let text = render_error("flow", &unknown_flow);
+        assert!(text.contains("synod flow bug-fix"), "{text}");
+
+        let reset_required = SessionCommandError::FlowReplacementRequiresReset {
+            current: "bug-fix".to_string(),
+            requested: "delivery".to_string(),
+        };
+        let text = render_error("flow", &reset_required);
+        assert!(text.contains("synod start"), "{text}");
+
+        let not_implemented = SessionCommandError::NotImplemented {
+            command_name: "next",
+            next_command: Some("synod inspect"),
+        };
+        let text = render_error("next", &not_implemented);
+        assert!(text.contains("synod inspect"), "{text}");
+
+        let runtime_error =
+            SessionCommandError::SessionRuntime(SessionRuntimeError::MissingTraceReference);
+        let text = render_error("run", &runtime_error);
+        assert!(!text.contains("next_command:"), "{text}");
+    }
+
+    #[test]
+    fn execute_run_status_and_next_cover_success_paths() {
+        let workspace = write_execution_workspace("synod-cli-session-success");
+
+        assert_eq!(
+            execute_start(Some(&workspace)).unwrap().exit_status,
+            CommandExitStatus::Succeeded
+        );
+        assert_eq!(
+            execute_capture(Some(&workspace), "Fix the failing add test").unwrap().exit_status,
+            CommandExitStatus::Succeeded
+        );
+        assert_eq!(
+            execute_plan(Some(&workspace)).unwrap().exit_status,
+            CommandExitStatus::Succeeded
+        );
+
+        let run = execute_run(Some(&workspace)).unwrap();
+        assert_eq!(run.exit_status, CommandExitStatus::Succeeded);
+        assert!(
+            run.terminal_output.contains("terminal_status: succeeded"),
+            "{}",
+            run.terminal_output
+        );
+
+        let status = execute_status(Some(&workspace)).unwrap();
+        assert_eq!(status.exit_status, CommandExitStatus::Succeeded);
+        assert!(
+            status.terminal_output.contains("latest_status: succeeded"),
+            "{}",
+            status.terminal_output
+        );
+
+        let next = execute_next(Some(&workspace)).unwrap();
+        assert_eq!(next.exit_status, CommandExitStatus::Succeeded);
+        assert!(
+            next.terminal_output.contains("next_command: synod inspect"),
+            "{}",
+            next.terminal_output
+        );
     }
 }

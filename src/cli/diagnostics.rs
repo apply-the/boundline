@@ -4,7 +4,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::adapters::trace_store::FileTraceStore;
-use crate::fixture::load_workspace_fixture;
+use crate::fixture::load_workspace_execution_profile;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -108,20 +108,25 @@ pub fn diagnose_workspace(workspace_ref: impl AsRef<Path>) -> DiagnosticsReport 
         }
     });
 
-    checks.push(match load_workspace_fixture(workspace) {
-        Ok(fixture) => DiagnosticsCheck {
-            name: "workspace_fixture".to_string(),
+    checks.push(match load_workspace_execution_profile(workspace) {
+        Ok(profile) => DiagnosticsCheck {
+            name: "workspace_execution_profile".to_string(),
             status: DiagnosticsStatus::Passed,
             message: format!(
-                "workspace fixture '{}' is available at {}",
-                fixture.name,
-                workspace.join(".synod/fixture.json").display()
+                "execution profile '{}' is available at {}{}",
+                profile.name,
+                workspace.join(".synod/execution.json").display(),
+                profile
+                    .legacy_source
+                    .as_ref()
+                    .map(|source| format!(" (legacy fallback from {source})"))
+                    .unwrap_or_default()
             ),
         },
         Err(error) => DiagnosticsCheck {
-            name: "workspace_fixture".to_string(),
+            name: "workspace_execution_profile".to_string(),
             status: DiagnosticsStatus::Failed,
-            message: format!("workspace fixture is unavailable: {error}"),
+            message: format!("workspace execution profile is unavailable: {error}"),
         },
     });
 
@@ -164,12 +169,20 @@ mod tests {
         )
         .unwrap();
         fs::write(
-            workspace.join(".synod").join("fixture.json"),
+            workspace.join(".synod").join("execution.json"),
             serde_json::to_vec_pretty(&serde_json::json!({
-                "name": "diagnostics-fixture",
-                "test_command": {"program": "cargo", "args": ["test", "--quiet"]},
-                "file_patches": [
-                    {"path": "src/lib.rs", "find": "left - right", "replace": "left + right"}
+                "name": "diagnostics-execution",
+                "read_targets": ["src/lib.rs"],
+                "validation_command": {"program": "cargo", "args": ["test", "--quiet"]},
+                "attempts": [
+                    {
+                        "attempt_id": "fix-add",
+                        "summary": "Replace subtraction with addition",
+                        "failure_mode": "terminal",
+                        "changes": [
+                            {"path": "src/lib.rs", "find": "left - right", "replace": "left + right"}
+                        ]
+                    }
                 ]
             }))
             .unwrap(),

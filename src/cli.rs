@@ -518,3 +518,156 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
         },
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::PathBuf;
+
+    use serde_json::json;
+    use uuid::Uuid;
+
+    use super::{CommandExitStatus, DeveloperCommand, dispatch};
+
+    const FIXTURE_CARGO_TOML: &str = r#"[package]
+name = "dispatch_fixture"
+version = "0.1.0"
+edition = "2024"
+"#;
+
+    const RED_LIB_RS: &str = "pub fn add(left: i32, right: i32) -> i32 {\n    left - right\n}\n";
+
+    const FIXTURE_TEST_RS: &str = r#"#[test]
+fn red_to_green_addition() {
+    assert_eq!(dispatch_fixture::add(2, 2), 4);
+}
+"#;
+
+    fn temp_workspace(prefix: &str) -> PathBuf {
+        let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+        fs::create_dir_all(&workspace).unwrap();
+        workspace
+    }
+
+    fn write_execution_workspace(prefix: &str) -> PathBuf {
+        let workspace = temp_workspace(prefix);
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::create_dir_all(workspace.join("tests")).unwrap();
+        fs::create_dir_all(workspace.join(".synod")).unwrap();
+        fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
+        fs::write(workspace.join("src/lib.rs"), RED_LIB_RS).unwrap();
+        fs::write(workspace.join("tests/red_to_green.rs"), FIXTURE_TEST_RS).unwrap();
+        fs::write(
+            workspace.join(".synod/execution.json"),
+            serde_json::to_string_pretty(&json!({
+                "name": "dispatch-execution",
+                "read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
+                "validation_command": {
+                    "program": "cargo",
+                    "args": ["test", "--quiet"]
+                },
+                "attempts": [
+                    {
+                        "attempt_id": "fix-add",
+                        "summary": "Replace subtraction with addition",
+                        "failure_mode": "terminal",
+                        "changes": [
+                            {
+                                "path": "src/lib.rs",
+                                "find": "left - right",
+                                "replace": "left + right"
+                            }
+                        ]
+                    }
+                ]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        workspace
+    }
+
+    #[test]
+    fn dispatch_covers_session_error_paths() {
+        let workspace = temp_workspace("synod-cli-dispatch-error");
+        let commands = [
+            DeveloperCommand::Capture {
+                workspace: Some(workspace.clone()),
+                goal: "goal".to_string(),
+            },
+            DeveloperCommand::Flow {
+                name: "bug-fix".to_string(),
+                workspace: Some(workspace.clone()),
+            },
+            DeveloperCommand::Plan { workspace: Some(workspace.clone()) },
+            DeveloperCommand::Step { workspace: Some(workspace.clone()) },
+            DeveloperCommand::Status { workspace: Some(workspace.clone()) },
+            DeveloperCommand::Next { workspace: Some(workspace.clone()) },
+        ];
+
+        for command in commands {
+            let outcome = dispatch(&command);
+            assert_eq!(outcome.exit_status, CommandExitStatus::NonSuccess);
+            assert!(outcome.output.contains("session error"), "{}", outcome.output);
+        }
+
+        let inspect =
+            dispatch(&DeveloperCommand::Inspect { trace: None, workspace: Some(workspace) });
+        assert_eq!(inspect.exit_status, CommandExitStatus::TraceReadFailure);
+        assert!(inspect.output.contains("inspect: trace read failure"), "{}", inspect.output);
+    }
+
+    #[test]
+    fn dispatch_covers_successful_custom_run_session_run_and_inspect_paths() {
+        let workspace = write_execution_workspace("synod-cli-dispatch-success");
+
+        let custom_run = dispatch(&DeveloperCommand::Run {
+            workspace: Some(workspace.clone()),
+            goal: Some("Fix the failing add test".to_string()),
+        });
+        assert_eq!(custom_run.exit_status, CommandExitStatus::Succeeded);
+        assert!(custom_run.output.contains("terminal_status: succeeded"), "{}", custom_run.output);
+        assert!(custom_run.trace_location.is_some());
+
+        let start = dispatch(&DeveloperCommand::Start { workspace: Some(workspace.clone()) });
+        assert_eq!(start.exit_status, CommandExitStatus::Succeeded);
+
+        let capture = dispatch(&DeveloperCommand::Capture {
+            workspace: Some(workspace.clone()),
+            goal: "Fix the failing add test".to_string(),
+        });
+        assert_eq!(capture.exit_status, CommandExitStatus::Succeeded);
+
+        let plan = dispatch(&DeveloperCommand::Plan { workspace: Some(workspace.clone()) });
+        assert_eq!(plan.exit_status, CommandExitStatus::Succeeded);
+
+        let step = dispatch(&DeveloperCommand::Step { workspace: Some(workspace.clone()) });
+        assert_eq!(step.exit_status, CommandExitStatus::Succeeded);
+
+        let run =
+            dispatch(&DeveloperCommand::Run { workspace: Some(workspace.clone()), goal: None });
+        assert_eq!(run.exit_status, CommandExitStatus::Succeeded);
+        assert!(run.output.contains("terminal_status: succeeded"), "{}", run.output);
+
+        let status = dispatch(&DeveloperCommand::Status { workspace: Some(workspace.clone()) });
+        assert_eq!(status.exit_status, CommandExitStatus::Succeeded);
+
+        let next = dispatch(&DeveloperCommand::Next { workspace: Some(workspace.clone()) });
+        assert_eq!(next.exit_status, CommandExitStatus::Succeeded);
+
+        let inspect = dispatch(&DeveloperCommand::Inspect {
+            trace: None,
+            workspace: Some(workspace.clone()),
+        });
+        assert_eq!(inspect.exit_status, CommandExitStatus::Succeeded);
+        assert!(inspect.output.contains("inspection_target:"), "{}", inspect.output);
+
+        let invalid_workspace = temp_workspace("synod-cli-dispatch-invalid");
+        let invalid = dispatch(&DeveloperCommand::Run {
+            workspace: Some(invalid_workspace),
+            goal: Some("Fix the failing add test".to_string()),
+        });
+        assert_eq!(invalid.exit_status, CommandExitStatus::InvalidInvocation);
+        assert!(invalid.output.contains("doctor:"), "{}", invalid.output);
+    }
+}

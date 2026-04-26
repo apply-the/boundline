@@ -45,6 +45,8 @@ fn capture_plan_step_and_run_keep_session_state_and_trace_synchronized() {
     let run = run_synod_in(&workspace, &["run"]);
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(0), "{run_text}");
+    assert!(run_text.contains("changed_files: src/lib.rs"), "{run_text}");
+    assert!(run_text.contains("validation: passed"), "{run_text}");
     assert!(run_text.contains("terminal_status: succeeded"), "{run_text}");
     assert!(run_text.contains("trace:"), "{run_text}");
 }
@@ -99,5 +101,7 @@ fn status_next_and_inspect_reuse_the_active_session_view_and_trace_reference() {
     assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
     assert!(inspect_text.contains("inspection_target: session-trace-ref"), "{inspect_text}");
     assert!(inspect_text.contains("goal: Fix the failing add test"), "{inspect_text}");
+    assert!(inspect_text.contains("src/lib.rs"), "{inspect_text}");
+    assert!(inspect_text.contains("validation passed"), "{inspect_text}");
     assert!(!inspect_text.contains("goal: Foreign latest trace"), "{inspect_text}");
 }

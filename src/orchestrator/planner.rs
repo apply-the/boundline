@@ -76,3 +76,54 @@ pub enum PlanningError {
     #[error("planner internal error: {0}")]
     Internal(String),
 }
+
+#[cfg(test)]
+mod tests {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+
+    use serde_json::json;
+
+    use super::{Planner, PlanningError, StaticPlanner};
+    use crate::domain::limits::RunLimits;
+    use crate::domain::plan::Plan;
+    use crate::domain::step::{Recoverability, Step, StepExecutionResult};
+    use crate::domain::task::{Task, TaskRunRequest};
+
+    fn build_task() -> Task {
+        let request = TaskRunRequest {
+            goal: "Recover a bounded task".to_string(),
+            input: json!({"ticket": "PLAN-1"}),
+            session_id: "session-planner".to_string(),
+            workspace_ref: "/tmp/synod-planner".to_string(),
+            limits: RunLimits::default(),
+            initial_context: None,
+        };
+        let plan = Plan::new(vec![Step::decision("verify", json!({})).unwrap()]).unwrap();
+        Task::new("task-planner", &request, plan).unwrap()
+    }
+
+    #[test]
+    fn static_planner_replan_reports_internal_error_when_the_queue_lock_is_poisoned() {
+        let planner = StaticPlanner::with_replans(
+            Plan::new(vec![Step::decision("initial", json!({})).unwrap()]).unwrap(),
+            vec![vec![Step::decision("replacement", json!({})).unwrap()]],
+        );
+        let task = build_task();
+        let failed_step = task.plan.current_step().unwrap().clone();
+        let failure = StepExecutionResult::failure(
+            crate::domain::step::ErrorInfo::new("bad-output", "need a replan"),
+            Recoverability::ReplanRequired,
+        );
+
+        let replans = planner.replans.clone();
+        let _ = catch_unwind(AssertUnwindSafe(|| {
+            let _guard = replans.lock().unwrap();
+            panic!("poison the replan queue");
+        }));
+
+        assert!(matches!(
+            planner.replan(&task, &failed_step, &failure).unwrap_err(),
+            PlanningError::Internal(message) if message.contains("failed to acquire replan queue lock")
+        ));
+    }
+}
