@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -10,9 +11,10 @@ use thiserror::Error;
 use crate::adapters::agent::FnAgentAdapter;
 use crate::adapters::tool::FnToolAdapter;
 use crate::domain::execution::{
-    ChangeEvidence, ChangeStatus, ExecutionAttemptDefinition, ExecutionCommand,
-    ExecutionFailureMode, ExecutionProfileError, ValidationRecord, WorkspaceChange,
-    WorkspaceExecutionProfile,
+    AdaptiveChangeKind, AttemptLineage, AttemptTransitionKind, ChangeEvidence, ChangeStatus,
+    ExecutionAttemptDefinition, ExecutionCommand, ExecutionFailureMode, ExecutionProfileError,
+    PathScore, SelectionEvidence, ValidationRecord, WorkspaceChange, WorkspaceExecutionProfile,
+    WorkspaceSliceSelection,
 };
 use crate::domain::flow::{
     FLOW_METADATA_KEY, SessionFlowState, attach_stage_metadata, built_in_flow,
@@ -27,7 +29,7 @@ use crate::domain::step::{
     ErrorInfo, Recoverability, Step, StepError, StepExecutionRequest, StepExecutionResult,
 };
 use crate::domain::task::TaskRunRequest;
-use crate::orchestrator::planner::StaticPlanner;
+use crate::orchestrator::planner::{CallbackPlanner, Planner, PlanningError, StaticPlanner};
 use crate::registry::agent_registry::{AgentRegistry, RegistryError as AgentRegistryError};
 use crate::registry::tool_registry::{RegistryError as ToolRegistryError, ToolRegistry};
 
@@ -37,9 +39,24 @@ const FIXTURE_RELATIVE_PATH: &str = ".synod/fixture.json";
 #[derive(Clone)]
 pub struct FixtureRuntime {
     pub profile: WorkspaceExecutionProfile,
-    pub planner: StaticPlanner,
+    pub planner: Arc<dyn Planner>,
     pub agents: AgentRegistry,
     pub tools: ToolRegistry,
+}
+
+#[derive(Debug, Clone)]
+struct AdaptiveAttemptPlan {
+    attempt: ExecutionAttemptDefinition,
+    workspace_slice: WorkspaceSliceSelection,
+    selection_evidence: SelectionEvidence,
+    candidate_signature: String,
+    attempt_lineage: AttemptLineage,
+}
+
+#[derive(Debug, Clone)]
+struct WorkspaceTargetSource {
+    path: String,
+    contents: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -162,14 +179,27 @@ pub fn load_workspace_fixture(workspace: &Path) -> Result<WorkspaceFixture, Fixt
 }
 
 pub fn build_fixture_plan(workspace: &Path) -> Result<Plan, FixtureRuntimeError> {
-    build_fixture_plan_for_flow(workspace, None)
+    build_fixture_plan_for_goal(workspace, None, "")
 }
 
 pub fn build_fixture_plan_for_flow(
     workspace: &Path,
     active_flow: Option<&SessionFlowState>,
 ) -> Result<Plan, FixtureRuntimeError> {
+    build_fixture_plan_for_goal(workspace, active_flow, "")
+}
+
+pub fn build_fixture_plan_for_goal(
+    workspace: &Path,
+    active_flow: Option<&SessionFlowState>,
+    goal: &str,
+) -> Result<Plan, FixtureRuntimeError> {
     let profile = load_workspace_execution_profile(workspace)?;
+
+    if profile.adaptive.is_some() {
+        return build_adaptive_initial_plan(workspace, &profile, active_flow, goal);
+    }
+
     build_vertical_slice_plan(&profile, active_flow, 0)
 }
 
@@ -202,11 +232,45 @@ pub fn build_fixture_runtime_for_flow(
     active_flow: Option<&SessionFlowState>,
 ) -> Result<FixtureRuntime, FixtureRuntimeError> {
     let profile = load_workspace_execution_profile(workspace)?;
-    let planner = StaticPlanner::with_replans(
-        build_vertical_slice_plan(&profile, active_flow, 0)?,
-        build_replan_queue(&profile, active_flow)?,
-    );
     let workspace_ref = workspace.to_path_buf();
+    let planner: Arc<dyn Planner> = if profile.adaptive.is_some() {
+        Arc::new(CallbackPlanner::new(
+            {
+                let workspace_ref = workspace_ref.clone();
+                let profile = profile.clone();
+                let active_flow = active_flow.cloned();
+                move |request, _context| {
+                    build_adaptive_initial_plan(
+                        &workspace_ref,
+                        &profile,
+                        active_flow.as_ref(),
+                        &request.goal,
+                    )
+                    .map_err(|error| PlanningError::InvalidPlan(error.to_string()))
+                }
+            },
+            {
+                let workspace_ref = workspace_ref.clone();
+                let profile = profile.clone();
+                let active_flow = active_flow.cloned();
+                move |task, failed_step, failure| {
+                    build_adaptive_replan_steps(
+                        &workspace_ref,
+                        &profile,
+                        active_flow.as_ref(),
+                        task,
+                        failed_step,
+                        failure,
+                    )
+                }
+            },
+        ))
+    } else {
+        Arc::new(StaticPlanner::with_replans(
+            build_vertical_slice_plan(&profile, active_flow, 0)?,
+            build_replan_queue(&profile, active_flow)?,
+        ))
+    };
 
     let mut agents = AgentRegistry::new();
     agents.register("analyzer", {
@@ -392,6 +456,653 @@ fn build_replan_queue(
     Ok(replans)
 }
 
+fn build_adaptive_initial_plan(
+    workspace: &Path,
+    profile: &WorkspaceExecutionProfile,
+    active_flow: Option<&SessionFlowState>,
+    goal: &str,
+) -> Result<Plan, FixtureRuntimeError> {
+    let Some(candidate) = build_adaptive_candidates(
+        workspace,
+        profile,
+        goal,
+        &BTreeSet::new(),
+        None,
+        "selected the initial adaptive candidate".to_string(),
+    )?
+    .into_iter()
+    .next() else {
+        return Err(FixtureRuntimeError::NoAdaptiveCandidate { profile: profile.name.clone() });
+    };
+
+    let Some(active_flow) = active_flow else {
+        let mut steps = vec![Step::agent(
+            "analyze",
+            "analyzer",
+            adaptive_analysis_step_input(profile, &candidate),
+        )?];
+        steps.extend(build_adaptive_attempt_steps(profile, None, &candidate)?);
+        return Ok(Plan::new(steps)?);
+    };
+
+    let flow = built_in_flow(&active_flow.flow_name)
+        .expect("validated flow name should resolve for adaptive fixture planning");
+
+    let mut steps = match flow.name {
+        "bug-fix" => vec![
+            Step::agent(
+                "investigate",
+                "analyzer",
+                attach_stage_metadata(adaptive_analysis_step_input(profile, &candidate), flow, 0)?,
+            )?,
+            Step::agent(
+                "implement",
+                "coder",
+                attach_stage_metadata(
+                    adaptive_code_step_input(
+                        profile,
+                        &candidate,
+                        json!({
+                            "phase": "implement",
+                            "force_retry_once": profile.limits.max_retries > 0,
+                        }),
+                    ),
+                    flow,
+                    1,
+                )?,
+            )?,
+            Step::tool(
+                "verify",
+                "tester",
+                attach_stage_metadata(
+                    adaptive_verify_step_input(profile, &candidate, json!({"phase": "verify"})),
+                    flow,
+                    2,
+                )?,
+            )?,
+        ],
+        "change" => vec![
+            Step::agent(
+                "understand-change",
+                "analyzer",
+                attach_stage_metadata(adaptive_analysis_step_input(profile, &candidate), flow, 0)?,
+            )?,
+            Step::agent(
+                "implement",
+                "coder",
+                attach_stage_metadata(
+                    adaptive_code_step_input(profile, &candidate, json!({"phase": "implement"})),
+                    flow,
+                    1,
+                )?,
+            )?,
+            Step::tool(
+                "verify",
+                "tester",
+                attach_stage_metadata(
+                    adaptive_verify_step_input(profile, &candidate, json!({"phase": "verify"})),
+                    flow,
+                    2,
+                )?,
+            )?,
+        ],
+        "delivery" => vec![
+            Step::agent(
+                "requirements",
+                "analyzer",
+                attach_stage_metadata(adaptive_analysis_step_input(profile, &candidate), flow, 0)?,
+            )?,
+            Step::decision(
+                "architecture",
+                attach_stage_metadata(
+                    json!({
+                        "phase": "architecture",
+                        "output": {"architecture_ready": true},
+                    }),
+                    flow,
+                    1,
+                )?,
+            )?,
+            Step::decision(
+                "backlog",
+                attach_stage_metadata(
+                    json!({
+                        "phase": "backlog",
+                        "output": {"backlog_ready": true},
+                    }),
+                    flow,
+                    2,
+                )?,
+            )?,
+            Step::agent(
+                "implementation-code",
+                "coder",
+                attach_stage_metadata(
+                    adaptive_code_step_input(
+                        profile,
+                        &candidate,
+                        json!({"phase": "implementation"}),
+                    ),
+                    flow,
+                    3,
+                )?,
+            )?,
+            Step::tool(
+                "implementation-verify",
+                "tester",
+                attach_stage_metadata(
+                    adaptive_verify_step_input(
+                        profile,
+                        &candidate,
+                        json!({"phase": "implementation"}),
+                    ),
+                    flow,
+                    3,
+                )?,
+            )?,
+        ],
+        _ => unreachable!("unsupported built-in flow should have been rejected earlier"),
+    };
+
+    steps.extend(build_review_steps_for_attempt(
+        profile,
+        Some(active_flow),
+        candidate.attempt.attempt_id.as_str(),
+    )?);
+
+    Ok(Plan::new(steps)?)
+}
+
+fn build_adaptive_replan_steps(
+    workspace: &Path,
+    profile: &WorkspaceExecutionProfile,
+    active_flow: Option<&SessionFlowState>,
+    task: &crate::domain::task::Task,
+    failed_step: &Step,
+    failure: &StepExecutionResult,
+) -> Result<Vec<Step>, PlanningError> {
+    let used_signatures = adaptive_candidate_signatures_from_state(&task.context.state);
+    let previous_attempt_id = latest_attempt_id_from_state(&task.context.state)
+        .or_else(|| failed_step.input.get("attempt_id").and_then(Value::as_str))
+        .map(str::to_string);
+    let reason = failure.error.as_ref().map(|error| error.message.clone()).unwrap_or_else(|| {
+        "adaptive validation failed and a new candidate is required".to_string()
+    });
+
+    let Some(candidate) = build_adaptive_candidates(
+        workspace,
+        profile,
+        &task.goal,
+        &used_signatures,
+        previous_attempt_id.as_deref(),
+        reason,
+    )
+    .map_err(|error| PlanningError::Internal(error.to_string()))?
+    .into_iter()
+    .next() else {
+        return Err(PlanningError::ReplanUnavailable(
+            "adaptive planner could not synthesize a new candidate".to_string(),
+        ));
+    };
+
+    build_adaptive_attempt_steps(profile, active_flow, &candidate)
+        .map_err(|error| PlanningError::InvalidPlan(error.to_string()))
+}
+
+fn build_adaptive_candidates(
+    workspace: &Path,
+    profile: &WorkspaceExecutionProfile,
+    goal: &str,
+    used_signatures: &BTreeSet<String>,
+    previous_attempt_id: Option<&str>,
+    lineage_reason: String,
+) -> Result<Vec<AdaptiveAttemptPlan>, FixtureRuntimeError> {
+    let adaptive = profile
+        .adaptive
+        .as_ref()
+        .expect("adaptive candidate synthesis requires an adaptive profile");
+    let goal_hint = adaptive_goal_hint(goal, profile);
+    let goal_terms = tokenize_terms(&goal_hint);
+    let validation_terms = tokenize_terms(&profile.validation_command.rendered());
+    let sources = load_workspace_target_sources(workspace, &profile.read_targets)?;
+    let mut path_scores = sources
+        .iter()
+        .map(|source| score_workspace_target(source, adaptive, &goal_terms, &validation_terms))
+        .collect::<Vec<_>>();
+    path_scores.sort_by(|left, right| {
+        right.score.cmp(&left.score).then_with(|| left.path.cmp(&right.path))
+    });
+
+    let selected_targets = path_scores
+        .iter()
+        .take(adaptive.max_selected_targets)
+        .map(|score| score.path.clone())
+        .collect::<Vec<_>>();
+
+    let mut raw_candidates = Vec::new();
+    let mut seen_signatures = BTreeSet::new();
+    for selected_target in &selected_targets {
+        let Some(source) = sources.iter().find(|source| &source.path == selected_target) else {
+            continue;
+        };
+
+        for change in adaptive_changes_for_target(&source.path, &source.contents, adaptive) {
+            let signature = workspace_change_signature(&change);
+            if !seen_signatures.insert(signature.clone()) {
+                continue;
+            }
+
+            raw_candidates.push((change, signature));
+            if raw_candidates.len() >= adaptive.max_generated_attempts {
+                break;
+            }
+        }
+
+        if raw_candidates.len() >= adaptive.max_generated_attempts {
+            break;
+        }
+    }
+
+    let available_candidates = raw_candidates
+        .into_iter()
+        .filter(|(_, signature)| !used_signatures.contains(signature))
+        .collect::<Vec<_>>();
+
+    let available_count = available_candidates.len();
+
+    Ok(available_candidates
+        .into_iter()
+        .enumerate()
+        .map(|(index, (change, signature))| {
+            let attempt_id = format!("adaptive-attempt-{}", used_signatures.len() + index + 1);
+            let workspace_slice = WorkspaceSliceSelection {
+                selection_id: format!("adaptive-slice-{attempt_id}"),
+                selected_targets: selected_targets.clone(),
+                scored_candidates: path_scores.clone(),
+                headline: format!("selected {} for adaptive delivery", change.path),
+            };
+            let selection_evidence = SelectionEvidence {
+                goal_terms: goal_terms.clone(),
+                validation_terms: validation_terms.clone(),
+                path_scores: path_scores.clone(),
+                reason: format!(
+                    "selected {} from {} scored read target(s)",
+                    change.path,
+                    selected_targets.len()
+                ),
+            };
+            let attempt = ExecutionAttemptDefinition {
+                attempt_id: attempt_id.clone(),
+                summary: format!(
+                    "Adaptively update {} by replacing '{}' with '{}'",
+                    change.path,
+                    excerpt(&change.find),
+                    excerpt(&change.replace)
+                ),
+                failure_mode: if index + 1 < available_count {
+                    ExecutionFailureMode::Replan
+                } else {
+                    ExecutionFailureMode::Terminal
+                },
+                changes: vec![change],
+            };
+            let attempt_lineage = AttemptLineage {
+                previous_attempt_id: previous_attempt_id.map(str::to_string),
+                current_attempt_id: attempt_id,
+                transition_kind: if previous_attempt_id.is_some() {
+                    AttemptTransitionKind::Replaced
+                } else {
+                    AttemptTransitionKind::Initial
+                },
+                reason: lineage_reason.clone(),
+            };
+
+            AdaptiveAttemptPlan {
+                attempt,
+                workspace_slice,
+                selection_evidence,
+                candidate_signature: signature,
+                attempt_lineage,
+            }
+        })
+        .collect())
+}
+
+fn build_adaptive_attempt_steps(
+    profile: &WorkspaceExecutionProfile,
+    active_flow: Option<&SessionFlowState>,
+    candidate: &AdaptiveAttemptPlan,
+) -> Result<Vec<Step>, FixtureRuntimeError> {
+    if let Some(active_flow) = active_flow {
+        let code_id = format!(
+            "{}-replan-{}-code",
+            active_flow.current_stage_id, candidate.attempt.attempt_id
+        );
+        let verify_id = format!(
+            "{}-replan-{}-verify",
+            active_flow.current_stage_id, candidate.attempt.attempt_id
+        );
+
+        return Ok(vec![
+            Step::agent(
+                code_id,
+                "coder",
+                attach_current_stage_metadata(
+                    adaptive_code_step_input(
+                        profile,
+                        candidate,
+                        json!({
+                            "phase": active_flow.current_stage_id,
+                        }),
+                    ),
+                    active_flow,
+                ),
+            )?,
+            Step::tool(
+                verify_id,
+                "tester",
+                attach_current_stage_metadata(
+                    adaptive_verify_step_input(
+                        profile,
+                        candidate,
+                        json!({
+                            "phase": active_flow.current_stage_id,
+                        }),
+                    ),
+                    active_flow,
+                ),
+            )?,
+        ]
+        .into_iter()
+        .chain(build_review_steps_for_attempt(
+            profile,
+            Some(active_flow),
+            candidate.attempt.attempt_id.as_str(),
+        )?)
+        .collect());
+    }
+
+    Ok(vec![
+        Step::agent(
+            format!("code-{}", candidate.attempt.attempt_id),
+            "coder",
+            adaptive_code_step_input(profile, candidate, json!({"phase": "code"})),
+        )?,
+        Step::tool(
+            format!("verify-{}", candidate.attempt.attempt_id),
+            "tester",
+            adaptive_verify_step_input(profile, candidate, json!({"phase": "verify"})),
+        )?,
+    ]
+    .into_iter()
+    .chain(build_review_steps_for_attempt(profile, None, candidate.attempt.attempt_id.as_str())?)
+    .collect())
+}
+
+fn load_workspace_target_sources(
+    workspace: &Path,
+    targets: &[String],
+) -> Result<Vec<WorkspaceTargetSource>, FixtureRuntimeError> {
+    targets
+        .iter()
+        .map(|target| {
+            let path = workspace.join(target);
+            let contents = fs::read_to_string(&path)
+                .map_err(|source| FixtureRuntimeError::Io { path: path.clone(), source })?;
+            Ok(WorkspaceTargetSource { path: target.clone(), contents })
+        })
+        .collect()
+}
+
+fn score_workspace_target(
+    source: &WorkspaceTargetSource,
+    adaptive: &crate::domain::execution::AdaptiveExecutionProfile,
+    goal_terms: &[String],
+    validation_terms: &[String],
+) -> PathScore {
+    let mut score = 0_i64;
+    let mut reasons = Vec::new();
+    let lower_path = source.path.to_ascii_lowercase();
+    let lower_contents = source.contents.to_ascii_lowercase();
+
+    for preference in &adaptive.path_preferences {
+        if lower_path.starts_with(&preference.to_ascii_lowercase()) {
+            score += 50;
+            reasons.push(format!("matched path preference {}", preference));
+        }
+    }
+
+    if lower_path.starts_with("src/") {
+        score += 15;
+        reasons.push("prioritized source file".to_string());
+    }
+
+    if lower_path.starts_with("tests/") {
+        score += 5;
+        reasons.push("test target remains available for evidence".to_string());
+    }
+
+    for term in goal_terms {
+        if lower_path.contains(term) {
+            score += 20;
+            reasons.push(format!("goal term '{}' matched path", term));
+        } else if lower_contents.contains(term) {
+            score += 5;
+            reasons.push(format!("goal term '{}' matched contents", term));
+        }
+    }
+
+    for term in validation_terms {
+        if lower_path.contains(term) || lower_contents.contains(term) {
+            score += 3;
+        }
+    }
+
+    let candidate_count =
+        adaptive_changes_for_target(&source.path, &source.contents, adaptive).len();
+    if candidate_count > 0 {
+        score += 10;
+        reasons.push(format!("supports {candidate_count} adaptive candidate(s)"));
+    }
+
+    PathScore { path: source.path.clone(), score, reasons }
+}
+
+fn adaptive_changes_for_target(
+    path: &str,
+    contents: &str,
+    adaptive: &crate::domain::execution::AdaptiveExecutionProfile,
+) -> Vec<WorkspaceChange> {
+    let mut changes = Vec::new();
+    for kind in adaptive.effective_change_kinds() {
+        changes.extend(match kind {
+            AdaptiveChangeKind::ArithmeticSwap => arithmetic_swap_candidates(path, contents),
+            AdaptiveChangeKind::ComparisonFlip => comparison_flip_candidates(path, contents),
+            AdaptiveChangeKind::BooleanFlip => boolean_flip_candidates(path, contents),
+        });
+    }
+    changes
+}
+
+fn arithmetic_swap_candidates(path: &str, contents: &str) -> Vec<WorkspaceChange> {
+    let patterns = [
+        (" - ", [" + ", " / ", " * "]),
+        (" * ", [" - ", " + ", " / "]),
+        (" / ", [" * ", " + ", " - "]),
+        (" + ", [" - ", " * ", " / "]),
+    ];
+
+    for (find, replacements) in patterns {
+        if contents.contains(find) {
+            return replacements
+                .into_iter()
+                .map(|replace| WorkspaceChange {
+                    path: path.to_string(),
+                    find: find.to_string(),
+                    replace: replace.to_string(),
+                })
+                .collect();
+        }
+    }
+
+    Vec::new()
+}
+
+fn comparison_flip_candidates(path: &str, contents: &str) -> Vec<WorkspaceChange> {
+    if contents.contains(" != ") {
+        return vec![WorkspaceChange {
+            path: path.to_string(),
+            find: " != ".to_string(),
+            replace: " == ".to_string(),
+        }];
+    }
+
+    if contents.contains(" == ") {
+        return vec![WorkspaceChange {
+            path: path.to_string(),
+            find: " == ".to_string(),
+            replace: " != ".to_string(),
+        }];
+    }
+
+    Vec::new()
+}
+
+fn boolean_flip_candidates(path: &str, contents: &str) -> Vec<WorkspaceChange> {
+    if contents.contains("false") {
+        return vec![WorkspaceChange {
+            path: path.to_string(),
+            find: "false".to_string(),
+            replace: "true".to_string(),
+        }];
+    }
+
+    if contents.contains("true") {
+        return vec![WorkspaceChange {
+            path: path.to_string(),
+            find: "true".to_string(),
+            replace: "false".to_string(),
+        }];
+    }
+
+    Vec::new()
+}
+
+fn tokenize_terms(text: &str) -> Vec<String> {
+    text.split(|character: char| !character.is_ascii_alphanumeric())
+        .filter_map(|segment| {
+            let term = segment.trim().to_ascii_lowercase();
+            if term.len() >= 3 { Some(term) } else { None }
+        })
+        .collect()
+}
+
+fn adaptive_goal_hint(goal: &str, profile: &WorkspaceExecutionProfile) -> String {
+    let trimmed = goal.trim();
+    if trimmed.is_empty() { profile.name.clone() } else { trimmed.to_string() }
+}
+
+fn workspace_change_signature(change: &WorkspaceChange) -> String {
+    format!("{}::{}=>{}", change.path, change.find, change.replace)
+}
+
+fn adaptive_candidate_signatures_from_state(state: &Map<String, Value>) -> BTreeSet<String> {
+    state
+        .get("adaptive_candidate_signatures")
+        .and_then(Value::as_array)
+        .map(|items| items.iter().filter_map(|item| item.as_str().map(str::to_string)).collect())
+        .unwrap_or_default()
+}
+
+fn latest_attempt_id_from_state(state: &Map<String, Value>) -> Option<&str> {
+    state.get("latest_attempt_id").and_then(Value::as_str)
+}
+
+fn adaptive_analysis_step_input(
+    profile: &WorkspaceExecutionProfile,
+    candidate: &AdaptiveAttemptPlan,
+) -> Value {
+    json!({
+        "phase": "analyze",
+        "execution_profile": profile.name,
+        "read_targets": read_targets_for_profile(profile),
+        "legacy_source": profile.legacy_source,
+        "workspace_slice": candidate.workspace_slice,
+        "selection_headline": &candidate.workspace_slice.headline,
+        "selection_evidence": candidate.selection_evidence,
+    })
+}
+
+fn adaptive_code_step_input(
+    profile: &WorkspaceExecutionProfile,
+    candidate: &AdaptiveAttemptPlan,
+    extra: Value,
+) -> Value {
+    let mut input = extra.as_object().cloned().unwrap_or_default();
+    input.insert("execution_profile".to_string(), json!(profile.name));
+    input.insert("attempt_id".to_string(), json!(&candidate.attempt.attempt_id));
+    input.insert("failure_mode".to_string(), json!(candidate.attempt.failure_mode));
+    input.insert(
+        "adaptive_attempt".to_string(),
+        serde_json::to_value(&candidate.attempt).unwrap_or(Value::Null),
+    );
+    input.insert(
+        "workspace_slice".to_string(),
+        serde_json::to_value(&candidate.workspace_slice).unwrap_or(Value::Null),
+    );
+    input.insert(
+        "selection_evidence".to_string(),
+        serde_json::to_value(&candidate.selection_evidence).unwrap_or(Value::Null),
+    );
+    input.insert("selection_headline".to_string(), json!(&candidate.workspace_slice.headline));
+    input.insert("candidate_signature".to_string(), json!(&candidate.candidate_signature));
+    input.insert(
+        "attempt_lineage".to_string(),
+        serde_json::to_value(&candidate.attempt_lineage).unwrap_or(Value::Null),
+    );
+    Value::Object(input)
+}
+
+fn adaptive_verify_step_input(
+    profile: &WorkspaceExecutionProfile,
+    candidate: &AdaptiveAttemptPlan,
+    extra: Value,
+) -> Value {
+    adaptive_code_step_input(profile, candidate, extra)
+}
+
+fn insert_adaptive_state_from_input(
+    state_patch: &mut Map<String, Value>,
+    input: &Value,
+    existing_state: &Map<String, Value>,
+) {
+    if let Some(workspace_slice) = input.get("workspace_slice") {
+        state_patch.insert("latest_workspace_slice".to_string(), workspace_slice.clone());
+    }
+
+    if let Some(selection_headline) = input.get("selection_headline") {
+        state_patch.insert("latest_selection_headline".to_string(), selection_headline.clone());
+    }
+
+    if let Some(selection_evidence) = input.get("selection_evidence") {
+        state_patch.insert("latest_selection_evidence".to_string(), selection_evidence.clone());
+    }
+
+    if let Some(attempt_lineage) = input.get("attempt_lineage") {
+        state_patch.insert("latest_attempt_lineage".to_string(), attempt_lineage.clone());
+    }
+
+    if let Some(candidate_signature) = input.get("candidate_signature").and_then(Value::as_str) {
+        let mut signatures = adaptive_candidate_signatures_from_state(existing_state);
+        signatures.insert(candidate_signature.to_string());
+        state_patch.insert("latest_candidate_signature".to_string(), json!(candidate_signature));
+        state_patch.insert(
+            "adaptive_candidate_signatures".to_string(),
+            json!(signatures.into_iter().collect::<Vec<_>>()),
+        );
+    }
+}
+
 fn build_attempt_steps(
     profile: &WorkspaceExecutionProfile,
     active_flow: Option<&SessionFlowState>,
@@ -493,27 +1204,35 @@ fn build_review_steps(
     active_flow: Option<&SessionFlowState>,
     attempt_index: usize,
 ) -> Result<Vec<Step>, FixtureRuntimeError> {
+    let attempt = execution_attempt(profile, attempt_index)?;
+    build_review_steps_for_attempt(profile, active_flow, &attempt.attempt_id)
+}
+
+fn build_review_steps_for_attempt(
+    profile: &WorkspaceExecutionProfile,
+    active_flow: Option<&SessionFlowState>,
+    attempt_id: &str,
+) -> Result<Vec<Step>, FixtureRuntimeError> {
     let Some(review) = profile.review.as_ref() else {
         return Ok(Vec::new());
     };
 
-    let attempt = execution_attempt(profile, attempt_index)?;
     let prefix = active_flow
-        .map(|flow| format!("{}-review-{}", flow.current_stage_id, attempt.attempt_id))
-        .unwrap_or_else(|| format!("review-{}", attempt.attempt_id));
+        .map(|flow| format!("{}-review-{}", flow.current_stage_id, attempt_id))
+        .unwrap_or_else(|| format!("review-{}", attempt_id));
 
     let mut steps = Vec::new();
     for reviewer in &review.reviewers {
         steps.push(review_agent_step(
             format!("{}-{}", prefix, reviewer.reviewer_id),
-            review_step_input(profile, attempt_index, reviewer.reviewer_id.clone(), false)?,
+            review_step_input_for_attempt(profile, attempt_id, reviewer.reviewer_id.clone(), false),
             active_flow,
         )?);
     }
 
     steps.push(review_tool_step(
         format!("{}-vote", prefix),
-        review_vote_step_input(profile, attempt_index)?,
+        review_vote_step_input_for_attempt(profile, attempt_id),
         "review-voter",
         active_flow,
     )?);
@@ -527,14 +1246,14 @@ fn build_review_steps(
             .clone();
         steps.push(review_agent_step(
             format!("{}-adjudicate", prefix),
-            review_step_input(profile, attempt_index, adjudicator_id, true)?,
+            review_step_input_for_attempt(profile, attempt_id, adjudicator_id, true),
             active_flow,
         )?);
     }
 
     steps.push(review_tool_step(
         format!("{}-finalize", prefix),
-        review_finalize_step_input(profile, attempt_index)?,
+        review_finalize_step_input_for_attempt(profile, attempt_id),
         "review-finalizer",
         active_flow,
     )?);
@@ -569,48 +1288,42 @@ fn review_tool_step(
     }
 }
 
-fn review_step_input(
+fn review_step_input_for_attempt(
     profile: &WorkspaceExecutionProfile,
-    attempt_index: usize,
+    attempt_id: &str,
     reviewer_id: String,
     adjudication: bool,
-) -> Result<Value, FixtureRuntimeError> {
-    let attempt = execution_attempt(profile, attempt_index)?;
-    Ok(json!({
+) -> Value {
+    json!({
         "phase": "review",
         "execution_profile": profile.name,
-        "attempt_index": attempt_index,
-        "attempt_id": attempt.attempt_id,
+        "attempt_id": attempt_id,
         "reviewer_id": reviewer_id,
         "adjudication": adjudication,
         "default_review_trigger": profile.review.as_ref().and_then(default_success_review_trigger),
-    }))
+    })
 }
 
-fn review_vote_step_input(
+fn review_vote_step_input_for_attempt(
     profile: &WorkspaceExecutionProfile,
-    attempt_index: usize,
-) -> Result<Value, FixtureRuntimeError> {
-    let attempt = execution_attempt(profile, attempt_index)?;
-    Ok(json!({
+    attempt_id: &str,
+) -> Value {
+    json!({
         "phase": "review-vote",
         "execution_profile": profile.name,
-        "attempt_index": attempt_index,
-        "attempt_id": attempt.attempt_id,
-    }))
+        "attempt_id": attempt_id,
+    })
 }
 
-fn review_finalize_step_input(
+fn review_finalize_step_input_for_attempt(
     profile: &WorkspaceExecutionProfile,
-    attempt_index: usize,
-) -> Result<Value, FixtureRuntimeError> {
-    let attempt = execution_attempt(profile, attempt_index)?;
-    Ok(json!({
+    attempt_id: &str,
+) -> Value {
+    json!({
         "phase": "review-finalize",
         "execution_profile": profile.name,
-        "attempt_index": attempt_index,
-        "attempt_id": attempt.attempt_id,
-    }))
+        "attempt_id": attempt_id,
+    })
 }
 
 fn default_success_review_trigger(review: &ReviewProfile) -> Option<ReviewTrigger> {
@@ -660,6 +1373,24 @@ fn execution_attempt(
     })
 }
 
+fn execution_attempt_from_request(
+    profile: &WorkspaceExecutionProfile,
+    request: &StepExecutionRequest,
+) -> Result<ExecutionAttemptDefinition, FixtureRuntimeError> {
+    if let Some(attempt) = request.input.get("adaptive_attempt") {
+        return serde_json::from_value(attempt.clone()).map_err(|error| {
+            FixtureRuntimeError::InvalidAdaptiveAttemptMetadata {
+                profile: profile.name.clone(),
+                message: error.to_string(),
+            }
+        });
+    }
+
+    let attempt_index =
+        request.input.get("attempt_index").and_then(Value::as_u64).unwrap_or(0) as usize;
+    execution_attempt(profile, attempt_index).cloned()
+}
+
 fn legacy_fixture_to_execution_profile(
     fixture: WorkspaceFixture,
 ) -> Result<WorkspaceExecutionProfile, FixtureRuntimeError> {
@@ -694,6 +1425,7 @@ fn legacy_fixture_to_execution_profile(
             args: fixture.test_command.args,
         },
         attempts,
+        adaptive: None,
         limits: fixture.limits,
         review: None,
         legacy_source: Some(FIXTURE_RELATIVE_PATH.to_string()),
@@ -705,14 +1437,36 @@ fn legacy_fixture_to_execution_profile(
 fn analyze_workspace_fixture(
     workspace: &Path,
     profile: &WorkspaceExecutionProfile,
-    _request: StepExecutionRequest,
+    request: StepExecutionRequest,
 ) -> StepExecutionResult {
     match snapshot_workspace_targets(workspace, &read_targets_for_profile(profile)) {
-        Ok(snapshots) => StepExecutionResult::success(json!({
-            "execution_profile": profile.name,
-            "analysis_targets": snapshots,
-            "legacy_source": profile.legacy_source,
-        })),
+        Ok(snapshots) => {
+            let mut state_patch = Map::new();
+            insert_adaptive_state_from_input(
+                &mut state_patch,
+                &request.input,
+                &request.task_snapshot.state,
+            );
+
+            if state_patch.is_empty() {
+                StepExecutionResult::success(json!({
+                    "execution_profile": profile.name,
+                    "analysis_targets": snapshots,
+                    "legacy_source": profile.legacy_source,
+                }))
+            } else {
+                StepExecutionResult::success_with_patch(
+                    json!({
+                        "execution_profile": profile.name,
+                        "analysis_targets": snapshots,
+                        "legacy_source": profile.legacy_source,
+                        "workspace_slice": request.input.get("workspace_slice").cloned(),
+                        "selection_evidence": request.input.get("selection_evidence").cloned(),
+                    }),
+                    state_patch,
+                )
+            }
+        }
         Err(error) => StepExecutionResult::failure(
             ErrorInfo::new(
                 "execution_analysis_failed",
@@ -743,10 +1497,7 @@ fn apply_workspace_fixture(
         );
     }
 
-    let attempt_index =
-        request.input.get("attempt_index").and_then(Value::as_u64).unwrap_or(0) as usize;
-
-    let attempt = match execution_attempt(profile, attempt_index) {
+    let attempt = match execution_attempt_from_request(profile, &request) {
         Ok(attempt) => attempt,
         Err(error) => {
             return StepExecutionResult::failure(
@@ -759,7 +1510,7 @@ fn apply_workspace_fixture(
         }
     };
 
-    match apply_execution_attempt(workspace, attempt) {
+    match apply_execution_attempt(workspace, &attempt) {
         Ok(report) => {
             let changed_files = if report.updated_files.is_empty() {
                 report.already_applied_files.clone()
@@ -772,6 +1523,11 @@ fn apply_workspace_fixture(
             state_patch.insert(
                 "latest_change_evidence".to_string(),
                 serde_json::to_value(&report.change_evidence).unwrap_or(Value::Null),
+            );
+            insert_adaptive_state_from_input(
+                &mut state_patch,
+                &request.input,
+                &request.task_snapshot.state,
             );
 
             StepExecutionResult::success_with_patch(
@@ -801,9 +1557,7 @@ fn verify_workspace_fixture(
     profile: &WorkspaceExecutionProfile,
     request: StepExecutionRequest,
 ) -> StepExecutionResult {
-    let attempt_index =
-        request.input.get("attempt_index").and_then(Value::as_u64).unwrap_or(0) as usize;
-    let attempt = match execution_attempt(profile, attempt_index) {
+    let attempt = match execution_attempt_from_request(profile, &request) {
         Ok(attempt) => attempt,
         Err(error) => {
             return StepExecutionResult::failure(
@@ -824,6 +1578,11 @@ fn verify_workspace_fixture(
             state_patch.insert(
                 "latest_validation_record".to_string(),
                 serde_json::to_value(&record).unwrap_or(Value::Null),
+            );
+            insert_adaptive_state_from_input(
+                &mut state_patch,
+                &request.input,
+                &request.task_snapshot.state,
             );
             if let Some(trigger) = profile.review.as_ref().and_then(default_success_review_trigger)
             {
@@ -854,6 +1613,11 @@ fn verify_workspace_fixture(
                 "latest_validation_record".to_string(),
                 serde_json::to_value(&record).unwrap_or(Value::Null),
             );
+            insert_adaptive_state_from_input(
+                &mut state_patch,
+                &request.input,
+                &request.task_snapshot.state,
+            );
             state_patch
                 .insert("next_review_trigger".to_string(), json!(ReviewTrigger::ValidationFailed));
             StepExecutionResult::success_with_patch(
@@ -883,6 +1647,11 @@ fn verify_workspace_fixture(
             patch.insert(
                 "latest_validation_record".to_string(),
                 serde_json::to_value(output.to_validation_record()).unwrap_or(Value::Null),
+            );
+            insert_adaptive_state_from_input(
+                &mut patch,
+                &request.input,
+                &request.task_snapshot.state,
             );
             patch
         }),
@@ -1526,6 +2295,10 @@ pub enum FixtureRuntimeError {
     PatchTargetMissing { path: PathBuf, needle: String },
     #[error("execution profile '{profile}' does not define attempt index {attempt_index}")]
     InvalidAttemptIndex { profile: String, attempt_index: usize },
+    #[error("execution profile '{profile}' does not define a credible adaptive candidate")]
+    NoAdaptiveCandidate { profile: String },
+    #[error("execution profile '{profile}' returned invalid adaptive attempt metadata: {message}")]
+    InvalidAdaptiveAttemptMetadata { profile: String, message: String },
     #[error("failed to execute fixture command `{command}`: {source}")]
     CommandLaunch {
         command: String,
@@ -1599,6 +2372,7 @@ mod tests {
                     replace: "left + right".to_string(),
                 }],
             }],
+            adaptive: None,
             limits: RunLimits::default(),
             review: None,
             legacy_source: None,

@@ -8,7 +8,10 @@ use uuid::Uuid;
 use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
 use crate::cli::CommandExitStatus;
 use crate::cli::output;
-use crate::domain::session::{ActiveSessionRecord, SessionStatus, SessionStatusView};
+use crate::domain::session::{
+    ActiveSessionRecord, SessionStatus, SessionStatusView, task_state_attempt_lineage_summary,
+    task_state_workspace_slice_summary,
+};
 use crate::domain::task::TaskStatus;
 use crate::domain::trace::current_timestamp_millis;
 use crate::orchestrator::session_runtime::{SessionRuntime, SessionRuntimeError};
@@ -309,6 +312,20 @@ fn build_status_view(
                 })
             })
         }),
+        latest_workspace_slice: record
+            .active_task
+            .as_ref()
+            .and_then(task_state_workspace_slice_summary),
+        latest_selection_headline: record.active_task.as_ref().and_then(|task| {
+            task.context
+                .state
+                .get("latest_selection_headline")
+                .and_then(|value| value.as_str().map(str::to_string))
+        }),
+        latest_attempt_lineage: record
+            .active_task
+            .as_ref()
+            .and_then(task_state_attempt_lineage_summary),
         latest_validation_status: record.active_task.as_ref().and_then(|task| {
             task.context
                 .state

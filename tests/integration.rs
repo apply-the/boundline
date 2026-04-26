@@ -16,6 +16,9 @@ mod fixture_vertical_slice;
 #[path = "integration/cli_custom_run.rs"]
 mod cli_custom_run;
 
+#[path = "integration/cli_adaptive_execution.rs"]
+mod cli_adaptive_execution;
+
 #[path = "integration/cli_diagnostics.rs"]
 mod cli_diagnostics;
 
@@ -30,6 +33,9 @@ mod assistant_chat_fallback;
 
 #[path = "integration/session_cli_flow.rs"]
 mod session_cli_flow;
+
+#[path = "integration/session_adaptive_flow.rs"]
+mod session_adaptive_flow;
 
 #[path = "integration/flow_cli_run.rs"]
 mod flow_cli_run;

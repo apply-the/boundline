@@ -114,6 +114,9 @@ fn build_status_view(record: &ActiveSessionRecord) -> SessionStatusView {
                 })
             })
         }),
+        latest_workspace_slice: None,
+        latest_selection_headline: None,
+        latest_attempt_lineage: None,
         latest_validation_status: active_task.and_then(|task| {
             task.context
                 .state
@@ -440,6 +443,7 @@ fn flow_and_execution_validation_cover_remaining_error_paths() {
                 replace: "left + right".to_string(),
             }],
         }],
+        adaptive: None,
         limits: RunLimits::default(),
         review: None,
         legacy_source: None,

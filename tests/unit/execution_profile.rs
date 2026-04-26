@@ -1,6 +1,6 @@
 use synod::domain::execution::{
-    ExecutionAttemptDefinition, ExecutionCommand, ExecutionFailureMode, WorkspaceChange,
-    WorkspaceExecutionProfile,
+    AdaptiveChangeKind, AdaptiveExecutionProfile, ExecutionAttemptDefinition, ExecutionCommand,
+    ExecutionFailureMode, WorkspaceChange, WorkspaceExecutionProfile,
 };
 use synod::domain::limits::TerminalCondition;
 use synod::domain::review::{
@@ -27,6 +27,7 @@ fn sample_profile() -> WorkspaceExecutionProfile {
                 replace: "left + right".to_string(),
             }],
         }],
+        adaptive: None,
         limits: RunLimits::default(),
         review: None,
         legacy_source: None,
@@ -127,4 +128,89 @@ fn execution_profile_validation_accepts_optional_review_configuration() {
     });
 
     profile.validate().unwrap();
+}
+
+#[test]
+fn execution_profile_validation_accepts_adaptive_only_configuration() {
+    let mut profile = sample_profile();
+    profile.attempts.clear();
+    profile.adaptive = Some(AdaptiveExecutionProfile {
+        max_selected_targets: 1,
+        max_generated_attempts: 4,
+        path_preferences: vec!["src/".to_string()],
+        allowed_change_kinds: vec![AdaptiveChangeKind::ArithmeticSwap],
+    });
+
+    profile.validate().unwrap();
+}
+
+#[test]
+fn execution_profile_validation_rejects_invalid_adaptive_configuration() {
+    let mut profile = sample_profile();
+    profile.attempts.clear();
+    profile.read_targets.clear();
+    profile.adaptive = Some(AdaptiveExecutionProfile {
+        max_selected_targets: 1,
+        max_generated_attempts: 4,
+        path_preferences: vec![],
+        allowed_change_kinds: vec![],
+    });
+
+    let error = profile.validate().unwrap_err();
+    assert!(error.to_string().contains("read target"));
+
+    let mut profile = sample_profile();
+    profile.attempts.clear();
+    profile.adaptive = Some(AdaptiveExecutionProfile {
+        max_selected_targets: 0,
+        max_generated_attempts: 4,
+        path_preferences: vec![],
+        allowed_change_kinds: vec![],
+    });
+
+    let error = profile.validate().unwrap_err();
+    assert!(error.to_string().contains("max_selected_targets"));
+
+    let mut profile = sample_profile();
+    profile.attempts.clear();
+    profile.adaptive = Some(AdaptiveExecutionProfile {
+        max_selected_targets: 1,
+        max_generated_attempts: 0,
+        path_preferences: vec![],
+        allowed_change_kinds: vec![],
+    });
+
+    let error = profile.validate().unwrap_err();
+    assert!(error.to_string().contains("max_generated_attempts"));
+
+    let mut profile = sample_profile();
+    profile.attempts.clear();
+    profile.adaptive = Some(AdaptiveExecutionProfile {
+        max_selected_targets: 1,
+        max_generated_attempts: 1,
+        path_preferences: vec!["../outside".to_string()],
+        allowed_change_kinds: vec![],
+    });
+
+    let error = profile.validate().unwrap_err();
+    assert!(error.to_string().contains("path preference"));
+}
+
+#[test]
+fn adaptive_execution_profile_defaults_builtin_change_kinds() {
+    let adaptive = AdaptiveExecutionProfile {
+        max_selected_targets: 1,
+        max_generated_attempts: 4,
+        path_preferences: vec![],
+        allowed_change_kinds: vec![],
+    };
+
+    assert_eq!(
+        adaptive.effective_change_kinds(),
+        vec![
+            AdaptiveChangeKind::ArithmeticSwap,
+            AdaptiveChangeKind::ComparisonFlip,
+            AdaptiveChangeKind::BooleanFlip,
+        ]
+    );
 }

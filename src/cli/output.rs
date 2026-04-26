@@ -214,6 +214,14 @@ pub fn render_run_trace(
         }
     }
 
+    if let Some(workspace_slice) = adaptive_workspace_slice_summary(&response.final_context.state) {
+        lines.push(format!("workspace_slice: {workspace_slice}"));
+    }
+
+    if let Some(attempt_lineage) = adaptive_attempt_lineage_summary(&response.final_context.state) {
+        lines.push(format!("attempt_lineage: {attempt_lineage}"));
+    }
+
     lines.push(format!("terminal_status: {}", task_status_text(response.terminal_status)));
     lines.push(format!("terminal_reason: {}", response.terminal_reason.message));
     lines.push(format!("trace: {}", response.trace_location));
@@ -344,6 +352,18 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
         lines.push(format!("latest_changed_files: {}", latest_changed_files.join(", ")));
     }
 
+    if let Some(latest_workspace_slice) = &view.latest_workspace_slice {
+        lines.push(format!("latest_workspace_slice: {latest_workspace_slice}"));
+    }
+
+    if let Some(latest_selection_headline) = &view.latest_selection_headline {
+        lines.push(format!("latest_selection_headline: {latest_selection_headline}"));
+    }
+
+    if let Some(latest_attempt_lineage) = &view.latest_attempt_lineage {
+        lines.push(format!("latest_attempt_lineage: {latest_attempt_lineage}"));
+    }
+
     if let Some(latest_validation_status) = &view.latest_validation_status {
         lines.push(format!("latest_validation_status: {latest_validation_status}"));
     }
@@ -391,6 +411,24 @@ pub const fn next_command_after_run(status: TaskStatus) -> &'static str {
         | TaskStatus::Exhausted
         | TaskStatus::Aborted => "/synod-next",
     }
+}
+
+fn adaptive_workspace_slice_summary(state: &serde_json::Map<String, Value>) -> Option<String> {
+    let slice = state.get("latest_workspace_slice")?;
+    let targets = slice.get("selected_targets")?.as_array()?;
+    let targets = targets.iter().filter_map(|item| item.as_str()).collect::<Vec<_>>();
+    if targets.is_empty() { None } else { Some(targets.join(", ")) }
+}
+
+fn adaptive_attempt_lineage_summary(state: &serde_json::Map<String, Value>) -> Option<String> {
+    let lineage = state.get("latest_attempt_lineage")?;
+    let current = lineage.get("current_attempt_id")?.as_str()?;
+    let transition = lineage.get("transition_kind")?.as_str()?;
+    let previous = lineage.get("previous_attempt_id").and_then(Value::as_str);
+    previous.map_or_else(
+        || Some(format!("{current} ({transition})")),
+        |previous| Some(format!("{current} {transition} {previous}")),
+    )
 }
 
 pub const fn next_command_after_inspect(_: TaskStatus) -> &'static str {
@@ -646,6 +684,9 @@ mod tests {
             latest_status: SessionStatus::Invalid,
             latest_trace_ref: None,
             latest_changed_files: Some(Vec::new()),
+            latest_workspace_slice: None,
+            latest_selection_headline: None,
+            latest_attempt_lineage: None,
             latest_validation_status: None,
             latest_review_trigger: None,
             latest_review_vote: None,
@@ -740,6 +781,9 @@ mod tests {
             latest_status: SessionStatus::Running,
             latest_trace_ref: None,
             latest_changed_files: None,
+            latest_workspace_slice: None,
+            latest_selection_headline: None,
+            latest_attempt_lineage: None,
             latest_validation_status: Some("passed".to_string()),
             latest_review_trigger: Some("pr_ready".to_string()),
             latest_review_vote: Some(
