@@ -31,6 +31,12 @@ mod session_store;
 #[path = "unit/execution_profile.rs"]
 mod execution_profile;
 
+#[path = "unit/review_profile.rs"]
+mod review_profile;
+
+#[path = "unit/review_voting.rs"]
+mod review_voting;
+
 #[path = "unit/flow_definition.rs"]
 mod flow_definition;
 

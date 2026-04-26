@@ -15,6 +15,11 @@ pub use domain::execution::{
 pub use domain::flow::{SessionFlowState, built_in_flow, supported_flow_names};
 pub use domain::limits::{RunLimits, TerminalCondition};
 pub use domain::plan::Plan;
+pub use domain::review::{
+    AdjudicationDefinition, ReviewOutcome, ReviewProfile, ReviewScenario, ReviewTrigger,
+    ReviewerDefinition, ReviewerDisposition, ReviewerFinding, ReviewerParticipation,
+    ReviewerParticipationStatus, VoteDecision, VoteResolution, VoteRuleDefinition, VoteStrategy,
+};
 pub use domain::step::{
     ErrorInfo, Recoverability, Step, StepExecutionRequest, StepExecutionResult, StepKind,
     StepStatus,

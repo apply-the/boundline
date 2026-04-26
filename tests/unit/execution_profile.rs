@@ -3,6 +3,10 @@ use synod::domain::execution::{
     WorkspaceExecutionProfile,
 };
 use synod::domain::limits::TerminalCondition;
+use synod::domain::review::{
+    ReviewProfile, ReviewScenario, ReviewTrigger, ReviewerDefinition, ReviewerDisposition,
+    ReviewerFinding, VoteRuleDefinition,
+};
 use synod::{Recoverability, RunLimits};
 
 fn sample_profile() -> WorkspaceExecutionProfile {
@@ -24,6 +28,7 @@ fn sample_profile() -> WorkspaceExecutionProfile {
             }],
         }],
         limits: RunLimits::default(),
+        review: None,
         legacy_source: None,
     }
 }
@@ -78,4 +83,48 @@ fn run_limits_accept_partial_json_overrides() {
     assert_eq!(limits.max_replans, 1);
     assert_eq!(limits.terminal_precedence, RunLimits::default().terminal_precedence);
     assert!(limits.terminal_precedence.contains(&TerminalCondition::GoalSatisfied));
+}
+
+#[test]
+fn execution_profile_validation_accepts_optional_review_configuration() {
+    let mut profile = sample_profile();
+    profile.review = Some(ReviewProfile {
+        triggers: vec![ReviewTrigger::PrReady],
+        reviewers: vec![
+            ReviewerDefinition {
+                reviewer_id: "safety".to_string(),
+                role: "Safety".to_string(),
+                source: Some("gpt".to_string()),
+                weight: 2,
+            },
+            ReviewerDefinition {
+                reviewer_id: "maintainability".to_string(),
+                role: "Maintainability".to_string(),
+                source: Some("claude".to_string()),
+                weight: 1,
+            },
+        ],
+        vote_rule: VoteRuleDefinition::default(),
+        adjudication: Default::default(),
+        scenarios: vec![ReviewScenario {
+            trigger: ReviewTrigger::PrReady,
+            findings: vec![
+                ReviewerFinding {
+                    reviewer_id: "safety".to_string(),
+                    disposition: ReviewerDisposition::Approve,
+                    summary: "No blocking issues".to_string(),
+                    details: None,
+                },
+                ReviewerFinding {
+                    reviewer_id: "maintainability".to_string(),
+                    disposition: ReviewerDisposition::Concern,
+                    summary: "Minor cleanup".to_string(),
+                    details: None,
+                },
+            ],
+            adjudication_finding: None,
+        }],
+    });
+
+    profile.validate().unwrap();
 }

@@ -98,9 +98,10 @@
 
 <!--
   ACTION REQUIRED: Name the deferred or excluded capabilities explicitly.
-  Synod specs should normally exclude councils, provider-routing complexity,
-  distributed execution, long-term memory, UI/UX work, and deployment pipelines
-  unless the constitution has been amended.
+  Synod specs should normally exclude councils and voting unless the roadmap and
+  constitution explicitly prioritize a bounded review slice; they should otherwise
+  exclude provider-routing complexity, distributed execution, long-term memory,
+  UI/UX work, and deployment pipelines.
 -->
 
 - **In Scope**: [core delivery capability introduced by this spec]

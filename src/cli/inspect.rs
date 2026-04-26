@@ -101,10 +101,13 @@ pub fn summarize_trace(
     let mut step_indexes: HashMap<String, usize> = HashMap::new();
     let mut executed_steps: Vec<TraceStepSummary> = Vec::new();
     let mut recovery_events: Vec<TraceRecoveryEvent> = Vec::new();
+    let mut review_timeline: Vec<String> = Vec::new();
 
     for event in &trace.events {
         match event.event_type {
-            TraceEventType::TaskStarted | TraceEventType::TerminalRecorded => {}
+            TraceEventType::TaskStarted
+            | TraceEventType::TerminalRecorded
+            | TraceEventType::ReviewerStarted => {}
             TraceEventType::FlowSelected => {
                 recovery_events.push(TraceRecoveryEvent {
                     event_type: event.event_type,
@@ -216,6 +219,16 @@ pub fn summarize_trace(
                     related_step_id: event.step_id.clone(),
                 });
             }
+            TraceEventType::ReviewStarted
+            | TraceEventType::ReviewTriggerIgnored
+            | TraceEventType::ReviewerCompleted
+            | TraceEventType::ReviewVoteResolved
+            | TraceEventType::ReviewAdjudicated
+            | TraceEventType::ReviewTerminalRecorded => {
+                if let Some(line) = review_timeline_line(event.event_type, &event.payload) {
+                    review_timeline.push(line);
+                }
+            }
         }
     }
 
@@ -224,6 +237,7 @@ pub fn summarize_trace(
         goal: trace.goal.clone(),
         executed_steps,
         recovery_events,
+        review_timeline,
         terminal_status,
         terminal_reason,
         duration: trace.duration_millis(),
@@ -307,6 +321,67 @@ fn corrected_command(inspection_target: TraceResolutionTarget) -> &'static str {
             "cargo run --bin synod -- inspect --workspace <workspace>"
         }
     }
+}
+
+fn review_timeline_line(event_type: TraceEventType, payload: &serde_json::Value) -> Option<String> {
+    match event_type {
+        TraceEventType::ReviewStarted => payload
+            .get("review_trigger")
+            .and_then(|value| value.as_str())
+            .map(|trigger| format!("review_trigger: {trigger}")),
+        TraceEventType::ReviewTriggerIgnored => payload
+            .get("review_trigger")
+            .and_then(|value| value.as_str())
+            .map(|trigger| format!("review_trigger_ignored: {trigger}")),
+        TraceEventType::ReviewerCompleted => reviewer_line(payload),
+        TraceEventType::ReviewVoteResolved => payload
+            .get("summary")
+            .and_then(|value| value.as_str())
+            .map(|summary| format!("review_vote: {summary}"))
+            .or_else(|| {
+                payload.get("vote_resolution").map(|resolution| {
+                    format!(
+                        "review_vote: {}",
+                        serde_json::to_string(resolution).unwrap_or_default()
+                    )
+                })
+            }),
+        TraceEventType::ReviewAdjudicated => {
+            reviewer_line(payload).map(|line| format!("review_adjudication: {line}"))
+        }
+        TraceEventType::ReviewTerminalRecorded => payload
+            .get("review_outcome")
+            .and_then(|value| value.as_str())
+            .map(|outcome| format!("review_outcome: {outcome}"))
+            .or_else(|| {
+                payload
+                    .get("failure_reason")
+                    .and_then(|value| value.as_str())
+                    .map(|reason| format!("review_reason: {reason}"))
+            }),
+        _ => None,
+    }
+}
+
+fn reviewer_line(payload: &serde_json::Value) -> Option<String> {
+    let reviewer_id = payload.get("reviewer_id").and_then(|value| value.as_str())?;
+
+    if let Some(finding) = payload.get("finding") {
+        let disposition =
+            finding.get("disposition").and_then(|value| value.as_str()).unwrap_or("unknown");
+        let summary =
+            finding.get("summary").and_then(|value| value.as_str()).unwrap_or("review finding");
+        let role = payload.get("reviewer_role").and_then(|value| value.as_str());
+        return Some(match role {
+            Some(role) => format!("reviewer {reviewer_id} ({role}) {disposition}: {summary}"),
+            None => format!("reviewer {reviewer_id} {disposition}: {summary}"),
+        });
+    }
+
+    payload
+        .get("failure_reason")
+        .and_then(|value| value.as_str())
+        .map(|reason| format!("reviewer {reviewer_id} failed: {reason}"))
 }
 
 fn success_headline(payload: &serde_json::Value, attempts: usize) -> String {
@@ -561,5 +636,54 @@ mod tests {
             2,
         );
         assert_eq!(success, "validation passed after 2 attempt(s) via cargo test --quiet");
+    }
+
+    #[test]
+    fn summarize_trace_collects_review_timeline_lines() {
+        let mut trace = terminal_trace();
+        trace.record_event(
+            TraceEventType::ReviewStarted,
+            Some("review-safety".to_string()),
+            0,
+            json!({"review_trigger": "pr_ready"}),
+        );
+        trace.record_event(
+            TraceEventType::ReviewerCompleted,
+            Some("review-safety".to_string()),
+            0,
+            json!({
+                "reviewer_id": "safety",
+                "reviewer_role": "Safety",
+                "finding": {
+                    "disposition": "approve",
+                    "summary": "No blockers"
+                }
+            }),
+        );
+        trace.record_event(
+            TraceEventType::ReviewVoteResolved,
+            Some("review-vote".to_string()),
+            0,
+            json!({"summary": "strategy=majority approvals=1 concerns=0 blocks=0 decision=accepted"}),
+        );
+        trace.record_event(
+            TraceEventType::ReviewTerminalRecorded,
+            Some("review-finalize".to_string()),
+            0,
+            json!({"review_outcome": "accepted"}),
+        );
+
+        let summary = summarize_trace("/tmp/trace.json", &trace).unwrap();
+
+        assert_eq!(
+            summary.review_timeline,
+            vec![
+                "review_trigger: pr_ready".to_string(),
+                "reviewer safety (Safety) approve: No blockers".to_string(),
+                "review_vote: strategy=majority approvals=1 concerns=0 blocks=0 decision=accepted"
+                    .to_string(),
+                "review_outcome: accepted".to_string(),
+            ]
+        );
     }
 }

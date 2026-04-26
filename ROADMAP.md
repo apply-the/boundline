@@ -8,7 +8,7 @@ Evolve Synod into a system capable of taking a problem and transforming it into 
 
 ## Current Status
 
-The `Spec 1.3 — Session & Interaction Model Unification`, `Spec 005 — Delivery Flows`, and `Spec 006 — Execution Engine` slices are now available in the local CLI.
+The `Spec 1.3 — Session & Interaction Model Unification`, `Spec 005 — Delivery Flows`, `Spec 006 — Execution Engine`, and `Spec 007 — Multi-Agent Review & Voting` slices are now available in the local CLI.
 
 - active session persisted in `.synod/session.json`
 - explicit flow `start -> capture -> flow -> plan -> step/run -> status/next -> inspect`
@@ -16,12 +16,13 @@ The `Spec 1.3 — Session & Interaction Model Unification`, `Spec 005 — Delive
 - flow-aware `status`, `next`, `run`, and `inspect` output with stage transition and recovery traces
 - execution-profile-backed red-to-green delivery under `.synod/execution.json` with legacy `.synod/fixture.json` fallback
 - changed-file and validation evidence projected into `run`, `status`, and `inspect`
+- bounded review councils with manifest-driven reviewers, majority or weighted voting, optional adjudication, and review evidence projected into `run`, `status`, `next`, and `inspect`
 - assistant command packs aligned with the session model and reuse of `latest_trace_ref`
 
 Immediate follow-up:
 
 - broaden the execution engine beyond the current manifest-driven red-to-green slice
-- add multi-agent review and voting on top of the execution output
+- deepen delivery and review beyond the current bounded local execution manifests
 
 ## Spec 006 — Execution Engine (Code Delivery)
 
@@ -61,7 +62,7 @@ Synod can take a slice and produce working code, not just suggestions.
 
 ### Outcome
 
-Synod introduces multi-agent councils to validate output before considering it done.
+Synod introduces bounded multi-agent councils to validate output before considering it done.
 
 ### Why now
 
@@ -86,7 +87,7 @@ When you start generating code automatically, you need serious quality control.
 
 ### Tangible result
 
-Synod does not rely on a single model and produces more robust output.
+Synod does not rely on a single model and produces more robust output, with review evidence persisted into the same local trace and session surfaces used by the delivery runtime.
 
 ## Recommended Sequence
 

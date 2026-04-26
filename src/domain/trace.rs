@@ -19,6 +19,13 @@ pub enum TraceEventType {
     StageTransitioned,
     StepStarted,
     StepCompleted,
+    ReviewStarted,
+    ReviewTriggerIgnored,
+    ReviewerStarted,
+    ReviewerCompleted,
+    ReviewVoteResolved,
+    ReviewAdjudicated,
+    ReviewTerminalRecorded,
     RetryScheduled,
     StageRetryScheduled,
     Replanned,
@@ -56,6 +63,8 @@ pub struct TraceSummaryView {
     pub goal: String,
     pub executed_steps: Vec<TraceStepSummary>,
     pub recovery_events: Vec<TraceRecoveryEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub review_timeline: Vec<String>,
     pub terminal_status: TaskStatus,
     pub terminal_reason: TerminalReason,
     #[serde(default, skip_serializing_if = "Option::is_none")]
