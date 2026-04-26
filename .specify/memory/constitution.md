@@ -1,29 +1,18 @@
 <!--
 Sync Impact Report
-Version change: unratified-template -> 1.0.0
+Version change: 1.0.0 -> 1.1.0
 Modified principles:
-- Placeholder template principles replaced by 18 concrete principles: I. Delivery Identity;
-	II. Delivery-First Scope; III. No Abstract Agent Systems; IV. Bounded Execution;
-	V. Stateful Execution; VI. Mutable Planning; VII. Execution Over Perfect Planning;
-	VIII. Sequential-First Design; IX. Tool-Agent Symmetry; X. Required Observability;
-	XI. No Hidden Intelligence; XII. Strict Non-Goals; XIII. Minimal Capability Slices;
-	XIV. Real Acceptance Criteria; XV. Failure as a First-Class Path;
-	XVI. Separation From External Systems; XVII. Evolution Without Premature Lock-In;
-	XVIII. Done Means Executable Delivery
+- XII. Strict Non-Goals: expanded to allow explicitly reprioritized, bounded
+	review councils and voting as delivery quality-control slices
 Added sections:
-- Specification Standards
-- Planning & Review Workflow
+- None
 Removed sections:
 - None
 Templates requiring updates:
 - updated: .specify/templates/plan-template.md
 - updated: .specify/templates/spec-template.md
-- updated: .specify/templates/tasks-template.md
-- updated: .specify/templates/commands/*.md (directory absent; no command templates to sync)
 Related docs updated:
-- updated: README.md
-- updated: specs/001-delivery-orchestrator-core/plan.md
-- updated: specs/001-delivery-orchestrator-core/research.md
+- None
 Follow-up TODOs:
 - None
 -->
@@ -144,10 +133,15 @@ Rationale: trust in Synod depends on visible control flow rather than implied ma
 ### XII. Strict Non-Goals
 
 - Specs MUST NOT introduce councils or voting systems unless those capabilities are
-	explicitly reprioritized.
-- Specs MUST NOT introduce provider abstraction complexity, distributed agent systems,
-	memory systems beyond task scope, UI or UX work, or deployment pipelines in the
-	default roadmap path.
+	explicitly reprioritized in the roadmap and bounded by clear reviewer counts,
+	decision rules, triggers, and terminal outcomes.
+- When councils or voting are in scope, specs MUST frame them as delivery quality-
+	control surfaces for reviewing bounded execution output, not as generic agent
+	collaboration platforms.
+- Specs MUST NOT introduce provider abstraction complexity beyond what is required to
+	execute the explicitly prioritized review slice, and MUST NOT introduce distributed
+	agent systems, memory systems beyond task scope, UI or UX work, or deployment
+	pipelines in the default roadmap path.
 - Out-of-scope work MUST be named explicitly rather than left ambiguous.
 
 Rationale: clear exclusions protect the delivery core from premature expansion.
@@ -253,4 +247,4 @@ Rationale: completion is defined by delivery behavior, not by conceptual ambitio
 - Ratification and amendment dates MUST use ISO format. An amendment is incomplete until
 	this file, the Sync Impact Report, and dependent artifacts are in sync.
 
-**Version**: 1.0.0 | **Ratified**: 2026-04-23 | **Last Amended**: 2026-04-23
+**Version**: 1.1.0 | **Ratified**: 2026-04-23 | **Last Amended**: 2026-04-26

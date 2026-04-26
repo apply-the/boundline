@@ -13,6 +13,7 @@ use crate::domain::task_context::TaskContext;
 use crate::domain::trace::{ExecutionTrace, TraceEventType, current_timestamp_millis};
 use crate::orchestrator::planner::{Planner, PlanningError};
 use crate::orchestrator::recovery::{RecoveryDecision, decide_recovery};
+use crate::orchestrator::review_trace::{record_review_step_completed, record_review_step_started};
 use crate::orchestrator::terminal::{build_terminal_reason, task_status_for_condition};
 use crate::registry::agent_registry::AgentRegistry;
 use crate::registry::tool_registry::ToolRegistry;
@@ -118,6 +119,13 @@ where
                     "step_kind": step_snapshot.kind,
                 }),
             );
+            record_review_step_started(
+                &mut trace,
+                &step_snapshot.id,
+                &step_snapshot.input,
+                &task.context.state,
+                task.plan.revision,
+            );
             self.persist_trace(&mut trace)?;
 
             let result = self.execute_step(&step_snapshot, &task.context);
@@ -147,6 +155,14 @@ where
                             "output": output,
                             "evidence": result.evidence,
                         }),
+                    );
+                    record_review_step_completed(
+                        &mut trace,
+                        &step_snapshot.id,
+                        &step_snapshot.input,
+                        &result,
+                        &task.context.state,
+                        task.plan.revision,
                     );
 
                     let goal_satisfied = task
@@ -193,6 +209,14 @@ where
                             "recoverability": result.recoverability,
                             "evidence": result.evidence,
                         }),
+                    );
+                    record_review_step_completed(
+                        &mut trace,
+                        &step_snapshot.id,
+                        &step_snapshot.input,
+                        &result,
+                        &task.context.state,
+                        task.plan.revision,
                     );
 
                     match decide_recovery(&task, &task.plan.steps[step_index], &result) {

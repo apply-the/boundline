@@ -120,6 +120,10 @@ fn build_status_view(record: &ActiveSessionRecord) -> SessionStatusView {
                 .get("latest_validation_status")
                 .and_then(|value| value.as_str().map(str::to_string))
         }),
+        latest_review_trigger: None,
+        latest_review_vote: None,
+        latest_review_outcome: None,
+        latest_review_headline: None,
         next_command: Some("synod step".to_string()),
         explanation: "session state is internally consistent".to_string(),
     }
@@ -437,6 +441,7 @@ fn flow_and_execution_validation_cover_remaining_error_paths() {
             }],
         }],
         limits: RunLimits::default(),
+        review: None,
         legacy_source: None,
     };
     assert_eq!(profile.validate().unwrap_err(), ExecutionProfileError::MissingProfileName);

@@ -41,7 +41,7 @@
 - Sequential-first design: Confirm one-step-at-a-time execution or justify why the constitution allows an exception.
 - Tool-agent symmetry: Show how reasoning and action remain explicit in the execution model.
 - Observability and explicit intelligence: List trace surfaces, visible decisions, failure signals, and any heuristic behavior that must be exposed.
-- Non-goals and external separation: Confirm the plan does not depend on Canon behavior or reintroduce deferred scope such as councils, provider abstraction complexity, long-term memory, UI/UX, or deployment pipelines.
+- Non-goals and external separation: Confirm the plan does not depend on Canon behavior or reintroduce deferred scope such as councils or voting outside an explicitly reprioritized, bounded review slice, provider abstraction complexity beyond the approved slice, long-term memory, UI/UX, or deployment pipelines.
 - Minimal slice: Explain the smallest independently valuable capability delivered by this plan.
 
 Mark each line as PASS or FAIL in the completed plan and reference the section that satisfies it.

@@ -1,0 +1,125 @@
+# Review Voting in Synod 0.7.0
+
+Synod `0.7.0` adds a bounded multi-agent review phase on top of the local
+execution engine. Review configuration lives inside `<workspace>/.synod/execution.json`
+under the `review` key.
+
+## What the runtime supports
+
+- bounded review triggers: `pr_ready`, `validation_failed`, and `high_risk_change`
+- two or more configured reviewers
+- structured findings with `approve`, `concern`, or `block`
+- vote strategies: `majority` and `weighted`
+- optional adjudication through a distinct adjudicator reviewer
+- persisted review evidence in `.synod/traces/` and projected review status in `.synod/session.json`
+
+## Manifest shape
+
+```json
+{
+  "review": {
+    "triggers": ["pr_ready", "validation_failed"],
+    "reviewers": [
+      {
+        "reviewer_id": "safety",
+        "role": "Safety",
+        "source": "gpt",
+        "weight": 2
+      },
+      {
+        "reviewer_id": "maintainability",
+        "role": "Maintainability",
+        "source": "claude",
+        "weight": 1
+      }
+    ],
+    "vote_rule": {
+      "strategy": "weighted",
+      "reject_on_blocking": true
+    },
+    "adjudication": {
+      "enabled": true,
+      "reviewer_id": "arbiter"
+    },
+    "scenarios": [
+      {
+        "trigger": "pr_ready",
+        "findings": [
+          {
+            "reviewer_id": "safety",
+            "disposition": "approve",
+            "summary": "No blockers"
+          },
+          {
+            "reviewer_id": "maintainability",
+            "disposition": "concern",
+            "summary": "Small cleanup still recommended"
+          }
+        ],
+        "adjudication_finding": {
+          "reviewer_id": "arbiter",
+          "disposition": "approve",
+          "summary": "Acceptable for merge"
+        }
+      }
+    ]
+  }
+}
+```
+
+## Vote semantics
+
+`majority` treats every reviewer as weight `1`.
+
+`weighted` uses the configured reviewer `weight` values.
+
+In both strategies, Synod resolves the council with these rules:
+
+1. if `reject_on_blocking` is `true` and any blocking finding is present, the vote is rejected immediately
+2. if approvals are strictly greater than half of the total weight, the vote is accepted
+3. if blocks are strictly greater than half of the total weight, the vote is rejected
+4. otherwise the vote result is `needs_adjudication`
+
+`concern` findings affect the total vote weight, but do not directly accept or reject the council.
+
+## Adjudication behavior
+
+When the vote result is `needs_adjudication` and `adjudication.enabled` is true,
+Synod executes one additional reviewer step for the configured adjudicator.
+
+- the adjudicator reviewer must be distinct from the main council reviewers
+- the scenario may define one `adjudication_finding`
+- the initial slice runs at most one adjudication step
+
+If adjudication is disabled and the council cannot reach acceptance or rejection,
+the final review outcome becomes `escalated`.
+
+## What users see
+
+When review is triggered, the local CLI surfaces review evidence in four places:
+
+- `synod run`: review trigger, reviewer findings, vote summary, review outcome
+- `synod status`: latest review trigger, vote summary, outcome, and reviewer headline
+- `synod next`: the same projected review state plus the next suggested command
+- `synod inspect`: ordered review timeline reconstructed from persisted trace events
+
+The persisted trace emits dedicated review events for:
+
+- review start
+- duplicate review trigger suppression
+- reviewer start and completion
+- vote resolution
+- adjudication
+- final review outcome
+
+## Current scope
+
+The `0.7.0` slice is intentionally bounded:
+
+- review is manifest-driven and deterministic
+- reviewers run sequentially, not concurrently
+- the runtime uses local fixture-backed execution and local trace persistence
+- voting is limited to `majority` and `weighted`
+- adjudication runs at most once
+
+For an executable example, see `specs/007-multi-agent-review/quickstart.md`.

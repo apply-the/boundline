@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::domain::limits::RunLimits;
+use crate::domain::review::{ReviewProfile, ReviewProfileError};
 use crate::domain::step::Recoverability;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -114,6 +115,8 @@ pub struct WorkspaceExecutionProfile {
     #[serde(default = "RunLimits::default")]
     pub limits: RunLimits,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review: Option<ReviewProfile>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub legacy_source: Option<String>,
 }
 
@@ -144,6 +147,10 @@ impl WorkspaceExecutionProfile {
             if !seen_attempts.insert(attempt.attempt_id.clone()) {
                 return Err(ExecutionProfileError::DuplicateAttemptId(attempt.attempt_id.clone()));
             }
+        }
+
+        if let Some(review) = &self.review {
+            review.validate()?;
         }
 
         Ok(())
@@ -211,4 +218,6 @@ pub enum ExecutionProfileError {
     MissingFindPattern(String),
     #[error("execution run limits are invalid: {0}")]
     InvalidRunLimits(String),
+    #[error("review profile is invalid: {0}")]
+    InvalidReviewProfile(#[from] ReviewProfileError),
 }

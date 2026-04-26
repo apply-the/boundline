@@ -96,7 +96,9 @@ pub fn render_run_trace(
 
         for event in &trace.events {
             match event.event_type {
-                TraceEventType::TaskStarted | TraceEventType::TerminalRecorded => {}
+                TraceEventType::TaskStarted
+                | TraceEventType::TerminalRecorded
+                | TraceEventType::ReviewerStarted => {}
                 TraceEventType::FlowSelected => {
                     let flow_name = event
                         .payload
@@ -198,6 +200,16 @@ pub fn render_run_trace(
                         .unwrap_or("stage failed");
                     lines.push(format!("stage {stage_id} failed: {reason}"));
                 }
+                TraceEventType::ReviewStarted
+                | TraceEventType::ReviewTriggerIgnored
+                | TraceEventType::ReviewerCompleted
+                | TraceEventType::ReviewVoteResolved
+                | TraceEventType::ReviewAdjudicated
+                | TraceEventType::ReviewTerminalRecorded => {
+                    if let Some(line) = review_event_line(event.event_type, &event.payload) {
+                        lines.push(line);
+                    }
+                }
             }
         }
     }
@@ -244,6 +256,8 @@ pub fn render_trace_summary(
         };
         lines.push(format!("{label}: {}", recovery.trigger));
     }
+
+    lines.extend(summary.review_timeline.iter().cloned());
 
     lines.push(format!("terminal_status: {}", task_status_text(summary.terminal_status)));
     lines.push(format!("terminal_reason: {}", summary.terminal_reason.message));
@@ -334,6 +348,22 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
         lines.push(format!("latest_validation_status: {latest_validation_status}"));
     }
 
+    if let Some(latest_review_trigger) = &view.latest_review_trigger {
+        lines.push(format!("latest_review_trigger: {latest_review_trigger}"));
+    }
+
+    if let Some(latest_review_vote) = &view.latest_review_vote {
+        lines.push(format!("latest_review_vote: {latest_review_vote}"));
+    }
+
+    if let Some(latest_review_outcome) = &view.latest_review_outcome {
+        lines.push(format!("latest_review_outcome: {latest_review_outcome}"));
+    }
+
+    if let Some(latest_review_headline) = &view.latest_review_headline {
+        lines.push(format!("latest_review_headline: {latest_review_headline}"));
+    }
+
     if let Some(next_command) = &view.next_command {
         lines.push(format!("next_command: {next_command}"));
     }
@@ -385,6 +415,65 @@ fn validation_line_from_event(payload: &Value) -> Option<String> {
         "validation: {} ({command}, exit_code={exit_code})",
         if succeeded { "passed" } else { "failed" }
     ))
+}
+
+fn review_event_line(event_type: TraceEventType, payload: &Value) -> Option<String> {
+    match event_type {
+        TraceEventType::ReviewStarted => payload
+            .get("review_trigger")
+            .and_then(Value::as_str)
+            .map(|trigger| format!("review_trigger: {trigger}")),
+        TraceEventType::ReviewTriggerIgnored => payload
+            .get("review_trigger")
+            .and_then(Value::as_str)
+            .map(|trigger| format!("review_trigger_ignored: {trigger}")),
+        TraceEventType::ReviewerCompleted => reviewer_event_line(payload),
+        TraceEventType::ReviewVoteResolved => payload
+            .get("summary")
+            .and_then(Value::as_str)
+            .map(|summary| format!("review_vote: {summary}"))
+            .or_else(|| {
+                payload.get("vote_resolution").map(|resolution| {
+                    format!(
+                        "review_vote: {}",
+                        serde_json::to_string(resolution).unwrap_or_default()
+                    )
+                })
+            }),
+        TraceEventType::ReviewAdjudicated => {
+            reviewer_event_line(payload).map(|line| format!("review_adjudication: {line}"))
+        }
+        TraceEventType::ReviewTerminalRecorded => payload
+            .get("review_outcome")
+            .and_then(Value::as_str)
+            .map(|outcome| format!("review_outcome: {outcome}"))
+            .or_else(|| {
+                payload
+                    .get("failure_reason")
+                    .and_then(Value::as_str)
+                    .map(|reason| format!("review_reason: {reason}"))
+            }),
+        _ => None,
+    }
+}
+
+fn reviewer_event_line(payload: &Value) -> Option<String> {
+    let reviewer_id = payload.get("reviewer_id").and_then(Value::as_str)?;
+
+    if let Some(finding) = payload.get("finding") {
+        let disposition = finding.get("disposition").and_then(Value::as_str).unwrap_or("unknown");
+        let summary = finding.get("summary").and_then(Value::as_str).unwrap_or("review finding");
+        let role = payload.get("reviewer_role").and_then(Value::as_str);
+        return Some(match role {
+            Some(role) => format!("reviewer {reviewer_id} ({role}) {disposition}: {summary}"),
+            None => format!("reviewer {reviewer_id} {disposition}: {summary}"),
+        });
+    }
+
+    payload
+        .get("failure_reason")
+        .and_then(Value::as_str)
+        .map(|reason| format!("reviewer {reviewer_id} failed: {reason}"))
 }
 
 fn task_status_text(status: TaskStatus) -> &'static str {
@@ -524,6 +613,7 @@ mod tests {
                     related_step_id: Some("verify".to_string()),
                 },
             ],
+            review_timeline: Vec::new(),
             terminal_status: TaskStatus::Failed,
             terminal_reason: TerminalReason::new(
                 TerminalCondition::UnrecoverableError,
@@ -557,6 +647,10 @@ mod tests {
             latest_trace_ref: None,
             latest_changed_files: Some(Vec::new()),
             latest_validation_status: None,
+            latest_review_trigger: None,
+            latest_review_vote: None,
+            latest_review_outcome: None,
+            latest_review_headline: None,
             next_command: None,
             explanation: "session is invalid".to_string(),
         };
@@ -565,5 +659,128 @@ mod tests {
 
         assert!(text.contains("latest_status: invalid"), "{text}");
         assert!(!text.contains("latest_changed_files:"), "{text}");
+    }
+
+    #[test]
+    fn render_run_trace_surfaces_review_events() {
+        let mut trace =
+            ExecutionTrace::new("task-review-output", "session-review-output", "Render review");
+        trace.record_event(
+            TraceEventType::ReviewStarted,
+            Some("review-safety".to_string()),
+            0,
+            json!({"review_trigger": "pr_ready"}),
+        );
+        trace.record_event(
+            TraceEventType::ReviewerCompleted,
+            Some("review-safety".to_string()),
+            0,
+            json!({
+                "reviewer_id": "safety",
+                "reviewer_role": "Safety",
+                "finding": {
+                    "disposition": "approve",
+                    "summary": "No blockers"
+                }
+            }),
+        );
+        trace.record_event(
+            TraceEventType::ReviewVoteResolved,
+            Some("review-vote".to_string()),
+            0,
+            json!({"summary": "strategy=majority approvals=1 concerns=0 blocks=0 decision=accepted"}),
+        );
+        trace.record_event(
+            TraceEventType::ReviewTerminalRecorded,
+            Some("review-finalize".to_string()),
+            0,
+            json!({"review_outcome": "accepted"}),
+        );
+
+        let response = TaskRunResponse {
+            task_id: "task-review-output".to_string(),
+            terminal_status: TaskStatus::Succeeded,
+            terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None),
+            final_context: TaskContext::new(
+                "session-review-output",
+                "/tmp/workspace",
+                RunLimits::default(),
+                serde_json::Map::new(),
+            ),
+            plan_revision: 0,
+            trace_location: "/tmp/workspace/.synod/traces/task-review-output.json".to_string(),
+        };
+
+        let text = render_run_trace("run", Some(&trace), &response, "/synod-next");
+
+        assert!(text.contains("review_trigger: pr_ready"), "{text}");
+        assert!(text.contains("reviewer safety (Safety) approve: No blockers"), "{text}");
+        assert!(
+            text.contains(
+                "review_vote: strategy=majority approvals=1 concerns=0 blocks=0 decision=accepted"
+            ),
+            "{text}"
+        );
+        assert!(text.contains("review_outcome: accepted"), "{text}");
+    }
+
+    #[test]
+    fn render_session_status_surfaces_review_projection() {
+        let view = SessionStatusView {
+            session_id: "session-review-status".to_string(),
+            workspace_ref: "/tmp/workspace".to_string(),
+            goal: Some("Ship review output".to_string()),
+            active_flow: None,
+            current_stage_id: None,
+            current_stage_index: None,
+            total_stages: None,
+            plan_revision: None,
+            current_step_id: None,
+            current_step_index: None,
+            latest_status: SessionStatus::Running,
+            latest_trace_ref: None,
+            latest_changed_files: None,
+            latest_validation_status: Some("passed".to_string()),
+            latest_review_trigger: Some("pr_ready".to_string()),
+            latest_review_vote: Some(
+                "strategy=majority approvals=2 concerns=0 blocks=0 decision=accepted".to_string(),
+            ),
+            latest_review_outcome: Some("accepted".to_string()),
+            latest_review_headline: Some("safety approve: No blockers".to_string()),
+            next_command: Some("synod step".to_string()),
+            explanation: "review is in progress".to_string(),
+        };
+
+        let text = render_session_status(&view);
+
+        assert!(text.contains("latest_review_trigger: pr_ready"), "{text}");
+        assert!(text.contains("latest_review_vote: strategy=majority approvals=2 concerns=0 blocks=0 decision=accepted"), "{text}");
+        assert!(text.contains("latest_review_outcome: accepted"), "{text}");
+        assert!(text.contains("latest_review_headline: safety approve: No blockers"), "{text}");
+    }
+
+    #[test]
+    fn render_trace_summary_includes_review_timeline() {
+        let summary = TraceSummaryView {
+            trace_ref: "/tmp/workspace/.synod/traces/task-review-output.json".to_string(),
+            goal: "Render trace summary".to_string(),
+            executed_steps: vec![],
+            recovery_events: vec![],
+            review_timeline: vec![
+                "review_trigger: pr_ready".to_string(),
+                "reviewer safety (Safety) approve: No blockers".to_string(),
+                "review_vote: strategy=majority approvals=1 concerns=0 blocks=0 decision=accepted"
+                    .to_string(),
+                "review_outcome: accepted".to_string(),
+            ],
+            terminal_status: TaskStatus::Succeeded,
+            terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None),
+            duration: Some(42),
+        };
+
+        let text = render_trace_summary(&summary, "latest-workspace-trace", "/synod-next");
+
+        assert!(text.contains("review_trigger: pr_ready"), "{text}");
+        assert!(text.contains("review_outcome: accepted"), "{text}");
     }
 }

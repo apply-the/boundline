@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use thiserror::Error;
 
 use crate::domain::flow::SessionFlowState;
@@ -190,6 +191,14 @@ pub struct SessionStatusView {
     pub latest_changed_files: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_validation_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_review_trigger: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_review_vote: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_review_outcome: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_review_headline: Option<String>,
     pub next_command: Option<String>,
     pub explanation: String,
 }
@@ -286,6 +295,48 @@ impl SessionStatusView {
             });
         }
 
+        let expected_review_trigger = record
+            .active_task
+            .as_ref()
+            .and_then(|task| task_state_string(task, "latest_review_trigger"));
+        if self.latest_review_trigger != expected_review_trigger {
+            return Err(SessionValidationError::StatusViewReviewTriggerMismatch {
+                expected: expected_review_trigger,
+                actual: self.latest_review_trigger.clone(),
+            });
+        }
+
+        let expected_review_vote = record
+            .active_task
+            .as_ref()
+            .and_then(|task| task_state_string(task, "latest_review_vote"));
+        if self.latest_review_vote != expected_review_vote {
+            return Err(SessionValidationError::StatusViewReviewVoteMismatch {
+                expected: expected_review_vote,
+                actual: self.latest_review_vote.clone(),
+            });
+        }
+
+        let expected_review_outcome = record
+            .active_task
+            .as_ref()
+            .and_then(|task| task_state_string(task, "latest_review_outcome"));
+        if self.latest_review_outcome != expected_review_outcome {
+            return Err(SessionValidationError::StatusViewReviewOutcomeMismatch {
+                expected: expected_review_outcome,
+                actual: self.latest_review_outcome.clone(),
+            });
+        }
+
+        let expected_review_headline =
+            record.active_task.as_ref().and_then(task_state_review_headline);
+        if self.latest_review_headline != expected_review_headline {
+            return Err(SessionValidationError::StatusViewReviewHeadlineMismatch {
+                expected: expected_review_headline,
+                actual: self.latest_review_headline.clone(),
+            });
+        }
+
         if self.explanation.trim().is_empty() {
             return Err(SessionValidationError::MissingStatusExplanation);
         }
@@ -379,6 +430,14 @@ pub enum SessionValidationError {
     StatusViewChangedFilesMismatch { expected: Option<Vec<String>>, actual: Option<Vec<String>> },
     #[error("status view validation status mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewValidationStatusMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view review trigger mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewReviewTriggerMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view review vote mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewReviewVoteMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view review outcome mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewReviewOutcomeMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view review headline mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewReviewHeadlineMismatch { expected: Option<String>, actual: Option<String> },
     #[error("status view explanation must not be empty")]
     MissingStatusExplanation,
     #[error("status view next_command must not be empty when present")]
@@ -440,6 +499,45 @@ fn task_state_strings(task: &Task, key: &str) -> Option<Vec<String>> {
     })
 }
 
+fn task_state_review_headline(task: &Task) -> Option<String> {
+    let latest_finding = task
+        .context
+        .state
+        .get("latest_review_findings")
+        .and_then(Value::as_array)
+        .and_then(|findings| findings.last());
+    if let Some(finding) = latest_finding {
+        let reviewer_id = finding.get("reviewer_id").and_then(Value::as_str).unwrap_or("reviewer");
+        let disposition = finding.get("disposition").and_then(Value::as_str).unwrap_or("unknown");
+        let summary = finding.get("summary").and_then(Value::as_str).unwrap_or("review finding");
+        return Some(format!("{reviewer_id} {disposition}: {summary}"));
+    }
+
+    let participants = task
+        .context
+        .state
+        .get("latest_review_participants")
+        .and_then(Value::as_array)
+        .map(|participants| {
+            participants
+                .iter()
+                .filter_map(|participant| {
+                    let reviewer_id = participant.get("reviewer_id").and_then(Value::as_str)?;
+                    let status =
+                        participant.get("status").and_then(Value::as_str).unwrap_or("unknown");
+                    Some(format!("{reviewer_id} {status}"))
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    if participants.is_empty() {
+        None
+    } else {
+        Some(format!("participants: {}", participants.join(", ")))
+    }
+}
+
 impl From<TaskPersistenceError> for SessionValidationError {
     fn from(value: TaskPersistenceError) -> Self {
         Self::InvalidTask(value.to_string())
@@ -452,7 +550,7 @@ mod tests {
 
     use super::{
         ActiveSessionRecord, SessionStatus, SessionStatusView, SessionValidationError,
-        task_state_string, task_state_strings, trace_within_workspace,
+        task_state_review_headline, task_state_string, task_state_strings, trace_within_workspace,
     };
     use crate::domain::limits::RunLimits;
     use crate::domain::plan::Plan;
@@ -511,6 +609,10 @@ mod tests {
             latest_trace_ref: record.latest_trace_ref.clone(),
             latest_changed_files: None,
             latest_validation_status: None,
+            latest_review_trigger: None,
+            latest_review_vote: None,
+            latest_review_outcome: None,
+            latest_review_headline: None,
             next_command: Some("synod step".to_string()),
             explanation: "view is consistent".to_string(),
         }
@@ -558,6 +660,15 @@ mod tests {
         let mut task = build_task("/tmp/workspace");
         task.context.state.insert("latest_validation_status".to_string(), json!("passed"));
         task.context.state.insert("latest_changed_files".to_string(), json!(["src/lib.rs"]));
+        task.context.state.insert("latest_review_trigger".to_string(), json!("pr_ready"));
+        task.context.state.insert(
+            "latest_review_findings".to_string(),
+            json!([{
+                "reviewer_id": "safety",
+                "disposition": "approve",
+                "summary": "No blockers"
+            }]),
+        );
 
         assert_eq!(
             task_state_string(&task, "latest_validation_status"),
@@ -566,6 +677,11 @@ mod tests {
         assert_eq!(
             task_state_strings(&task, "latest_changed_files"),
             Some(vec!["src/lib.rs".to_string()])
+        );
+        assert_eq!(task_state_string(&task, "latest_review_trigger"), Some("pr_ready".to_string()));
+        assert_eq!(
+            task_state_review_headline(&task),
+            Some("safety approve: No blockers".to_string())
         );
     }
 
