@@ -19,17 +19,12 @@ pub enum ReviewerDisposition {
     Block,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum VoteStrategy {
+    #[default]
     Majority,
     Weighted,
-}
-
-impl Default for VoteStrategy {
-    fn default() -> Self {
-        Self::Majority
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
