@@ -1,6 +1,6 @@
-# Review Voting in Synod 0.7.0
+# Review Voting in Synod 0.8.0
 
-Synod `0.7.0` adds a bounded multi-agent review phase on top of the local
+Synod `0.8.0` keeps the bounded multi-agent review phase on top of the local
 execution engine. Review configuration lives inside `<workspace>/.synod/execution.json`
 under the `review` key.
 
@@ -114,7 +114,7 @@ The persisted trace emits dedicated review events for:
 
 ## Current scope
 
-The `0.7.0` slice is intentionally bounded:
+The `0.8.0` slice is intentionally bounded:
 
 - review is manifest-driven and deterministic
 - reviewers run sequentially, not concurrently

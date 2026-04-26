@@ -15,7 +15,10 @@ validation commands, and surface change evidence across the built-in `bug-fix`,
 `change`, and `delivery` flows. Review-configured manifests can now run bounded
 multi-reviewer councils with majority or weighted voting, persist review trace
 events, and surface review trigger, vote, outcome, and reviewer evidence across
-`run`, `status`, `next`, and `inspect`.
+`run`, `status`, `next`, and `inspect`. Adaptive execution profiles can also
+select one bounded workspace slice, synthesize deterministic repair candidates,
+replan after failed validation, and surface slice and attempt-lineage evidence
+across the same CLI surfaces.
 
 For contributor setup and validation expectations, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -89,6 +92,7 @@ The current implementation covers:
 - deterministic terminal states
 - persisted JSON traces for successful and non-successful runs
 - bounded review councils with manifest-driven reviewers, vote resolution, and optional adjudication
+- bounded adaptive execution with workspace-slice selection, deterministic candidate synthesis, and signature-based replanning
 - review evidence projected into `run`, `status`, `next`, and `inspect`
 
 ## Developer CLI
@@ -116,7 +120,9 @@ stage replan, and stage failure. Delivery runs additionally expose
 `changed_files`, validation summaries, and trace-visible recovery history.
 When a review profile is configured and triggered, `run`, `status`, `next`, and
 `inspect` also expose the active review trigger, reviewer findings, vote
-summary, and final review outcome.
+summary, and final review outcome. When adaptive execution is active, `run`,
+`status`, `next`, and `inspect` also surface the latest `workspace_slice`,
+selection headline, validation outcome, and attempt lineage.
 
 For the full command walkthrough and example flows, see
 [`specs/004-session-model-unification/quickstart.md`](specs/004-session-model-unification/quickstart.md)
@@ -127,8 +133,11 @@ and
 and
 [`specs/007-multi-agent-review/quickstart.md`](specs/007-multi-agent-review/quickstart.md).
 
-For the concrete review configuration and voting rules implemented in `0.7.0`,
-see [`docs/review-voting.md`](docs/review-voting.md).
+For the adaptive execution manifest shape and bounded replanning behavior in
+`0.8.0`, see [`docs/adaptive-execution.md`](docs/adaptive-execution.md).
+
+For the concrete review configuration and voting rules still available in
+`0.8.0`, see [`docs/review-voting.md`](docs/review-voting.md).
 
 ## Assistant Command Packs
 

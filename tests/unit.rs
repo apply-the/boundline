@@ -1,3 +1,6 @@
+#[path = "support/workspace_fixture.rs"]
+mod workspace_fixture;
+
 #[path = "unit/step_state.rs"]
 mod step_state;
 
@@ -30,6 +33,9 @@ mod session_store;
 
 #[path = "unit/execution_profile.rs"]
 mod execution_profile;
+
+#[path = "unit/adaptive_execution.rs"]
+mod adaptive_execution;
 
 #[path = "unit/review_profile.rs"]
 mod review_profile;

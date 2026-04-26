@@ -385,6 +385,28 @@ fn reviewer_line(payload: &serde_json::Value) -> Option<String> {
 }
 
 fn success_headline(payload: &serde_json::Value, attempts: usize) -> String {
+    if let Some(headline) = payload
+        .get("output")
+        .and_then(|output| output.get("workspace_slice"))
+        .and_then(|slice| slice.get("headline"))
+        .and_then(|value| value.as_str())
+    {
+        return format!("adaptive slice {headline}");
+    }
+
+    if let Some(change) = payload
+        .get("output")
+        .and_then(|output| output.get("change_evidence"))
+        .and_then(|value| value.as_array())
+        .and_then(|items| items.first())
+    {
+        let path = change.get("path").and_then(|value| value.as_str()).unwrap_or("workspace");
+        let before =
+            change.get("before_excerpt").and_then(|value| value.as_str()).unwrap_or("before");
+        let after = change.get("after_excerpt").and_then(|value| value.as_str()).unwrap_or("after");
+        return format!("updated {path} from {before} to {after} after {attempts} attempt(s)");
+    }
+
     if let Some(changed_files) = payload
         .get("output")
         .and_then(|output| output.get("changed_files"))

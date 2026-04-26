@@ -39,14 +39,16 @@ If the user explicitly selects a built-in flow, assistants should run `cargo run
 
 ### Continuing a Workflow (User Story 2)
 - `/synod-step`: Executes `cargo run --bin synod -- step --workspace <workspace>` and summarizes `latest_status`, `latest_trace_ref`, `next_command`, and flow-stage fields when present.
-- `/synod-run`: Executes `cargo run --bin synod -- run --workspace <workspace>` and summarizes `terminal_status`, `terminal_reason`, `changed_files`, validation summaries, `trace`, `next_command`, and any flow/stage lifecycle events. When review is configured, also summarize `review_trigger`, reviewer findings, `review_vote`, and `review_outcome`.
-- `/synod-status`: Executes `cargo run --bin synod -- status --workspace <workspace>` and summarizes the active session state for the current workspace, including `active_flow`, `current_stage`, `stage_progress`, `latest_changed_files`, `latest_validation_status`, and the latest review fields when available.
-- `/synod-next`: Executes `cargo run --bin synod -- next --workspace <workspace>` and summarizes the CLI-reported next action for the active session, including flow-stage context and latest review outcome when present.
+- `/synod-run`: Executes `cargo run --bin synod -- run --workspace <workspace>` and summarizes `terminal_status`, `terminal_reason`, `changed_files`, validation summaries, `trace`, `next_command`, and any flow/stage lifecycle events. When adaptive execution is active, also summarize `workspace_slice` and `attempt_lineage`. When review is configured, also summarize `review_trigger`, reviewer findings, `review_vote`, and `review_outcome`.
+- `/synod-status`: Executes `cargo run --bin synod -- status --workspace <workspace>` and summarizes the active session state for the current workspace, including `active_flow`, `current_stage`, `stage_progress`, `latest_changed_files`, `latest_workspace_slice`, `latest_selection_headline`, `latest_attempt_lineage`, `latest_validation_status`, and the latest review fields when available.
+- `/synod-next`: Executes `cargo run --bin synod -- next --workspace <workspace>` and summarizes the CLI-reported next action for the active session, including flow-stage context, the latest adaptive slice and validation state, and the latest review outcome when present.
 
 ### Inspecting Prior Runs (User Story 3)
 - `/synod-inspect`: Executes `cargo run --bin synod -- inspect --trace <trace>` for an explicit trace or `cargo run --bin synod -- inspect --workspace <workspace>` for the workspace-selected trace. Workspace-based inspect may reuse the active session's `latest_trace_ref` before falling back to the latest workspace trace.
-- Successful inspection summaries must expose `inspection_target`, `trace`, `terminal_status`, `terminal_reason`, changed-file headlines, validation headlines, review trigger, reviewer findings, vote summary, review outcome, and `next_command` so assistants can continue routing without dumping raw logs.
+- Successful inspection summaries must expose `inspection_target`, `trace`, `terminal_status`, `terminal_reason`, changed-file headlines, validation headlines, adaptive slice and lineage evidence when present, review trigger, reviewer findings, vote summary, review outcome, and `next_command` so assistants can continue routing without dumping raw logs.
 - Trace-read failures must expose `terminal_reason`, `next_command: /synod-inspect`, and a `corrected_command` that tells the user how to retry with a corrected trace reference or workspace. Workspace-based inspect session errors should route back to `/synod-start`.
+
+For the current adaptive execution manifest shape and bounded replanning behavior, see [`docs/adaptive-execution.md`](../docs/adaptive-execution.md).
 
 For the current review manifest shape and vote semantics, see [`docs/review-voting.md`](../docs/review-voting.md).
 

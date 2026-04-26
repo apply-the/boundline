@@ -3,7 +3,7 @@ use synod::domain::limits::RunLimits;
 use synod::domain::plan::Plan;
 use synod::domain::step::{ErrorInfo, Recoverability, Step, StepExecutionResult};
 use synod::domain::task::{Task, TaskRunRequest};
-use synod::orchestrator::planner::{Planner, PlanningError, StaticPlanner};
+use synod::orchestrator::planner::{CallbackPlanner, Planner, PlanningError, StaticPlanner};
 
 fn build_task() -> Task {
     let request = TaskRunRequest {
@@ -75,4 +75,49 @@ fn static_planner_reports_when_no_replan_is_available() {
 
     let invalid = PlanningError::InvalidPlan("missing steps".to_string());
     assert_eq!(invalid.to_string(), "planner returned an invalid plan: missing steps");
+}
+
+#[test]
+fn callback_planner_supports_dynamic_initial_plans_and_replans() {
+    let initial_plan =
+        Plan::new(vec![Step::decision("dynamic-analyze", json!({})).unwrap()]).unwrap();
+    let planner = CallbackPlanner::new(
+        {
+            let initial_plan = initial_plan.clone();
+            move |request, _context| {
+                assert_eq!(request.goal, "goal");
+                Ok(initial_plan.clone())
+            }
+        },
+        move |_task, failed_step, failure| {
+            assert_eq!(failed_step.id, "verify");
+            assert_eq!(failure.recoverability, Recoverability::ReplanRequired);
+            Ok(vec![Step::decision("dynamic-replan", json!({"phase": 2})).unwrap()])
+        },
+    );
+
+    let task = build_task();
+    let failure = StepExecutionResult::failure(
+        ErrorInfo::new("bad_output", "need a new plan"),
+        Recoverability::ReplanRequired,
+    );
+    let current_step = task.plan.current_step().unwrap().clone();
+
+    let created_plan = planner
+        .create_initial_plan(
+            &TaskRunRequest {
+                goal: "goal".to_string(),
+                input: json!({}),
+                session_id: "session".to_string(),
+                workspace_ref: "/tmp/workspace".to_string(),
+                limits: RunLimits::default(),
+                initial_context: None,
+            },
+            &task.context,
+        )
+        .unwrap();
+    let replanned = planner.replan(&task, &current_step, &failure).unwrap();
+
+    assert_eq!(created_plan, initial_plan);
+    assert_eq!(replanned[0].id, "dynamic-replan");
 }
