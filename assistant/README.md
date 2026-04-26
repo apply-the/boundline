@@ -2,6 +2,8 @@
 
 This directory contains Markdown-based commands to run `synod` from various AI assistants (Claude, Codex, Copilot).
 
+The current delivery surface expects `<workspace>/.synod/execution.json` when present and falls back to the legacy `<workspace>/.synod/fixture.json` manifest for older workspaces.
+
 ## Directory Structure
 - **Claude**: `claude/commands/`
 - **Codex**: `codex/commands/`
@@ -37,13 +39,13 @@ If the user explicitly selects a built-in flow, assistants should run `cargo run
 
 ### Continuing a Workflow (User Story 2)
 - `/synod-step`: Executes `cargo run --bin synod -- step --workspace <workspace>` and summarizes `latest_status`, `latest_trace_ref`, `next_command`, and flow-stage fields when present.
-- `/synod-run`: Executes `cargo run --bin synod -- run --workspace <workspace>` and summarizes `terminal_status`, `terminal_reason`, `trace`, `next_command`, and any flow/stage lifecycle events.
-- `/synod-status`: Executes `cargo run --bin synod -- status --workspace <workspace>` and summarizes the active session state for the current workspace, including `active_flow`, `current_stage`, and `stage_progress` when available.
+- `/synod-run`: Executes `cargo run --bin synod -- run --workspace <workspace>` and summarizes `terminal_status`, `terminal_reason`, `changed_files`, validation summaries, `trace`, `next_command`, and any flow/stage lifecycle events.
+- `/synod-status`: Executes `cargo run --bin synod -- status --workspace <workspace>` and summarizes the active session state for the current workspace, including `active_flow`, `current_stage`, `stage_progress`, `latest_changed_files`, and `latest_validation_status` when available.
 - `/synod-next`: Executes `cargo run --bin synod -- next --workspace <workspace>` and summarizes the CLI-reported next action for the active session, including flow-stage context when available.
 
 ### Inspecting Prior Runs (User Story 3)
 - `/synod-inspect`: Executes `cargo run --bin synod -- inspect --trace <trace>` for an explicit trace or `cargo run --bin synod -- inspect --workspace <workspace>` for the workspace-selected trace. Workspace-based inspect may reuse the active session's `latest_trace_ref` before falling back to the latest workspace trace.
-- Successful inspection summaries must expose `inspection_target`, `trace`, `terminal_status`, `terminal_reason`, and `next_command` so assistants can continue routing without dumping raw logs.
+- Successful inspection summaries must expose `inspection_target`, `trace`, `terminal_status`, `terminal_reason`, changed-file headlines, validation headlines, and `next_command` so assistants can continue routing without dumping raw logs.
 - Trace-read failures must expose `terminal_reason`, `next_command: /synod-inspect`, and a `corrected_command` that tells the user how to retry with a corrected trace reference or workspace. Workspace-based inspect session errors should route back to `/synod-start`.
 
 ## Continuity Rules

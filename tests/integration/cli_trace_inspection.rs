@@ -21,6 +21,8 @@ fn inspect_command_reconstructs_step_order_from_a_successful_fixture_trace() {
     assert!(text.contains("analyze"), "{text}");
     assert!(text.contains("code"), "{text}");
     assert!(text.contains("verify"), "{text}");
+    assert!(text.contains("src/lib.rs"), "{text}");
+    assert!(text.contains("validation passed"), "{text}");
     assert!(text.contains("terminal_reason"), "{text}");
 }
 

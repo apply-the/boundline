@@ -176,6 +176,9 @@ where
                     let error = result.error.clone().expect("failed results are validated");
                     task.plan.steps[step_index].mark_failed(error.clone(), result.recoverability);
                     task.context.apply_failure_error(&step_snapshot.id, &error);
+                    if let Some(state_patch) = result.state_patch.as_ref() {
+                        task.context.apply_state_patch(state_patch);
+                    }
                     task.context.set_last_result(StepResultSummary::from_step(
                         &task.plan.steps[step_index],
                     ));

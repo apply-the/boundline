@@ -480,6 +480,8 @@ fn render_session_status_includes_goal_trace_and_next_command() {
         current_step_index: Some(1),
         latest_status: SessionStatus::Running,
         latest_trace_ref: Some("/tmp/session-workspace/.synod/traces/task.json".to_string()),
+        latest_changed_files: None,
+        latest_validation_status: None,
         next_command: Some("synod next".to_string()),
         explanation: "the active session can keep executing from the current step".to_string(),
     };

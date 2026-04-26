@@ -17,8 +17,8 @@ use crate::domain::task::{Task, TaskRequestError, TaskRunResponse, TaskStatus, T
 use crate::domain::task_context::TaskContext;
 use crate::domain::trace::{ExecutionTrace, TraceEventType, current_timestamp_millis};
 use crate::fixture::{
-    FixtureRuntime, FixtureRuntimeError, build_fixture_plan_for_flow, build_fixture_runtime,
-    build_task_request,
+    FixtureRuntime, FixtureRuntimeError, build_fixture_plan_for_flow,
+    build_fixture_runtime_for_flow, build_task_request,
 };
 use crate::orchestrator::planner::Planner;
 use crate::orchestrator::recovery::{RecoveryDecision, decide_recovery};
@@ -189,7 +189,8 @@ impl SessionRuntime {
             return Err(SessionRuntimeError::MissingGoal);
         }
 
-        build_fixture_runtime(&self.workspace_ref).map_err(SessionRuntimeError::FixtureRuntime)
+        build_fixture_runtime_for_flow(&self.workspace_ref, session.active_flow.as_ref())
+            .map_err(SessionRuntimeError::FixtureRuntime)
     }
 
     fn execute_single_step(
@@ -357,6 +358,9 @@ impl SessionRuntime {
                 let error = result.error.clone().expect("failed results are validated");
                 task.plan.steps[step_index].mark_failed(error.clone(), result.recoverability);
                 task.context.apply_failure_error(&step_snapshot.id, &error);
+                if let Some(state_patch) = result.state_patch.as_ref() {
+                    task.context.apply_state_patch(state_patch);
+                }
                 task.context
                     .set_last_result(StepResultSummary::from_step(&task.plan.steps[step_index]));
                 trace.record_event(
@@ -847,5 +851,331 @@ fn session_status_for_task_status(status: TaskStatus) -> SessionStatus {
         TaskStatus::Failed => SessionStatus::Failed,
         TaskStatus::Exhausted => SessionStatus::Exhausted,
         TaskStatus::Aborted => SessionStatus::Aborted,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    use serde_json::{Map, json};
+    use uuid::Uuid;
+
+    use super::{SessionRuntime, session_status_for_task_status};
+    use crate::domain::execution::{
+        ExecutionAttemptDefinition, ExecutionCommand, ExecutionFailureMode, WorkspaceChange,
+        WorkspaceExecutionProfile,
+    };
+    use crate::domain::flow::{attach_stage_metadata, built_in_flow};
+    use crate::domain::limits::{RunLimits, TerminalCondition};
+    use crate::domain::plan::Plan;
+    use crate::domain::session::{ActiveSessionRecord, SessionStatus};
+    use crate::domain::step::{ExecutionStatus, Recoverability, Step, StepStatus};
+    use crate::domain::task::{Task, TaskRunRequest, TaskStatus, TerminalReason};
+    use crate::domain::task_context::TaskContext;
+    use crate::domain::trace::{ExecutionTrace, TraceEventType};
+    use crate::fixture::FixtureRuntime;
+    use crate::orchestrator::planner::StaticPlanner;
+    use crate::registry::agent_registry::AgentRegistry;
+    use crate::registry::tool_registry::ToolRegistry;
+
+    fn temp_workspace(prefix: &str) -> PathBuf {
+        let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+        fs::create_dir_all(workspace.join(".synod")).unwrap();
+        workspace
+    }
+
+    fn write_execution_profile_workspace(
+        prefix: &str,
+        attempts: Vec<ExecutionAttemptDefinition>,
+    ) -> PathBuf {
+        let workspace = temp_workspace(prefix);
+        fs::write(
+            workspace.join(".synod/execution.json"),
+            serde_json::to_string_pretty(&WorkspaceExecutionProfile {
+                name: "session-runtime-profile".to_string(),
+                read_targets: Vec::new(),
+                validation_command: ExecutionCommand {
+                    program: "cargo".to_string(),
+                    args: vec!["test".to_string(), "--quiet".to_string()],
+                },
+                attempts,
+                limits: RunLimits::default(),
+                legacy_source: None,
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        workspace
+    }
+
+    fn build_request(workspace_ref: &str) -> TaskRunRequest {
+        TaskRunRequest {
+            goal: "Drive a session runtime branch".to_string(),
+            input: json!({"ticket": "SESSION-RUNTIME"}),
+            session_id: "session-runtime".to_string(),
+            workspace_ref: workspace_ref.to_string(),
+            limits: RunLimits::default(),
+            initial_context: None,
+        }
+    }
+
+    fn decision_task(workspace_ref: &str, input: serde_json::Value) -> Task {
+        let plan = Plan::new(vec![Step::decision("decide", input).unwrap()]).unwrap();
+        Task::new("task-runtime", &build_request(workspace_ref), plan).unwrap()
+    }
+
+    fn build_session(workspace: &Path, task: Task) -> ActiveSessionRecord {
+        ActiveSessionRecord {
+            session_id: "session-runtime".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: Some("Drive a session runtime branch".to_string()),
+            active_flow: None,
+            active_task: Some(task),
+            latest_status: SessionStatus::Planned,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 10,
+            updated_at: 10,
+        }
+    }
+
+    fn manual_runtime() -> FixtureRuntime {
+        FixtureRuntime {
+            profile: WorkspaceExecutionProfile {
+                name: "manual-runtime".to_string(),
+                read_targets: Vec::new(),
+                validation_command: ExecutionCommand {
+                    program: "cargo".to_string(),
+                    args: vec!["test".to_string(), "--quiet".to_string()],
+                },
+                attempts: vec![ExecutionAttemptDefinition {
+                    attempt_id: "fix-add".to_string(),
+                    summary: String::new(),
+                    failure_mode: ExecutionFailureMode::Terminal,
+                    changes: vec![WorkspaceChange {
+                        path: "src/lib.rs".to_string(),
+                        find: "left - right".to_string(),
+                        replace: "left + right".to_string(),
+                    }],
+                }],
+                limits: RunLimits::default(),
+                legacy_source: None,
+            },
+            planner: StaticPlanner::new(
+                Plan::new(vec![Step::decision("placeholder", json!({})).unwrap()]).unwrap(),
+            ),
+            agents: AgentRegistry::new(),
+            tools: ToolRegistry::new(),
+        }
+    }
+
+    fn context() -> TaskContext {
+        TaskContext::new("session-runtime", "/tmp/workspace", RunLimits::default(), Map::new())
+    }
+
+    #[test]
+    fn execute_step_routes_agent_tool_and_decision_edge_cases() {
+        let runtime = SessionRuntime::for_workspace(temp_workspace("synod-runtime-routing"));
+        let fixture_runtime = manual_runtime();
+        let context = context();
+
+        let mut missing_agent_target = Step::agent("agent", "coder", json!({})).unwrap();
+        missing_agent_target.target_name = None;
+        let missing_agent = runtime.execute_step(&fixture_runtime, &missing_agent_target, &context);
+        assert_eq!(missing_agent.status, ExecutionStatus::Failed);
+        assert_eq!(missing_agent.recoverability, Recoverability::Terminal);
+
+        let unknown_agent = runtime.execute_step(
+            &fixture_runtime,
+            &Step::agent("agent", "unknown", json!({})).unwrap(),
+            &context,
+        );
+        assert_eq!(unknown_agent.status, ExecutionStatus::Failed);
+
+        let mut missing_tool_target = Step::tool("tool", "tester", json!({})).unwrap();
+        missing_tool_target.target_name = None;
+        let missing_tool = runtime.execute_step(&fixture_runtime, &missing_tool_target, &context);
+        assert_eq!(missing_tool.status, ExecutionStatus::Failed);
+
+        let unknown_tool = runtime.execute_step(
+            &fixture_runtime,
+            &Step::tool("tool", "unknown", json!({})).unwrap(),
+            &context,
+        );
+        assert_eq!(unknown_tool.status, ExecutionStatus::Failed);
+
+        let plain_decision =
+            runtime.execute_decision(&Step::decision("plain", json!("ok")).unwrap());
+        assert_eq!(plain_decision.status, ExecutionStatus::Succeeded);
+
+        let retry_decision = runtime.execute_decision(
+            &Step::decision("retry", json!({"retryable_failure": true})).unwrap(),
+        );
+        assert_eq!(retry_decision.recoverability, Recoverability::Retryable);
+
+        let replan_decision = runtime
+            .execute_decision(&Step::decision("replan", json!({"replan_required": true})).unwrap());
+        assert_eq!(replan_decision.recoverability, Recoverability::ReplanRequired);
+
+        let terminal_decision = runtime.execute_decision(
+            &Step::decision("terminal", json!({"terminal_failure": true})).unwrap(),
+        );
+        assert_eq!(terminal_decision.recoverability, Recoverability::Terminal);
+
+        let patched_decision = runtime.execute_decision(
+            &Step::decision(
+                "patched",
+                json!({"output": {"ok": true}, "state_patch": {"goal_satisfied": true}}),
+            )
+            .unwrap(),
+        );
+        assert_eq!(patched_decision.status, ExecutionStatus::Succeeded);
+        assert_eq!(patched_decision.state_patch.as_ref().unwrap()["goal_satisfied"], json!(true));
+
+        assert_eq!(
+            runtime.session_store().path(),
+            runtime.workspace_ref().join(".synod/session.json")
+        );
+        assert_eq!(runtime.trace_store().root(), runtime.workspace_ref().join(".synod/traces"));
+        assert_eq!(session_status_for_task_status(TaskStatus::Aborted), SessionStatus::Aborted);
+    }
+
+    #[test]
+    fn load_or_create_trace_and_flow_helpers_cover_private_flow_branches() {
+        let workspace = write_execution_profile_workspace(
+            "synod-runtime-flow-helpers",
+            vec![ExecutionAttemptDefinition {
+                attempt_id: "fix-add".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left - right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+        );
+        let runtime = SessionRuntime::for_workspace(&workspace);
+
+        let flow = built_in_flow("bug-fix").unwrap();
+        let stage0 = Step::agent(
+            "investigate",
+            "analyzer",
+            attach_stage_metadata(json!({"phase": "investigate"}), flow, 0).unwrap(),
+        )
+        .unwrap();
+        let stage1 = Step::agent(
+            "implement",
+            "coder",
+            attach_stage_metadata(json!({"phase": "implement"}), flow, 1).unwrap(),
+        )
+        .unwrap();
+        let request = build_request(workspace.to_string_lossy().as_ref());
+        let task = Task::new(
+            "task-flow",
+            &request,
+            Plan::new(vec![stage0.clone(), stage1.clone()]).unwrap(),
+        )
+        .unwrap();
+        let mut session = ActiveSessionRecord {
+            session_id: "session-runtime".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: Some("Drive a session runtime branch".to_string()),
+            active_flow: Some(flow.initial_state()),
+            active_task: Some(task.clone()),
+            latest_status: SessionStatus::Planned,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 10,
+            updated_at: 10,
+        };
+
+        let created = runtime.load_or_create_trace(&mut session, &task).unwrap();
+        assert_eq!(created.events[0].event_type, TraceEventType::TaskStarted);
+        assert_eq!(created.events[1].event_type, TraceEventType::FlowSelected);
+
+        let reused = runtime.load_or_create_trace(&mut session, &task).unwrap();
+        assert_eq!(reused.goal, created.goal);
+
+        let transition = runtime.advance_session_flow(&mut session, &task, 0).unwrap().unwrap();
+        assert_eq!(transition.0.stage_id, "investigate");
+        assert_eq!(transition.1.stage_id, "implement");
+        assert_eq!(session.active_flow.as_ref().unwrap().current_stage_id, "implement");
+
+        let payload = runtime.flow_payload_for_step(&stage0).unwrap().unwrap();
+        assert_eq!(payload["stage_id"], json!("investigate"));
+        assert_eq!(
+            runtime.flow_payload_for_step(&Step::decision("plain", json!({})).unwrap()).unwrap(),
+            None
+        );
+
+        let mut trace = ExecutionTrace::new("task-flow", "session-runtime", "goal");
+        runtime.record_stage_failure(
+            &mut trace,
+            &session,
+            "implement",
+            0,
+            &TerminalReason::new(TerminalCondition::UnrecoverableError, "failed", None),
+        );
+        assert_eq!(trace.events[0].event_type, TraceEventType::StageFailed);
+    }
+
+    #[test]
+    fn execute_next_step_covers_retry_replan_and_terminal_decision_recovery() {
+        let workspace = write_execution_profile_workspace(
+            "synod-runtime-decision-recovery",
+            vec![
+                ExecutionAttemptDefinition {
+                    attempt_id: "bad-fix".to_string(),
+                    summary: String::new(),
+                    failure_mode: ExecutionFailureMode::Replan,
+                    changes: vec![WorkspaceChange {
+                        path: "src/lib.rs".to_string(),
+                        find: "left - right".to_string(),
+                        replace: "left / right".to_string(),
+                    }],
+                },
+                ExecutionAttemptDefinition {
+                    attempt_id: "good-fix".to_string(),
+                    summary: String::new(),
+                    failure_mode: ExecutionFailureMode::Terminal,
+                    changes: vec![WorkspaceChange {
+                        path: "src/lib.rs".to_string(),
+                        find: "left / right".to_string(),
+                        replace: "left + right".to_string(),
+                    }],
+                },
+            ],
+        );
+        let runtime = SessionRuntime::for_workspace(&workspace);
+
+        let mut retry_session = build_session(
+            &workspace,
+            decision_task(workspace.to_string_lossy().as_ref(), json!({"retryable_failure": true})),
+        );
+        runtime.execute_next_step(&mut retry_session).unwrap();
+        assert_eq!(retry_session.active_task.as_ref().unwrap().retry_count, 1);
+        assert_eq!(
+            retry_session.active_task.as_ref().unwrap().plan.steps[0].status,
+            StepStatus::Pending
+        );
+
+        let mut replan_session = build_session(
+            &workspace,
+            decision_task(workspace.to_string_lossy().as_ref(), json!({"replan_required": true})),
+        );
+        runtime.execute_next_step(&mut replan_session).unwrap();
+        assert_eq!(replan_session.active_task.as_ref().unwrap().replan_count, 1);
+        assert_eq!(replan_session.active_task.as_ref().unwrap().plan.revision, 1);
+
+        let mut terminal_session = build_session(
+            &workspace,
+            decision_task(workspace.to_string_lossy().as_ref(), json!({"terminal_failure": true})),
+        );
+        runtime.execute_next_step(&mut terminal_session).unwrap();
+        assert_eq!(terminal_session.latest_status, SessionStatus::Failed);
+        assert!(terminal_session.latest_terminal_reason.is_some());
     }
 }

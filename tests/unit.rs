@@ -28,8 +28,14 @@ mod session_record;
 #[path = "unit/session_store.rs"]
 mod session_store;
 
+#[path = "unit/execution_profile.rs"]
+mod execution_profile;
+
 #[path = "unit/flow_definition.rs"]
 mod flow_definition;
 
 #[path = "unit/session_flow_state.rs"]
 mod session_flow_state;
+
+#[path = "unit/coverage_additional.rs"]
+mod coverage_additional;

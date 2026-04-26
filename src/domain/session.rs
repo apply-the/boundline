@@ -186,6 +186,10 @@ pub struct SessionStatusView {
     pub current_step_index: Option<usize>,
     pub latest_status: SessionStatus,
     pub latest_trace_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_changed_files: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_validation_status: Option<String>,
     pub next_command: Option<String>,
     pub explanation: String,
 }
@@ -257,6 +261,28 @@ impl SessionStatusView {
             return Err(SessionValidationError::StatusViewTraceMismatch {
                 expected: record.latest_trace_ref.clone(),
                 actual: self.latest_trace_ref.clone(),
+            });
+        }
+
+        let expected_changed_files = record
+            .active_task
+            .as_ref()
+            .and_then(|task| task_state_strings(task, "latest_changed_files"));
+        if self.latest_changed_files != expected_changed_files {
+            return Err(SessionValidationError::StatusViewChangedFilesMismatch {
+                expected: expected_changed_files,
+                actual: self.latest_changed_files.clone(),
+            });
+        }
+
+        let expected_validation_status = record
+            .active_task
+            .as_ref()
+            .and_then(|task| task_state_string(task, "latest_validation_status"));
+        if self.latest_validation_status != expected_validation_status {
+            return Err(SessionValidationError::StatusViewValidationStatusMismatch {
+                expected: expected_validation_status,
+                actual: self.latest_validation_status.clone(),
             });
         }
 
@@ -349,6 +375,10 @@ pub enum SessionValidationError {
     StatusViewStageCountMismatch { expected: Option<usize>, actual: Option<usize> },
     #[error("status view trace mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewTraceMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view changed files mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewChangedFilesMismatch { expected: Option<Vec<String>>, actual: Option<Vec<String>> },
+    #[error("status view validation status mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewValidationStatusMismatch { expected: Option<String>, actual: Option<String> },
     #[error("status view explanation must not be empty")]
     MissingStatusExplanation,
     #[error("status view next_command must not be empty when present")]
@@ -398,8 +428,152 @@ fn trace_within_workspace(workspace_ref: &str, trace_ref: &str) -> bool {
     }
 }
 
+fn task_state_string(task: &Task, key: &str) -> Option<String> {
+    task.context.state.get(key).and_then(|value| value.as_str().map(str::to_string))
+}
+
+fn task_state_strings(task: &Task, key: &str) -> Option<Vec<String>> {
+    task.context.state.get(key).and_then(|value| {
+        value.as_array().map(|items| {
+            items.iter().filter_map(|item| item.as_str().map(str::to_string)).collect::<Vec<_>>()
+        })
+    })
+}
+
 impl From<TaskPersistenceError> for SessionValidationError {
     fn from(value: TaskPersistenceError) -> Self {
         Self::InvalidTask(value.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::{
+        ActiveSessionRecord, SessionStatus, SessionStatusView, SessionValidationError,
+        task_state_string, task_state_strings, trace_within_workspace,
+    };
+    use crate::domain::limits::RunLimits;
+    use crate::domain::plan::Plan;
+    use crate::domain::step::Step;
+    use crate::domain::task::{Task, TaskPersistenceError, TaskRunRequest};
+
+    fn build_task(workspace_ref: &str) -> Task {
+        let request = TaskRunRequest {
+            goal: "Deliver a session-backed CLI".to_string(),
+            input: json!({"ticket": "SESSION-TEST"}),
+            session_id: "session-1".to_string(),
+            workspace_ref: workspace_ref.to_string(),
+            limits: RunLimits::default(),
+            initial_context: None,
+        };
+        let plan = Plan::new(vec![Step::decision("analyze", json!({})).unwrap()]).unwrap();
+        Task::new("task-1", &request, plan).unwrap()
+    }
+
+    fn build_record(workspace_ref: &str) -> ActiveSessionRecord {
+        ActiveSessionRecord {
+            session_id: "session-1".to_string(),
+            workspace_ref: workspace_ref.to_string(),
+            goal: Some("Deliver a session-backed CLI".to_string()),
+            active_flow: Some(
+                crate::domain::flow::built_in_flow("bug-fix").unwrap().initial_state(),
+            ),
+            active_task: Some(build_task(workspace_ref)),
+            latest_status: SessionStatus::Planned,
+            latest_terminal_reason: None,
+            latest_trace_ref: Some(format!("{workspace_ref}/.synod/traces/task-1.json")),
+            created_at: 10,
+            updated_at: 20,
+        }
+    }
+
+    fn build_view(record: &ActiveSessionRecord) -> SessionStatusView {
+        SessionStatusView {
+            session_id: record.session_id.clone(),
+            workspace_ref: record.workspace_ref.clone(),
+            goal: record.goal.clone(),
+            active_flow: record.active_flow.as_ref().map(|flow| flow.flow_name.clone()),
+            current_stage_id: record.active_flow.as_ref().map(|flow| flow.current_stage_id.clone()),
+            current_stage_index: record.active_flow.as_ref().map(|flow| flow.current_stage_index),
+            total_stages: record.active_flow.as_ref().map(|flow| flow.total_stages),
+            plan_revision: record.active_task.as_ref().map(|task| task.plan.revision),
+            current_step_id: record
+                .active_task
+                .as_ref()
+                .and_then(|task| task.plan.current_step().map(|step| step.id.clone())),
+            current_step_index: record
+                .active_task
+                .as_ref()
+                .map(|task| task.plan.current_step_index),
+            latest_status: record.latest_status,
+            latest_trace_ref: record.latest_trace_ref.clone(),
+            latest_changed_files: None,
+            latest_validation_status: None,
+            next_command: Some("synod step".to_string()),
+            explanation: "view is consistent".to_string(),
+        }
+    }
+
+    #[test]
+    fn status_view_rejects_stage_count_trace_and_step_index_mismatches() {
+        let workspace = "/tmp/synod-session-domain";
+        let record = build_record(workspace);
+
+        let mut wrong_stage_index = build_view(&record);
+        wrong_stage_index.current_stage_index = Some(1);
+        assert!(matches!(
+            wrong_stage_index.validate(&record).unwrap_err(),
+            SessionValidationError::StatusViewStageIndexMismatch { .. }
+        ));
+
+        let mut wrong_stage_count = build_view(&record);
+        wrong_stage_count.total_stages = Some(99);
+        assert!(matches!(
+            wrong_stage_count.validate(&record).unwrap_err(),
+            SessionValidationError::StatusViewStageCountMismatch { .. }
+        ));
+
+        let mut wrong_trace = build_view(&record);
+        wrong_trace.latest_trace_ref = Some("/tmp/other/trace.json".to_string());
+        assert!(matches!(
+            wrong_trace.validate(&record).unwrap_err(),
+            SessionValidationError::StatusViewTraceMismatch { .. }
+        ));
+
+        let mut wrong_step_index = build_view(&record);
+        wrong_step_index.current_step_index = Some(99);
+        assert!(matches!(
+            wrong_step_index.validate(&record).unwrap_err(),
+            SessionValidationError::StatusViewStepIndexMismatch { .. }
+        ));
+    }
+
+    #[test]
+    fn helper_functions_cover_relative_trace_paths_and_state_extractors() {
+        assert!(trace_within_workspace("/tmp/workspace", "trace.json"));
+        assert!(!trace_within_workspace("/tmp/workspace", "../outside.json"));
+
+        let mut task = build_task("/tmp/workspace");
+        task.context.state.insert("latest_validation_status".to_string(), json!("passed"));
+        task.context.state.insert("latest_changed_files".to_string(), json!(["src/lib.rs"]));
+
+        assert_eq!(
+            task_state_string(&task, "latest_validation_status"),
+            Some("passed".to_string())
+        );
+        assert_eq!(
+            task_state_strings(&task, "latest_changed_files"),
+            Some(vec!["src/lib.rs".to_string()])
+        );
+    }
+
+    #[test]
+    fn task_persistence_errors_convert_to_session_validation_errors() {
+        let error = SessionValidationError::from(TaskPersistenceError::MissingGoal);
+        assert!(
+            matches!(error, SessionValidationError::InvalidTask(message) if message.contains("task goal must not be empty"))
+        );
     }
 }
