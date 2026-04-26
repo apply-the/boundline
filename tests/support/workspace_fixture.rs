@@ -26,11 +26,58 @@ const FIXTURE_TEST_RS: &str = concat!(
 );
 
 pub fn temp_fixture_workspace(prefix: &str) -> PathBuf {
-    create_fixture_workspace(prefix, "left - right", "left + right")
+    create_fixture_workspace(
+        prefix,
+        vec![execution_attempt(
+            "fix-add",
+            "Replace subtraction with addition",
+            "terminal",
+            "left - right",
+            "left + right",
+        )],
+        "left - right",
+        "left + right",
+    )
 }
 
 pub fn temp_broken_fixture_workspace(prefix: &str) -> PathBuf {
-    create_fixture_workspace(prefix, "left * right", "left + right")
+    create_fixture_workspace(
+        prefix,
+        vec![execution_attempt(
+            "broken-change",
+            "Attempt a missing patch",
+            "terminal",
+            "left * right",
+            "left + right",
+        )],
+        "left * right",
+        "left + right",
+    )
+}
+
+#[allow(dead_code)]
+pub fn temp_replanning_execution_workspace(prefix: &str) -> PathBuf {
+    create_fixture_workspace(
+        prefix,
+        vec![
+            execution_attempt(
+                "bad-fix",
+                "Introduce a wrong division fix",
+                "replan",
+                "left - right",
+                "left / right",
+            ),
+            execution_attempt(
+                "good-fix",
+                "Replace division with addition",
+                "terminal",
+                "left / right",
+                "left + right",
+            ),
+        ],
+        "left - right",
+        "left / right",
+    )
 }
 
 pub fn run_synod(args: &[&str]) -> Output {
@@ -60,7 +107,12 @@ pub fn extract_trace_path(text: &str) -> Option<PathBuf> {
     })
 }
 
-fn create_fixture_workspace(prefix: &str, find: &str, replace: &str) -> PathBuf {
+fn create_fixture_workspace(
+    prefix: &str,
+    attempts: Vec<serde_json::Value>,
+    legacy_find: &str,
+    legacy_replace: &str,
+) -> PathBuf {
     let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
     fs::create_dir_all(workspace.join("src")).unwrap();
     fs::create_dir_all(workspace.join("tests")).unwrap();
@@ -69,6 +121,20 @@ fn create_fixture_workspace(prefix: &str, find: &str, replace: &str) -> PathBuf 
     fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
     fs::write(workspace.join("src/lib.rs"), RED_LIB_RS).unwrap();
     fs::write(workspace.join("tests/red_to_green.rs"), FIXTURE_TEST_RS).unwrap();
+    fs::write(
+        workspace.join(".synod/execution.json"),
+        serde_json::to_string_pretty(&serde_json::json!({
+            "name": "red-to-green-execution",
+            "read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
+            "validation_command": {
+                "program": "cargo",
+                "args": ["test", "--quiet"],
+            },
+            "attempts": attempts,
+        }))
+        .unwrap(),
+    )
+    .unwrap();
     fs::write(
         workspace.join(".synod/fixture.json"),
         serde_json::to_string_pretty(&serde_json::json!({
@@ -80,8 +146,8 @@ fn create_fixture_workspace(prefix: &str, find: &str, replace: &str) -> PathBuf 
             "file_patches": [
                 {
                     "path": "src/lib.rs",
-                    "find": find,
-                    "replace": replace,
+                    "find": legacy_find,
+                    "replace": legacy_replace,
                 }
             ]
         }))
@@ -91,4 +157,25 @@ fn create_fixture_workspace(prefix: &str, find: &str, replace: &str) -> PathBuf 
 
     debug_assert_ne!(RED_LIB_RS, GREEN_LIB_RS);
     workspace
+}
+
+fn execution_attempt(
+    attempt_id: &str,
+    summary: &str,
+    failure_mode: &str,
+    find: &str,
+    replace: &str,
+) -> serde_json::Value {
+    serde_json::json!({
+        "attempt_id": attempt_id,
+        "summary": summary,
+        "failure_mode": failure_mode,
+        "changes": [
+            {
+                "path": "src/lib.rs",
+                "find": find,
+                "replace": replace,
+            }
+        ]
+    })
 }

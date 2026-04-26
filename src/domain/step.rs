@@ -201,6 +201,11 @@ impl StepExecutionResult {
         self
     }
 
+    pub fn with_state_patch(mut self, state_patch: Map<String, Value>) -> Self {
+        self.state_patch = Some(state_patch);
+        self
+    }
+
     pub fn validate(&self) -> Result<(), StepExecutionResultError> {
         match self.status {
             ExecutionStatus::Succeeded => {

@@ -23,8 +23,10 @@ fn trace_summary_preserves_step_order_and_terminal_reason() {
 
     assert_eq!(summary.trace_ref, trace_path.to_string_lossy());
     assert_eq!(summary.executed_steps[0].step_id, "analyze");
-    assert_eq!(summary.executed_steps[1].step_id, "code");
-    assert_eq!(summary.executed_steps[2].step_id, "verify");
+    assert_eq!(summary.executed_steps[1].step_id, "code-fix-add");
+    assert_eq!(summary.executed_steps[2].step_id, "verify-fix-add");
+    assert!(summary.executed_steps[1].headline.contains("src/lib.rs"));
+    assert!(summary.executed_steps[2].headline.contains("validation passed"));
     assert_eq!(summary.terminal_status, trace.terminal_status.unwrap());
     assert_eq!(summary.terminal_reason, trace.terminal_reason.unwrap());
 }

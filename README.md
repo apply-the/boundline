@@ -9,8 +9,10 @@ Synod is a bounded delivery orchestrator. The current repository implements the
 core Rust orchestrator plus a local developer CLI for `doctor`, session-backed
 `start` / `capture` / `flow` / `plan` / `step` / `run` / `status` / `next`,
 and `inspect`. The current vertical slice is validated with isolated workspace
-fixtures under `.synod/fixture.json` that let Synod drive a real failing test
-to green across the built-in `bug-fix`, `change`, and `delivery` flows.
+execution profiles under `.synod/execution.json` with legacy fallback to
+`.synod/fixture.json`, letting Synod apply real workspace changes, run
+validation commands, and surface change evidence across the built-in `bug-fix`,
+`change`, and `delivery` flows.
 
 For contributor setup and validation expectations, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -87,9 +89,10 @@ The current implementation covers:
 
 The local `synod` binary keeps the developer experience local, deterministic,
 and backed by both `<workspace>/.synod/session.json` and
-`<workspace>/.synod/traces/`. `doctor`, `plan`, and `run` expect a workspace
-fixture manifest at `<workspace>/.synod/fixture.json` for the current red-to-
-green bug-fix slice.
+`<workspace>/.synod/traces/`. `doctor`, `plan`, and `run` prefer a workspace
+execution manifest at `<workspace>/.synod/execution.json` and fall back to the
+legacy `<workspace>/.synod/fixture.json` shape for the current red-to-green
+delivery slice.
 
 The primary session-native flow is:
 
@@ -103,12 +106,15 @@ The primary session-native flow is:
 When a flow is selected, `status` and `next` surface `active_flow`,
 `current_stage`, and `stage_progress`. `run` and `inspect` also render flow and
 stage lifecycle events such as flow selection, stage transitions, stage retry,
-stage replan, and stage failure.
+stage replan, and stage failure. Delivery runs additionally expose
+`changed_files`, validation summaries, and trace-visible recovery history.
 
 For the full command walkthrough and example flows, see
 [`specs/004-session-model-unification/quickstart.md`](specs/004-session-model-unification/quickstart.md)
 and
-[`specs/005-delivery-flows/quickstart.md`](specs/005-delivery-flows/quickstart.md).
+[`specs/005-delivery-flows/quickstart.md`](specs/005-delivery-flows/quickstart.md),
+and
+[`specs/006-execution-engine/quickstart.md`](specs/006-execution-engine/quickstart.md).
 
 ## Assistant Command Packs
 
@@ -131,4 +137,5 @@ Run these commands from the repository root:
 cargo fmt --all
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-targets
+cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
 ```

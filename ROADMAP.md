@@ -8,18 +8,19 @@ Evolve Synod into a system capable of taking a problem and transforming it into 
 
 ## Current Status
 
-The `Spec 1.3 — Session & Interaction Model Unification` slice and `Spec 005 — Delivery Flows` are now available in the local CLI.
+The `Spec 1.3 — Session & Interaction Model Unification`, `Spec 005 — Delivery Flows`, and `Spec 006 — Execution Engine` slices are now available in the local CLI.
 
 - active session persisted in `.synod/session.json`
 - explicit flow `start -> capture -> flow -> plan -> step/run -> status/next -> inspect`
 - built-in `bug-fix`, `change`, and `delivery` flow definitions with stage-aware session state
 - flow-aware `status`, `next`, `run`, and `inspect` output with stage transition and recovery traces
-- fixture-backed red-to-green execution slice under `.synod/fixture.json`, replacing the old synthetic onboarding surface
+- execution-profile-backed red-to-green delivery under `.synod/execution.json` with legacy `.synod/fixture.json` fallback
+- changed-file and validation evidence projected into `run`, `status`, and `inspect`
 - assistant command packs aligned with the session model and reuse of `latest_trace_ref`
 
 Immediate follow-up:
 
-- expand the execution engine beyond the current fixture-backed red-to-green slice
+- broaden the execution engine beyond the current manifest-driven red-to-green slice
 - add multi-agent review and voting on top of the execution output
 
 ## Spec 006 — Execution Engine (Code Delivery)
