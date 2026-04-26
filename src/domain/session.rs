@@ -190,6 +190,12 @@ pub struct SessionStatusView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_changed_files: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_workspace_slice: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_selection_headline: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_attempt_lineage: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_validation_status: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_review_trigger: Option<String>,
@@ -281,6 +287,35 @@ impl SessionStatusView {
             return Err(SessionValidationError::StatusViewChangedFilesMismatch {
                 expected: expected_changed_files,
                 actual: self.latest_changed_files.clone(),
+            });
+        }
+
+        let expected_workspace_slice =
+            record.active_task.as_ref().and_then(task_state_workspace_slice_summary);
+        if self.latest_workspace_slice != expected_workspace_slice {
+            return Err(SessionValidationError::StatusViewWorkspaceSliceMismatch {
+                expected: expected_workspace_slice,
+                actual: self.latest_workspace_slice.clone(),
+            });
+        }
+
+        let expected_selection_headline = record
+            .active_task
+            .as_ref()
+            .and_then(|task| task_state_string(task, "latest_selection_headline"));
+        if self.latest_selection_headline != expected_selection_headline {
+            return Err(SessionValidationError::StatusViewSelectionHeadlineMismatch {
+                expected: expected_selection_headline,
+                actual: self.latest_selection_headline.clone(),
+            });
+        }
+
+        let expected_attempt_lineage =
+            record.active_task.as_ref().and_then(task_state_attempt_lineage_summary);
+        if self.latest_attempt_lineage != expected_attempt_lineage {
+            return Err(SessionValidationError::StatusViewAttemptLineageMismatch {
+                expected: expected_attempt_lineage,
+                actual: self.latest_attempt_lineage.clone(),
             });
         }
 
@@ -428,6 +463,12 @@ pub enum SessionValidationError {
     StatusViewTraceMismatch { expected: Option<String>, actual: Option<String> },
     #[error("status view changed files mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewChangedFilesMismatch { expected: Option<Vec<String>>, actual: Option<Vec<String>> },
+    #[error("status view workspace slice mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewWorkspaceSliceMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view selection headline mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewSelectionHeadlineMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view attempt lineage mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewAttemptLineageMismatch { expected: Option<String>, actual: Option<String> },
     #[error("status view validation status mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewValidationStatusMismatch { expected: Option<String>, actual: Option<String> },
     #[error("status view review trigger mismatch: expected {expected:?}, got {actual:?}")]
@@ -499,6 +540,26 @@ fn task_state_strings(task: &Task, key: &str) -> Option<Vec<String>> {
     })
 }
 
+pub(crate) fn task_state_workspace_slice_summary(task: &Task) -> Option<String> {
+    let slice = task.context.state.get("latest_workspace_slice")?;
+    let selected_targets = slice.get("selected_targets")?.as_array()?;
+    let targets = selected_targets.iter().filter_map(|item| item.as_str()).collect::<Vec<_>>();
+
+    if targets.is_empty() { None } else { Some(targets.join(", ")) }
+}
+
+pub(crate) fn task_state_attempt_lineage_summary(task: &Task) -> Option<String> {
+    let lineage = task.context.state.get("latest_attempt_lineage")?;
+    let current = lineage.get("current_attempt_id")?.as_str()?;
+    let transition = lineage.get("transition_kind")?.as_str()?;
+    let previous = lineage.get("previous_attempt_id").and_then(Value::as_str);
+
+    previous.map_or_else(
+        || Some(format!("{current} ({transition})")),
+        |previous| Some(format!("{current} {transition} {previous}")),
+    )
+}
+
 fn task_state_review_headline(task: &Task) -> Option<String> {
     let latest_finding = task
         .context
@@ -550,7 +611,8 @@ mod tests {
 
     use super::{
         ActiveSessionRecord, SessionStatus, SessionStatusView, SessionValidationError,
-        task_state_review_headline, task_state_string, task_state_strings, trace_within_workspace,
+        task_state_attempt_lineage_summary, task_state_review_headline, task_state_string,
+        task_state_strings, task_state_workspace_slice_summary, trace_within_workspace,
     };
     use crate::domain::limits::RunLimits;
     use crate::domain::plan::Plan;
@@ -608,6 +670,9 @@ mod tests {
             latest_status: record.latest_status,
             latest_trace_ref: record.latest_trace_ref.clone(),
             latest_changed_files: None,
+            latest_workspace_slice: None,
+            latest_selection_headline: None,
+            latest_attempt_lineage: None,
             latest_validation_status: None,
             latest_review_trigger: None,
             latest_review_vote: None,
@@ -660,6 +725,22 @@ mod tests {
         let mut task = build_task("/tmp/workspace");
         task.context.state.insert("latest_validation_status".to_string(), json!("passed"));
         task.context.state.insert("latest_changed_files".to_string(), json!(["src/lib.rs"]));
+        task.context.state.insert(
+            "latest_workspace_slice".to_string(),
+            json!({"selected_targets": ["src/lib.rs"]}),
+        );
+        task.context.state.insert(
+            "latest_selection_headline".to_string(),
+            json!("selected src/lib.rs for adaptive delivery"),
+        );
+        task.context.state.insert(
+            "latest_attempt_lineage".to_string(),
+            json!({
+                "previous_attempt_id": "adaptive-attempt-1",
+                "current_attempt_id": "adaptive-attempt-2",
+                "transition_kind": "replaced",
+            }),
+        );
         task.context.state.insert("latest_review_trigger".to_string(), json!("pr_ready"));
         task.context.state.insert(
             "latest_review_findings".to_string(),
@@ -677,6 +758,11 @@ mod tests {
         assert_eq!(
             task_state_strings(&task, "latest_changed_files"),
             Some(vec!["src/lib.rs".to_string()])
+        );
+        assert_eq!(task_state_workspace_slice_summary(&task), Some("src/lib.rs".to_string()));
+        assert_eq!(
+            task_state_attempt_lineage_summary(&task),
+            Some("adaptive-attempt-2 replaced adaptive-attempt-1".to_string())
         );
         assert_eq!(task_state_string(&task, "latest_review_trigger"), Some("pr_ready".to_string()));
         assert_eq!(

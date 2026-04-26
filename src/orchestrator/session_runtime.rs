@@ -17,10 +17,9 @@ use crate::domain::task::{Task, TaskRequestError, TaskRunResponse, TaskStatus, T
 use crate::domain::task_context::TaskContext;
 use crate::domain::trace::{ExecutionTrace, TraceEventType, current_timestamp_millis};
 use crate::fixture::{
-    FixtureRuntime, FixtureRuntimeError, build_fixture_plan_for_flow,
+    FixtureRuntime, FixtureRuntimeError, build_fixture_plan_for_goal,
     build_fixture_runtime_for_flow, build_task_request,
 };
-use crate::orchestrator::planner::Planner;
 use crate::orchestrator::recovery::{RecoveryDecision, decide_recovery};
 use crate::orchestrator::review_trace::{record_review_step_completed, record_review_step_started};
 use crate::orchestrator::terminal::{build_terminal_reason, task_status_for_condition};
@@ -136,10 +135,11 @@ impl SessionRuntime {
                 .map_err(|error| SessionRuntimeError::InvalidFlowState(error.to_string()))?;
         }
 
-        let request = build_task_request(&self.workspace_ref, goal, session.session_id.clone())
+        let request = build_task_request(&self.workspace_ref, &goal, session.session_id.clone())
             .map_err(SessionRuntimeError::FixtureRuntime)?;
-        let plan = build_fixture_plan_for_flow(&self.workspace_ref, session.active_flow.as_ref())
-            .map_err(SessionRuntimeError::FixtureRuntime)?;
+        let plan =
+            build_fixture_plan_for_goal(&self.workspace_ref, session.active_flow.as_ref(), &goal)
+                .map_err(SessionRuntimeError::FixtureRuntime)?;
         let task = Task::new(Uuid::new_v4().to_string(), &request, plan)
             .map_err(SessionRuntimeError::TaskRequest)?;
 
@@ -925,6 +925,7 @@ mod tests {
                     args: vec!["test".to_string(), "--quiet".to_string()],
                 },
                 attempts,
+                adaptive: None,
                 limits: RunLimits::default(),
                 review: None,
                 legacy_source: None,
@@ -985,13 +986,14 @@ mod tests {
                         replace: "left + right".to_string(),
                     }],
                 }],
+                adaptive: None,
                 limits: RunLimits::default(),
                 review: None,
                 legacy_source: None,
             },
-            planner: StaticPlanner::new(
+            planner: std::sync::Arc::new(StaticPlanner::new(
                 Plan::new(vec![Step::decision("placeholder", json!({})).unwrap()]).unwrap(),
-            ),
+            )),
             agents: AgentRegistry::new(),
             tools: ToolRegistry::new(),
         }

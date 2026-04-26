@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -16,6 +18,9 @@ const RED_LIB_RS: &str =
 
 const GREEN_LIB_RS: &str =
     concat!("pub fn add(left: i32, right: i32) -> i32 {\n", "    left + right\n", "}\n",);
+
+const MULTIPLY_LIB_RS: &str =
+    concat!("pub fn add(left: i32, right: i32) -> i32 {\n", "    left * right\n", "}\n",);
 
 const FIXTURE_TEST_RS: &str = concat!(
     "use synod_fixture::add;\n\n",
@@ -53,6 +58,14 @@ pub fn temp_broken_fixture_workspace(prefix: &str) -> PathBuf {
         "left * right",
         "left + right",
     )
+}
+
+pub fn temp_adaptive_fixture_workspace(prefix: &str) -> PathBuf {
+    create_adaptive_fixture_workspace(prefix, RED_LIB_RS)
+}
+
+pub fn temp_adaptive_replanning_workspace(prefix: &str) -> PathBuf {
+    create_adaptive_fixture_workspace(prefix, MULTIPLY_LIB_RS)
 }
 
 #[allow(dead_code)]
@@ -156,6 +169,39 @@ fn create_fixture_workspace(
     .unwrap();
 
     debug_assert_ne!(RED_LIB_RS, GREEN_LIB_RS);
+    workspace
+}
+
+fn create_adaptive_fixture_workspace(prefix: &str, source_contents: &str) -> PathBuf {
+    let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::create_dir_all(workspace.join("tests")).unwrap();
+    fs::create_dir_all(workspace.join(".synod")).unwrap();
+
+    fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
+    fs::write(workspace.join("src/lib.rs"), source_contents).unwrap();
+    fs::write(workspace.join("tests/red_to_green.rs"), FIXTURE_TEST_RS).unwrap();
+    fs::write(
+        workspace.join(".synod/execution.json"),
+        serde_json::to_string_pretty(&serde_json::json!({
+            "name": "adaptive-red-to-green-execution",
+            "read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
+            "validation_command": {
+                "program": "cargo",
+                "args": ["test", "--quiet"],
+            },
+            "attempts": [],
+            "adaptive": {
+                "max_selected_targets": 1,
+                "max_generated_attempts": 4,
+                "path_preferences": ["src/"],
+                "allowed_change_kinds": ["arithmetic_swap"],
+            },
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
     workspace
 }
 
