@@ -73,6 +73,10 @@ fn session_record_round_trips_and_status_values_serialize() {
         latest_trace_ref: record.latest_trace_ref.clone(),
         latest_changed_files: None,
         latest_validation_status: None,
+        latest_review_trigger: None,
+        latest_review_vote: None,
+        latest_review_outcome: None,
+        latest_review_headline: None,
         next_command: Some("synod step".to_string()),
         explanation: "the active plan is ready for explicit execution".to_string(),
     };

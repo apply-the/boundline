@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::adapters::trace_store::TraceStore;
+use serde_json::Value;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -314,8 +315,66 @@ fn build_status_view(
                 .get("latest_validation_status")
                 .and_then(|value| value.as_str().map(str::to_string))
         }),
+        latest_review_trigger: record.active_task.as_ref().and_then(|task| {
+            task.context
+                .state
+                .get("latest_review_trigger")
+                .and_then(|value| value.as_str().map(str::to_string))
+        }),
+        latest_review_vote: record.active_task.as_ref().and_then(|task| {
+            task.context
+                .state
+                .get("latest_review_vote")
+                .and_then(|value| value.as_str().map(str::to_string))
+        }),
+        latest_review_outcome: record.active_task.as_ref().and_then(|task| {
+            task.context
+                .state
+                .get("latest_review_outcome")
+                .and_then(|value| value.as_str().map(str::to_string))
+        }),
+        latest_review_headline: record.active_task.as_ref().and_then(review_headline_from_task),
         next_command,
         explanation: explanation.into(),
+    }
+}
+
+fn review_headline_from_task(task: &crate::domain::task::Task) -> Option<String> {
+    let latest_finding = task
+        .context
+        .state
+        .get("latest_review_findings")
+        .and_then(Value::as_array)
+        .and_then(|findings| findings.last());
+    if let Some(finding) = latest_finding {
+        let reviewer_id = finding.get("reviewer_id").and_then(Value::as_str).unwrap_or("reviewer");
+        let disposition = finding.get("disposition").and_then(Value::as_str).unwrap_or("unknown");
+        let summary = finding.get("summary").and_then(Value::as_str).unwrap_or("review finding");
+        return Some(format!("{reviewer_id} {disposition}: {summary}"));
+    }
+
+    let participants = task
+        .context
+        .state
+        .get("latest_review_participants")
+        .and_then(Value::as_array)
+        .map(|participants| {
+            participants
+                .iter()
+                .filter_map(|participant| {
+                    let reviewer_id = participant.get("reviewer_id").and_then(Value::as_str)?;
+                    let status =
+                        participant.get("status").and_then(Value::as_str).unwrap_or("unknown");
+                    Some(format!("{reviewer_id} {status}"))
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    if participants.is_empty() {
+        None
+    } else {
+        Some(format!("participants: {}", participants.join(", ")))
     }
 }
 
@@ -490,6 +549,81 @@ fn red_to_green_addition() {
         workspace
     }
 
+    fn write_review_execution_workspace(prefix: &str) -> PathBuf {
+        let workspace = temp_workspace(prefix);
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::create_dir_all(workspace.join("tests")).unwrap();
+        fs::create_dir_all(workspace.join(".synod")).unwrap();
+        fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
+        fs::write(workspace.join("src/lib.rs"), RED_LIB_RS).unwrap();
+        fs::write(workspace.join("tests/red_to_green.rs"), FIXTURE_TEST_RS).unwrap();
+        fs::write(
+            workspace.join(".synod/execution.json"),
+            serde_json::to_string_pretty(&json!({
+                "name": "session-review-execution",
+                "read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
+                "validation_command": {
+                    "program": "cargo",
+                    "args": ["test", "--quiet"]
+                },
+                "attempts": [
+                    {
+                        "attempt_id": "fix-add",
+                        "summary": "Replace subtraction with addition",
+                        "failure_mode": "terminal",
+                        "changes": [
+                            {
+                                "path": "src/lib.rs",
+                                "find": "left - right",
+                                "replace": "left + right"
+                            }
+                        ]
+                    }
+                ],
+                "review": {
+                    "triggers": ["pr_ready"],
+                    "reviewers": [
+                        {
+                            "reviewer_id": "safety",
+                            "role": "Safety",
+                            "source": "gpt",
+                            "weight": 1
+                        },
+                        {
+                            "reviewer_id": "maintainability",
+                            "role": "Maintainability",
+                            "source": "claude",
+                            "weight": 1
+                        }
+                    ],
+                    "vote_rule": {
+                        "strategy": "majority"
+                    },
+                    "scenarios": [
+                        {
+                            "trigger": "pr_ready",
+                            "findings": [
+                                {
+                                    "reviewer_id": "safety",
+                                    "disposition": "approve",
+                                    "summary": "No blockers"
+                                },
+                                {
+                                    "reviewer_id": "maintainability",
+                                    "disposition": "approve",
+                                    "summary": "Ready to ship"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        workspace
+    }
+
     #[test]
     fn resolve_workspace_and_status_helpers_cover_remaining_branches() {
         let workspace = temp_workspace("synod-cli-session-resolve");
@@ -634,6 +768,89 @@ fn red_to_green_addition() {
             next.terminal_output.contains("next_command: synod inspect"),
             "{}",
             next.terminal_output
+        );
+    }
+
+    #[test]
+    fn execute_run_status_and_inspect_surface_review_evidence() {
+        let workspace = write_review_execution_workspace("synod-cli-session-review-success");
+
+        assert_eq!(
+            execute_start(Some(&workspace)).unwrap().exit_status,
+            CommandExitStatus::Succeeded
+        );
+        assert_eq!(
+            execute_capture(Some(&workspace), "Fix the failing add test and review it")
+                .unwrap()
+                .exit_status,
+            CommandExitStatus::Succeeded
+        );
+        assert_eq!(
+            execute_plan(Some(&workspace)).unwrap().exit_status,
+            CommandExitStatus::Succeeded
+        );
+
+        let run = execute_run(Some(&workspace)).unwrap();
+        assert_eq!(run.exit_status, CommandExitStatus::Succeeded);
+        assert!(
+            run.terminal_output.contains("review_trigger: pr_ready"),
+            "{}",
+            run.terminal_output
+        );
+        assert!(
+            run.terminal_output.contains("reviewer safety (Safety) approve: No blockers"),
+            "{}",
+            run.terminal_output
+        );
+        assert!(
+            run.terminal_output.contains(
+                "review_vote: strategy=Majority approvals=2 concerns=0 blocks=0 decision=Accepted"
+            ),
+            "{}",
+            run.terminal_output
+        );
+        assert!(
+            run.terminal_output.contains("review_outcome: accepted"),
+            "{}",
+            run.terminal_output
+        );
+
+        let status = execute_status(Some(&workspace)).unwrap();
+        assert!(
+            status.terminal_output.contains("latest_review_trigger: pr_ready"),
+            "{}",
+            status.terminal_output
+        );
+        assert!(
+            status.terminal_output.contains("latest_review_outcome: accepted"),
+            "{}",
+            status.terminal_output
+        );
+        assert!(
+            status
+                .terminal_output
+                .contains("latest_review_headline: maintainability approve: Ready to ship"),
+            "{}",
+            status.terminal_output
+        );
+
+        let inspect = crate::cli::inspect::execute_inspect(None, Some(&workspace)).unwrap();
+        assert!(
+            inspect.terminal_output.contains("review_trigger: pr_ready"),
+            "{}",
+            inspect.terminal_output
+        );
+        assert!(
+            inspect.terminal_output.contains(
+                "review_vote: strategy=Majority approvals=2 concerns=0 blocks=0 decision=Accepted"
+            ),
+            "{}",
+            inspect.terminal_output
+        );
+        assert!(
+            inspect.terminal_output.contains("review_outcome: accepted"),
+            "{}",
+            inspect.terminal_output
         );
     }
 }

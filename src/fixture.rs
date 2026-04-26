@@ -19,6 +19,10 @@ use crate::domain::flow::{
 };
 use crate::domain::limits::RunLimits;
 use crate::domain::plan::Plan;
+use crate::domain::review::{
+    ReviewOutcome, ReviewProfile, ReviewTrigger, ReviewerDisposition, ReviewerFinding,
+    ReviewerParticipation, ReviewerParticipationStatus, VoteDecision, VoteResolution,
+};
 use crate::domain::step::{
     ErrorInfo, Recoverability, Step, StepError, StepExecutionRequest, StepExecutionResult,
 };
@@ -219,6 +223,10 @@ pub fn build_fixture_runtime_for_flow(
             apply_workspace_fixture(&workspace_ref, &profile, request)
         })
     })?;
+    agents.register("reviewer", {
+        let profile = profile.clone();
+        FnAgentAdapter::new(move |request| review_workspace_fixture(&profile, request))
+    })?;
 
     let mut tools = ToolRegistry::new();
     tools.register("tester", {
@@ -227,6 +235,14 @@ pub fn build_fixture_runtime_for_flow(
         FnToolAdapter::new(move |request| {
             verify_workspace_fixture(&workspace_ref, &profile, request)
         })
+    })?;
+    tools.register("review-voter", {
+        let profile = profile.clone();
+        FnToolAdapter::new(move |request| resolve_review_vote(&profile, request))
+    })?;
+    tools.register("review-finalizer", {
+        let profile = profile.clone();
+        FnToolAdapter::new(move |request| finalize_workspace_review(&profile, request))
     })?;
 
     Ok(FixtureRuntime { profile, planner, agents, tools })
@@ -246,7 +262,7 @@ fn build_vertical_slice_plan(
     let flow = built_in_flow(&active_flow.flow_name)
         .expect("validated flow name should resolve for fixture planning");
 
-    let steps = match flow.name {
+    let mut steps = match flow.name {
         "bug-fix" => vec![
             Step::agent(
                 "investigate",
@@ -360,6 +376,8 @@ fn build_vertical_slice_plan(
         _ => unreachable!("unsupported built-in flow should have been rejected earlier"),
     };
 
+    steps.extend(build_review_steps(profile, Some(active_flow), attempt_index)?);
+
     Ok(Plan::new(steps)?)
 }
 
@@ -416,7 +434,10 @@ fn build_attempt_steps(
                     active_flow,
                 ),
             )?,
-        ]);
+        ]
+        .into_iter()
+        .chain(build_review_steps(profile, Some(active_flow), attempt_index)?)
+        .collect());
     }
 
     Ok(vec![
@@ -430,7 +451,10 @@ fn build_attempt_steps(
             "tester",
             verify_step_input(profile, attempt_index, json!({"phase": "verify"}))?,
         )?,
-    ])
+    ]
+    .into_iter()
+    .chain(build_review_steps(profile, None, attempt_index)?)
+    .collect())
 }
 
 fn analysis_step_input(profile: &WorkspaceExecutionProfile) -> Value {
@@ -462,6 +486,139 @@ fn verify_step_input(
     extra: Value,
 ) -> Result<Value, FixtureRuntimeError> {
     code_step_input(profile, attempt_index, extra)
+}
+
+fn build_review_steps(
+    profile: &WorkspaceExecutionProfile,
+    active_flow: Option<&SessionFlowState>,
+    attempt_index: usize,
+) -> Result<Vec<Step>, FixtureRuntimeError> {
+    let Some(review) = profile.review.as_ref() else {
+        return Ok(Vec::new());
+    };
+
+    let attempt = execution_attempt(profile, attempt_index)?;
+    let prefix = active_flow
+        .map(|flow| format!("{}-review-{}", flow.current_stage_id, attempt.attempt_id))
+        .unwrap_or_else(|| format!("review-{}", attempt.attempt_id));
+
+    let mut steps = Vec::new();
+    for reviewer in &review.reviewers {
+        steps.push(review_agent_step(
+            format!("{}-{}", prefix, reviewer.reviewer_id),
+            review_step_input(profile, attempt_index, reviewer.reviewer_id.clone(), false)?,
+            active_flow,
+        )?);
+    }
+
+    steps.push(review_tool_step(
+        format!("{}-vote", prefix),
+        review_vote_step_input(profile, attempt_index)?,
+        "review-voter",
+        active_flow,
+    )?);
+
+    if review.adjudication.enabled {
+        let adjudicator_id = review
+            .adjudication
+            .reviewer_id
+            .as_ref()
+            .expect("validated review profile must define an adjudicator when enabled")
+            .clone();
+        steps.push(review_agent_step(
+            format!("{}-adjudicate", prefix),
+            review_step_input(profile, attempt_index, adjudicator_id, true)?,
+            active_flow,
+        )?);
+    }
+
+    steps.push(review_tool_step(
+        format!("{}-finalize", prefix),
+        review_finalize_step_input(profile, attempt_index)?,
+        "review-finalizer",
+        active_flow,
+    )?);
+
+    Ok(steps)
+}
+
+fn review_agent_step(
+    id: String,
+    input: Value,
+    active_flow: Option<&SessionFlowState>,
+) -> Result<Step, StepError> {
+    match active_flow {
+        Some(active_flow) => {
+            Step::agent(id, "reviewer", attach_current_stage_metadata(input, active_flow))
+        }
+        None => Step::agent(id, "reviewer", input),
+    }
+}
+
+fn review_tool_step(
+    id: String,
+    input: Value,
+    target_name: &str,
+    active_flow: Option<&SessionFlowState>,
+) -> Result<Step, StepError> {
+    match active_flow {
+        Some(active_flow) => {
+            Step::tool(id, target_name, attach_current_stage_metadata(input, active_flow))
+        }
+        None => Step::tool(id, target_name, input),
+    }
+}
+
+fn review_step_input(
+    profile: &WorkspaceExecutionProfile,
+    attempt_index: usize,
+    reviewer_id: String,
+    adjudication: bool,
+) -> Result<Value, FixtureRuntimeError> {
+    let attempt = execution_attempt(profile, attempt_index)?;
+    Ok(json!({
+        "phase": "review",
+        "execution_profile": profile.name,
+        "attempt_index": attempt_index,
+        "attempt_id": attempt.attempt_id,
+        "reviewer_id": reviewer_id,
+        "adjudication": adjudication,
+        "default_review_trigger": profile.review.as_ref().and_then(default_success_review_trigger),
+    }))
+}
+
+fn review_vote_step_input(
+    profile: &WorkspaceExecutionProfile,
+    attempt_index: usize,
+) -> Result<Value, FixtureRuntimeError> {
+    let attempt = execution_attempt(profile, attempt_index)?;
+    Ok(json!({
+        "phase": "review-vote",
+        "execution_profile": profile.name,
+        "attempt_index": attempt_index,
+        "attempt_id": attempt.attempt_id,
+    }))
+}
+
+fn review_finalize_step_input(
+    profile: &WorkspaceExecutionProfile,
+    attempt_index: usize,
+) -> Result<Value, FixtureRuntimeError> {
+    let attempt = execution_attempt(profile, attempt_index)?;
+    Ok(json!({
+        "phase": "review-finalize",
+        "execution_profile": profile.name,
+        "attempt_index": attempt_index,
+        "attempt_id": attempt.attempt_id,
+    }))
+}
+
+fn default_success_review_trigger(review: &ReviewProfile) -> Option<ReviewTrigger> {
+    review
+        .triggers
+        .iter()
+        .copied()
+        .find(|trigger| !matches!(trigger, ReviewTrigger::ValidationFailed))
 }
 
 fn attach_current_stage_metadata(input: Value, active_flow: &SessionFlowState) -> Value {
@@ -538,6 +695,7 @@ fn legacy_fixture_to_execution_profile(
         },
         attempts,
         limits: fixture.limits,
+        review: None,
         legacy_source: Some(FIXTURE_RELATIVE_PATH.to_string()),
     };
     profile.validate()?;
@@ -667,12 +825,43 @@ fn verify_workspace_fixture(
                 "latest_validation_record".to_string(),
                 serde_json::to_value(&record).unwrap_or(Value::Null),
             );
+            if let Some(trigger) = profile.review.as_ref().and_then(default_success_review_trigger)
+            {
+                state_patch.insert("next_review_trigger".to_string(), json!(trigger));
+            } else {
+                state_patch.insert("goal_satisfied".to_string(), json!(true));
+            }
             StepExecutionResult::success_with_patch(
                 json!({
                     "execution_profile": profile.name,
                     "attempt_id": attempt.attempt_id,
                     "validation": record,
-                    "goal_satisfied": true,
+                    "review_trigger": profile.review.as_ref().and_then(default_success_review_trigger),
+                }),
+                state_patch,
+            )
+        }
+        Ok(output)
+            if attempt.failure_mode == ExecutionFailureMode::Terminal
+                && profile.review.as_ref().is_some_and(|review| {
+                    review.triggers.contains(&ReviewTrigger::ValidationFailed)
+                }) =>
+        {
+            let record = output.to_validation_record();
+            let mut state_patch = Map::new();
+            state_patch.insert("latest_validation_status".to_string(), json!("failed"));
+            state_patch.insert(
+                "latest_validation_record".to_string(),
+                serde_json::to_value(&record).unwrap_or(Value::Null),
+            );
+            state_patch
+                .insert("next_review_trigger".to_string(), json!(ReviewTrigger::ValidationFailed));
+            StepExecutionResult::success_with_patch(
+                json!({
+                    "execution_profile": profile.name,
+                    "attempt_id": attempt.attempt_id,
+                    "validation": record,
+                    "review_trigger": ReviewTrigger::ValidationFailed,
                 }),
                 state_patch,
             )
@@ -705,6 +894,355 @@ fn verify_workspace_fixture(
             Recoverability::Terminal,
         ),
     }
+}
+
+fn review_workspace_fixture(
+    profile: &WorkspaceExecutionProfile,
+    request: StepExecutionRequest,
+) -> StepExecutionResult {
+    let Some(review) = profile.review.as_ref() else {
+        return StepExecutionResult::success(json!({"review_skipped": true}));
+    };
+
+    let Some(reviewer_id) = request.input.get("reviewer_id").and_then(Value::as_str) else {
+        return StepExecutionResult::failure(
+            ErrorInfo::new("missing_reviewer_id", "review step is missing reviewer_id metadata"),
+            Recoverability::Terminal,
+        );
+    };
+    let adjudication = request.input.get("adjudication").and_then(Value::as_bool).unwrap_or(false);
+    let Some(trigger) = active_review_trigger(review, &request) else {
+        return StepExecutionResult::success(json!({
+            "review_skipped": true,
+            "reviewer_id": reviewer_id,
+        }));
+    };
+
+    let (reviewer_role, reviewer_source) = match review.reviewer_by_id(reviewer_id) {
+        Some(reviewer) => (reviewer.role.clone(), reviewer.source.clone()),
+        None if adjudication => ("Adjudicator".to_string(), None),
+        None => {
+            return review_terminal_failure(
+                "unknown_reviewer",
+                format!("reviewer '{reviewer_id}' is not configured in the review council"),
+                Some(trigger),
+                reviewer_id,
+            );
+        }
+    };
+
+    let Some(scenario) = review.scenario_for(trigger) else {
+        return review_terminal_failure(
+            "missing_review_scenario",
+            format!("review trigger '{trigger:?}' does not define a review scenario"),
+            Some(trigger),
+            reviewer_id,
+        );
+    };
+
+    let finding = if adjudication {
+        scenario.adjudication_finding.as_ref()
+    } else {
+        scenario.findings.iter().find(|finding| finding.reviewer_id == reviewer_id)
+    };
+    let Some(finding) = finding else {
+        return review_terminal_failure(
+            "missing_review_finding",
+            format!("reviewer '{reviewer_id}' did not produce a configured finding"),
+            Some(trigger),
+            reviewer_id,
+        );
+    };
+
+    let mut findings = review_findings_from_state(&request);
+    findings.push(finding.clone());
+    let mut reviewers = review_reviewer_ids_from_state(&request);
+    if !reviewers.contains(&reviewer_id.to_string()) {
+        reviewers.push(reviewer_id.to_string());
+    }
+    let mut participants = review_participants_from_state(&request);
+    participants.push(ReviewerParticipation {
+        reviewer_id: reviewer_id.to_string(),
+        status: ReviewerParticipationStatus::Completed,
+        reason: None,
+    });
+
+    let mut state_patch = Map::new();
+    state_patch.insert("latest_review_trigger".to_string(), json!(trigger));
+    state_patch.insert(
+        "latest_review_findings".to_string(),
+        serde_json::to_value(&findings).unwrap_or(Value::Null),
+    );
+    state_patch.insert("latest_reviewers".to_string(), json!(reviewers));
+    state_patch.insert(
+        "latest_review_participants".to_string(),
+        serde_json::to_value(&participants).unwrap_or(Value::Null),
+    );
+    if adjudication {
+        state_patch.insert(
+            "latest_review_adjudication".to_string(),
+            serde_json::to_value(finding).unwrap_or(Value::Null),
+        );
+    }
+
+    StepExecutionResult::success_with_patch(
+        json!({
+            "review_trigger": trigger,
+            "reviewer_id": reviewer_id,
+            "reviewer_role": reviewer_role,
+            "reviewer_source": reviewer_source,
+            "finding": finding,
+            "adjudication": adjudication,
+        }),
+        state_patch,
+    )
+}
+
+fn resolve_review_vote(
+    profile: &WorkspaceExecutionProfile,
+    request: StepExecutionRequest,
+) -> StepExecutionResult {
+    let Some(review) = profile.review.as_ref() else {
+        return StepExecutionResult::success_with_patch(
+            json!({"review_skipped": true}),
+            Map::from_iter([(String::from("goal_satisfied"), json!(true))]),
+        );
+    };
+    let Some(trigger) = active_review_trigger(review, &request) else {
+        return StepExecutionResult::success_with_patch(
+            json!({"review_skipped": true}),
+            Map::from_iter([(String::from("goal_satisfied"), json!(true))]),
+        );
+    };
+
+    let findings = review_findings_from_state(&request);
+    let resolution = match review.vote_rule.resolve(&review.reviewers, &findings) {
+        Ok(resolution) => resolution,
+        Err(error) => {
+            return review_terminal_failure(
+                "invalid_review_vote",
+                format!("review vote could not be resolved: {error}"),
+                Some(trigger),
+                "review-voter",
+            );
+        }
+    };
+
+    if resolution
+        .participants
+        .iter()
+        .any(|participant| participant.status != ReviewerParticipationStatus::Completed)
+    {
+        return review_terminal_failure(
+            "incomplete_review_participation",
+            "one or more configured reviewers did not complete the review",
+            Some(trigger),
+            "review-voter",
+        );
+    }
+
+    let mut state_patch = Map::new();
+    state_patch.insert("latest_review_trigger".to_string(), json!(trigger));
+    state_patch.insert(
+        "latest_review_participants".to_string(),
+        serde_json::to_value(&resolution.participants).unwrap_or(Value::Null),
+    );
+    state_patch.insert(
+        "latest_review_vote_resolution".to_string(),
+        serde_json::to_value(&resolution).unwrap_or(Value::Null),
+    );
+    state_patch.insert("latest_review_vote".to_string(), json!(render_vote_summary(&resolution)));
+    state_patch.insert("latest_review_vote_decision".to_string(), json!(resolution.decision));
+
+    StepExecutionResult::success_with_patch(
+        json!({
+            "review_trigger": trigger,
+            "vote": resolution,
+        }),
+        state_patch,
+    )
+}
+
+fn finalize_workspace_review(
+    profile: &WorkspaceExecutionProfile,
+    request: StepExecutionRequest,
+) -> StepExecutionResult {
+    let Some(review) = profile.review.as_ref() else {
+        return StepExecutionResult::success_with_patch(
+            json!({"review_skipped": true}),
+            Map::from_iter([(String::from("goal_satisfied"), json!(true))]),
+        );
+    };
+    let Some(trigger) = active_review_trigger(review, &request) else {
+        return StepExecutionResult::success_with_patch(
+            json!({"review_skipped": true}),
+            Map::from_iter([(String::from("goal_satisfied"), json!(true))]),
+        );
+    };
+
+    let vote_decision = request
+        .task_snapshot
+        .state
+        .get("latest_review_vote_decision")
+        .cloned()
+        .and_then(|value| serde_json::from_value::<VoteDecision>(value).ok());
+
+    match vote_decision {
+        Some(VoteDecision::Accepted) => review_terminal_success(trigger, ReviewOutcome::Accepted),
+        Some(VoteDecision::Rejected) => review_terminal_rejection(trigger),
+        Some(VoteDecision::NeedsAdjudication) if review.adjudication.enabled => {
+            let adjudication = request
+                .task_snapshot
+                .state
+                .get("latest_review_adjudication")
+                .cloned()
+                .and_then(|value| serde_json::from_value::<ReviewerFinding>(value).ok());
+            match adjudication.map(|finding| finding.disposition) {
+                Some(ReviewerDisposition::Approve) => {
+                    review_terminal_success(trigger, ReviewOutcome::Accepted)
+                }
+                Some(ReviewerDisposition::Block) => review_terminal_rejection(trigger),
+                Some(ReviewerDisposition::Concern) => review_terminal_escalation(trigger),
+                None => review_terminal_failure(
+                    "missing_adjudication",
+                    "review required adjudication but no adjudication finding was recorded",
+                    Some(trigger),
+                    "review-finalizer",
+                ),
+            }
+        }
+        Some(VoteDecision::NeedsAdjudication) => review_terminal_escalation(trigger),
+        None => review_terminal_failure(
+            "missing_review_vote",
+            "review finalizer could not find a resolved vote decision",
+            Some(trigger),
+            "review-finalizer",
+        ),
+    }
+}
+
+fn review_terminal_success(trigger: ReviewTrigger, outcome: ReviewOutcome) -> StepExecutionResult {
+    let mut state_patch = Map::new();
+    state_patch.insert("latest_review_trigger".to_string(), json!(trigger));
+    state_patch.insert("latest_review_outcome".to_string(), json!(outcome));
+    state_patch.insert("goal_satisfied".to_string(), json!(true));
+    StepExecutionResult::success_with_patch(
+        json!({
+            "review_trigger": trigger,
+            "review_outcome": outcome,
+        }),
+        state_patch,
+    )
+}
+
+fn review_terminal_rejection(trigger: ReviewTrigger) -> StepExecutionResult {
+    let mut patch = Map::new();
+    patch.insert("latest_review_trigger".to_string(), json!(trigger));
+    patch.insert("latest_review_outcome".to_string(), json!(ReviewOutcome::Rejected));
+    StepExecutionResult::failure(
+        ErrorInfo::new(
+            "review_rejected",
+            format!("review trigger '{trigger:?}' rejected the delivery result"),
+        ),
+        Recoverability::Terminal,
+    )
+    .with_state_patch(patch)
+}
+
+fn review_terminal_escalation(trigger: ReviewTrigger) -> StepExecutionResult {
+    let mut patch = Map::new();
+    patch.insert("latest_review_trigger".to_string(), json!(trigger));
+    patch.insert("latest_review_outcome".to_string(), json!(ReviewOutcome::Escalated));
+    StepExecutionResult::failure(
+        ErrorInfo::new(
+            "review_escalated",
+            format!("review trigger '{trigger:?}' ended in escalation"),
+        ),
+        Recoverability::Terminal,
+    )
+    .with_state_patch(patch)
+}
+
+fn review_terminal_failure(
+    code: impl Into<String>,
+    message: impl Into<String>,
+    trigger: Option<ReviewTrigger>,
+    reviewer_id: &str,
+) -> StepExecutionResult {
+    let message = message.into();
+    let mut patch = Map::new();
+    if let Some(trigger) = trigger {
+        patch.insert("latest_review_trigger".to_string(), json!(trigger));
+    }
+    patch.insert("latest_review_outcome".to_string(), json!(ReviewOutcome::Failed));
+    patch.insert(
+        "latest_review_participants".to_string(),
+        serde_json::to_value(vec![ReviewerParticipation {
+            reviewer_id: reviewer_id.to_string(),
+            status: ReviewerParticipationStatus::Failed,
+            reason: Some(message.clone()),
+        }])
+        .unwrap_or(Value::Null),
+    );
+    StepExecutionResult::failure(ErrorInfo::new(code, message), Recoverability::Terminal)
+        .with_state_patch(patch)
+}
+
+fn active_review_trigger(
+    review: &ReviewProfile,
+    request: &StepExecutionRequest,
+) -> Option<ReviewTrigger> {
+    request
+        .task_snapshot
+        .state
+        .get("next_review_trigger")
+        .cloned()
+        .or_else(|| request.input.get("default_review_trigger").cloned())
+        .and_then(|value| serde_json::from_value::<ReviewTrigger>(value).ok())
+        .filter(|trigger| review.triggers.contains(trigger))
+}
+
+fn review_findings_from_state(request: &StepExecutionRequest) -> Vec<ReviewerFinding> {
+    request
+        .task_snapshot
+        .state
+        .get("latest_review_findings")
+        .cloned()
+        .and_then(|value| serde_json::from_value::<Vec<ReviewerFinding>>(value).ok())
+        .unwrap_or_default()
+}
+
+fn review_reviewer_ids_from_state(request: &StepExecutionRequest) -> Vec<String> {
+    request
+        .task_snapshot
+        .state
+        .get("latest_reviewers")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items.iter().filter_map(|item| item.as_str().map(str::to_string)).collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+fn review_participants_from_state(request: &StepExecutionRequest) -> Vec<ReviewerParticipation> {
+    request
+        .task_snapshot
+        .state
+        .get("latest_review_participants")
+        .cloned()
+        .and_then(|value| serde_json::from_value::<Vec<ReviewerParticipation>>(value).ok())
+        .unwrap_or_default()
+}
+
+fn render_vote_summary(resolution: &VoteResolution) -> String {
+    format!(
+        "strategy={:?} approvals={} concerns={} blocks={} decision={:?}",
+        resolution.strategy,
+        resolution.approvals,
+        resolution.concerns,
+        resolution.blocks,
+        resolution.decision
+    )
 }
 
 fn snapshot_workspace_targets(
@@ -1010,11 +1548,15 @@ mod tests {
         analyze_workspace_fixture, apply_fixture_patches, apply_workspace_fixture,
         build_fixture_plan, build_fixture_runtime, build_task_request, build_vertical_slice_plan,
         execution_manifest_path, load_workspace_execution_profile, load_workspace_fixture,
-        run_fixture_command, verify_workspace_fixture,
+        resolve_review_vote, run_fixture_command, verify_workspace_fixture,
     };
     use crate::domain::flow::built_in_flow;
     use crate::domain::limits::RunLimits;
-    use crate::domain::step::{Recoverability, StepExecutionRequest, StepKind};
+    use crate::domain::review::{
+        ReviewProfile, ReviewScenario, ReviewTrigger, ReviewerDefinition, ReviewerDisposition,
+        ReviewerFinding, VoteDecision, VoteRuleDefinition,
+    };
+    use crate::domain::step::{ExecutionStatus, Recoverability, StepExecutionRequest, StepKind};
     use crate::domain::task_context::TaskContext;
 
     fn temp_workspace() -> std::path::PathBuf {
@@ -1058,8 +1600,71 @@ mod tests {
                 }],
             }],
             limits: RunLimits::default(),
+            review: None,
             legacy_source: None,
         }
+    }
+
+    fn sample_review_profile(validation_command: ExecutionCommand) -> WorkspaceExecutionProfile {
+        let mut profile = sample_profile(validation_command);
+        profile.review = Some(ReviewProfile {
+            triggers: vec![ReviewTrigger::PrReady, ReviewTrigger::ValidationFailed],
+            reviewers: vec![
+                ReviewerDefinition {
+                    reviewer_id: "safety".to_string(),
+                    role: "Safety".to_string(),
+                    source: Some("gpt".to_string()),
+                    weight: 2,
+                },
+                ReviewerDefinition {
+                    reviewer_id: "maintainability".to_string(),
+                    role: "Maintainability".to_string(),
+                    source: Some("claude".to_string()),
+                    weight: 1,
+                },
+            ],
+            vote_rule: VoteRuleDefinition::default(),
+            adjudication: Default::default(),
+            scenarios: vec![
+                ReviewScenario {
+                    trigger: ReviewTrigger::PrReady,
+                    findings: vec![
+                        ReviewerFinding {
+                            reviewer_id: "safety".to_string(),
+                            disposition: ReviewerDisposition::Approve,
+                            summary: "No blocking issues".to_string(),
+                            details: None,
+                        },
+                        ReviewerFinding {
+                            reviewer_id: "maintainability".to_string(),
+                            disposition: ReviewerDisposition::Approve,
+                            summary: "Looks ready".to_string(),
+                            details: None,
+                        },
+                    ],
+                    adjudication_finding: None,
+                },
+                ReviewScenario {
+                    trigger: ReviewTrigger::ValidationFailed,
+                    findings: vec![
+                        ReviewerFinding {
+                            reviewer_id: "safety".to_string(),
+                            disposition: ReviewerDisposition::Block,
+                            summary: "Validation still fails".to_string(),
+                            details: None,
+                        },
+                        ReviewerFinding {
+                            reviewer_id: "maintainability".to_string(),
+                            disposition: ReviewerDisposition::Concern,
+                            summary: "Retry after a fix".to_string(),
+                            details: None,
+                        },
+                    ],
+                    adjudication_finding: None,
+                },
+            ],
+        });
+        profile
     }
 
     fn request(input: serde_json::Value, attempt_number: usize) -> StepExecutionRequest {
@@ -1073,6 +1678,26 @@ mod tests {
                 "/tmp/workspace",
                 RunLimits::default(),
                 Map::new(),
+            ),
+            attempt_number,
+        }
+    }
+
+    fn request_with_state(
+        input: serde_json::Value,
+        attempt_number: usize,
+        state: Map<String, serde_json::Value>,
+    ) -> StepExecutionRequest {
+        StepExecutionRequest {
+            step_id: "review".to_string(),
+            step_kind: StepKind::Tool,
+            target_name: "review-voter".to_string(),
+            input,
+            task_snapshot: TaskContext::new(
+                "session-1",
+                "/tmp/workspace",
+                RunLimits::default(),
+                state,
             ),
             attempt_number,
         }
@@ -1250,6 +1875,78 @@ mod tests {
                 "implementation-code",
                 "implementation-verify"
             ]
+        );
+    }
+
+    #[test]
+    fn build_vertical_slice_plan_appends_review_steps_when_review_is_configured() {
+        let profile = sample_review_profile(ExecutionCommand {
+            program: "cargo".to_string(),
+            args: vec!["test".to_string(), "--quiet".to_string()],
+        });
+
+        let direct = build_vertical_slice_plan(&profile, None, 0).unwrap();
+
+        assert_eq!(
+            direct.steps.iter().map(|step| step.id.as_str()).collect::<Vec<_>>(),
+            vec![
+                "analyze",
+                "code-fix-add",
+                "verify-fix-add",
+                "review-fix-add-safety",
+                "review-fix-add-maintainability",
+                "review-fix-add-vote",
+                "review-fix-add-finalize",
+            ]
+        );
+    }
+
+    #[test]
+    fn review_validation_failure_is_routed_into_review_state() {
+        let workspace = write_execution_workspace(
+            "synod-fixture-review-validation-failure",
+            "pub fn add(left: i32, right: i32) -> i32 {\n    left - right\n}\n",
+        );
+        let mut profile = sample_review_profile(ExecutionCommand {
+            program: "cargo".to_string(),
+            args: vec!["test".to_string(), "--quiet".to_string()],
+        });
+        profile.attempts[0].failure_mode = ExecutionFailureMode::Terminal;
+
+        let result =
+            verify_workspace_fixture(&workspace, &profile, request(json!({"attempt_index": 0}), 1));
+
+        assert_eq!(result.status, ExecutionStatus::Succeeded);
+        assert_eq!(
+            result.state_patch.as_ref().unwrap()["next_review_trigger"],
+            json!(ReviewTrigger::ValidationFailed)
+        );
+        assert_eq!(
+            result.state_patch.as_ref().unwrap()["latest_validation_status"],
+            json!("failed")
+        );
+    }
+
+    #[test]
+    fn review_vote_resolution_succeeds_for_pr_ready_findings() {
+        let profile = sample_review_profile(ExecutionCommand {
+            program: "cargo".to_string(),
+            args: vec!["test".to_string(), "--quiet".to_string()],
+        });
+        let mut state = Map::new();
+        state.insert("next_review_trigger".to_string(), json!(ReviewTrigger::PrReady));
+        state.insert(
+            "latest_review_findings".to_string(),
+            serde_json::to_value(profile.review.as_ref().unwrap().scenarios[0].findings.clone())
+                .unwrap(),
+        );
+
+        let result = resolve_review_vote(&profile, request_with_state(json!({}), 1, state));
+
+        assert_eq!(result.status, ExecutionStatus::Succeeded);
+        assert_eq!(
+            result.state_patch.as_ref().unwrap()["latest_review_vote_decision"],
+            json!(VoteDecision::Accepted)
         );
     }
 

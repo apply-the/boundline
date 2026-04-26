@@ -12,7 +12,10 @@ and `inspect`. The current vertical slice is validated with isolated workspace
 execution profiles under `.synod/execution.json` with legacy fallback to
 `.synod/fixture.json`, letting Synod apply real workspace changes, run
 validation commands, and surface change evidence across the built-in `bug-fix`,
-`change`, and `delivery` flows.
+`change`, and `delivery` flows. Review-configured manifests can now run bounded
+multi-reviewer councils with majority or weighted voting, persist review trace
+events, and surface review trigger, vote, outcome, and reviewer evidence across
+`run`, `status`, `next`, and `inspect`.
 
 For contributor setup and validation expectations, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -73,6 +76,7 @@ The current repository implements the delivery orchestrator core as a Rust libra
 - `synod::AgentRegistry` and `synod::ToolRegistry`: register named execution endpoints.
 - `synod::FileTraceStore`: persists execution traces under `<workspace>/.synod/traces/`.
 - `synod::FileSessionStore` and `synod::SessionRuntime`: persist and resume active session state under `<workspace>/.synod/session.json`.
+- `synod::ReviewProfile` and related review-domain types: configure bounded councils, reviewer findings, voting, and optional adjudication from `.synod/execution.json`.
 - `synod::TaskRunRequest` and `synod::TaskRunResponse`: define the run contract used by tests and future delivery flows.
 - `synod` CLI binary: exposes `doctor`, `start`, `capture`, `flow`, `plan`, `step`, `run`, `status`, `next`, and `inspect` over the existing core.
 
@@ -84,6 +88,8 @@ The current implementation covers:
 - bounded retries and bounded replanning
 - deterministic terminal states
 - persisted JSON traces for successful and non-successful runs
+- bounded review councils with manifest-driven reviewers, vote resolution, and optional adjudication
+- review evidence projected into `run`, `status`, `next`, and `inspect`
 
 ## Developer CLI
 
@@ -108,13 +114,21 @@ When a flow is selected, `status` and `next` surface `active_flow`,
 stage lifecycle events such as flow selection, stage transitions, stage retry,
 stage replan, and stage failure. Delivery runs additionally expose
 `changed_files`, validation summaries, and trace-visible recovery history.
+When a review profile is configured and triggered, `run`, `status`, `next`, and
+`inspect` also expose the active review trigger, reviewer findings, vote
+summary, and final review outcome.
 
 For the full command walkthrough and example flows, see
 [`specs/004-session-model-unification/quickstart.md`](specs/004-session-model-unification/quickstart.md)
 and
 [`specs/005-delivery-flows/quickstart.md`](specs/005-delivery-flows/quickstart.md),
 and
-[`specs/006-execution-engine/quickstart.md`](specs/006-execution-engine/quickstart.md).
+[`specs/006-execution-engine/quickstart.md`](specs/006-execution-engine/quickstart.md),
+and
+[`specs/007-multi-agent-review/quickstart.md`](specs/007-multi-agent-review/quickstart.md).
+
+For the concrete review configuration and voting rules implemented in `0.7.0`,
+see [`docs/review-voting.md`](docs/review-voting.md).
 
 ## Assistant Command Packs
 

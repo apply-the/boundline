@@ -22,6 +22,7 @@ use crate::fixture::{
 };
 use crate::orchestrator::planner::Planner;
 use crate::orchestrator::recovery::{RecoveryDecision, decide_recovery};
+use crate::orchestrator::review_trace::{record_review_step_completed, record_review_step_started};
 use crate::orchestrator::terminal::{build_terminal_reason, task_status_for_condition};
 
 #[derive(Debug, Clone)]
@@ -277,6 +278,13 @@ impl SessionRuntime {
                 "step_kind": step_snapshot.kind,
             }),
         );
+        record_review_step_started(
+            trace,
+            &step_snapshot.id,
+            &step_snapshot.input,
+            &task.context.state,
+            task.plan.revision,
+        );
         let trace_location = self.persist_trace(trace)?;
         session.latest_trace_ref = Some(trace_location);
 
@@ -306,6 +314,14 @@ impl SessionRuntime {
                         "output": output,
                         "evidence": result.evidence,
                     }),
+                );
+                record_review_step_completed(
+                    trace,
+                    &step_snapshot.id,
+                    &step_snapshot.input,
+                    &result,
+                    &task.context.state,
+                    task.plan.revision,
                 );
 
                 let goal_satisfied = task
@@ -374,6 +390,14 @@ impl SessionRuntime {
                         "recoverability": result.recoverability,
                         "evidence": result.evidence,
                     }),
+                );
+                record_review_step_completed(
+                    trace,
+                    &step_snapshot.id,
+                    &step_snapshot.input,
+                    &result,
+                    &task.context.state,
+                    task.plan.revision,
                 );
 
                 match decide_recovery(task, &task.plan.steps[step_index], &result) {
@@ -902,6 +926,7 @@ mod tests {
                 },
                 attempts,
                 limits: RunLimits::default(),
+                review: None,
                 legacy_source: None,
             })
             .unwrap(),
@@ -961,6 +986,7 @@ mod tests {
                     }],
                 }],
                 limits: RunLimits::default(),
+                review: None,
                 legacy_source: None,
             },
             planner: StaticPlanner::new(

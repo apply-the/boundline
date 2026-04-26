@@ -185,6 +185,7 @@ fn trace_summary_renderer_mentions_steps_recovery_and_terminal_reason() {
             trigger: "retrying step code within remaining retry budget".to_string(),
             related_step_id: Some("code".to_string()),
         }],
+        review_timeline: Vec::new(),
         terminal_status: TaskStatus::Succeeded,
         terminal_reason: TerminalReason::new(
             TerminalCondition::GoalSatisfied,
@@ -482,6 +483,10 @@ fn render_session_status_includes_goal_trace_and_next_command() {
         latest_trace_ref: Some("/tmp/session-workspace/.synod/traces/task.json".to_string()),
         latest_changed_files: None,
         latest_validation_status: None,
+        latest_review_trigger: None,
+        latest_review_vote: None,
+        latest_review_outcome: None,
+        latest_review_headline: None,
         next_command: Some("synod next".to_string()),
         explanation: "the active session can keep executing from the current step".to_string(),
     };
@@ -622,6 +627,7 @@ fn render_trace_summary_handles_all_terminal_status_variants() {
             goal: "test".to_string(),
             executed_steps: vec![],
             recovery_events: vec![],
+            review_timeline: Vec::new(),
             terminal_status: status,
             terminal_reason: TerminalReason::new(
                 TerminalCondition::GoalSatisfied,
@@ -655,6 +661,7 @@ fn render_trace_summary_covers_replan_recovery_label_and_decision_step_kind() {
             trigger: "goal shifted".to_string(),
             related_step_id: None,
         }],
+        review_timeline: Vec::new(),
         terminal_status: TaskStatus::Succeeded,
         terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None),
         duration: None,
@@ -686,6 +693,7 @@ fn render_trace_summary_covers_pending_running_and_skipped_step_statuses() {
                 headline: format!("{expected} after 1 attempt(s)"),
             }],
             recovery_events: vec![],
+            review_timeline: Vec::new(),
             terminal_status: TaskStatus::Succeeded,
             terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None),
             duration: None,
