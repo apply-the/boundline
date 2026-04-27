@@ -10,6 +10,12 @@ use crate::cli::CommandExitStatus;
 use crate::cli::output;
 use crate::domain::session::{
     ActiveSessionRecord, SessionStatus, SessionStatusView, task_state_attempt_lineage_summary,
+    task_state_governance_approval_text, task_state_governance_blocked_reason,
+    task_state_governance_candidate_actions, task_state_governance_canon_run_ref,
+    task_state_governance_decision_headline, task_state_governance_mode_text,
+    task_state_governance_packet_binding_reason, task_state_governance_packet_ref,
+    task_state_governance_packet_source_stage, task_state_governance_runtime_text,
+    task_state_governance_stage_key, task_state_governance_state_text,
     task_state_workspace_slice_summary,
 };
 use crate::domain::task::TaskStatus;
@@ -128,6 +134,18 @@ pub fn execute_step(workspace: Option<&Path>) -> Result<SessionCommandReport, Se
         return Err(SessionCommandError::MissingPlannedTask);
     }
 
+    if runtime.refresh_governance_state(&mut record).map_err(map_runtime_error)? {
+        runtime.persist_session(&record).map_err(map_runtime_error)?;
+        return Ok(SessionCommandReport {
+            exit_status: exit_status_for_session(record.latest_status),
+            terminal_output: output::render_session_status(&build_status_view(
+                &record,
+                suggested_next_command(&record),
+                "refreshed governance approval state and returned without executing another step",
+            )),
+        });
+    }
+
     runtime.execute_next_step(&mut record).map_err(map_runtime_error)?;
     runtime.persist_session(&record).map_err(map_runtime_error)?;
 
@@ -154,6 +172,18 @@ pub fn execute_run(workspace: Option<&Path>) -> Result<SessionCommandReport, Ses
         return Err(SessionCommandError::MissingPlannedTask);
     }
 
+    if runtime.refresh_governance_state(&mut record).map_err(map_runtime_error)? {
+        runtime.persist_session(&record).map_err(map_runtime_error)?;
+        return Ok(SessionCommandReport {
+            exit_status: exit_status_for_session(record.latest_status),
+            terminal_output: output::render_session_status(&build_status_view(
+                &record,
+                suggested_next_command(&record),
+                "refreshed governance approval state and returned without resuming the governed stage",
+            )),
+        });
+    }
+
     let response = runtime.run_to_terminal(&mut record).map_err(map_runtime_error)?;
     runtime.persist_session(&record).map_err(map_runtime_error)?;
 
@@ -171,14 +201,23 @@ pub fn execute_status(
     workspace: Option<&Path>,
 ) -> Result<SessionCommandReport, SessionCommandError> {
     let workspace = resolve_workspace(workspace)?;
-    let record = load_active_session(&workspace)?;
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut record = load_active_session(&workspace)?;
+    let refreshed = runtime.refresh_governance_state(&mut record).map_err(map_runtime_error)?;
+    if refreshed {
+        runtime.persist_session(&record).map_err(map_runtime_error)?;
+    }
 
     Ok(SessionCommandReport {
         exit_status: CommandExitStatus::Succeeded,
         terminal_output: output::render_session_status(&build_status_view(
             &record,
             suggested_next_command(&record),
-            "current active session state for the workspace",
+            if refreshed {
+                "refreshed governance approval state for the active workspace session"
+            } else {
+                "current active session state for the workspace"
+            },
         )),
     })
 }
@@ -351,6 +390,54 @@ fn build_status_view(
                 .and_then(|value| value.as_str().map(str::to_string))
         }),
         latest_review_headline: record.active_task.as_ref().and_then(review_headline_from_task),
+        latest_governance_stage: record
+            .active_task
+            .as_ref()
+            .and_then(task_state_governance_stage_key),
+        latest_governance_runtime: record
+            .active_task
+            .as_ref()
+            .and_then(task_state_governance_runtime_text),
+        latest_governance_mode: record
+            .active_task
+            .as_ref()
+            .and_then(task_state_governance_mode_text),
+        latest_governance_run_ref: record
+            .active_task
+            .as_ref()
+            .and_then(task_state_governance_canon_run_ref),
+        latest_governance_state: record
+            .active_task
+            .as_ref()
+            .and_then(task_state_governance_state_text),
+        latest_governance_blocked_reason: record
+            .active_task
+            .as_ref()
+            .and_then(task_state_governance_blocked_reason),
+        latest_governance_packet_ref: record
+            .active_task
+            .as_ref()
+            .and_then(task_state_governance_packet_ref),
+        latest_governance_packet_source_stage: record
+            .active_task
+            .as_ref()
+            .and_then(task_state_governance_packet_source_stage),
+        latest_governance_packet_binding_reason: record
+            .active_task
+            .as_ref()
+            .and_then(task_state_governance_packet_binding_reason),
+        latest_governance_approval: record
+            .active_task
+            .as_ref()
+            .and_then(task_state_governance_approval_text),
+        latest_governance_decision: record
+            .active_task
+            .as_ref()
+            .and_then(task_state_governance_decision_headline),
+        latest_governance_candidates: record
+            .active_task
+            .as_ref()
+            .and_then(task_state_governance_candidate_actions),
         next_command,
         explanation: explanation.into(),
     }
@@ -396,6 +483,16 @@ fn review_headline_from_task(task: &crate::domain::task::Task) -> Option<String>
 }
 
 fn suggested_next_command(record: &ActiveSessionRecord) -> Option<String> {
+    if let Some(task) = record.active_task.as_ref()
+        && let Some(governance_state) = task_state_governance_state_text(task)
+    {
+        match governance_state.as_str() {
+            "awaiting_approval" => return Some("synod status".to_string()),
+            "blocked" | "failed" => return Some("synod inspect".to_string()),
+            _ => {}
+        }
+    }
+
     match record.latest_status {
         SessionStatus::Initialized => Some("synod capture --goal <goal>".to_string()),
         SessionStatus::GoalCaptured => Some("synod plan".to_string()),

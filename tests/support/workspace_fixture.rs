@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -21,6 +22,8 @@ const GREEN_LIB_RS: &str =
 
 const MULTIPLY_LIB_RS: &str =
     concat!("pub fn add(left: i32, right: i32) -> i32 {\n", "    left * right\n", "}\n",);
+
+const MISSING_CANON_COMMAND: &str = "/definitely/missing/canon";
 
 const FIXTURE_TEST_RS: &str = concat!(
     "use synod_fixture::add;\n\n",
@@ -66,6 +69,30 @@ pub fn temp_adaptive_fixture_workspace(prefix: &str) -> PathBuf {
 
 pub fn temp_adaptive_replanning_workspace(prefix: &str) -> PathBuf {
     create_adaptive_fixture_workspace(prefix, MULTIPLY_LIB_RS)
+}
+
+pub fn temp_optional_governance_workspace(prefix: &str) -> PathBuf {
+    create_governance_fixture_workspace(prefix, false)
+}
+
+pub fn temp_required_governance_workspace(prefix: &str) -> PathBuf {
+    create_governance_fixture_workspace(prefix, true)
+}
+
+pub fn temp_canon_governance_workspace(prefix: &str) -> PathBuf {
+    create_canon_governance_fixture_workspace(prefix, CanonFixtureScenario::Reusable)
+}
+
+pub fn temp_canon_packet_rejection_workspace(prefix: &str) -> PathBuf {
+    create_canon_governance_fixture_workspace(prefix, CanonFixtureScenario::RejectedPacket)
+}
+
+pub fn temp_canon_approval_workspace(prefix: &str) -> PathBuf {
+    create_canon_governance_fixture_workspace(prefix, CanonFixtureScenario::Approval)
+}
+
+pub fn temp_canon_autopilot_blocked_workspace(prefix: &str) -> PathBuf {
+    create_canon_governance_fixture_workspace(prefix, CanonFixtureScenario::AutopilotBlocked)
 }
 
 #[allow(dead_code)]
@@ -203,6 +230,287 @@ fn create_adaptive_fixture_workspace(prefix: &str, source_contents: &str) -> Pat
     .unwrap();
 
     workspace
+}
+
+fn create_governance_fixture_workspace(prefix: &str, required: bool) -> PathBuf {
+    let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::create_dir_all(workspace.join("tests")).unwrap();
+    fs::create_dir_all(workspace.join(".synod")).unwrap();
+
+    fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
+    fs::write(workspace.join("src/lib.rs"), RED_LIB_RS).unwrap();
+    fs::write(workspace.join("tests/red_to_green.rs"), FIXTURE_TEST_RS).unwrap();
+    fs::write(
+        workspace.join(".synod/execution.json"),
+        serde_json::to_string_pretty(&serde_json::json!({
+            "name": if required {
+                "required-governance-execution"
+            } else {
+                "optional-governance-execution"
+            },
+            "read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
+            "validation_command": {
+                "program": "cargo",
+                "args": ["test", "--quiet"],
+            },
+            "attempts": [
+                execution_attempt(
+                    "fix-add",
+                    "Replace subtraction with addition",
+                    "terminal",
+                    "left - right",
+                    "left + right",
+                )
+            ],
+            "governance": {
+                "default_runtime": "local",
+                "canon": {
+                    "command": MISSING_CANON_COMMAND,
+                    "default_owner": "platform",
+                    "default_risk": "medium",
+                    "default_zone": "engineering",
+                    "default_system_context": "existing"
+                },
+                "stages": [
+                    {
+                        "flow_name": "bug-fix",
+                        "stage_id": "investigate",
+                        "enabled": true,
+                        "required": required,
+                        "autopilot": false,
+                        "runtime": "canon",
+                        "canon_mode": "discovery",
+                        "system_context": "existing",
+                        "risk": "medium",
+                        "zone": "engineering",
+                        "owner": "platform"
+                    }
+                ]
+            }
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    workspace
+}
+
+#[derive(Clone, Copy)]
+enum CanonFixtureScenario {
+    Reusable,
+    RejectedPacket,
+    Approval,
+    AutopilotBlocked,
+}
+
+fn create_canon_governance_fixture_workspace(
+    prefix: &str,
+    scenario: CanonFixtureScenario,
+) -> PathBuf {
+    let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::create_dir_all(workspace.join("tests")).unwrap();
+    fs::create_dir_all(workspace.join(".synod")).unwrap();
+    fs::create_dir_all(workspace.join(".canon/runs")).unwrap();
+
+    fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
+    fs::write(workspace.join("src/lib.rs"), RED_LIB_RS).unwrap();
+    fs::write(workspace.join("tests/red_to_green.rs"), FIXTURE_TEST_RS).unwrap();
+
+    let command = match scenario {
+        CanonFixtureScenario::AutopilotBlocked => "canon-missing".to_string(),
+        _ => write_canon_stub_script(&workspace, scenario).to_string_lossy().into_owned(),
+    };
+
+    write_canon_fixture_documents(&workspace, scenario);
+
+    fs::write(
+        workspace.join(".synod/execution.json"),
+        serde_json::to_string_pretty(&serde_json::json!({
+            "name": match scenario {
+                CanonFixtureScenario::Reusable => "canon-governance-execution",
+                CanonFixtureScenario::RejectedPacket => "canon-packet-rejection-execution",
+                CanonFixtureScenario::Approval => "canon-approval-execution",
+                CanonFixtureScenario::AutopilotBlocked => "canon-autopilot-blocked-execution",
+            },
+            "read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
+            "validation_command": {
+                "program": "cargo",
+                "args": ["test", "--quiet"],
+            },
+            "attempts": [
+                execution_attempt(
+                    "fix-add",
+                    "Replace subtraction with addition",
+                    "terminal",
+                    "left - right",
+                    "left + right",
+                )
+            ],
+            "governance": canon_governance_profile(&command, scenario),
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    workspace
+}
+
+fn canon_governance_profile(command: &str, scenario: CanonFixtureScenario) -> serde_json::Value {
+    let investigate_policy = match scenario {
+        CanonFixtureScenario::Approval => serde_json::json!({
+            "flow_name": "bug-fix",
+            "stage_id": "investigate",
+            "enabled": true,
+            "required": true,
+            "autopilot": true,
+            "runtime": "canon",
+            "system_context": "existing",
+            "risk": "medium",
+            "zone": "engineering",
+            "owner": "platform"
+        }),
+        CanonFixtureScenario::AutopilotBlocked => serde_json::json!({
+            "flow_name": "bug-fix",
+            "stage_id": "investigate",
+            "enabled": true,
+            "required": true,
+            "autopilot": true,
+            "runtime": "canon",
+            "system_context": "existing",
+            "risk": "medium",
+            "zone": "engineering",
+            "owner": "platform"
+        }),
+        _ => serde_json::json!({
+            "flow_name": "bug-fix",
+            "stage_id": "investigate",
+            "enabled": true,
+            "required": false,
+            "autopilot": false,
+            "runtime": "canon",
+            "canon_mode": "discovery",
+            "system_context": "existing",
+            "risk": "medium",
+            "zone": "engineering",
+            "owner": "platform"
+        }),
+    };
+
+    let mut stages = vec![investigate_policy];
+    if matches!(scenario, CanonFixtureScenario::Reusable) {
+        stages.push(serde_json::json!({
+            "flow_name": "bug-fix",
+            "stage_id": "implement",
+            "enabled": true,
+            "required": false,
+            "autopilot": false,
+            "runtime": "canon",
+            "canon_mode": "implementation",
+            "system_context": "existing",
+            "risk": "medium",
+            "zone": "engineering",
+            "owner": "platform"
+        }));
+    }
+
+    serde_json::json!({
+        "default_runtime": "local",
+        "canon": {
+            "command": command,
+            "default_owner": "platform",
+            "default_risk": "medium",
+            "default_zone": "engineering",
+            "default_system_context": "existing"
+        },
+        "stages": stages,
+    })
+}
+
+fn write_canon_fixture_documents(workspace: &Path, scenario: CanonFixtureScenario) {
+    fs::create_dir_all(workspace.join(".canon/runs/canon-run-investigate")).unwrap();
+    fs::write(
+        workspace.join(".canon/runs/canon-run-investigate/discovery.md"),
+        match scenario {
+            CanonFixtureScenario::RejectedPacket => "# Discovery\n\nTODO\n",
+            _ => "# Discovery\n\nObserved checkout failure in the parser boundary.\n",
+        },
+    )
+    .unwrap();
+    fs::create_dir_all(workspace.join(".canon/runs/canon-run-implement")).unwrap();
+    fs::write(
+        workspace.join(".canon/runs/canon-run-implement/implementation.md"),
+        "# Implementation\n\nPrepared governed implementation guidance.\n",
+    )
+    .unwrap();
+    fs::create_dir_all(workspace.join(".canon/runs/canon-run-approval")).unwrap();
+    fs::write(
+        workspace.join(".canon/runs/canon-run-approval/discovery.md"),
+        "# Discovery\n\nApproval-gated governed investigation.\n",
+    )
+    .unwrap();
+    if matches!(scenario, CanonFixtureScenario::Approval) {
+        fs::write(workspace.join(".canon/approval-state.txt"), "requested\n").unwrap();
+    }
+}
+
+fn write_canon_stub_script(workspace: &Path, scenario: CanonFixtureScenario) -> PathBuf {
+    let script_path = workspace.join(".synod/canon-stub.sh");
+    let script = match scenario {
+        CanonFixtureScenario::Reusable => {
+            r#"#!/bin/sh
+request=$(cat)
+case "$request" in
+  *'"mode":"implementation"'*)
+    run_ref="canon-run-implement"
+    packet_ref=".canon/runs/canon-run-implement"
+    document_ref="$packet_ref/implementation.md"
+    headline="implementation packet ready"
+    ;;
+  *)
+    run_ref="canon-run-investigate"
+    packet_ref=".canon/runs/canon-run-investigate"
+    document_ref="$packet_ref/discovery.md"
+    headline="discovery packet ready"
+    ;;
+esac
+printf '{"status":"governed_ready","run_ref":"%s","packet_ref":"%s","expected_document_refs":["%s"],"document_refs":["%s"],"approval_state":"not_needed","packet_readiness":"reusable","missing_sections":[],"headline":"%s","message":"Canon completed the governed stage"}' "$run_ref" "$packet_ref" "$document_ref" "$document_ref" "$headline"
+"#
+        }
+        CanonFixtureScenario::RejectedPacket => {
+            r#"#!/bin/sh
+cat >/dev/null
+printf '{"status":"governed_ready","run_ref":"canon-run-investigate","packet_ref":".canon/runs/canon-run-investigate","expected_document_refs":[".canon/runs/canon-run-investigate/discovery.md"],"document_refs":[".canon/runs/canon-run-investigate/discovery.md"],"approval_state":"not_needed","packet_readiness":"reusable","missing_sections":[],"headline":"discovery packet pending","message":"Canon completed the governed stage"}'
+"#
+        }
+        CanonFixtureScenario::Approval => {
+            r#"#!/bin/sh
+request=$(cat)
+case "$request" in
+  *'"request_kind":"refresh"'*)
+    state=$(cat .canon/approval-state.txt 2>/dev/null | tr -d '\n')
+    if [ "$state" = "granted" ]; then
+      printf '{"status":"governed_ready","run_ref":"canon-run-approval","packet_ref":".canon/runs/canon-run-approval","expected_document_refs":[".canon/runs/canon-run-approval/discovery.md"],"document_refs":[".canon/runs/canon-run-approval/discovery.md"],"approval_state":"granted","packet_readiness":"reusable","missing_sections":[],"headline":"approval granted packet ready","message":"Canon approval granted"}'
+    else
+      printf '{"status":"awaiting_approval","run_ref":"canon-run-approval","packet_ref":".canon/runs/canon-run-approval","expected_document_refs":[".canon/runs/canon-run-approval/discovery.md"],"document_refs":[],"approval_state":"requested","packet_readiness":"pending","missing_sections":[],"headline":"awaiting approval","message":"Canon is waiting for approval"}'
+    fi
+    ;;
+  *)
+    printf '{"status":"awaiting_approval","run_ref":"canon-run-approval","packet_ref":".canon/runs/canon-run-approval","expected_document_refs":[".canon/runs/canon-run-approval/discovery.md"],"document_refs":[],"approval_state":"requested","packet_readiness":"pending","missing_sections":[],"headline":"awaiting approval","message":"Canon is waiting for approval"}'
+    ;;
+esac
+"#
+        }
+        CanonFixtureScenario::AutopilotBlocked => {
+            unreachable!("blocked scenario should not create a stub")
+        }
+    };
+    fs::write(&script_path, script).unwrap();
+    let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&script_path, permissions).unwrap();
+    script_path
 }
 
 fn execution_attempt(

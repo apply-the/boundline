@@ -134,10 +134,15 @@ and
 [`specs/007-multi-agent-review/quickstart.md`](specs/007-multi-agent-review/quickstart.md).
 
 For the adaptive execution manifest shape and bounded replanning behavior in
-`0.8.0`, see [`docs/adaptive-execution.md`](docs/adaptive-execution.md).
+`0.9.0`, see [`docs/adaptive-execution.md`](docs/adaptive-execution.md).
 
 For the concrete review configuration and voting rules still available in
-`0.8.0`, see [`docs/review-voting.md`](docs/review-voting.md).
+`0.9.0`, see [`docs/review-voting.md`](docs/review-voting.md).
+
+In `0.9.0`, governed stages can also project `latest_governance_runtime`,
+`latest_governance_mode`, `latest_governance_run_ref`, packet provenance,
+autopilot candidates, approval waits, and packet rejection outcomes through
+`run`, `status`, `next`, and `inspect`.
 
 ## Assistant Command Packs
 

@@ -39,3 +39,12 @@ mod session_adaptive_flow;
 
 #[path = "integration/flow_cli_run.rs"]
 mod flow_cli_run;
+
+#[path = "integration/session_governance_flow.rs"]
+mod session_governance_flow;
+
+#[path = "integration/canon_governance_flow.rs"]
+mod canon_governance_flow;
+
+#[path = "integration/governance_autopilot_flow.rs"]
+mod governance_autopilot_flow;

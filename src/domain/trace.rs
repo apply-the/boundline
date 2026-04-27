@@ -19,6 +19,13 @@ pub enum TraceEventType {
     StageTransitioned,
     StepStarted,
     StepCompleted,
+    GovernanceSelected,
+    GovernanceStarted,
+    GovernanceDecisionRecorded,
+    GovernanceAwaitingApproval,
+    GovernanceCompleted,
+    GovernanceBlocked,
+    GovernancePacketRejected,
     ReviewStarted,
     ReviewTriggerIgnored,
     ReviewerStarted,
@@ -63,6 +70,8 @@ pub struct TraceSummaryView {
     pub goal: String,
     pub executed_steps: Vec<TraceStepSummary>,
     pub recovery_events: Vec<TraceRecoveryEvent>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub governance_timeline: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub review_timeline: Vec<String>,
     pub terminal_status: TaskStatus,

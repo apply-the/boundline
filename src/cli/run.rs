@@ -29,7 +29,8 @@ pub fn execute_custom_run(
         goal,
         format!("run-{}", crate::domain::trace::current_timestamp_millis()),
     )?;
-    let orchestrator = Orchestrator::new(runtime.planner, runtime.agents, runtime.tools, store);
+    let orchestrator = Orchestrator::new(runtime.planner, runtime.agents, runtime.tools, store)
+        .with_governance(runtime.profile.read_targets.clone(), runtime.profile.governance.clone());
     let response = orchestrator.run(request)?;
     let trace = trace_reader.load(Path::new(&response.trace_location)).ok();
     let exit_status = if response.terminal_status == TaskStatus::Succeeded {
