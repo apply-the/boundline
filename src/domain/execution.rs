@@ -3,6 +3,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::domain::governance::{GovernanceProfile, GovernanceProfileError};
 use crate::domain::limits::RunLimits;
 use crate::domain::review::{ReviewProfile, ReviewProfileError};
 use crate::domain::step::Recoverability;
@@ -229,6 +230,8 @@ pub struct WorkspaceExecutionProfile {
     #[serde(default = "RunLimits::default")]
     pub limits: RunLimits,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub governance: Option<GovernanceProfile>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub review: Option<ReviewProfile>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub legacy_source: Option<String>,
@@ -269,6 +272,10 @@ impl WorkspaceExecutionProfile {
 
         if let Some(review) = &self.review {
             review.validate()?;
+        }
+
+        if let Some(governance) = &self.governance {
+            governance.validate()?;
         }
 
         Ok(())
@@ -354,4 +361,6 @@ pub enum ExecutionProfileError {
     InvalidAdaptivePathPreference(String),
     #[error("review profile is invalid: {0}")]
     InvalidReviewProfile(#[from] ReviewProfileError),
+    #[error("governance profile is invalid: {0}")]
+    InvalidGovernanceProfile(#[from] GovernanceProfileError),
 }

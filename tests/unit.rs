@@ -49,5 +49,14 @@ mod flow_definition;
 #[path = "unit/session_flow_state.rs"]
 mod session_flow_state;
 
+#[path = "unit/governance_policy.rs"]
+mod governance_policy;
+
+#[path = "unit/governance_runtime.rs"]
+mod governance_runtime;
+
+#[path = "unit/canon_stage_mapping.rs"]
+mod canon_stage_mapping;
+
 #[path = "unit/coverage_additional.rs"]
 mod coverage_additional;

@@ -1,11 +1,19 @@
 use std::path::Path;
 
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
 use crate::domain::flow::SessionFlowState;
+use crate::domain::governance::{
+    AutopilotDecisionRecord, GovernedStagePacket, GovernedStageRecord, PacketReuseBinding,
+};
 use crate::domain::task::{Task, TaskPersistenceError, TaskStatus, TerminalReason};
+use crate::domain::task_context::{
+    LATEST_GOVERNANCE_DECISION_KEY, LATEST_GOVERNANCE_PACKET_KEY,
+    LATEST_GOVERNANCE_PACKET_REUSE_KEY, LATEST_GOVERNANCE_STAGE_KEY,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -205,6 +213,30 @@ pub struct SessionStatusView {
     pub latest_review_outcome: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_review_headline: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_governance_stage: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_governance_runtime: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_governance_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_governance_run_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_governance_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_governance_blocked_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_governance_packet_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_governance_packet_source_stage: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_governance_packet_binding_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_governance_approval: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_governance_decision: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_governance_candidates: Option<Vec<String>>,
     pub next_command: Option<String>,
     pub explanation: String,
 }
@@ -372,6 +404,115 @@ impl SessionStatusView {
             });
         }
 
+        let expected_governance_stage =
+            record.active_task.as_ref().and_then(task_state_governance_stage_key);
+        if self.latest_governance_stage != expected_governance_stage {
+            return Err(SessionValidationError::StatusViewGovernanceStageMismatch {
+                expected: expected_governance_stage,
+                actual: self.latest_governance_stage.clone(),
+            });
+        }
+
+        let expected_governance_runtime =
+            record.active_task.as_ref().and_then(task_state_governance_runtime_text);
+        if self.latest_governance_runtime != expected_governance_runtime {
+            return Err(SessionValidationError::StatusViewGovernanceRuntimeMismatch {
+                expected: expected_governance_runtime,
+                actual: self.latest_governance_runtime.clone(),
+            });
+        }
+
+        let expected_governance_mode =
+            record.active_task.as_ref().and_then(task_state_governance_mode_text);
+        if self.latest_governance_mode != expected_governance_mode {
+            return Err(SessionValidationError::StatusViewGovernanceModeMismatch {
+                expected: expected_governance_mode,
+                actual: self.latest_governance_mode.clone(),
+            });
+        }
+
+        let expected_governance_run_ref =
+            record.active_task.as_ref().and_then(task_state_governance_canon_run_ref);
+        if self.latest_governance_run_ref != expected_governance_run_ref {
+            return Err(SessionValidationError::StatusViewGovernanceRunRefMismatch {
+                expected: expected_governance_run_ref,
+                actual: self.latest_governance_run_ref.clone(),
+            });
+        }
+
+        let expected_governance_state =
+            record.active_task.as_ref().and_then(task_state_governance_state_text);
+        if self.latest_governance_state != expected_governance_state {
+            return Err(SessionValidationError::StatusViewGovernanceStateMismatch {
+                expected: expected_governance_state,
+                actual: self.latest_governance_state.clone(),
+            });
+        }
+
+        let expected_governance_blocked_reason =
+            record.active_task.as_ref().and_then(task_state_governance_blocked_reason);
+        if self.latest_governance_blocked_reason != expected_governance_blocked_reason {
+            return Err(SessionValidationError::StatusViewGovernanceBlockedReasonMismatch {
+                expected: expected_governance_blocked_reason,
+                actual: self.latest_governance_blocked_reason.clone(),
+            });
+        }
+
+        let expected_governance_packet_ref =
+            record.active_task.as_ref().and_then(task_state_governance_packet_ref);
+        if self.latest_governance_packet_ref != expected_governance_packet_ref {
+            return Err(SessionValidationError::StatusViewGovernancePacketRefMismatch {
+                expected: expected_governance_packet_ref,
+                actual: self.latest_governance_packet_ref.clone(),
+            });
+        }
+
+        let expected_governance_packet_source_stage =
+            record.active_task.as_ref().and_then(task_state_governance_packet_source_stage);
+        if self.latest_governance_packet_source_stage != expected_governance_packet_source_stage {
+            return Err(SessionValidationError::StatusViewGovernancePacketSourceMismatch {
+                expected: expected_governance_packet_source_stage,
+                actual: self.latest_governance_packet_source_stage.clone(),
+            });
+        }
+
+        let expected_governance_packet_binding_reason =
+            record.active_task.as_ref().and_then(task_state_governance_packet_binding_reason);
+        if self.latest_governance_packet_binding_reason != expected_governance_packet_binding_reason
+        {
+            return Err(SessionValidationError::StatusViewGovernancePacketBindingMismatch {
+                expected: expected_governance_packet_binding_reason,
+                actual: self.latest_governance_packet_binding_reason.clone(),
+            });
+        }
+
+        let expected_governance_approval =
+            record.active_task.as_ref().and_then(task_state_governance_approval_text);
+        if self.latest_governance_approval != expected_governance_approval {
+            return Err(SessionValidationError::StatusViewGovernanceApprovalMismatch {
+                expected: expected_governance_approval,
+                actual: self.latest_governance_approval.clone(),
+            });
+        }
+
+        let expected_governance_decision =
+            record.active_task.as_ref().and_then(task_state_governance_decision_headline);
+        if self.latest_governance_decision != expected_governance_decision {
+            return Err(SessionValidationError::StatusViewGovernanceDecisionMismatch {
+                expected: expected_governance_decision,
+                actual: self.latest_governance_decision.clone(),
+            });
+        }
+
+        let expected_governance_candidates =
+            record.active_task.as_ref().and_then(task_state_governance_candidate_actions);
+        if self.latest_governance_candidates != expected_governance_candidates {
+            return Err(SessionValidationError::StatusViewGovernanceCandidatesMismatch {
+                expected: expected_governance_candidates,
+                actual: self.latest_governance_candidates.clone(),
+            });
+        }
+
         if self.explanation.trim().is_empty() {
             return Err(SessionValidationError::MissingStatusExplanation);
         }
@@ -479,6 +620,37 @@ pub enum SessionValidationError {
     StatusViewReviewOutcomeMismatch { expected: Option<String>, actual: Option<String> },
     #[error("status view review headline mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewReviewHeadlineMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view governance stage mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewGovernanceStageMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view governance runtime mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewGovernanceRuntimeMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view governance mode mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewGovernanceModeMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view governance run ref mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewGovernanceRunRefMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view governance state mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewGovernanceStateMismatch { expected: Option<String>, actual: Option<String> },
+    #[error(
+        "status view governance blocked reason mismatch: expected {expected:?}, got {actual:?}"
+    )]
+    StatusViewGovernanceBlockedReasonMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view governance packet ref mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewGovernancePacketRefMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view governance packet source mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewGovernancePacketSourceMismatch { expected: Option<String>, actual: Option<String> },
+    #[error(
+        "status view governance packet binding mismatch: expected {expected:?}, got {actual:?}"
+    )]
+    StatusViewGovernancePacketBindingMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view governance approval mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewGovernanceApprovalMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view governance decision mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewGovernanceDecisionMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view governance candidates mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewGovernanceCandidatesMismatch {
+        expected: Option<Vec<String>>,
+        actual: Option<Vec<String>>,
+    },
     #[error("status view explanation must not be empty")]
     MissingStatusExplanation,
     #[error("status view next_command must not be empty when present")]
@@ -532,11 +704,106 @@ fn task_state_string(task: &Task, key: &str) -> Option<String> {
     task.context.state.get(key).and_then(|value| value.as_str().map(str::to_string))
 }
 
+fn task_state_json<T: DeserializeOwned>(task: &Task, key: &str) -> Option<T> {
+    task.context.state.get(key).cloned().and_then(|value| serde_json::from_value(value).ok())
+}
+
 fn task_state_strings(task: &Task, key: &str) -> Option<Vec<String>> {
     task.context.state.get(key).and_then(|value| {
         value.as_array().map(|items| {
             items.iter().filter_map(|item| item.as_str().map(str::to_string)).collect::<Vec<_>>()
         })
+    })
+}
+
+pub(crate) fn task_state_governed_stage(task: &Task) -> Option<GovernedStageRecord> {
+    task_state_json(task, LATEST_GOVERNANCE_STAGE_KEY)
+}
+
+pub(crate) fn task_state_governed_packet(task: &Task) -> Option<GovernedStagePacket> {
+    task_state_json(task, LATEST_GOVERNANCE_PACKET_KEY)
+}
+
+pub(crate) fn task_state_governance_packet_reuse(task: &Task) -> Option<PacketReuseBinding> {
+    task_state_json(task, LATEST_GOVERNANCE_PACKET_REUSE_KEY)
+}
+
+pub(crate) fn task_state_governance_decision(task: &Task) -> Option<AutopilotDecisionRecord> {
+    task_state_json(task, LATEST_GOVERNANCE_DECISION_KEY)
+}
+
+fn encoded_text<T: Serialize>(value: &T) -> Option<String> {
+    serde_json::to_value(value).ok().and_then(|value| value.as_str().map(str::to_string))
+}
+
+fn autopilot_action_text(action: crate::domain::governance::AutopilotAction) -> &'static str {
+    match action {
+        crate::domain::governance::AutopilotAction::SelectMode => "select_mode",
+        crate::domain::governance::AutopilotAction::RetryStageWithNarrowedContext => {
+            "retry_stage_with_narrowed_context"
+        }
+        crate::domain::governance::AutopilotAction::EscalateVerification => "escalate_verification",
+        crate::domain::governance::AutopilotAction::EscalatePrReview => "escalate_pr_review",
+        crate::domain::governance::AutopilotAction::AwaitApproval => "await_approval",
+        crate::domain::governance::AutopilotAction::BlockStage => "block_stage",
+    }
+}
+
+pub(crate) fn task_state_governance_stage_key(task: &Task) -> Option<String> {
+    task_state_governed_stage(task).map(|record| record.stage_key)
+}
+
+pub(crate) fn task_state_governance_runtime_text(task: &Task) -> Option<String> {
+    task_state_governed_stage(task).and_then(|record| encoded_text(&record.runtime))
+}
+
+pub(crate) fn task_state_governance_mode_text(task: &Task) -> Option<String> {
+    task_state_governed_packet(task)
+        .and_then(|packet| packet.canon_mode)
+        .and_then(|mode| encoded_text(&mode))
+}
+
+pub(crate) fn task_state_governance_canon_run_ref(task: &Task) -> Option<String> {
+    task_state_governed_stage(task).and_then(|record| record.canon_run_ref)
+}
+
+pub(crate) fn task_state_governance_state_text(task: &Task) -> Option<String> {
+    task_state_governed_stage(task).and_then(|record| encoded_text(&record.lifecycle_state))
+}
+
+pub(crate) fn task_state_governance_blocked_reason(task: &Task) -> Option<String> {
+    task_state_governed_stage(task).and_then(|record| record.blocked_reason)
+}
+
+pub(crate) fn task_state_governance_packet_ref(task: &Task) -> Option<String> {
+    task_state_governed_packet(task)
+        .map(|packet| packet.packet_ref)
+        .or_else(|| task_state_governed_stage(task).and_then(|record| record.packet_ref))
+}
+
+pub(crate) fn task_state_governance_packet_source_stage(task: &Task) -> Option<String> {
+    task_state_governance_packet_reuse(task).map(|binding| binding.upstream_stage_key)
+}
+
+pub(crate) fn task_state_governance_packet_binding_reason(task: &Task) -> Option<String> {
+    task_state_governance_packet_reuse(task).map(|binding| binding.binding_reason)
+}
+
+pub(crate) fn task_state_governance_approval_text(task: &Task) -> Option<String> {
+    task_state_governed_stage(task).and_then(|record| encoded_text(&record.approval_state))
+}
+
+pub(crate) fn task_state_governance_decision_headline(task: &Task) -> Option<String> {
+    task_state_governance_decision(task).map(|decision| decision.rationale)
+}
+
+pub(crate) fn task_state_governance_candidate_actions(task: &Task) -> Option<Vec<String>> {
+    task_state_governance_decision(task).map(|decision| {
+        decision
+            .candidate_actions
+            .into_iter()
+            .map(|action| autopilot_action_text(action).to_string())
+            .collect::<Vec<_>>()
     })
 }
 
@@ -678,9 +945,139 @@ mod tests {
             latest_review_vote: None,
             latest_review_outcome: None,
             latest_review_headline: None,
+            latest_governance_stage: None,
+            latest_governance_runtime: None,
+            latest_governance_mode: None,
+            latest_governance_run_ref: None,
+            latest_governance_state: None,
+            latest_governance_blocked_reason: None,
+            latest_governance_packet_ref: None,
+            latest_governance_packet_source_stage: None,
+            latest_governance_packet_binding_reason: None,
+            latest_governance_approval: None,
+            latest_governance_decision: None,
+            latest_governance_candidates: None,
             next_command: Some("synod step".to_string()),
             explanation: "view is consistent".to_string(),
         }
+    }
+
+    fn build_derived_state_record(workspace_ref: &str) -> ActiveSessionRecord {
+        let mut record = build_record(workspace_ref);
+        let task = record.active_task.as_mut().unwrap();
+        task.context.state.insert("latest_changed_files".to_string(), json!(["src/lib.rs"]));
+        task.context.state.insert(
+            "latest_workspace_slice".to_string(),
+            json!({"selected_targets": ["src/lib.rs", "tests/red_to_green.rs"]}),
+        );
+        task.context
+            .state
+            .insert("latest_selection_headline".to_string(), json!("selected src/lib.rs"));
+        task.context.state.insert(
+            "latest_attempt_lineage".to_string(),
+            json!({
+                "previous_attempt_id": "attempt-1",
+                "current_attempt_id": "attempt-2",
+                "transition_kind": "retried_from",
+            }),
+        );
+        task.context.state.insert("latest_validation_status".to_string(), json!("passed"));
+        task.context.state.insert("latest_review_trigger".to_string(), json!("pr_ready"));
+        task.context.state.insert("latest_review_vote".to_string(), json!("accepted"));
+        task.context.state.insert("latest_review_outcome".to_string(), json!("accepted"));
+        task.context.state.insert(
+            "latest_review_findings".to_string(),
+            json!([{
+                "reviewer_id": "safety",
+                "disposition": "approve",
+                "summary": "No blockers"
+            }]),
+        );
+        task.context
+            .set_latest_governance_stage(&crate::domain::governance::GovernedStageRecord {
+                stage_key: "bug-fix:investigate".to_string(),
+                runtime: crate::domain::governance::GovernanceRuntimeKind::Canon,
+                lifecycle_state:
+                    crate::domain::governance::GovernanceLifecycleState::AwaitingApproval,
+                required: true,
+                autopilot_enabled: true,
+                approval_state: crate::domain::governance::ApprovalState::Requested,
+                canon_run_ref: Some("canon-run-1".to_string()),
+                governance_attempt_id: "attempt-governance-1".to_string(),
+                previous_governance_attempt_id: None,
+                packet_ref: Some(".canon/runs/canon-run-1".to_string()),
+                decision_ref: Some("decision-1".to_string()),
+                blocked_reason: None,
+            })
+            .unwrap();
+        task.context
+            .set_latest_governance_packet(&crate::domain::governance::GovernedStagePacket {
+                packet_ref: ".canon/runs/canon-run-1".to_string(),
+                runtime: crate::domain::governance::GovernanceRuntimeKind::Canon,
+                canon_mode: Some(crate::domain::governance::CanonMode::Discovery),
+                expected_document_refs: vec![".canon/runs/canon-run-1/discovery.md".to_string()],
+                document_refs: vec![".canon/runs/canon-run-1/discovery.md".to_string()],
+                readiness: crate::domain::governance::PacketReadiness::Reusable,
+                missing_sections: Vec::new(),
+                headline: "governed discovery packet".to_string(),
+            })
+            .unwrap();
+        task.context
+            .set_latest_governance_packet_reuse(&crate::domain::governance::PacketReuseBinding {
+                upstream_stage_key: "bug-fix:investigate".to_string(),
+                downstream_stage_key: "bug-fix:implement".to_string(),
+                packet_ref: ".canon/runs/canon-run-1".to_string(),
+                binding_reason: "upstream_stage_context".to_string(),
+            })
+            .unwrap();
+        task.context
+            .set_latest_governance_decision(&crate::domain::governance::AutopilotDecisionRecord {
+                decision_id: "decision-1".to_string(),
+                stage_key: "bug-fix:investigate".to_string(),
+                candidate_actions: vec![
+                    crate::domain::governance::AutopilotAction::SelectMode,
+                    crate::domain::governance::AutopilotAction::AwaitApproval,
+                ],
+                candidate_modes: vec![crate::domain::governance::CanonMode::Discovery],
+                selected_action: Some(crate::domain::governance::AutopilotAction::SelectMode),
+                selected_mode: Some(crate::domain::governance::CanonMode::Discovery),
+                selected_target_stage_key: None,
+                rationale: "autopilot selected Canon mode Discovery for bug-fix:investigate"
+                    .to_string(),
+                blocked_reason: None,
+            })
+            .unwrap();
+
+        record
+    }
+
+    fn build_derived_view(record: &ActiveSessionRecord) -> SessionStatusView {
+        let mut view = build_view(record);
+        let task = record.active_task.as_ref().unwrap();
+        view.latest_changed_files = task_state_strings(task, "latest_changed_files");
+        view.latest_workspace_slice = task_state_workspace_slice_summary(task);
+        view.latest_selection_headline = task_state_string(task, "latest_selection_headline");
+        view.latest_attempt_lineage = task_state_attempt_lineage_summary(task);
+        view.latest_validation_status = task_state_string(task, "latest_validation_status");
+        view.latest_review_trigger = task_state_string(task, "latest_review_trigger");
+        view.latest_review_vote = task_state_string(task, "latest_review_vote");
+        view.latest_review_outcome = task_state_string(task, "latest_review_outcome");
+        view.latest_review_headline = task_state_review_headline(task);
+        view.latest_governance_stage = super::task_state_governance_stage_key(task);
+        view.latest_governance_runtime = super::task_state_governance_runtime_text(task);
+        view.latest_governance_mode = super::task_state_governance_mode_text(task);
+        view.latest_governance_run_ref = super::task_state_governance_canon_run_ref(task);
+        view.latest_governance_state = super::task_state_governance_state_text(task);
+        view.latest_governance_blocked_reason = super::task_state_governance_blocked_reason(task);
+        view.latest_governance_packet_ref = super::task_state_governance_packet_ref(task);
+        view.latest_governance_packet_source_stage =
+            super::task_state_governance_packet_source_stage(task);
+        view.latest_governance_packet_binding_reason =
+            super::task_state_governance_packet_binding_reason(task);
+        view.latest_governance_approval = super::task_state_governance_approval_text(task);
+        view.latest_governance_decision = super::task_state_governance_decision_headline(task);
+        view.latest_governance_candidates = super::task_state_governance_candidate_actions(task);
+        view
     }
 
     #[test]
@@ -769,6 +1166,182 @@ mod tests {
             task_state_review_headline(&task),
             Some("safety approve: No blockers".to_string())
         );
+    }
+
+    #[test]
+    fn status_view_rejects_derived_state_mismatches_and_blank_metadata() {
+        let record = build_derived_state_record("/tmp/synod-session-domain-derived");
+        let view = build_derived_view(&record);
+
+        macro_rules! assert_view_error {
+            ($candidate:expr, $pattern:pat) => {{
+                let error = $candidate.validate(&record).unwrap_err();
+                assert!(matches!(error, $pattern), "unexpected error: {error:?}");
+            }};
+        }
+
+        let mut wrong_changed_files = view.clone();
+        wrong_changed_files.latest_changed_files = Some(vec!["src/other.rs".to_string()]);
+        assert_view_error!(
+            wrong_changed_files,
+            SessionValidationError::StatusViewChangedFilesMismatch { .. }
+        );
+
+        let mut wrong_workspace_slice = view.clone();
+        wrong_workspace_slice.latest_workspace_slice = Some("tests/red_to_green.rs".to_string());
+        assert_view_error!(
+            wrong_workspace_slice,
+            SessionValidationError::StatusViewWorkspaceSliceMismatch { .. }
+        );
+
+        let mut wrong_selection_headline = view.clone();
+        wrong_selection_headline.latest_selection_headline = Some("different headline".to_string());
+        assert_view_error!(
+            wrong_selection_headline,
+            SessionValidationError::StatusViewSelectionHeadlineMismatch { .. }
+        );
+
+        let mut wrong_attempt_lineage = view.clone();
+        wrong_attempt_lineage.latest_attempt_lineage =
+            Some("attempt-3 retried_from attempt-2".to_string());
+        assert_view_error!(
+            wrong_attempt_lineage,
+            SessionValidationError::StatusViewAttemptLineageMismatch { .. }
+        );
+
+        let mut wrong_validation_status = view.clone();
+        wrong_validation_status.latest_validation_status = Some("failed".to_string());
+        assert_view_error!(
+            wrong_validation_status,
+            SessionValidationError::StatusViewValidationStatusMismatch { .. }
+        );
+
+        let mut wrong_review_trigger = view.clone();
+        wrong_review_trigger.latest_review_trigger = Some("manual".to_string());
+        assert_view_error!(
+            wrong_review_trigger,
+            SessionValidationError::StatusViewReviewTriggerMismatch { .. }
+        );
+
+        let mut wrong_review_vote = view.clone();
+        wrong_review_vote.latest_review_vote = Some("rejected".to_string());
+        assert_view_error!(
+            wrong_review_vote,
+            SessionValidationError::StatusViewReviewVoteMismatch { .. }
+        );
+
+        let mut wrong_review_outcome = view.clone();
+        wrong_review_outcome.latest_review_outcome = Some("blocked".to_string());
+        assert_view_error!(
+            wrong_review_outcome,
+            SessionValidationError::StatusViewReviewOutcomeMismatch { .. }
+        );
+
+        let mut wrong_review_headline = view.clone();
+        wrong_review_headline.latest_review_headline =
+            Some("reviewer blocked: missing test".to_string());
+        assert_view_error!(
+            wrong_review_headline,
+            SessionValidationError::StatusViewReviewHeadlineMismatch { .. }
+        );
+
+        let mut wrong_governance_stage = view.clone();
+        wrong_governance_stage.latest_governance_stage = Some("bug-fix:implement".to_string());
+        assert_view_error!(
+            wrong_governance_stage,
+            SessionValidationError::StatusViewGovernanceStageMismatch { .. }
+        );
+
+        let mut wrong_governance_runtime = view.clone();
+        wrong_governance_runtime.latest_governance_runtime = Some("local".to_string());
+        assert_view_error!(
+            wrong_governance_runtime,
+            SessionValidationError::StatusViewGovernanceRuntimeMismatch { .. }
+        );
+
+        let mut wrong_governance_mode = view.clone();
+        wrong_governance_mode.latest_governance_mode = Some("implementation".to_string());
+        assert_view_error!(
+            wrong_governance_mode,
+            SessionValidationError::StatusViewGovernanceModeMismatch { .. }
+        );
+
+        let mut wrong_governance_run_ref = view.clone();
+        wrong_governance_run_ref.latest_governance_run_ref = Some("canon-run-2".to_string());
+        assert_view_error!(
+            wrong_governance_run_ref,
+            SessionValidationError::StatusViewGovernanceRunRefMismatch { .. }
+        );
+
+        let mut wrong_governance_state = view.clone();
+        wrong_governance_state.latest_governance_state = Some("blocked".to_string());
+        assert_view_error!(
+            wrong_governance_state,
+            SessionValidationError::StatusViewGovernanceStateMismatch { .. }
+        );
+
+        let mut wrong_governance_blocked_reason = view.clone();
+        wrong_governance_blocked_reason.latest_governance_blocked_reason =
+            Some("unexpected blocked reason".to_string());
+        assert_view_error!(
+            wrong_governance_blocked_reason,
+            SessionValidationError::StatusViewGovernanceBlockedReasonMismatch { .. }
+        );
+
+        let mut wrong_governance_packet_ref = view.clone();
+        wrong_governance_packet_ref.latest_governance_packet_ref =
+            Some(".canon/runs/canon-run-2".to_string());
+        assert_view_error!(
+            wrong_governance_packet_ref,
+            SessionValidationError::StatusViewGovernancePacketRefMismatch { .. }
+        );
+
+        let mut wrong_governance_packet_source = view.clone();
+        wrong_governance_packet_source.latest_governance_packet_source_stage =
+            Some("bug-fix:verify".to_string());
+        assert_view_error!(
+            wrong_governance_packet_source,
+            SessionValidationError::StatusViewGovernancePacketSourceMismatch { .. }
+        );
+
+        let mut wrong_governance_packet_binding = view.clone();
+        wrong_governance_packet_binding.latest_governance_packet_binding_reason =
+            Some("same_stage_rerun".to_string());
+        assert_view_error!(
+            wrong_governance_packet_binding,
+            SessionValidationError::StatusViewGovernancePacketBindingMismatch { .. }
+        );
+
+        let mut wrong_governance_approval = view.clone();
+        wrong_governance_approval.latest_governance_approval = Some("granted".to_string());
+        assert_view_error!(
+            wrong_governance_approval,
+            SessionValidationError::StatusViewGovernanceApprovalMismatch { .. }
+        );
+
+        let mut wrong_governance_decision = view.clone();
+        wrong_governance_decision.latest_governance_decision =
+            Some("different decision".to_string());
+        assert_view_error!(
+            wrong_governance_decision,
+            SessionValidationError::StatusViewGovernanceDecisionMismatch { .. }
+        );
+
+        let mut wrong_governance_candidates = view.clone();
+        wrong_governance_candidates.latest_governance_candidates =
+            Some(vec!["block_stage".to_string()]);
+        assert_view_error!(
+            wrong_governance_candidates,
+            SessionValidationError::StatusViewGovernanceCandidatesMismatch { .. }
+        );
+
+        let mut missing_explanation = view.clone();
+        missing_explanation.explanation = "  ".to_string();
+        assert_view_error!(missing_explanation, SessionValidationError::MissingStatusExplanation);
+
+        let mut missing_next_command = view.clone();
+        missing_next_command.next_command = Some(" ".to_string());
+        assert_view_error!(missing_next_command, SessionValidationError::MissingNextCommand);
     }
 
     #[test]

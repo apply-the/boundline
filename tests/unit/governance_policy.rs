@@ -1,0 +1,699 @@
+use synod::domain::flow::FlowStepMetadata;
+use synod::domain::limits::RunLimits;
+use synod::domain::task_context::TaskContext;
+use synod::domain::task_context::{
+    LATEST_GOVERNANCE_DECISION_KEY, LATEST_GOVERNANCE_PACKET_KEY,
+    LATEST_GOVERNANCE_PACKET_REUSE_KEY, LATEST_GOVERNANCE_STAGE_KEY,
+};
+use synod::{
+    ApprovalState, AutopilotAction, AutopilotDecisionRecord, CanonMode, CanonRuntimeConfig,
+    GovernanceBoundedContext, GovernanceLifecycleState, GovernanceProfile, GovernanceRuntimeKind,
+    GovernedStagePacket, GovernedStageRecord, PacketReadiness, PacketReuseBinding,
+    StageGovernancePolicy, SystemContextBinding, bounded_reused_packets, build_autopilot_decision,
+    escalation_target_stage_key, governance_stage_key, governance_state_patch,
+    narrowed_bounded_context, select_packet_reuse_binding, selected_stage_policy,
+    supported_canon_modes_for_stage,
+};
+
+fn sample_record() -> GovernedStageRecord {
+    GovernedStageRecord {
+        stage_key: "bug-fix:investigate".to_string(),
+        runtime: GovernanceRuntimeKind::Local,
+        lifecycle_state: GovernanceLifecycleState::GovernedReady,
+        required: false,
+        autopilot_enabled: false,
+        approval_state: ApprovalState::NotNeeded,
+        canon_run_ref: None,
+        governance_attempt_id: "attempt-1".to_string(),
+        previous_governance_attempt_id: None,
+        packet_ref: Some(".synod/governance/bug-fix-investigate/attempt-1".to_string()),
+        decision_ref: Some("decision-1".to_string()),
+        blocked_reason: None,
+    }
+}
+
+fn sample_policy() -> StageGovernancePolicy {
+    StageGovernancePolicy {
+        flow_name: "bug-fix".to_string(),
+        stage_id: "investigate".to_string(),
+        enabled: true,
+        required: false,
+        autopilot: false,
+        runtime: Some(GovernanceRuntimeKind::Local),
+        canon_mode: None,
+        system_context: None,
+        risk: None,
+        zone: None,
+        owner: None,
+    }
+}
+
+fn sample_canon_config() -> CanonRuntimeConfig {
+    CanonRuntimeConfig {
+        command: "canon".to_string(),
+        default_owner: Some("platform".to_string()),
+        default_risk: Some("medium".to_string()),
+        default_zone: Some("engineering".to_string()),
+        default_system_context: Some(SystemContextBinding::Existing),
+    }
+}
+
+fn sample_canon_policy(flow_name: &str, stage_id: &str, mode: CanonMode) -> StageGovernancePolicy {
+    StageGovernancePolicy {
+        flow_name: flow_name.to_string(),
+        stage_id: stage_id.to_string(),
+        enabled: true,
+        required: false,
+        autopilot: false,
+        runtime: Some(GovernanceRuntimeKind::Canon),
+        canon_mode: Some(mode),
+        system_context: Some(SystemContextBinding::Existing),
+        risk: Some("medium".to_string()),
+        zone: Some("engineering".to_string()),
+        owner: Some("platform".to_string()),
+    }
+}
+
+#[test]
+fn governance_stage_helpers_select_expected_policy() {
+    let policy = sample_policy();
+    let profile = GovernanceProfile {
+        default_runtime: GovernanceRuntimeKind::Local,
+        canon: None,
+        stages: vec![policy.clone()],
+    };
+
+    assert_eq!(governance_stage_key("bug-fix", "investigate"), "bug-fix:investigate");
+    assert_eq!(selected_stage_policy(Some(&profile), "bug-fix", "investigate"), Some(policy));
+    assert_eq!(selected_stage_policy(Some(&profile), "bug-fix", "verify"), None);
+    assert_eq!(selected_stage_policy(None, "bug-fix", "investigate"), None);
+}
+
+#[test]
+fn governance_state_patch_writes_all_present_entries() {
+    let record = sample_record();
+    let packet = GovernedStagePacket {
+        packet_ref: ".synod/governance/bug-fix-investigate/attempt-1".to_string(),
+        runtime: GovernanceRuntimeKind::Local,
+        canon_mode: None,
+        expected_document_refs: vec!["packet/brief.md".to_string()],
+        document_refs: vec!["packet/brief.md".to_string()],
+        readiness: PacketReadiness::Reusable,
+        missing_sections: Vec::new(),
+        headline: "local packet".to_string(),
+    };
+    let reuse = PacketReuseBinding {
+        upstream_stage_key: "bug-fix:investigate".to_string(),
+        downstream_stage_key: "bug-fix:implement".to_string(),
+        packet_ref: packet.packet_ref.clone(),
+        binding_reason: "immediate upstream governance packet".to_string(),
+    };
+    let decision = AutopilotDecisionRecord {
+        decision_id: "decision-1".to_string(),
+        stage_key: "bug-fix:investigate".to_string(),
+        candidate_actions: vec![AutopilotAction::SelectMode, AutopilotAction::AwaitApproval],
+        candidate_modes: vec![CanonMode::Discovery],
+        selected_action: Some(AutopilotAction::SelectMode),
+        selected_mode: Some(CanonMode::Discovery),
+        selected_target_stage_key: None,
+        rationale: "discovery best matches investigate".to_string(),
+        blocked_reason: None,
+    };
+
+    let patch =
+        governance_state_patch(&record, Some(&packet), Some(&reuse), Some(&decision)).unwrap();
+
+    assert_eq!(patch[LATEST_GOVERNANCE_STAGE_KEY]["stage_key"], "bug-fix:investigate");
+    assert_eq!(patch[LATEST_GOVERNANCE_PACKET_KEY]["packet_ref"], packet.packet_ref);
+    assert_eq!(patch[LATEST_GOVERNANCE_PACKET_REUSE_KEY]["binding_reason"], reuse.binding_reason);
+    assert_eq!(patch[LATEST_GOVERNANCE_DECISION_KEY]["decision_id"], "decision-1");
+}
+
+#[test]
+fn governance_state_patch_omits_optional_entries_when_absent() {
+    let patch = governance_state_patch(&sample_record(), None, None, None).unwrap();
+
+    assert!(patch.contains_key(LATEST_GOVERNANCE_STAGE_KEY));
+    assert!(patch[LATEST_GOVERNANCE_PACKET_KEY].is_null());
+    assert!(patch[LATEST_GOVERNANCE_PACKET_REUSE_KEY].is_null());
+    assert!(patch[LATEST_GOVERNANCE_DECISION_KEY].is_null());
+}
+
+#[test]
+fn governance_profile_validation_rejects_duplicate_stage_policies() {
+    let policy = sample_policy();
+    let profile = GovernanceProfile {
+        default_runtime: GovernanceRuntimeKind::Local,
+        canon: None,
+        stages: vec![policy.clone(), policy],
+    };
+
+    let error = profile.validate().unwrap_err();
+    assert!(error.to_string().contains("duplicated"));
+}
+
+#[test]
+fn governance_profile_validation_rejects_unsupported_flows_and_stages() {
+    let profile = GovernanceProfile {
+        default_runtime: GovernanceRuntimeKind::Local,
+        canon: None,
+        stages: vec![StageGovernancePolicy {
+            flow_name: "unknown-flow".to_string(),
+            stage_id: "investigate".to_string(),
+            ..sample_policy()
+        }],
+    };
+
+    let error = profile.validate().unwrap_err();
+    assert!(error.to_string().contains("not a supported built-in flow"));
+
+    let profile = GovernanceProfile {
+        default_runtime: GovernanceRuntimeKind::Local,
+        canon: None,
+        stages: vec![StageGovernancePolicy {
+            flow_name: "bug-fix".to_string(),
+            stage_id: "unknown-stage".to_string(),
+            ..sample_policy()
+        }],
+    };
+
+    let error = profile.validate().unwrap_err();
+    assert!(error.to_string().contains("not a supported built-in stage"));
+}
+
+#[test]
+fn governance_profile_validation_rejects_existing_only_modes_with_new_context() {
+    let profile = GovernanceProfile {
+        default_runtime: GovernanceRuntimeKind::Canon,
+        canon: Some(sample_canon_config()),
+        stages: vec![StageGovernancePolicy {
+            required: true,
+            system_context: Some(SystemContextBinding::New),
+            ..sample_canon_policy("bug-fix", "implement", CanonMode::Implementation)
+        }],
+    };
+
+    let error = profile.validate().unwrap_err();
+    assert!(error.to_string().contains("cannot bind system_context"));
+}
+
+#[test]
+fn governance_profile_validation_rejects_disabled_required_and_autopilot_policies() {
+    let mut required_policy = sample_policy();
+    required_policy.enabled = false;
+    required_policy.required = true;
+    let profile = GovernanceProfile {
+        default_runtime: GovernanceRuntimeKind::Local,
+        canon: None,
+        stages: vec![required_policy],
+    };
+
+    let error = profile.validate().unwrap_err();
+    assert!(error.to_string().contains("cannot be required unless it is enabled"));
+
+    let mut autopilot_policy = sample_policy();
+    autopilot_policy.enabled = false;
+    autopilot_policy.autopilot = true;
+    let profile = GovernanceProfile {
+        default_runtime: GovernanceRuntimeKind::Local,
+        canon: None,
+        stages: vec![autopilot_policy],
+    };
+
+    let error = profile.validate().unwrap_err();
+    assert!(error.to_string().contains("cannot enable autopilot unless it is enabled"));
+}
+
+#[test]
+fn governance_profile_validation_rejects_missing_canon_configuration_and_forbidden_mode() {
+    let profile = GovernanceProfile {
+        default_runtime: GovernanceRuntimeKind::Canon,
+        canon: None,
+        stages: vec![sample_canon_policy("bug-fix", "investigate", CanonMode::Discovery)],
+    };
+
+    let error = profile.validate().unwrap_err();
+    assert!(error.to_string().contains("requires Canon configuration"));
+
+    let profile = GovernanceProfile {
+        default_runtime: GovernanceRuntimeKind::Canon,
+        canon: Some(sample_canon_config()),
+        stages: vec![sample_canon_policy("bug-fix", "investigate", CanonMode::Implementation)],
+    };
+
+    let error = profile.validate().unwrap_err();
+    assert!(error.to_string().contains("cannot bind Canon mode"));
+}
+
+#[test]
+fn governance_profile_validation_rejects_missing_canon_fields() {
+    for missing_field in ["system_context", "risk", "zone", "owner"] {
+        let mut policy = sample_canon_policy("bug-fix", "investigate", CanonMode::Discovery);
+        let mut canon = sample_canon_config();
+        match missing_field {
+            "system_context" => {
+                policy.system_context = None;
+                canon.default_system_context = None;
+            }
+            "risk" => {
+                policy.risk = None;
+                canon.default_risk = None;
+            }
+            "zone" => {
+                policy.zone = None;
+                canon.default_zone = None;
+            }
+            "owner" => {
+                policy.owner = None;
+                canon.default_owner = None;
+            }
+            _ => unreachable!("unexpected field"),
+        }
+
+        let profile = GovernanceProfile {
+            default_runtime: GovernanceRuntimeKind::Canon,
+            canon: Some(canon),
+            stages: vec![policy],
+        };
+
+        let error = profile.validate().unwrap_err();
+        assert!(
+            error.to_string().contains(&format!("missing Canon field '{missing_field}'")),
+            "unexpected error for {missing_field}: {error}"
+        );
+    }
+}
+
+#[test]
+fn governance_profile_validation_accepts_canon_defaults_for_single_mode_stage() {
+    let profile = GovernanceProfile {
+        default_runtime: GovernanceRuntimeKind::Canon,
+        canon: Some(CanonRuntimeConfig {
+            default_system_context: Some(SystemContextBinding::New),
+            ..sample_canon_config()
+        }),
+        stages: vec![StageGovernancePolicy {
+            flow_name: "delivery".to_string(),
+            stage_id: "requirements".to_string(),
+            enabled: true,
+            required: false,
+            autopilot: false,
+            runtime: Some(GovernanceRuntimeKind::Canon),
+            canon_mode: None,
+            system_context: None,
+            risk: None,
+            zone: None,
+            owner: None,
+        }],
+    };
+
+    profile.validate().unwrap();
+}
+
+#[test]
+fn canon_mode_helpers_expose_primary_documents_and_context_requirements() {
+    let expectations = [
+        (CanonMode::Requirements, "requirements.md", false),
+        (CanonMode::Architecture, "architecture.md", false),
+        (CanonMode::Backlog, "backlog.md", true),
+        (CanonMode::Change, "change.md", true),
+        (CanonMode::Discovery, "discovery.md", false),
+        (CanonMode::Implementation, "implementation.md", true),
+        (CanonMode::Verification, "verification.md", true),
+        (CanonMode::PrReview, "pr-review.md", true),
+    ];
+
+    for (mode, document_name, requires_existing_context) in expectations {
+        assert_eq!(mode.primary_document_name(), document_name);
+        assert_eq!(mode.requires_existing_context(), requires_existing_context);
+    }
+
+    assert_eq!(
+        CanonMode::Verification.expected_document_refs(".canon/packets/verify-1"),
+        vec![".canon/packets/verify-1/verification.md".to_string()]
+    );
+}
+
+#[test]
+fn supported_canon_modes_include_expected_stage_whitelist_entries() {
+    let expectations = [
+        ("delivery", "requirements", vec![CanonMode::Requirements]),
+        ("delivery", "architecture", vec![CanonMode::Architecture]),
+        ("delivery", "backlog", vec![CanonMode::Backlog]),
+        ("delivery", "implementation", vec![CanonMode::Implementation]),
+        ("change", "understand-change", vec![CanonMode::Change]),
+        ("change", "implement", vec![CanonMode::Implementation]),
+        ("change", "verify", vec![CanonMode::Verification, CanonMode::PrReview]),
+        ("bug-fix", "investigate", vec![CanonMode::Discovery, CanonMode::Change]),
+        ("bug-fix", "implement", vec![CanonMode::Implementation]),
+        ("bug-fix", "verify", vec![CanonMode::Verification, CanonMode::PrReview]),
+    ];
+
+    for (flow_name, stage_id, expected_modes) in expectations {
+        assert_eq!(supported_canon_modes_for_stage(flow_name, stage_id), expected_modes.as_slice());
+    }
+
+    assert!(supported_canon_modes_for_stage("delivery", "unknown").is_empty());
+}
+
+#[test]
+fn stage_governance_policy_effective_runtime_prefers_override() {
+    let policy = sample_policy();
+    assert_eq!(
+        policy.effective_runtime(GovernanceRuntimeKind::Canon),
+        GovernanceRuntimeKind::Local
+    );
+
+    let inherited = StageGovernancePolicy { runtime: None, ..sample_policy() };
+    assert_eq!(
+        inherited.effective_runtime(GovernanceRuntimeKind::Canon),
+        GovernanceRuntimeKind::Canon
+    );
+}
+
+#[test]
+fn canon_runtime_config_validation_rejects_blank_command() {
+    let error = CanonRuntimeConfig { command: "   ".to_string(), ..sample_canon_config() }
+        .validate()
+        .unwrap_err();
+
+    assert!(error.to_string().contains("requires a Canon command"));
+}
+
+#[test]
+fn governance_reuse_binding_uses_immediate_upstream_stage_context() {
+    let mut context = TaskContext::new(
+        "session-governance",
+        "/tmp/synod-governance",
+        RunLimits::default(),
+        serde_json::Map::new(),
+    );
+    context
+        .set_latest_governance_stage(&GovernedStageRecord {
+            stage_key: "bug-fix:investigate".to_string(),
+            runtime: GovernanceRuntimeKind::Canon,
+            lifecycle_state: GovernanceLifecycleState::GovernedReady,
+            required: false,
+            autopilot_enabled: false,
+            approval_state: ApprovalState::NotNeeded,
+            canon_run_ref: Some("canon-run-1".to_string()),
+            governance_attempt_id: "attempt-1".to_string(),
+            previous_governance_attempt_id: None,
+            packet_ref: Some(".canon/runs/canon-run-1".to_string()),
+            decision_ref: None,
+            blocked_reason: None,
+        })
+        .unwrap();
+    context
+        .set_latest_governance_packet(&GovernedStagePacket {
+            packet_ref: ".canon/runs/canon-run-1".to_string(),
+            runtime: GovernanceRuntimeKind::Canon,
+            canon_mode: Some(CanonMode::Discovery),
+            expected_document_refs: vec![".canon/runs/canon-run-1/discovery.md".to_string()],
+            document_refs: vec![".canon/runs/canon-run-1/discovery.md".to_string()],
+            readiness: PacketReadiness::Reusable,
+            missing_sections: Vec::new(),
+            headline: "investigation packet ready".to_string(),
+        })
+        .unwrap();
+    let metadata = FlowStepMetadata {
+        flow_name: "bug-fix".to_string(),
+        stage_id: "implement".to_string(),
+        stage_index: 1,
+        total_stages: 3,
+    };
+
+    let binding =
+        select_packet_reuse_binding(&context, &metadata).unwrap().expect("binding should exist");
+    let reused_packets = bounded_reused_packets(&context, &metadata).unwrap();
+
+    assert_eq!(binding.upstream_stage_key, "bug-fix:investigate");
+    assert_eq!(binding.downstream_stage_key, "bug-fix:implement");
+    assert_eq!(binding.binding_reason, "upstream_stage_context");
+    assert_eq!(reused_packets.len(), 1);
+    assert_eq!(reused_packets[0].stage_key, "bug-fix:investigate");
+    assert_eq!(reused_packets[0].packet_ref, ".canon/runs/canon-run-1");
+}
+
+#[test]
+fn governance_reuse_binding_supports_same_stage_rerun() {
+    let mut context = TaskContext::new(
+        "session-governance",
+        "/tmp/synod-governance",
+        RunLimits::default(),
+        serde_json::Map::new(),
+    );
+    context
+        .set_latest_governance_stage(&GovernedStageRecord {
+            stage_key: "bug-fix:implement".to_string(),
+            runtime: GovernanceRuntimeKind::Canon,
+            lifecycle_state: GovernanceLifecycleState::GovernedReady,
+            required: false,
+            autopilot_enabled: false,
+            approval_state: ApprovalState::NotNeeded,
+            canon_run_ref: Some("canon-run-2".to_string()),
+            governance_attempt_id: "attempt-2".to_string(),
+            previous_governance_attempt_id: Some("attempt-1".to_string()),
+            packet_ref: Some(".canon/runs/canon-run-2".to_string()),
+            decision_ref: None,
+            blocked_reason: None,
+        })
+        .unwrap();
+    context
+        .set_latest_governance_packet(&GovernedStagePacket {
+            packet_ref: ".canon/runs/canon-run-2".to_string(),
+            runtime: GovernanceRuntimeKind::Canon,
+            canon_mode: Some(CanonMode::Implementation),
+            expected_document_refs: vec![".canon/runs/canon-run-2/implementation.md".to_string()],
+            document_refs: vec![".canon/runs/canon-run-2/implementation.md".to_string()],
+            readiness: PacketReadiness::Reusable,
+            missing_sections: Vec::new(),
+            headline: "implementation packet ready".to_string(),
+        })
+        .unwrap();
+    let metadata = FlowStepMetadata {
+        flow_name: "bug-fix".to_string(),
+        stage_id: "implement".to_string(),
+        stage_index: 1,
+        total_stages: 3,
+    };
+
+    let binding =
+        select_packet_reuse_binding(&context, &metadata).unwrap().expect("binding should exist");
+
+    assert_eq!(binding.binding_reason, "same_stage_rerun");
+    assert_eq!(binding.upstream_stage_key, "bug-fix:implement");
+}
+
+#[test]
+fn autopilot_waits_for_approval_before_reselecting_modes() {
+    let metadata = FlowStepMetadata {
+        flow_name: "bug-fix".to_string(),
+        stage_id: "investigate".to_string(),
+        stage_index: 0,
+        total_stages: 3,
+    };
+    let policy = StageGovernancePolicy {
+        autopilot: true,
+        runtime: Some(GovernanceRuntimeKind::Canon),
+        ..sample_policy()
+    };
+    let decision = build_autopilot_decision(
+        "attempt-approval",
+        &policy,
+        GovernanceRuntimeKind::Local,
+        &metadata,
+        &GovernanceBoundedContext {
+            read_targets: vec!["src/lib.rs".to_string(), "tests/red_to_green.rs".to_string()],
+            stage_brief_ref: None,
+            reused_packets: Vec::new(),
+        },
+        Some(GovernanceLifecycleState::AwaitingApproval),
+        Some(ApprovalState::Requested),
+        Some(PacketReadiness::Pending),
+    )
+    .expect("decision should exist");
+
+    assert_eq!(decision.selected_action, Some(AutopilotAction::AwaitApproval));
+    assert_eq!(decision.selected_mode, None);
+    assert_eq!(
+        decision.candidate_actions,
+        vec![AutopilotAction::AwaitApproval, AutopilotAction::SelectMode]
+    );
+}
+
+#[test]
+fn autopilot_returns_none_when_disabled() {
+    let metadata = FlowStepMetadata {
+        flow_name: "bug-fix".to_string(),
+        stage_id: "investigate".to_string(),
+        stage_index: 0,
+        total_stages: 3,
+    };
+
+    assert_eq!(
+        build_autopilot_decision(
+            "attempt-disabled",
+            &sample_policy(),
+            GovernanceRuntimeKind::Local,
+            &metadata,
+            &GovernanceBoundedContext {
+                read_targets: vec!["src/lib.rs".to_string()],
+                stage_brief_ref: None,
+                reused_packets: Vec::new(),
+            },
+            None,
+            None,
+            None,
+        ),
+        None,
+    );
+}
+
+#[test]
+fn autopilot_prefers_narrowed_context_after_packet_rejection() {
+    let metadata = FlowStepMetadata {
+        flow_name: "bug-fix".to_string(),
+        stage_id: "implement".to_string(),
+        stage_index: 1,
+        total_stages: 3,
+    };
+    let policy = StageGovernancePolicy {
+        autopilot: true,
+        runtime: Some(GovernanceRuntimeKind::Canon),
+        canon_mode: Some(CanonMode::Implementation),
+        ..sample_policy()
+    };
+    let bounded_context = GovernanceBoundedContext {
+        read_targets: vec!["src/lib.rs".to_string(), "tests/red_to_green.rs".to_string()],
+        stage_brief_ref: None,
+        reused_packets: Vec::new(),
+    };
+    let decision = build_autopilot_decision(
+        "attempt-rejected",
+        &policy,
+        GovernanceRuntimeKind::Local,
+        &metadata,
+        &bounded_context,
+        Some(GovernanceLifecycleState::Blocked),
+        Some(ApprovalState::NotNeeded),
+        Some(PacketReadiness::Rejected),
+    )
+    .expect("decision should exist");
+
+    assert_eq!(decision.selected_action, Some(AutopilotAction::RetryStageWithNarrowedContext));
+    assert_eq!(decision.selected_mode, Some(CanonMode::Implementation));
+    assert_eq!(
+        narrowed_bounded_context(&bounded_context).unwrap().read_targets,
+        vec!["src/lib.rs".to_string()]
+    );
+}
+
+#[test]
+fn autopilot_blocks_required_stage_without_a_compliant_continuation() {
+    let metadata = FlowStepMetadata {
+        flow_name: "bug-fix".to_string(),
+        stage_id: "investigate".to_string(),
+        stage_index: 0,
+        total_stages: 3,
+    };
+    let policy = StageGovernancePolicy {
+        autopilot: true,
+        required: true,
+        runtime: Some(GovernanceRuntimeKind::Canon),
+        canon_mode: Some(CanonMode::Discovery),
+        ..sample_policy()
+    };
+
+    let decision = build_autopilot_decision(
+        "attempt-blocked",
+        &policy,
+        GovernanceRuntimeKind::Local,
+        &metadata,
+        &GovernanceBoundedContext {
+            read_targets: vec!["src/lib.rs".to_string()],
+            stage_brief_ref: None,
+            reused_packets: Vec::new(),
+        },
+        None,
+        Some(ApprovalState::NotNeeded),
+        Some(PacketReadiness::Reusable),
+    )
+    .expect("decision should exist");
+
+    assert_eq!(decision.selected_action, None);
+    assert_eq!(decision.selected_mode, Some(CanonMode::Discovery));
+    assert!(decision.candidate_actions.contains(&AutopilotAction::BlockStage));
+    assert_eq!(
+        decision.blocked_reason,
+        Some("no compliant governance continuation exists for bug-fix:investigate".to_string())
+    );
+}
+
+#[test]
+fn autopilot_escalates_pr_review_from_verification_stage() {
+    let metadata = FlowStepMetadata {
+        flow_name: "bug-fix".to_string(),
+        stage_id: "verify".to_string(),
+        stage_index: 2,
+        total_stages: 3,
+    };
+    let policy = StageGovernancePolicy {
+        flow_name: "bug-fix".to_string(),
+        stage_id: "verify".to_string(),
+        enabled: true,
+        required: false,
+        autopilot: true,
+        runtime: Some(GovernanceRuntimeKind::Canon),
+        canon_mode: Some(CanonMode::Verification),
+        system_context: Some(SystemContextBinding::Existing),
+        risk: Some("medium".to_string()),
+        zone: Some("engineering".to_string()),
+        owner: Some("platform".to_string()),
+    };
+
+    let decision = build_autopilot_decision(
+        "attempt-pr-review",
+        &policy,
+        GovernanceRuntimeKind::Local,
+        &metadata,
+        &GovernanceBoundedContext {
+            read_targets: vec!["src/lib.rs".to_string()],
+            stage_brief_ref: None,
+            reused_packets: Vec::new(),
+        },
+        None,
+        Some(ApprovalState::NotNeeded),
+        Some(PacketReadiness::Reusable),
+    )
+    .expect("decision should exist");
+
+    assert_eq!(decision.selected_action, Some(AutopilotAction::EscalatePrReview));
+    assert_eq!(decision.selected_mode, Some(CanonMode::Verification));
+    assert_eq!(decision.selected_target_stage_key, Some("bug-fix:verify".to_string()));
+}
+
+#[test]
+fn autopilot_exposes_verification_and_pr_review_escalation_targets() {
+    let implement = FlowStepMetadata {
+        flow_name: "bug-fix".to_string(),
+        stage_id: "implement".to_string(),
+        stage_index: 1,
+        total_stages: 3,
+    };
+    let verify = FlowStepMetadata {
+        flow_name: "bug-fix".to_string(),
+        stage_id: "verify".to_string(),
+        stage_index: 2,
+        total_stages: 3,
+    };
+
+    assert_eq!(
+        escalation_target_stage_key(&implement, AutopilotAction::EscalateVerification),
+        Some("bug-fix:verify".to_string())
+    );
+    assert_eq!(
+        escalation_target_stage_key(&verify, AutopilotAction::EscalatePrReview),
+        Some("bug-fix:verify".to_string())
+    );
+}

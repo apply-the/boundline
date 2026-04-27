@@ -23,11 +23,11 @@
 
 **CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T004 Create adaptive execution domain types, validation rules, and session projection primitives in src/domain/execution.rs, src/domain/task_context.rs, and src/domain/session.rs
-- [ ] T005 [P] Extend manifest loading and legacy compatibility for adaptive execution profiles in src/domain/execution.rs and src/fixture.rs
-- [ ] T006 [P] Add adaptive trace event and summary support in src/domain/trace.rs, src/cli/output.rs, and src/cli/inspect.rs
-- [ ] T007 [P] Extend planner and runtime interfaces for synthesized adaptive attempts in src/orchestrator/planner.rs, src/orchestrator/engine.rs, and src/orchestrator/session_runtime.rs
-- [ ] T008 Implement shared no-repeat candidate-signature and attempt-lineage primitives in src/domain/execution.rs, src/fixture.rs, and src/orchestrator/planner.rs
+- [X] T004 Create adaptive execution domain types, validation rules, and session projection primitives in src/domain/execution.rs, src/domain/task_context.rs, and src/domain/session.rs
+- [X] T005 [P] Extend manifest loading and legacy compatibility for adaptive execution profiles in src/domain/execution.rs and src/fixture.rs
+- [X] T006 [P] Add adaptive trace event and summary support in src/domain/trace.rs, src/cli/output.rs, and src/cli/inspect.rs
+- [X] T007 [P] Extend planner and runtime interfaces for synthesized adaptive attempts in src/orchestrator/planner.rs, src/orchestrator/engine.rs, and src/orchestrator/session_runtime.rs
+- [X] T008 Implement shared no-repeat candidate-signature and attempt-lineage primitives in src/domain/execution.rs, src/fixture.rs, and src/orchestrator/planner.rs
 
 **Checkpoint**: Foundation ready - adaptive profiles can be described, loaded, persisted, and traced inside the existing execution lifecycle.
 
@@ -41,16 +41,16 @@
 
 ### Tests for User Story 1
 
-- [ ] T009 [P] [US1] Add unit coverage for adaptive profile validation, slice scoring, and candidate generation in tests/unit/adaptive_execution.rs and tests/unit/execution_profile.rs
+- [X] T009 [P] [US1] Add unit coverage for adaptive profile validation, slice scoring, and candidate generation in tests/unit/adaptive_execution.rs and tests/unit/execution_profile.rs
 - [ ] T010 [P] [US1] Add contract coverage for adaptive profile parsing and adaptive run output in tests/contract/adaptive_execution_profile_contract.rs and tests/contract/adaptive_run_contract.rs
-- [ ] T011 [P] [US1] Add integration coverage for a successful adaptive run and direct inspect flow in tests/integration/cli_adaptive_execution.rs
+- [X] T011 [P] [US1] Add integration coverage for a successful adaptive run and direct inspect flow in tests/integration/cli_adaptive_execution.rs
 
 ### Implementation for User Story 1
 
-- [ ] T012 [US1] Implement adaptive profile parsing, bounded read-target scoring, and workspace-slice selection helpers in src/domain/execution.rs and src/fixture.rs
-- [ ] T013 [US1] Implement an adaptive planner that synthesizes the initial adaptive attempt in src/orchestrator/planner.rs and connect it from src/fixture.rs
-- [ ] T014 [US1] Teach the coder and verifier execution path to consume synthesized adaptive attempts in src/fixture.rs and src/orchestrator/engine.rs
-- [ ] T015 [US1] Render workspace-slice summaries and adaptive attempt metadata in src/cli/output.rs, src/cli/run.rs, and src/cli/inspect.rs
+- [X] T012 [US1] Implement adaptive profile parsing, bounded read-target scoring, and workspace-slice selection helpers in src/domain/execution.rs and src/fixture.rs
+- [X] T013 [US1] Implement an adaptive planner that synthesizes the initial adaptive attempt in src/orchestrator/planner.rs and connect it from src/fixture.rs
+- [X] T014 [US1] Teach the coder and verifier execution path to consume synthesized adaptive attempts in src/fixture.rs and src/orchestrator/engine.rs
+- [X] T015 [US1] Render workspace-slice summaries and adaptive attempt metadata in src/cli/output.rs, src/cli/run.rs, and src/cli/inspect.rs
 
 **Checkpoint**: User Story 1 is complete when a bounded adaptive run can solve one real workspace bug without pre-authored attempts and with inspectable evidence.
 
@@ -70,9 +70,9 @@
 
 ### Implementation for User Story 2
 
-- [ ] T019 [US2] Implement validation-driven replanning and next-candidate synthesis in src/orchestrator/planner.rs and src/fixture.rs
-- [ ] T020 [US2] Persist adaptive candidate signatures, selection evidence, and attempt lineage in src/domain/task_context.rs, src/orchestrator/engine.rs, and src/orchestrator/session_runtime.rs
-- [ ] T021 [US2] Implement explicit no-credible-next-step and exhausted adaptive terminal handling in src/fixture.rs, src/orchestrator/engine.rs, and src/cli/output.rs
+- [X] T019 [US2] Implement validation-driven replanning and next-candidate synthesis in src/orchestrator/planner.rs and src/fixture.rs
+- [X] T020 [US2] Persist adaptive candidate signatures, selection evidence, and attempt lineage in src/domain/task_context.rs, src/orchestrator/engine.rs, and src/orchestrator/session_runtime.rs
+- [X] T021 [US2] Implement explicit no-credible-next-step and exhausted adaptive terminal handling in src/fixture.rs, src/orchestrator/engine.rs, and src/cli/output.rs
 - [ ] T022 [US2] Harden invalid adaptive profile, unreadable target, and repeated-candidate diagnostics in src/domain/execution.rs, src/fixture.rs, and src/cli/diagnostics.rs
 
 **Checkpoint**: User Story 2 is complete when failed adaptive attempts produce materially different replans or explicit terminal stop behavior with visible evidence.
@@ -92,8 +92,8 @@
 
 ### Implementation for User Story 3
 
-- [ ] T025 [US3] Project latest workspace slice, selection headline, and attempt lineage into session status and next guidance in src/domain/session.rs and src/cli/session.rs
-- [ ] T026 [US3] Extend trace summarization and inspect rendering for adaptive slice-selection and lineage evidence in src/domain/trace.rs and src/cli/inspect.rs
+- [X] T025 [US3] Project latest workspace slice, selection headline, and attempt lineage into session status and next guidance in src/domain/session.rs and src/cli/session.rs
+- [X] T026 [US3] Extend trace summarization and inspect rendering for adaptive slice-selection and lineage evidence in src/domain/trace.rs and src/cli/inspect.rs
 - [ ] T027 [US3] Add adaptive-aware CLI output and assistant-facing summaries in src/cli/output.rs, src/cli/run.rs, and assistant/README.md
 
 **Checkpoint**: All adaptive execution outcomes are inspectable through the existing bounded CLI surfaces.
@@ -104,9 +104,9 @@
 
 **Purpose**: Finalize docs, versioning, coverage, and full validation for the adaptive slice.
 
-- [ ] T028 [P] Add adaptive execution documentation in docs/adaptive-execution.md covering manifest shape, workspace-slice selection, deterministic candidate generation, no-repeat behavior, and explicit terminal outcomes
+- [X] T028 [P] Add adaptive execution documentation in docs/adaptive-execution.md covering manifest shape, workspace-slice selection, deterministic candidate generation, no-repeat behavior, and explicit terminal outcomes
 - [ ] T029 [P] Update feature documentation in README.md, ROADMAP.md, AGENTS.md, assistant/README.md, and specs/008-adaptive-execution-engine/quickstart.md
-- [ ] T030 [P] Bump crate and lockfile version to 0.8.0 in Cargo.toml and Cargo.lock
+- [X] T030 [P] Bump crate and lockfile version to 0.8.0 in Cargo.toml and Cargo.lock
 - [ ] T031 [P] Raise source coverage for new adaptive paths in tests/unit/adaptive_execution.rs, adaptive contract tests, and adaptive integration tests
 - [ ] T032 Run formatting, lint, test, and coverage validation with `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --all-targets`, and `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`
 
