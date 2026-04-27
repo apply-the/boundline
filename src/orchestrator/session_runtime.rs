@@ -1,5 +1,9 @@
 use std::path::{Path, PathBuf};
 
+use crate::adapters::governance_runtime::{
+    CanonCliRuntime, GovernanceRequestKind, GovernanceRuntime, GovernanceRuntimeRequest,
+    LocalGovernanceRuntime,
+};
 use serde_json::{Value, json};
 use thiserror::Error;
 use uuid::Uuid;
@@ -7,6 +11,10 @@ use uuid::Uuid;
 use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
 use crate::adapters::trace_store::{FileTraceStore, TraceStore, TraceStoreError};
 use crate::domain::flow::{FlowStepMetadata, built_in_flow, supported_flow_names_csv};
+use crate::domain::governance::{
+    ApprovalState, GovernanceLifecycleState, GovernanceRuntimeKind, GovernedStageRecord,
+    PacketReadiness, resolved_canon_mode,
+};
 use crate::domain::limits::TerminalCondition;
 use crate::domain::session::{ActiveSessionRecord, SessionStatus};
 use crate::domain::step::{
@@ -19,6 +27,10 @@ use crate::domain::trace::{ExecutionTrace, TraceEventType, current_timestamp_mil
 use crate::fixture::{
     FixtureRuntime, FixtureRuntimeError, build_fixture_plan_for_goal,
     build_fixture_runtime_for_flow, build_task_request,
+};
+use crate::orchestrator::governance::{
+    GovernanceStepDecision, bounded_governance_context, build_autopilot_decision,
+    governance_stage_key, governance_state_patch, runtime_command_available, selected_stage_policy,
 };
 use crate::orchestrator::recovery::{RecoveryDecision, decide_recovery};
 use crate::orchestrator::review_trace::{record_review_step_completed, record_review_step_started};
@@ -174,10 +186,73 @@ impl SessionRuntime {
         }
     }
 
+    pub fn refresh_governance_state(
+        &self,
+        session: &mut ActiveSessionRecord,
+    ) -> Result<bool, SessionRuntimeError> {
+        let runtime = self.build_runtime(session)?;
+        let Some(mut task) = session.active_task.take() else {
+            return Ok(false);
+        };
+        let result = (|| {
+            let Some(record) = task
+                .context
+                .latest_governance_stage()
+                .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?
+            else {
+                return Ok(false);
+            };
+            if record.lifecycle_state != GovernanceLifecycleState::AwaitingApproval {
+                return Ok(false);
+            }
+
+            let mut trace = self.load_or_create_trace(session, &task)?;
+            let step =
+                task.plan.current_step().cloned().ok_or(SessionRuntimeError::MissingActiveTask)?;
+            let metadata = FlowStepMetadata::from_step(&step)
+                .map_err(|error| SessionRuntimeError::InvalidFlowState(error.to_string()))?
+                .ok_or_else(|| {
+                    SessionRuntimeError::InvalidFlowState(
+                        "governance refresh requires flow metadata".to_string(),
+                    )
+                })?;
+            let Some(governance) = runtime.profile.governance.as_ref() else {
+                return Ok(false);
+            };
+            let Some(policy) =
+                selected_stage_policy(Some(governance), &metadata.flow_name, &metadata.stage_id)
+            else {
+                return Ok(false);
+            };
+
+            let decision = self.execute_governance_for_step(
+                session,
+                &mut task,
+                &mut trace,
+                &runtime,
+                &step,
+                &metadata,
+                governance,
+                &policy,
+                GovernanceRequestKind::Refresh,
+            )?;
+
+            Ok(!matches!(decision, GovernanceStepDecision::Continue))
+        })();
+        session.active_task = Some(task);
+        result
+    }
+
     fn build_runtime(
         &self,
         session: &ActiveSessionRecord,
     ) -> Result<FixtureRuntime, SessionRuntimeError> {
+        if let Some(active_flow) = &session.active_flow {
+            active_flow
+                .validate()
+                .map_err(|error| SessionRuntimeError::InvalidFlowState(error.to_string()))?;
+        }
+
         let goal = session
             .goal
             .as_deref()
@@ -252,6 +327,12 @@ impl SessionRuntime {
                 })),
             );
             return self.finalize_task(session, task, trace, reason).map(Some);
+        }
+
+        match self.ensure_stage_governance(session, task, trace, runtime)? {
+            GovernanceStepDecision::Continue => {}
+            GovernanceStepDecision::Halt => return Ok(None),
+            GovernanceStepDecision::Terminal(response) => return Ok(Some(response)),
         }
 
         let step_index = task.plan.current_step_index;
@@ -512,6 +593,626 @@ impl SessionRuntime {
                     }
                 }
             }
+        }
+    }
+
+    fn ensure_stage_governance(
+        &self,
+        session: &mut ActiveSessionRecord,
+        task: &mut Task,
+        trace: &mut ExecutionTrace,
+        runtime: &FixtureRuntime,
+    ) -> Result<GovernanceStepDecision<TaskRunResponse>, SessionRuntimeError> {
+        let Some(step) = task.plan.current_step().cloned() else {
+            return Ok(GovernanceStepDecision::Continue);
+        };
+        let Some(metadata) = FlowStepMetadata::from_step(&step)
+            .map_err(|error| SessionRuntimeError::InvalidFlowState(error.to_string()))?
+        else {
+            return Ok(GovernanceStepDecision::Continue);
+        };
+        let Some(governance) = runtime.profile.governance.as_ref() else {
+            return Ok(GovernanceStepDecision::Continue);
+        };
+        let Some(policy) =
+            selected_stage_policy(Some(governance), &metadata.flow_name, &metadata.stage_id)
+        else {
+            return Ok(GovernanceStepDecision::Continue);
+        };
+        if !policy.enabled {
+            return Ok(GovernanceStepDecision::Continue);
+        }
+
+        let stage_key = governance_stage_key(&metadata.flow_name, &metadata.stage_id);
+        if let Some(existing_record) = task
+            .context
+            .latest_governance_stage()
+            .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?
+            && existing_record.stage_key == stage_key
+        {
+            return Ok(GovernanceStepDecision::Continue);
+        }
+
+        self.execute_governance_for_step(
+            session,
+            task,
+            trace,
+            runtime,
+            &step,
+            &metadata,
+            governance,
+            &policy,
+            GovernanceRequestKind::Start,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn execute_governance_for_step(
+        &self,
+        session: &mut ActiveSessionRecord,
+        task: &mut Task,
+        trace: &mut ExecutionTrace,
+        runtime: &FixtureRuntime,
+        step: &Step,
+        metadata: &FlowStepMetadata,
+        governance: &crate::domain::governance::GovernanceProfile,
+        policy: &crate::domain::governance::StageGovernancePolicy,
+        request_kind: GovernanceRequestKind,
+    ) -> Result<GovernanceStepDecision<TaskRunResponse>, SessionRuntimeError> {
+        let stage_key = governance_stage_key(&metadata.flow_name, &metadata.stage_id);
+        let existing_record = task
+            .context
+            .latest_governance_stage()
+            .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?;
+        if matches!(request_kind, GovernanceRequestKind::Refresh)
+            && existing_record.as_ref().is_none_or(|record| {
+                record.stage_key != stage_key
+                    || record.lifecycle_state != GovernanceLifecycleState::AwaitingApproval
+            })
+        {
+            return Ok(GovernanceStepDecision::Continue);
+        }
+
+        let existing_packet = task
+            .context
+            .latest_governance_packet()
+            .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?;
+        let governance_attempt_id = existing_record
+            .as_ref()
+            .filter(|_| matches!(request_kind, GovernanceRequestKind::Refresh))
+            .map(|record| record.governance_attempt_id.clone())
+            .unwrap_or_else(|| {
+                format!("{}-attempt-{}", stage_key.replace(':', "-"), task.plan.revision)
+            });
+        let previous_attempt_id = if matches!(request_kind, GovernanceRequestKind::Refresh) {
+            existing_record
+                .as_ref()
+                .and_then(|record| record.previous_governance_attempt_id.clone())
+        } else {
+            existing_record
+                .as_ref()
+                .filter(|record| record.stage_key == stage_key)
+                .map(|record| record.governance_attempt_id.clone())
+        };
+        let (bounded_context, packet_reuse) =
+            bounded_governance_context(&task.context, metadata, &runtime.profile.read_targets)
+                .map_err(|error| SessionRuntimeError::GovernancePatch(error.to_string()))?;
+
+        let requested_runtime = policy.effective_runtime(governance.default_runtime);
+        let canon_available = governance
+            .canon
+            .as_ref()
+            .is_some_and(|canon| runtime_command_available(&canon.command));
+        let mut decision = if requested_runtime == GovernanceRuntimeKind::Canon {
+            build_autopilot_decision(
+                &governance_attempt_id,
+                policy,
+                governance.default_runtime,
+                metadata,
+                &bounded_context,
+                existing_record.as_ref().map(|record| record.lifecycle_state),
+                existing_record.as_ref().map(|record| record.approval_state),
+                existing_packet.as_ref().map(|packet| packet.readiness),
+            )
+        } else {
+            None
+        };
+        let mut mode = decision
+            .as_ref()
+            .and_then(|record| record.selected_mode)
+            .or_else(|| resolved_canon_mode(policy, governance.default_runtime))
+            .or(existing_packet.as_ref().and_then(|packet| packet.canon_mode));
+        let mut selected_runtime = requested_runtime;
+        if requested_runtime == GovernanceRuntimeKind::Canon
+            && (mode.is_none() || !canon_available)
+            && !policy.required
+        {
+            selected_runtime = GovernanceRuntimeKind::Local;
+            decision = None;
+        }
+
+        trace.record_event(
+            TraceEventType::GovernanceSelected,
+            Some(step.id.clone()),
+            task.plan.revision,
+            json!({
+                "stage_key": stage_key,
+                "required": policy.required,
+                "autopilot_enabled": policy.autopilot,
+                "requested_runtime": requested_runtime,
+                "selected_runtime": selected_runtime,
+            }),
+        );
+
+        if let Some(decision) = &decision {
+            self.record_governance_decision_event(trace, step, task.plan.revision, decision);
+        }
+
+        if requested_runtime == GovernanceRuntimeKind::Canon
+            && selected_runtime == GovernanceRuntimeKind::Canon
+        {
+            let Some(canon) = governance.canon.as_ref() else {
+                return self.handle_governance_block(
+                    session,
+                    task,
+                    trace,
+                    GovernanceBlockContext {
+                        step_id: step.id.clone(),
+                        stage_key: stage_key.clone(),
+                        required: policy.required,
+                        autopilot_enabled: policy.autopilot,
+                        runtime: GovernanceRuntimeKind::Canon,
+                        reason: format!(
+                            "governance stage {stage_key} requires Canon configuration"
+                        ),
+                    },
+                    decision.clone(),
+                );
+            };
+            if !canon_available {
+                return self.handle_governance_block(
+                    session,
+                    task,
+                    trace,
+                    GovernanceBlockContext {
+                        step_id: step.id.clone(),
+                        stage_key: stage_key.clone(),
+                        required: policy.required,
+                        autopilot_enabled: policy.autopilot,
+                        runtime: GovernanceRuntimeKind::Canon,
+                        reason: format!(
+                            "governance required Canon for {stage_key}, but command '{}' is unavailable",
+                            canon.command
+                        ),
+                    },
+                    decision.clone(),
+                );
+            }
+            let Some(mode_value) = mode.take() else {
+                return self.handle_governance_block(
+                    session,
+                    task,
+                    trace,
+                    GovernanceBlockContext {
+                        step_id: step.id.clone(),
+                        stage_key: stage_key.clone(),
+                        required: policy.required,
+                        autopilot_enabled: policy.autopilot,
+                        runtime: GovernanceRuntimeKind::Canon,
+                        reason: format!(
+                            "governance stage {stage_key} requires an explicit Canon mode"
+                        ),
+                    },
+                    decision.clone(),
+                );
+            };
+
+            let request = GovernanceRuntimeRequest {
+                request_kind,
+                governance_attempt_id: governance_attempt_id.clone(),
+                stage_key: stage_key.clone(),
+                goal: task.goal.clone(),
+                workspace_ref: self.workspace_ref.to_string_lossy().into_owned(),
+                autopilot: policy.autopilot,
+                mode: Some(mode_value),
+                system_context: policy.system_context.or(canon.default_system_context),
+                risk: policy.risk.clone().or_else(|| canon.default_risk.clone()),
+                zone: policy.zone.clone().or_else(|| canon.default_zone.clone()),
+                owner: policy.owner.clone().or_else(|| canon.default_owner.clone()),
+                run_ref: existing_record.as_ref().and_then(|record| record.canon_run_ref.clone()),
+                packet_ref: existing_record
+                    .as_ref()
+                    .and_then(|record| record.packet_ref.clone())
+                    .or_else(|| existing_packet.as_ref().map(|packet| packet.packet_ref.clone())),
+                bounded_context,
+                input_documents: Vec::new(),
+            };
+            trace.record_event(
+                TraceEventType::GovernanceStarted,
+                Some(step.id.clone()),
+                task.plan.revision,
+                json!({
+                    "stage_key": stage_key,
+                    "runtime": GovernanceRuntimeKind::Canon,
+                    "canon_mode": request.mode,
+                    "system_context": request.system_context,
+                    "risk": request.risk,
+                    "zone": request.zone,
+                    "owner": request.owner,
+                }),
+            );
+            let response = CanonCliRuntime::new(canon.command.clone())
+                .with_working_directory(&self.workspace_ref)
+                .execute(&request)
+                .map_err(|error| SessionRuntimeError::GovernanceRuntime(error.to_string()))?;
+            let decision = if decision.is_some() {
+                decision
+            } else {
+                let decision = build_autopilot_decision(
+                    &governance_attempt_id,
+                    policy,
+                    governance.default_runtime,
+                    metadata,
+                    &request.bounded_context,
+                    Some(response.status),
+                    Some(response.approval_state),
+                    response.packet.as_ref().map(|packet| packet.readiness),
+                );
+                if let Some(record) = &decision {
+                    self.record_governance_decision_event(trace, step, task.plan.revision, record);
+                }
+                decision
+            };
+
+            return self.apply_governance_response(
+                session,
+                task,
+                trace,
+                step,
+                stage_key,
+                policy,
+                request_kind,
+                GovernanceRuntimeKind::Canon,
+                governance_attempt_id,
+                previous_attempt_id,
+                packet_reuse,
+                decision,
+                response,
+            );
+        }
+
+        let request = GovernanceRuntimeRequest {
+            request_kind,
+            governance_attempt_id: governance_attempt_id.clone(),
+            stage_key: stage_key.clone(),
+            goal: task.goal.clone(),
+            workspace_ref: self.workspace_ref.to_string_lossy().into_owned(),
+            autopilot: policy.autopilot,
+            mode: None,
+            system_context: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            run_ref: None,
+            packet_ref: existing_record
+                .as_ref()
+                .and_then(|record| record.packet_ref.clone())
+                .or_else(|| existing_packet.as_ref().map(|packet| packet.packet_ref.clone())),
+            bounded_context,
+            input_documents: Vec::new(),
+        };
+
+        trace.record_event(
+            TraceEventType::GovernanceStarted,
+            Some(step.id.clone()),
+            task.plan.revision,
+            json!({
+                "stage_key": stage_key,
+                "runtime": GovernanceRuntimeKind::Local,
+            }),
+        );
+        let response = LocalGovernanceRuntime
+            .execute(&request)
+            .map_err(|error| SessionRuntimeError::GovernanceRuntime(error.to_string()))?;
+
+        let decision = if decision.is_some() {
+            decision
+        } else {
+            let decision = build_autopilot_decision(
+                &governance_attempt_id,
+                policy,
+                governance.default_runtime,
+                metadata,
+                &request.bounded_context,
+                Some(response.status),
+                Some(response.approval_state),
+                response.packet.as_ref().map(|packet| packet.readiness),
+            );
+            if let Some(record) = &decision {
+                self.record_governance_decision_event(trace, step, task.plan.revision, record);
+            }
+            decision
+        };
+
+        self.apply_governance_response(
+            session,
+            task,
+            trace,
+            step,
+            stage_key,
+            policy,
+            request_kind,
+            GovernanceRuntimeKind::Local,
+            governance_attempt_id,
+            previous_attempt_id,
+            packet_reuse,
+            decision,
+            response,
+        )
+    }
+
+    fn record_governance_decision_event(
+        &self,
+        trace: &mut ExecutionTrace,
+        step: &Step,
+        plan_revision: usize,
+        decision: &crate::domain::governance::AutopilotDecisionRecord,
+    ) {
+        trace.record_event(
+            TraceEventType::GovernanceDecisionRecorded,
+            Some(step.id.clone()),
+            plan_revision,
+            json!({
+                "stage_key": decision.stage_key,
+                "candidate_actions": decision.candidate_actions,
+                "candidate_modes": decision.candidate_modes,
+                "selected_action": decision.selected_action,
+                "selected_mode": decision.selected_mode,
+                "selected_target_stage_key": decision.selected_target_stage_key,
+                "reason": decision.rationale,
+                "blocked_reason": decision.blocked_reason,
+            }),
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn apply_governance_response(
+        &self,
+        session: &mut ActiveSessionRecord,
+        task: &mut Task,
+        trace: &mut ExecutionTrace,
+        step: &Step,
+        stage_key: String,
+        policy: &crate::domain::governance::StageGovernancePolicy,
+        request_kind: GovernanceRequestKind,
+        runtime_kind: GovernanceRuntimeKind,
+        governance_attempt_id: String,
+        previous_attempt_id: Option<String>,
+        packet_reuse: Option<crate::domain::governance::PacketReuseBinding>,
+        decision: Option<crate::domain::governance::AutopilotDecisionRecord>,
+        response: crate::adapters::governance_runtime::GovernanceRuntimeResponse,
+    ) -> Result<GovernanceStepDecision<TaskRunResponse>, SessionRuntimeError> {
+        let packet_rejected = response.packet.as_ref().is_some_and(|packet| {
+            matches!(packet.readiness, PacketReadiness::Incomplete | PacketReadiness::Rejected)
+        });
+        let effective_status =
+            if packet_rejected { GovernanceLifecycleState::Blocked } else { response.status };
+        let blocked_reason = if packet_rejected {
+            Some(
+                decision
+                    .as_ref()
+                    .and_then(|decision| decision.blocked_reason.clone())
+                    .unwrap_or_else(|| {
+                        response
+                            .packet
+                            .as_ref()
+                            .map(|packet| {
+                                format!(
+                                    "governance packet was {:?} for stage {stage_key}",
+                                    packet.readiness
+                                )
+                            })
+                            .unwrap_or_else(|| {
+                                format!("governance packet was rejected for stage {stage_key}")
+                            })
+                    }),
+            )
+        } else {
+            matches!(
+                response.status,
+                GovernanceLifecycleState::Blocked | GovernanceLifecycleState::Failed
+            )
+            .then(|| response.message.clone())
+        };
+        let record = GovernedStageRecord {
+            stage_key: stage_key.clone(),
+            runtime: runtime_kind,
+            lifecycle_state: effective_status,
+            required: policy.required,
+            autopilot_enabled: policy.autopilot,
+            approval_state: response.approval_state,
+            canon_run_ref: response.run_ref.clone(),
+            governance_attempt_id,
+            previous_governance_attempt_id: previous_attempt_id,
+            packet_ref: response.packet.as_ref().map(|packet| packet.packet_ref.clone()),
+            decision_ref: decision.as_ref().map(|decision| decision.decision_id.clone()),
+            blocked_reason: blocked_reason.clone(),
+        };
+        let patch = governance_state_patch(
+            &record,
+            response.packet.as_ref(),
+            packet_reuse.as_ref(),
+            decision.as_ref(),
+        )
+        .map_err(|error| SessionRuntimeError::GovernancePatch(error.to_string()))?;
+        task.context.apply_state_patch(&patch);
+
+        if let Some(packet) = response.packet.as_ref()
+            && packet_rejected
+        {
+            trace.record_event(
+                TraceEventType::GovernancePacketRejected,
+                Some(step.id.clone()),
+                task.plan.revision,
+                json!({
+                    "stage_key": stage_key,
+                    "packet_ref": packet.packet_ref,
+                    "packet_readiness": packet.readiness,
+                    "missing_sections": packet.missing_sections,
+                    "reason": blocked_reason.as_deref().unwrap_or(&response.message),
+                }),
+            );
+        }
+
+        match effective_status {
+            GovernanceLifecycleState::GovernedReady => {
+                trace.record_event(
+                    TraceEventType::GovernanceCompleted,
+                    Some(step.id.clone()),
+                    task.plan.revision,
+                    json!({
+                        "stage_key": stage_key,
+                        "runtime": runtime_kind,
+                        "packet_ref": response.packet.as_ref().map(|packet| packet.packet_ref.clone()),
+                        "packet_readiness": response.packet.as_ref().map(|packet| packet.readiness),
+                        "document_refs": response.packet.as_ref().map(|packet| packet.document_refs.clone()).unwrap_or_default(),
+                        "headline": response.packet.as_ref().map(|packet| packet.headline.clone()).unwrap_or_else(|| response.message.clone()),
+                    }),
+                );
+                let trace_location = self.persist_trace(trace)?;
+                session.latest_status = SessionStatus::Running;
+                session.latest_terminal_reason = None;
+                session.latest_trace_ref = Some(trace_location);
+                session.updated_at = current_timestamp_millis();
+                if matches!(request_kind, GovernanceRequestKind::Refresh) {
+                    Ok(GovernanceStepDecision::Halt)
+                } else {
+                    Ok(GovernanceStepDecision::Continue)
+                }
+            }
+            GovernanceLifecycleState::AwaitingApproval => {
+                trace.record_event(
+                    TraceEventType::GovernanceAwaitingApproval,
+                    Some(step.id.clone()),
+                    task.plan.revision,
+                    json!({
+                        "stage_key": stage_key,
+                        "runtime": runtime_kind,
+                        "approval_state": response.approval_state,
+                        "run_ref": response.run_ref,
+                    }),
+                );
+                let trace_location = self.persist_trace(trace)?;
+                session.latest_status = SessionStatus::Running;
+                session.latest_terminal_reason = None;
+                session.latest_trace_ref = Some(trace_location);
+                session.updated_at = current_timestamp_millis();
+                Ok(GovernanceStepDecision::Halt)
+            }
+            GovernanceLifecycleState::Blocked | GovernanceLifecycleState::Failed => {
+                let reason = blocked_reason.unwrap_or(response.message.clone());
+                trace.record_event(
+                    TraceEventType::GovernanceBlocked,
+                    Some(step.id.clone()),
+                    task.plan.revision,
+                    json!({
+                        "stage_key": stage_key,
+                        "runtime": runtime_kind,
+                        "required": policy.required,
+                        "reason": reason,
+                        "packet_ref": response.packet.as_ref().map(|packet| packet.packet_ref.clone()),
+                    }),
+                );
+                let trace_location = self.persist_trace(trace)?;
+                session.latest_status = SessionStatus::Running;
+                session.latest_terminal_reason = None;
+                session.latest_trace_ref = Some(trace_location);
+                session.updated_at = current_timestamp_millis();
+
+                if policy.required {
+                    let terminal_reason = build_terminal_reason(
+                        TerminalCondition::TaskNotCredible,
+                        format!("governance blocked stage {stage_key}: {reason}"),
+                        Some(json!({
+                            "stage_key": stage_key,
+                            "runtime": runtime_kind,
+                            "required": policy.required,
+                        })),
+                    );
+                    self.finalize_task(session, task, trace, terminal_reason)
+                        .map(GovernanceStepDecision::Terminal)
+                } else if runtime_kind == GovernanceRuntimeKind::Local
+                    && matches!(request_kind, GovernanceRequestKind::Start)
+                {
+                    Ok(GovernanceStepDecision::Continue)
+                } else {
+                    Ok(GovernanceStepDecision::Halt)
+                }
+            }
+            _ => Ok(GovernanceStepDecision::Continue),
+        }
+    }
+
+    fn handle_governance_block(
+        &self,
+        session: &mut ActiveSessionRecord,
+        task: &mut Task,
+        trace: &mut ExecutionTrace,
+        block: GovernanceBlockContext,
+        decision: Option<crate::domain::governance::AutopilotDecisionRecord>,
+    ) -> Result<GovernanceStepDecision<TaskRunResponse>, SessionRuntimeError> {
+        let record = GovernedStageRecord {
+            stage_key: block.stage_key.clone(),
+            runtime: block.runtime,
+            lifecycle_state: GovernanceLifecycleState::Blocked,
+            required: block.required,
+            autopilot_enabled: block.autopilot_enabled,
+            approval_state: ApprovalState::NotNeeded,
+            canon_run_ref: None,
+            governance_attempt_id: format!(
+                "{}-blocked-{}",
+                block.stage_key.replace(':', "-"),
+                task.plan.revision
+            ),
+            previous_governance_attempt_id: None,
+            packet_ref: None,
+            decision_ref: decision.as_ref().map(|decision| decision.decision_id.clone()),
+            blocked_reason: Some(block.reason.clone()),
+        };
+        let patch = governance_state_patch(&record, None, None, decision.as_ref())
+            .map_err(|error| SessionRuntimeError::GovernancePatch(error.to_string()))?;
+        task.context.apply_state_patch(&patch);
+        trace.record_event(
+            TraceEventType::GovernanceBlocked,
+            Some(block.step_id.clone()),
+            task.plan.revision,
+            json!({
+                "stage_key": block.stage_key,
+                "runtime": block.runtime,
+                "required": block.required,
+                "reason": block.reason,
+            }),
+        );
+        let trace_location = self.persist_trace(trace)?;
+        session.latest_trace_ref = Some(trace_location);
+        session.updated_at = current_timestamp_millis();
+
+        if block.required {
+            let terminal_reason = build_terminal_reason(
+                TerminalCondition::TaskNotCredible,
+                format!("governance blocked stage {}: {}", block.stage_key, block.reason),
+                Some(json!({
+                    "stage_key": block.stage_key,
+                    "runtime": block.runtime,
+                    "required": block.required,
+                })),
+            );
+            self.finalize_task(session, task, trace, terminal_reason)
+                .map(GovernanceStepDecision::Terminal)
+        } else {
+            session.latest_status = SessionStatus::Running;
+            session.latest_terminal_reason = None;
+            Ok(GovernanceStepDecision::Halt)
         }
     }
 
@@ -839,6 +1540,15 @@ impl SessionRuntime {
     }
 }
 
+struct GovernanceBlockContext {
+    step_id: String,
+    stage_key: String,
+    required: bool,
+    autopilot_enabled: bool,
+    runtime: GovernanceRuntimeKind,
+    reason: String,
+}
+
 #[derive(Debug, Error)]
 pub enum SessionRuntimeError {
     #[error("session store operation failed: {0}")]
@@ -865,6 +1575,12 @@ pub enum SessionRuntimeError {
     FixtureRuntime(#[source] FixtureRuntimeError),
     #[error("task request is invalid: {0}")]
     TaskRequest(#[source] TaskRequestError),
+    #[error("task context state is invalid: {0}")]
+    TaskContext(String),
+    #[error("governance state patch is invalid: {0}")]
+    GovernancePatch(String),
+    #[error("governance runtime failed: {0}")]
+    GovernanceRuntime(String),
 }
 
 fn session_status_for_task_status(status: TaskStatus) -> SessionStatus {
@@ -887,11 +1603,16 @@ mod tests {
     use uuid::Uuid;
 
     use super::{SessionRuntime, session_status_for_task_status};
+    use crate::adapters::trace_store::TraceStore;
     use crate::domain::execution::{
         ExecutionAttemptDefinition, ExecutionCommand, ExecutionFailureMode, WorkspaceChange,
         WorkspaceExecutionProfile,
     };
     use crate::domain::flow::{attach_stage_metadata, built_in_flow};
+    use crate::domain::governance::{
+        CanonMode, CanonRuntimeConfig, GovernanceLifecycleState, GovernanceProfile,
+        GovernanceRuntimeKind, PacketReadiness, StageGovernancePolicy, SystemContextBinding,
+    };
     use crate::domain::limits::{RunLimits, TerminalCondition};
     use crate::domain::plan::Plan;
     use crate::domain::session::{ActiveSessionRecord, SessionStatus};
@@ -914,12 +1635,21 @@ mod tests {
         prefix: &str,
         attempts: Vec<ExecutionAttemptDefinition>,
     ) -> PathBuf {
+        write_governed_execution_profile_workspace(prefix, attempts, Vec::new(), None)
+    }
+
+    fn write_governed_execution_profile_workspace(
+        prefix: &str,
+        attempts: Vec<ExecutionAttemptDefinition>,
+        read_targets: Vec<String>,
+        governance: Option<GovernanceProfile>,
+    ) -> PathBuf {
         let workspace = temp_workspace(prefix);
         fs::write(
             workspace.join(".synod/execution.json"),
             serde_json::to_string_pretty(&WorkspaceExecutionProfile {
                 name: "session-runtime-profile".to_string(),
-                read_targets: Vec::new(),
+                read_targets,
                 validation_command: ExecutionCommand {
                     program: "cargo".to_string(),
                     args: vec!["test".to_string(), "--quiet".to_string()],
@@ -927,6 +1657,7 @@ mod tests {
                 attempts,
                 adaptive: None,
                 limits: RunLimits::default(),
+                governance,
                 review: None,
                 legacy_source: None,
             })
@@ -988,6 +1719,7 @@ mod tests {
                 }],
                 adaptive: None,
                 limits: RunLimits::default(),
+                governance: None,
                 review: None,
                 legacy_source: None,
             },
@@ -1205,5 +1937,180 @@ mod tests {
         runtime.execute_next_step(&mut terminal_session).unwrap();
         assert_eq!(terminal_session.latest_status, SessionStatus::Failed);
         assert!(terminal_session.latest_terminal_reason.is_some());
+    }
+
+    #[test]
+    fn execute_next_step_falls_back_to_local_governance_when_canon_is_optional() {
+        let workspace = write_governed_execution_profile_workspace(
+            "synod-runtime-governance-local-fallback",
+            vec![ExecutionAttemptDefinition {
+                attempt_id: "fix-add".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left - right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+            vec!["README.md".to_string()],
+            Some(GovernanceProfile {
+                default_runtime: GovernanceRuntimeKind::Local,
+                canon: Some(CanonRuntimeConfig {
+                    command: "/definitely/missing/canon".to_string(),
+                    default_owner: Some("platform".to_string()),
+                    default_risk: Some("medium".to_string()),
+                    default_zone: Some("engineering".to_string()),
+                    default_system_context: Some(SystemContextBinding::Existing),
+                }),
+                stages: vec![StageGovernancePolicy {
+                    flow_name: "bug-fix".to_string(),
+                    stage_id: "investigate".to_string(),
+                    enabled: true,
+                    required: false,
+                    autopilot: false,
+                    runtime: Some(GovernanceRuntimeKind::Canon),
+                    canon_mode: Some(CanonMode::Discovery),
+                    system_context: Some(SystemContextBinding::Existing),
+                    risk: Some("medium".to_string()),
+                    zone: Some("engineering".to_string()),
+                    owner: Some("platform".to_string()),
+                }],
+            }),
+        );
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let mut session = ActiveSessionRecord {
+            session_id: "session-runtime".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: None,
+            active_flow: None,
+            active_task: None,
+            latest_status: SessionStatus::Initialized,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 10,
+            updated_at: 10,
+        };
+
+        runtime.capture_goal(&mut session, "Drive governed bug fix").unwrap();
+        runtime.select_flow(&mut session, "bug-fix").unwrap();
+        runtime.plan_task(&mut session).unwrap();
+        runtime.execute_next_step(&mut session).unwrap();
+
+        let task = session.active_task.as_ref().unwrap();
+        let governed_stage = task.context.latest_governance_stage().unwrap().unwrap();
+        let governed_packet = task.context.latest_governance_packet().unwrap().unwrap();
+        assert_eq!(governed_stage.stage_key, "bug-fix:investigate");
+        assert_eq!(governed_stage.runtime, GovernanceRuntimeKind::Local);
+        assert_eq!(governed_stage.lifecycle_state, GovernanceLifecycleState::GovernedReady);
+        assert_eq!(governed_packet.runtime, GovernanceRuntimeKind::Local);
+        assert_eq!(governed_packet.readiness, PacketReadiness::Reusable);
+        assert!(!governed_packet.document_refs.is_empty());
+
+        let trace = runtime
+            .trace_store()
+            .load(Path::new(session.latest_trace_ref.as_ref().unwrap()))
+            .unwrap();
+        assert!(
+            trace.events.iter().any(|event| event.event_type == TraceEventType::GovernanceSelected),
+            "{:?}",
+            trace.events
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| event.event_type == TraceEventType::GovernanceCompleted),
+            "{:?}",
+            trace.events
+        );
+    }
+
+    #[test]
+    fn execute_next_step_blocks_when_required_canon_governance_is_unavailable() {
+        let workspace = write_governed_execution_profile_workspace(
+            "synod-runtime-governance-required-canon",
+            vec![ExecutionAttemptDefinition {
+                attempt_id: "fix-add".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left - right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+            vec!["README.md".to_string()],
+            Some(GovernanceProfile {
+                default_runtime: GovernanceRuntimeKind::Local,
+                canon: Some(CanonRuntimeConfig {
+                    command: "/definitely/missing/canon".to_string(),
+                    default_owner: Some("platform".to_string()),
+                    default_risk: Some("medium".to_string()),
+                    default_zone: Some("engineering".to_string()),
+                    default_system_context: Some(SystemContextBinding::Existing),
+                }),
+                stages: vec![StageGovernancePolicy {
+                    flow_name: "bug-fix".to_string(),
+                    stage_id: "investigate".to_string(),
+                    enabled: true,
+                    required: true,
+                    autopilot: false,
+                    runtime: Some(GovernanceRuntimeKind::Canon),
+                    canon_mode: Some(CanonMode::Discovery),
+                    system_context: Some(SystemContextBinding::Existing),
+                    risk: Some("medium".to_string()),
+                    zone: Some("engineering".to_string()),
+                    owner: Some("platform".to_string()),
+                }],
+            }),
+        );
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let mut session = ActiveSessionRecord {
+            session_id: "session-runtime".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: None,
+            active_flow: None,
+            active_task: None,
+            latest_status: SessionStatus::Initialized,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 10,
+            updated_at: 10,
+        };
+
+        runtime.capture_goal(&mut session, "Drive governed bug fix").unwrap();
+        runtime.select_flow(&mut session, "bug-fix").unwrap();
+        runtime.plan_task(&mut session).unwrap();
+        runtime.execute_next_step(&mut session).unwrap();
+
+        let task = session.active_task.as_ref().unwrap();
+        let governed_stage = task.context.latest_governance_stage().unwrap().unwrap();
+        assert_eq!(session.latest_status, SessionStatus::Failed);
+        assert_eq!(task.status, TaskStatus::Failed);
+        assert_eq!(governed_stage.stage_key, "bug-fix:investigate");
+        assert_eq!(governed_stage.runtime, GovernanceRuntimeKind::Canon);
+        assert_eq!(governed_stage.lifecycle_state, GovernanceLifecycleState::Blocked);
+        assert!(task.context.latest_governance_packet().unwrap().is_none());
+        assert!(
+            session
+                .latest_terminal_reason
+                .as_ref()
+                .unwrap()
+                .message
+                .contains("governance blocked stage bug-fix:investigate")
+        );
+        assert_eq!(task.plan.current_step_index, 0);
+        assert_eq!(task.plan.steps[0].status, StepStatus::Pending);
+
+        let trace = runtime
+            .trace_store()
+            .load(Path::new(session.latest_trace_ref.as_ref().unwrap()))
+            .unwrap();
+        assert!(
+            trace.events.iter().any(|event| event.event_type == TraceEventType::GovernanceBlocked),
+            "{:?}",
+            trace.events
+        );
     }
 }

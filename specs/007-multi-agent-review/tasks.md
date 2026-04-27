@@ -23,11 +23,11 @@
 
 **CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T004 Create review domain types, validation rules, terminal outcomes, and vote-resolution primitives in src/domain/review.rs
-- [ ] T005 [P] Extend execution-profile loading and validation for review configuration in src/domain/execution.rs and src/fixture.rs
-- [ ] T006 [P] Extend task context and session projection for review trigger, vote, outcome, and participants in src/domain/task_context.rs and src/domain/session.rs
-- [ ] T007 [P] Add trace event and summary support for review lifecycle evidence in src/domain/trace.rs and src/cli/output.rs
-- [ ] T008 Implement shared duplicate-trigger and adjudication primitives in src/domain/review.rs, src/orchestrator/engine.rs, and src/orchestrator/session_runtime.rs after T005, T006, and T007 complete
+- [X] T004 Create review domain types, validation rules, terminal outcomes, and vote-resolution primitives in src/domain/review.rs
+- [X] T005 [P] Extend execution-profile loading and validation for review configuration in src/domain/execution.rs and src/fixture.rs
+- [X] T006 [P] Extend task context and session projection for review trigger, vote, outcome, and participants in src/domain/task_context.rs and src/domain/session.rs
+- [X] T007 [P] Add trace event and summary support for review lifecycle evidence in src/domain/trace.rs and src/cli/output.rs
+- [X] T008 Implement shared duplicate-trigger and adjudication primitives in src/domain/review.rs, src/orchestrator/engine.rs, and src/orchestrator/session_runtime.rs after T005, T006, and T007 complete
 
 **Checkpoint**: Foundation ready - review councils can be described, loaded, persisted, and traced inside the existing execution lifecycle.
 
@@ -41,16 +41,16 @@
 
 ### Tests for User Story 1
 
-- [ ] T009 [P] [US1] Add unit coverage for review profile validation and accepted vote computation in tests/unit/review_profile.rs and tests/unit/review_voting.rs
+- [X] T009 [P] [US1] Add unit coverage for review profile validation and accepted vote computation in tests/unit/review_profile.rs and tests/unit/review_voting.rs
 - [ ] T010 [P] [US1] Add contract coverage for review profile parsing and accepted run output in tests/contract/review_profile_contract.rs and tests/contract/review_run_contract.rs
 - [ ] T011 [P] [US1] Add integration coverage for accepted review runs and session-backed review flow in tests/integration/cli_review_run.rs and tests/integration/session_review_flow.rs
 
 ### Implementation for User Story 1
 
-- [ ] T012 [US1] Implement manifest-backed review profile parsing, deterministic reviewer findings, and reviewer agent registration in src/fixture.rs and src/domain/execution.rs
-- [ ] T013 [US1] Append sequential reviewer agent steps and vote-resolution evaluation to reviewable runs in src/fixture.rs, src/orchestrator/planner.rs, and src/orchestrator/session_runtime.rs
-- [ ] T014 [US1] Persist reviewer findings, participation records, vote summaries, and accepted review state in src/orchestrator/engine.rs, src/orchestrator/session_runtime.rs, and src/domain/task_context.rs
-- [ ] T015 [US1] Render accepted review trigger, reviewers, vote summary, and outcome in src/cli/run.rs, src/cli/output.rs, and src/cli/session.rs
+- [X] T012 [US1] Implement manifest-backed review profile parsing, deterministic reviewer findings, and reviewer agent registration in src/fixture.rs and src/domain/execution.rs
+- [X] T013 [US1] Append sequential reviewer agent steps and vote-resolution evaluation to reviewable runs in src/fixture.rs, src/orchestrator/planner.rs, and src/orchestrator/session_runtime.rs
+- [X] T014 [US1] Persist reviewer findings, participation records, vote summaries, and accepted review state in src/orchestrator/engine.rs, src/orchestrator/session_runtime.rs, and src/domain/task_context.rs
+- [X] T015 [US1] Render accepted review trigger, reviewers, vote summary, and outcome in src/cli/run.rs, src/cli/output.rs, and src/cli/session.rs
 
 **Checkpoint**: User Story 1 is complete when a bounded review council can accept one delivery result with inspectable evidence.
 
@@ -104,7 +104,7 @@
 
 **Purpose**: Finalize docs, versioning, coverage, and full validation for the review slice.
 
-- [ ] T028 [P] Add dedicated voting documentation in docs/review-voting.md covering majority voting, weighted voting, reject-on-blocking behavior, adjudication, malformed reviewer output, and accepted/rejected/escalated/failed outcomes with worked examples
+- [X] T028 [P] Add dedicated voting documentation in docs/review-voting.md covering majority voting, weighted voting, reject-on-blocking behavior, adjudication, malformed reviewer output, and accepted/rejected/escalated/failed outcomes with worked examples
 - [ ] T029 [P] Update feature documentation in README.md, ROADMAP.md, AGENTS.md, assistant/README.md, and specs/007-multi-agent-review/quickstart.md
 - [ ] T030 [P] Keep crate version at 0.7.0 in Cargo.toml and Cargo.lock
 - [ ] T031 [P] Raise source coverage for new review paths in tests/unit/coverage_additional.rs, tests/unit/review_profile.rs, tests/unit/review_voting.rs, and review integration tests

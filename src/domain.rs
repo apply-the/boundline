@@ -1,5 +1,6 @@
 pub mod execution;
 pub mod flow;
+pub mod governance;
 pub mod limits;
 pub mod plan;
 pub mod review;

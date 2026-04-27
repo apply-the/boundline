@@ -98,7 +98,7 @@
 
 - [X] T026 [P] [US3] Add contract coverage for persisted delivery-flow session state in tests/contract/flow_session_contract.rs
 - [X] T027 [P] [US3] Add integration coverage for end-to-end delivery-flow stage progression in tests/integration/flow_cli_run.rs
-- [ ] T028 [P] [US3] Add integration coverage for terminal completion and invalid stage-state recovery in tests/integration/flow_cli_run.rs
+- [X] T028 [P] [US3] Add integration coverage for terminal completion and invalid stage-state recovery in tests/integration/flow_cli_run.rs
 
 ### Implementation for User Story 3
 

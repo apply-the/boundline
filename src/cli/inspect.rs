@@ -101,6 +101,7 @@ pub fn summarize_trace(
     let mut step_indexes: HashMap<String, usize> = HashMap::new();
     let mut executed_steps: Vec<TraceStepSummary> = Vec::new();
     let mut recovery_events: Vec<TraceRecoveryEvent> = Vec::new();
+    let mut governance_timeline: Vec<String> = Vec::new();
     let mut review_timeline: Vec<String> = Vec::new();
 
     for event in &trace.events {
@@ -219,6 +220,17 @@ pub fn summarize_trace(
                     related_step_id: event.step_id.clone(),
                 });
             }
+            TraceEventType::GovernanceSelected
+            | TraceEventType::GovernanceStarted
+            | TraceEventType::GovernanceDecisionRecorded
+            | TraceEventType::GovernanceAwaitingApproval
+            | TraceEventType::GovernanceCompleted
+            | TraceEventType::GovernanceBlocked
+            | TraceEventType::GovernancePacketRejected => {
+                if let Some(line) = governance_timeline_line(event.event_type, &event.payload) {
+                    governance_timeline.push(line);
+                }
+            }
             TraceEventType::ReviewStarted
             | TraceEventType::ReviewTriggerIgnored
             | TraceEventType::ReviewerCompleted
@@ -237,6 +249,7 @@ pub fn summarize_trace(
         goal: trace.goal.clone(),
         executed_steps,
         recovery_events,
+        governance_timeline,
         review_timeline,
         terminal_status,
         terminal_reason,
@@ -359,6 +372,77 @@ fn review_timeline_line(event_type: TraceEventType, payload: &serde_json::Value)
                     .and_then(|value| value.as_str())
                     .map(|reason| format!("review_reason: {reason}"))
             }),
+        _ => None,
+    }
+}
+
+fn governance_timeline_line(
+    event_type: TraceEventType,
+    payload: &serde_json::Value,
+) -> Option<String> {
+    match event_type {
+        TraceEventType::GovernanceSelected => Some(format!(
+            "governance_selected: {} -> {}",
+            payload.get("stage_key").and_then(|value| value.as_str()).unwrap_or("unknown-stage"),
+            payload
+                .get("selected_runtime")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown-runtime")
+        )),
+        TraceEventType::GovernanceStarted => Some(format!(
+            "governance_started: {}{}{}",
+            payload.get("stage_key").and_then(|value| value.as_str()).unwrap_or("unknown-stage"),
+            payload
+                .get("canon_mode")
+                .and_then(|value| value.as_str())
+                .map(|mode| format!(" ({mode})"))
+                .unwrap_or_default(),
+            payload
+                .get("run_ref")
+                .and_then(|value| value.as_str())
+                .map(|run_ref| format!(" [{run_ref}]"))
+                .unwrap_or_default()
+        )),
+        TraceEventType::GovernanceDecisionRecorded => payload
+            .get("selected_action")
+            .and_then(|value| value.as_str())
+            .map(|selected_action| format!("governance_decision: {selected_action}"))
+            .or_else(|| {
+                payload
+                    .get("blocked_reason")
+                    .and_then(|value| value.as_str())
+                    .map(|reason| format!("governance_decision_blocked: {reason}"))
+            }),
+        TraceEventType::GovernanceAwaitingApproval => Some(format!(
+            "governance_awaiting_approval: {} ({}){}",
+            payload.get("stage_key").and_then(|value| value.as_str()).unwrap_or("unknown-stage"),
+            payload.get("approval_state").and_then(|value| value.as_str()).unwrap_or("unknown"),
+            payload
+                .get("run_ref")
+                .and_then(|value| value.as_str())
+                .map(|run_ref| format!(" [{run_ref}]"))
+                .unwrap_or_default()
+        )),
+        TraceEventType::GovernanceCompleted => Some(format!(
+            "governance_completed: {}{}",
+            payload
+                .get("headline")
+                .and_then(|value| value.as_str())
+                .unwrap_or("governed packet ready"),
+            payload
+                .get("packet_ref")
+                .and_then(|value| value.as_str())
+                .map(|packet_ref| format!(" [{packet_ref}]"))
+                .unwrap_or_default()
+        )),
+        TraceEventType::GovernanceBlocked => Some(format!(
+            "governance_blocked: {}",
+            payload.get("reason").and_then(|value| value.as_str()).unwrap_or("blocked")
+        )),
+        TraceEventType::GovernancePacketRejected => Some(format!(
+            "governance_packet_rejected: {}",
+            payload.get("reason").and_then(|value| value.as_str()).unwrap_or("packet rejected")
+        )),
         _ => None,
     }
 }
