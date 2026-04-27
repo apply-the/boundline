@@ -5,26 +5,174 @@
 [![Vulnerabilities](https://github.com/apply-the/synod/actions/workflows/vulnerabilities.yml/badge.svg)](https://github.com/apply-the/synod/actions/workflows/vulnerabilities.yml)
 [![Coverage](https://codecov.io/gh/apply-the/synod/graph/badge.svg)](https://codecov.io/gh/apply-the/synod)
 
-Synod is a bounded delivery orchestrator. The current repository implements the
-core Rust orchestrator plus a local developer CLI for `doctor`, session-backed
-`start` / `capture` / `flow` / `plan` / `step` / `run` / `status` / `next`,
-and `inspect`. The current vertical slice is validated with isolated workspace
-execution profiles under `.synod/execution.json` with legacy fallback to
-`.synod/fixture.json`, letting Synod apply real workspace changes, run
-validation commands, and surface change evidence across the built-in `bug-fix`,
-`change`, and `delivery` flows. Review-configured manifests can now run bounded
-multi-reviewer councils with majority or weighted voting, persist review trace
-events, and surface review trigger, vote, outcome, and reviewer evidence across
-`run`, `status`, `next`, and `inspect`. Adaptive execution profiles can also
-select one bounded workspace slice, synthesize deterministic repair candidates,
-replan after failed validation, and surface slice and attempt-lineage evidence
-across the same CLI surfaces.
+**Synod is a local CLI for bounded software-delivery work. You run it inside a
+workspace to execute manifest-declared changes, validate them, and inspect the
+result through session state and traces written back to disk.**
+
+## What Synod Does
+
+The main surface is the `synod` CLI:
+
+- `doctor` validates that a workspace is ready to run.
+- `start`, `capture`, `flow`, `plan`, and `step` drive the session workflow.
+- `run` executes a bounded delivery task end to end.
+- `status`, `next`, and `inspect` explain the current session and latest trace.
+
+Use it when you want delivery work to stay bounded and inspectable:
+
+- keep execution rules in `<workspace>/.synod/execution.json`
+- apply only manifest-declared changes
+- run the workspace validation command after each attempt
+- keep session state in `<workspace>/.synod/session.json`
+- keep execution traces in `<workspace>/.synod/traces/`
+
+Synod prefers `<workspace>/.synod/execution.json` and falls back to the legacy
+`<workspace>/.synod/fixture.json`.
+
+Local execution is the default. When governance is configured, Synod can also
+route stages through Canon and project governance state, approvals, packet
+provenance, and blocked reasons through the same CLI.
+
+## Canon Compatibility
+
+When Synod governance is configured to use Canon, the current adapter is
+validated against Canon `0.20.0`.
+
+That is the Canon CLI version explicitly documented as supported for Synod
+`0.9.0`. Earlier or later Canon versions may work, but they are not part of the
+documented compatibility surface yet.
 
 For contributor setup and validation expectations, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Canon remains part of the longer-term architecture discussion below, but the
-currently implemented developer experience runs fully locally and does not call
-Canon at runtime.
+## Install
+
+Requirements:
+
+- Rust `1.95.0`
+- `cargo`
+
+Run from source:
+
+```bash
+git clone https://github.com/apply-the/synod.git
+cd synod
+cargo run --bin synod -- --help
+```
+
+Install the CLI locally:
+
+```bash
+cargo install --path .
+synod --help
+```
+
+If you are actively changing the repository, prefer `cargo run --bin synod -- ...`
+from the repo root so the command always uses your current source tree.
+
+## Use Synod
+
+The shortest way to think about Synod is:
+
+1. Point it at a workspace.
+2. Give it a bounded execution manifest.
+3. Capture a goal.
+4. Plan and run.
+5. Read `status`, `next`, or `inspect` to continue.
+
+### 1. Prepare a workspace manifest
+
+Create `<workspace>/.synod/execution.json`:
+
+```json
+{
+	"name": "red-to-green-execution",
+	"read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
+	"validation_command": {
+		"program": "cargo",
+		"args": ["test", "--quiet"]
+	},
+	"attempts": [
+		{
+			"attempt_id": "fix-add",
+			"summary": "Replace subtraction with addition",
+			"failure_mode": "replan",
+			"changes": [
+				{
+					"path": "src/lib.rs",
+					"find": "left - right",
+					"replace": "left + right"
+				}
+			]
+		}
+	]
+}
+```
+
+### 2. Run the session workflow
+
+```bash
+synod doctor --workspace <workspace>
+synod start --workspace <workspace>
+synod capture --workspace <workspace> --goal "Fix the failing add test"
+synod flow bug-fix --workspace <workspace>
+synod plan --workspace <workspace>
+synod run --workspace <workspace>
+synod status --workspace <workspace>
+synod inspect --workspace <workspace>
+```
+
+What those commands do, in short:
+
+- `doctor` checks that the workspace and manifest are usable.
+- `start` initializes the workspace session.
+- `capture` stores the goal in session state.
+- `flow` optionally selects `bug-fix`, `change`, or `delivery`.
+- `plan` creates the next bounded task.
+- `run` executes until Synod reaches a terminal state or needs operator action.
+- `status` reports the current session snapshot.
+- `inspect` summarizes the latest trace and evidence.
+
+### 3. Use the direct workflow when you do not need a session
+
+If you do not need the explicit session setup, you can run directly:
+
+```bash
+synod run --workspace <workspace> --goal "Fix the failing add test"
+```
+
+### 4. Inspect what happened
+
+Synod writes:
+
+- session state to `<workspace>/.synod/session.json`
+- traces to `<workspace>/.synod/traces/`
+- latest execution evidence to the CLI output of `run`, `status`, `next`, and `inspect`
+
+Depending on the manifest, that output can also include:
+
+- changed files and validation status
+- adaptive workspace-slice selection and attempt lineage
+- review triggers, findings, votes, and outcomes
+- governance runtime, mode, approval state, packet provenance, and blocked rationale
+
+## Common Workflow
+
+- create or update `<workspace>/.synod/execution.json`
+- run `synod doctor --workspace <workspace>`
+- capture a goal with `synod capture`
+- optionally select `bug-fix`, `change`, or `delivery` with `synod flow`
+- run `synod plan` and `synod run`
+- inspect the result with `synod status`, `synod next`, and `synod inspect`
+
+## Documentation
+
+Start here if you want more than the short README flow:
+
+- **[Getting Started](docs/getting-started.md)**: install Synod, prepare a workspace, run the first task, then inspect the result
+- **[Adaptive Execution](docs/adaptive-execution.md)**: adaptive execution manifest and replanning behavior
+- **[Review Voting](docs/review-voting.md)**: review councils and vote resolution
+- **[Assistant Command Packs](assistant/README.md)**: assistant command packs for Copilot, Codex, and Claude
+- **[Changelog](CHANGELOG.md)**: released versions and delivered feature slices
 
 ## Separation
 
@@ -101,8 +249,7 @@ The local `synod` binary keeps the developer experience local, deterministic,
 and backed by both `<workspace>/.synod/session.json` and
 `<workspace>/.synod/traces/`. `doctor`, `plan`, and `run` prefer a workspace
 execution manifest at `<workspace>/.synod/execution.json` and fall back to the
-legacy `<workspace>/.synod/fixture.json` shape for the current red-to-green
-delivery slice.
+legacy `<workspace>/.synod/fixture.json` shape.
 
 The primary session-native flow is:
 

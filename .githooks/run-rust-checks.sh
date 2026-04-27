@@ -15,9 +15,17 @@ fi
 
 step_index=1
 step_total=3
-if [ "$hook_name" = "pre-push" ]; then
-  step_total=4
-fi
+case "$hook_name" in
+  pre-commit)
+    step_total=1
+    ;;
+  pre-push)
+    step_total=3
+    ;;
+  *)
+    step_total=3
+    ;;
+esac
 
 run_step() {
   step_label=$1
@@ -49,10 +57,10 @@ run_step \
   "Run 'cargo clippy --workspace --all-targets --all-features -- -D warnings' and fix the reported warnings." \
   cargo clippy --workspace --all-targets --all-features -- -D warnings
 
-run_step \
-  "cargo test" \
-  "Run 'cargo test' and fix the failing test or regression before retrying." \
-  cargo test
+  run_step \
+    "cargo test" \
+    "Run 'cargo test' and fix the failing test or regression before retrying." \
+    cargo test
 
 if [ "$hook_name" = "pre-push" ]; then
   run_step \
