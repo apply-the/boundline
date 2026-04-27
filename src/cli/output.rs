@@ -151,6 +151,17 @@ pub fn render_run_trace(
                         lines.push(validation_line);
                     }
                 }
+                TraceEventType::GovernanceSelected
+                | TraceEventType::GovernanceStarted
+                | TraceEventType::GovernanceDecisionRecorded
+                | TraceEventType::GovernanceAwaitingApproval
+                | TraceEventType::GovernanceCompleted
+                | TraceEventType::GovernanceBlocked
+                | TraceEventType::GovernancePacketRejected => {
+                    if let Some(line) = governance_event_line(event.event_type, &event.payload) {
+                        lines.push(line);
+                    }
+                }
                 TraceEventType::RetryScheduled => {
                     let step_id = event.step_id.as_deref().unwrap_or("unknown-step");
                     let reason = event
@@ -264,6 +275,8 @@ pub fn render_trace_summary(
         };
         lines.push(format!("{label}: {}", recovery.trigger));
     }
+
+    lines.extend(summary.governance_timeline.iter().cloned());
 
     lines.extend(summary.review_timeline.iter().cloned());
 
@@ -384,6 +397,66 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
         lines.push(format!("latest_review_headline: {latest_review_headline}"));
     }
 
+    if let Some(latest_governance_stage) = &view.latest_governance_stage {
+        lines.push(format!("latest_governance_stage: {latest_governance_stage}"));
+    }
+
+    if let Some(latest_governance_runtime) = &view.latest_governance_runtime {
+        lines.push(format!("latest_governance_runtime: {latest_governance_runtime}"));
+    }
+
+    if let Some(latest_governance_mode) = &view.latest_governance_mode {
+        lines.push(format!("latest_governance_mode: {latest_governance_mode}"));
+    }
+
+    if let Some(latest_governance_run_ref) = &view.latest_governance_run_ref {
+        lines.push(format!("latest_governance_run_ref: {latest_governance_run_ref}"));
+    }
+
+    if let Some(latest_governance_state) = &view.latest_governance_state {
+        lines.push(format!("latest_governance_state: {latest_governance_state}"));
+    }
+
+    if let Some(latest_governance_blocked_reason) = &view.latest_governance_blocked_reason {
+        lines.push(format!("latest_governance_blocked_reason: {latest_governance_blocked_reason}"));
+    }
+
+    if let Some(latest_governance_packet_ref) = &view.latest_governance_packet_ref {
+        lines.push(format!("latest_governance_packet_ref: {latest_governance_packet_ref}"));
+    }
+
+    if let Some(latest_governance_packet_source_stage) = &view.latest_governance_packet_source_stage
+    {
+        lines.push(format!(
+            "latest_governance_packet_source_stage: {latest_governance_packet_source_stage}"
+        ));
+    }
+
+    if let Some(latest_governance_packet_binding_reason) =
+        &view.latest_governance_packet_binding_reason
+    {
+        lines.push(format!(
+            "latest_governance_packet_binding_reason: {latest_governance_packet_binding_reason}"
+        ));
+    }
+
+    if let Some(latest_governance_approval) = &view.latest_governance_approval {
+        lines.push(format!("latest_governance_approval: {latest_governance_approval}"));
+    }
+
+    if let Some(latest_governance_decision) = &view.latest_governance_decision {
+        lines.push(format!("latest_governance_decision: {latest_governance_decision}"));
+    }
+
+    if let Some(latest_governance_candidates) = &view.latest_governance_candidates
+        && !latest_governance_candidates.is_empty()
+    {
+        lines.push(format!(
+            "latest_governance_candidates: {}",
+            latest_governance_candidates.join(", ")
+        ));
+    }
+
     if let Some(next_command) = &view.next_command {
         lines.push(format!("next_command: {next_command}"));
     }
@@ -491,6 +564,68 @@ fn review_event_line(event_type: TraceEventType, payload: &Value) -> Option<Stri
                     .and_then(Value::as_str)
                     .map(|reason| format!("review_reason: {reason}"))
             }),
+        _ => None,
+    }
+}
+
+fn governance_event_line(event_type: TraceEventType, payload: &Value) -> Option<String> {
+    match event_type {
+        TraceEventType::GovernanceSelected => Some(format!(
+            "governance_selected: {} -> {}",
+            payload.get("stage_key").and_then(Value::as_str).unwrap_or("unknown-stage"),
+            payload.get("selected_runtime").and_then(Value::as_str).unwrap_or("unknown-runtime")
+        )),
+        TraceEventType::GovernanceStarted => Some(format!(
+            "governance_started: {}{}{}",
+            payload.get("stage_key").and_then(Value::as_str).unwrap_or("unknown-stage"),
+            payload
+                .get("canon_mode")
+                .and_then(Value::as_str)
+                .map(|mode| format!(" ({mode})"))
+                .unwrap_or_default(),
+            payload
+                .get("run_ref")
+                .and_then(Value::as_str)
+                .map(|run_ref| format!(" [{run_ref}]"))
+                .unwrap_or_default()
+        )),
+        TraceEventType::GovernanceDecisionRecorded => payload
+            .get("selected_action")
+            .and_then(Value::as_str)
+            .map(|action| format!("governance_decision: {action}"))
+            .or_else(|| {
+                payload
+                    .get("blocked_reason")
+                    .and_then(Value::as_str)
+                    .map(|reason| format!("governance_decision_blocked: {reason}"))
+            }),
+        TraceEventType::GovernanceAwaitingApproval => Some(format!(
+            "governance_awaiting_approval: {} ({}){}",
+            payload.get("stage_key").and_then(Value::as_str).unwrap_or("unknown-stage"),
+            payload.get("approval_state").and_then(Value::as_str).unwrap_or("unknown"),
+            payload
+                .get("run_ref")
+                .and_then(Value::as_str)
+                .map(|run_ref| format!(" [{run_ref}]"))
+                .unwrap_or_default()
+        )),
+        TraceEventType::GovernanceCompleted => Some(format!(
+            "governance_completed: {}{}",
+            payload.get("headline").and_then(Value::as_str).unwrap_or("governed packet ready"),
+            payload
+                .get("packet_ref")
+                .and_then(Value::as_str)
+                .map(|packet_ref| format!(" [{packet_ref}]"))
+                .unwrap_or_default()
+        )),
+        TraceEventType::GovernanceBlocked => Some(format!(
+            "governance_blocked: {}",
+            payload.get("reason").and_then(Value::as_str).unwrap_or("blocked")
+        )),
+        TraceEventType::GovernancePacketRejected => Some(format!(
+            "governance_packet_rejected: {}",
+            payload.get("reason").and_then(Value::as_str).unwrap_or("packet rejected")
+        )),
         _ => None,
     }
 }
@@ -651,6 +786,7 @@ mod tests {
                     related_step_id: Some("verify".to_string()),
                 },
             ],
+            governance_timeline: Vec::new(),
             review_timeline: Vec::new(),
             terminal_status: TaskStatus::Failed,
             terminal_reason: TerminalReason::new(
@@ -692,6 +828,18 @@ mod tests {
             latest_review_vote: None,
             latest_review_outcome: None,
             latest_review_headline: None,
+            latest_governance_stage: None,
+            latest_governance_runtime: None,
+            latest_governance_mode: None,
+            latest_governance_run_ref: None,
+            latest_governance_state: None,
+            latest_governance_blocked_reason: None,
+            latest_governance_packet_ref: None,
+            latest_governance_packet_source_stage: None,
+            latest_governance_packet_binding_reason: None,
+            latest_governance_approval: None,
+            latest_governance_decision: None,
+            latest_governance_candidates: None,
             next_command: None,
             explanation: "session is invalid".to_string(),
         };
@@ -791,6 +939,23 @@ mod tests {
             ),
             latest_review_outcome: Some("accepted".to_string()),
             latest_review_headline: Some("safety approve: No blockers".to_string()),
+            latest_governance_stage: Some("bug-fix:implement".to_string()),
+            latest_governance_runtime: Some("canon".to_string()),
+            latest_governance_mode: Some("implementation".to_string()),
+            latest_governance_run_ref: Some("canon-run-1".to_string()),
+            latest_governance_state: Some("awaiting_approval".to_string()),
+            latest_governance_blocked_reason: None,
+            latest_governance_packet_ref: Some(".canon/runs/canon-run-1".to_string()),
+            latest_governance_packet_source_stage: Some("bug-fix:investigate".to_string()),
+            latest_governance_packet_binding_reason: Some("upstream_stage_context".to_string()),
+            latest_governance_approval: Some("requested".to_string()),
+            latest_governance_decision: Some(
+                "await approval for governed implementation".to_string(),
+            ),
+            latest_governance_candidates: Some(vec![
+                "await_approval".to_string(),
+                "block_stage".to_string(),
+            ]),
             next_command: Some("synod step".to_string()),
             explanation: "review is in progress".to_string(),
         };
@@ -801,6 +966,13 @@ mod tests {
         assert!(text.contains("latest_review_vote: strategy=majority approvals=2 concerns=0 blocks=0 decision=accepted"), "{text}");
         assert!(text.contains("latest_review_outcome: accepted"), "{text}");
         assert!(text.contains("latest_review_headline: safety approve: No blockers"), "{text}");
+        assert!(text.contains("latest_governance_mode: implementation"), "{text}");
+        assert!(text.contains("latest_governance_run_ref: canon-run-1"), "{text}");
+        assert!(text.contains("latest_governance_state: awaiting_approval"), "{text}");
+        assert!(
+            text.contains("latest_governance_candidates: await_approval, block_stage"),
+            "{text}"
+        );
     }
 
     #[test]
@@ -810,6 +982,10 @@ mod tests {
             goal: "Render trace summary".to_string(),
             executed_steps: vec![],
             recovery_events: vec![],
+            governance_timeline: vec![
+                "governance_selected: bug-fix:implement -> canon".to_string(),
+                "governance_awaiting_approval: bug-fix:implement (requested)".to_string(),
+            ],
             review_timeline: vec![
                 "review_trigger: pr_ready".to_string(),
                 "reviewer safety (Safety) approve: No blockers".to_string(),
@@ -824,6 +1000,7 @@ mod tests {
 
         let text = render_trace_summary(&summary, "latest-workspace-trace", "/synod-next");
 
+        assert!(text.contains("governance_selected: bug-fix:implement -> canon"), "{text}");
         assert!(text.contains("review_trigger: pr_ready"), "{text}");
         assert!(text.contains("review_outcome: accepted"), "{text}");
     }

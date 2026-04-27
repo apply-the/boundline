@@ -17,7 +17,7 @@ use crate::domain::execution::{
     WorkspaceSliceSelection,
 };
 use crate::domain::flow::{
-    FLOW_METADATA_KEY, SessionFlowState, attach_stage_metadata, built_in_flow,
+    FLOW_METADATA_KEY, FlowStepMetadata, SessionFlowState, attach_stage_metadata, built_in_flow,
 };
 use crate::domain::limits::RunLimits;
 use crate::domain::plan::Plan;
@@ -29,6 +29,7 @@ use crate::domain::step::{
     ErrorInfo, Recoverability, Step, StepError, StepExecutionRequest, StepExecutionResult,
 };
 use crate::domain::task::TaskRunRequest;
+use crate::orchestrator::governance::{bounded_reused_packets, select_packet_reuse_binding};
 use crate::orchestrator::planner::{CallbackPlanner, Planner, PlanningError, StaticPlanner};
 use crate::registry::agent_registry::{AgentRegistry, RegistryError as AgentRegistryError};
 use crate::registry::tool_registry::{RegistryError as ToolRegistryError, ToolRegistry};
@@ -1427,6 +1428,7 @@ fn legacy_fixture_to_execution_profile(
         attempts,
         adaptive: None,
         limits: fixture.limits,
+        governance: None,
         review: None,
         legacy_source: Some(FIXTURE_RELATIVE_PATH.to_string()),
     };
@@ -1447,24 +1449,24 @@ fn analyze_workspace_fixture(
                 &request.input,
                 &request.task_snapshot.state,
             );
+            let governance_context = governance_context_from_request(&request);
+            let mut rendered_output = json!({
+                "execution_profile": profile.name,
+                "analysis_targets": snapshots,
+                "legacy_source": profile.legacy_source,
+            });
+            if let Some(governance_context) = governance_context {
+                rendered_output["governance_context"] = governance_context;
+            }
 
             if state_patch.is_empty() {
-                StepExecutionResult::success(json!({
-                    "execution_profile": profile.name,
-                    "analysis_targets": snapshots,
-                    "legacy_source": profile.legacy_source,
-                }))
+                StepExecutionResult::success(rendered_output)
             } else {
-                StepExecutionResult::success_with_patch(
-                    json!({
-                        "execution_profile": profile.name,
-                        "analysis_targets": snapshots,
-                        "legacy_source": profile.legacy_source,
-                        "workspace_slice": request.input.get("workspace_slice").cloned(),
-                        "selection_evidence": request.input.get("selection_evidence").cloned(),
-                    }),
-                    state_patch,
-                )
+                rendered_output["workspace_slice"] =
+                    request.input.get("workspace_slice").cloned().unwrap_or(Value::Null);
+                rendered_output["selection_evidence"] =
+                    request.input.get("selection_evidence").cloned().unwrap_or(Value::Null);
+                StepExecutionResult::success_with_patch(rendered_output, state_patch)
             }
         }
         Err(error) => StepExecutionResult::failure(
@@ -1529,18 +1531,20 @@ fn apply_workspace_fixture(
                 &request.input,
                 &request.task_snapshot.state,
             );
+            let governance_context = governance_context_from_request(&request);
+            let mut rendered_output = json!({
+                "execution_profile": profile.name,
+                "attempt_id": attempt.attempt_id,
+                "change_applied": true,
+                "changed_files": changed_files,
+                "already_applied_files": report.already_applied_files,
+                "change_evidence": report.change_evidence,
+            });
+            if let Some(governance_context) = governance_context {
+                rendered_output["governance_context"] = governance_context;
+            }
 
-            StepExecutionResult::success_with_patch(
-                json!({
-                    "execution_profile": profile.name,
-                    "attempt_id": attempt.attempt_id,
-                    "change_applied": true,
-                    "changed_files": changed_files,
-                    "already_applied_files": report.already_applied_files,
-                    "change_evidence": report.change_evidence,
-                }),
-                state_patch,
-            )
+            StepExecutionResult::success_with_patch(rendered_output, state_patch)
         }
         Err(error) => StepExecutionResult::failure(
             ErrorInfo::new(
@@ -1590,15 +1594,17 @@ fn verify_workspace_fixture(
             } else {
                 state_patch.insert("goal_satisfied".to_string(), json!(true));
             }
-            StepExecutionResult::success_with_patch(
-                json!({
-                    "execution_profile": profile.name,
-                    "attempt_id": attempt.attempt_id,
-                    "validation": record,
-                    "review_trigger": profile.review.as_ref().and_then(default_success_review_trigger),
-                }),
-                state_patch,
-            )
+            let governance_context = governance_context_from_request(&request);
+            let mut rendered_output = json!({
+                "execution_profile": profile.name,
+                "attempt_id": attempt.attempt_id,
+                "validation": record,
+                "review_trigger": profile.review.as_ref().and_then(default_success_review_trigger),
+            });
+            if let Some(governance_context) = governance_context {
+                rendered_output["governance_context"] = governance_context;
+            }
+            StepExecutionResult::success_with_patch(rendered_output, state_patch)
         }
         Ok(output)
             if attempt.failure_mode == ExecutionFailureMode::Terminal
@@ -1620,15 +1626,17 @@ fn verify_workspace_fixture(
             );
             state_patch
                 .insert("next_review_trigger".to_string(), json!(ReviewTrigger::ValidationFailed));
-            StepExecutionResult::success_with_patch(
-                json!({
-                    "execution_profile": profile.name,
-                    "attempt_id": attempt.attempt_id,
-                    "validation": record,
-                    "review_trigger": ReviewTrigger::ValidationFailed,
-                }),
-                state_patch,
-            )
+            let governance_context = governance_context_from_request(&request);
+            let mut rendered_output = json!({
+                "execution_profile": profile.name,
+                "attempt_id": attempt.attempt_id,
+                "validation": record,
+                "review_trigger": ReviewTrigger::ValidationFailed,
+            });
+            if let Some(governance_context) = governance_context {
+                rendered_output["governance_context"] = governance_context;
+            }
+            StepExecutionResult::success_with_patch(rendered_output, state_patch)
         }
         Ok(output) => StepExecutionResult::failure(
             ErrorInfo::new(
@@ -1765,6 +1773,21 @@ fn review_workspace_fixture(
         }),
         state_patch,
     )
+}
+
+fn governance_context_from_request(request: &StepExecutionRequest) -> Option<Value> {
+    let metadata = FlowStepMetadata::from_value(request.input.get(FLOW_METADATA_KEY)?).ok()??;
+    let reused_packets = bounded_reused_packets(&request.task_snapshot, &metadata).ok()?;
+    if reused_packets.is_empty() {
+        return None;
+    }
+    let reuse_binding =
+        select_packet_reuse_binding(&request.task_snapshot, &metadata).ok().flatten();
+
+    Some(json!({
+        "reused_packets": reused_packets,
+        "reuse_binding": reuse_binding,
+    }))
 }
 
 fn resolve_review_vote(
@@ -2323,7 +2346,11 @@ mod tests {
         execution_manifest_path, load_workspace_execution_profile, load_workspace_fixture,
         resolve_review_vote, run_fixture_command, verify_workspace_fixture,
     };
-    use crate::domain::flow::built_in_flow;
+    use crate::domain::flow::{attach_stage_metadata, built_in_flow};
+    use crate::domain::governance::{
+        ApprovalState, CanonMode, GovernanceLifecycleState, GovernanceRuntimeKind,
+        GovernedStagePacket, GovernedStageRecord, PacketReadiness,
+    };
     use crate::domain::limits::RunLimits;
     use crate::domain::review::{
         ReviewProfile, ReviewScenario, ReviewTrigger, ReviewerDefinition, ReviewerDisposition,
@@ -2374,6 +2401,7 @@ mod tests {
             }],
             adaptive: None,
             limits: RunLimits::default(),
+            governance: None,
             review: None,
             legacy_source: None,
         }
@@ -2869,6 +2897,76 @@ mod tests {
         assert!(command_output.succeeded());
         assert_eq!(command_output.rendered_command(), "true");
         assert_eq!(command_output.details()["command"], json!("true"));
+    }
+
+    #[test]
+    fn fixture_analysis_surfaces_bounded_governance_context_for_flow_steps() {
+        let workspace = write_execution_workspace(
+            "synod-fixture-governance-context",
+            "pub fn add(left: i32, right: i32) -> i32 {\n    left + right\n}\n",
+        );
+        let profile = sample_profile(ExecutionCommand {
+            program: "cargo".to_string(),
+            args: vec!["test".to_string(), "--quiet".to_string()],
+        });
+        let mut state = Map::new();
+        state.insert(
+            "latest_governance_stage".to_string(),
+            serde_json::to_value(GovernedStageRecord {
+                stage_key: "bug-fix:investigate".to_string(),
+                runtime: GovernanceRuntimeKind::Canon,
+                lifecycle_state: GovernanceLifecycleState::GovernedReady,
+                required: false,
+                autopilot_enabled: false,
+                approval_state: ApprovalState::NotNeeded,
+                canon_run_ref: Some("canon-run-3".to_string()),
+                governance_attempt_id: "attempt-3".to_string(),
+                previous_governance_attempt_id: None,
+                packet_ref: Some(".canon/runs/canon-run-3".to_string()),
+                decision_ref: None,
+                blocked_reason: None,
+            })
+            .unwrap(),
+        );
+        state.insert(
+            "latest_governance_packet".to_string(),
+            serde_json::to_value(GovernedStagePacket {
+                packet_ref: ".canon/runs/canon-run-3".to_string(),
+                runtime: GovernanceRuntimeKind::Canon,
+                canon_mode: Some(CanonMode::Discovery),
+                expected_document_refs: vec![".canon/runs/canon-run-3/discovery.md".to_string()],
+                document_refs: vec![".canon/runs/canon-run-3/discovery.md".to_string()],
+                readiness: PacketReadiness::Reusable,
+                missing_sections: Vec::new(),
+                headline: "investigation packet ready".to_string(),
+            })
+            .unwrap(),
+        );
+        let input = attach_stage_metadata(
+            json!({
+                "phase": "implement",
+            }),
+            built_in_flow("bug-fix").unwrap(),
+            1,
+        )
+        .unwrap();
+
+        let result =
+            analyze_workspace_fixture(&workspace, &profile, request_with_state(input, 1, state));
+        let governance_context = &result.output.as_ref().unwrap()["governance_context"];
+
+        assert_eq!(
+            governance_context["reused_packets"][0]["stage_key"],
+            json!("bug-fix:investigate")
+        );
+        assert_eq!(
+            governance_context["reused_packets"][0]["packet_ref"],
+            json!(".canon/runs/canon-run-3")
+        );
+        assert_eq!(
+            governance_context["reuse_binding"]["binding_reason"],
+            json!("upstream_stage_context")
+        );
     }
 
     #[test]

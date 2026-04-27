@@ -29,6 +29,7 @@ fn sample_profile() -> WorkspaceExecutionProfile {
         }],
         adaptive: None,
         limits: RunLimits::default(),
+        governance: None,
         review: None,
         legacy_source: None,
     }

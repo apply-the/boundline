@@ -1,4 +1,5 @@
 pub mod engine;
+pub mod governance;
 pub mod planner;
 pub mod recovery;
 mod review_trace;

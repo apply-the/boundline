@@ -42,3 +42,18 @@ mod flow_session_contract;
 
 #[path = "contract/flow_status_contract.rs"]
 mod flow_status_contract;
+
+#[path = "contract/governance_execution_profile_contract.rs"]
+mod governance_execution_profile_contract;
+
+#[path = "contract/local_governance_runtime_contract.rs"]
+mod local_governance_runtime_contract;
+
+#[path = "contract/canon_runtime_contract.rs"]
+mod canon_runtime_contract;
+
+#[path = "contract/governance_session_contract.rs"]
+mod governance_session_contract;
+
+#[path = "contract/governance_trace_contract.rs"]
+mod governance_trace_contract;

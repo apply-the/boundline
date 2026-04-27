@@ -72,6 +72,14 @@ fn load_session_record(workspace: &std::path::Path) -> ActiveSessionRecord {
         .unwrap()
 }
 
+fn persist_session_record(workspace: &std::path::Path, record: &ActiveSessionRecord) {
+    fs::write(
+        workspace.join(".synod").join("session.json"),
+        serde_json::to_vec_pretty(record).unwrap(),
+    )
+    .unwrap();
+}
+
 #[test]
 fn bug_fix_flow_progresses_stages_and_inspect_reports_transitions() {
     let workspace = temp_workspace();
@@ -198,5 +206,32 @@ fn flow_cannot_be_replaced_once_a_plan_exists() {
     let text = terminal_text(&output);
     assert_eq!(output.status.code(), Some(1), "{text}");
     assert!(text.contains("cannot replace active flow `bug-fix` with `change`"), "{text}");
+    assert!(text.contains("next_command: synod start"), "{text}");
+}
+
+#[test]
+fn invalid_flow_state_requires_a_new_session_before_stage_execution_resumes() {
+    let workspace = temp_workspace();
+    assert_eq!(run_synod_in(&workspace, &["start"]).status.code(), Some(0));
+    assert_eq!(
+        run_synod_in(&workspace, &["capture", "--goal", "Fix the failing checkout flow"])
+            .status
+            .code(),
+        Some(0)
+    );
+    assert_eq!(run_synod_in(&workspace, &["flow", "bug-fix"]).status.code(), Some(0));
+    assert_eq!(run_synod_in(&workspace, &["plan"]).status.code(), Some(0));
+
+    let mut record = load_session_record(&workspace);
+    let active_flow = record.active_flow.as_mut().expect("flow should be present");
+    active_flow.current_stage_index = active_flow.total_stages;
+    active_flow.current_stage_id = "corrupted-stage".to_string();
+    persist_session_record(&workspace, &record);
+
+    let output = run_synod_in(&workspace, &["step"]);
+    let text = terminal_text(&output);
+    assert_eq!(output.status.code(), Some(1), "{text}");
+    assert!(text.contains("active session is invalid: session flow state is invalid"), "{text}");
+    assert!(text.contains("invalid stage index"), "{text}");
     assert!(text.contains("next_command: synod start"), "{text}");
 }
