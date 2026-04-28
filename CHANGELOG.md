@@ -19,9 +19,26 @@ version.
 
 Delivered specs:
 
-- None recorded after `0.10.0`
+- None recorded after `0.11.0`
 
 Highlights:
+
+## [0.11.0]
+
+Delivered specs:
+
+- `011-init-model-routing`
+
+Highlights:
+
+- Added `synod init` to scaffold bounded workspace defaults under `.synod/`
+  without hand-authoring setup files.
+- Added `synod config show|set|unset` for runtime/model routing at global and
+  workspace scope.
+- Added deterministic routing precedence (`CLI > workspace > global > built-in`)
+  with effective-source visibility.
+- Added initial runtime setup surface for Claude, Codex, Copilot, and Gemini
+  CLI (CLI-only for Gemini in this slice).
 
 ## [0.10.0]
 
