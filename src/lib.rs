@@ -6,6 +6,7 @@ pub mod orchestrator;
 pub mod registry;
 
 pub use adapters::agent::FnAgentAdapter;
+pub use adapters::config_store::{ConfigStoreError, FileConfigStore};
 pub use adapters::governance_runtime::{
     CanonCliRuntime, GovernanceBoundedContext, GovernanceInputDocument, GovernanceRequestKind,
     GovernanceRuntime, GovernanceRuntimeError, GovernanceRuntimeRequest, GovernanceRuntimeResponse,
@@ -17,6 +18,11 @@ pub use domain::brief::{
     AuthoredBriefBundle, BriefIngestionError, GovernanceIntent, InputSourceKind,
     InputSourceReference, MAX_BRIEF_BYTES, MAX_BRIEF_SOURCES, normalize_governance_intent,
     normalize_inputs as normalize_brief_inputs, normalize_inputs_with_governance,
+};
+pub use domain::configuration::{
+    ConfigFile, ConfigShowScope, ConfigWriteScope, EffectiveRouting, InitTemplate, ModelRoute,
+    RouteSlot, RoutingConfig, RoutingOverrides, RuntimeKind, SourcedRoute, ValueSource,
+    resolve_effective_routing,
 };
 pub use domain::execution::{
     ChangeEvidence, ChangeStatus, ExecutionAttemptDefinition, ExecutionCommand,

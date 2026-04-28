@@ -2,6 +2,10 @@
 
 Synod `0.8.0` adds a bounded adaptive execution mode on top of the local execution engine. Instead of requiring every attempt to be pre-authored in `<workspace>/.synod/execution.json`, an execution profile can now describe an `adaptive` block and let Synod choose one workspace slice and one deterministic candidate at a time.
 
+In `0.11.0`, operators can generate the baseline execution profile with
+`synod init`; adaptive behavior is still configured through the execution
+manifest itself.
+
 ## What the runtime supports
 
 - bounded workspace-slice scoring from `read_targets`

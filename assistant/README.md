@@ -1,8 +1,10 @@
 # Assistant Command Packs
 
-This directory contains Markdown-based commands to run `synod` from various AI assistants (Claude, Codex, Copilot).
+This directory contains Markdown-based commands to run `synod` from various AI assistants (Claude, Codex, Copilot, Gemini CLI).
 
 The current delivery surface expects `<workspace>/.synod/execution.json` when present and falls back to the legacy `<workspace>/.synod/fixture.json` manifest for older workspaces.
+`synod init` now scaffolds the default execution profile and local routing config
+for human-first setup.
 
 ## Directory Structure
 - **Claude**: `claude/commands/`
@@ -15,6 +17,7 @@ Each AI assistant has its own local or remote configuration. Currently, all comm
 - **Copilot**: Copy `./assistant/copilot/prompts/*.prompt.md` to `.github/prompts/` or reference via `#file`.
 - **Claude**: Load the respective `.md` files as projects or upload as attachments to the context window.
 - **Codex**: Import into the corresponding workbench.
+- **Gemini CLI**: Reference the command docs from this directory and run the mapped Synod CLI commands locally.
 
 ## Fallback Conventions
 Since an assistant may be executed in a context *without* shell access (e.g., standard chat window), each command must gracefully degrade.
@@ -32,8 +35,13 @@ If the shell/terminal *is* available:
 ## Workflows
 
 ### Starting a Workflow (User Story 1)
+- `/synod-init`: Runs `cargo run --bin synod -- init --workspace <workspace> --template <bug-fix|change|delivery>` before first use or when workspace setup is missing.
 - `/synod-start`: Confirms the workspace and runs `cargo run --bin synod -- start --workspace <workspace>` to initialize the active session.
 - `/synod-plan`: Captures human-authored input into the active session, then runs `cargo run --bin synod -- plan --workspace <workspace>`. When the user gives direct text, use `cargo run --bin synod -- capture --workspace <workspace> --goal "<goal>"`. When the user provides Markdown brief files, use `cargo run --bin synod -- capture --workspace <workspace> --brief <path> [--brief <path> ...]`. When both are present, pass both `--goal` and repeated `--brief` flags in the same capture command.
+
+When the user asks to tune defaults for planning, verification, or review roles,
+assistants should use `cargo run --bin synod -- config show|set|unset ...`
+instead of asking users to edit config files manually.
 
 If the user explicitly selects a built-in flow, assistants should run `cargo run --bin synod -- flow <bug-fix|change|delivery> --workspace <workspace>` after capture and before plan. There is no separate assistant command pack for `flow`; use the raw CLI subcommand directly.
 

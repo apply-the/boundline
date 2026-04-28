@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod config_store;
 pub mod governance_runtime;
 pub mod session_store;
 pub mod tool;
