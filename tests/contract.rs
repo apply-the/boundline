@@ -57,3 +57,12 @@ mod governance_session_contract;
 
 #[path = "contract/governance_trace_contract.rs"]
 mod governance_trace_contract;
+
+#[path = "contract/human_input_cli_contract.rs"]
+mod human_input_cli_contract;
+
+#[path = "contract/human_input_session_contract.rs"]
+mod human_input_session_contract;
+
+#[path = "contract/human_input_governance_contract.rs"]
+mod human_input_governance_contract;

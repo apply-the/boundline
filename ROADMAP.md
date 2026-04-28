@@ -6,17 +6,21 @@ Canon is downstream from Synod in this roadmap: Synod thinks, decides, orchestra
 
 Evolve Synod into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.9.0
+## Current Status: v0.10.0
 
-All core features now complete:
+In addition to all v0.9.0 capabilities (session, flows, execution, review,
+adaptive, assistant integration, governance), the v0.10.0 release ships the
+full `010-human-brief-ingestion` feature:
 
-- **Session & Delivery**: active session persisted in `.synod/session.json`, explicit flow `start -> capture -> flow -> plan -> step/run -> status/next -> inspect`
-- **Flows**: built-in `bug-fix`, `change`, and `delivery` flow definitions with stage-aware session state
-- **Execution**: execution-profile-backed red-to-green delivery under `.synod/execution.json` with legacy `.synod/fixture.json` fallback, changed-file and validation evidence projected into surfaces
-- **Review**: bounded review councils with manifest-driven reviewers, majority or weighted voting, optional adjudication, and review evidence across all surfaces
-- **Adaptive**: workspace-slice selection, deterministic candidate synthesis, bounded replanning after failed validation, adaptive evidence projected into all session and inspect surfaces
-- **Assistant Integration**: command packs aligned with session model and reuse of `latest_trace_ref`
-- **Governance**: local-first and Canon-backed stage governance with packet readiness checks, packet provenance, approval refresh, and autopilot decision evidence across CLI surfaces
+- **Human Brief Ingestion**: `synod capture` and `synod run` accept direct
+  text, repeated `--brief <path>.md` arguments, and business-level governance
+  intent, normalizing them into one inspectable authored brief bundle.
+- **Multi-Source Provenance**: explicit briefs and Markdown paths referenced in
+  goal text resolve in stable precedence order, deduplicate deterministically,
+  and remain visible through `status`, `inspect`, and trace summaries.
+- **Clarification and Governance Routing**: unbounded requests stop with one
+  explicit clarification before planning, while governed runs surface blocked
+  or approval-gated next actions through the existing session surfaces.
 
 ### Immediate follow-up directions
 
@@ -25,59 +29,6 @@ All core features now complete:
 - deepen delivery and review beyond the current bounded local execution manifests
 - multi-workspace and cross-repository orchestration
 - advanced goal negotiation and constraint modeling
-
-## Next Feature — Canon Governance Adapter
-
-### Outcome
-
-Synod binds meaningful flow stages to Canon runs through a CLI adapter, uses Canon-produced documents as governed reasoning inputs, and keeps Synod in control of orchestration and execution.
-
-### Why next
-
-The current core is stable enough to add governance without confusing it with flow definition or local execution. Canon should now add governed packets and durable documentation around the stages Synod already knows how to run.
-
-### In scope
-
-- `GovernanceRuntime` abstraction with a local default and a `CanonCliRuntime`
-- optional Canon integration controlled by Synod config rather than a compile-time crate dependency
-- stage-to-mode mapping from Synod flows into Canon modes for `bug-fix`, `change`, and `delivery`
-- generation of Canon input documents per mode and stage
-- capture of Canon run IDs and statuses inside the Synod session record
-- reuse of Canon-produced documents as reasoning material for later Synod stages
-- stage-scoped governance at meaningful boundaries, while Synod retains its own internal step trace
-
-### Out of scope
-
-- direct Rust dependency on Canon internals
-- one Canon run per micro-step inside Synod
-- replacing `.synod` traces with Canon artifacts
-- mandatory governance for all users or all runs
-
-### Operating model
-
-```text
-Synod flow stage -> Canon mode run -> governed documents -> Synod reasoning/execution
-Synod internal steps -> Synod trace
-```
-
-### Intended flow
-
-- Synod chooses the next stage and prepares the bounded context for it.
-- Canon produces the stage documents and governed packet for that mode.
-- Synod reads those documents to reason, plan, and constrain execution.
-- Synod performs the actual coding, testing, and adaptive retry loop locally.
-- Synod optionally sends later verification or PR-review stages back through Canon.
-
-### Initial stage mapping
-
-- `delivery`: `requirements -> requirements`, `architecture -> architecture`, `backlog -> backlog`, `implementation -> implementation`
-- `change`: `understand-change -> change`, `implement -> implementation`, `verify -> verification` with optional `pr-review`
-- `bug-fix`: `investigate -> discovery` or `change` depending on uncertainty, `implement -> implementation`, `verify -> verification` with optional `pr-review`
-- Canon documents become bounded stage inputs for Synod, not replacements for Synod planning or trace storage.
-
-### Tangible result
-
-Synod stays the orchestrator, but gains governed documentation that improves planning, implementation boundaries, verification context, and auditability across the full delivery flow.
 
 ## Architecture: User Through Execution
 

@@ -41,6 +41,73 @@ impl TerminalReason {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ClarificationReasonKind {
+    MissingContext,
+    SourceConflict,
+    MissingSource,
+    UnsupportedSource,
+    UnboundedRequest,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ClarificationStatus {
+    Open,
+    Answered,
+    Exhausted,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClarificationRecord {
+    pub clarification_id: String,
+    pub reason_kind: ClarificationReasonKind,
+    pub prompt: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub missing_fields: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blocking_sources: Vec<String>,
+    pub turn_index: usize,
+    pub status: ClarificationStatus,
+}
+
+impl ClarificationRecord {
+    pub fn headline(&self) -> String {
+        match self.reason_kind {
+            ClarificationReasonKind::MissingContext => {
+                "clarification required: provide the missing business context".to_string()
+            }
+            ClarificationReasonKind::SourceConflict => {
+                "clarification required: resolve the conflicting source material".to_string()
+            }
+            ClarificationReasonKind::MissingSource => {
+                "clarification required: provide the missing authored source".to_string()
+            }
+            ClarificationReasonKind::UnsupportedSource => {
+                "clarification required: replace the unsupported authored source".to_string()
+            }
+            ClarificationReasonKind::UnboundedRequest => {
+                "clarification required: narrow the request to one bounded outcome".to_string()
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DerivedTaskDraft {
+    pub draft_id: String,
+    pub bundle_id: String,
+    pub bounded_goal: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flow_hint: Option<String>,
+    pub planning_ready: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub validation_targets: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocking_clarification_ref: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TaskRunRequest {
     pub goal: String,

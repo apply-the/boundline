@@ -2,6 +2,7 @@ use std::{fmt, path::PathBuf};
 
 use clap::{Parser, Subcommand};
 
+use crate::domain::governance::GovernanceRuntimeKind;
 use crate::domain::trace::current_timestamp_millis;
 
 pub mod diagnostics;
@@ -76,7 +77,18 @@ pub enum DeveloperCommand {
         #[arg(long)]
         workspace: Option<PathBuf>,
         #[arg(long)]
-        goal: String,
+        goal: Option<String>,
+        /// One or more Markdown brief files (.md or .markdown) inside the workspace.
+        #[arg(long = "brief")]
+        brief: Vec<PathBuf>,
+        #[arg(long = "governance")]
+        governance: Option<GovernanceRuntimeKind>,
+        #[arg(long)]
+        risk: Option<String>,
+        #[arg(long)]
+        zone: Option<String>,
+        #[arg(long)]
+        owner: Option<String>,
     },
     Flow {
         name: String,
@@ -96,6 +108,17 @@ pub enum DeveloperCommand {
         workspace: Option<PathBuf>,
         #[arg(long)]
         goal: Option<String>,
+        /// One or more Markdown brief files (.md or .markdown) inside the workspace.
+        #[arg(long = "brief")]
+        brief: Vec<PathBuf>,
+        #[arg(long = "governance")]
+        governance: Option<GovernanceRuntimeKind>,
+        #[arg(long)]
+        risk: Option<String>,
+        #[arg(long)]
+        zone: Option<String>,
+        #[arg(long)]
+        owner: Option<String>,
     },
     Inspect {
         #[arg(long)]
@@ -165,10 +188,18 @@ impl DeveloperCommandSession {
                 exit_status: None,
                 trace_location: None,
             },
-            DeveloperCommand::Capture { workspace, goal } => Self {
+            DeveloperCommand::Capture {
+                workspace,
+                goal,
+                brief: _,
+                governance: _,
+                risk: _,
+                zone: _,
+                owner: _,
+            } => Self {
                 command_name: CommandName::Capture,
                 workspace_ref: workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
-                goal: Some(goal.clone()),
+                goal: goal.clone(),
                 trace_ref: None,
                 started_at: current_timestamp_millis(),
                 completed_at: None,
@@ -205,7 +236,15 @@ impl DeveloperCommandSession {
                 exit_status: None,
                 trace_location: None,
             },
-            DeveloperCommand::Run { workspace, goal } => Self {
+            DeveloperCommand::Run {
+                workspace,
+                goal,
+                brief: _,
+                governance: _,
+                risk: _,
+                zone: _,
+                owner: _,
+            } => Self {
                 command_name: CommandName::Run,
                 workspace_ref: workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
                 goal: goal.clone(),
@@ -282,6 +321,7 @@ impl DeveloperCommandSession {
         }
 
         if matches!(self.command_name, CommandName::Capture)
+            && self.goal.is_some()
             && self.goal.as_deref().map(str::trim).unwrap_or_default().is_empty()
         {
             return Err(CliValidationError::MissingGoal(self.command_name));
@@ -366,11 +406,23 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                 trace_location: None,
             }
         }
-        DeveloperCommand::Run { workspace, goal } => match goal {
-            Some(goal) => {
-                let workspace = workspace
-                    .as_ref()
-                    .expect("validated run invocations with --goal must include --workspace");
+        DeveloperCommand::Run { workspace, goal, brief, governance, risk, zone, owner } => {
+            let custom = goal.is_some()
+                || !brief.is_empty()
+                || governance.is_some()
+                || risk.is_some()
+                || zone.is_some()
+                || owner.is_some();
+            if custom {
+                let Some(workspace) = workspace.as_ref() else {
+                    return DispatchOutcome {
+                        exit_status: CommandExitStatus::InvalidInvocation,
+                        output: output::validation_error_message(
+                            &CliValidationError::MissingWorkspaceRef(CommandName::Run),
+                        ),
+                        trace_location: None,
+                    };
+                };
                 let report = diagnostics::diagnose_workspace(workspace);
                 if !report.ready {
                     return DispatchOutcome {
@@ -380,7 +432,15 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                     };
                 }
 
-                match run::execute_custom_run(workspace, goal) {
+                match run::execute_custom_run(
+                    workspace,
+                    goal.as_deref(),
+                    brief,
+                    *governance,
+                    risk.as_deref(),
+                    zone.as_deref(),
+                    owner.as_deref(),
+                ) {
                     Ok(report) => DispatchOutcome {
                         exit_status: report.exit_status,
                         output: report.terminal_output,
@@ -392,20 +452,21 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                         trace_location: None,
                     },
                 }
+            } else {
+                match session::execute_run(workspace.as_deref()) {
+                    Ok(report) => DispatchOutcome {
+                        exit_status: report.exit_status,
+                        output: report.terminal_output,
+                        trace_location: None,
+                    },
+                    Err(error) => DispatchOutcome {
+                        exit_status: CommandExitStatus::NonSuccess,
+                        output: session::render_error(command.name().as_str(), &error),
+                        trace_location: None,
+                    },
+                }
             }
-            None => match session::execute_run(workspace.as_deref()) {
-                Ok(report) => DispatchOutcome {
-                    exit_status: report.exit_status,
-                    output: report.terminal_output,
-                    trace_location: None,
-                },
-                Err(error) => DispatchOutcome {
-                    exit_status: CommandExitStatus::NonSuccess,
-                    output: session::render_error(command.name().as_str(), &error),
-                    trace_location: None,
-                },
-            },
-        },
+        }
         DeveloperCommand::Inspect { trace, workspace } => {
             match inspect::execute_inspect(trace.as_deref(), workspace.as_deref()) {
                 Ok(report) => DispatchOutcome {
@@ -438,8 +499,16 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                 trace_location: None,
             },
         },
-        DeveloperCommand::Capture { workspace, goal } => {
-            match session::execute_capture(workspace.as_deref(), goal) {
+        DeveloperCommand::Capture { workspace, goal, brief, governance, risk, zone, owner } => {
+            match session::execute_capture(
+                workspace.as_deref(),
+                goal.as_deref(),
+                brief,
+                *governance,
+                risk.as_deref(),
+                zone.as_deref(),
+                owner.as_deref(),
+            ) {
                 Ok(report) => DispatchOutcome {
                     exit_status: report.exit_status,
                     output: report.terminal_output,
@@ -593,7 +662,12 @@ fn red_to_green_addition() {
         let commands = [
             DeveloperCommand::Capture {
                 workspace: Some(workspace.clone()),
-                goal: "goal".to_string(),
+                goal: Some("goal".to_string()),
+                brief: Vec::new(),
+                governance: None,
+                risk: None,
+                zone: None,
+                owner: None,
             },
             DeveloperCommand::Flow {
                 name: "bug-fix".to_string(),
@@ -624,6 +698,11 @@ fn red_to_green_addition() {
         let custom_run = dispatch(&DeveloperCommand::Run {
             workspace: Some(workspace.clone()),
             goal: Some("Fix the failing add test".to_string()),
+            brief: Vec::new(),
+            governance: None,
+            risk: None,
+            zone: None,
+            owner: None,
         });
         assert_eq!(custom_run.exit_status, CommandExitStatus::Succeeded);
         assert!(custom_run.output.contains("terminal_status: succeeded"), "{}", custom_run.output);
@@ -634,7 +713,12 @@ fn red_to_green_addition() {
 
         let capture = dispatch(&DeveloperCommand::Capture {
             workspace: Some(workspace.clone()),
-            goal: "Fix the failing add test".to_string(),
+            goal: Some("Fix the failing add test".to_string()),
+            brief: Vec::new(),
+            governance: None,
+            risk: None,
+            zone: None,
+            owner: None,
         });
         assert_eq!(capture.exit_status, CommandExitStatus::Succeeded);
 
@@ -644,8 +728,15 @@ fn red_to_green_addition() {
         let step = dispatch(&DeveloperCommand::Step { workspace: Some(workspace.clone()) });
         assert_eq!(step.exit_status, CommandExitStatus::Succeeded);
 
-        let run =
-            dispatch(&DeveloperCommand::Run { workspace: Some(workspace.clone()), goal: None });
+        let run = dispatch(&DeveloperCommand::Run {
+            workspace: Some(workspace.clone()),
+            goal: None,
+            brief: Vec::new(),
+            governance: None,
+            risk: None,
+            zone: None,
+            owner: None,
+        });
         assert_eq!(run.exit_status, CommandExitStatus::Succeeded);
         assert!(run.output.contains("terminal_status: succeeded"), "{}", run.output);
 
@@ -666,6 +757,11 @@ fn red_to_green_addition() {
         let invalid = dispatch(&DeveloperCommand::Run {
             workspace: Some(invalid_workspace),
             goal: Some("Fix the failing add test".to_string()),
+            brief: Vec::new(),
+            governance: None,
+            risk: None,
+            zone: None,
+            owner: None,
         });
         assert_eq!(invalid.exit_status, CommandExitStatus::InvalidInvocation);
         assert!(invalid.output.contains("doctor:"), "{}", invalid.output);

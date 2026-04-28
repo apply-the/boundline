@@ -78,6 +78,7 @@ fn build_planned_record(workspace_ref: &str) -> ActiveSessionRecord {
         session_id: "session-coverage".to_string(),
         workspace_ref: workspace_ref.to_string(),
         goal: Some("Deliver a bounded change".to_string()),
+        authored_brief: None,
         active_flow: None,
         active_task: Some(build_task(workspace_ref)),
         latest_status: SessionStatus::Planned,
@@ -94,6 +95,16 @@ fn build_status_view(record: &ActiveSessionRecord) -> SessionStatusView {
         session_id: record.session_id.clone(),
         workspace_ref: record.workspace_ref.clone(),
         goal: record.goal.clone(),
+        authored_input_summary: None,
+        authored_input_sources: None,
+        authored_input_deduplicated_sources: None,
+        clarification_headline: None,
+        clarification_prompt: None,
+        clarification_missing_fields: None,
+        requested_governance_runtime: None,
+        requested_governance_risk: None,
+        requested_governance_zone: None,
+        requested_governance_owner: None,
         active_flow: record.active_flow.as_ref().map(|flow| flow.flow_name.clone()),
         current_stage_id: record.active_flow.as_ref().map(|flow| flow.current_stage_id.clone()),
         current_stage_index: record.active_flow.as_ref().map(|flow| flow.current_stage_index),
@@ -139,6 +150,7 @@ fn build_status_view(record: &ActiveSessionRecord) -> SessionStatusView {
         latest_governance_approval: None,
         latest_governance_decision: None,
         latest_governance_candidates: None,
+        governance_next_action: None,
         next_command: Some("synod step".to_string()),
         explanation: "session state is internally consistent".to_string(),
     }
@@ -150,6 +162,7 @@ fn build_started_session(workspace: &Path) -> ActiveSessionRecord {
         session_id: Uuid::new_v4().to_string(),
         workspace_ref: workspace.to_string_lossy().into_owned(),
         goal: None,
+        authored_brief: None,
         active_flow: None,
         active_task: None,
         latest_status: SessionStatus::Initialized,
@@ -260,7 +273,12 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
         DeveloperCommand::Start { workspace: Some(workspace.clone()) },
         DeveloperCommand::Capture {
             workspace: Some(workspace.clone()),
-            goal: "capture goal".to_string(),
+            goal: Some("capture goal".to_string()),
+            brief: Vec::new(),
+            governance: None,
+            risk: None,
+            zone: None,
+            owner: None,
         },
         DeveloperCommand::Flow { name: "bug-fix".to_string(), workspace: Some(workspace.clone()) },
         DeveloperCommand::Plan { workspace: Some(workspace.clone()) },
@@ -268,6 +286,11 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
         DeveloperCommand::Run {
             workspace: Some(workspace.clone()),
             goal: Some("ship it".to_string()),
+            brief: Vec::new(),
+            governance: None,
+            risk: None,
+            zone: None,
+            owner: None,
         },
         DeveloperCommand::Inspect {
             trace: Some(trace.clone()),
@@ -303,7 +326,12 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
 
     let invalid_capture = DeveloperCommandSession::from_command(&DeveloperCommand::Capture {
         workspace: Some(workspace.clone()),
-        goal: "  ".to_string(),
+        goal: Some("  ".to_string()),
+        brief: Vec::new(),
+        governance: None,
+        risk: None,
+        zone: None,
+        owner: None,
     });
     assert_eq!(
         invalid_capture.validate().unwrap_err(),
@@ -319,6 +347,11 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
     let invalid_run_workspace = DeveloperCommandSession::from_command(&DeveloperCommand::Run {
         workspace: None,
         goal: Some("ship".to_string()),
+        brief: Vec::new(),
+        governance: None,
+        risk: None,
+        zone: None,
+        owner: None,
     });
     assert_eq!(
         invalid_run_workspace.validate().unwrap_err(),
@@ -328,6 +361,11 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
     let invalid_run_goal = DeveloperCommandSession::from_command(&DeveloperCommand::Run {
         workspace: Some(workspace.clone()),
         goal: Some(" ".to_string()),
+        brief: Vec::new(),
+        governance: None,
+        risk: None,
+        zone: None,
+        owner: None,
     });
     assert_eq!(
         invalid_run_goal.validate().unwrap_err(),
@@ -807,7 +845,16 @@ fn inspect_summary_and_session_commands_cover_additional_error_paths() {
         SessionCommandError::MissingCapturedGoal
     ));
 
-    execute_capture(Some(&workspace), "Fix the failing add test").unwrap();
+    execute_capture(
+        Some(&workspace),
+        Some("Fix the failing add test"),
+        &[],
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
     assert!(matches!(
         execute_step(Some(&workspace)).unwrap_err(),
         SessionCommandError::MissingPlannedTask

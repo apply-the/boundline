@@ -13,6 +13,11 @@ pub use adapters::governance_runtime::{
 };
 pub use adapters::tool::FnToolAdapter;
 pub use adapters::trace_store::FileTraceStore;
+pub use domain::brief::{
+    AuthoredBriefBundle, BriefIngestionError, GovernanceIntent, InputSourceKind,
+    InputSourceReference, MAX_BRIEF_BYTES, MAX_BRIEF_SOURCES, normalize_governance_intent,
+    normalize_inputs as normalize_brief_inputs, normalize_inputs_with_governance,
+};
 pub use domain::execution::{
     ChangeEvidence, ChangeStatus, ExecutionAttemptDefinition, ExecutionCommand,
     ExecutionFailureMode, ValidationRecord, WorkspaceChange, WorkspaceExecutionProfile,

@@ -132,6 +132,19 @@ pub fn run_synod_in(workspace: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_synod")).args(args).current_dir(workspace).output().unwrap()
 }
 
+pub fn write_markdown_brief(
+    workspace: &Path,
+    relative_path: impl AsRef<Path>,
+    contents: impl AsRef<str>,
+) -> PathBuf {
+    let path = workspace.join(relative_path.as_ref());
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
+    fs::write(&path, contents.as_ref()).unwrap();
+    path
+}
+
 pub fn terminal_text(output: &Output) -> String {
     format!(
         "{}{}",
