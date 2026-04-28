@@ -60,3 +60,9 @@ mod canon_stage_mapping;
 
 #[path = "unit/coverage_additional.rs"]
 mod coverage_additional;
+
+#[path = "unit/human_input_ingestion.rs"]
+mod human_input_ingestion;
+
+#[path = "unit/human_input_governance.rs"]
+mod human_input_governance;

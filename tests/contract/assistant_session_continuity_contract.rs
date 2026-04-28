@@ -16,14 +16,16 @@ fn assistant_readme_documents_session_native_continuity_rules() {
     for snippet in [
         "cargo run --bin synod -- start --workspace <workspace>",
         "cargo run --bin synod -- capture --workspace <workspace> --goal \"<goal>\"",
+        "cargo run --bin synod -- capture --workspace <workspace> --brief <path> [--brief <path> ...]",
         "cargo run --bin synod -- plan --workspace <workspace>",
         "cargo run --bin synod -- step --workspace <workspace>",
         "cargo run --bin synod -- run --workspace <workspace>",
         "cargo run --bin synod -- status --workspace <workspace>",
         "cargo run --bin synod -- next --workspace <workspace>",
-        "Preserve confirmed `workspace_ref`, captured goal, and latest trace reference across assistant turns.",
+        "Preserve confirmed `workspace_ref`, captured goal, confirmed brief paths, authored input summary, and latest trace reference across assistant turns.",
         "Workspace-based inspect may reuse the active session's `latest_trace_ref` before falling back to the latest workspace trace.",
         "When CLI output includes `next_command`, prefer that route instead of inventing a follow-up.",
+        "governance_next_action",
     ] {
         assert!(content.contains(snippet), "assistant/README.md missing {snippet}");
     }
@@ -39,7 +41,15 @@ fn inspect_assets_document_session_trace_reuse_and_start_recovery() {
 
     for path in assets {
         let content = read_asset(path);
-        for snippet in ["latest_trace_ref", "/synod-start"] {
+        for snippet in [
+            "latest_trace_ref",
+            "/synod-start",
+            "authored_input_summary",
+            "authored_input_sources",
+            "authored_input_deduplicated_sources",
+            "governance_next_action",
+            "corrected_command",
+        ] {
             assert!(content.contains(snippet), "{path} missing {snippet}");
         }
     }
@@ -64,6 +74,7 @@ fn assistant_command_packs_expose_session_native_backend_mappings() {
             "assistant/claude/commands/synod-plan.md",
             &[
                 "cargo run --bin synod -- capture --workspace <workspace> --goal \"<goal>\"",
+                "cargo run --bin synod -- capture --workspace <workspace> --brief <path> [--brief <path> ...]",
                 "cargo run --bin synod -- plan --workspace <workspace>",
             ][..],
         ),
@@ -71,6 +82,7 @@ fn assistant_command_packs_expose_session_native_backend_mappings() {
             "assistant/codex/commands/synod-plan.md",
             &[
                 "cargo run --bin synod -- capture --workspace <workspace> --goal \"<goal>\"",
+                "cargo run --bin synod -- capture --workspace <workspace> --brief <path> [--brief <path> ...]",
                 "cargo run --bin synod -- plan --workspace <workspace>",
             ][..],
         ),
@@ -78,6 +90,7 @@ fn assistant_command_packs_expose_session_native_backend_mappings() {
             "assistant/copilot/prompts/synod-plan.prompt.md",
             &[
                 "cargo run --bin synod -- capture --workspace <workspace> --goal \"<goal>\"",
+                "cargo run --bin synod -- capture --workspace <workspace> --brief <path> [--brief <path> ...]",
                 "cargo run --bin synod -- plan --workspace <workspace>",
             ][..],
         ),
@@ -107,15 +120,27 @@ fn assistant_command_packs_expose_session_native_backend_mappings() {
         ),
         (
             "assistant/claude/commands/synod-status.md",
-            &["cargo run --bin synod -- status --workspace <workspace>"][..],
+            &[
+                "cargo run --bin synod -- status --workspace <workspace>",
+                "authored_input_summary",
+                "governance_next_action",
+            ][..],
         ),
         (
             "assistant/codex/commands/synod-status.md",
-            &["cargo run --bin synod -- status --workspace <workspace>"][..],
+            &[
+                "cargo run --bin synod -- status --workspace <workspace>",
+                "authored_input_summary",
+                "governance_next_action",
+            ][..],
         ),
         (
             "assistant/copilot/prompts/synod-status.prompt.md",
-            &["cargo run --bin synod -- status --workspace <workspace>"][..],
+            &[
+                "cargo run --bin synod -- status --workspace <workspace>",
+                "authored_input_summary",
+                "governance_next_action",
+            ][..],
         ),
         (
             "assistant/claude/commands/synod-next.md",

@@ -7,6 +7,7 @@ use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStor
 use crate::adapters::trace_store::{FileTraceStore, TraceStore, TraceStoreError};
 use crate::cli::CommandExitStatus;
 use crate::cli::output;
+use crate::domain::session::governance_next_action_for_state;
 use crate::domain::step::{StepKind, StepStatus};
 use crate::domain::task::TaskStatus;
 use crate::domain::trace::{
@@ -98,6 +99,17 @@ pub fn summarize_trace(
     let terminal_status = trace.terminal_status.ok_or(TraceSummaryError::MissingTerminalStatus)?;
     let terminal_reason =
         trace.terminal_reason.clone().ok_or(TraceSummaryError::MissingTerminalReason)?;
+    let mut authored_input_summary: Option<String> = None;
+    let mut authored_input_sources: Vec<String> = Vec::new();
+    let mut authored_input_deduplicated_sources: Vec<String> = Vec::new();
+    let mut clarification_headline: Option<String> = None;
+    let mut clarification_prompt: Option<String> = None;
+    let mut clarification_missing_fields: Vec<String> = Vec::new();
+    let mut requested_governance_runtime: Option<String> = None;
+    let mut requested_governance_risk: Option<String> = None;
+    let mut requested_governance_zone: Option<String> = None;
+    let mut requested_governance_owner: Option<String> = None;
+    let mut latest_governance_state: Option<String> = None;
     let mut step_indexes: HashMap<String, usize> = HashMap::new();
     let mut executed_steps: Vec<TraceStepSummary> = Vec::new();
     let mut recovery_events: Vec<TraceRecoveryEvent> = Vec::new();
@@ -106,9 +118,100 @@ pub fn summarize_trace(
 
     for event in &trace.events {
         match event.event_type {
-            TraceEventType::TaskStarted
-            | TraceEventType::TerminalRecorded
-            | TraceEventType::ReviewerStarted => {}
+            TraceEventType::TaskStarted => {
+                if authored_input_summary.is_none() {
+                    authored_input_summary = event
+                        .payload
+                        .get("input")
+                        .and_then(|input| input.get("authored_input_summary"))
+                        .and_then(|value| value.as_str().map(str::to_string));
+                }
+                if authored_input_sources.is_empty() {
+                    authored_input_sources = event
+                        .payload
+                        .get("input")
+                        .and_then(|input| input.get("authored_input_sources"))
+                        .and_then(|value| value.as_array())
+                        .map(|items| {
+                            items
+                                .iter()
+                                .filter_map(|item| item.as_str().map(str::to_string))
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default();
+                }
+                if authored_input_deduplicated_sources.is_empty() {
+                    authored_input_deduplicated_sources = event
+                        .payload
+                        .get("input")
+                        .and_then(|input| input.get("authored_input_deduplicated_sources"))
+                        .and_then(|value| value.as_array())
+                        .map(|items| {
+                            items
+                                .iter()
+                                .filter_map(|item| item.as_str().map(str::to_string))
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default();
+                }
+                if clarification_headline.is_none() {
+                    clarification_headline = event
+                        .payload
+                        .get("input")
+                        .and_then(|input| input.get("clarification_headline"))
+                        .and_then(|value| value.as_str().map(str::to_string));
+                }
+                if clarification_prompt.is_none() {
+                    clarification_prompt = event
+                        .payload
+                        .get("input")
+                        .and_then(|input| input.get("clarification_prompt"))
+                        .and_then(|value| value.as_str().map(str::to_string));
+                }
+                if clarification_missing_fields.is_empty() {
+                    clarification_missing_fields = event
+                        .payload
+                        .get("input")
+                        .and_then(|input| input.get("clarification_missing_fields"))
+                        .and_then(|value| value.as_array())
+                        .map(|items| {
+                            items
+                                .iter()
+                                .filter_map(|item| item.as_str().map(str::to_string))
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default();
+                }
+                if requested_governance_runtime.is_none() {
+                    requested_governance_runtime = event
+                        .payload
+                        .get("input")
+                        .and_then(|input| input.get("requested_governance_runtime"))
+                        .and_then(|value| value.as_str().map(str::to_string));
+                }
+                if requested_governance_risk.is_none() {
+                    requested_governance_risk = event
+                        .payload
+                        .get("input")
+                        .and_then(|input| input.get("requested_governance_risk"))
+                        .and_then(|value| value.as_str().map(str::to_string));
+                }
+                if requested_governance_zone.is_none() {
+                    requested_governance_zone = event
+                        .payload
+                        .get("input")
+                        .and_then(|input| input.get("requested_governance_zone"))
+                        .and_then(|value| value.as_str().map(str::to_string));
+                }
+                if requested_governance_owner.is_none() {
+                    requested_governance_owner = event
+                        .payload
+                        .get("input")
+                        .and_then(|input| input.get("requested_governance_owner"))
+                        .and_then(|value| value.as_str().map(str::to_string));
+                }
+            }
+            TraceEventType::TerminalRecorded | TraceEventType::ReviewerStarted => {}
             TraceEventType::FlowSelected => {
                 recovery_events.push(TraceRecoveryEvent {
                     event_type: event.event_type,
@@ -227,6 +330,19 @@ pub fn summarize_trace(
             | TraceEventType::GovernanceCompleted
             | TraceEventType::GovernanceBlocked
             | TraceEventType::GovernancePacketRejected => {
+                match event.event_type {
+                    TraceEventType::GovernanceAwaitingApproval => {
+                        latest_governance_state = Some("awaiting_approval".to_string());
+                    }
+                    TraceEventType::GovernanceCompleted => {
+                        latest_governance_state = Some("governed_ready".to_string());
+                    }
+                    TraceEventType::GovernanceBlocked
+                    | TraceEventType::GovernancePacketRejected => {
+                        latest_governance_state = Some("blocked".to_string());
+                    }
+                    _ => {}
+                }
                 if let Some(line) = governance_timeline_line(event.event_type, &event.payload) {
                     governance_timeline.push(line);
                 }
@@ -247,9 +363,22 @@ pub fn summarize_trace(
     Ok(TraceSummaryView {
         trace_ref: trace_ref.as_ref().to_string_lossy().into_owned(),
         goal: trace.goal.clone(),
+        authored_input_summary,
+        authored_input_sources,
+        authored_input_deduplicated_sources,
+        clarification_headline,
+        clarification_prompt,
+        clarification_missing_fields,
+        requested_governance_runtime,
+        requested_governance_risk,
+        requested_governance_zone,
+        requested_governance_owner,
         executed_steps,
         recovery_events,
         governance_timeline,
+        governance_next_action: governance_next_action_for_state(
+            latest_governance_state.as_deref(),
+        ),
         review_timeline,
         terminal_status,
         terminal_reason,
@@ -650,6 +779,7 @@ mod tests {
             session_id: "session-inspect".to_string(),
             workspace_ref: workspace.to_string_lossy().into_owned(),
             goal: None,
+            authored_brief: None,
             active_flow: None,
             active_task: None,
             latest_status: SessionStatus::GoalCaptured,

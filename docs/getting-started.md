@@ -96,6 +96,18 @@ synod capture --workspace <workspace> --goal "Fix the failing add test"
 synod flow bug-fix --workspace <workspace>
 ```
 
+Since `0.10.0`, `synod capture` (and `synod run`) also accept one or more
+`--brief <path>.md` arguments alongside or instead of `--goal`. Each brief
+must be a Markdown file (`.md` or `.markdown`) inside the workspace; their
+contents are concatenated under stable provenance headers and projected
+through the existing capture pipeline:
+
+```bash
+synod capture --workspace <workspace> \
+  --goal "Fix the failing add test" \
+  --brief docs/context.md
+```
+
 `synod flow` is optional. Use it when you want to pin the run to one of the
 built-in flows: `bug-fix`, `change`, or `delivery`.
 

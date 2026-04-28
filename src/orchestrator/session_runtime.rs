@@ -30,7 +30,9 @@ use crate::fixture::{
 };
 use crate::orchestrator::governance::{
     GovernanceStepDecision, bounded_governance_context, build_autopilot_decision,
-    governance_stage_key, governance_state_patch, runtime_command_available, selected_stage_policy,
+    governance_input_documents, governance_stage_key, governance_state_patch,
+    overlay_stage_policy_with_intent, requested_governance_intent, runtime_command_available,
+    selected_stage_policy,
 };
 use crate::orchestrator::recovery::{RecoveryDecision, decide_recovery};
 use crate::orchestrator::review_trace::{record_review_step_completed, record_review_step_started};
@@ -141,14 +143,27 @@ impl SessionRuntime {
 
     pub fn plan_task(&self, session: &mut ActiveSessionRecord) -> Result<(), SessionRuntimeError> {
         let goal = session.goal.clone().ok_or(SessionRuntimeError::MissingGoal)?;
+        if let Some(bundle) = session.authored_brief.as_ref()
+            && let Some(clarification) = bundle.clarification.as_ref()
+        {
+            return Err(SessionRuntimeError::ClarificationRequired {
+                headline: clarification.headline(),
+                prompt: clarification.prompt.clone(),
+            });
+        }
         if let Some(active_flow) = &session.active_flow {
             active_flow
                 .validate()
                 .map_err(|error| SessionRuntimeError::InvalidFlowState(error.to_string()))?;
         }
 
-        let request = build_task_request(&self.workspace_ref, &goal, session.session_id.clone())
-            .map_err(SessionRuntimeError::FixtureRuntime)?;
+        let request = build_task_request(
+            &self.workspace_ref,
+            &goal,
+            session.session_id.clone(),
+            session.authored_brief.as_ref(),
+        )
+        .map_err(SessionRuntimeError::FixtureRuntime)?;
         let plan =
             build_fixture_plan_for_goal(&self.workspace_ref, session.active_flow.as_ref(), &goal)
                 .map_err(SessionRuntimeError::FixtureRuntime)?;
@@ -224,6 +239,8 @@ impl SessionRuntime {
             else {
                 return Ok(false);
             };
+            let governance_intent = requested_governance_intent(&task.input);
+            let policy = overlay_stage_policy_with_intent(&policy, governance_intent.as_ref());
 
             let decision = self.execute_governance_for_step(
                 session,
@@ -619,6 +636,8 @@ impl SessionRuntime {
         else {
             return Ok(GovernanceStepDecision::Continue);
         };
+        let governance_intent = requested_governance_intent(&task.input);
+        let policy = overlay_stage_policy_with_intent(&policy, governance_intent.as_ref());
         if !policy.enabled {
             return Ok(GovernanceStepDecision::Continue);
         }
@@ -697,6 +716,7 @@ impl SessionRuntime {
         let (bounded_context, packet_reuse) =
             bounded_governance_context(&task.context, metadata, &runtime.profile.read_targets)
                 .map_err(|error| SessionRuntimeError::GovernancePatch(error.to_string()))?;
+        let input_documents = governance_input_documents(&task.input);
 
         let requested_runtime = policy.effective_runtime(governance.default_runtime);
         let canon_available = governance
@@ -825,7 +845,7 @@ impl SessionRuntime {
                     .and_then(|record| record.packet_ref.clone())
                     .or_else(|| existing_packet.as_ref().map(|packet| packet.packet_ref.clone())),
                 bounded_context,
-                input_documents: Vec::new(),
+                input_documents: input_documents.clone(),
             };
             trace.record_event(
                 TraceEventType::GovernanceStarted,
@@ -899,7 +919,7 @@ impl SessionRuntime {
                 .and_then(|record| record.packet_ref.clone())
                 .or_else(|| existing_packet.as_ref().map(|packet| packet.packet_ref.clone())),
             bounded_context,
-            input_documents: Vec::new(),
+            input_documents,
         };
 
         trace.record_event(
@@ -1557,6 +1577,8 @@ pub enum SessionRuntimeError {
     TraceStore(#[from] TraceStoreError),
     #[error("active session has no captured goal")]
     MissingGoal,
+    #[error("{headline}: {prompt}")]
+    ClarificationRequired { headline: String, prompt: String },
     #[error("unknown flow `{requested}`; supported flows: {supported}")]
     UnknownFlow { requested: String, supported: String },
     #[error(
@@ -1688,6 +1710,7 @@ mod tests {
             session_id: "session-runtime".to_string(),
             workspace_ref: workspace.to_string_lossy().into_owned(),
             goal: Some("Drive a session runtime branch".to_string()),
+            authored_brief: None,
             active_flow: None,
             active_task: Some(task),
             latest_status: SessionStatus::Planned,
@@ -1843,6 +1866,7 @@ mod tests {
             session_id: "session-runtime".to_string(),
             workspace_ref: workspace.to_string_lossy().into_owned(),
             goal: Some("Drive a session runtime branch".to_string()),
+            authored_brief: None,
             active_flow: Some(flow.initial_state()),
             active_task: Some(task.clone()),
             latest_status: SessionStatus::Planned,
@@ -1983,6 +2007,7 @@ mod tests {
             session_id: "session-runtime".to_string(),
             workspace_ref: workspace.to_string_lossy().into_owned(),
             goal: None,
+            authored_brief: None,
             active_flow: None,
             active_task: None,
             latest_status: SessionStatus::Initialized,
@@ -2070,6 +2095,7 @@ mod tests {
             session_id: "session-runtime".to_string(),
             workspace_ref: workspace.to_string_lossy().into_owned(),
             goal: None,
+            authored_brief: None,
             active_flow: None,
             active_task: None,
             latest_status: SessionStatus::Initialized,

@@ -1,6 +1,10 @@
 use std::path::{Path, PathBuf};
 
 use crate::adapters::trace_store::TraceStore;
+use crate::domain::brief::{
+    AuthoredBriefBundle, BriefIngestionError, normalize_governance_intent,
+    normalize_inputs_with_governance,
+};
 use serde_json::Value;
 use thiserror::Error;
 use uuid::Uuid;
@@ -8,15 +12,16 @@ use uuid::Uuid;
 use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
 use crate::cli::CommandExitStatus;
 use crate::cli::output;
+use crate::domain::governance::GovernanceRuntimeKind;
 use crate::domain::session::{
     ActiveSessionRecord, SessionStatus, SessionStatusView, task_state_attempt_lineage_summary,
     task_state_governance_approval_text, task_state_governance_blocked_reason,
     task_state_governance_candidate_actions, task_state_governance_canon_run_ref,
     task_state_governance_decision_headline, task_state_governance_mode_text,
-    task_state_governance_packet_binding_reason, task_state_governance_packet_ref,
-    task_state_governance_packet_source_stage, task_state_governance_runtime_text,
-    task_state_governance_stage_key, task_state_governance_state_text,
-    task_state_workspace_slice_summary,
+    task_state_governance_next_action, task_state_governance_packet_binding_reason,
+    task_state_governance_packet_ref, task_state_governance_packet_source_stage,
+    task_state_governance_runtime_text, task_state_governance_stage_key,
+    task_state_governance_state_text, task_state_workspace_slice_summary,
 };
 use crate::domain::task::TaskStatus;
 use crate::domain::trace::current_timestamp_millis;
@@ -37,6 +42,7 @@ pub fn execute_start(
         session_id: Uuid::new_v4().to_string(),
         workspace_ref: workspace.to_string_lossy().into_owned(),
         goal: None,
+        authored_brief: None,
         active_flow: None,
         active_task: None,
         latest_status: SessionStatus::Initialized,
@@ -60,20 +66,45 @@ pub fn execute_start(
 
 pub fn execute_capture(
     workspace: Option<&Path>,
-    goal: &str,
+    goal: Option<&str>,
+    briefs: &[PathBuf],
+    governance: Option<GovernanceRuntimeKind>,
+    risk: Option<&str>,
+    zone: Option<&str>,
+    owner: Option<&str>,
 ) -> Result<SessionCommandReport, SessionCommandError> {
     let workspace = resolve_workspace(workspace)?;
     let runtime = SessionRuntime::for_workspace(&workspace);
     let mut record = load_active_session(&workspace)?;
-    runtime.capture_goal(&mut record, goal).map_err(map_runtime_error)?;
+
+    let governance_intent = normalize_governance_intent(governance, risk, zone, owner)
+        .map_err(SessionCommandError::BriefIngestion)?;
+    let bundle = normalize_inputs_with_governance(&workspace, goal, briefs, governance_intent)
+        .map_err(SessionCommandError::BriefIngestion)?;
+    let effective_goal = bundle.render_goal_text();
+
+    runtime.capture_goal(&mut record, &effective_goal).map_err(map_runtime_error)?;
+    record.authored_brief = Some(bundle.clone());
     runtime.persist_session(&record).map_err(map_runtime_error)?;
+
+    let summary = if bundle.clarification.is_some() {
+        "captured the active goal, but clarification is required before planning can continue"
+            .to_string()
+    } else if bundle.markdown_source_count() == 0 {
+        "captured the active goal for the current workspace session".to_string()
+    } else {
+        format!(
+            "captured the active goal with {} Markdown brief source(s) for the current workspace session",
+            bundle.markdown_source_count()
+        )
+    };
 
     Ok(SessionCommandReport {
         exit_status: CommandExitStatus::Succeeded,
         terminal_output: output::render_session_status(&build_status_view(
             &record,
             Some("synod plan".to_string()),
-            "captured the active goal for the current workspace session",
+            summary,
         )),
     })
 }
@@ -281,6 +312,9 @@ fn map_store_error(error: SessionStoreError) -> SessionCommandError {
 fn map_runtime_error(error: SessionRuntimeError) -> SessionCommandError {
     match error {
         SessionRuntimeError::MissingGoal => SessionCommandError::MissingCapturedGoal,
+        SessionRuntimeError::ClarificationRequired { headline, prompt } => {
+            SessionCommandError::ClarificationRequired { headline, prompt }
+        }
         SessionRuntimeError::MissingActiveTask => SessionCommandError::MissingPlannedTask,
         SessionRuntimeError::UnknownFlow { requested, supported } => {
             SessionCommandError::UnknownFlow { requested, supported }
@@ -325,10 +359,40 @@ fn build_status_view(
     next_command: Option<String>,
     explanation: impl Into<String>,
 ) -> SessionStatusView {
+    let governance_intent =
+        record.authored_brief.as_ref().and_then(|bundle| bundle.governance_intent.as_ref());
+
     SessionStatusView {
         session_id: record.session_id.clone(),
         workspace_ref: record.workspace_ref.clone(),
         goal: record.goal.clone(),
+        authored_input_summary: record.authored_brief.as_ref().map(|bundle| bundle.summary_text()),
+        authored_input_sources: record
+            .authored_brief
+            .as_ref()
+            .map(|bundle| bundle.ordered_source_labels()),
+        authored_input_deduplicated_sources: record.authored_brief.as_ref().and_then(|bundle| {
+            let labels = bundle.deduplicated_source_labels();
+            (!labels.is_empty()).then_some(labels)
+        }),
+        clarification_headline: record
+            .authored_brief
+            .as_ref()
+            .and_then(AuthoredBriefBundle::clarification_headline),
+        clarification_prompt: record
+            .authored_brief
+            .as_ref()
+            .and_then(AuthoredBriefBundle::clarification_prompt),
+        clarification_missing_fields: record
+            .authored_brief
+            .as_ref()
+            .and_then(AuthoredBriefBundle::clarification_missing_fields),
+        requested_governance_runtime: governance_intent
+            .and_then(|intent| intent.runtime_preference)
+            .map(|runtime| requested_governance_runtime_text(runtime).to_string()),
+        requested_governance_risk: governance_intent.and_then(|intent| intent.risk.clone()),
+        requested_governance_zone: governance_intent.and_then(|intent| intent.zone.clone()),
+        requested_governance_owner: governance_intent.and_then(|intent| intent.owner.clone()),
         active_flow: record.active_flow.as_ref().map(|flow| flow.flow_name.clone()),
         current_stage_id: record.active_flow.as_ref().map(|flow| flow.current_stage_id.clone()),
         current_stage_index: record.active_flow.as_ref().map(|flow| flow.current_stage_index),
@@ -438,8 +502,19 @@ fn build_status_view(
             .active_task
             .as_ref()
             .and_then(task_state_governance_candidate_actions),
+        governance_next_action: record
+            .active_task
+            .as_ref()
+            .and_then(task_state_governance_next_action),
         next_command,
         explanation: explanation.into(),
+    }
+}
+
+fn requested_governance_runtime_text(runtime: GovernanceRuntimeKind) -> &'static str {
+    match runtime {
+        GovernanceRuntimeKind::Local => "local",
+        GovernanceRuntimeKind::Canon => "canon",
     }
 }
 
@@ -483,6 +558,10 @@ fn review_headline_from_task(task: &crate::domain::task::Task) -> Option<String>
 }
 
 fn suggested_next_command(record: &ActiveSessionRecord) -> Option<String> {
+    if record.authored_brief.as_ref().and_then(|bundle| bundle.clarification.as_ref()).is_some() {
+        return Some("synod capture --goal <narrower goal>".to_string());
+    }
+
     if let Some(task) = record.active_task.as_ref()
         && let Some(governance_state) = task_state_governance_state_text(task)
     {
@@ -531,6 +610,10 @@ pub enum SessionCommandError {
     SessionStore(#[from] SessionStoreError),
     #[error("session runtime operation failed: {0}")]
     SessionRuntime(#[from] SessionRuntimeError),
+    #[error("failed to ingest authored brief: {0}")]
+    BriefIngestion(#[from] BriefIngestionError),
+    #[error("{headline}: {prompt}")]
+    ClarificationRequired { headline: String, prompt: String },
     #[error("`{command_name}` session workflow is not implemented yet")]
     NotImplemented { command_name: &'static str, next_command: Option<&'static str> },
 }
@@ -566,6 +649,8 @@ impl SessionCommandError {
             Self::WorkspaceResolution(error) => error.to_string(),
             Self::SessionStore(error) => error.to_string(),
             Self::SessionRuntime(error) => error.to_string(),
+            Self::BriefIngestion(error) => format!("failed to ingest authored brief: {error}"),
+            Self::ClarificationRequired { headline, prompt } => format!("{headline}: {prompt}"),
         }
     }
 
@@ -580,7 +665,9 @@ impl SessionCommandError {
             Self::FlowReplacementRequiresReset { .. } => Some("synod start"),
             Self::InvalidFlowState(_) => Some("synod start"),
             Self::NotImplemented { next_command, .. } => *next_command,
+            Self::ClarificationRequired { .. } => Some("synod capture --goal <narrower goal>"),
             Self::WorkspaceResolution(_) | Self::SessionStore(_) | Self::SessionRuntime(_) => None,
+            Self::BriefIngestion(_) => Some("synod capture --goal <goal>"),
         }
     }
 }
@@ -757,6 +844,7 @@ fn red_to_green_addition() {
                 session_id: "session".to_string(),
                 workspace_ref: "/tmp/workspace".to_string(),
                 goal: None,
+                authored_brief: None,
                 active_flow: None,
                 active_task: None,
                 latest_status: SessionStatus::Invalid,
@@ -852,7 +940,17 @@ fn red_to_green_addition() {
             CommandExitStatus::Succeeded
         );
         assert_eq!(
-            execute_capture(Some(&workspace), "Fix the failing add test").unwrap().exit_status,
+            execute_capture(
+                Some(&workspace),
+                Some("Fix the failing add test"),
+                &[],
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap()
+            .exit_status,
             CommandExitStatus::Succeeded
         );
         assert_eq!(
@@ -894,9 +992,17 @@ fn red_to_green_addition() {
             CommandExitStatus::Succeeded
         );
         assert_eq!(
-            execute_capture(Some(&workspace), "Fix the failing add test and review it")
-                .unwrap()
-                .exit_status,
+            execute_capture(
+                Some(&workspace),
+                Some("Fix the failing add test and review it"),
+                &[],
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap()
+            .exit_status,
             CommandExitStatus::Succeeded
         );
         assert_eq!(

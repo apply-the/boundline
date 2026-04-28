@@ -64,6 +64,15 @@ fn governance_session_contract_refreshes_approval_state_during_status() {
     assert!(step_text.contains("latest_governance_run_ref: canon-run-approval"), "{step_text}");
     assert!(step_text.contains("latest_governance_candidates: select_mode"), "{step_text}");
 
+    let pending_status = run_synod_in(&workspace, &["status"]);
+    let pending_status_text = terminal_text(&pending_status);
+    assert_eq!(pending_status.status.code(), Some(0), "{pending_status_text}");
+    assert!(
+        pending_status_text
+            .contains("governance_next_action: wait for approval and rerun synod status"),
+        "{pending_status_text}"
+    );
+
     fs::write(workspace.join(".canon/approval-state.txt"), "granted\n").unwrap();
 
     let status = run_synod_in(&workspace, &["status"]);

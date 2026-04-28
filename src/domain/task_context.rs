@@ -8,11 +8,14 @@ use crate::domain::governance::{
 };
 use crate::domain::limits::RunLimits;
 use crate::domain::step::{ErrorInfo, StepResultSummary};
+use crate::domain::task::{ClarificationRecord, DerivedTaskDraft};
 
 pub const LATEST_GOVERNANCE_STAGE_KEY: &str = "latest_governance_stage";
 pub const LATEST_GOVERNANCE_PACKET_KEY: &str = "latest_governance_packet";
 pub const LATEST_GOVERNANCE_PACKET_REUSE_KEY: &str = "latest_governance_packet_reuse";
 pub const LATEST_GOVERNANCE_DECISION_KEY: &str = "latest_governance_decision";
+pub const LATEST_CLARIFICATION_KEY: &str = "latest_clarification";
+pub const LATEST_DERIVED_TASK_DRAFT_KEY: &str = "derived_task_draft";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TaskContext {
@@ -149,6 +152,28 @@ impl TaskContext {
         &self,
     ) -> Result<Option<AutopilotDecisionRecord>, TaskContextError> {
         self.load_serialized(LATEST_GOVERNANCE_DECISION_KEY)
+    }
+
+    pub fn set_latest_clarification(
+        &mut self,
+        clarification: &ClarificationRecord,
+    ) -> Result<(), TaskContextError> {
+        self.store_serialized(LATEST_CLARIFICATION_KEY, clarification)
+    }
+
+    pub fn latest_clarification(&self) -> Result<Option<ClarificationRecord>, TaskContextError> {
+        self.load_serialized(LATEST_CLARIFICATION_KEY)
+    }
+
+    pub fn set_derived_task_draft(
+        &mut self,
+        draft: &DerivedTaskDraft,
+    ) -> Result<(), TaskContextError> {
+        self.store_serialized(LATEST_DERIVED_TASK_DRAFT_KEY, draft)
+    }
+
+    pub fn derived_task_draft(&self) -> Result<Option<DerivedTaskDraft>, TaskContextError> {
+        self.load_serialized(LATEST_DERIVED_TASK_DRAFT_KEY)
     }
 
     fn merge_into_state(&mut self, patch: &Map<String, Value>) {

@@ -114,6 +114,8 @@ Create `<workspace>/.synod/execution.json`:
 synod doctor --workspace <workspace>
 synod start --workspace <workspace>
 synod capture --workspace <workspace> --goal "Fix the failing add test"
+# or capture from one or more Markdown brief files inside the workspace:
+synod capture --workspace <workspace> --brief docs/brief.md
 synod flow bug-fix --workspace <workspace>
 synod plan --workspace <workspace>
 synod run --workspace <workspace>

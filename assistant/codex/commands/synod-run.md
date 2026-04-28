@@ -7,10 +7,10 @@ Resume the active Synod session until it reaches a terminal outcome.
 
 ## Required Context
 - `workspace_ref`
-- Active session state; do not ask for a new goal when one is already captured
+- Active session state; do not ask for a new goal or brief path when authored input is already captured
 
 ## Shell-Enabled Path
-If the workspace is known, run `cargo run --bin synod -- run --workspace <workspace>` exactly once.
+If the workspace is known, run `cargo run --bin synod -- run --workspace <workspace>` exactly once. If the active session has no captured goal, authored brief, or planned task, route to `/synod-plan` or `/synod-start` instead of inventing a new run command.
 
 ## Chat-Only Path
 If shell execution is unavailable, ask only for missing workspace context and then provide this exact copyable command:
@@ -20,7 +20,7 @@ If shell execution is unavailable, ask only for missing workspace context and th
 Wait for the user to paste the output before continuing.
 
 ## Output Interpretation
-Summarize `terminal_status`, `terminal_reason`, `trace`, and `next_command`. Preserve the returned trace reference for later `/synod-inspect` use.
+Summarize `terminal_status`, `terminal_reason`, `trace`, `next_command`, and any governance wait-or-block guidance when surfaced. Preserve the returned trace reference for later `/synod-inspect` use.
 
 ## Next-Step Routing
 Prefer the CLI-reported `next_command`; when inspection is needed, route to `/synod-inspect`.

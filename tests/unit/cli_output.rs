@@ -43,8 +43,15 @@ fn command_names_render_from_subcommands() {
     assert_eq!(command_name(&command), "flow");
     assert_eq!(command.name(), CommandName::Flow);
 
-    let command =
-        DeveloperCommand::Run { workspace: Some(PathBuf::from("/tmp/workspace")), goal: None };
+    let command = DeveloperCommand::Run {
+        workspace: Some(PathBuf::from("/tmp/workspace")),
+        goal: None,
+        brief: Vec::new(),
+        governance: None,
+        risk: None,
+        zone: None,
+        owner: None,
+    };
     assert_eq!(command_name(&command), "run");
     assert_eq!(command.name(), CommandName::Run);
 }
@@ -54,6 +61,11 @@ fn run_session_requires_a_non_empty_goal() {
     let command = DeveloperCommand::Run {
         workspace: Some(PathBuf::from("/tmp/workspace")),
         goal: Some("   ".to_string()),
+        brief: Vec::new(),
+        governance: None,
+        risk: None,
+        zone: None,
+        owner: None,
     };
     let session = DeveloperCommandSession::from_command(&command);
 
@@ -62,7 +74,15 @@ fn run_session_requires_a_non_empty_goal() {
 
 #[test]
 fn run_without_legacy_flags_is_valid_for_session_native_execution() {
-    let command = DeveloperCommand::Run { workspace: None, goal: None };
+    let command = DeveloperCommand::Run {
+        workspace: None,
+        goal: None,
+        brief: Vec::new(),
+        governance: None,
+        risk: None,
+        zone: None,
+        owner: None,
+    };
     let session = DeveloperCommandSession::from_command(&command);
 
     assert_eq!(session.validate(), Ok(()));
@@ -164,6 +184,16 @@ fn trace_summary_renderer_mentions_steps_recovery_and_terminal_reason() {
     let summary = TraceSummaryView {
         trace_ref: "/tmp/workspace/.synod/traces/task.json".to_string(),
         goal: "Inspect a recorded run".to_string(),
+        authored_input_summary: None,
+        authored_input_sources: Vec::new(),
+        authored_input_deduplicated_sources: Vec::new(),
+        clarification_headline: None,
+        clarification_prompt: None,
+        clarification_missing_fields: Vec::new(),
+        requested_governance_runtime: None,
+        requested_governance_risk: None,
+        requested_governance_zone: None,
+        requested_governance_owner: None,
         executed_steps: vec![
             TraceStepSummary {
                 step_id: "analyze".to_string(),
@@ -186,6 +216,7 @@ fn trace_summary_renderer_mentions_steps_recovery_and_terminal_reason() {
             related_step_id: Some("code".to_string()),
         }],
         governance_timeline: Vec::new(),
+        governance_next_action: None,
         review_timeline: Vec::new(),
         terminal_status: TaskStatus::Succeeded,
         terminal_reason: TerminalReason::new(
@@ -473,6 +504,16 @@ fn render_session_status_includes_goal_trace_and_next_command() {
         session_id: "session-status".to_string(),
         workspace_ref: "/tmp/session-workspace".to_string(),
         goal: Some("Ship a bounded change".to_string()),
+        authored_input_summary: None,
+        authored_input_sources: None,
+        authored_input_deduplicated_sources: None,
+        clarification_headline: None,
+        clarification_prompt: None,
+        clarification_missing_fields: None,
+        requested_governance_runtime: None,
+        requested_governance_risk: None,
+        requested_governance_zone: None,
+        requested_governance_owner: None,
         active_flow: None,
         current_stage_id: None,
         current_stage_index: None,
@@ -503,6 +544,7 @@ fn render_session_status_includes_goal_trace_and_next_command() {
         latest_governance_approval: None,
         latest_governance_decision: None,
         latest_governance_candidates: None,
+        governance_next_action: None,
         next_command: Some("synod next".to_string()),
         explanation: "the active session can keep executing from the current step".to_string(),
     };
@@ -618,6 +660,11 @@ fn command_names_render_for_all_four_subcommands() {
         command_name(&DeveloperCommand::Run {
             workspace: Some(PathBuf::from("/tmp")),
             goal: Some("x".to_string()),
+            brief: Vec::new(),
+            governance: None,
+            risk: None,
+            zone: None,
+            owner: None,
         }),
         "run"
     );
@@ -641,9 +688,20 @@ fn render_trace_summary_handles_all_terminal_status_variants() {
         let summary = TraceSummaryView {
             trace_ref: "/tmp/trace.json".to_string(),
             goal: "test".to_string(),
+            authored_input_summary: None,
+            authored_input_sources: Vec::new(),
+            authored_input_deduplicated_sources: Vec::new(),
+            clarification_headline: None,
+            clarification_prompt: None,
+            clarification_missing_fields: Vec::new(),
+            requested_governance_runtime: None,
+            requested_governance_risk: None,
+            requested_governance_zone: None,
+            requested_governance_owner: None,
             executed_steps: vec![],
             recovery_events: vec![],
             governance_timeline: Vec::new(),
+            governance_next_action: None,
             review_timeline: Vec::new(),
             terminal_status: status,
             terminal_reason: TerminalReason::new(
@@ -666,6 +724,16 @@ fn render_trace_summary_covers_replan_recovery_label_and_decision_step_kind() {
     let summary = TraceSummaryView {
         trace_ref: "/tmp/trace.json".to_string(),
         goal: "test".to_string(),
+        authored_input_summary: None,
+        authored_input_sources: Vec::new(),
+        authored_input_deduplicated_sources: Vec::new(),
+        clarification_headline: None,
+        clarification_prompt: None,
+        clarification_missing_fields: Vec::new(),
+        requested_governance_runtime: None,
+        requested_governance_risk: None,
+        requested_governance_zone: None,
+        requested_governance_owner: None,
         executed_steps: vec![TraceStepSummary {
             step_id: "decide".to_string(),
             step_kind: StepKind::Decision,
@@ -679,6 +747,7 @@ fn render_trace_summary_covers_replan_recovery_label_and_decision_step_kind() {
             related_step_id: None,
         }],
         governance_timeline: Vec::new(),
+        governance_next_action: None,
         review_timeline: Vec::new(),
         terminal_status: TaskStatus::Succeeded,
         terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None),
@@ -703,6 +772,16 @@ fn render_trace_summary_covers_pending_running_and_skipped_step_statuses() {
         let summary = TraceSummaryView {
             trace_ref: "/tmp/trace.json".to_string(),
             goal: "test".to_string(),
+            authored_input_summary: None,
+            authored_input_sources: Vec::new(),
+            authored_input_deduplicated_sources: Vec::new(),
+            clarification_headline: None,
+            clarification_prompt: None,
+            clarification_missing_fields: Vec::new(),
+            requested_governance_runtime: None,
+            requested_governance_risk: None,
+            requested_governance_zone: None,
+            requested_governance_owner: None,
             executed_steps: vec![TraceStepSummary {
                 step_id: "step1".to_string(),
                 step_kind: StepKind::Agent,
@@ -712,6 +791,7 @@ fn render_trace_summary_covers_pending_running_and_skipped_step_statuses() {
             }],
             recovery_events: vec![],
             governance_timeline: Vec::new(),
+            governance_next_action: None,
             review_timeline: Vec::new(),
             terminal_status: TaskStatus::Succeeded,
             terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None),
