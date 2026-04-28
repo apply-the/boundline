@@ -31,3 +31,18 @@ fn init_accepts_template_and_assistant_runtimes() {
         other => panic!("expected Init, got {other:?}"),
     }
 }
+
+#[test]
+fn init_accepts_workspace_without_template() {
+    let cli = Cli::try_parse_from(["synod", "init", "--workspace", "/tmp/ws"]).unwrap();
+
+    match cli.command {
+        DeveloperCommand::Init { workspace, template, assistant, force } => {
+            assert_eq!(workspace, PathBuf::from("/tmp/ws"));
+            assert_eq!(template, None);
+            assert!(assistant.is_empty());
+            assert!(!force);
+        }
+        other => panic!("expected Init, got {other:?}"),
+    }
+}

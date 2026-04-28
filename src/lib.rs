@@ -19,6 +19,11 @@ pub use domain::brief::{
     InputSourceReference, MAX_BRIEF_BYTES, MAX_BRIEF_SOURCES, normalize_governance_intent,
     normalize_inputs as normalize_brief_inputs, normalize_inputs_with_governance,
 };
+pub use domain::cluster::{
+    ClusterConfigFile, ClusterError, ClusterInspectReport, ClusterMemberRegistration,
+    ClusterMemberRole, ClusterMemberState, ClusterMemberStatusView, ClusterSessionProjection,
+    WorkspaceCluster,
+};
 pub use domain::configuration::{
     ConfigFile, ConfigShowScope, ConfigWriteScope, EffectiveRouting, InitTemplate, ModelRoute,
     RouteSlot, RoutingConfig, RoutingOverrides, RuntimeKind, SourcedRoute, ValueSource,

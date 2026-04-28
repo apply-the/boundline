@@ -22,8 +22,12 @@ fn effective_routing_prefers_workspace_over_global() {
         ..RoutingConfig::default()
     };
 
-    let resolved =
-        resolve_effective_routing(&RoutingOverrides::default(), Some(&workspace), Some(&global));
+    let resolved = resolve_effective_routing(
+        &RoutingOverrides::default(),
+        Some(&workspace),
+        None,
+        Some(&global),
+    );
     assert_eq!(resolved.verification.source, ValueSource::Workspace);
     assert_eq!(resolved.verification.route.runtime, RuntimeKind::Copilot);
 }
@@ -43,7 +47,7 @@ fn reviewer_role_routes_can_be_resolved_from_cli_overrides() {
     );
     let workspace = RoutingConfig { reviewer_roles: workspace_roles, ..RoutingConfig::default() };
 
-    let resolved = resolve_effective_routing(&cli, Some(&workspace), None);
+    let resolved = resolve_effective_routing(&cli, Some(&workspace), None, None);
     let security = resolved.reviewer_roles.get("security").expect("security role should exist");
     assert_eq!(security.source, ValueSource::Cli);
     assert_eq!(security.route.runtime, RuntimeKind::Claude);
