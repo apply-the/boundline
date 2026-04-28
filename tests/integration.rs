@@ -57,3 +57,9 @@ mod human_input_multi_source_flow;
 
 #[path = "integration/human_input_governance_flow.rs"]
 mod human_input_governance_flow;
+
+#[path = "integration/init_bootstrap_flow.rs"]
+mod init_bootstrap_flow;
+
+#[path = "integration/config_workspace_flow.rs"]
+mod config_workspace_flow;

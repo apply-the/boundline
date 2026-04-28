@@ -6,88 +6,32 @@ Canon is downstream from Synod in this roadmap: Synod thinks, decides, orchestra
 
 Evolve Synod into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.10.0
+## Current Status: v0.11.0
 
-In addition to all v0.9.0 capabilities (session, flows, execution, review,
-adaptive, assistant integration, governance), the v0.10.0 release ships the
-full `010-human-brief-ingestion` feature:
+In addition to all v0.10.0 capabilities, the v0.11.0 release ships the full
+`011-init-model-routing` feature:
 
-- **Human Brief Ingestion**: `synod capture` and `synod run` accept direct
-  text, repeated `--brief <path>.md` arguments, and business-level governance
-  intent, normalizing them into one inspectable authored brief bundle.
-- **Multi-Source Provenance**: explicit briefs and Markdown paths referenced in
-  goal text resolve in stable precedence order, deduplicate deterministically,
-  and remain visible through `status`, `inspect`, and trace summaries.
-- **Clarification and Governance Routing**: unbounded requests stop with one
-  explicit clarification before planning, while governed runs surface blocked
-  or approval-gated next actions through the existing session surfaces.
+- **Human-Friendly Init**: `synod init` scaffolds `.synod/execution.json` and
+  `.synod/config.toml` from bounded templates (`bug-fix`, `change`, `delivery`),
+  with explicit preview and overwrite safeguards.
+- **Model Routing Configuration**: `synod config show|set|unset` manages runtime
+  and model defaults for planning, implementation, verification, review, named
+  reviewer roles, and adjudication.
+- **Global + Local Precedence**: effective routing resolves deterministically as
+  CLI input > workspace config > global config > built-in defaults, and exposes
+  value source in user-facing output.
+- **Runtime Surfaces**: initial support covers Claude, Codex, Copilot, and
+  Gemini CLI (CLI-only in this slice).
 
 ### Immediate follow-up directions
 
-- add a human-friendly `synod init` flow with provider and model routing configuration
+- add a provider-agnostic model gateway inside Synod (no Openclaw runtime dependency), with first-class provider auth flows and capability discovery
+- decouple assistant command packs from model backends so Claude/Codex/Copilot surfaces map to routing slots instead of hard-wired providers
 - deepen Canon governance with richer escalation and broader governed stage coverage
 - broaden adaptive heuristics beyond the current deterministic local repair patterns
 - deepen delivery and review beyond the current bounded local execution manifests
 - multi-workspace and cross-repository orchestration
 - advanced goal negotiation and constraint modeling
-
-## Next Planning Slice: Human-Friendly Init and Model Routing
-
-### Outcome
-
-Synod should bootstrap a workspace without asking the operator to hand-author
-`.synod/execution.json`, capture which assistant runtimes are available, and
-persist editable model-routing defaults that can differ by execution step and
-review role.
-
-### Initial runtime support
-
-- Claude
-- Codex
-- Copilot
-- Gemini CLI only for the first slice, without a dedicated Synod client adapter yet
-
-### In scope
-
-- a `synod init` command that scaffolds workspace-local Synod files from bounded
-  templates such as `bug-fix`, `change`, and `delivery`
-- optional repo setup during init for supported assistant surfaces when the
-  selected runtime needs repository-local files or prompts
-- persisted provider and model defaults for major stages such as planning,
-  implementation, verification, review, and adjudication
-- distinct default reviewer or adjudicator model selection so voting councils do
-  not have to reuse the same model profile as implementation steps
-- CLI commands to inspect and modify the saved configuration later instead of
-  forcing manual JSON edits
-- a user-scoped global config plus workspace-local override, with local values
-  taking precedence when both are present
-
-### Out of scope
-
-- hard-coding immutable provider or model choices that the operator cannot change later
-- requiring every supported runtime to ship a rich native client adapter in the
-  first slice
-- removing bounded execution policy from Synod; init should scaffold it, not
-  replace it with an unbounded free-form mode
-
-### Configuration precedence
-
-```text
-CLI flags or explicit command choices
-        ↓
-workspace-local Synod config
-        ↓
-user-scoped global Synod config
-        ↓
-built-in Synod defaults
-```
-
-### Why this slice matters next
-
-The current CLI already accepts human-authored goals and briefs, but workspace
-setup is still manifest-first and too manual. Adding init plus editable
-provider and model routing closes the biggest usability gap without weakening
-the bounded execution model.
 
 ## Architecture: User Through Execution
 

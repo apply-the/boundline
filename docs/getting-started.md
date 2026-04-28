@@ -9,16 +9,18 @@ Synod is a local CLI for bounded software-delivery work.
 
 You use Synod to:
 
+- initialize bounded workspace defaults with `synod init`
 - read an execution manifest from `<workspace>/.synod/execution.json`
 - capture human-authored goals and Markdown briefs without authoring a task JSON request
+- inspect or tune runtime/model routing with `synod config`
 - apply only the changes declared in that manifest
 - run the workspace validation command after each attempt
 - keep session state in `<workspace>/.synod/session.json`
 - keep traces in `<workspace>/.synod/traces/`
 
-Today, human-friendly input stops at goal and brief capture. Synod still does
-not provide a `synod init` workflow or interactive setup that writes the
-workspace execution manifest for you.
+Synod now supports `synod init` as the human-friendly bootstrap path. The
+bounded execution manifest remains the runtime contract, but init generates it
+for the operator and can create workspace-local routing config.
 
 If review, adaptive execution, or governance are configured, Synod projects that
 state through the same CLI instead of introducing a separate runtime surface.
@@ -49,15 +51,16 @@ synod --help
 
 ## First Run in a Workspace
 
-### 1. Prepare the Workspace Manifest
+### 1. Initialize the Workspace
 
-Create a workspace with a `.synod/execution.json` file.
+Run init to scaffold `.synod/execution.json` and `.synod/config.toml`:
 
-This is still a manual step today. The roadmap now tracks a future `synod init`
-flow, but the current CLI expects the execution manifest or the legacy fixture
-to exist before `doctor`, `plan`, or `run` can proceed.
+```bash
+synod init --workspace <workspace> --template bug-fix
+```
 
-Minimal example:
+You can still author `.synod/execution.json` manually when needed. The file
+shape remains:
 
 ```json
 {
@@ -93,6 +96,14 @@ Before starting a session, validate the target workspace:
 
 ```bash
 synod doctor --workspace <workspace>
+```
+
+Optional routing setup:
+
+```bash
+synod config set --scope global --slot planning --runtime codex --model gpt-5-codex
+synod config set --workspace <workspace> --scope workspace --reviewer safety --runtime copilot --model gpt-5.4
+synod config show --workspace <workspace> --scope effective
 ```
 
 ### 3. Start the Session and Capture the Goal
@@ -159,6 +170,8 @@ contract; it only skips the explicit session setup.
 
 | Command | What it is for |
 | --- | --- |
+| `synod init` | Bootstrap `.synod` workspace files and optional assistant setup |
+| `synod config show|set|unset` | Inspect or edit routing defaults at global/workspace scope |
 | `synod doctor` | Validate the workspace and manifest before running |
 | `synod start` | Initialize or reset the active workspace session |
 | `synod capture` | Store the delivery goal in session state |
@@ -172,8 +185,8 @@ contract; it only skips the explicit session setup.
 
 ## Choosing the Right Manifest Shape
 
-Synod is intentionally bounded by the workspace manifest until a future init
-flow can scaffold that policy for you.
+Synod is intentionally bounded by the workspace manifest; `synod init`
+scaffolds that policy for normal operator workflows.
 
 - use `attempts` when you want explicit authored change attempts
 - use `adaptive` when you want Synod to choose one bounded workspace slice and
@@ -185,6 +198,7 @@ flow can scaffold that policy for you.
 ## Next Reading
 
 - [README.md](../README.md) for the short product overview
+- [docs/configuration.md](configuration.md) for init/config precedence and routing details
 - [docs/adaptive-execution.md](adaptive-execution.md) for adaptive slicing and replanning
 - [docs/review-voting.md](review-voting.md) for multi-reviewer councils
 - [assistant/README.md](../assistant/README.md) for assistant command packs

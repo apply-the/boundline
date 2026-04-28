@@ -1,8 +1,9 @@
-# Review Voting in Synod 0.8.0
+# Review Voting in Synod 0.11.0
 
-Synod `0.8.0` keeps the bounded multi-agent review phase on top of the local
+Synod `0.11.0` keeps the bounded multi-agent review phase on top of the local
 execution engine. Review configuration lives inside `<workspace>/.synod/execution.json`
-under the `review` key.
+under the `review` key. Runtime/model routing for review roles is configured
+through `synod config` in global or workspace scope and resolved by precedence.
 
 ## What the runtime supports
 
@@ -12,6 +13,16 @@ under the `review` key.
 - vote strategies: `majority` and `weighted`
 - optional adjudication through a distinct adjudicator reviewer
 - persisted review evidence in `.synod/traces/` and projected review status in `.synod/session.json`
+
+## Routing and role differentiation
+
+- `reviewers[*].source` remains the runtime-facing review source field in the
+  bounded execution profile.
+- `synod config` lets operators set defaults for review and per-reviewer role
+  overrides without editing the manifest directly.
+- adjudication can use a dedicated route that differs from both delivery stages
+  and the review council defaults.
+- effective resolution follows CLI > workspace config > global config > built-in defaults.
 
 ## Manifest shape
 

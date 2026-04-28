@@ -66,3 +66,9 @@ mod human_input_ingestion;
 
 #[path = "unit/human_input_governance.rs"]
 mod human_input_governance;
+
+#[path = "unit/config_resolution.rs"]
+mod config_resolution;
+
+#[path = "unit/config_store_additional.rs"]
+mod config_store_additional;
