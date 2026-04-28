@@ -1,4 +1,6 @@
 use serde_json::json;
+use std::fs;
+use synod::domain::brief::normalize_inputs;
 use synod::domain::flow::built_in_flow;
 use synod::domain::limits::RunLimits;
 use synod::domain::plan::Plan;
@@ -32,6 +34,7 @@ fn session_record_round_trips_and_status_values_serialize() {
         session_id: "session-1".to_string(),
         workspace_ref: "/tmp/synod-session-record".to_string(),
         goal: Some("Deliver a session-backed CLI".to_string()),
+        authored_brief: None,
         active_flow: Some(built_in_flow("bug-fix").unwrap().initial_state()),
         active_task: Some(task),
         latest_status: SessionStatus::Planned,
@@ -62,6 +65,16 @@ fn session_record_round_trips_and_status_values_serialize() {
         session_id: record.session_id.clone(),
         workspace_ref: record.workspace_ref.clone(),
         goal: record.goal.clone(),
+        authored_input_summary: None,
+        authored_input_sources: None,
+        authored_input_deduplicated_sources: None,
+        clarification_headline: None,
+        clarification_prompt: None,
+        clarification_missing_fields: None,
+        requested_governance_runtime: None,
+        requested_governance_risk: None,
+        requested_governance_zone: None,
+        requested_governance_owner: None,
         active_flow: Some("bug-fix".to_string()),
         current_stage_id: Some("investigate".to_string()),
         current_stage_index: Some(0),
@@ -92,6 +105,7 @@ fn session_record_round_trips_and_status_values_serialize() {
         latest_governance_approval: None,
         latest_governance_decision: None,
         latest_governance_candidates: None,
+        governance_next_action: None,
         next_command: Some("synod step".to_string()),
         explanation: "the active plan is ready for explicit execution".to_string(),
     };
@@ -105,6 +119,7 @@ fn session_record_validation_rejects_workspace_mismatches_and_external_traces() 
         session_id: "session-2".to_string(),
         workspace_ref: "/tmp/synod-session-record".to_string(),
         goal: Some("Deliver a session-backed CLI".to_string()),
+        authored_brief: None,
         active_flow: None,
         active_task: Some(task),
         latest_status: SessionStatus::Planned,
@@ -135,6 +150,7 @@ fn terminal_session_requires_terminal_reason_and_consistent_view() {
         session_id: "session-terminal".to_string(),
         workspace_ref: "/tmp/synod-session-record".to_string(),
         goal: Some("Deliver a session-backed CLI".to_string()),
+        authored_brief: None,
         active_flow: None,
         active_task: Some(task),
         latest_status: SessionStatus::Succeeded,
@@ -156,6 +172,7 @@ fn goal_captured_sessions_require_a_goal_but_invalid_sessions_can_clear_context(
         session_id: "session-goal-captured".to_string(),
         workspace_ref: "/tmp/synod-session-record".to_string(),
         goal: None,
+        authored_brief: None,
         active_flow: None,
         active_task: None,
         latest_status: SessionStatus::GoalCaptured,
@@ -181,6 +198,7 @@ fn invalid_flow_state_is_rejected_by_session_validation() {
         session_id: "session-flow".to_string(),
         workspace_ref: "/tmp/synod-session-record".to_string(),
         goal: Some("Deliver a session-backed CLI".to_string()),
+        authored_brief: None,
         active_flow: Some(synod::domain::flow::SessionFlowState {
             flow_name: "bug-fix".to_string(),
             current_stage_id: "verify".to_string(),
@@ -196,4 +214,82 @@ fn invalid_flow_state_is_rejected_by_session_validation() {
     };
 
     assert!(matches!(record.validate().unwrap_err(), SessionValidationError::InvalidFlowState(_)));
+}
+
+#[test]
+fn goal_captured_status_view_can_project_clarification_fields_from_authored_brief() {
+    let workspace = std::env::temp_dir()
+        .join(format!("synod-session-record-clarification-{}", uuid::Uuid::new_v4()));
+    fs::create_dir_all(&workspace).unwrap();
+    let bundle = normalize_inputs(
+        &workspace,
+        Some("Improve the platform docs and fix whatever tests are broken"),
+        &[],
+    )
+    .unwrap();
+
+    let record = ActiveSessionRecord {
+        session_id: "session-clarification".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: Some(bundle.render_goal_text()),
+        authored_brief: Some(bundle.clone()),
+        active_flow: None,
+        active_task: None,
+        latest_status: SessionStatus::GoalCaptured,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 20,
+    };
+
+    let view = SessionStatusView {
+        session_id: record.session_id.clone(),
+        workspace_ref: record.workspace_ref.clone(),
+        goal: record.goal.clone(),
+        authored_input_summary: Some(bundle.summary_text()),
+        authored_input_sources: Some(bundle.ordered_source_labels()),
+        authored_input_deduplicated_sources: None,
+        clarification_headline: bundle.clarification_headline(),
+        clarification_prompt: bundle.clarification_prompt(),
+        clarification_missing_fields: bundle.clarification_missing_fields(),
+        requested_governance_runtime: None,
+        requested_governance_risk: None,
+        requested_governance_zone: None,
+        requested_governance_owner: None,
+        active_flow: None,
+        current_stage_id: None,
+        current_stage_index: None,
+        total_stages: None,
+        plan_revision: None,
+        current_step_id: None,
+        current_step_index: None,
+        latest_status: SessionStatus::GoalCaptured,
+        latest_trace_ref: None,
+        latest_changed_files: None,
+        latest_workspace_slice: None,
+        latest_selection_headline: None,
+        latest_attempt_lineage: None,
+        latest_validation_status: None,
+        latest_review_trigger: None,
+        latest_review_vote: None,
+        latest_review_outcome: None,
+        latest_review_headline: None,
+        latest_governance_stage: None,
+        latest_governance_runtime: None,
+        latest_governance_mode: None,
+        latest_governance_run_ref: None,
+        latest_governance_state: None,
+        latest_governance_blocked_reason: None,
+        latest_governance_packet_ref: None,
+        latest_governance_packet_source_stage: None,
+        latest_governance_packet_binding_reason: None,
+        latest_governance_approval: None,
+        latest_governance_decision: None,
+        latest_governance_candidates: None,
+        governance_next_action: None,
+        next_command: Some("synod capture --goal <narrower goal>".to_string()),
+        explanation: "clarification is required before planning can continue".to_string(),
+    };
+
+    view.validate(&record).unwrap();
 }

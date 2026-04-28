@@ -19,11 +19,34 @@ version.
 
 Delivered specs:
 
-- None recorded after `0.9.0`
+- None recorded after `0.10.0`
 
 Highlights:
 
-- No additional released feature-spec delivery is recorded after `0.9.0`.
+## [0.10.0]
+
+Delivered specs:
+
+- `010-human-brief-ingestion`
+
+Highlights:
+
+- `synod capture` and `synod run` accept one or more `--brief <path>.md`
+  arguments alongside (or instead of) `--goal`. Brief contents are normalized
+  into a single goal text projected through the existing capture pipeline so
+  developers no longer need to author free-text prose only on the command line.
+- New `synod::domain::brief` module (`AuthoredBriefBundle`,
+  `InputSourceReference`, `BriefIngestionError`, `normalize_inputs`) enforces
+  workspace-bounded `.md`/`.markdown` sources, an upper bound of 10 brief
+  files per invocation, and a 256 KiB per-source size cap.
+- Multi-source resolution deduplicates explicit and referenced Markdown input
+  into one persisted authored brief bundle with stable provenance across
+  `capture`, `run`, `status`, and `inspect`.
+- Clarification-aware task drafting blocks planning explicitly for unbounded
+  requests and records an inspectable trace instead of guessing missing scope.
+- Human governance intent (`--governance`, `--risk`, `--zone`, `--owner`)
+  maps into the existing governed execution path and surfaces next-action
+  guidance for blocked or approval-gated runs.
 
 ## [0.9.0] - 2026-04-27
 

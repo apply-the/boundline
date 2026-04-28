@@ -6,6 +6,9 @@ use synod::domain::governance::{
 };
 use synod::domain::limits::RunLimits;
 use synod::domain::step::{ErrorInfo, Recoverability, Step, StepResultSummary};
+use synod::domain::task::{
+    ClarificationReasonKind, ClarificationRecord, ClarificationStatus, DerivedTaskDraft,
+};
 use synod::domain::task_context::{LATEST_GOVERNANCE_STAGE_KEY, TaskContext, TaskContextError};
 
 #[test]
@@ -139,4 +142,34 @@ fn task_context_failure_helpers_cover_workspace_membership_and_error_buckets() {
     assert_eq!(context.state["last_step_id"], json!("verify"));
     assert_eq!(context.state["last_error"]["code"], json!("terminal"));
     assert_eq!(context.state["step_errors"]["verify"]["message"], json!("boom"));
+}
+
+#[test]
+fn task_context_round_trips_clarification_and_derived_draft_records() {
+    let mut context =
+        TaskContext::new("session-context", "/tmp/synod-context", RunLimits::default(), Map::new());
+    let clarification = ClarificationRecord {
+        clarification_id: "clarification-1".to_string(),
+        reason_kind: ClarificationReasonKind::UnboundedRequest,
+        prompt: "Narrow the request to one bounded outcome".to_string(),
+        missing_fields: vec!["bounded_scope".to_string()],
+        blocking_sources: vec!["source-1".to_string()],
+        turn_index: 1,
+        status: ClarificationStatus::Open,
+    };
+    let draft = DerivedTaskDraft {
+        draft_id: "draft-1".to_string(),
+        bundle_id: "bundle-1".to_string(),
+        bounded_goal: "Improve the platform docs and fix whatever tests are broken".to_string(),
+        flow_hint: Some("bug-fix".to_string()),
+        planning_ready: false,
+        validation_targets: vec!["docs/brief.md".to_string()],
+        blocking_clarification_ref: Some(clarification.clarification_id.clone()),
+    };
+
+    context.set_latest_clarification(&clarification).unwrap();
+    context.set_derived_task_draft(&draft).unwrap();
+
+    assert_eq!(context.latest_clarification().unwrap(), Some(clarification));
+    assert_eq!(context.derived_task_draft().unwrap(), Some(draft));
 }

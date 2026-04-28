@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
+use crate::domain::brief::AuthoredBriefBundle;
 use crate::domain::flow::SessionFlowState;
 use crate::domain::governance::{
     AutopilotDecisionRecord, GovernedStagePacket, GovernedStageRecord, PacketReuseBinding,
@@ -54,6 +55,8 @@ pub struct ActiveSessionRecord {
     pub session_id: String,
     pub workspace_ref: String,
     pub goal: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authored_brief: Option<AuthoredBriefBundle>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub active_flow: Option<SessionFlowState>,
     pub active_task: Option<Task>,
@@ -183,6 +186,26 @@ pub struct SessionStatusView {
     pub workspace_ref: String,
     pub goal: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authored_input_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authored_input_sources: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authored_input_deduplicated_sources: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clarification_headline: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clarification_prompt: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clarification_missing_fields: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_governance_runtime: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_governance_risk: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_governance_zone: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_governance_owner: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub active_flow: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current_stage_id: Option<String>,
@@ -237,6 +260,8 @@ pub struct SessionStatusView {
     pub latest_governance_decision: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_governance_candidates: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub governance_next_action: Option<String>,
     pub next_command: Option<String>,
     pub explanation: String,
 }
@@ -328,6 +353,48 @@ impl SessionStatusView {
             return Err(SessionValidationError::StatusViewWorkspaceSliceMismatch {
                 expected: expected_workspace_slice,
                 actual: self.latest_workspace_slice.clone(),
+            });
+        }
+
+        let expected_authored_input_deduplicated_sources =
+            record.authored_brief.as_ref().and_then(|bundle| {
+                let labels = bundle.deduplicated_source_labels();
+                (!labels.is_empty()).then_some(labels)
+            });
+        if self.authored_input_deduplicated_sources != expected_authored_input_deduplicated_sources
+        {
+            return Err(
+                SessionValidationError::StatusViewAuthoredInputDeduplicatedSourcesMismatch {
+                    expected: expected_authored_input_deduplicated_sources,
+                    actual: self.authored_input_deduplicated_sources.clone(),
+                },
+            );
+        }
+
+        let expected_clarification_headline =
+            record.authored_brief.as_ref().and_then(|bundle| bundle.clarification_headline());
+        if self.clarification_headline != expected_clarification_headline {
+            return Err(SessionValidationError::StatusViewClarificationHeadlineMismatch {
+                expected: expected_clarification_headline,
+                actual: self.clarification_headline.clone(),
+            });
+        }
+
+        let expected_clarification_prompt =
+            record.authored_brief.as_ref().and_then(|bundle| bundle.clarification_prompt());
+        if self.clarification_prompt != expected_clarification_prompt {
+            return Err(SessionValidationError::StatusViewClarificationPromptMismatch {
+                expected: expected_clarification_prompt,
+                actual: self.clarification_prompt.clone(),
+            });
+        }
+
+        let expected_clarification_missing_fields =
+            record.authored_brief.as_ref().and_then(|bundle| bundle.clarification_missing_fields());
+        if self.clarification_missing_fields != expected_clarification_missing_fields {
+            return Err(SessionValidationError::StatusViewClarificationMissingFieldsMismatch {
+                expected: expected_clarification_missing_fields,
+                actual: self.clarification_missing_fields.clone(),
             });
         }
 
@@ -513,8 +580,23 @@ impl SessionStatusView {
             });
         }
 
+        let expected_governance_next_action =
+            record.active_task.as_ref().and_then(task_state_governance_next_action);
+        if self.governance_next_action != expected_governance_next_action {
+            return Err(SessionValidationError::StatusViewGovernanceNextActionMismatch {
+                expected: expected_governance_next_action,
+                actual: self.governance_next_action.clone(),
+            });
+        }
+
         if self.explanation.trim().is_empty() {
             return Err(SessionValidationError::MissingStatusExplanation);
+        }
+
+        if let Some(governance_next_action) = &self.governance_next_action
+            && governance_next_action.trim().is_empty()
+        {
+            return Err(SessionValidationError::MissingGovernanceNextAction);
         }
 
         if let Some(next_command) = &self.next_command
@@ -604,6 +686,24 @@ pub enum SessionValidationError {
     StatusViewTraceMismatch { expected: Option<String>, actual: Option<String> },
     #[error("status view changed files mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewChangedFilesMismatch { expected: Option<Vec<String>>, actual: Option<Vec<String>> },
+    #[error(
+        "status view authored input deduplicated sources mismatch: expected {expected:?}, got {actual:?}"
+    )]
+    StatusViewAuthoredInputDeduplicatedSourcesMismatch {
+        expected: Option<Vec<String>>,
+        actual: Option<Vec<String>>,
+    },
+    #[error("status view clarification headline mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewClarificationHeadlineMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view clarification prompt mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewClarificationPromptMismatch { expected: Option<String>, actual: Option<String> },
+    #[error(
+        "status view clarification missing fields mismatch: expected {expected:?}, got {actual:?}"
+    )]
+    StatusViewClarificationMissingFieldsMismatch {
+        expected: Option<Vec<String>>,
+        actual: Option<Vec<String>>,
+    },
     #[error("status view workspace slice mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewWorkspaceSliceMismatch { expected: Option<String>, actual: Option<String> },
     #[error("status view selection headline mismatch: expected {expected:?}, got {actual:?}")]
@@ -651,8 +751,12 @@ pub enum SessionValidationError {
         expected: Option<Vec<String>>,
         actual: Option<Vec<String>>,
     },
+    #[error("status view governance next action mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewGovernanceNextActionMismatch { expected: Option<String>, actual: Option<String> },
     #[error("status view explanation must not be empty")]
     MissingStatusExplanation,
+    #[error("status view governance_next_action must not be empty when present")]
+    MissingGovernanceNextAction,
     #[error("status view next_command must not be empty when present")]
     MissingNextCommand,
     #[error("status view step index mismatch: expected {expected:?}, got {actual:?}")]
@@ -807,6 +911,21 @@ pub(crate) fn task_state_governance_candidate_actions(task: &Task) -> Option<Vec
     })
 }
 
+pub(crate) fn governance_next_action_for_state(governance_state: Option<&str>) -> Option<String> {
+    match governance_state {
+        Some("awaiting_approval") => Some("wait for approval and rerun synod status".to_string()),
+        Some("blocked") => {
+            Some("resolve the governance blocker, then rerun synod step".to_string())
+        }
+        _ => None,
+    }
+}
+
+pub(crate) fn task_state_governance_next_action(task: &Task) -> Option<String> {
+    let governance_state = task_state_governance_state_text(task);
+    governance_next_action_for_state(governance_state.as_deref())
+}
+
 pub(crate) fn task_state_workspace_slice_summary(task: &Task) -> Option<String> {
     let slice = task.context.state.get("latest_workspace_slice")?;
     let selected_targets = slice.get("selected_targets")?.as_array()?;
@@ -904,6 +1023,7 @@ mod tests {
             session_id: "session-1".to_string(),
             workspace_ref: workspace_ref.to_string(),
             goal: Some("Deliver a session-backed CLI".to_string()),
+            authored_brief: None,
             active_flow: Some(
                 crate::domain::flow::built_in_flow("bug-fix").unwrap().initial_state(),
             ),
@@ -921,6 +1041,16 @@ mod tests {
             session_id: record.session_id.clone(),
             workspace_ref: record.workspace_ref.clone(),
             goal: record.goal.clone(),
+            authored_input_summary: None,
+            authored_input_sources: None,
+            authored_input_deduplicated_sources: None,
+            clarification_headline: None,
+            clarification_prompt: None,
+            clarification_missing_fields: None,
+            requested_governance_runtime: None,
+            requested_governance_risk: None,
+            requested_governance_zone: None,
+            requested_governance_owner: None,
             active_flow: record.active_flow.as_ref().map(|flow| flow.flow_name.clone()),
             current_stage_id: record.active_flow.as_ref().map(|flow| flow.current_stage_id.clone()),
             current_stage_index: record.active_flow.as_ref().map(|flow| flow.current_stage_index),
@@ -957,6 +1087,7 @@ mod tests {
             latest_governance_approval: None,
             latest_governance_decision: None,
             latest_governance_candidates: None,
+            governance_next_action: None,
             next_command: Some("synod step".to_string()),
             explanation: "view is consistent".to_string(),
         }
@@ -1056,6 +1187,12 @@ mod tests {
         let task = record.active_task.as_ref().unwrap();
         view.latest_changed_files = task_state_strings(task, "latest_changed_files");
         view.latest_workspace_slice = task_state_workspace_slice_summary(task);
+        view.clarification_headline =
+            record.authored_brief.as_ref().and_then(|bundle| bundle.clarification_headline());
+        view.clarification_prompt =
+            record.authored_brief.as_ref().and_then(|bundle| bundle.clarification_prompt());
+        view.clarification_missing_fields =
+            record.authored_brief.as_ref().and_then(|bundle| bundle.clarification_missing_fields());
         view.latest_selection_headline = task_state_string(task, "latest_selection_headline");
         view.latest_attempt_lineage = task_state_attempt_lineage_summary(task);
         view.latest_validation_status = task_state_string(task, "latest_validation_status");
@@ -1077,6 +1214,7 @@ mod tests {
         view.latest_governance_approval = super::task_state_governance_approval_text(task);
         view.latest_governance_decision = super::task_state_governance_decision_headline(task);
         view.latest_governance_candidates = super::task_state_governance_candidate_actions(task);
+        view.governance_next_action = super::task_state_governance_next_action(task);
         view
     }
 

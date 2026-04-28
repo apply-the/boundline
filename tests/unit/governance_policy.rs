@@ -1,3 +1,5 @@
+use serde_json::json;
+use synod::domain::brief::AuthoredBriefResolutionState;
 use synod::domain::flow::FlowStepMetadata;
 use synod::domain::limits::RunLimits;
 use synod::domain::task_context::TaskContext;
@@ -5,10 +7,14 @@ use synod::domain::task_context::{
     LATEST_GOVERNANCE_DECISION_KEY, LATEST_GOVERNANCE_PACKET_KEY,
     LATEST_GOVERNANCE_PACKET_REUSE_KEY, LATEST_GOVERNANCE_STAGE_KEY,
 };
+use synod::orchestrator::governance::{
+    governance_input_documents, overlay_stage_policy_with_intent, requested_governance_intent,
+};
 use synod::{
-    ApprovalState, AutopilotAction, AutopilotDecisionRecord, CanonMode, CanonRuntimeConfig,
-    GovernanceBoundedContext, GovernanceLifecycleState, GovernanceProfile, GovernanceRuntimeKind,
-    GovernedStagePacket, GovernedStageRecord, PacketReadiness, PacketReuseBinding,
+    ApprovalState, AuthoredBriefBundle, AutopilotAction, AutopilotDecisionRecord, CanonMode,
+    CanonRuntimeConfig, GovernanceBoundedContext, GovernanceIntent, GovernanceLifecycleState,
+    GovernanceProfile, GovernanceRuntimeKind, GovernedStagePacket, GovernedStageRecord,
+    InputSourceKind, InputSourceReference, PacketReadiness, PacketReuseBinding,
     StageGovernancePolicy, SystemContextBinding, bounded_reused_packets, build_autopilot_decision,
     escalation_target_stage_key, governance_stage_key, governance_state_patch,
     narrowed_bounded_context, select_packet_reuse_binding, selected_stage_policy,
@@ -74,6 +80,55 @@ fn sample_canon_policy(flow_name: &str, stage_id: &str, mode: CanonMode) -> Stag
     }
 }
 
+fn sample_governance_intent(runtime_preference: Option<GovernanceRuntimeKind>) -> GovernanceIntent {
+    GovernanceIntent {
+        requested: true,
+        runtime_preference,
+        risk: Some("high".to_string()),
+        zone: Some("payments".to_string()),
+        owner: Some("platform".to_string()),
+    }
+}
+
+fn sample_authored_bundle(governance_intent: Option<GovernanceIntent>) -> AuthoredBriefBundle {
+    AuthoredBriefBundle {
+        bundle_id: "bundle-1".to_string(),
+        primary_goal_text: Some("Fix the failing checkout flow".to_string()),
+        sources: vec![
+            InputSourceReference {
+                source_id: "source-1".to_string(),
+                kind: InputSourceKind::DirectText,
+                display_name: "developer goal".to_string(),
+                workspace_path: None,
+                precedence: 0,
+                content: "Fix the failing checkout flow".to_string(),
+            },
+            InputSourceReference {
+                source_id: "source-2".to_string(),
+                kind: InputSourceKind::AttachedMarkdown,
+                display_name: "brief.md".to_string(),
+                workspace_path: Some("docs/brief.md".to_string()),
+                precedence: 1,
+                content: "# Brief".to_string(),
+            },
+            InputSourceReference {
+                source_id: "source-3".to_string(),
+                kind: InputSourceKind::ReferencedMarkdown,
+                display_name: "notes.md".to_string(),
+                workspace_path: Some("docs/notes.md".to_string()),
+                precedence: 2,
+                content: "# Notes".to_string(),
+            },
+        ],
+        deduplicated_sources: Vec::new(),
+        governance_intent,
+        resolution_state: AuthoredBriefResolutionState::Ready,
+        clarification: None,
+        derived_task_draft: None,
+        captured_at: 1,
+    }
+}
+
 #[test]
 fn governance_stage_helpers_select_expected_policy() {
     let policy = sample_policy();
@@ -87,6 +142,58 @@ fn governance_stage_helpers_select_expected_policy() {
     assert_eq!(selected_stage_policy(Some(&profile), "bug-fix", "investigate"), Some(policy));
     assert_eq!(selected_stage_policy(Some(&profile), "bug-fix", "verify"), None);
     assert_eq!(selected_stage_policy(None, "bug-fix", "investigate"), None);
+}
+
+#[test]
+fn requested_governance_intent_prefers_top_level_value_over_authored_bundle_fallback() {
+    let top_level_intent = sample_governance_intent(Some(GovernanceRuntimeKind::Local));
+    let bundle_intent = sample_governance_intent(Some(GovernanceRuntimeKind::Canon));
+    let task_input = json!({
+        "governance_intent": top_level_intent,
+        "authored_brief": sample_authored_bundle(Some(bundle_intent)),
+    });
+
+    assert_eq!(
+        requested_governance_intent(&task_input),
+        Some(sample_governance_intent(Some(GovernanceRuntimeKind::Local)))
+    );
+}
+
+#[test]
+fn requested_governance_intent_falls_back_to_authored_bundle_and_overlays_policy() {
+    let bundle_intent = sample_governance_intent(Some(GovernanceRuntimeKind::Canon));
+    let task_input = json!({
+        "authored_brief": sample_authored_bundle(Some(bundle_intent.clone())),
+    });
+    let mut policy = sample_policy();
+    policy.enabled = false;
+    policy.runtime = Some(GovernanceRuntimeKind::Local);
+
+    let intent = requested_governance_intent(&task_input);
+    let overlaid = overlay_stage_policy_with_intent(&policy, intent.as_ref());
+
+    assert_eq!(intent, Some(bundle_intent));
+    assert!(overlaid.enabled);
+    assert!(overlaid.required);
+    assert_eq!(overlaid.runtime, Some(GovernanceRuntimeKind::Canon));
+    assert_eq!(overlaid.risk.as_deref(), Some("high"));
+    assert_eq!(overlaid.zone.as_deref(), Some("payments"));
+    assert_eq!(overlaid.owner.as_deref(), Some("platform"));
+}
+
+#[test]
+fn governance_input_documents_uses_first_workspace_doc_as_stage_brief() {
+    let task_input = json!({
+        "authored_brief": sample_authored_bundle(None),
+    });
+
+    let documents = governance_input_documents(&task_input);
+
+    assert_eq!(documents.len(), 2);
+    assert_eq!(documents[0].kind, "stage-brief");
+    assert_eq!(documents[0].path, "docs/brief.md");
+    assert_eq!(documents[1].kind, "authored-brief");
+    assert_eq!(documents[1].path, "docs/notes.md");
 }
 
 #[test]

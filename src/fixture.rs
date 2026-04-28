@@ -10,6 +10,7 @@ use thiserror::Error;
 
 use crate::adapters::agent::FnAgentAdapter;
 use crate::adapters::tool::FnToolAdapter;
+use crate::domain::brief::AuthoredBriefBundle;
 use crate::domain::execution::{
     AdaptiveChangeKind, AttemptLineage, AttemptTransitionKind, ChangeEvidence, ChangeStatus,
     ExecutionAttemptDefinition, ExecutionCommand, ExecutionFailureMode, ExecutionProfileError,
@@ -29,6 +30,7 @@ use crate::domain::step::{
     ErrorInfo, Recoverability, Step, StepError, StepExecutionRequest, StepExecutionResult,
 };
 use crate::domain::task::TaskRunRequest;
+use crate::domain::task_context::{LATEST_CLARIFICATION_KEY, LATEST_DERIVED_TASK_DRAFT_KEY};
 use crate::orchestrator::governance::{bounded_reused_packets, select_packet_reuse_binding};
 use crate::orchestrator::planner::{CallbackPlanner, Planner, PlanningError, StaticPlanner};
 use crate::registry::agent_registry::{AgentRegistry, RegistryError as AgentRegistryError};
@@ -208,19 +210,71 @@ pub fn build_task_request(
     workspace: &Path,
     goal: impl Into<String>,
     session_id: impl Into<String>,
+    authored_brief: Option<&AuthoredBriefBundle>,
 ) -> Result<TaskRunRequest, FixtureRuntimeError> {
     let profile = load_workspace_execution_profile(workspace)?;
+    let mut input = Map::new();
+    let mut initial_context = Map::new();
+    input.insert("execution_profile".to_string(), json!(profile.name));
+    input.insert("flow".to_string(), json!("workspace_execution"));
+    if let Some(authored_brief) = authored_brief {
+        input.insert("authored_brief".to_string(), json!(authored_brief));
+        input.insert("authored_input_summary".to_string(), json!(authored_brief.summary_text()));
+        input.insert(
+            "authored_input_sources".to_string(),
+            json!(authored_brief.ordered_source_labels()),
+        );
+        if !authored_brief.deduplicated_sources.is_empty() {
+            input.insert(
+                "authored_input_deduplicated_sources".to_string(),
+                json!(authored_brief.deduplicated_source_labels()),
+            );
+        }
+        input.insert(
+            "authored_input_resolution_state".to_string(),
+            json!(authored_brief.resolution_state),
+        );
+        if let Some(derived_task_draft) = authored_brief.derived_task_draft.as_ref() {
+            input.insert("derived_task_draft".to_string(), json!(derived_task_draft));
+            initial_context
+                .insert(LATEST_DERIVED_TASK_DRAFT_KEY.to_string(), json!(derived_task_draft));
+        }
+        if let Some(clarification) = authored_brief.clarification.as_ref() {
+            input.insert("clarification_record".to_string(), json!(clarification));
+            input.insert("clarification_headline".to_string(), json!(clarification.headline()));
+            input.insert("clarification_prompt".to_string(), json!(&clarification.prompt));
+            if !clarification.missing_fields.is_empty() {
+                input.insert(
+                    "clarification_missing_fields".to_string(),
+                    json!(&clarification.missing_fields),
+                );
+            }
+            initial_context.insert(LATEST_CLARIFICATION_KEY.to_string(), json!(clarification));
+        }
+        if let Some(governance_intent) = authored_brief.governance_intent.as_ref() {
+            input.insert("governance_intent".to_string(), json!(governance_intent));
+            if let Some(runtime_preference) = governance_intent.runtime_preference {
+                input.insert("requested_governance_runtime".to_string(), json!(runtime_preference));
+            }
+            if let Some(risk) = governance_intent.risk.as_ref() {
+                input.insert("requested_governance_risk".to_string(), json!(risk));
+            }
+            if let Some(zone) = governance_intent.zone.as_ref() {
+                input.insert("requested_governance_zone".to_string(), json!(zone));
+            }
+            if let Some(owner) = governance_intent.owner.as_ref() {
+                input.insert("requested_governance_owner".to_string(), json!(owner));
+            }
+        }
+    }
 
     Ok(TaskRunRequest {
         goal: goal.into(),
-        input: json!({
-            "execution_profile": profile.name,
-            "flow": "workspace_execution",
-        }),
+        input: Value::Object(input),
         session_id: session_id.into(),
         workspace_ref: workspace.to_string_lossy().into_owned(),
         limits: profile.limits,
-        initial_context: None,
+        initial_context: (!initial_context.is_empty()).then_some(initial_context),
     })
 }
 
@@ -2865,7 +2919,7 @@ mod tests {
         );
 
         let task_request =
-            build_task_request(&workspace, "Fix the workspace", "session-1").unwrap();
+            build_task_request(&workspace, "Fix the workspace", "session-1", None).unwrap();
         assert_eq!(task_request.input["execution_profile"], json!("fixture-profile"));
         assert_eq!(task_request.input["flow"], json!("workspace_execution"));
 

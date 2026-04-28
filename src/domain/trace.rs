@@ -68,10 +68,32 @@ pub struct ExecutionTrace {
 pub struct TraceSummaryView {
     pub trace_ref: String,
     pub goal: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authored_input_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub authored_input_sources: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub authored_input_deduplicated_sources: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clarification_headline: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clarification_prompt: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub clarification_missing_fields: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_governance_runtime: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_governance_risk: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_governance_zone: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_governance_owner: Option<String>,
     pub executed_steps: Vec<TraceStepSummary>,
     pub recovery_events: Vec<TraceRecoveryEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub governance_timeline: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub governance_next_action: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub review_timeline: Vec<String>,
     pub terminal_status: TaskStatus,
