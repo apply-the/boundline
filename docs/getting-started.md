@@ -10,10 +10,15 @@ Synod is a local CLI for bounded software-delivery work.
 You use Synod to:
 
 - read an execution manifest from `<workspace>/.synod/execution.json`
+- capture human-authored goals and Markdown briefs without authoring a task JSON request
 - apply only the changes declared in that manifest
 - run the workspace validation command after each attempt
 - keep session state in `<workspace>/.synod/session.json`
 - keep traces in `<workspace>/.synod/traces/`
+
+Today, human-friendly input stops at goal and brief capture. Synod still does
+not provide a `synod init` workflow or interactive setup that writes the
+workspace execution manifest for you.
 
 If review, adaptive execution, or governance are configured, Synod projects that
 state through the same CLI instead of introducing a separate runtime surface.
@@ -47,6 +52,10 @@ synod --help
 ### 1. Prepare the Workspace Manifest
 
 Create a workspace with a `.synod/execution.json` file.
+
+This is still a manual step today. The roadmap now tracks a future `synod init`
+flow, but the current CLI expects the execution manifest or the legacy fixture
+to exist before `doctor`, `plan`, or `run` can proceed.
 
 Minimal example:
 
@@ -143,6 +152,9 @@ Use the direct workflow when you only want to launch one bounded run:
 synod run --workspace <workspace> --goal "Fix the failing add test"
 ```
 
+Direct run still uses the workspace execution manifest as the bounded execution
+contract; it only skips the explicit session setup.
+
 ## The Core Commands
 
 | Command | What it is for |
@@ -160,7 +172,8 @@ synod run --workspace <workspace> --goal "Fix the failing add test"
 
 ## Choosing the Right Manifest Shape
 
-Synod is intentionally bounded by the workspace manifest.
+Synod is intentionally bounded by the workspace manifest until a future init
+flow can scaffold that policy for you.
 
 - use `attempts` when you want explicit authored change attempts
 - use `adaptive` when you want Synod to choose one bounded workspace slice and
