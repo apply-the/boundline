@@ -63,3 +63,12 @@ mod init_bootstrap_flow;
 
 #[path = "integration/config_workspace_flow.rs"]
 mod config_workspace_flow;
+
+#[path = "integration/cluster_bootstrap_flow.rs"]
+mod cluster_bootstrap_flow;
+
+#[path = "integration/cluster_status_flow.rs"]
+mod cluster_status_flow;
+
+#[path = "integration/cluster_config_flow.rs"]
+mod cluster_config_flow;

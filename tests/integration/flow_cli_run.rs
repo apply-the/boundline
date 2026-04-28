@@ -26,6 +26,28 @@ fn run_limits(max_steps: usize, max_retries: usize) -> serde_json::Value {
     })
 }
 
+fn execution_profile(name: &str, max_steps: usize, max_retries: usize) -> serde_json::Value {
+    json!({
+        "name": name,
+        "read_targets": ["fixture-target.txt"],
+        "validation_command": {
+            "program": "sh",
+            "args": ["-c", "grep -q green fixture-target.txt"]
+        },
+        "limits": run_limits(max_steps, max_retries),
+        "attempts": [
+            {
+                "attempt_id": "fix-target",
+                "summary": "Replace red with green",
+                "failure_mode": "terminal",
+                "changes": [
+                    {"path": "fixture-target.txt", "find": "red", "replace": "green"}
+                ]
+            }
+        ]
+    })
+}
+
 fn temp_workspace() -> PathBuf {
     temp_workspace_with_retries(0)
 }
@@ -40,16 +62,8 @@ fn temp_workspace_with_retries(max_retries: usize) -> PathBuf {
     .unwrap();
     fs::write(workspace.join("fixture-target.txt"), "red\n").unwrap();
     fs::write(
-        workspace.join(".synod").join("fixture.json"),
-        serde_json::to_vec_pretty(&json!({
-            "name": "flow-run",
-            "test_command": {"program": "sh", "args": ["-c", "grep -q green fixture-target.txt"]},
-            "limits": run_limits(8, max_retries),
-            "file_patches": [
-                {"path": "fixture-target.txt", "find": "red", "replace": "green"}
-            ]
-        }))
-        .unwrap(),
+        workspace.join(".synod").join("execution.json"),
+        serde_json::to_vec_pretty(&execution_profile("flow-run", 8, max_retries)).unwrap(),
     )
     .unwrap();
     workspace
