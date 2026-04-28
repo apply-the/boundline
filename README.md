@@ -7,7 +7,9 @@
 
 **Synod is a local CLI for bounded software-delivery work. You run it inside a
 workspace to execute manifest-declared changes, validate them, and inspect the
-result through session state and traces written back to disk.**
+result through session state and traces written back to disk. Human-friendly
+goal and brief capture is supported, but Synod still requires a workspace
+execution manifest today.**
 
 ## What Synod Does
 
@@ -28,6 +30,14 @@ Use it when you want delivery work to stay bounded and inspectable:
 
 Synod prefers `<workspace>/.synod/execution.json` and falls back to the legacy
 `<workspace>/.synod/fixture.json`.
+
+Important: human-facing input does not replace the execution manifest yet.
+`synod capture --goal ...`, repeated `--brief` flags, and direct `synod run
+--goal ...` remove the need to author a JSON request for the task itself, but
+`doctor`, `plan`, and `run` still expect `<workspace>/.synod/execution.json`
+or the legacy fixture to define the bounded execution policy. There is not yet
+a `synod init` command or interactive scaffold that generates that file for
+you.
 
 Local execution is the default. When governance is configured, Synod can also
 route stages through Canon and project governance state, approvals, packet
@@ -75,11 +85,14 @@ The shortest way to think about Synod is:
 
 1. Point it at a workspace.
 2. Give it a bounded execution manifest.
-3. Capture a goal.
+3. Capture a goal or provide Markdown briefs.
 4. Plan and run.
 5. Read `status`, `next`, or `inspect` to continue.
 
 ### 1. Prepare a workspace manifest
+
+This is still required today. Synod does not yet provide `synod init` or an
+interactive setup flow that writes the execution manifest for you.
 
 Create `<workspace>/.synod/execution.json`:
 
@@ -125,18 +138,19 @@ synod inspect --workspace <workspace>
 
 What those commands do, in short:
 
-- `doctor` checks that the workspace and manifest are usable.
+- `doctor` checks that the workspace and execution manifest are usable.
 - `start` initializes the workspace session.
-- `capture` stores the goal in session state.
+- `capture` stores human-authored goal and brief input in session state.
 - `flow` optionally selects `bug-fix`, `change`, or `delivery`.
-- `plan` creates the next bounded task.
-- `run` executes until Synod reaches a terminal state or needs operator action.
+- `plan` creates the next bounded task from the captured human input plus the workspace manifest.
+- `run` executes until Synod reaches a terminal state or needs operator action, still using the workspace manifest as the execution contract.
 - `status` reports the current session snapshot.
 - `inspect` summarizes the latest trace and evidence.
 
 ### 3. Use the direct workflow when you do not need a session
 
-If you do not need the explicit session setup, you can run directly:
+If you do not need the explicit session setup, you can run directly. This still
+requires `<workspace>/.synod/execution.json` or the legacy fixture to exist:
 
 ```bash
 synod run --workspace <workspace> --goal "Fix the failing add test"
@@ -161,7 +175,7 @@ Depending on the manifest, that output can also include:
 
 - create or update `<workspace>/.synod/execution.json`
 - run `synod doctor --workspace <workspace>`
-- capture a goal with `synod capture`
+- capture a goal with `synod capture` or pass the goal directly to `synod run`
 - optionally select `bug-fix`, `change`, or `delivery` with `synod flow`
 - run `synod plan` and `synod run`
 - inspect the result with `synod status`, `synod next`, and `synod inspect`
