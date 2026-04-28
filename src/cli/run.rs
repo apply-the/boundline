@@ -1,11 +1,20 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
+use serde_json::json;
 use thiserror::Error;
+use uuid::Uuid;
 
 use crate::adapters::trace_store::{FileTraceStore, TraceStore};
 use crate::cli::CommandExitStatus;
 use crate::cli::output;
-use crate::domain::task::TaskStatus;
+use crate::domain::brief::{
+    BriefIngestionError, normalize_governance_intent, normalize_inputs_with_governance,
+};
+use crate::domain::governance::GovernanceRuntimeKind;
+use crate::domain::limits::TerminalCondition;
+use crate::domain::task::{TaskRunResponse, TaskStatus, TerminalReason};
+use crate::domain::task_context::TaskContext;
+use crate::domain::trace::{ExecutionTrace, TraceEventType};
 use crate::fixture::{FixtureRuntimeError, build_fixture_runtime, build_task_request};
 use crate::orchestrator::engine::{Orchestrator, OrchestratorError};
 
@@ -18,17 +27,88 @@ pub struct RunCommandReport {
 
 pub fn execute_custom_run(
     workspace: &Path,
-    goal: impl Into<String>,
+    goal: Option<&str>,
+    briefs: &[PathBuf],
+    governance: Option<GovernanceRuntimeKind>,
+    risk: Option<&str>,
+    zone: Option<&str>,
+    owner: Option<&str>,
 ) -> Result<RunCommandReport, RunCommandError> {
-    let goal = goal.into();
-    let runtime = build_fixture_runtime(workspace)?;
+    let governance_intent = normalize_governance_intent(governance, risk, zone, owner)?;
+    let bundle = normalize_inputs_with_governance(workspace, goal, briefs, governance_intent)?;
+    let goal = bundle.render_goal_text();
     let store = FileTraceStore::for_workspace(workspace);
     let trace_reader = store.clone();
     let request = build_task_request(
         workspace,
         goal,
         format!("run-{}", crate::domain::trace::current_timestamp_millis()),
+        Some(&bundle),
     )?;
+
+    if let Some(clarification) = bundle.clarification.as_ref() {
+        let terminal_reason = TerminalReason::new(
+            TerminalCondition::TaskNotCredible,
+            clarification.prompt.clone(),
+            Some(json!({
+                "clarification_required": true,
+                "clarification_headline": clarification.headline(),
+                "clarification_missing_fields": clarification.missing_fields,
+            })),
+        );
+        let mut trace = ExecutionTrace::new(
+            Uuid::new_v4().to_string(),
+            request.session_id.clone(),
+            request.goal.clone(),
+        );
+        trace.record_event(
+            TraceEventType::TaskStarted,
+            None,
+            0,
+            json!({
+                "goal": request.goal,
+                "input": request.input,
+                "limits": request.limits,
+            }),
+        );
+        trace.record_event(
+            TraceEventType::TerminalRecorded,
+            None,
+            0,
+            json!({
+                "terminal_status": TaskStatus::Failed,
+                "terminal_reason": terminal_reason,
+            }),
+        );
+        trace.finalize(TaskStatus::Failed, terminal_reason.clone());
+        let trace_path = store.persist(&trace).map_err(RunCommandError::TraceStore)?;
+        let trace_location = trace_path.to_string_lossy().into_owned();
+        trace.set_trace_location(trace_location.clone());
+        store.persist(&trace).map_err(RunCommandError::TraceStore)?;
+        let loaded_trace = trace_reader.load(Path::new(&trace_location)).ok();
+        let response = TaskRunResponse {
+            task_id: trace.task_id.clone(),
+            terminal_status: TaskStatus::Failed,
+            terminal_reason,
+            final_context: TaskContext::new(
+                request.session_id,
+                request.workspace_ref,
+                request.limits,
+                request.initial_context.unwrap_or_default(),
+            ),
+            plan_revision: 0,
+            trace_location: trace_location.clone(),
+        };
+        let terminal_output =
+            output::render_run_trace("run", loaded_trace.as_ref(), &response, "/synod-inspect");
+        return Ok(RunCommandReport {
+            exit_status: CommandExitStatus::NonSuccess,
+            terminal_output,
+            trace_location: Some(trace_location),
+        });
+    }
+
+    let runtime = build_fixture_runtime(workspace)?;
     let orchestrator = Orchestrator::new(runtime.planner, runtime.agents, runtime.tools, store)
         .with_governance(runtime.profile.read_targets.clone(), runtime.profile.governance.clone());
     let response = orchestrator.run(request)?;
@@ -54,8 +134,12 @@ pub fn execute_custom_run(
 
 #[derive(Debug, Error)]
 pub enum RunCommandError {
+    #[error("failed to ingest authored brief: {0}")]
+    BriefIngestion(#[from] BriefIngestionError),
     #[error("failed to prepare the fixture-backed vertical slice: {0}")]
     FixtureRuntime(#[from] FixtureRuntimeError),
+    #[error("failed to persist the clarification trace: {0}")]
+    TraceStore(#[from] crate::adapters::trace_store::TraceStoreError),
     #[error("failed to run the orchestrator vertical slice: {0}")]
     Orchestrator(#[from] OrchestratorError),
 }

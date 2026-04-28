@@ -2,17 +2,27 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::domain::flow::built_in_flow;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub enum GovernanceRuntimeKind {
     #[default]
     Local,
     Canon,
+}
+
+impl std::fmt::Display for GovernanceRuntimeKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Local => f.write_str("local"),
+            Self::Canon => f.write_str("canon"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

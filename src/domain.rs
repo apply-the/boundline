@@ -1,3 +1,4 @@
+pub mod brief;
 pub mod execution;
 pub mod flow;
 pub mod governance;

@@ -94,6 +94,28 @@ pub fn render_run_trace(
     if let Some(trace) = trace {
         lines.insert(0, format!("goal: {}", trace.goal));
 
+        if let Some(input) = trace.events.iter().find_map(|event| {
+            (event.event_type == TraceEventType::TaskStarted)
+                .then(|| event.payload.get("input"))
+                .flatten()
+        }) {
+            if let Some(authored_input_summary) =
+                input.get("authored_input_summary").and_then(Value::as_str)
+            {
+                lines.push(format!("authored_input_summary: {authored_input_summary}"));
+            }
+            if let Some(clarification_headline) =
+                input.get("clarification_headline").and_then(Value::as_str)
+            {
+                lines.push(format!("clarification_headline: {clarification_headline}"));
+            }
+            if let Some(clarification_prompt) =
+                input.get("clarification_prompt").and_then(Value::as_str)
+            {
+                lines.push(format!("clarification_prompt: {clarification_prompt}"));
+            }
+        }
+
         for event in &trace.events {
             match event.event_type {
                 TraceEventType::TaskStarted
@@ -251,6 +273,53 @@ pub fn render_trace_summary(
         format!("goal: {}", summary.goal),
     ];
 
+    if let Some(authored_input_summary) = &summary.authored_input_summary {
+        lines.push(format!("authored_input_summary: {authored_input_summary}"));
+    }
+
+    if !summary.authored_input_sources.is_empty() {
+        lines
+            .push(format!("authored_input_sources: {}", summary.authored_input_sources.join(", ")));
+    }
+
+    if !summary.authored_input_deduplicated_sources.is_empty() {
+        lines.push(format!(
+            "authored_input_deduplicated_sources: {}",
+            summary.authored_input_deduplicated_sources.join(", ")
+        ));
+    }
+
+    if let Some(clarification_headline) = &summary.clarification_headline {
+        lines.push(format!("clarification_headline: {clarification_headline}"));
+    }
+
+    if let Some(clarification_prompt) = &summary.clarification_prompt {
+        lines.push(format!("clarification_prompt: {clarification_prompt}"));
+    }
+
+    if !summary.clarification_missing_fields.is_empty() {
+        lines.push(format!(
+            "clarification_missing_fields: {}",
+            summary.clarification_missing_fields.join(", ")
+        ));
+    }
+
+    if let Some(requested_governance_runtime) = &summary.requested_governance_runtime {
+        lines.push(format!("requested_governance_runtime: {requested_governance_runtime}"));
+    }
+
+    if let Some(requested_governance_risk) = &summary.requested_governance_risk {
+        lines.push(format!("requested_governance_risk: {requested_governance_risk}"));
+    }
+
+    if let Some(requested_governance_zone) = &summary.requested_governance_zone {
+        lines.push(format!("requested_governance_zone: {requested_governance_zone}"));
+    }
+
+    if let Some(requested_governance_owner) = &summary.requested_governance_owner {
+        lines.push(format!("requested_governance_owner: {requested_governance_owner}"));
+    }
+
     for step in &summary.executed_steps {
         lines.push(format!(
             "step {} ({}) {} [{} attempt(s)] - {}",
@@ -277,6 +346,10 @@ pub fn render_trace_summary(
     }
 
     lines.extend(summary.governance_timeline.iter().cloned());
+
+    if let Some(governance_next_action) = &summary.governance_next_action {
+        lines.push(format!("governance_next_action: {governance_next_action}"));
+    }
 
     lines.extend(summary.review_timeline.iter().cloned());
 
@@ -325,6 +398,58 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
 
     if let Some(goal) = &view.goal {
         lines.push(format!("goal: {goal}"));
+    }
+
+    if let Some(authored_input_summary) = &view.authored_input_summary {
+        lines.push(format!("authored_input_summary: {authored_input_summary}"));
+    }
+
+    if let Some(authored_input_sources) = &view.authored_input_sources
+        && !authored_input_sources.is_empty()
+    {
+        lines.push(format!("authored_input_sources: {}", authored_input_sources.join(", ")));
+    }
+
+    if let Some(authored_input_deduplicated_sources) = &view.authored_input_deduplicated_sources
+        && !authored_input_deduplicated_sources.is_empty()
+    {
+        lines.push(format!(
+            "authored_input_deduplicated_sources: {}",
+            authored_input_deduplicated_sources.join(", ")
+        ));
+    }
+
+    if let Some(clarification_headline) = &view.clarification_headline {
+        lines.push(format!("clarification_headline: {clarification_headline}"));
+    }
+
+    if let Some(clarification_prompt) = &view.clarification_prompt {
+        lines.push(format!("clarification_prompt: {clarification_prompt}"));
+    }
+
+    if let Some(clarification_missing_fields) = &view.clarification_missing_fields
+        && !clarification_missing_fields.is_empty()
+    {
+        lines.push(format!(
+            "clarification_missing_fields: {}",
+            clarification_missing_fields.join(", ")
+        ));
+    }
+
+    if let Some(requested_governance_runtime) = &view.requested_governance_runtime {
+        lines.push(format!("requested_governance_runtime: {requested_governance_runtime}"));
+    }
+
+    if let Some(requested_governance_risk) = &view.requested_governance_risk {
+        lines.push(format!("requested_governance_risk: {requested_governance_risk}"));
+    }
+
+    if let Some(requested_governance_zone) = &view.requested_governance_zone {
+        lines.push(format!("requested_governance_zone: {requested_governance_zone}"));
+    }
+
+    if let Some(requested_governance_owner) = &view.requested_governance_owner {
+        lines.push(format!("requested_governance_owner: {requested_governance_owner}"));
     }
 
     if let Some(active_flow) = &view.active_flow {
@@ -455,6 +580,10 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
             "latest_governance_candidates: {}",
             latest_governance_candidates.join(", ")
         ));
+    }
+
+    if let Some(governance_next_action) = &view.governance_next_action {
+        lines.push(format!("governance_next_action: {governance_next_action}"));
     }
 
     if let Some(next_command) = &view.next_command {
@@ -712,11 +841,33 @@ mod tests {
         let commands = [
             (DeveloperCommand::Doctor { workspace: "/tmp/workspace".into() }, "doctor"),
             (DeveloperCommand::Start { workspace: None }, "start"),
-            (DeveloperCommand::Capture { workspace: None, goal: "goal".to_string() }, "capture"),
+            (
+                DeveloperCommand::Capture {
+                    workspace: None,
+                    goal: Some("goal".to_string()),
+                    brief: Vec::new(),
+                    governance: None,
+                    risk: None,
+                    zone: None,
+                    owner: None,
+                },
+                "capture",
+            ),
             (DeveloperCommand::Flow { name: "bug-fix".to_string(), workspace: None }, "flow"),
             (DeveloperCommand::Plan { workspace: None }, "plan"),
             (DeveloperCommand::Step { workspace: None }, "step"),
-            (DeveloperCommand::Run { workspace: None, goal: None }, "run"),
+            (
+                DeveloperCommand::Run {
+                    workspace: None,
+                    goal: None,
+                    brief: Vec::new(),
+                    governance: None,
+                    risk: None,
+                    zone: None,
+                    owner: None,
+                },
+                "run",
+            ),
             (DeveloperCommand::Inspect { trace: None, workspace: None }, "inspect"),
             (DeveloperCommand::Status { workspace: None }, "status"),
             (DeveloperCommand::Next { workspace: None }, "next"),
@@ -762,6 +913,16 @@ mod tests {
         let summary = TraceSummaryView {
             trace_ref: "/tmp/workspace/.synod/traces/task-output.json".to_string(),
             goal: "Render trace summary".to_string(),
+            authored_input_summary: None,
+            authored_input_sources: Vec::new(),
+            authored_input_deduplicated_sources: Vec::new(),
+            clarification_headline: None,
+            clarification_prompt: None,
+            clarification_missing_fields: Vec::new(),
+            requested_governance_runtime: None,
+            requested_governance_risk: None,
+            requested_governance_zone: None,
+            requested_governance_owner: None,
             executed_steps: vec![TraceStepSummary {
                 step_id: "verify".to_string(),
                 step_kind: StepKind::Tool,
@@ -787,6 +948,7 @@ mod tests {
                 },
             ],
             governance_timeline: Vec::new(),
+            governance_next_action: None,
             review_timeline: Vec::new(),
             terminal_status: TaskStatus::Failed,
             terminal_reason: TerminalReason::new(
@@ -810,6 +972,16 @@ mod tests {
             session_id: "session-output".to_string(),
             workspace_ref: "/tmp/workspace".to_string(),
             goal: None,
+            authored_input_summary: None,
+            authored_input_sources: None,
+            authored_input_deduplicated_sources: None,
+            clarification_headline: None,
+            clarification_prompt: None,
+            clarification_missing_fields: None,
+            requested_governance_runtime: None,
+            requested_governance_risk: None,
+            requested_governance_zone: None,
+            requested_governance_owner: None,
             active_flow: None,
             current_stage_id: None,
             current_stage_index: None,
@@ -840,6 +1012,7 @@ mod tests {
             latest_governance_approval: None,
             latest_governance_decision: None,
             latest_governance_candidates: None,
+            governance_next_action: None,
             next_command: None,
             explanation: "session is invalid".to_string(),
         };
@@ -919,6 +1092,16 @@ mod tests {
             session_id: "session-review-status".to_string(),
             workspace_ref: "/tmp/workspace".to_string(),
             goal: Some("Ship review output".to_string()),
+            authored_input_summary: None,
+            authored_input_sources: None,
+            authored_input_deduplicated_sources: None,
+            clarification_headline: None,
+            clarification_prompt: None,
+            clarification_missing_fields: None,
+            requested_governance_runtime: None,
+            requested_governance_risk: None,
+            requested_governance_zone: None,
+            requested_governance_owner: None,
             active_flow: None,
             current_stage_id: None,
             current_stage_index: None,
@@ -956,6 +1139,7 @@ mod tests {
                 "await_approval".to_string(),
                 "block_stage".to_string(),
             ]),
+            governance_next_action: Some("wait for approval and rerun synod status".to_string()),
             next_command: Some("synod step".to_string()),
             explanation: "review is in progress".to_string(),
         };
@@ -973,6 +1157,10 @@ mod tests {
             text.contains("latest_governance_candidates: await_approval, block_stage"),
             "{text}"
         );
+        assert!(
+            text.contains("governance_next_action: wait for approval and rerun synod status"),
+            "{text}"
+        );
     }
 
     #[test]
@@ -980,12 +1168,23 @@ mod tests {
         let summary = TraceSummaryView {
             trace_ref: "/tmp/workspace/.synod/traces/task-review-output.json".to_string(),
             goal: "Render trace summary".to_string(),
+            authored_input_summary: None,
+            authored_input_sources: Vec::new(),
+            authored_input_deduplicated_sources: Vec::new(),
+            clarification_headline: None,
+            clarification_prompt: None,
+            clarification_missing_fields: Vec::new(),
+            requested_governance_runtime: None,
+            requested_governance_risk: None,
+            requested_governance_zone: None,
+            requested_governance_owner: None,
             executed_steps: vec![],
             recovery_events: vec![],
             governance_timeline: vec![
                 "governance_selected: bug-fix:implement -> canon".to_string(),
                 "governance_awaiting_approval: bug-fix:implement (requested)".to_string(),
             ],
+            governance_next_action: Some("wait for approval and rerun synod status".to_string()),
             review_timeline: vec![
                 "review_trigger: pr_ready".to_string(),
                 "reviewer safety (Safety) approve: No blockers".to_string(),
@@ -1001,6 +1200,10 @@ mod tests {
         let text = render_trace_summary(&summary, "latest-workspace-trace", "/synod-next");
 
         assert!(text.contains("governance_selected: bug-fix:implement -> canon"), "{text}");
+        assert!(
+            text.contains("governance_next_action: wait for approval and rerun synod status"),
+            "{text}"
+        );
         assert!(text.contains("review_trigger: pr_ready"), "{text}");
         assert!(text.contains("review_outcome: accepted"), "{text}");
     }

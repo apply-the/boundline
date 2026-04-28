@@ -22,7 +22,9 @@ use crate::domain::task_context::TaskContext;
 use crate::domain::trace::{ExecutionTrace, TraceEventType, current_timestamp_millis};
 use crate::orchestrator::governance::{
     GovernanceStepDecision, bounded_governance_context, build_autopilot_decision,
-    governance_stage_key, governance_state_patch, runtime_command_available, selected_stage_policy,
+    governance_input_documents, governance_stage_key, governance_state_patch,
+    overlay_stage_policy_with_intent, requested_governance_intent, runtime_command_available,
+    selected_stage_policy,
 };
 use crate::orchestrator::planner::{Planner, PlanningError};
 use crate::orchestrator::recovery::{RecoveryDecision, decide_recovery};
@@ -358,6 +360,8 @@ where
         else {
             return Ok(GovernanceStepDecision::Continue);
         };
+        let governance_intent = requested_governance_intent(&task.input);
+        let policy = overlay_stage_policy_with_intent(&policy, governance_intent.as_ref());
         if !policy.enabled {
             return Ok(GovernanceStepDecision::Continue);
         }
@@ -381,6 +385,7 @@ where
         let (bounded_context, packet_reuse) =
             bounded_governance_context(&task.context, &metadata, &self.read_targets)
                 .map_err(|error| OrchestratorError::GovernancePatch(error.to_string()))?;
+        let input_documents = governance_input_documents(&task.input);
 
         let requested_runtime = policy.effective_runtime(governance.default_runtime);
         let canon_available = governance
@@ -503,7 +508,7 @@ where
                 run_ref: None,
                 packet_ref: existing_packet.as_ref().map(|packet| packet.packet_ref.clone()),
                 bounded_context,
-                input_documents: Vec::new(),
+                input_documents: input_documents.clone(),
             };
             trace.record_event(
                 TraceEventType::GovernanceStarted,
@@ -570,7 +575,7 @@ where
             run_ref: None,
             packet_ref: existing_packet.as_ref().map(|packet| packet.packet_ref.clone()),
             bounded_context,
-            input_documents: Vec::new(),
+            input_documents,
         };
 
         trace.record_event(

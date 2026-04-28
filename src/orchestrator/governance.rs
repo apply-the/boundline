@@ -1,4 +1,7 @@
-use crate::adapters::governance_runtime::{GovernanceBoundedContext, ReusedPacketInput};
+use crate::adapters::governance_runtime::{
+    GovernanceBoundedContext, GovernanceInputDocument, ReusedPacketInput,
+};
+use crate::domain::brief::{AuthoredBriefBundle, GovernanceIntent};
 use crate::domain::flow::{FlowStepMetadata, built_in_flow};
 use serde::Serialize;
 use serde_json::{Map, Value};
@@ -25,6 +28,76 @@ pub fn selected_stage_policy(
     stage_id: &str,
 ) -> Option<StageGovernancePolicy> {
     governance.and_then(|profile| profile.stage_policy(flow_name, stage_id).cloned())
+}
+
+pub fn requested_governance_intent(task_input: &Value) -> Option<GovernanceIntent> {
+    task_input
+        .get("governance_intent")
+        .cloned()
+        .or_else(|| {
+            task_input
+                .get("authored_brief")
+                .and_then(|bundle| bundle.get("governance_intent"))
+                .cloned()
+        })
+        .and_then(|value| serde_json::from_value(value).ok())
+}
+
+pub fn overlay_stage_policy_with_intent(
+    policy: &StageGovernancePolicy,
+    intent: Option<&GovernanceIntent>,
+) -> StageGovernancePolicy {
+    let Some(intent) = intent else {
+        return policy.clone();
+    };
+
+    let mut policy = policy.clone();
+    policy.enabled = true;
+
+    if let Some(runtime_preference) = intent.runtime_preference {
+        policy.runtime = Some(runtime_preference);
+        if runtime_preference == GovernanceRuntimeKind::Canon {
+            policy.required = true;
+        }
+    }
+    if let Some(risk) = intent.risk.as_ref() {
+        policy.risk = Some(risk.clone());
+    }
+    if let Some(zone) = intent.zone.as_ref() {
+        policy.zone = Some(zone.clone());
+    }
+    if let Some(owner) = intent.owner.as_ref() {
+        policy.owner = Some(owner.clone());
+    }
+
+    policy
+}
+
+pub fn governance_input_documents(task_input: &Value) -> Vec<GovernanceInputDocument> {
+    let Some(bundle) = task_input
+        .get("authored_brief")
+        .cloned()
+        .and_then(|value| serde_json::from_value::<AuthoredBriefBundle>(value).ok())
+    else {
+        return Vec::new();
+    };
+
+    let mut documents = Vec::new();
+    let mut stage_brief_assigned = false;
+    for source in bundle.sources {
+        let Some(path) = source.workspace_path else {
+            continue;
+        };
+        let kind = if stage_brief_assigned {
+            "authored-brief"
+        } else {
+            stage_brief_assigned = true;
+            "stage-brief"
+        };
+        documents.push(GovernanceInputDocument { kind: kind.to_string(), path });
+    }
+
+    documents
 }
 
 pub fn select_packet_reuse_binding(

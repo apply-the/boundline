@@ -48,3 +48,12 @@ mod canon_governance_flow;
 
 #[path = "integration/governance_autopilot_flow.rs"]
 mod governance_autopilot_flow;
+
+#[path = "integration/human_input_capture_flow.rs"]
+mod human_input_capture_flow;
+
+#[path = "integration/human_input_multi_source_flow.rs"]
+mod human_input_multi_source_flow;
+
+#[path = "integration/human_input_governance_flow.rs"]
+mod human_input_governance_flow;
