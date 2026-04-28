@@ -7,15 +7,17 @@
 
 **Synod is a local CLI for bounded software-delivery work. You run it inside a
 workspace to execute manifest-declared changes, validate them, and inspect the
-result through session state and traces written back to disk. Human-friendly
-goal and brief capture is supported, but Synod still requires a workspace
-execution manifest today.**
+result through session state and traces written back to disk. `synod init`
+bootstraps workspace setup, and `synod config` manages routing defaults with
+global and workspace precedence.**
 
 ## What Synod Does
 
 The main surface is the `synod` CLI:
 
 - `doctor` validates that a workspace is ready to run.
+- `init` bootstraps `.synod` workspace files and optional assistant runtime setup.
+- `config` shows, sets, and unsets global or workspace routing defaults.
 - `start`, `capture`, `flow`, `plan`, and `step` drive the session workflow.
 - `run` executes a bounded delivery task end to end.
 - `status`, `next`, and `inspect` explain the current session and latest trace.
@@ -29,15 +31,9 @@ Use it when you want delivery work to stay bounded and inspectable:
 - keep execution traces in `<workspace>/.synod/traces/`
 
 Synod prefers `<workspace>/.synod/execution.json` and falls back to the legacy
-`<workspace>/.synod/fixture.json`.
-
-Important: human-facing input does not replace the execution manifest yet.
-`synod capture --goal ...`, repeated `--brief` flags, and direct `synod run
---goal ...` remove the need to author a JSON request for the task itself, but
-`doctor`, `plan`, and `run` still expect `<workspace>/.synod/execution.json`
-or the legacy fixture to define the bounded execution policy. There is not yet
-a `synod init` command or interactive scaffold that generates that file for
-you.
+`<workspace>/.synod/fixture.json` for older workspaces. Init generates the
+modern execution profile by default and creates `.synod/config.toml` for local
+routing overrides.
 
 Local execution is the default. When governance is configured, Synod can also
 route stages through Canon and project governance state, approvals, packet
@@ -84,41 +80,25 @@ from the repo root so the command always uses your current source tree.
 The shortest way to think about Synod is:
 
 1. Point it at a workspace.
-2. Give it a bounded execution manifest.
-3. Capture a goal or provide Markdown briefs.
-4. Plan and run.
-5. Read `status`, `next`, or `inspect` to continue.
+2. Run `synod init` to scaffold bounded defaults.
+3. Optionally tune routing defaults with `synod config`.
+4. Capture a goal or provide Markdown briefs.
+5. Plan and run.
+6. Read `status`, `next`, or `inspect` to continue.
 
-### 1. Prepare a workspace manifest
+### 1. Initialize a workspace
 
-This is still required today. Synod does not yet provide `synod init` or an
-interactive setup flow that writes the execution manifest for you.
+```bash
+synod init --workspace <workspace> --template bug-fix
+synod doctor --workspace <workspace>
+```
 
-Create `<workspace>/.synod/execution.json`:
+Optional routing setup:
 
-```json
-{
-	"name": "red-to-green-execution",
-	"read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
-	"validation_command": {
-		"program": "cargo",
-		"args": ["test", "--quiet"]
-	},
-	"attempts": [
-		{
-			"attempt_id": "fix-add",
-			"summary": "Replace subtraction with addition",
-			"failure_mode": "replan",
-			"changes": [
-				{
-					"path": "src/lib.rs",
-					"find": "left - right",
-					"replace": "left + right"
-				}
-			]
-		}
-	]
-}
+```bash
+synod config set --scope global --slot planning --runtime codex --model gpt-5-codex
+synod config set --workspace <workspace> --scope workspace --reviewer safety --runtime copilot --model gpt-5.4
+synod config show --workspace <workspace> --scope effective
 ```
 
 ### 2. Run the session workflow
@@ -149,8 +129,7 @@ What those commands do, in short:
 
 ### 3. Use the direct workflow when you do not need a session
 
-If you do not need the explicit session setup, you can run directly. This still
-requires `<workspace>/.synod/execution.json` or the legacy fixture to exist:
+If you do not need the explicit session setup, you can run directly after init:
 
 ```bash
 synod run --workspace <workspace> --goal "Fix the failing add test"
@@ -173,7 +152,8 @@ Depending on the manifest, that output can also include:
 
 ## Common Workflow
 
-- create or update `<workspace>/.synod/execution.json`
+- run `synod init --workspace <workspace> --template <bug-fix|change|delivery>`
+- optionally tune defaults with `synod config show|set|unset`
 - run `synod doctor --workspace <workspace>`
 - capture a goal with `synod capture` or pass the goal directly to `synod run`
 - optionally select `bug-fix`, `change`, or `delivery` with `synod flow`
@@ -185,9 +165,10 @@ Depending on the manifest, that output can also include:
 Start here if you want more than the short README flow:
 
 - **[Getting Started](docs/getting-started.md)**: install Synod, prepare a workspace, run the first task, then inspect the result
+- **[Configuration](docs/configuration.md)**: init templates, routing precedence, and review-role routing
 - **[Adaptive Execution](docs/adaptive-execution.md)**: adaptive execution manifest and replanning behavior
 - **[Review Voting](docs/review-voting.md)**: review councils and vote resolution
-- **[Assistant Command Packs](assistant/README.md)**: assistant command packs for Copilot, Codex, and Claude
+- **[Assistant Command Packs](assistant/README.md)**: assistant command packs for Copilot, Codex, Claude, and Gemini CLI
 - **[Changelog](CHANGELOG.md)**: released versions and delivered feature slices
 
 ## Separation
@@ -243,9 +224,10 @@ The current repository implements the delivery orchestrator core as a Rust libra
 - `synod::AgentRegistry` and `synod::ToolRegistry`: register named execution endpoints.
 - `synod::FileTraceStore`: persists execution traces under `<workspace>/.synod/traces/`.
 - `synod::FileSessionStore` and `synod::SessionRuntime`: persist and resume active session state under `<workspace>/.synod/session.json`.
+- `synod::FileConfigStore` and configuration-domain types: persist global and workspace routing defaults with explicit source precedence.
 - `synod::ReviewProfile` and related review-domain types: configure bounded councils, reviewer findings, voting, and optional adjudication from `.synod/execution.json`.
 - `synod::TaskRunRequest` and `synod::TaskRunResponse`: define the run contract used by tests and future delivery flows.
-- `synod` CLI binary: exposes `doctor`, `start`, `capture`, `flow`, `plan`, `step`, `run`, `status`, `next`, and `inspect` over the existing core.
+- `synod` CLI binary: exposes `init`, `config`, `doctor`, `start`, `capture`, `flow`, `plan`, `step`, `run`, `status`, `next`, and `inspect` over the existing core.
 
 The current implementation covers:
 
@@ -265,16 +247,20 @@ The local `synod` binary keeps the developer experience local, deterministic,
 and backed by both `<workspace>/.synod/session.json` and
 `<workspace>/.synod/traces/`. `doctor`, `plan`, and `run` prefer a workspace
 execution manifest at `<workspace>/.synod/execution.json` and fall back to the
-legacy `<workspace>/.synod/fixture.json` shape.
+legacy `<workspace>/.synod/fixture.json` shape. `synod init` scaffolds the
+workspace execution profile and `synod config` manages global and workspace
+routing defaults.
 
-The primary session-native flow is:
+The primary init + session flow is:
 
-1. `synod start`
-2. `synod capture --goal "..."`
-3. optional: `synod flow bug-fix|change|delivery`
-4. `synod plan`
-5. `synod step` or `synod run`
-6. `synod status`, `synod next`, and `synod inspect --workspace <workspace>`
+1. `synod init --workspace <workspace> --template bug-fix|change|delivery`
+2. optional: `synod config show|set|unset`
+3. `synod start`
+4. `synod capture --goal "..."`
+5. optional: `synod flow bug-fix|change|delivery`
+6. `synod plan`
+7. `synod step` or `synod run`
+8. `synod status`, `synod next`, and `synod inspect --workspace <workspace>`
 
 When a flow is selected, `status` and `next` surface `active_flow`,
 `current_stage`, and `stage_progress`. `run` and `inspect` also render flow and

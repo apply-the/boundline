@@ -2,10 +2,15 @@ use std::{fmt, path::PathBuf};
 
 use clap::{Parser, Subcommand};
 
+use crate::domain::configuration::{
+    ConfigShowScope, ConfigWriteScope, InitTemplate, RouteSlot, RuntimeKind,
+};
 use crate::domain::governance::GovernanceRuntimeKind;
 use crate::domain::trace::current_timestamp_millis;
 
+pub mod config;
 pub mod diagnostics;
+pub mod init;
 pub mod inspect;
 pub mod output;
 pub mod run;
@@ -30,6 +35,8 @@ pub enum CommandName {
     Step,
     Status,
     Next,
+    Init,
+    Config,
 }
 
 impl CommandName {
@@ -45,6 +52,8 @@ impl CommandName {
             Self::Step => "step",
             Self::Status => "status",
             Self::Next => "next",
+            Self::Init => "init",
+            Self::Config => "config",
         }
     }
 }
@@ -134,6 +143,58 @@ pub enum DeveloperCommand {
         #[arg(long)]
         workspace: Option<PathBuf>,
     },
+    Init {
+        #[arg(long)]
+        workspace: PathBuf,
+        #[arg(long)]
+        template: Option<InitTemplate>,
+        #[arg(long = "assistant")]
+        assistant: Vec<RuntimeKind>,
+        #[arg(long)]
+        force: bool,
+    },
+    Config {
+        #[command(subcommand)]
+        command: ConfigSubcommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ConfigSubcommand {
+    Show {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long)]
+        scope: Option<ConfigShowScope>,
+    },
+    Set {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long)]
+        scope: ConfigWriteScope,
+        #[arg(long)]
+        slot: Option<RouteSlot>,
+        #[arg(long)]
+        reviewer: Option<String>,
+        #[arg(long)]
+        adjudicator: bool,
+        #[arg(long)]
+        runtime: RuntimeKind,
+        #[arg(long)]
+        model: String,
+    },
+    Unset {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long)]
+        scope: ConfigWriteScope,
+        #[arg(long)]
+        slot: Option<RouteSlot>,
+        #[arg(long)]
+        reviewer: Option<String>,
+        #[arg(long)]
+        adjudicator: bool,
+    },
 }
 
 impl DeveloperCommand {
@@ -149,6 +210,8 @@ impl DeveloperCommand {
             Self::Inspect { .. } => CommandName::Inspect,
             Self::Status { .. } => CommandName::Status,
             Self::Next { .. } => CommandName::Next,
+            Self::Init { .. } => CommandName::Init,
+            Self::Config { .. } => CommandName::Config,
         }
     }
 }
@@ -284,6 +347,32 @@ impl DeveloperCommandSession {
                 exit_status: None,
                 trace_location: None,
             },
+            DeveloperCommand::Init { workspace, .. } => Self {
+                command_name: CommandName::Init,
+                workspace_ref: Some(workspace.to_string_lossy().into_owned()),
+                goal: None,
+                trace_ref: None,
+                started_at: current_timestamp_millis(),
+                completed_at: None,
+                exit_status: None,
+                trace_location: None,
+            },
+            DeveloperCommand::Config { command } => Self {
+                command_name: CommandName::Config,
+                workspace_ref: match command {
+                    ConfigSubcommand::Show { workspace, .. }
+                    | ConfigSubcommand::Set { workspace, .. }
+                    | ConfigSubcommand::Unset { workspace, .. } => {
+                        workspace.as_ref().map(|path| path.to_string_lossy().into_owned())
+                    }
+                },
+                goal: None,
+                trace_ref: None,
+                started_at: current_timestamp_millis(),
+                completed_at: None,
+                exit_status: None,
+                trace_location: None,
+            },
         }
     }
 
@@ -317,7 +406,9 @@ impl DeveloperCommandSession {
             | CommandName::Plan
             | CommandName::Step
             | CommandName::Status
-            | CommandName::Next => {}
+            | CommandName::Next
+            | CommandName::Init
+            | CommandName::Config => {}
         }
 
         if matches!(self.command_name, CommandName::Capture)
@@ -585,6 +676,66 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                 trace_location: None,
             },
         },
+        DeveloperCommand::Init { workspace, template, assistant, force } => {
+            match init::execute_init(workspace, *template, assistant, *force) {
+                Ok(report) => DispatchOutcome {
+                    exit_status: report.exit_status,
+                    output: report.terminal_output,
+                    trace_location: None,
+                },
+                Err(error) => DispatchOutcome {
+                    exit_status: CommandExitStatus::NonSuccess,
+                    output: format!("init error: {error}"),
+                    trace_location: None,
+                },
+            }
+        }
+        DeveloperCommand::Config { command } => {
+            let result = match command {
+                ConfigSubcommand::Show { workspace, scope } => {
+                    config::execute_show(workspace.as_deref(), *scope)
+                }
+                ConfigSubcommand::Set {
+                    workspace,
+                    scope,
+                    slot,
+                    reviewer,
+                    adjudicator,
+                    runtime,
+                    model,
+                } => config::execute_set(
+                    workspace.as_deref(),
+                    *scope,
+                    *slot,
+                    reviewer.as_deref(),
+                    *adjudicator,
+                    *runtime,
+                    model,
+                ),
+                ConfigSubcommand::Unset { workspace, scope, slot, reviewer, adjudicator } => {
+                    config::execute_unset(
+                        workspace.as_deref(),
+                        *scope,
+                        *slot,
+                        reviewer.as_deref(),
+                        *adjudicator,
+                    )
+                }
+            };
+
+            match result {
+                Ok(report) => DispatchOutcome {
+                    exit_status: report.exit_status,
+                    output: report.terminal_output,
+                    trace_location: None,
+                },
+                Err(error) => DispatchOutcome {
+                    exit_status: CommandExitStatus::NonSuccess,
+                    output: format!("config error: {error}"),
+                    trace_location: None,
+                },
+            }
+        }
     }
 }
 

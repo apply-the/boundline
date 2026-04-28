@@ -51,6 +51,8 @@ pub fn command_name(command: &DeveloperCommand) -> &'static str {
         DeveloperCommand::Inspect { .. } => "inspect",
         DeveloperCommand::Status { .. } => "status",
         DeveloperCommand::Next { .. } => "next",
+        DeveloperCommand::Init { .. } => "init",
+        DeveloperCommand::Config { .. } => "config",
     }
 }
 

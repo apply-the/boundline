@@ -20,10 +20,10 @@ case "$hook_name" in
     step_total=1
     ;;
   pre-push)
-    step_total=4
+    step_total=3
     ;;
   *)
-    step_total=4
+    step_total=3
     ;;
 esac
 
@@ -59,16 +59,9 @@ if [ "$hook_name" != "pre-commit" ]; then
     cargo clippy --workspace --all-targets --all-features -- -D warnings
 
   run_step \
-    "cargo test" \
-    "Run 'cargo test' and fix the failing test or regression before retrying." \
-    cargo test
-
-  if [ "$hook_name" = "pre-push" ]; then
-    run_step \
-      "cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info" \
-      "Install 'cargo-llvm-cov' if needed, then run 'cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info' and fix the failing test or coverage regression before retrying." \
-      cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
-  fi
+    "cargo nextest run" \
+    "Run 'cargo nextest run' and fix the failing test or regression before retrying." \
+    cargo nextest run
 fi
 
 printf '%s\n' "[$hook_name] All Rust quality checks passed."

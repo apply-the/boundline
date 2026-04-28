@@ -66,3 +66,9 @@ mod human_input_session_contract;
 
 #[path = "contract/human_input_governance_contract.rs"]
 mod human_input_governance_contract;
+
+#[path = "contract/init_cli_contract.rs"]
+mod init_cli_contract;
+
+#[path = "contract/config_cli_contract.rs"]
+mod config_cli_contract;
