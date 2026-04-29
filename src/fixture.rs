@@ -37,7 +37,6 @@ use crate::registry::agent_registry::{AgentRegistry, RegistryError as AgentRegis
 use crate::registry::tool_registry::{RegistryError as ToolRegistryError, ToolRegistry};
 
 const EXECUTION_RELATIVE_PATH: &str = ".synod/execution.json";
-const FIXTURE_RELATIVE_PATH: &str = ".synod/fixture.json";
 
 #[derive(Clone)]
 pub struct FixtureRuntime {
@@ -131,10 +130,6 @@ impl FilePatch {
     }
 }
 
-pub fn fixture_manifest_path(workspace: &Path) -> PathBuf {
-    workspace.join(FIXTURE_RELATIVE_PATH)
-}
-
 pub fn execution_manifest_path(workspace: &Path) -> PathBuf {
     workspace.join(EXECUTION_RELATIVE_PATH)
 }
@@ -143,42 +138,19 @@ pub fn load_workspace_execution_profile(
     workspace: &Path,
 ) -> Result<WorkspaceExecutionProfile, FixtureRuntimeError> {
     let execution_path = execution_manifest_path(workspace);
-    if execution_path.is_file() {
-        let contents = fs::read_to_string(&execution_path).map_err(|source| {
-            FixtureRuntimeError::ExecutionProfileRead { path: execution_path.clone(), source }
+    if !execution_path.is_file() {
+        return Err(FixtureRuntimeError::MissingExecutionProfile(execution_path));
+    }
+
+    let contents = fs::read_to_string(&execution_path).map_err(|source| {
+        FixtureRuntimeError::ExecutionProfileRead { path: execution_path.clone(), source }
+    })?;
+    let profile =
+        serde_json::from_str::<WorkspaceExecutionProfile>(&contents).map_err(|source| {
+            FixtureRuntimeError::ExecutionProfileParse { path: execution_path.clone(), source }
         })?;
-        let profile =
-            serde_json::from_str::<WorkspaceExecutionProfile>(&contents).map_err(|source| {
-                FixtureRuntimeError::ExecutionProfileParse { path: execution_path.clone(), source }
-            })?;
-        profile.validate()?;
-        return Ok(profile);
-    }
-
-    match load_workspace_fixture(workspace) {
-        Ok(fixture) => legacy_fixture_to_execution_profile(fixture),
-        Err(FixtureRuntimeError::MissingFixture(_)) => {
-            Err(FixtureRuntimeError::MissingExecutionProfile {
-                preferred: execution_path,
-                legacy: fixture_manifest_path(workspace),
-            })
-        }
-        Err(error) => Err(error),
-    }
-}
-
-pub fn load_workspace_fixture(workspace: &Path) -> Result<WorkspaceFixture, FixtureRuntimeError> {
-    let path = fixture_manifest_path(workspace);
-    if !path.is_file() {
-        return Err(FixtureRuntimeError::MissingFixture(path));
-    }
-
-    let contents = fs::read_to_string(&path)
-        .map_err(|source| FixtureRuntimeError::FixtureRead { path: path.clone(), source })?;
-    let fixture = serde_json::from_str::<WorkspaceFixture>(&contents)
-        .map_err(|source| FixtureRuntimeError::FixtureParse { path: path.clone(), source })?;
-    fixture.validate()?;
-    Ok(fixture)
+    profile.validate()?;
+    Ok(profile)
 }
 
 pub fn build_fixture_plan(workspace: &Path) -> Result<Plan, FixtureRuntimeError> {
@@ -1446,50 +1418,6 @@ fn execution_attempt_from_request(
     execution_attempt(profile, attempt_index).cloned()
 }
 
-fn legacy_fixture_to_execution_profile(
-    fixture: WorkspaceFixture,
-) -> Result<WorkspaceExecutionProfile, FixtureRuntimeError> {
-    let read_targets = fixture
-        .file_patches
-        .iter()
-        .map(|patch| patch.path.clone())
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect::<Vec<_>>();
-
-    let attempts = vec![ExecutionAttemptDefinition {
-        attempt_id: "legacy-attempt-1".to_string(),
-        summary: format!("Converted legacy fixture {}", fixture.name),
-        failure_mode: ExecutionFailureMode::Terminal,
-        changes: fixture
-            .file_patches
-            .into_iter()
-            .map(|patch| WorkspaceChange {
-                path: patch.path,
-                find: patch.find,
-                replace: patch.replace,
-            })
-            .collect(),
-    }];
-
-    let profile = WorkspaceExecutionProfile {
-        name: fixture.name,
-        read_targets,
-        validation_command: ExecutionCommand {
-            program: fixture.test_command.program,
-            args: fixture.test_command.args,
-        },
-        attempts,
-        adaptive: None,
-        limits: fixture.limits,
-        governance: None,
-        review: None,
-        legacy_source: Some(FIXTURE_RELATIVE_PATH.to_string()),
-    };
-    profile.validate()?;
-    Ok(profile)
-}
-
 fn analyze_workspace_fixture(
     workspace: &Path,
     profile: &WorkspaceExecutionProfile,
@@ -2318,12 +2246,8 @@ pub enum FixtureValidationError {
 
 #[derive(Debug, Error)]
 pub enum FixtureRuntimeError {
-    #[error(
-        "workspace execution profile is missing; looked for {preferred} and legacy fallback {legacy}"
-    )]
-    MissingExecutionProfile { preferred: PathBuf, legacy: PathBuf },
-    #[error("workspace fixture is missing at {0}")]
-    MissingFixture(PathBuf),
+    #[error("workspace execution profile is missing at {0}")]
+    MissingExecutionProfile(PathBuf),
     #[error("failed to read workspace execution profile from {path}: {source}")]
     ExecutionProfileRead {
         path: PathBuf,
@@ -2338,18 +2262,6 @@ pub enum FixtureRuntimeError {
     },
     #[error("workspace execution profile is invalid: {0}")]
     ExecutionProfileValidation(#[from] ExecutionProfileError),
-    #[error("failed to read workspace fixture from {path}: {source}")]
-    FixtureRead {
-        path: PathBuf,
-        #[source]
-        source: std::io::Error,
-    },
-    #[error("workspace fixture is invalid at {path}: {source}")]
-    FixtureParse {
-        path: PathBuf,
-        #[source]
-        source: serde_json::Error,
-    },
     #[error("workspace fixture is invalid: {0}")]
     FixtureValidation(#[from] FixtureValidationError),
     #[error("workspace fixture flow metadata is invalid: {0}")]
@@ -2397,8 +2309,8 @@ mod tests {
         FixtureRuntimeError, WorkspaceChange, WorkspaceExecutionProfile, WorkspaceFixture,
         analyze_workspace_fixture, apply_fixture_patches, apply_workspace_fixture,
         build_fixture_plan, build_fixture_runtime, build_task_request, build_vertical_slice_plan,
-        execution_manifest_path, load_workspace_execution_profile, load_workspace_fixture,
-        resolve_review_vote, run_fixture_command, verify_workspace_fixture,
+        execution_manifest_path, load_workspace_execution_profile, resolve_review_vote,
+        run_fixture_command, verify_workspace_fixture,
     };
     use crate::domain::flow::{attach_stage_metadata, built_in_flow};
     use crate::domain::governance::{
@@ -2562,9 +2474,9 @@ mod tests {
     #[test]
     fn loader_rejects_a_missing_manifest() {
         let workspace = temp_workspace();
-        let error = load_workspace_fixture(&workspace).unwrap_err();
+        let error = load_workspace_execution_profile(&workspace).unwrap_err();
 
-        assert!(matches!(error, FixtureRuntimeError::MissingFixture(_)));
+        assert!(matches!(error, FixtureRuntimeError::MissingExecutionProfile(_)));
     }
 
     #[test]
@@ -2678,7 +2590,7 @@ mod tests {
         fs::remove_file(execution_manifest_path(&workspace)).unwrap();
         assert!(matches!(
             load_workspace_execution_profile(&workspace).unwrap_err(),
-            FixtureRuntimeError::MissingExecutionProfile { .. }
+            FixtureRuntimeError::MissingExecutionProfile(_)
         ));
     }
 
@@ -3067,7 +2979,7 @@ mod tests {
     }
 
     #[test]
-    fn execution_profile_loader_falls_back_to_the_legacy_fixture_manifest() {
+    fn execution_profile_loader_requires_the_modern_manifest() {
         let workspace = temp_workspace();
         fs::write(
             workspace.join(".synod/fixture.json"),
@@ -3082,12 +2994,8 @@ mod tests {
         )
         .unwrap();
 
-        let profile = load_workspace_execution_profile(&workspace).unwrap();
+        let error = load_workspace_execution_profile(&workspace).unwrap_err();
 
-        assert_eq!(profile.name, "legacy-profile");
-        assert_eq!(profile.legacy_source.as_deref(), Some(".synod/fixture.json"));
-        assert_eq!(profile.read_targets, vec!["src/lib.rs".to_string()]);
-        assert_eq!(profile.attempts.len(), 1);
-        assert_eq!(profile.attempts[0].attempt_id, "legacy-attempt-1");
+        assert!(matches!(error, FixtureRuntimeError::MissingExecutionProfile(_)));
     }
 }

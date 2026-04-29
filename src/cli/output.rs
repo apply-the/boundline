@@ -2,6 +2,7 @@ use serde_json::Value;
 
 use crate::cli::diagnostics::{DiagnosticsReport, DiagnosticsStatus};
 use crate::cli::{CliValidationError, CommandExitStatus, DeveloperCommand};
+use crate::domain::cluster::{ClusterInspectReport, ClusterMemberState};
 use crate::domain::session::{SessionStatus, SessionStatusView};
 use crate::domain::step::{StepKind, StepStatus};
 use crate::domain::task::{TaskRunResponse, TaskStatus};
@@ -53,7 +54,64 @@ pub fn command_name(command: &DeveloperCommand) -> &'static str {
         DeveloperCommand::Next { .. } => "next",
         DeveloperCommand::Init { .. } => "init",
         DeveloperCommand::Config { .. } => "config",
+        DeveloperCommand::Cluster { .. } => "cluster",
     }
+}
+
+pub fn render_cluster_init(cluster_id: &str, cluster_path: &str, members: &[String]) -> String {
+    let mut lines = vec![
+        "cluster: initialized".to_string(),
+        format!("cluster_id: {cluster_id}"),
+        format!("cluster_file: {cluster_path}"),
+        "members:".to_string(),
+    ];
+    for member in members {
+        lines.push(format!("- {member}"));
+    }
+    lines.join("\n")
+}
+
+pub fn render_cluster_status(report: &ClusterInspectReport) -> String {
+    let mut lines = vec![
+        "cluster: status".to_string(),
+        format!("cluster_id: {}", report.cluster_id),
+        format!("primary_workspace: {}", report.primary_workspace_ref),
+        "members:".to_string(),
+    ];
+
+    for member in &report.members {
+        let mut line =
+            format!("- {} [{}]", member.workspace_ref, cluster_member_state_text(member.state));
+        if let Some(status) = member.latest_status {
+            line.push_str(&format!(" status={}", session_status_text(status)));
+        }
+        line.push_str(&format!(" {}", member.headline));
+        lines.push(line);
+    }
+
+    lines.join("\n")
+}
+
+pub fn render_cluster_inspect(report: &ClusterInspectReport) -> String {
+    let mut lines = vec![
+        "cluster: inspect".to_string(),
+        format!("cluster_id: {}", report.cluster_id),
+        format!("primary_workspace: {}", report.primary_workspace_ref),
+        "members:".to_string(),
+    ];
+
+    for member in &report.members {
+        let trace_text = member.latest_trace_ref.as_deref().unwrap_or("<missing>");
+        lines.push(format!(
+            "- {} [{}] trace={} {}",
+            member.workspace_ref,
+            cluster_member_state_text(member.state),
+            trace_text,
+            member.headline
+        ));
+    }
+
+    lines.join("\n")
 }
 
 pub fn validation_error_message(error: &CliValidationError) -> String {
@@ -820,6 +878,16 @@ fn session_status_text(status: SessionStatus) -> &'static str {
         SessionStatus::Exhausted => "exhausted",
         SessionStatus::Aborted => "aborted",
         SessionStatus::Invalid => "invalid",
+    }
+}
+
+fn cluster_member_state_text(state: ClusterMemberState) -> &'static str {
+    match state {
+        ClusterMemberState::Healthy => "healthy",
+        ClusterMemberState::MissingSession => "missing-session",
+        ClusterMemberState::MissingTrace => "missing-trace",
+        ClusterMemberState::Blocked => "blocked",
+        ClusterMemberState::Invalid => "invalid",
     }
 }
 

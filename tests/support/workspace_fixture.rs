@@ -43,8 +43,13 @@ pub fn temp_fixture_workspace(prefix: &str) -> PathBuf {
             "left - right",
             "left + right",
         )],
-        "left - right",
-        "left + right",
+    )
+}
+
+pub fn temp_cluster_workspaces(prefix: &str) -> (PathBuf, PathBuf) {
+    (
+        temp_fixture_workspace(&format!("{prefix}-primary")),
+        temp_fixture_workspace(&format!("{prefix}-secondary")),
     )
 }
 
@@ -58,8 +63,6 @@ pub fn temp_broken_fixture_workspace(prefix: &str) -> PathBuf {
             "left * right",
             "left + right",
         )],
-        "left * right",
-        "left + right",
     )
 }
 
@@ -115,8 +118,6 @@ pub fn temp_replanning_execution_workspace(prefix: &str) -> PathBuf {
                 "left + right",
             ),
         ],
-        "left - right",
-        "left / right",
     )
 }
 
@@ -160,12 +161,7 @@ pub fn extract_trace_path(text: &str) -> Option<PathBuf> {
     })
 }
 
-fn create_fixture_workspace(
-    prefix: &str,
-    attempts: Vec<serde_json::Value>,
-    legacy_find: &str,
-    legacy_replace: &str,
-) -> PathBuf {
+fn create_fixture_workspace(prefix: &str, attempts: Vec<serde_json::Value>) -> PathBuf {
     let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
     fs::create_dir_all(workspace.join("src")).unwrap();
     fs::create_dir_all(workspace.join("tests")).unwrap();
@@ -184,25 +180,6 @@ fn create_fixture_workspace(
                 "args": ["test", "--quiet"],
             },
             "attempts": attempts,
-        }))
-        .unwrap(),
-    )
-    .unwrap();
-    fs::write(
-        workspace.join(".synod/fixture.json"),
-        serde_json::to_string_pretty(&serde_json::json!({
-            "name": "red-to-green",
-            "test_command": {
-                "program": "cargo",
-                "args": ["test", "--quiet"],
-            },
-            "file_patches": [
-                {
-                    "path": "src/lib.rs",
-                    "find": legacy_find,
-                    "replace": legacy_replace,
-                }
-            ]
         }))
         .unwrap(),
     )

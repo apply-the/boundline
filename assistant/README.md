@@ -2,9 +2,9 @@
 
 This directory contains Markdown-based commands to run `synod` from various AI assistants (Claude, Codex, Copilot, Gemini CLI).
 
-The current delivery surface expects `<workspace>/.synod/execution.json` when present and falls back to the legacy `<workspace>/.synod/fixture.json` manifest for older workspaces.
-`synod init` now scaffolds the default execution profile and local routing config
-for human-first setup.
+The current delivery surface uses `<workspace>/.synod/execution.json` as the
+workspace execution profile. `synod init` scaffolds that starting profile plus
+local routing config for human-first setup.
 
 ## Directory Structure
 - **Claude**: `claude/commands/`
@@ -35,7 +35,7 @@ If the shell/terminal *is* available:
 ## Workflows
 
 ### Starting a Workflow (User Story 1)
-- `/synod-init`: Runs `cargo run --bin synod -- init --workspace <workspace> --template <bug-fix|change|delivery>` before first use or when workspace setup is missing.
+- `/synod-init`: Runs `cargo run --bin synod -- init --workspace <workspace>` before first use or when workspace setup is missing. Add `--template <change|delivery>` only when the user explicitly wants a different starting profile than the default `bug-fix`. Use `--force` when replacing an existing generated profile.
 - `/synod-start`: Confirms the workspace and runs `cargo run --bin synod -- start --workspace <workspace>` to initialize the active session.
 - `/synod-plan`: Captures human-authored input into the active session, then runs `cargo run --bin synod -- plan --workspace <workspace>`. When the user gives direct text, use `cargo run --bin synod -- capture --workspace <workspace> --goal "<goal>"`. When the user provides Markdown brief files, use `cargo run --bin synod -- capture --workspace <workspace> --brief <path> [--brief <path> ...]`. When both are present, pass both `--goal` and repeated `--brief` flags in the same capture command.
 

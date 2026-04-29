@@ -72,3 +72,12 @@ mod config_resolution;
 
 #[path = "unit/config_store_additional.rs"]
 mod config_store_additional;
+
+#[path = "unit/cluster_models.rs"]
+mod cluster_models;
+
+#[path = "unit/cluster_config_resolution.rs"]
+mod cluster_config_resolution;
+
+#[path = "unit/cluster_projection.rs"]
+mod cluster_projection;

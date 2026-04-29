@@ -72,3 +72,9 @@ mod init_cli_contract;
 
 #[path = "contract/config_cli_contract.rs"]
 mod config_cli_contract;
+
+#[path = "contract/cluster_cli_contract.rs"]
+mod cluster_cli_contract;
+
+#[path = "contract/cluster_config_contract.rs"]
+mod cluster_config_contract;

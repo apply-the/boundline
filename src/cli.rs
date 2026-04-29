@@ -8,6 +8,7 @@ use crate::domain::configuration::{
 use crate::domain::governance::GovernanceRuntimeKind;
 use crate::domain::trace::current_timestamp_millis;
 
+pub mod cluster;
 pub mod config;
 pub mod diagnostics;
 pub mod init;
@@ -37,6 +38,7 @@ pub enum CommandName {
     Next,
     Init,
     Config,
+    Cluster,
 }
 
 impl CommandName {
@@ -54,6 +56,7 @@ impl CommandName {
             Self::Next => "next",
             Self::Init => "init",
             Self::Config => "config",
+            Self::Cluster => "cluster",
         }
     }
 }
@@ -144,18 +147,46 @@ pub enum DeveloperCommand {
         workspace: Option<PathBuf>,
     },
     Init {
+        /// Workspace directory to bootstrap.
         #[arg(long)]
         workspace: PathBuf,
+        /// Optional starting template for the generated execution profile. Defaults to bug-fix.
         #[arg(long)]
         template: Option<InitTemplate>,
+        /// Assistant runtimes to record in the local workspace config.
         #[arg(long = "assistant")]
         assistant: Vec<RuntimeKind>,
+        /// Replace existing Synod files in the workspace.
         #[arg(long)]
         force: bool,
     },
     Config {
         #[command(subcommand)]
         command: ConfigSubcommand,
+    },
+    Cluster {
+        #[command(subcommand)]
+        command: ClusterSubcommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ClusterSubcommand {
+    Init {
+        #[arg(long)]
+        workspace: PathBuf,
+        #[arg(long = "cluster-id")]
+        cluster_id: String,
+        #[arg(long = "member")]
+        member: Vec<PathBuf>,
+    },
+    Status {
+        #[arg(long)]
+        workspace: PathBuf,
+    },
+    Inspect {
+        #[arg(long)]
+        workspace: PathBuf,
     },
 }
 
@@ -165,11 +196,15 @@ pub enum ConfigSubcommand {
         #[arg(long)]
         workspace: Option<PathBuf>,
         #[arg(long)]
+        cluster: Option<PathBuf>,
+        #[arg(long)]
         scope: Option<ConfigShowScope>,
     },
     Set {
         #[arg(long)]
         workspace: Option<PathBuf>,
+        #[arg(long)]
+        cluster: Option<PathBuf>,
         #[arg(long)]
         scope: ConfigWriteScope,
         #[arg(long)]
@@ -186,6 +221,8 @@ pub enum ConfigSubcommand {
     Unset {
         #[arg(long)]
         workspace: Option<PathBuf>,
+        #[arg(long)]
+        cluster: Option<PathBuf>,
         #[arg(long)]
         scope: ConfigWriteScope,
         #[arg(long)]
@@ -212,6 +249,7 @@ impl DeveloperCommand {
             Self::Next { .. } => CommandName::Next,
             Self::Init { .. } => CommandName::Init,
             Self::Config { .. } => CommandName::Config,
+            Self::Cluster { .. } => CommandName::Cluster,
         }
     }
 }
@@ -360,10 +398,27 @@ impl DeveloperCommandSession {
             DeveloperCommand::Config { command } => Self {
                 command_name: CommandName::Config,
                 workspace_ref: match command {
-                    ConfigSubcommand::Show { workspace, .. }
-                    | ConfigSubcommand::Set { workspace, .. }
-                    | ConfigSubcommand::Unset { workspace, .. } => {
-                        workspace.as_ref().map(|path| path.to_string_lossy().into_owned())
+                    ConfigSubcommand::Show { workspace, cluster, .. }
+                    | ConfigSubcommand::Set { workspace, cluster, .. }
+                    | ConfigSubcommand::Unset { workspace, cluster, .. } => workspace
+                        .as_ref()
+                        .or(cluster.as_ref())
+                        .map(|path| path.to_string_lossy().into_owned()),
+                },
+                goal: None,
+                trace_ref: None,
+                started_at: current_timestamp_millis(),
+                completed_at: None,
+                exit_status: None,
+                trace_location: None,
+            },
+            DeveloperCommand::Cluster { command } => Self {
+                command_name: CommandName::Cluster,
+                workspace_ref: match command {
+                    ClusterSubcommand::Init { workspace, .. }
+                    | ClusterSubcommand::Status { workspace }
+                    | ClusterSubcommand::Inspect { workspace } => {
+                        Some(workspace.to_string_lossy().into_owned())
                     }
                 },
                 goal: None,
@@ -408,7 +463,8 @@ impl DeveloperCommandSession {
             | CommandName::Status
             | CommandName::Next
             | CommandName::Init
-            | CommandName::Config => {}
+            | CommandName::Config
+            | CommandName::Cluster => {}
         }
 
         if matches!(self.command_name, CommandName::Capture)
@@ -692,35 +748,43 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
         }
         DeveloperCommand::Config { command } => {
             let result = match command {
-                ConfigSubcommand::Show { workspace, scope } => {
-                    config::execute_show(workspace.as_deref(), *scope)
+                ConfigSubcommand::Show { workspace, cluster, scope } => {
+                    config::execute_show(workspace.as_deref(), cluster.as_deref(), *scope)
                 }
                 ConfigSubcommand::Set {
                     workspace,
+                    cluster,
                     scope,
                     slot,
                     reviewer,
                     adjudicator,
                     runtime,
                     model,
-                } => config::execute_set(
+                } => config::execute_set(config::SetConfigRequest {
+                    workspace: workspace.as_deref(),
+                    cluster: cluster.as_deref(),
+                    scope: *scope,
+                    slot: *slot,
+                    reviewer: reviewer.as_deref(),
+                    adjudicator: *adjudicator,
+                    runtime: *runtime,
+                    model,
+                }),
+                ConfigSubcommand::Unset {
+                    workspace,
+                    cluster,
+                    scope,
+                    slot,
+                    reviewer,
+                    adjudicator,
+                } => config::execute_unset(
                     workspace.as_deref(),
+                    cluster.as_deref(),
                     *scope,
                     *slot,
                     reviewer.as_deref(),
                     *adjudicator,
-                    *runtime,
-                    model,
                 ),
-                ConfigSubcommand::Unset { workspace, scope, slot, reviewer, adjudicator } => {
-                    config::execute_unset(
-                        workspace.as_deref(),
-                        *scope,
-                        *slot,
-                        reviewer.as_deref(),
-                        *adjudicator,
-                    )
-                }
             };
 
             match result {
@@ -736,6 +800,46 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                 },
             }
         }
+        DeveloperCommand::Cluster { command } => match command {
+            ClusterSubcommand::Init { workspace, cluster_id, member } => {
+                match cluster::execute_init(workspace, cluster_id, member) {
+                    Ok(report) => DispatchOutcome {
+                        exit_status: report.exit_status,
+                        output: report.terminal_output,
+                        trace_location: None,
+                    },
+                    Err(error) => DispatchOutcome {
+                        exit_status: CommandExitStatus::NonSuccess,
+                        output: format!("cluster error: {error}"),
+                        trace_location: None,
+                    },
+                }
+            }
+            ClusterSubcommand::Status { workspace } => match cluster::execute_status(workspace) {
+                Ok(report) => DispatchOutcome {
+                    exit_status: report.exit_status,
+                    output: report.terminal_output,
+                    trace_location: None,
+                },
+                Err(error) => DispatchOutcome {
+                    exit_status: CommandExitStatus::NonSuccess,
+                    output: format!("cluster error: {error}"),
+                    trace_location: None,
+                },
+            },
+            ClusterSubcommand::Inspect { workspace } => match cluster::execute_inspect(workspace) {
+                Ok(report) => DispatchOutcome {
+                    exit_status: report.exit_status,
+                    output: report.terminal_output,
+                    trace_location: None,
+                },
+                Err(error) => DispatchOutcome {
+                    exit_status: CommandExitStatus::NonSuccess,
+                    output: format!("cluster error: {error}"),
+                    trace_location: None,
+                },
+            },
+        },
     }
 }
 
