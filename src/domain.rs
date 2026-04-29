@@ -1,4 +1,5 @@
 pub mod brief;
+pub mod cluster;
 pub mod configuration;
 pub mod execution;
 pub mod flow;

@@ -10,7 +10,7 @@ Synod is a local CLI for bounded software-delivery work.
 You use Synod to:
 
 - initialize bounded workspace defaults with `synod init`
-- read an execution manifest from `<workspace>/.synod/execution.json`
+- start from a generated execution profile and edit it only when you need finer control
 - capture human-authored goals and Markdown briefs without authoring a task JSON request
 - inspect or tune runtime/model routing with `synod config`
 - apply only the changes declared in that manifest
@@ -18,9 +18,9 @@ You use Synod to:
 - keep session state in `<workspace>/.synod/session.json`
 - keep traces in `<workspace>/.synod/traces/`
 
-Synod now supports `synod init` as the human-friendly bootstrap path. The
-bounded execution manifest remains the runtime contract, but init generates it
-for the operator and can create workspace-local routing config.
+For most users the path is simple: run `synod init`, let Synod generate the
+starting profile, and edit that profile only when the defaults stop fitting the
+workspace.
 
 If review, adaptive execution, or governance are configured, Synod projects that
 state through the same CLI instead of introducing a separate runtime surface.
@@ -53,14 +53,33 @@ synod --help
 
 ### 1. Initialize the Workspace
 
-Run init to scaffold `.synod/execution.json` and `.synod/config.toml`:
+Run init once per workspace:
 
 ```bash
-synod init --workspace <workspace> --template bug-fix
+synod init --workspace <workspace>
 ```
 
-You can still author `.synod/execution.json` manually when needed. The file
-shape remains:
+`--template` is optional. If you omit it, Synod uses `bug-fix`.
+Available starting templates are:
+
+- `bug-fix`: start from a small targeted repair
+- `change`: start from a bounded implementation change
+- `delivery`: start from a broader delivery update
+
+Templates only seed the generated execution profile. They do not lock the
+workspace, and they do not replace `synod flow`.
+
+If you want a different starting point later, regenerate it explicitly:
+
+```bash
+synod init --workspace <workspace> --force --template change
+```
+
+If you simply need another task of the same kind, do not rerun init. Start a
+new session and run the workflow again.
+
+If you need finer control than the generated starting point, edit the generated
+profile at `<workspace>/.synod/execution.json` directly. The file shape is:
 
 ```json
 {
@@ -87,9 +106,6 @@ shape remains:
 }
 ```
 
-Synod prefers this manifest and still supports the legacy
-`<workspace>/.synod/fixture.json` format for older workspaces.
-
 ### 2. Check the Workspace
 
 Before starting a session, validate the target workspace:
@@ -104,6 +120,21 @@ Optional routing setup:
 synod config set --scope global --slot planning --runtime codex --model gpt-5-codex
 synod config set --workspace <workspace> --scope workspace --reviewer safety --runtime copilot --model gpt-5.4
 synod config show --workspace <workspace> --scope effective
+```
+
+Optional clustered setup:
+
+```bash
+synod cluster init \
+  --workspace <primary-workspace> \
+  --cluster-id delivery-a \
+  --member <primary-workspace> \
+  --member <secondary-workspace>
+
+synod cluster status --workspace <primary-workspace>
+synod cluster inspect --workspace <primary-workspace>
+synod config set --cluster <primary-workspace> --scope cluster --slot planning --runtime codex --model gpt-5-codex
+synod config show --workspace <secondary-workspace> --cluster <primary-workspace> --scope effective
 ```
 
 ### 3. Start the Session and Capture the Goal
@@ -129,7 +160,9 @@ synod capture --workspace <workspace> \
 ```
 
 `synod flow` is optional. Use it when you want to pin the run to one of the
-built-in flows: `bug-fix`, `change`, or `delivery`.
+built-in flows: `bug-fix`, `change`, or `delivery`. This is separate from the
+init template: `init` bootstraps the workspace, while `flow` selects the shape
+of the current run.
 
 ### 4. Plan and Run
 
@@ -172,6 +205,7 @@ contract; it only skips the explicit session setup.
 | --- | --- |
 | `synod init` | Bootstrap `.synod` workspace files and optional assistant setup |
 | `synod config show|set|unset` | Inspect or edit routing defaults at global/workspace scope |
+| `synod cluster init|status|inspect` | Register a bounded multi-workspace cluster and inspect member state |
 | `synod doctor` | Validate the workspace and manifest before running |
 | `synod start` | Initialize or reset the active workspace session |
 | `synod capture` | Store the delivery goal in session state |

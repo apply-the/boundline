@@ -4,6 +4,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::adapters::trace_store::FileTraceStore;
+use crate::fixture::FixtureRuntimeError;
 use crate::fixture::load_workspace_execution_profile;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -113,14 +114,17 @@ pub fn diagnose_workspace(workspace_ref: impl AsRef<Path>) -> DiagnosticsReport 
             name: "workspace_execution_profile".to_string(),
             status: DiagnosticsStatus::Passed,
             message: format!(
-                "execution profile '{}' is available at {}{}",
+                "execution profile '{}' is ready at {}",
                 profile.name,
                 workspace.join(".synod/execution.json").display(),
-                profile
-                    .legacy_source
-                    .as_ref()
-                    .map(|source| format!(" (legacy fallback from {source})"))
-                    .unwrap_or_default()
+            ),
+        },
+        Err(FixtureRuntimeError::MissingExecutionProfile(_)) => DiagnosticsCheck {
+            name: "workspace_execution_profile".to_string(),
+            status: DiagnosticsStatus::Failed,
+            message: format!(
+                "run `synod init --workspace {}` to create the workspace profile",
+                workspace.display()
             ),
         },
         Err(error) => DiagnosticsCheck {

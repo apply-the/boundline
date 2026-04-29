@@ -14,16 +14,16 @@ if [ -f rust-toolchain.toml ]; then
 fi
 
 step_index=1
-step_total=3
+step_total=4
 case "$hook_name" in
   pre-commit)
     step_total=1
     ;;
   pre-push)
-    step_total=3
+    step_total=4
     ;;
   *)
-    step_total=3
+    step_total=4
     ;;
 esac
 
@@ -48,9 +48,9 @@ run_step() {
 printf '%s\n' "[$hook_name] Running Rust quality checks in $repo_root"
 
 run_step \
-  "cargo fmt --check" \
+  "cargo fmt --all -- --check" \
   "Run 'cargo fmt', restage any formatting changes, then retry." \
-  cargo fmt --check
+  cargo fmt --all -- --check
 
 if [ "$hook_name" != "pre-commit" ]; then
   run_step \
@@ -59,9 +59,14 @@ if [ "$hook_name" != "pre-commit" ]; then
     cargo clippy --workspace --all-targets --all-features -- -D warnings
 
   run_step \
-    "cargo nextest run" \
-    "Run 'cargo nextest run' and fix the failing test or regression before retrying." \
-    cargo nextest run
+    "cargo nextest run --workspace --all-features" \
+    "Install cargo-nextest if needed with 'cargo install cargo-nextest', then rerun 'cargo nextest run --workspace --all-features'." \
+    cargo nextest run --workspace --all-features
+
+  run_step \
+    "cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info" \
+    "Install cargo-llvm-cov if needed with 'cargo install cargo-llvm-cov', then rerun 'cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info'." \
+    cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
 fi
 
 printf '%s\n' "[$hook_name] All Rust quality checks passed."

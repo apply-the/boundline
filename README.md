@@ -24,20 +24,27 @@ The main surface is the `synod` CLI:
 
 Use it when you want delivery work to stay bounded and inspectable:
 
-- keep execution rules in `<workspace>/.synod/execution.json`
-- apply only manifest-declared changes
-- run the workspace validation command after each attempt
-- keep session state in `<workspace>/.synod/session.json`
-- keep execution traces in `<workspace>/.synod/traces/`
-
-Synod prefers `<workspace>/.synod/execution.json` and falls back to the legacy
-`<workspace>/.synod/fixture.json` for older workspaces. Init generates the
-modern execution profile by default and creates `.synod/config.toml` for local
-routing overrides.
+- bootstrap a workspace once with `synod init`
+- keep the work contract explicit and local to the repo
+- apply only declared changes
+- run the validation command after each attempt
+- resume from saved session state and traces
 
 Local execution is the default. When governance is configured, Synod can also
-route stages through Canon and project governance state, approvals, packet
-provenance, and blocked reasons through the same CLI.
+route stages through Canon while keeping the same CLI surface.
+
+## Why This Is Better Than Markdown-Only Agent Frameworks
+
+A framework built from Markdown-defined agents can describe roles, prompts, and
+handoff conventions. Synod adds the missing harness: persisted session state,
+execution traces, a bounded run loop, named agent and tool dispatch, real
+workspace mutation, validation command execution, retry and replan semantics,
+and governance overlay when required.
+
+Markdown can still be useful as input. The difference is that Synod does not
+stop at describing how agents should behave. It owns the executable control
+plane that decides what runs next, records what happened, and lets the operator
+resume or inspect the work afterward.
 
 ## Canon Compatibility
 
@@ -89,9 +96,24 @@ The shortest way to think about Synod is:
 ### 1. Initialize a workspace
 
 ```bash
-synod init --workspace <workspace> --template bug-fix
+synod init --workspace <workspace>
 synod doctor --workspace <workspace>
 ```
+
+`--template` is optional. If you omit it, Synod starts with `bug-fix`.
+Available starting templates are `bug-fix`, `change`, and `delivery`.
+
+A template only seeds the generated execution profile. It does not lock the
+workspace, and it does not decide the later `synod flow` choice.
+
+If you want a different starting point later, rerun init with `--force`:
+
+```bash
+synod init --workspace <workspace> --force --template delivery
+```
+
+If you just need another task of the same type, do not rerun init. Start a new
+session, capture the new goal, and run the workflow again.
 
 Optional routing setup:
 
@@ -99,6 +121,20 @@ Optional routing setup:
 synod config set --scope global --slot planning --runtime codex --model gpt-5-codex
 synod config set --workspace <workspace> --scope workspace --reviewer safety --runtime copilot --model gpt-5.4
 synod config show --workspace <workspace> --scope effective
+```
+
+Optional clustered setup across two repositories:
+
+```bash
+synod cluster init \
+	--workspace <primary-workspace> \
+	--cluster-id delivery-a \
+	--member <primary-workspace> \
+	--member <secondary-workspace>
+
+synod cluster status --workspace <primary-workspace>
+synod config set --cluster <primary-workspace> --scope cluster --slot planning --runtime codex --model gpt-5-codex
+synod config show --workspace <secondary-workspace> --cluster <primary-workspace> --scope effective
 ```
 
 ### 2. Run the session workflow
@@ -152,7 +188,8 @@ Depending on the manifest, that output can also include:
 
 ## Common Workflow
 
-- run `synod init --workspace <workspace> --template <bug-fix|change|delivery>`
+- run `synod init --workspace <workspace>`
+- optionally add `--template change` or `--template delivery` when you want a different starting profile than the default `bug-fix`
 - optionally tune defaults with `synod config show|set|unset`
 - run `synod doctor --workspace <workspace>`
 - capture a goal with `synod capture` or pass the goal directly to `synod run`
@@ -245,22 +282,21 @@ The current implementation covers:
 
 The local `synod` binary keeps the developer experience local, deterministic,
 and backed by both `<workspace>/.synod/session.json` and
-`<workspace>/.synod/traces/`. `doctor`, `plan`, and `run` prefer a workspace
-execution manifest at `<workspace>/.synod/execution.json` and fall back to the
-legacy `<workspace>/.synod/fixture.json` shape. `synod init` scaffolds the
-workspace execution profile and `synod config` manages global and workspace
-routing defaults.
+`<workspace>/.synod/traces/`. `synod init` scaffolds the workspace execution
+profile at `<workspace>/.synod/execution.json`, and `synod config` manages
+global and workspace routing defaults.
 
 The primary init + session flow is:
 
-1. `synod init --workspace <workspace> --template bug-fix|change|delivery`
-2. optional: `synod config show|set|unset`
-3. `synod start`
-4. `synod capture --goal "..."`
-5. optional: `synod flow bug-fix|change|delivery`
-6. `synod plan`
-7. `synod step` or `synod run`
-8. `synod status`, `synod next`, and `synod inspect --workspace <workspace>`
+1. `synod init --workspace <workspace>`
+2. optional: if you want a non-default starting profile, rerun or start with `--template change|delivery`
+3. optional: `synod config show|set|unset`
+4. `synod start`
+5. `synod capture --goal "..."`
+6. optional: `synod flow bug-fix|change|delivery`
+7. `synod plan`
+8. `synod step` or `synod run`
+9. `synod status`, `synod next`, and `synod inspect --workspace <workspace>`
 
 When a flow is selected, `status` and `next` surface `active_flow`,
 `current_stage`, and `stage_progress`. `run` and `inspect` also render flow and
@@ -310,9 +346,13 @@ For the assistant workflow walkthrough, see
 
 Run these commands from the repository root:
 
+If you install the repository hooks with `./scripts/install-hooks.sh`,
+`pre-push` runs the same formatting, lint, test, and coverage checks used by
+the blocking GitHub workflows.
+
 ```bash
-cargo fmt --all
-cargo clippy --all-targets --all-features -- -D warnings
-cargo test --all-targets
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo nextest run --workspace --all-features
 cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
 ```

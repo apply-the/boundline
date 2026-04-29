@@ -5,24 +5,24 @@ use synod::cli::{Cli, ConfigSubcommand, DeveloperCommand};
 use synod::domain::configuration::{ConfigShowScope, ConfigWriteScope, RouteSlot, RuntimeKind};
 
 #[test]
-fn config_show_accepts_effective_scope() {
+fn cluster_scope_show_accepts_primary_workspace() {
     let cli = Cli::try_parse_from([
         "synod",
         "config",
         "show",
-        "--workspace",
-        "/tmp/ws",
+        "--cluster",
+        "/tmp/primary",
         "--scope",
-        "effective",
+        "cluster",
     ])
     .unwrap();
 
     match cli.command {
         DeveloperCommand::Config { command } => match command {
             ConfigSubcommand::Show { workspace, cluster, scope } => {
-                assert_eq!(workspace, Some(PathBuf::from("/tmp/ws")));
-                assert_eq!(cluster, None);
-                assert_eq!(scope, Some(ConfigShowScope::Effective));
+                assert_eq!(workspace, None);
+                assert_eq!(cluster, Some(PathBuf::from("/tmp/primary")));
+                assert_eq!(scope, Some(ConfigShowScope::Cluster));
             }
             other => panic!("expected Show, got {other:?}"),
         },
@@ -31,13 +31,15 @@ fn config_show_accepts_effective_scope() {
 }
 
 #[test]
-fn config_set_accepts_workspace_slot_runtime_and_model() {
+fn cluster_scope_set_accepts_cluster_slot_runtime_and_model() {
     let cli = Cli::try_parse_from([
         "synod",
         "config",
         "set",
+        "--cluster",
+        "/tmp/primary",
         "--scope",
-        "workspace",
+        "cluster",
         "--slot",
         "planning",
         "--runtime",
@@ -59,9 +61,9 @@ fn config_set_accepts_workspace_slot_runtime_and_model() {
                 runtime,
                 model,
             } => {
-                assert!(workspace.is_none());
-                assert!(cluster.is_none());
-                assert_eq!(scope, ConfigWriteScope::Workspace);
+                assert_eq!(workspace, None);
+                assert_eq!(cluster, Some(PathBuf::from("/tmp/primary")));
+                assert_eq!(scope, ConfigWriteScope::Cluster);
                 assert_eq!(slot, Some(RouteSlot::Planning));
                 assert_eq!(reviewer, None);
                 assert!(!adjudicator);

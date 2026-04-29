@@ -53,6 +53,7 @@ pub enum RouteSlot {
 pub enum ConfigShowScope {
     Effective,
     Workspace,
+    Cluster,
     Global,
 }
 
@@ -60,6 +61,7 @@ pub enum ConfigShowScope {
 #[serde(rename_all = "snake_case")]
 pub enum ConfigWriteScope {
     Workspace,
+    Cluster,
     Global,
 }
 
@@ -164,6 +166,7 @@ fn default_version() -> u32 {
 pub enum ValueSource {
     Cli,
     Workspace,
+    Cluster,
     Global,
     BuiltIn,
 }
@@ -197,6 +200,7 @@ pub struct RoutingOverrides {
 pub fn resolve_effective_routing(
     cli: &RoutingOverrides,
     workspace: Option<&RoutingConfig>,
+    cluster: Option<&RoutingConfig>,
     global: Option<&RoutingConfig>,
 ) -> EffectiveRouting {
     let defaults = built_in_defaults();
@@ -204,30 +208,35 @@ pub fn resolve_effective_routing(
     let planning = resolve_single(
         cli.planning.as_ref(),
         workspace.and_then(|cfg| cfg.planning.as_ref()),
+        cluster.and_then(|cfg| cfg.planning.as_ref()),
         global.and_then(|cfg| cfg.planning.as_ref()),
         &defaults.planning,
     );
     let implementation = resolve_single(
         cli.implementation.as_ref(),
         workspace.and_then(|cfg| cfg.implementation.as_ref()),
+        cluster.and_then(|cfg| cfg.implementation.as_ref()),
         global.and_then(|cfg| cfg.implementation.as_ref()),
         &defaults.implementation,
     );
     let verification = resolve_single(
         cli.verification.as_ref(),
         workspace.and_then(|cfg| cfg.verification.as_ref()),
+        cluster.and_then(|cfg| cfg.verification.as_ref()),
         global.and_then(|cfg| cfg.verification.as_ref()),
         &defaults.verification,
     );
     let review = resolve_single(
         cli.review.as_ref(),
         workspace.and_then(|cfg| cfg.review.as_ref()),
+        cluster.and_then(|cfg| cfg.review.as_ref()),
         global.and_then(|cfg| cfg.review.as_ref()),
         &defaults.review,
     );
     let adjudication = resolve_single(
         cli.adjudication.as_ref(),
         workspace.and_then(|cfg| cfg.adjudication.as_ref()),
+        cluster.and_then(|cfg| cfg.adjudication.as_ref()),
         global.and_then(|cfg| cfg.adjudication.as_ref()),
         &defaults.adjudication,
     );
@@ -238,6 +247,7 @@ pub fn resolve_effective_routing(
         .reviewer_roles
         .keys()
         .chain(workspace.into_iter().flat_map(|cfg| cfg.reviewer_roles.keys()))
+        .chain(cluster.into_iter().flat_map(|cfg| cfg.reviewer_roles.keys()))
         .chain(global.into_iter().flat_map(|cfg| cfg.reviewer_roles.keys()))
     {
         role_ids.insert(key.clone(), ());
@@ -247,6 +257,7 @@ pub fn resolve_effective_routing(
         let route = resolve_single(
             cli.reviewer_roles.get(&role_id),
             workspace.and_then(|cfg| cfg.reviewer_roles.get(&role_id)),
+            cluster.and_then(|cfg| cfg.reviewer_roles.get(&role_id)),
             global.and_then(|cfg| cfg.reviewer_roles.get(&role_id)),
             &review.route,
         );
@@ -266,6 +277,7 @@ pub fn resolve_effective_routing(
 fn resolve_single(
     cli: Option<&ModelRoute>,
     workspace: Option<&ModelRoute>,
+    cluster: Option<&ModelRoute>,
     global: Option<&ModelRoute>,
     default: &ModelRoute,
 ) -> SourcedRoute {
@@ -274,6 +286,9 @@ fn resolve_single(
     }
     if let Some(route) = workspace {
         return SourcedRoute { route: route.clone(), source: ValueSource::Workspace };
+    }
+    if let Some(route) = cluster {
+        return SourcedRoute { route: route.clone(), source: ValueSource::Cluster };
     }
     if let Some(route) = global {
         return SourcedRoute { route: route.clone(), source: ValueSource::Global };
@@ -341,7 +356,7 @@ mod tests {
             ..RoutingConfig::default()
         };
 
-        let resolved = resolve_effective_routing(&cli, Some(&workspace), Some(&global));
+        let resolved = resolve_effective_routing(&cli, Some(&workspace), None, Some(&global));
         assert_eq!(resolved.planning.source, ValueSource::Cli);
         assert_eq!(resolved.planning.route.runtime, RuntimeKind::Gemini);
     }
@@ -358,7 +373,7 @@ mod tests {
         };
         let global = RoutingConfig::default();
 
-        let resolved = resolve_effective_routing(&cli, Some(&workspace), Some(&global));
+        let resolved = resolve_effective_routing(&cli, Some(&workspace), None, Some(&global));
         assert!(resolved.reviewer_roles.is_empty());
         assert_eq!(resolved.review.route.runtime, RuntimeKind::Claude);
     }

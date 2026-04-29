@@ -13,7 +13,9 @@ Synod is a bounded delivery orchestrator. Contributions should keep that bias:
 
 - Rust `1.95.0` from [rust-toolchain.toml](rust-toolchain.toml)
 - `rustfmt` and `clippy`
-- optional but recommended: `cargo-nextest` and `cargo-deny`
+- `cargo-nextest` if you want the same test runner used by the repository pre-push hook and blocking CI workflows
+- optional but recommended: `cargo-deny`
+- `cargo-llvm-cov` if you install the repository pre-push hook
 
 To install the repository git hooks:
 
@@ -55,17 +57,24 @@ Avoid unrelated refactors while landing feature work unless the refactor is requ
 Run these commands from the repository root before opening a PR:
 
 ```bash
-cargo fmt --all
+cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --all-targets
+cargo nextest run --workspace --all-features
+cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
 ```
 
 Additional validation when relevant:
 
 ```bash
-cargo nextest run
+cargo test --workspace --all-features
 cargo deny check licenses advisories bans sources
 ```
+
+After `./scripts/install-hooks.sh`, `pre-commit` runs `cargo fmt --all --
+--check`; `pre-push` runs `cargo clippy --workspace --all-targets
+--all-features -- -D warnings`, `cargo nextest run --workspace --all-features`, and
+`cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`.
+That matches the blocking GitHub lint, test, and coverage workflows.
 
 ### Test Layout Notes
 

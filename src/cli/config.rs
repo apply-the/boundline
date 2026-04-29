@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
+use crate::adapters::cluster_store::{ClusterStoreError, FileClusterStore};
 use crate::adapters::config_store::{ConfigStoreError, FileConfigStore};
 use crate::cli::CommandExitStatus;
 use crate::domain::configuration::{
@@ -9,16 +10,27 @@ use crate::domain::configuration::{
     RuntimeKind, ValueSource, resolve_effective_routing,
 };
 
-use super::init::runtime_available;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfigCommandReport {
     pub exit_status: CommandExitStatus,
     pub terminal_output: String,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct SetConfigRequest<'a> {
+    pub workspace: Option<&'a Path>,
+    pub cluster: Option<&'a Path>,
+    pub scope: ConfigWriteScope,
+    pub slot: Option<RouteSlot>,
+    pub reviewer: Option<&'a str>,
+    pub adjudicator: bool,
+    pub runtime: RuntimeKind,
+    pub model: &'a str,
+}
+
 pub fn execute_show(
     workspace: Option<&Path>,
+    cluster: Option<&Path>,
     scope: Option<ConfigShowScope>,
 ) -> Result<ConfigCommandReport, ConfigCommandError> {
     let scope = scope.unwrap_or(ConfigShowScope::Effective);
@@ -33,14 +45,37 @@ pub fn execute_show(
             let local = FileConfigStore::for_workspace(workspace).load_local()?.unwrap_or_default();
             render_scope("workspace", &local)
         }
+        ConfigShowScope::Cluster => {
+            let cluster = cluster.ok_or(ConfigCommandError::ClusterRequired)?;
+            let store = FileClusterStore::for_workspace(cluster);
+            let config = store.load()?.ok_or_else(|| {
+                ConfigCommandError::MissingClusterConfig(store.cluster_config_path())
+            })?;
+            let scope_view = ConfigFile { version: config.version, routing: config.routing };
+            render_scope("cluster", &scope_view)
+        }
         ConfigShowScope::Effective => {
             let workspace = workspace.ok_or(ConfigCommandError::WorkspaceRequired)?;
             let store = FileConfigStore::for_workspace(workspace);
             let local = store.local_routing()?;
+            let cluster_routing = if let Some(cluster) = cluster {
+                let store = FileClusterStore::for_workspace(cluster);
+                Some(
+                    store
+                        .load()?
+                        .ok_or_else(|| {
+                            ConfigCommandError::MissingClusterConfig(store.cluster_config_path())
+                        })?
+                        .routing,
+                )
+            } else {
+                None
+            };
             let global = FileConfigStore::global_routing()?;
             let resolved = resolve_effective_routing(
                 &RoutingOverrides::default(),
                 local.as_ref(),
+                cluster_routing.as_ref(),
                 global.as_ref(),
             );
 
@@ -93,23 +128,40 @@ pub fn execute_show(
 }
 
 pub fn execute_set(
-    workspace: Option<&Path>,
-    scope: ConfigWriteScope,
-    slot: Option<RouteSlot>,
-    reviewer: Option<&str>,
-    adjudicator: bool,
-    runtime: RuntimeKind,
-    model: &str,
+    request: SetConfigRequest<'_>,
 ) -> Result<ConfigCommandReport, ConfigCommandError> {
-    if !runtime_available(runtime) {
-        return Err(ConfigCommandError::RuntimeUnavailable(runtime));
-    }
-
-    let target = mutation_target(slot, reviewer, adjudicator)?;
-    let route = ModelRoute { runtime, model: model.to_string() };
+    let target = mutation_target(request.slot, request.reviewer, request.adjudicator)?;
+    let route = ModelRoute { runtime: request.runtime, model: request.model.to_string() };
     route.validate().map_err(|source| ConfigCommandError::InvalidRoute(source.to_string()))?;
 
-    let (mut config, location) = load_config_for_scope(workspace, scope)?;
+    if request.scope == ConfigWriteScope::Cluster {
+        let cluster = request.cluster.ok_or(ConfigCommandError::ClusterRequired)?;
+        let store = FileClusterStore::for_workspace(cluster);
+        let mut config = store
+            .load()?
+            .ok_or_else(|| ConfigCommandError::MissingClusterConfig(store.cluster_config_path()))?;
+
+        match target {
+            MutationTarget::Slot(slot) => config.routing.set_slot(slot, route),
+            MutationTarget::Reviewer(role) => {
+                config.routing.reviewer_roles.insert(role, route);
+            }
+            MutationTarget::Adjudicator => config.routing.adjudication = Some(route),
+        }
+
+        config
+            .routing
+            .validate()
+            .map_err(|source| ConfigCommandError::InvalidRoute(source.to_string()))?;
+        let path = store.save(&config)?;
+
+        return Ok(ConfigCommandReport {
+            exit_status: CommandExitStatus::Succeeded,
+            terminal_output: format!("config: updated cluster config at {}", path.display()),
+        });
+    }
+
+    let (mut config, location) = load_config_for_scope(request.workspace, request.scope)?;
 
     match target {
         MutationTarget::Slot(slot) => config.routing.set_slot(slot, route),
@@ -123,7 +175,7 @@ pub fn execute_set(
         .routing
         .validate()
         .map_err(|source| ConfigCommandError::InvalidRoute(source.to_string()))?;
-    save_config_for_scope(workspace, scope, &config)?;
+    save_config_for_scope(request.workspace, request.scope, &config)?;
 
     Ok(ConfigCommandReport {
         exit_status: CommandExitStatus::Succeeded,
@@ -133,12 +185,40 @@ pub fn execute_set(
 
 pub fn execute_unset(
     workspace: Option<&Path>,
+    cluster: Option<&Path>,
     scope: ConfigWriteScope,
     slot: Option<RouteSlot>,
     reviewer: Option<&str>,
     adjudicator: bool,
 ) -> Result<ConfigCommandReport, ConfigCommandError> {
     let target = mutation_target(slot, reviewer, adjudicator)?;
+
+    if scope == ConfigWriteScope::Cluster {
+        let cluster = cluster.ok_or(ConfigCommandError::ClusterRequired)?;
+        let store = FileClusterStore::for_workspace(cluster);
+        let mut config = store
+            .load()?
+            .ok_or_else(|| ConfigCommandError::MissingClusterConfig(store.cluster_config_path()))?;
+
+        match target {
+            MutationTarget::Slot(slot) => config.routing.unset_slot(slot),
+            MutationTarget::Reviewer(role) => {
+                config.routing.reviewer_roles.remove(&role);
+            }
+            MutationTarget::Adjudicator => config.routing.adjudication = None,
+        }
+
+        let path = store.save(&config)?;
+
+        return Ok(ConfigCommandReport {
+            exit_status: CommandExitStatus::Succeeded,
+            terminal_output: format!(
+                "config: removed value from cluster config at {}",
+                path.display()
+            ),
+        });
+    }
+
     let (mut config, location) = load_config_for_scope(workspace, scope)?;
 
     match target {
@@ -228,6 +308,7 @@ fn source_text(source: ValueSource) -> &'static str {
     match source {
         ValueSource::Cli => "cli",
         ValueSource::Workspace => "workspace",
+        ValueSource::Cluster => "cluster",
         ValueSource::Global => "global",
         ValueSource::BuiltIn => "built-in",
     }
@@ -279,6 +360,7 @@ fn load_config_for_scope(
             let config = store.load_local()?.unwrap_or_default();
             Ok((config, format!("workspace config at {}", store.local_config_path().display())))
         }
+        ConfigWriteScope::Cluster => Err(ConfigCommandError::ClusterRequired),
     }
 }
 
@@ -294,6 +376,7 @@ fn save_config_for_scope(
             let store = FileConfigStore::for_workspace(workspace);
             Ok(store.save_local(config)?)
         }
+        ConfigWriteScope::Cluster => Err(ConfigCommandError::ClusterRequired),
     }
 }
 
@@ -301,14 +384,18 @@ fn save_config_for_scope(
 pub enum ConfigCommandError {
     #[error("workspace is required for this command")]
     WorkspaceRequired,
+    #[error("cluster primary workspace is required for this command")]
+    ClusterRequired,
     #[error("select exactly one target: --slot, --reviewer, or --adjudicator")]
     InvalidTargetSelection,
     #[error("reviewer role cannot be empty")]
     InvalidReviewerRole,
-    #[error("runtime '{0}' is not currently available")]
-    RuntimeUnavailable(RuntimeKind),
     #[error("invalid route: {0}")]
     InvalidRoute(String),
     #[error("config store error: {0}")]
     Store(#[from] ConfigStoreError),
+    #[error("cluster store error: {0}")]
+    ClusterStore(#[from] ClusterStoreError),
+    #[error("cluster config is missing at {0}")]
+    MissingClusterConfig(PathBuf),
 }

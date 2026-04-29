@@ -23,15 +23,36 @@ In addition to all v0.10.0 capabilities, the v0.11.0 release ships the full
 - **Runtime Surfaces**: initial support covers Claude, Codex, Copilot, and
   Gemini CLI (CLI-only in this slice).
 
-### Immediate follow-up directions
+### Priority 1: Next Spec
 
-- add a provider-agnostic model gateway inside Synod (no Openclaw runtime dependency), with first-class provider auth flows and capability discovery
-- decouple assistant command packs from model backends so Claude/Codex/Copilot surfaces map to routing slots instead of hard-wired providers
+The next spec should be a product realignment slice, not another incremental
+framework layer. It should land the primary user experience as one coherent
+session-native orchestration step instead of spreading the shift across many
+small specs.
+
+Priority outcomes for that next spec:
+
+- make `start -> capture -> plan -> run -> status -> inspect` the primary UX and push `init` out of the user's everyday mental model
+- shift planning away from static init templates toward plans derived from goal, workspace state, collected documents, and Canon-produced artifacts
+- propose or infer flows automatically, with explicit override only when needed
+- move agent adapters toward real read/modify/test/fix model-guided loops instead of declared static change sets
+- keep Canon as governance and artifact control overlay, not the center of orchestration
+
+Companion architecture review:
+
+- [docs/session-native-orchestrator-review.md](docs/session-native-orchestrator-review.md)
+
+### Secondary follow-up directions
+
 - deepen Canon governance with richer escalation and broader governed stage coverage
 - broaden adaptive heuristics beyond the current deterministic local repair patterns
 - deepen delivery and review beyond the current bounded local execution manifests
-- multi-workspace and cross-repository orchestration
+- expand the new multi-workspace cluster slice into full cross-repository execution planning and mutation
 - advanced goal negotiation and constraint modeling
+
+To be challenged:
+- add a provider-agnostic model gateway inside Synod, with first-class provider auth flows and capability discovery
+- decouple assistant command packs from model backends so Claude/Codex/Copilot surfaces map to routing slots instead of hard-wired providers
 
 ## Architecture: User Through Execution
 
