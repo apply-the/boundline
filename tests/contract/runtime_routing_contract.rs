@@ -25,6 +25,7 @@ fn confirmed_goal_plan_takes_precedence_over_execution_profile_for_session_run()
 
     let run = execute_run(Some(&workspace)).unwrap();
     assert!(run.terminal_output.contains("decision "), "{}", run.terminal_output);
+    assert!(run.terminal_output.contains("routing: native (goal_plan)"), "{}", run.terminal_output);
     assert!(!run.terminal_output.contains("routing: compatibility"), "{}", run.terminal_output);
 }
 

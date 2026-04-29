@@ -1,6 +1,9 @@
-# Configuration in Synod 0.15.0
+# Configuration in Synod 0.16.0
 
-Synod `0.15.0` keeps a user-friendly setup and routing configuration surface for the session-native runtime plus explicit compatibility/bootstrap workflows.
+Synod `0.16.0` keeps a user-friendly setup and routing configuration surface for the session-native runtime plus explicit compatibility/bootstrap workflows.
+
+The `0.16.0` release keeps configuration behavior stable while making `status`,
+`next`, and `inspect` reuse the same routing and `execution_condition` story.
 
 ## What changed
 

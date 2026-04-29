@@ -285,12 +285,26 @@ fn cli_plan_persists_goal_plan_and_proposed_flow_before_confirmation() {
         "{}",
         planned.terminal_output
     );
+    assert!(
+        planned.terminal_output.contains(
+            "execution_condition: blocked - flow confirmation is still pending before native execution"
+        ),
+        "{}",
+        planned.terminal_output
+    );
 
     let status = execute_status(Some(&ws)).unwrap();
     assert!(
         status
             .terminal_output
             .contains("execution_path: native_goal_plan_pending_flow_confirmation"),
+        "{}",
+        status.terminal_output
+    );
+    assert!(
+        status.terminal_output.contains(
+            "execution_condition: blocked - flow confirmation is still pending before native execution"
+        ),
         "{}",
         status.terminal_output
     );
@@ -339,10 +353,24 @@ fn cli_plan_supports_explicit_no_flow_for_native_session() {
         "{}",
         planned.terminal_output
     );
+    assert!(
+        planned.terminal_output.contains(
+            "execution_condition: waiting - planning is complete and execution can begin"
+        ),
+        "{}",
+        planned.terminal_output
+    );
 
     let status = execute_status(Some(&ws)).unwrap();
     assert!(
         status.terminal_output.contains("execution_path: native_goal_plan"),
+        "{}",
+        status.terminal_output
+    );
+    assert!(
+        status.terminal_output.contains(
+            "execution_condition: waiting - planning is complete and execution can begin"
+        ),
         "{}",
         status.terminal_output
     );

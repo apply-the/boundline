@@ -24,7 +24,7 @@ or
 Wait for pasted output before continuing. If workspace-based inspect reports a session error, route to `/synod-start`. If trace reading fails, ask for a corrected trace reference or workspace and provide the replacement inspect command.
 
 ## Output Interpretation
-Summarize `inspection_target`, `trace`, `routing_summary`, `goal_plan_summary`, `decision_timeline`, `failure_evidence`, `terminal_status`, `terminal_reason`, `authored_input_summary`, `authored_input_sources`, `authored_input_deduplicated_sources` when present, `governance_next_action` when present, `corrected_command` on failures, and the CLI-reported `next_command`.
+Summarize `inspection_target`, `trace`, `routing_summary`, `execution_condition`, `goal_plan_summary`, `decision_timeline`, `failure_evidence`, `terminal_status`, `terminal_reason`, `authored_input_summary`, `authored_input_sources`, `authored_input_deduplicated_sources` when present, `governance_next_action` when present, `corrected_command` on failures, and the CLI-reported `next_command`.
 
 ## Next-Step Routing
 If workspace-based inspect reports a session error, route to `/synod-start`. Otherwise prefer the CLI-reported `next_command`.

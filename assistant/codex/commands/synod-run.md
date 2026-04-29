@@ -20,7 +20,7 @@ If shell execution is unavailable, ask only for missing workspace context and th
 Wait for the user to paste the output before continuing.
 
 ## Output Interpretation
-Summarize `routing`, `execution_path`, `flow_state`, `terminal_status`, `terminal_reason`, `trace`, `next_command`, any latest decision summary when surfaced, and any governance wait-or-block guidance. Preserve the returned trace reference for later `/synod-inspect` use.
+Summarize `routing`, `execution_condition`, `execution_path`, `flow_state`, `terminal_status`, `terminal_reason`, `trace`, `next_command`, any latest decision summary when surfaced, and any governance wait-or-block guidance. Preserve the returned trace reference for later `/synod-inspect` use.
 
 ## Next-Step Routing
 Prefer the CLI-reported `next_command`; when inspection is needed, route to `/synod-inspect`.

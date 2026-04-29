@@ -49,10 +49,10 @@ resume or inspect the work afterward.
 ## Canon Compatibility
 
 When Synod governance is configured to use Canon, the current adapter is
-validated against Canon `0.20.0`.
+validated against Canon `0.24.0`.
 
 That is the Canon CLI version explicitly documented as supported for Synod
-`0.15.0`. Earlier or later Canon versions may work, but they are not part of the
+`0.16.0`. Earlier or later Canon versions may work, but they are not part of the
 documented compatibility surface yet.
 
 For contributor setup and validation expectations, see [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -165,8 +165,8 @@ What those commands do, in short:
 - `flow` optionally selects `bug-fix`, `change`, or `delivery` ahead of planning.
 - `plan` derives the next bounded `GoalPlan` from captured input plus workspace state, and persists confirmed, proposed, or absent flow state.
 - `run` executes through the native decision loop whenever a `GoalPlan` exists; declarative `.synod/execution.json` execution remains the explicit compatibility path.
-- `status` reports the current session snapshot.
-- `inspect` summarizes the latest trace and evidence.
+- `status` reports the current session snapshot with explicit `routing`, `execution_condition`, and next-step guidance.
+- `inspect` summarizes the latest trace and evidence with the same route and execution-condition story plus trace-specific detail.
 
 ### 3. Use the direct compatibility workflow when you do not need a session
 
@@ -188,6 +188,7 @@ Synod writes:
 
 Depending on the manifest, that output can also include:
 
+- route explanation, `execution_condition`, and CLI-reported next-command guidance
 - changed files and validation status
 - adaptive workspace-slice selection and attempt lineage
 - review triggers, findings, votes, and outcomes
@@ -327,15 +328,16 @@ and
 [`specs/007-multi-agent-review/quickstart.md`](specs/007-multi-agent-review/quickstart.md).
 
 For the adaptive execution manifest shape and bounded compatibility behavior in
-`0.15.0`, see [`docs/adaptive-execution.md`](docs/adaptive-execution.md).
+`0.16.0`, see [`docs/adaptive-execution.md`](docs/adaptive-execution.md).
 
 For the concrete review configuration and voting rules still available in
-`0.15.0`, see [`docs/review-voting.md`](docs/review-voting.md).
+`0.16.0`, see [`docs/review-voting.md`](docs/review-voting.md).
 
-In `0.15.0`, governed stages can also project `latest_governance_runtime`,
+In `0.16.0`, governed stages can also project `latest_governance_runtime`,
 `latest_governance_mode`, `latest_governance_run_ref`, packet provenance,
 autopilot candidates, approval waits, and packet rejection outcomes through
-`run`, `status`, `next`, and `inspect`.
+`run`, `status`, `next`, and `inspect`, all without breaking the shared
+`routing` plus `execution_condition` summary model.
 
 ## Assistant Command Packs
 
