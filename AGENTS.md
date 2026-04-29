@@ -1,6 +1,6 @@
 # synod Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-04-28
+Auto-generated from all feature plans. Last updated: 2026-04-29
 
 ## Active Technologies
 - Rust 1.95.0, edition 2024 + Existing runtime dependencies (`serde`, `serde_json`, `thiserror`, `tracing`, `uuid`) plus `clap` 4.x for a stable subcommand-based CLI surface (002-developer-ux-orchestrator)
@@ -23,6 +23,10 @@ Auto-generated from all feature plans. Last updated: 2026-04-28
 - Workspace-local `.synod/execution.json`, `.synod/session.json`, `.synod/traces/`, new workspace-local `.synod/config.toml`, and new user-scoped global config at `$XDG_CONFIG_HOME/synod/config.toml` with fallback to `$HOME/.config/synod/config.toml` on macOS/Linux developer machines (011-init-model-routing)
 - Rust 1.95.0, edition 2024 + Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`) plus Rust standard library path and filesystem APIs; no new runtime dependencies for the first clustered slice (012-multi-workspace)
 - Workspace-local `.synod/session.json` and `.synod/traces/` remain authoritative per repository, existing workspace `.synod/config.toml` and user-global config remain in place, and a new primary-workspace `.synod/cluster.toml` stores cluster membership and cluster-scoped defaults (012-multi-workspace)
+- Rust 1.95.0, edition 2024 + `clap` 4.x, `serde` 1.x, `serde_json` 1.x, `thiserror` 2.x, `tracing` 0.1, `uuid` 1.x, `toml` 0.8 (013-session-native-orchestrator)
+- workspace-local JSON files (`.synod/session.json`, `.synod/traces/`, `.synod/execution.json`, `.synod/config.toml`) (013-session-native-orchestrator)
+- Rust 1.95.0, edition 2024 + `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, Rust standard library filesystem and process APIs (014-native-loop-integration)
+- Workspace-local `.synod/session.json`, `.synod/traces/`, optional `.synod/execution.json`, optional `.canon/` artifacts (014-native-loop-integration)
 
 - Rust 1.95.0, edition 2024 + Rust standard library plus `serde`, `serde_json`, `thiserror`, `tracing`, and `uuid` for structured state, trace serialization, error handling, instrumentation, and stable identifiers (001-delivery-orchestrator-core)
 
@@ -50,9 +54,9 @@ Crate versioning follows Semantic Versioning.
 Before 1.0.0, breaking changes MAY occur in minor versions.
 
 ## Recent Changes
+- 014-native-loop-integration: Added Rust 1.95.0, edition 2024 + `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, Rust standard library filesystem and process APIs
+- 013-session-native-orchestrator: Added Rust 1.95.0, edition 2024 + `clap` 4.x, `serde` 1.x, `serde_json` 1.x, `thiserror` 2.x, `tracing` 0.1, `uuid` 1.x, `toml` 0.8
 - 012-multi-workspace: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`) plus Rust standard library path and filesystem APIs; no new runtime dependencies for the first clustered slice
-- 011-init-model-routing: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`) plus `toml` for human-editable config serialization; no additional runtime abstraction crates for the first slice
-- 010-human-brief-ingestion: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`) plus Rust standard library filesystem, path, and collections APIs; no new runtime dependencies for the first human-input slice
 
 
 <!-- MANUAL ADDITIONS START -->

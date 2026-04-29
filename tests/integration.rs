@@ -72,3 +72,9 @@ mod cluster_status_flow;
 
 #[path = "integration/cluster_config_flow.rs"]
 mod cluster_config_flow;
+
+#[path = "integration/session_native_flow.rs"]
+mod session_native_flow;
+
+#[path = "integration/fixture_compat_flow.rs"]
+mod fixture_compat_flow;

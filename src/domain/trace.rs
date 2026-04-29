@@ -39,6 +39,13 @@ pub enum TraceEventType {
     StageReplanned,
     StageFailed,
     TerminalRecorded,
+    DecisionCreated,
+    DecisionDispatched,
+    DecisionVerified,
+    DecisionFailed,
+    DecisionRecovered,
+    GoalPlanCreated,
+    FlowInferred,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

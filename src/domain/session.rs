@@ -6,7 +6,10 @@ use serde_json::Value;
 use thiserror::Error;
 
 use crate::domain::brief::AuthoredBriefBundle;
+use crate::domain::decision::Decision;
 use crate::domain::flow::SessionFlowState;
+use crate::domain::flow_policy::FlowPolicy;
+use crate::domain::goal_plan::GoalPlan;
 use crate::domain::governance::{
     AutopilotDecisionRecord, GovernedStagePacket, GovernedStageRecord, PacketReuseBinding,
 };
@@ -60,6 +63,12 @@ pub struct ActiveSessionRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub active_flow: Option<SessionFlowState>,
     pub active_task: Option<Task>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal_plan: Option<GoalPlan>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub decisions: Vec<Decision>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_flow_policy: Option<FlowPolicy>,
     pub latest_status: SessionStatus,
     pub latest_terminal_reason: Option<TerminalReason>,
     pub latest_trace_ref: Option<String>,
@@ -99,7 +108,10 @@ impl ActiveSessionRecord {
             return Err(SessionValidationError::MissingGoal(self.latest_status));
         }
 
-        if status_requires_task(self.latest_status) && self.active_task.is_none() {
+        if status_requires_task(self.latest_status)
+            && self.active_task.is_none()
+            && !status_allows_goal_plan_without_task(self.latest_status, self.goal_plan.as_ref())
+        {
             return Err(SessionValidationError::MissingActiveTask(self.latest_status));
         }
 
@@ -217,6 +229,8 @@ pub struct SessionStatusView {
     pub current_step_id: Option<String>,
     pub current_step_index: Option<usize>,
     pub latest_status: SessionStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_path: Option<String>,
     pub latest_trace_ref: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_changed_files: Option<Vec<String>>,
@@ -634,6 +648,28 @@ impl SessionStatusView {
     }
 }
 
+pub fn execution_path_text(record: &ActiveSessionRecord) -> Option<String> {
+    if let Some(goal_plan) = record.goal_plan.as_ref() {
+        if let Some(flow) = goal_plan.flow.as_ref()
+            && !flow.confirmed
+        {
+            return Some("native_goal_plan_pending_flow_confirmation".to_string());
+        }
+
+        return Some("native_goal_plan".to_string());
+    }
+
+    if record.active_task.is_some() {
+        return Some("fixture_compatibility".to_string());
+    }
+
+    if record.goal.is_some() {
+        return Some("native_session_pending_plan".to_string());
+    }
+
+    None
+}
+
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum SessionValidationError {
     #[error("session_id must not be empty")]
@@ -781,6 +817,21 @@ fn status_requires_task(status: SessionStatus) -> bool {
             | SessionStatus::Exhausted
             | SessionStatus::Aborted
     )
+}
+
+fn status_allows_goal_plan_without_task(
+    status: SessionStatus,
+    goal_plan: Option<&GoalPlan>,
+) -> bool {
+    matches!(
+        status,
+        SessionStatus::Planned
+            | SessionStatus::Running
+            | SessionStatus::Succeeded
+            | SessionStatus::Failed
+            | SessionStatus::Exhausted
+            | SessionStatus::Aborted
+    ) && goal_plan.is_some()
 }
 
 fn expected_task_status(status: SessionStatus) -> Option<TaskStatus> {
@@ -997,8 +1048,9 @@ mod tests {
 
     use super::{
         ActiveSessionRecord, SessionStatus, SessionStatusView, SessionValidationError,
-        task_state_attempt_lineage_summary, task_state_review_headline, task_state_string,
-        task_state_strings, task_state_workspace_slice_summary, trace_within_workspace,
+        execution_path_text, task_state_attempt_lineage_summary, task_state_review_headline,
+        task_state_string, task_state_strings, task_state_workspace_slice_summary,
+        trace_within_workspace,
     };
     use crate::domain::limits::RunLimits;
     use crate::domain::plan::Plan;
@@ -1028,6 +1080,9 @@ mod tests {
                 crate::domain::flow::built_in_flow("bug-fix").unwrap().initial_state(),
             ),
             active_task: Some(build_task(workspace_ref)),
+            goal_plan: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
             latest_status: SessionStatus::Planned,
             latest_terminal_reason: None,
             latest_trace_ref: Some(format!("{workspace_ref}/.synod/traces/task-1.json")),
@@ -1065,6 +1120,7 @@ mod tests {
                 .as_ref()
                 .map(|task| task.plan.current_step_index),
             latest_status: record.latest_status,
+            execution_path: execution_path_text(record),
             latest_trace_ref: record.latest_trace_ref.clone(),
             latest_changed_files: None,
             latest_workspace_slice: None,

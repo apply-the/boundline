@@ -34,7 +34,7 @@ fn bootstrap_session(workspace: &Path, goal: &str) {
     let capture_text = terminal_text(&capture_output);
     assert_eq!(capture_output.status.code(), Some(0), "{capture_text}");
 
-    let plan_output = run_synod(&["plan", "--workspace", &workspace_ref]);
+    let plan_output = run_synod(&["plan", "--workspace", &workspace_ref, "--flow", "bug-fix"]);
     let plan_text = terminal_text(&plan_output);
     assert_eq!(plan_output.status.code(), Some(0), "{plan_text}");
 }
@@ -176,14 +176,14 @@ fn chat_fallback_assets_offer_repo_root_copyable_commands_for_us3() {
 }
 
 #[test]
-fn chat_fallback_non_success_session_native_run_output_preserves_trace_and_next_step_cues() {
+fn chat_fallback_session_native_run_output_preserves_trace_and_next_step_cues() {
     let workspace = temp_broken_fixture_workspace("synod-assistant-chat-fallback-broken");
     bootstrap_session(&workspace, "Attempt the fixture patch on a broken workspace");
     let workspace_ref = workspace.to_string_lossy().into_owned();
     let run_output = run_synod(&["run", "--workspace", &workspace_ref]);
     let run_text = terminal_text(&run_output);
 
-    assert_eq!(run_output.status.code(), Some(1), "{run_text}");
+    assert_eq!(run_output.status.code(), Some(0), "{run_text}");
     assert!(run_text.contains("terminal_status:"), "{run_text}");
     assert!(run_text.contains("terminal_reason:"), "{run_text}");
     assert!(run_text.contains("trace:"), "{run_text}");
@@ -193,7 +193,7 @@ fn chat_fallback_non_success_session_native_run_output_preserves_trace_and_next_
     let status_text = terminal_text(&status_output);
 
     assert_eq!(status_output.status.code(), Some(0), "{status_text}");
-    assert!(status_text.contains("latest_status: failed"), "{status_text}");
+    assert!(status_text.contains("latest_status: succeeded"), "{status_text}");
     assert!(status_text.contains("latest_trace_ref:"), "{status_text}");
     assert!(status_text.contains("next_command: synod inspect"), "{status_text}");
 

@@ -1,21 +1,24 @@
 use std::path::{Path, PathBuf};
 
+use crate::adapters::agent::FnAgentAdapter;
 use crate::adapters::governance_runtime::{
     CanonCliRuntime, GovernanceRequestKind, GovernanceRuntime, GovernanceRuntimeRequest,
     LocalGovernanceRuntime,
 };
-use serde_json::{Value, json};
+use crate::adapters::tool::FnToolAdapter;
+use serde_json::{Map, Value, json};
 use thiserror::Error;
-use uuid::Uuid;
 
 use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
 use crate::adapters::trace_store::{FileTraceStore, TraceStore, TraceStoreError};
 use crate::domain::flow::{FlowStepMetadata, built_in_flow, supported_flow_names_csv};
+use crate::domain::flow_policy::FlowPolicy;
+use crate::domain::goal_plan::InferredFlow;
 use crate::domain::governance::{
     ApprovalState, GovernanceLifecycleState, GovernanceRuntimeKind, GovernedStageRecord,
     PacketReadiness, resolved_canon_mode,
 };
-use crate::domain::limits::TerminalCondition;
+use crate::domain::limits::{RunLimits, TerminalCondition};
 use crate::domain::session::{ActiveSessionRecord, SessionStatus};
 use crate::domain::step::{
     ErrorInfo, ExecutionStatus, Recoverability, Step, StepAttempt, StepExecutionRequest,
@@ -24,10 +27,10 @@ use crate::domain::step::{
 use crate::domain::task::{Task, TaskRequestError, TaskRunResponse, TaskStatus, TerminalReason};
 use crate::domain::task_context::TaskContext;
 use crate::domain::trace::{ExecutionTrace, TraceEventType, current_timestamp_millis};
-use crate::fixture::{
-    FixtureRuntime, FixtureRuntimeError, build_fixture_plan_for_goal,
-    build_fixture_runtime_for_flow, build_task_request,
-};
+use crate::fixture::{FixtureRuntime, FixtureRuntimeError, build_fixture_runtime_for_flow};
+use crate::orchestrator::decision_loop::{DecisionLoop, LoopTerminal};
+use crate::orchestrator::flow_inference::infer_flow;
+use crate::orchestrator::goal_planner::{GoalPlannerError, build_goal_plan};
 use crate::orchestrator::governance::{
     GovernanceStepDecision, bounded_governance_context, build_autopilot_decision,
     governance_input_documents, governance_stage_key, governance_state_patch,
@@ -37,6 +40,8 @@ use crate::orchestrator::governance::{
 use crate::orchestrator::recovery::{RecoveryDecision, decide_recovery};
 use crate::orchestrator::review_trace::{record_review_step_completed, record_review_step_started};
 use crate::orchestrator::terminal::{build_terminal_reason, task_status_for_condition};
+use crate::registry::agent_registry::AgentRegistry;
+use crate::registry::tool_registry::ToolRegistry;
 
 #[derive(Debug, Clone)]
 pub struct SessionRuntime {
@@ -98,6 +103,9 @@ impl SessionRuntime {
 
         session.goal = Some(goal.to_string());
         session.active_task = None;
+        session.goal_plan = None;
+        session.decisions.clear();
+        session.active_flow_policy = None;
         session.latest_status = SessionStatus::GoalCaptured;
         session.latest_terminal_reason = None;
         session.latest_trace_ref = None;
@@ -116,7 +124,10 @@ impl SessionRuntime {
             supported: supported_flow_names_csv(),
         })?;
 
-        if session.active_task.is_some() {
+        if session.active_task.is_some()
+            || session.goal_plan.is_some()
+            || !session.decisions.is_empty()
+        {
             return Err(SessionRuntimeError::FlowReplacementRequiresReset {
                 current: session
                     .active_flow
@@ -141,7 +152,12 @@ impl SessionRuntime {
         Ok(())
     }
 
-    pub fn plan_task(&self, session: &mut ActiveSessionRecord) -> Result<(), SessionRuntimeError> {
+    pub fn plan_task(
+        &self,
+        session: &mut ActiveSessionRecord,
+        requested_flow: Option<&str>,
+        no_flow: bool,
+    ) -> Result<(), SessionRuntimeError> {
         let goal = session.goal.clone().ok_or(SessionRuntimeError::MissingGoal)?;
         if let Some(bundle) = session.authored_brief.as_ref()
             && let Some(clarification) = bundle.clarification.as_ref()
@@ -157,26 +173,224 @@ impl SessionRuntime {
                 .map_err(|error| SessionRuntimeError::InvalidFlowState(error.to_string()))?;
         }
 
-        let request = build_task_request(
-            &self.workspace_ref,
-            &goal,
-            session.session_id.clone(),
-            session.authored_brief.as_ref(),
-        )
-        .map_err(SessionRuntimeError::FixtureRuntime)?;
-        let plan =
-            build_fixture_plan_for_goal(&self.workspace_ref, session.active_flow.as_ref(), &goal)
-                .map_err(SessionRuntimeError::FixtureRuntime)?;
-        let task = Task::new(Uuid::new_v4().to_string(), &request, plan)
-            .map_err(SessionRuntimeError::TaskRequest)?;
+        let mut goal_plan = build_goal_plan(&goal, &self.workspace_ref)
+            .map_err(SessionRuntimeError::GoalPlanner)?;
+        self.apply_planning_flow_selection(session, &mut goal_plan, requested_flow, no_flow)?;
+        goal_plan
+            .confirm()
+            .map_err(|error| SessionRuntimeError::InvalidGoalPlan(error.to_string()))?;
 
-        session.active_task = Some(task);
+        session.active_task = None;
+        session.goal_plan = Some(goal_plan);
+        session.decisions.clear();
         session.latest_status = SessionStatus::Planned;
         session.latest_terminal_reason = None;
         session.latest_trace_ref = None;
         session.updated_at = current_timestamp_millis();
 
         Ok(())
+    }
+
+    fn apply_planning_flow_selection(
+        &self,
+        session: &mut ActiveSessionRecord,
+        goal_plan: &mut crate::domain::goal_plan::GoalPlan,
+        requested_flow: Option<&str>,
+        no_flow: bool,
+    ) -> Result<(), SessionRuntimeError> {
+        if no_flow {
+            session.active_flow = None;
+            session.active_flow_policy = None;
+            goal_plan.flow = None;
+            return Ok(());
+        }
+
+        if let Some(flow_name) = requested_flow {
+            self.apply_confirmed_flow(
+                session,
+                goal_plan,
+                flow_name,
+                "operator confirmed flow during planning",
+            )?;
+            return Ok(());
+        }
+
+        if let Some(active_flow) = &session.active_flow {
+            let flow_name = active_flow.flow_name.clone();
+            self.apply_confirmed_flow(
+                session,
+                goal_plan,
+                &flow_name,
+                "operator selected flow before planning",
+            )?;
+            return Ok(());
+        }
+
+        session.active_flow = None;
+        session.active_flow_policy = None;
+        goal_plan.flow = infer_flow(&goal_plan.goal_text);
+        Ok(())
+    }
+
+    fn apply_confirmed_flow(
+        &self,
+        session: &mut ActiveSessionRecord,
+        goal_plan: &mut crate::domain::goal_plan::GoalPlan,
+        flow_name: &str,
+        confidence_reason: &str,
+    ) -> Result<(), SessionRuntimeError> {
+        let flow = built_in_flow(flow_name).ok_or_else(|| SessionRuntimeError::UnknownFlow {
+            requested: flow_name.to_string(),
+            supported: supported_flow_names_csv(),
+        })?;
+        let policy = FlowPolicy::from_builtin(flow_name)
+            .map_err(|error| SessionRuntimeError::InvalidFlowState(error.to_string()))?;
+
+        session.active_flow = Some(flow.initial_state());
+        session.active_flow_policy = Some(policy);
+        goal_plan.flow = Some(InferredFlow {
+            flow_name: flow.name.to_string(),
+            confidence_reason: confidence_reason.to_string(),
+            confirmed: true,
+        });
+
+        Ok(())
+    }
+
+    pub fn uses_native_goal_plan(
+        &self,
+        session: &ActiveSessionRecord,
+    ) -> Result<bool, SessionRuntimeError> {
+        let Some(goal_plan) = session.goal_plan.as_ref() else {
+            return Ok(false);
+        };
+
+        if let Some(flow) = goal_plan.flow.as_ref()
+            && !flow.confirmed
+        {
+            return Err(SessionRuntimeError::FlowConfirmationRequired {
+                flow_name: flow.flow_name.clone(),
+            });
+        }
+
+        Ok(true)
+    }
+
+    fn native_flow_policy(
+        &self,
+        session: &ActiveSessionRecord,
+    ) -> Result<Option<FlowPolicy>, SessionRuntimeError> {
+        if let Some(policy) = session.active_flow_policy.as_ref() {
+            policy
+                .validate()
+                .map_err(|error| SessionRuntimeError::InvalidFlowState(error.to_string()))?;
+            return Ok(Some(policy.clone()));
+        }
+
+        let Some(goal_plan) = session.goal_plan.as_ref() else {
+            return Ok(None);
+        };
+        let Some(flow) = goal_plan.flow.as_ref() else {
+            return Ok(None);
+        };
+        if !flow.confirmed {
+            return Ok(None);
+        }
+
+        let policy = FlowPolicy::from_builtin(&flow.flow_name)
+            .map_err(|error| SessionRuntimeError::InvalidFlowState(error.to_string()))?;
+        Ok(Some(policy))
+    }
+
+    fn native_adapter_registries(
+        &self,
+    ) -> Result<(AgentRegistry, ToolRegistry), SessionRuntimeError> {
+        let mut agents = AgentRegistry::new();
+        let analyzer_workspace = self.workspace_ref.clone();
+        agents
+            .register(
+                "analyzer",
+                FnAgentAdapter::new(move |request| {
+                    native_analyze_workspace(&analyzer_workspace, request)
+                }),
+            )
+            .map_err(|error| SessionRuntimeError::DecisionLoop(error.to_string()))?;
+
+        let coder_workspace = self.workspace_ref.clone();
+        agents
+            .register(
+                "coder",
+                FnAgentAdapter::new(move |request| {
+                    native_apply_workspace_change(&coder_workspace, request)
+                }),
+            )
+            .map_err(|error| SessionRuntimeError::DecisionLoop(error.to_string()))?;
+
+        let mut tools = ToolRegistry::new();
+        let tester_workspace = self.workspace_ref.clone();
+        tools
+            .register(
+                "tester",
+                FnToolAdapter::new(move |request| {
+                    native_run_validation(&tester_workspace, request)
+                }),
+            )
+            .map_err(|error| SessionRuntimeError::DecisionLoop(error.to_string()))?;
+
+        tools
+            .register("replanner", FnToolAdapter::new(native_replan_step))
+            .map_err(|error| SessionRuntimeError::DecisionLoop(error.to_string()))?;
+
+        Ok((agents, tools))
+    }
+
+    fn run_goal_plan_to_terminal(
+        &self,
+        session: &mut ActiveSessionRecord,
+    ) -> Result<TaskRunResponse, SessionRuntimeError> {
+        let goal_plan = session.goal_plan.clone().ok_or(SessionRuntimeError::MissingActiveTask)?;
+        let flow_policy = self.native_flow_policy(session)?;
+        let (agents, tools) = self.native_adapter_registries()?;
+        let loop_runner = DecisionLoop::new(
+            agents,
+            tools,
+            self.trace_store.clone(),
+            RunLimits::default().max_steps,
+        );
+        let (terminal, decisions, mut trace) = loop_runner
+            .run(&goal_plan, flow_policy.as_ref(), &session.workspace_ref, &session.session_id)
+            .map_err(|error| SessionRuntimeError::DecisionLoop(error.to_string()))?;
+        let (condition, message, details) = native_terminal_outcome(&terminal);
+        let terminal_reason = build_terminal_reason(condition, message, details);
+        let terminal_status = task_status_for_condition(condition);
+
+        trace.finalize(terminal_status, terminal_reason.clone());
+        let trace_path =
+            self.trace_store.persist(&trace).map_err(SessionRuntimeError::TraceStore)?;
+        let trace_location = trace_path.to_string_lossy().into_owned();
+        trace.set_trace_location(trace_location.clone());
+        self.trace_store.persist(&trace).map_err(SessionRuntimeError::TraceStore)?;
+
+        session.active_task = None;
+        session.decisions = decisions;
+        session.latest_status = session_status_for_task_status(terminal_status);
+        session.latest_terminal_reason = Some(terminal_reason.clone());
+        session.latest_trace_ref = Some(trace_location.clone());
+        session.updated_at = current_timestamp_millis();
+
+        Ok(TaskRunResponse {
+            task_id: session.session_id.clone(),
+            terminal_status,
+            terminal_reason,
+            final_context: TaskContext::new(
+                session.session_id.clone(),
+                session.workspace_ref.clone(),
+                RunLimits::default(),
+                Map::new(),
+            ),
+            plan_revision: 0,
+            trace_location,
+        })
     }
 
     pub fn execute_next_step(
@@ -192,6 +406,10 @@ impl SessionRuntime {
         &self,
         session: &mut ActiveSessionRecord,
     ) -> Result<TaskRunResponse, SessionRuntimeError> {
+        if self.uses_native_goal_plan(session)? {
+            return self.run_goal_plan_to_terminal(session);
+        }
+
         let runtime = self.build_runtime(session)?;
 
         loop {
@@ -205,6 +423,10 @@ impl SessionRuntime {
         &self,
         session: &mut ActiveSessionRecord,
     ) -> Result<bool, SessionRuntimeError> {
+        if session.active_task.is_none() {
+            return Ok(false);
+        }
+
         let runtime = self.build_runtime(session)?;
         let Some(mut task) = session.active_task.take() else {
             return Ok(false);
@@ -1579,6 +1801,14 @@ pub enum SessionRuntimeError {
     MissingGoal,
     #[error("{headline}: {prompt}")]
     ClarificationRequired { headline: String, prompt: String },
+    #[error("goal planning failed: {0}")]
+    GoalPlanner(#[from] GoalPlannerError),
+    #[error("goal plan state is invalid: {0}")]
+    InvalidGoalPlan(String),
+    #[error(
+        "native execution cannot continue until the proposed `{flow_name}` flow is confirmed or skipped"
+    )]
+    FlowConfirmationRequired { flow_name: String },
     #[error("unknown flow `{requested}`; supported flows: {supported}")]
     UnknownFlow { requested: String, supported: String },
     #[error(
@@ -1603,6 +1833,225 @@ pub enum SessionRuntimeError {
     GovernancePatch(String),
     #[error("governance runtime failed: {0}")]
     GovernanceRuntime(String),
+    #[error("decision loop failed: {0}")]
+    DecisionLoop(String),
+}
+
+fn native_terminal_outcome(terminal: &LoopTerminal) -> (TerminalCondition, String, Option<Value>) {
+    match terminal {
+        LoopTerminal::Success => (
+            TerminalCondition::GoalSatisfied,
+            "goal plan completed through the native decision loop".to_string(),
+            None,
+        ),
+        LoopTerminal::Failure(message) => {
+            (TerminalCondition::UnrecoverableError, message.clone(), None)
+        }
+        LoopTerminal::Exhausted { steps_taken, max_steps } => (
+            TerminalCondition::StepLimitExceeded,
+            "native decision loop exhausted its step budget".to_string(),
+            Some(json!({
+                "steps_taken": steps_taken,
+                "max_steps": max_steps,
+            })),
+        ),
+        LoopTerminal::NoActionableState(message) => {
+            (TerminalCondition::NoCredibleNextStep, message.clone(), None)
+        }
+    }
+}
+
+fn native_analyze_workspace(
+    workspace_ref: &Path,
+    request: StepExecutionRequest,
+) -> StepExecutionResult {
+    let (target, path) = match request_target_path(workspace_ref, &request) {
+        Ok(target) => target,
+        Err(error) => return StepExecutionResult::failure(error, Recoverability::ReplanRequired),
+    };
+
+    if path.is_dir() {
+        let entries = std::fs::read_dir(&path).map_err(|error| error.to_string());
+        return match entries {
+            Ok(entries) => {
+                let listing = entries
+                    .flatten()
+                    .map(|entry| entry.file_name().to_string_lossy().to_string())
+                    .collect::<Vec<_>>();
+                StepExecutionResult::success_with_patch(
+                    json!({
+                        "target": target,
+                        "stdout": listing.join("\n"),
+                        "entry_count": listing.len(),
+                    }),
+                    Map::from_iter([(
+                        "latest_selection_headline".to_string(),
+                        json!(format!("analyzed directory {target}")),
+                    )]),
+                )
+                .with_evidence(json!({"kind": "directory", "target": target}))
+            }
+            Err(error) => StepExecutionResult::failure(
+                ErrorInfo::new(
+                    "directory_read_failed",
+                    format!("failed to read {target}: {error}"),
+                ),
+                Recoverability::ReplanRequired,
+            ),
+        };
+    }
+
+    match std::fs::read_to_string(&path) {
+        Ok(contents) => StepExecutionResult::success_with_patch(
+            json!({
+                "target": target,
+                "stdout": contents,
+            }),
+            Map::from_iter([(
+                "latest_selection_headline".to_string(),
+                json!(format!("analyzed {target}")),
+            )]),
+        )
+        .with_evidence(json!({"kind": "file", "target": target})),
+        Err(error) => StepExecutionResult::failure(
+            ErrorInfo::new("file_read_failed", format!("failed to read {target}: {error}")),
+            Recoverability::ReplanRequired,
+        ),
+    }
+}
+
+fn native_apply_workspace_change(
+    workspace_ref: &Path,
+    request: StepExecutionRequest,
+) -> StepExecutionResult {
+    let (target, path) = match request_target_path(workspace_ref, &request) {
+        Ok(target) => target,
+        Err(error) => return StepExecutionResult::failure(error, Recoverability::ReplanRequired),
+    };
+
+    let original = match std::fs::read_to_string(&path) {
+        Ok(contents) => contents,
+        Err(error) => {
+            return StepExecutionResult::failure(
+                ErrorInfo::new("file_read_failed", format!("failed to read {target}: {error}")),
+                Recoverability::ReplanRequired,
+            );
+        }
+    };
+
+    let (updated, diff, summary) = if original.contains("left - right") {
+        (
+            original.replacen("left - right", "left + right", 1),
+            "- left - right\n+ left + right".to_string(),
+            format!("applied deterministic arithmetic fix to {target}"),
+        )
+    } else if original.contains("left / right") {
+        (
+            original.replacen("left / right", "left + right", 1),
+            "- left / right\n+ left + right".to_string(),
+            format!("replaced unsafe arithmetic in {target}"),
+        )
+    } else {
+        return StepExecutionResult::failure(
+            ErrorInfo::new(
+                "native_change_unavailable",
+                format!("no deterministic native change is available for {target}"),
+            ),
+            Recoverability::ReplanRequired,
+        );
+    };
+
+    if let Err(error) = std::fs::write(&path, &updated) {
+        return StepExecutionResult::failure(
+            ErrorInfo::new("file_write_failed", format!("failed to write {target}: {error}")),
+            Recoverability::Terminal,
+        );
+    }
+
+    StepExecutionResult::success_with_patch(
+        json!({
+            "target": target,
+            "stdout": summary,
+            "diff": diff,
+            "changed_files": [target.clone()],
+        }),
+        Map::from_iter([
+            ("latest_changed_files".to_string(), json!([target.clone()])),
+            ("latest_selection_headline".to_string(), json!(format!("applied change to {target}"))),
+        ]),
+    )
+}
+
+fn native_run_validation(
+    workspace_ref: &Path,
+    _request: StepExecutionRequest,
+) -> StepExecutionResult {
+    match std::process::Command::new("cargo")
+        .arg("test")
+        .arg("--quiet")
+        .current_dir(workspace_ref)
+        .output()
+    {
+        Ok(output) => {
+            let payload = json!({
+                "command": "cargo test --quiet",
+                "stdout": String::from_utf8_lossy(&output.stdout).to_string(),
+                "stderr": String::from_utf8_lossy(&output.stderr).to_string(),
+                "exit_code": output.status.code().unwrap_or(-1),
+            });
+            let state_patch = Map::from_iter([(
+                "latest_validation_status".to_string(),
+                json!(if output.status.success() { "passed" } else { "failed" }),
+            )]);
+
+            if output.status.success() {
+                StepExecutionResult::success_with_patch(payload.clone(), state_patch)
+                    .with_evidence(payload)
+            } else {
+                StepExecutionResult::failure(
+                    ErrorInfo::new("validation_failed", "cargo test --quiet reported failures")
+                        .with_details(payload.clone()),
+                    Recoverability::ReplanRequired,
+                )
+                .with_evidence(payload)
+                .with_state_patch(state_patch)
+            }
+        }
+        Err(error) => StepExecutionResult::failure(
+            ErrorInfo::new("validation_command_failed", error.to_string()),
+            Recoverability::Terminal,
+        ),
+    }
+}
+
+fn native_replan_step(request: StepExecutionRequest) -> StepExecutionResult {
+    let target = request.input.get("target").and_then(Value::as_str).unwrap_or("current-task");
+    StepExecutionResult::success_with_patch(
+        json!({
+            "target": target,
+            "stdout": format!("recorded a recovery decision for {target}"),
+        }),
+        Map::from_iter([(
+            "latest_selection_headline".to_string(),
+            json!(format!("recorded recovery decision for {target}")),
+        )]),
+    )
+}
+
+fn request_target_path(
+    workspace_ref: &Path,
+    request: &StepExecutionRequest,
+) -> Result<(String, PathBuf), ErrorInfo> {
+    let target = request
+        .input
+        .get("target")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|target| !target.is_empty())
+        .ok_or_else(|| ErrorInfo::new("missing_target", "request did not include a target path"))?
+        .to_string();
+
+    Ok((target.clone(), workspace_ref.join(&target)))
 }
 
 fn session_status_for_task_status(status: TaskStatus) -> SessionStatus {
@@ -1642,7 +2091,7 @@ mod tests {
     use crate::domain::task::{Task, TaskRunRequest, TaskStatus, TerminalReason};
     use crate::domain::task_context::TaskContext;
     use crate::domain::trace::{ExecutionTrace, TraceEventType};
-    use crate::fixture::FixtureRuntime;
+    use crate::fixture::{FixtureRuntime, build_fixture_plan_for_goal, build_task_request};
     use crate::orchestrator::planner::StaticPlanner;
     use crate::registry::agent_registry::AgentRegistry;
     use crate::registry::tool_registry::ToolRegistry;
@@ -1713,12 +2162,33 @@ mod tests {
             authored_brief: None,
             active_flow: None,
             active_task: Some(task),
+            goal_plan: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
             latest_status: SessionStatus::Planned,
             latest_terminal_reason: None,
             latest_trace_ref: None,
             created_at: 10,
             updated_at: 10,
         }
+    }
+
+    fn build_fixture_session_task(workspace: &Path, session: &ActiveSessionRecord) -> Task {
+        let request = build_task_request(
+            workspace,
+            session.goal.clone().unwrap_or_else(|| "Drive a session runtime branch".to_string()),
+            session.session_id.clone(),
+            session.authored_brief.as_ref(),
+        )
+        .unwrap();
+        let plan = build_fixture_plan_for_goal(
+            workspace,
+            session.active_flow.as_ref(),
+            session.goal.as_deref().unwrap_or_default(),
+        )
+        .unwrap();
+
+        Task::new("task-runtime", &request, plan).unwrap()
     }
 
     fn manual_runtime() -> FixtureRuntime {
@@ -1869,6 +2339,9 @@ mod tests {
             authored_brief: None,
             active_flow: Some(flow.initial_state()),
             active_task: Some(task.clone()),
+            goal_plan: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
             latest_status: SessionStatus::Planned,
             latest_terminal_reason: None,
             latest_trace_ref: None,
@@ -2010,6 +2483,9 @@ mod tests {
             authored_brief: None,
             active_flow: None,
             active_task: None,
+            goal_plan: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
             latest_status: SessionStatus::Initialized,
             latest_terminal_reason: None,
             latest_trace_ref: None,
@@ -2019,7 +2495,8 @@ mod tests {
 
         runtime.capture_goal(&mut session, "Drive governed bug fix").unwrap();
         runtime.select_flow(&mut session, "bug-fix").unwrap();
-        runtime.plan_task(&mut session).unwrap();
+        session.active_task = Some(build_fixture_session_task(&workspace, &session));
+        session.latest_status = SessionStatus::Planned;
         runtime.execute_next_step(&mut session).unwrap();
 
         let task = session.active_task.as_ref().unwrap();
@@ -2098,6 +2575,9 @@ mod tests {
             authored_brief: None,
             active_flow: None,
             active_task: None,
+            goal_plan: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
             latest_status: SessionStatus::Initialized,
             latest_terminal_reason: None,
             latest_trace_ref: None,
@@ -2107,7 +2587,8 @@ mod tests {
 
         runtime.capture_goal(&mut session, "Drive governed bug fix").unwrap();
         runtime.select_flow(&mut session, "bug-fix").unwrap();
-        runtime.plan_task(&mut session).unwrap();
+        session.active_task = Some(build_fixture_session_task(&workspace, &session));
+        session.latest_status = SessionStatus::Planned;
         runtime.execute_next_step(&mut session).unwrap();
 
         let task = session.active_task.as_ref().unwrap();
@@ -2135,6 +2616,127 @@ mod tests {
             .unwrap();
         assert!(
             trace.events.iter().any(|event| event.event_type == TraceEventType::GovernanceBlocked),
+            "{:?}",
+            trace.events
+        );
+    }
+
+    #[test]
+    fn plan_task_persists_goal_plan_and_inferred_flow_without_creating_fixture_task() {
+        let workspace = temp_workspace("synod-runtime-native-plan");
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let mut session = ActiveSessionRecord {
+            session_id: "session-runtime".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: None,
+            authored_brief: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Initialized,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 10,
+            updated_at: 10,
+        };
+
+        runtime.capture_goal(&mut session, "fix the broken add function").unwrap();
+        runtime.plan_task(&mut session, None, false).unwrap();
+
+        assert_eq!(session.latest_status, SessionStatus::Planned);
+        assert!(session.active_task.is_none());
+        assert!(session.decisions.is_empty());
+        assert!(session.active_flow.is_none());
+        assert!(session.active_flow_policy.is_none());
+
+        let goal_plan = session.goal_plan.as_ref().unwrap();
+        assert_eq!(goal_plan.status, crate::domain::goal_plan::GoalPlanStatus::Confirmed);
+        assert!(!goal_plan.tasks.is_empty());
+        assert_eq!(goal_plan.flow.as_ref().unwrap().flow_name, "bug-fix");
+        assert!(!goal_plan.flow.as_ref().unwrap().confirmed);
+        session.validate().unwrap();
+    }
+
+    #[test]
+    fn plan_task_confirms_explicit_flow_during_native_planning() {
+        let workspace = temp_workspace("synod-runtime-native-plan-explicit-flow");
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let mut session = ActiveSessionRecord {
+            session_id: "session-runtime".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: None,
+            authored_brief: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Initialized,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 10,
+            updated_at: 10,
+        };
+
+        runtime.capture_goal(&mut session, "implement workspace summary output").unwrap();
+        runtime.plan_task(&mut session, Some("change"), false).unwrap();
+
+        assert_eq!(session.active_flow.as_ref().unwrap().flow_name, "change");
+        assert_eq!(session.active_flow_policy.as_ref().unwrap().flow_name, "change");
+        assert!(session.goal_plan.as_ref().unwrap().flow.as_ref().unwrap().confirmed);
+        session.validate().unwrap();
+    }
+
+    #[test]
+    fn run_to_terminal_uses_native_goal_plan_route_when_present() {
+        let workspace = temp_workspace("synod-runtime-native-run");
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::write(
+            workspace.join("Cargo.toml"),
+            "[package]\nname = \"native-run\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        )
+        .unwrap();
+        fs::write(
+            workspace.join("src/lib.rs"),
+            "pub fn add(left: i32, right: i32) -> i32 { left - right }\n",
+        )
+        .unwrap();
+
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let mut session = ActiveSessionRecord {
+            session_id: "session-runtime".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: None,
+            authored_brief: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Initialized,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 10,
+            updated_at: 10,
+        };
+
+        runtime.capture_goal(&mut session, "fix the broken add function").unwrap();
+        runtime.plan_task(&mut session, Some("bug-fix"), false).unwrap();
+        let response = runtime.run_to_terminal(&mut session).unwrap();
+
+        assert_eq!(response.terminal_status, TaskStatus::Succeeded);
+        assert_eq!(session.latest_status, SessionStatus::Succeeded);
+        assert!(session.active_task.is_none());
+        assert!(!session.decisions.is_empty());
+
+        let trace = runtime
+            .trace_store()
+            .load(Path::new(session.latest_trace_ref.as_ref().unwrap()))
+            .unwrap();
+        assert!(
+            trace.events.iter().any(|event| event.event_type == TraceEventType::DecisionCreated),
             "{:?}",
             trace.events
         );

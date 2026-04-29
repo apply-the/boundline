@@ -110,6 +110,10 @@ pub enum DeveloperCommand {
     Plan {
         #[arg(long)]
         workspace: Option<PathBuf>,
+        #[arg(long, conflicts_with = "no_flow")]
+        flow: Option<String>,
+        #[arg(long = "no-flow")]
+        no_flow: bool,
     },
     Step {
         #[arg(long)]
@@ -317,7 +321,7 @@ impl DeveloperCommandSession {
                 exit_status: None,
                 trace_location: None,
             },
-            DeveloperCommand::Plan { workspace } => Self {
+            DeveloperCommand::Plan { workspace, .. } => Self {
                 command_name: CommandName::Plan,
                 workspace_ref: workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
                 goal: None,
@@ -682,18 +686,20 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                 },
             }
         }
-        DeveloperCommand::Plan { workspace } => match session::execute_plan(workspace.as_deref()) {
-            Ok(report) => DispatchOutcome {
-                exit_status: report.exit_status,
-                output: report.terminal_output,
-                trace_location: None,
-            },
-            Err(error) => DispatchOutcome {
-                exit_status: CommandExitStatus::NonSuccess,
-                output: session::render_error(command.name().as_str(), &error),
-                trace_location: None,
-            },
-        },
+        DeveloperCommand::Plan { workspace, flow, no_flow } => {
+            match session::execute_plan(workspace.as_deref(), flow.as_deref(), *no_flow) {
+                Ok(report) => DispatchOutcome {
+                    exit_status: report.exit_status,
+                    output: report.terminal_output,
+                    trace_location: None,
+                },
+                Err(error) => DispatchOutcome {
+                    exit_status: CommandExitStatus::NonSuccess,
+                    output: session::render_error(command.name().as_str(), &error),
+                    trace_location: None,
+                },
+            }
+        }
         DeveloperCommand::Step { workspace } => match session::execute_step(workspace.as_deref()) {
             Ok(report) => DispatchOutcome {
                 exit_status: report.exit_status,
@@ -928,7 +934,11 @@ fn red_to_green_addition() {
                 name: "bug-fix".to_string(),
                 workspace: Some(workspace.clone()),
             },
-            DeveloperCommand::Plan { workspace: Some(workspace.clone()) },
+            DeveloperCommand::Plan {
+                workspace: Some(workspace.clone()),
+                flow: None,
+                no_flow: false,
+            },
             DeveloperCommand::Step { workspace: Some(workspace.clone()) },
             DeveloperCommand::Status { workspace: Some(workspace.clone()) },
             DeveloperCommand::Next { workspace: Some(workspace.clone()) },
@@ -948,10 +958,11 @@ fn red_to_green_addition() {
 
     #[test]
     fn dispatch_covers_successful_custom_run_session_run_and_inspect_paths() {
-        let workspace = write_execution_workspace("synod-cli-dispatch-success");
+        let custom_workspace = write_execution_workspace("synod-cli-dispatch-success-custom");
+        let session_workspace = write_execution_workspace("synod-cli-dispatch-success-session");
 
         let custom_run = dispatch(&DeveloperCommand::Run {
-            workspace: Some(workspace.clone()),
+            workspace: Some(custom_workspace.clone()),
             goal: Some("Fix the failing add test".to_string()),
             brief: Vec::new(),
             governance: None,
@@ -963,11 +974,12 @@ fn red_to_green_addition() {
         assert!(custom_run.output.contains("terminal_status: succeeded"), "{}", custom_run.output);
         assert!(custom_run.trace_location.is_some());
 
-        let start = dispatch(&DeveloperCommand::Start { workspace: Some(workspace.clone()) });
+        let start =
+            dispatch(&DeveloperCommand::Start { workspace: Some(session_workspace.clone()) });
         assert_eq!(start.exit_status, CommandExitStatus::Succeeded);
 
         let capture = dispatch(&DeveloperCommand::Capture {
-            workspace: Some(workspace.clone()),
+            workspace: Some(session_workspace.clone()),
             goal: Some("Fix the failing add test".to_string()),
             brief: Vec::new(),
             governance: None,
@@ -977,14 +989,16 @@ fn red_to_green_addition() {
         });
         assert_eq!(capture.exit_status, CommandExitStatus::Succeeded);
 
-        let plan = dispatch(&DeveloperCommand::Plan { workspace: Some(workspace.clone()) });
+        let plan = dispatch(&DeveloperCommand::Plan {
+            workspace: Some(session_workspace.clone()),
+            flow: Some("bug-fix".to_string()),
+            no_flow: false,
+        });
         assert_eq!(plan.exit_status, CommandExitStatus::Succeeded);
-
-        let step = dispatch(&DeveloperCommand::Step { workspace: Some(workspace.clone()) });
-        assert_eq!(step.exit_status, CommandExitStatus::Succeeded);
+        assert!(plan.output.contains("execution_path: native_goal_plan"), "{}", plan.output);
 
         let run = dispatch(&DeveloperCommand::Run {
-            workspace: Some(workspace.clone()),
+            workspace: Some(session_workspace.clone()),
             goal: None,
             brief: Vec::new(),
             governance: None,
@@ -995,15 +1009,16 @@ fn red_to_green_addition() {
         assert_eq!(run.exit_status, CommandExitStatus::Succeeded);
         assert!(run.output.contains("terminal_status: succeeded"), "{}", run.output);
 
-        let status = dispatch(&DeveloperCommand::Status { workspace: Some(workspace.clone()) });
+        let status =
+            dispatch(&DeveloperCommand::Status { workspace: Some(session_workspace.clone()) });
         assert_eq!(status.exit_status, CommandExitStatus::Succeeded);
 
-        let next = dispatch(&DeveloperCommand::Next { workspace: Some(workspace.clone()) });
+        let next = dispatch(&DeveloperCommand::Next { workspace: Some(session_workspace.clone()) });
         assert_eq!(next.exit_status, CommandExitStatus::Succeeded);
 
         let inspect = dispatch(&DeveloperCommand::Inspect {
             trace: None,
-            workspace: Some(workspace.clone()),
+            workspace: Some(session_workspace.clone()),
         });
         assert_eq!(inspect.exit_status, CommandExitStatus::Succeeded);
         assert!(inspect.output.contains("inspection_target:"), "{}", inspect.output);

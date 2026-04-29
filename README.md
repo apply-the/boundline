@@ -5,30 +5,30 @@
 [![Vulnerabilities](https://github.com/apply-the/synod/actions/workflows/vulnerabilities.yml/badge.svg)](https://github.com/apply-the/synod/actions/workflows/vulnerabilities.yml)
 [![Coverage](https://codecov.io/gh/apply-the/synod/graph/badge.svg)](https://codecov.io/gh/apply-the/synod)
 
-**Synod is a local CLI for bounded software-delivery work. You run it inside a
-workspace to execute manifest-declared changes, validate them, and inspect the
-result through session state and traces written back to disk. `synod init`
-bootstraps workspace setup, and `synod config` manages routing defaults with
-global and workspace precedence.**
+**Synod is a local CLI for bounded software-delivery work. The primary path is
+session-native: start a session, capture a goal, plan a bounded `GoalPlan`, run
+through the decision loop, and inspect the resulting session state and traces.
+`synod init` remains optional bootstrap, and declarative execution profiles
+remain available as an explicit compatibility path.**
 
 ## What Synod Does
 
 The main surface is the `synod` CLI:
 
 - `doctor` validates that a workspace is ready to run.
-- `init` bootstraps `.synod` workspace files and optional assistant runtime setup.
+- `init` optionally bootstraps `.synod` workspace files and assistant runtime setup.
 - `config` shows, sets, and unsets global or workspace routing defaults.
 - `start`, `capture`, `flow`, `plan`, and `step` drive the session workflow.
-- `run` executes a bounded delivery task end to end.
+- `run` executes a bounded delivery task end to end, preferring native session planning when a `GoalPlan` exists.
 - `status`, `next`, and `inspect` explain the current session and latest trace.
 
 Use it when you want delivery work to stay bounded and inspectable:
 
-- bootstrap a workspace once with `synod init`
-- keep the work contract explicit and local to the repo
-- apply only declared changes
-- run the validation command after each attempt
+- drive work from a captured goal instead of from a pre-authored manifest alone
+- keep planning, execution, and evidence explicit in session state and traces
+- run validation after each bounded action
 - resume from saved session state and traces
+- fall back to declarative execution profiles only when that compatibility path is intentional
 
 Local execution is the default. When governance is configured, Synod can also
 route stages through Canon while keeping the same CLI surface.
@@ -87,13 +87,14 @@ from the repo root so the command always uses your current source tree.
 The shortest way to think about Synod is:
 
 1. Point it at a workspace.
-2. Run `synod init` to scaffold bounded defaults.
+2. Optionally run `synod init` once if you want scaffolded defaults.
 3. Optionally tune routing defaults with `synod config`.
 4. Capture a goal or provide Markdown briefs.
-5. Plan and run.
-6. Read `status`, `next`, or `inspect` to continue.
+5. Run `synod plan` to persist a bounded `GoalPlan` and any inferred or explicit flow state.
+6. Run `synod run` to execute through the native decision loop.
+7. Read `status`, `next`, or `inspect` to continue.
 
-### 1. Initialize a workspace
+### 1. Optional bootstrap
 
 ```bash
 synod init --workspace <workspace>
@@ -145,7 +146,11 @@ synod start --workspace <workspace>
 synod capture --workspace <workspace> --goal "Fix the failing add test"
 # or capture from one or more Markdown brief files inside the workspace:
 synod capture --workspace <workspace> --brief docs/brief.md
+# optional explicit flow selection still exists:
 synod flow bug-fix --workspace <workspace>
+# or confirm/override during planning:
+# synod plan --workspace <workspace> --flow bug-fix
+# synod plan --workspace <workspace> --no-flow
 synod plan --workspace <workspace>
 synod run --workspace <workspace>
 synod status --workspace <workspace>
@@ -157,19 +162,21 @@ What those commands do, in short:
 - `doctor` checks that the workspace and execution manifest are usable.
 - `start` initializes the workspace session.
 - `capture` stores human-authored goal and brief input in session state.
-- `flow` optionally selects `bug-fix`, `change`, or `delivery`.
-- `plan` creates the next bounded task from the captured human input plus the workspace manifest.
-- `run` executes until Synod reaches a terminal state or needs operator action, still using the workspace manifest as the execution contract.
+- `flow` optionally selects `bug-fix`, `change`, or `delivery` ahead of planning.
+- `plan` derives the next bounded `GoalPlan` from captured input plus workspace state, and persists confirmed, proposed, or absent flow state.
+- `run` executes through the native decision loop whenever a `GoalPlan` exists; declarative `.synod/execution.json` execution remains the explicit compatibility path.
 - `status` reports the current session snapshot.
 - `inspect` summarizes the latest trace and evidence.
 
-### 3. Use the direct workflow when you do not need a session
+### 3. Use the direct compatibility workflow when you do not need a session
 
-If you do not need the explicit session setup, you can run directly after init:
+If you want the declarative execution-profile path instead of the session-native path, run directly with an explicit workspace and goal:
 
 ```bash
 synod run --workspace <workspace> --goal "Fix the failing add test"
 ```
+
+This path uses the workspace execution profile and remains useful for compatibility and test-oriented workflows.
 
 ### 4. Inspect what happened
 
@@ -192,9 +199,10 @@ Depending on the manifest, that output can also include:
 - optionally add `--template change` or `--template delivery` when you want a different starting profile than the default `bug-fix`
 - optionally tune defaults with `synod config show|set|unset`
 - run `synod doctor --workspace <workspace>`
-- capture a goal with `synod capture` or pass the goal directly to `synod run`
-- optionally select `bug-fix`, `change`, or `delivery` with `synod flow`
-- run `synod plan` and `synod run`
+- capture a goal with `synod capture`
+- optionally select `bug-fix`, `change`, or `delivery` with `synod flow`, or confirm it during `synod plan`
+- run `synod plan` and `synod run` for the native session path
+- use direct `synod run --workspace <workspace> --goal ...` only when you intentionally want execution-profile compatibility behavior
 - inspect the result with `synod status`, `synod next`, and `synod inspect`
 
 ## Documentation
