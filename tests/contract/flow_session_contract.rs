@@ -98,28 +98,12 @@ fn delivery_flow_plan_persists_stage_tagged_steps_and_active_flow_state() {
     assert_eq!(active_flow.current_stage_index, 0);
     assert_eq!(active_flow.total_stages, 4);
 
-    let task = record.active_task.expect("planned task should be present");
-    let stage_ids: Vec<_> = task
-        .plan
-        .steps
-        .iter()
-        .map(|step| {
-            step.input
-                .get("delivery_flow")
-                .and_then(|value| value.get("stage_id"))
-                .and_then(|value| value.as_str())
-                .expect("stage metadata should exist")
-                .to_string()
-        })
-        .collect();
-    assert_eq!(
-        stage_ids,
-        vec![
-            "requirements".to_string(),
-            "architecture".to_string(),
-            "backlog".to_string(),
-            "implementation".to_string(),
-            "implementation".to_string(),
-        ]
-    );
+    assert!(record.active_task.is_none(), "native planning should not synthesize a fixture task");
+
+    let goal_plan = record.goal_plan.expect("goal plan should be present");
+    assert!(!goal_plan.tasks.is_empty(), "goal plan should contain bounded tasks");
+    let flow =
+        goal_plan.flow.expect("explicit flow selection should be persisted on the goal plan");
+    assert_eq!(flow.flow_name, "delivery");
+    assert!(flow.confirmed, "explicit flow selection should be confirmed");
 }

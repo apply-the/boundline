@@ -1,0 +1,113 @@
+use serde_json::json;
+use synod::domain::goal_plan::{GoalPlan, InferredFlow, PlannedTask};
+use synod::domain::limits::RunLimits;
+use synod::domain::plan::Plan;
+use synod::domain::session::{ActiveSessionRecord, SessionStatus, execution_path_text};
+use synod::domain::step::Step;
+use synod::domain::task::{Task, TaskRunRequest};
+
+fn build_task(workspace_ref: &str) -> Task {
+    let request = TaskRunRequest {
+        goal: "Deliver a session-backed CLI".to_string(),
+        input: json!({"ticket": "SESSION-1"}),
+        session_id: "session-1".to_string(),
+        workspace_ref: workspace_ref.to_string(),
+        limits: RunLimits::default(),
+        initial_context: None,
+    };
+    let plan =
+        Plan::new(vec![Step::decision("analyze", json!({"phase": "bootstrap"})).unwrap()]).unwrap();
+
+    Task::new("task-1", &request, plan).unwrap()
+}
+
+fn build_goal_plan(confirmed: bool) -> GoalPlan {
+    let mut goal_plan = GoalPlan::new(
+        "Fix the failing add test",
+        vec![PlannedTask {
+            task_id: "planned-task-1".to_string(),
+            description: "Fix the broken arithmetic path".to_string(),
+            target: "src/lib.rs".to_string(),
+            expected_outcome: Some("tests pass".to_string()),
+            decision_type_hint: None,
+        }],
+    )
+    .unwrap();
+    goal_plan.flow = Some(InferredFlow {
+        flow_name: "bug-fix".to_string(),
+        confidence_reason: "goal contains keyword 'fix'".to_string(),
+        confirmed,
+    });
+    goal_plan.confirm().unwrap();
+    goal_plan
+}
+
+#[test]
+fn execution_path_prefers_pending_native_goal_plan_over_fixture_state() {
+    let record = ActiveSessionRecord {
+        session_id: "session-native".to_string(),
+        workspace_ref: "/tmp/synod-session-model".to_string(),
+        goal: Some("Fix the failing add test".to_string()),
+        authored_brief: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: Some(build_goal_plan(false)),
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Planned,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 20,
+    };
+
+    assert_eq!(
+        execution_path_text(&record).as_deref(),
+        Some("native_goal_plan_pending_flow_confirmation")
+    );
+}
+
+#[test]
+fn execution_path_uses_fixture_compatibility_when_only_task_state_exists() {
+    let workspace_ref = "/tmp/synod-session-model";
+    let record = ActiveSessionRecord {
+        session_id: "session-fixture".to_string(),
+        workspace_ref: workspace_ref.to_string(),
+        goal: Some("Deliver a session-backed CLI".to_string()),
+        authored_brief: None,
+        active_flow: None,
+        active_task: Some(build_task(workspace_ref)),
+        goal_plan: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Running,
+        latest_terminal_reason: None,
+        latest_trace_ref: Some(format!("{workspace_ref}/.synod/traces/task-1.json")),
+        created_at: 10,
+        updated_at: 20,
+    };
+
+    assert_eq!(execution_path_text(&record).as_deref(), Some("fixture_compatibility"));
+}
+
+#[test]
+fn execution_path_marks_goal_captured_sessions_as_pending_plan() {
+    let record = ActiveSessionRecord {
+        session_id: "session-captured".to_string(),
+        workspace_ref: "/tmp/synod-session-model".to_string(),
+        goal: Some("Implement the workspace summary".to_string()),
+        authored_brief: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::GoalCaptured,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 20,
+    };
+
+    assert_eq!(execution_path_text(&record).as_deref(), Some("native_session_pending_plan"));
+}

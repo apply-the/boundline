@@ -6,41 +6,26 @@ Canon is downstream from Synod in this roadmap: Synod thinks, decides, orchestra
 
 Evolve Synod into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.11.0
+## Current Status: v0.13.0
 
-In addition to all v0.10.0 capabilities, the v0.11.0 release ships the full
-`011-init-model-routing` feature:
+In addition to all v0.12.0 capabilities, the v0.13.0 release ships the full
+`013-session-native-orchestrator` feature:
 
-- **Human-Friendly Init**: `synod init` scaffolds `.synod/execution.json` and
-  `.synod/config.toml` from bounded templates (`bug-fix`, `change`, `delivery`),
-  with explicit preview and overwrite safeguards.
-- **Model Routing Configuration**: `synod config show|set|unset` manages runtime
-  and model defaults for planning, implementation, verification, review, named
-  reviewer roles, and adjudication.
-- **Global + Local Precedence**: effective routing resolves deterministically as
-  CLI input > workspace config > global config > built-in defaults, and exposes
-  value source in user-facing output.
-- **Runtime Surfaces**: initial support covers Claude, Codex, Copilot, and
-  Gemini CLI (CLI-only in this slice).
-
-### Priority 1: Next Spec
-
-The next spec should be a product realignment slice, not another incremental
-framework layer. It should land the primary user experience as one coherent
-session-native orchestration step instead of spreading the shift across many
-small specs.
-
-Priority outcomes for that next spec:
-
-- make `start -> capture -> plan -> run -> status -> inspect` the primary UX and push `init` out of the user's everyday mental model
-- shift planning away from static init templates toward plans derived from goal, workspace state, collected documents, and Canon-produced artifacts
-- propose or infer flows automatically, with explicit override only when needed
-- move agent adapters toward real read/modify/test/fix model-guided loops instead of declared static change sets
-- keep Canon as governance and artifact control overlay, not the center of orchestration
-
-Companion architecture review:
-
-- [docs/session-native-orchestrator-review.md](docs/session-native-orchestrator-review.md)
+- **Session-Native Orchestration**: `start → capture → plan → run → inspect` is
+  now the primary UX, pushing `init` to an optional/advanced path.
+- **Goal-Derived Planning**: plans are derived from goal text, workspace state,
+  collected documents, and Canon-produced artifacts via `GoalPlan` model.
+- **Flow Inference**: flows are proposed automatically from goal keywords
+  (bug-fix, change, delivery) with explicit `--flow` / `--no-flow` overrides.
+- **Bounded Decision Loop**: observe→decide→act→verify→update execution engine
+  produces typed, inspectable `Decision` objects with structured `ToolResult`
+  outputs, bounded step limits, and explicit terminal states (Success, Failure,
+  Exhausted, NoActionableState).
+- **Flow as Policy**: `FlowPolicy` constrains decision types per flow stage
+  (e.g., only Analyze in investigate stage, only Code/Fix in implement).
+- **Decision Trace Events**: DecisionCreated, DecisionDispatched,
+  DecisionVerified, DecisionFailed, DecisionRecovered, GoalPlanCreated,
+  FlowInferred trace events provide full decision-level observability.
 
 ### Secondary follow-up directions
 

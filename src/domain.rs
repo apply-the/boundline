@@ -1,8 +1,11 @@
 pub mod brief;
 pub mod cluster;
 pub mod configuration;
+pub mod decision;
 pub mod execution;
 pub mod flow;
+pub mod flow_policy;
+pub mod goal_plan;
 pub mod governance;
 pub mod limits;
 pub mod plan;
@@ -11,4 +14,5 @@ pub mod session;
 pub mod step;
 pub mod task;
 pub mod task_context;
+pub mod tool_result;
 pub mod trace;

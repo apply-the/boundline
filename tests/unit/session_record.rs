@@ -2,6 +2,7 @@ use serde_json::json;
 use std::fs;
 use synod::domain::brief::normalize_inputs;
 use synod::domain::flow::built_in_flow;
+use synod::domain::goal_plan::{GoalPlan, PlannedTask};
 use synod::domain::limits::RunLimits;
 use synod::domain::plan::Plan;
 use synod::domain::session::{
@@ -10,6 +11,22 @@ use synod::domain::session::{
 };
 use synod::domain::step::Step;
 use synod::domain::task::{Task, TaskRunRequest, TaskStatus, TerminalReason};
+
+fn build_goal_plan() -> GoalPlan {
+    let mut plan = GoalPlan::new(
+        "Deliver a session-backed CLI",
+        vec![PlannedTask {
+            task_id: "planned-task-1".to_string(),
+            description: "Analyze the current CLI path".to_string(),
+            target: "/tmp/synod-session-record/src/lib.rs".to_string(),
+            expected_outcome: Some("routing gaps understood".to_string()),
+            decision_type_hint: None,
+        }],
+    )
+    .unwrap();
+    plan.confirm().unwrap();
+    plan
+}
 
 fn build_task(workspace_ref: &str) -> Task {
     let request = TaskRunRequest {
@@ -37,6 +54,9 @@ fn session_record_round_trips_and_status_values_serialize() {
         authored_brief: None,
         active_flow: Some(built_in_flow("bug-fix").unwrap().initial_state()),
         active_task: Some(task),
+        goal_plan: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
         latest_status: SessionStatus::Planned,
         latest_terminal_reason: None,
         latest_trace_ref: Some("/tmp/synod-session-record/.synod/traces/task-1.json".to_string()),
@@ -83,6 +103,7 @@ fn session_record_round_trips_and_status_values_serialize() {
         current_step_id: Some("analyze".to_string()),
         current_step_index: Some(0),
         latest_status: SessionStatus::Planned,
+        execution_path: synod::domain::session::execution_path_text(&record),
         latest_trace_ref: record.latest_trace_ref.clone(),
         latest_changed_files: None,
         latest_workspace_slice: None,
@@ -122,6 +143,9 @@ fn session_record_validation_rejects_workspace_mismatches_and_external_traces() 
         authored_brief: None,
         active_flow: None,
         active_task: Some(task),
+        goal_plan: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
         latest_status: SessionStatus::Planned,
         latest_terminal_reason: None,
         latest_trace_ref: Some("/tmp/synod-session-record/.synod/traces/task-1.json".to_string()),
@@ -153,6 +177,9 @@ fn terminal_session_requires_terminal_reason_and_consistent_view() {
         authored_brief: None,
         active_flow: None,
         active_task: Some(task),
+        goal_plan: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
         latest_status: SessionStatus::Succeeded,
         latest_terminal_reason: None,
         latest_trace_ref: Some("/tmp/synod-session-record/.synod/traces/task-1.json".to_string()),
@@ -175,6 +202,9 @@ fn goal_captured_sessions_require_a_goal_but_invalid_sessions_can_clear_context(
         authored_brief: None,
         active_flow: None,
         active_task: None,
+        goal_plan: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
         latest_status: SessionStatus::GoalCaptured,
         latest_terminal_reason: None,
         latest_trace_ref: None,
@@ -206,6 +236,9 @@ fn invalid_flow_state_is_rejected_by_session_validation() {
             total_stages: 3,
         }),
         active_task: None,
+        goal_plan: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
         latest_status: SessionStatus::GoalCaptured,
         latest_terminal_reason: None,
         latest_trace_ref: None,
@@ -235,6 +268,9 @@ fn goal_captured_status_view_can_project_clarification_fields_from_authored_brie
         authored_brief: Some(bundle.clone()),
         active_flow: None,
         active_task: None,
+        goal_plan: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
         latest_status: SessionStatus::GoalCaptured,
         latest_terminal_reason: None,
         latest_trace_ref: None,
@@ -264,6 +300,7 @@ fn goal_captured_status_view_can_project_clarification_fields_from_authored_brie
         current_step_id: None,
         current_step_index: None,
         latest_status: SessionStatus::GoalCaptured,
+        execution_path: synod::domain::session::execution_path_text(&record),
         latest_trace_ref: None,
         latest_changed_files: None,
         latest_workspace_slice: None,
@@ -292,4 +329,26 @@ fn goal_captured_status_view_can_project_clarification_fields_from_authored_brie
     };
 
     view.validate(&record).unwrap();
+}
+
+#[test]
+fn planned_session_with_goal_plan_and_no_active_task_is_valid() {
+    let record = ActiveSessionRecord {
+        session_id: "session-native-plan".to_string(),
+        workspace_ref: "/tmp/synod-session-record".to_string(),
+        goal: Some("Deliver a session-backed CLI".to_string()),
+        authored_brief: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: Some(build_goal_plan()),
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Planned,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 20,
+    };
+
+    record.validate().unwrap();
 }

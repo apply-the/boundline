@@ -522,6 +522,7 @@ fn render_session_status_includes_goal_trace_and_next_command() {
         current_step_id: Some("verify".to_string()),
         current_step_index: Some(1),
         latest_status: SessionStatus::Running,
+        execution_path: Some("native_goal_plan".to_string()),
         latest_trace_ref: Some("/tmp/session-workspace/.synod/traces/task.json".to_string()),
         latest_changed_files: None,
         latest_workspace_slice: None,
@@ -554,6 +555,7 @@ fn render_session_status_includes_goal_trace_and_next_command() {
     assert!(rendered.contains("session_id: session-status"), "{rendered}");
     assert!(rendered.contains("goal: Ship a bounded change"), "{rendered}");
     assert!(rendered.contains("latest_status: running"), "{rendered}");
+    assert!(rendered.contains("execution_path: native_goal_plan"), "{rendered}");
     assert!(
         rendered.contains("latest_trace_ref: /tmp/session-workspace/.synod/traces/task.json"),
         "{rendered}"

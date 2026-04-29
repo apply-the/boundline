@@ -357,6 +357,15 @@ pub fn summarize_trace(
                     review_timeline.push(line);
                 }
             }
+            TraceEventType::DecisionCreated
+            | TraceEventType::DecisionDispatched
+            | TraceEventType::DecisionVerified
+            | TraceEventType::DecisionFailed
+            | TraceEventType::DecisionRecovered
+            | TraceEventType::GoalPlanCreated
+            | TraceEventType::FlowInferred => {
+                // Decision loop events — handled by decision-specific inspection
+            }
         }
     }
 
@@ -782,6 +791,9 @@ mod tests {
             authored_brief: None,
             active_flow: None,
             active_task: None,
+            goal_plan: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
             latest_status: SessionStatus::GoalCaptured,
             latest_terminal_reason: None,
             latest_trace_ref: None,
