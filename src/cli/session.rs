@@ -14,8 +14,8 @@ use crate::cli::CommandExitStatus;
 use crate::cli::output;
 use crate::domain::governance::GovernanceRuntimeKind;
 use crate::domain::session::{
-    ActiveSessionRecord, SessionStatus, SessionStatusView, execution_path_text,
-    task_state_attempt_lineage_summary, task_state_governance_approval_text,
+    ActiveSessionRecord, SessionStatus, SessionStatusView, decision_status_text,
+    execution_path_text, task_state_attempt_lineage_summary, task_state_governance_approval_text,
     task_state_governance_blocked_reason, task_state_governance_candidate_actions,
     task_state_governance_canon_run_ref, task_state_governance_decision_headline,
     task_state_governance_mode_text, task_state_governance_next_action,
@@ -411,6 +411,10 @@ fn build_status_view(
         requested_governance_zone: governance_intent.and_then(|intent| intent.zone.clone()),
         requested_governance_owner: governance_intent.and_then(|intent| intent.owner.clone()),
         active_flow: record.active_flow.as_ref().map(|flow| flow.flow_name.clone()),
+        flow_state: record
+            .goal_plan
+            .as_ref()
+            .map(|goal_plan| goal_plan.flow_state().summary_text()),
         current_stage_id: record.active_flow.as_ref().map(|flow| flow.current_stage_id.clone()),
         current_stage_index: record.active_flow.as_ref().map(|flow| flow.current_stage_index),
         total_stages: record.active_flow.as_ref().map(|flow| flow.total_stages),
@@ -423,6 +427,11 @@ fn build_status_view(
         latest_status: record.latest_status,
         execution_path: execution_path_text(record),
         latest_trace_ref: record.latest_trace_ref.clone(),
+        latest_decision_status: record
+            .decisions
+            .last()
+            .map(|decision| decision_status_text(decision.status).to_string()),
+        latest_decision_target: record.decisions.last().map(|decision| decision.target.clone()),
         latest_changed_files: record.active_task.as_ref().and_then(|task| {
             task.context.state.get("latest_changed_files").and_then(|value| {
                 value.as_array().map(|items| {
@@ -636,6 +645,12 @@ fn planning_summary(record: &ActiveSessionRecord) -> String {
         );
     }
 
+    if goal_plan.flow_skipped {
+        return format!(
+            "planned the active goal into {task_count} bounded goal-plan task(s) with operator-skipped flow constraints"
+        );
+    }
+
     format!(
         "planned the active goal into {task_count} bounded goal-plan task(s) without flow constraints"
     )
@@ -695,7 +710,7 @@ impl SessionCommandError {
             Self::MissingPlannedTask => "active session has no planned task".to_string(),
             Self::FlowConfirmationRequired { flow_name } => {
                 format!(
-                    "active session has a proposed `{flow_name}` flow that must be confirmed or skipped before execution"
+                    "active session has a proposed `{flow_name}` flow that must be confirmed or skipped before execution; run `synod plan --flow {flow_name}` to confirm or `synod plan --no-flow` to skip"
                 )
             }
             Self::UnknownFlow { requested, supported } => {

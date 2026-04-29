@@ -72,6 +72,17 @@ fn current_stage_returns_stage_at_index() {
 }
 
 #[test]
+fn all_builtin_bug_fix_stages_share_verifiable_transition_rules() {
+    let policy = FlowPolicy::from_builtin("bug-fix").unwrap();
+    assert!(
+        policy
+            .stage_policies
+            .iter()
+            .all(|stage| stage.transition_condition == TransitionCondition::AllVerified)
+    );
+}
+
+#[test]
 fn change_flow_stage_policies_are_correct() {
     let policy = FlowPolicy::from_builtin("change").unwrap();
     assert_eq!(policy.stage_policies.len(), 3);

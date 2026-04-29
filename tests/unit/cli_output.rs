@@ -6,18 +6,21 @@ use synod::adapters::trace_store::TraceStore;
 use synod::cli::diagnostics::{DiagnosticsCheck, DiagnosticsReport, DiagnosticsStatus};
 use synod::cli::inspect::{
     InspectCommandError, TraceResolutionTarget, TraceSummaryError, execute_inspect, render_error,
-    resolve_trace_path, summarize_trace,
+    render_inspection_routing_summary, resolve_trace_path, summarize_trace,
 };
 use synod::cli::output::{
     CommandExitCode, command_name, next_command_after_inspect, next_command_after_run,
-    render_diagnostics, render_inspect_failure, render_run_trace, render_session_status,
-    render_trace_summary, validation_error_message,
+    render_diagnostics, render_goal_plan_flow_state, render_inspect_failure, render_route_outcome,
+    render_run_trace, render_session_status, render_trace_summary, validation_error_message,
 };
 use synod::cli::{
     CliValidationError, CommandExitStatus, CommandName, DeveloperCommand, DeveloperCommandSession,
 };
+use synod::domain::goal_plan::{GoalPlanFlowMode, GoalPlanFlowState};
 use synod::domain::limits::{RunLimits, TerminalCondition};
-use synod::domain::session::{SessionStatus, SessionStatusView};
+use synod::domain::session::{
+    RoutingMode, RoutingOutcome, RoutingSource, SessionStatus, SessionStatusView,
+};
 use synod::domain::step::{StepKind, StepStatus};
 use synod::domain::task::{TaskRunResponse, TaskStatus, TerminalReason};
 use synod::domain::task_context::TaskContext;
@@ -165,6 +168,33 @@ fn inspect_failure_renderer_exposes_correction_cues() {
 }
 
 #[test]
+fn route_and_flow_render_helpers_expose_foundational_runtime_cues() {
+    let route = RoutingOutcome {
+        mode: RoutingMode::Blocked,
+        source: RoutingSource::GoalPlan,
+        reason: "flow confirmation is still pending".to_string(),
+    };
+    let flow_state = GoalPlanFlowState {
+        mode: GoalPlanFlowMode::Proposed,
+        flow_name: Some("bug-fix".to_string()),
+        confidence_reason: Some("goal contains keyword 'fix'".to_string()),
+    };
+
+    assert_eq!(
+        render_route_outcome(&route),
+        "routing: blocked (goal_plan) - flow confirmation is still pending"
+    );
+    assert_eq!(
+        render_goal_plan_flow_state(&flow_state),
+        "flow_state: proposed (bug-fix) - goal contains keyword 'fix'"
+    );
+
+    let summary = render_inspection_routing_summary(&route, Some(&flow_state));
+    assert_eq!(summary[0], "routing: blocked (goal_plan) - flow confirmation is still pending");
+    assert_eq!(summary[1], "flow_state: proposed (bug-fix) - goal contains keyword 'fix'");
+}
+
+#[test]
 fn inspect_invalid_session_errors_reuse_session_guidance() {
     let rendered = render_error(
         None,
@@ -184,6 +214,8 @@ fn trace_summary_renderer_mentions_steps_recovery_and_terminal_reason() {
     let summary = TraceSummaryView {
         trace_ref: "/tmp/workspace/.synod/traces/task.json".to_string(),
         goal: "Inspect a recorded run".to_string(),
+        routing_summary: None,
+        goal_plan_summary: None,
         authored_input_summary: None,
         authored_input_sources: Vec::new(),
         authored_input_deduplicated_sources: Vec::new(),
@@ -194,6 +226,8 @@ fn trace_summary_renderer_mentions_steps_recovery_and_terminal_reason() {
         requested_governance_risk: None,
         requested_governance_zone: None,
         requested_governance_owner: None,
+        decision_timeline: Vec::new(),
+        failure_evidence: Vec::new(),
         executed_steps: vec![
             TraceStepSummary {
                 step_id: "analyze".to_string(),
@@ -515,6 +549,7 @@ fn render_session_status_includes_goal_trace_and_next_command() {
         requested_governance_zone: None,
         requested_governance_owner: None,
         active_flow: None,
+        flow_state: None,
         current_stage_id: None,
         current_stage_index: None,
         total_stages: None,
@@ -524,6 +559,8 @@ fn render_session_status_includes_goal_trace_and_next_command() {
         latest_status: SessionStatus::Running,
         execution_path: Some("native_goal_plan".to_string()),
         latest_trace_ref: Some("/tmp/session-workspace/.synod/traces/task.json".to_string()),
+        latest_decision_status: None,
+        latest_decision_target: None,
         latest_changed_files: None,
         latest_workspace_slice: None,
         latest_selection_headline: None,
@@ -690,6 +727,8 @@ fn render_trace_summary_handles_all_terminal_status_variants() {
         let summary = TraceSummaryView {
             trace_ref: "/tmp/trace.json".to_string(),
             goal: "test".to_string(),
+            routing_summary: None,
+            goal_plan_summary: None,
             authored_input_summary: None,
             authored_input_sources: Vec::new(),
             authored_input_deduplicated_sources: Vec::new(),
@@ -700,6 +739,8 @@ fn render_trace_summary_handles_all_terminal_status_variants() {
             requested_governance_risk: None,
             requested_governance_zone: None,
             requested_governance_owner: None,
+            decision_timeline: Vec::new(),
+            failure_evidence: Vec::new(),
             executed_steps: vec![],
             recovery_events: vec![],
             governance_timeline: Vec::new(),
@@ -726,6 +767,8 @@ fn render_trace_summary_covers_replan_recovery_label_and_decision_step_kind() {
     let summary = TraceSummaryView {
         trace_ref: "/tmp/trace.json".to_string(),
         goal: "test".to_string(),
+        routing_summary: None,
+        goal_plan_summary: None,
         authored_input_summary: None,
         authored_input_sources: Vec::new(),
         authored_input_deduplicated_sources: Vec::new(),
@@ -736,6 +779,8 @@ fn render_trace_summary_covers_replan_recovery_label_and_decision_step_kind() {
         requested_governance_risk: None,
         requested_governance_zone: None,
         requested_governance_owner: None,
+        decision_timeline: Vec::new(),
+        failure_evidence: Vec::new(),
         executed_steps: vec![TraceStepSummary {
             step_id: "decide".to_string(),
             step_kind: StepKind::Decision,
@@ -774,6 +819,8 @@ fn render_trace_summary_covers_pending_running_and_skipped_step_statuses() {
         let summary = TraceSummaryView {
             trace_ref: "/tmp/trace.json".to_string(),
             goal: "test".to_string(),
+            routing_summary: None,
+            goal_plan_summary: None,
             authored_input_summary: None,
             authored_input_sources: Vec::new(),
             authored_input_deduplicated_sources: Vec::new(),
@@ -784,6 +831,8 @@ fn render_trace_summary_covers_pending_running_and_skipped_step_statuses() {
             requested_governance_risk: None,
             requested_governance_zone: None,
             requested_governance_owner: None,
+            decision_timeline: Vec::new(),
+            failure_evidence: Vec::new(),
             executed_steps: vec![TraceStepSummary {
                 step_id: "step1".to_string(),
                 step_kind: StepKind::Agent,

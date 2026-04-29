@@ -27,6 +27,8 @@ Auto-generated from all feature plans. Last updated: 2026-04-29
 - workspace-local JSON files (`.synod/session.json`, `.synod/traces/`, `.synod/execution.json`, `.synod/config.toml`) (013-session-native-orchestrator)
 - Rust 1.95.0, edition 2024 + `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, Rust standard library filesystem and process APIs (014-native-loop-integration)
 - Workspace-local `.synod/session.json`, `.synod/traces/`, optional `.synod/execution.json`, optional `.canon/` artifacts (014-native-loop-integration)
+- Rust 1.95.0, edition 2024 + `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, process, and collections APIs (015-runtime-refoundation)
+- Workspace-local `.synod/session.json`, `.synod/traces/`, optional `.synod/execution.json`, optional `.canon/` artifacts, plus repository docs and assistant assets updated as part of rollout (015-runtime-refoundation)
 
 - Rust 1.95.0, edition 2024 + Rust standard library plus `serde`, `serde_json`, `thiserror`, `tracing`, and `uuid` for structured state, trace serialization, error handling, instrumentation, and stable identifiers (001-delivery-orchestrator-core)
 
@@ -54,10 +56,11 @@ Crate versioning follows Semantic Versioning.
 Before 1.0.0, breaking changes MAY occur in minor versions.
 
 ## Recent Changes
+- 015-runtime-refoundation: Added Rust 1.95.0, edition 2024 + `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, process, and collections APIs
 - 014-native-loop-integration: Added Rust 1.95.0, edition 2024 + `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, Rust standard library filesystem and process APIs
 - 013-session-native-orchestrator: Added Rust 1.95.0, edition 2024 + `clap` 4.x, `serde` 1.x, `serde_json` 1.x, `thiserror` 2.x, `tracing` 0.1, `uuid` 1.x, `toml` 0.8
-- 012-multi-workspace: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`) plus Rust standard library path and filesystem APIs; no new runtime dependencies for the first clustered slice
 
 
 <!-- MANUAL ADDITIONS START -->
+- Prefer the session-native `start -> capture -> plan -> run -> inspect` path in docs, examples, and assistant guidance; treat `.synod/execution.json` and direct `run --goal` usage as explicit compatibility surfaces.
 <!-- MANUAL ADDITIONS END -->

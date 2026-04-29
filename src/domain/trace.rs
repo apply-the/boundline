@@ -48,6 +48,34 @@ pub enum TraceEventType {
     FlowInferred,
 }
 
+impl TraceEventType {
+    pub const fn is_decision_loop_event(self) -> bool {
+        matches!(
+            self,
+            Self::DecisionCreated
+                | Self::DecisionDispatched
+                | Self::DecisionVerified
+                | Self::DecisionFailed
+                | Self::DecisionRecovered
+                | Self::GoalPlanCreated
+                | Self::FlowInferred
+        )
+    }
+
+    pub const fn routing_projection_key(self) -> Option<&'static str> {
+        match self {
+            Self::GoalPlanCreated => Some("goal_plan_created"),
+            Self::FlowInferred => Some("flow_inferred"),
+            Self::DecisionCreated => Some("decision_created"),
+            Self::DecisionDispatched => Some("decision_dispatched"),
+            Self::DecisionVerified => Some("decision_verified"),
+            Self::DecisionFailed => Some("decision_failed"),
+            Self::DecisionRecovered => Some("decision_recovered"),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TraceEvent {
     pub event_id: String,
@@ -76,6 +104,10 @@ pub struct TraceSummaryView {
     pub trace_ref: String,
     pub goal: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub routing_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal_plan_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authored_input_summary: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub authored_input_sources: Vec<String>,
@@ -95,6 +127,10 @@ pub struct TraceSummaryView {
     pub requested_governance_zone: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requested_governance_owner: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub decision_timeline: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub failure_evidence: Vec<String>,
     pub executed_steps: Vec<TraceStepSummary>,
     pub recovery_events: Vec<TraceRecoveryEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

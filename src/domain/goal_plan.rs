@@ -36,6 +36,47 @@ pub struct InferredFlow {
     pub confirmed: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GoalPlanFlowMode {
+    Proposed,
+    Confirmed,
+    Skipped,
+    Absent,
+}
+
+impl GoalPlanFlowMode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Proposed => "proposed",
+            Self::Confirmed => "confirmed",
+            Self::Skipped => "skipped",
+            Self::Absent => "absent",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GoalPlanFlowState {
+    pub mode: GoalPlanFlowMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flow_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confidence_reason: Option<String>,
+}
+
+impl GoalPlanFlowState {
+    pub fn summary_text(&self) -> String {
+        match (self.flow_name.as_deref(), self.confidence_reason.as_deref()) {
+            (Some(flow_name), Some(confidence_reason)) => {
+                format!("{} ({flow_name}) - {confidence_reason}", self.mode.as_str())
+            }
+            (Some(flow_name), None) => format!("{} ({flow_name})", self.mode.as_str()),
+            _ => self.mode.as_str().to_string(),
+        }
+    }
+}
+
 /// A single planned task in a goal-derived plan.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlannedTask {
@@ -75,6 +116,8 @@ pub struct GoalPlan {
     pub workspace_signals: WorkspaceSignals,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub flow: Option<InferredFlow>,
+    #[serde(default)]
+    pub flow_skipped: bool,
     pub created_at: u64,
     pub status: GoalPlanStatus,
 }
@@ -91,6 +134,7 @@ impl GoalPlan {
             source_evidence: Vec::new(),
             workspace_signals: WorkspaceSignals::default(),
             flow: None,
+            flow_skipped: false,
             created_at: current_timestamp_millis(),
             status: GoalPlanStatus::Draft,
         };
@@ -140,12 +184,41 @@ impl GoalPlan {
 
     pub fn with_flow(mut self, flow: InferredFlow) -> Self {
         self.flow = Some(flow);
+        self.flow_skipped = false;
         self
     }
 
     pub fn with_evidence(mut self, evidence: Vec<EvidenceRef>) -> Self {
         self.source_evidence = evidence;
         self
+    }
+
+    pub fn mark_flow_skipped(&mut self) {
+        self.flow = None;
+        self.flow_skipped = true;
+    }
+
+    pub fn flow_state(&self) -> GoalPlanFlowState {
+        match self.flow.as_ref() {
+            Some(flow) => GoalPlanFlowState {
+                mode: if flow.confirmed {
+                    GoalPlanFlowMode::Confirmed
+                } else {
+                    GoalPlanFlowMode::Proposed
+                },
+                flow_name: Some(flow.flow_name.clone()),
+                confidence_reason: Some(flow.confidence_reason.clone()),
+            },
+            None => GoalPlanFlowState {
+                mode: if self.flow_skipped {
+                    GoalPlanFlowMode::Skipped
+                } else {
+                    GoalPlanFlowMode::Absent
+                },
+                flow_name: None,
+                confidence_reason: None,
+            },
+        }
     }
 }
 

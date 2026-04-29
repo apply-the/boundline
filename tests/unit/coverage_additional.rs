@@ -109,6 +109,7 @@ fn build_status_view(record: &ActiveSessionRecord) -> SessionStatusView {
         requested_governance_zone: None,
         requested_governance_owner: None,
         active_flow: record.active_flow.as_ref().map(|flow| flow.flow_name.clone()),
+        flow_state: None,
         current_stage_id: record.active_flow.as_ref().map(|flow| flow.current_stage_id.clone()),
         current_stage_index: record.active_flow.as_ref().map(|flow| flow.current_stage_index),
         total_stages: record.active_flow.as_ref().map(|flow| flow.total_stages),
@@ -119,6 +120,8 @@ fn build_status_view(record: &ActiveSessionRecord) -> SessionStatusView {
         latest_status: record.latest_status,
         execution_path: synod::domain::session::execution_path_text(record),
         latest_trace_ref: record.latest_trace_ref.clone(),
+        latest_decision_status: None,
+        latest_decision_target: None,
         latest_changed_files: active_task.and_then(|task| {
             task.context.state.get("latest_changed_files").and_then(|value| {
                 value.as_array().map(|items| {

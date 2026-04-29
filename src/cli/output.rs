@@ -3,6 +3,8 @@ use serde_json::Value;
 use crate::cli::diagnostics::{DiagnosticsReport, DiagnosticsStatus};
 use crate::cli::{CliValidationError, CommandExitStatus, DeveloperCommand};
 use crate::domain::cluster::{ClusterInspectReport, ClusterMemberState};
+use crate::domain::goal_plan::GoalPlanFlowState;
+use crate::domain::session::RoutingOutcome;
 use crate::domain::session::{SessionStatus, SessionStatusView};
 use crate::domain::step::{StepKind, StepStatus};
 use crate::domain::task::{TaskRunResponse, TaskStatus};
@@ -116,6 +118,14 @@ pub fn render_cluster_inspect(report: &ClusterInspectReport) -> String {
 
 pub fn validation_error_message(error: &CliValidationError) -> String {
     error.to_string()
+}
+
+pub fn render_route_outcome(outcome: &RoutingOutcome) -> String {
+    format!("routing: {} ({}) - {}", outcome.mode.as_str(), outcome.source.as_str(), outcome.reason)
+}
+
+pub fn render_goal_plan_flow_state(flow_state: &GoalPlanFlowState) -> String {
+    format!("flow_state: {}", flow_state.summary_text())
 }
 
 pub fn render_diagnostics(report: &DiagnosticsReport) -> String {
@@ -374,6 +384,14 @@ pub fn render_trace_summary(
         format!("goal: {}", summary.goal),
     ];
 
+    if let Some(routing_summary) = &summary.routing_summary {
+        lines.push(routing_summary.clone());
+    }
+
+    if let Some(goal_plan_summary) = &summary.goal_plan_summary {
+        lines.push(format!("goal_plan_summary: {goal_plan_summary}"));
+    }
+
     if let Some(authored_input_summary) = &summary.authored_input_summary {
         lines.push(format!("authored_input_summary: {authored_input_summary}"));
     }
@@ -419,6 +437,16 @@ pub fn render_trace_summary(
 
     if let Some(requested_governance_owner) = &summary.requested_governance_owner {
         lines.push(format!("requested_governance_owner: {requested_governance_owner}"));
+    }
+
+    if !summary.decision_timeline.is_empty() {
+        lines.push("decision_timeline:".to_string());
+        lines.extend(summary.decision_timeline.iter().cloned());
+    }
+
+    if !summary.failure_evidence.is_empty() {
+        lines.push("failure_evidence:".to_string());
+        lines.extend(summary.failure_evidence.iter().cloned());
     }
 
     for step in &summary.executed_steps {
@@ -557,6 +585,10 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
         lines.push(format!("active_flow: {active_flow}"));
     }
 
+    if let Some(flow_state) = &view.flow_state {
+        lines.push(format!("flow_state: {flow_state}"));
+    }
+
     if let Some(current_stage_id) = &view.current_stage_id {
         lines.push(format!("current_stage: {current_stage_id}"));
     }
@@ -587,6 +619,14 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
 
     if let Some(latest_trace_ref) = &view.latest_trace_ref {
         lines.push(format!("latest_trace_ref: {latest_trace_ref}"));
+    }
+
+    if let Some(latest_decision_status) = &view.latest_decision_status {
+        lines.push(format!("latest_decision_status: {latest_decision_status}"));
+    }
+
+    if let Some(latest_decision_target) = &view.latest_decision_target {
+        lines.push(format!("latest_decision_target: {latest_decision_target}"));
     }
 
     if let Some(latest_changed_files) = &view.latest_changed_files
@@ -1028,6 +1068,8 @@ mod tests {
         let summary = TraceSummaryView {
             trace_ref: "/tmp/workspace/.synod/traces/task-output.json".to_string(),
             goal: "Render trace summary".to_string(),
+            routing_summary: None,
+            goal_plan_summary: None,
             authored_input_summary: None,
             authored_input_sources: Vec::new(),
             authored_input_deduplicated_sources: Vec::new(),
@@ -1038,6 +1080,8 @@ mod tests {
             requested_governance_risk: None,
             requested_governance_zone: None,
             requested_governance_owner: None,
+            decision_timeline: Vec::new(),
+            failure_evidence: Vec::new(),
             executed_steps: vec![TraceStepSummary {
                 step_id: "verify".to_string(),
                 step_kind: StepKind::Tool,
@@ -1098,6 +1142,7 @@ mod tests {
             requested_governance_zone: None,
             requested_governance_owner: None,
             active_flow: None,
+            flow_state: None,
             current_stage_id: None,
             current_stage_index: None,
             total_stages: None,
@@ -1107,6 +1152,8 @@ mod tests {
             latest_status: SessionStatus::Invalid,
             execution_path: None,
             latest_trace_ref: None,
+            latest_decision_status: None,
+            latest_decision_target: None,
             latest_changed_files: Some(Vec::new()),
             latest_workspace_slice: None,
             latest_selection_headline: None,
@@ -1219,6 +1266,7 @@ mod tests {
             requested_governance_zone: None,
             requested_governance_owner: None,
             active_flow: None,
+            flow_state: None,
             current_stage_id: None,
             current_stage_index: None,
             total_stages: None,
@@ -1228,6 +1276,8 @@ mod tests {
             latest_status: SessionStatus::Running,
             execution_path: Some("fixture_compatibility".to_string()),
             latest_trace_ref: None,
+            latest_decision_status: None,
+            latest_decision_target: None,
             latest_changed_files: None,
             latest_workspace_slice: None,
             latest_selection_headline: None,
@@ -1286,6 +1336,8 @@ mod tests {
         let summary = TraceSummaryView {
             trace_ref: "/tmp/workspace/.synod/traces/task-review-output.json".to_string(),
             goal: "Render trace summary".to_string(),
+            routing_summary: None,
+            goal_plan_summary: None,
             authored_input_summary: None,
             authored_input_sources: Vec::new(),
             authored_input_deduplicated_sources: Vec::new(),
@@ -1296,6 +1348,8 @@ mod tests {
             requested_governance_risk: None,
             requested_governance_zone: None,
             requested_governance_owner: None,
+            decision_timeline: Vec::new(),
+            failure_evidence: Vec::new(),
             executed_steps: vec![],
             recovery_events: vec![],
             governance_timeline: vec![

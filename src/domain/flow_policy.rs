@@ -69,6 +69,14 @@ impl FlowPolicy {
         self.stage_policies.get(self.current_stage_index)
     }
 
+    pub fn current_stage_id(&self) -> Option<&str> {
+        self.current_stage().map(|stage| stage.stage_id.as_str())
+    }
+
+    pub fn stage_progress(&self) -> Option<(usize, usize)> {
+        self.current_stage().map(|_| (self.current_stage_index + 1, self.stage_policies.len()))
+    }
+
     /// Check if a decision type is allowed at the current stage.
     pub fn is_allowed(&self, decision_type: DecisionType) -> bool {
         self.current_stage().is_some_and(|stage| stage.allows(decision_type))

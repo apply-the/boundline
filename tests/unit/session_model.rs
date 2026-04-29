@@ -2,7 +2,10 @@ use serde_json::json;
 use synod::domain::goal_plan::{GoalPlan, InferredFlow, PlannedTask};
 use synod::domain::limits::RunLimits;
 use synod::domain::plan::Plan;
-use synod::domain::session::{ActiveSessionRecord, SessionStatus, execution_path_text};
+use synod::domain::session::{
+    ActiveSessionRecord, RoutingMode, RoutingSource, SessionStatus, execution_path_text,
+    routing_outcome,
+};
 use synod::domain::step::Step;
 use synod::domain::task::{Task, TaskRunRequest};
 
@@ -110,4 +113,54 @@ fn execution_path_marks_goal_captured_sessions_as_pending_plan() {
     };
 
     assert_eq!(execution_path_text(&record).as_deref(), Some("native_session_pending_plan"));
+}
+
+#[test]
+fn routing_outcome_blocks_when_flow_confirmation_is_pending() {
+    let record = ActiveSessionRecord {
+        session_id: "session-native".to_string(),
+        workspace_ref: "/tmp/synod-session-model".to_string(),
+        goal: Some("Fix the failing add test".to_string()),
+        authored_brief: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: Some(build_goal_plan(false)),
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Planned,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 20,
+    };
+
+    let outcome = routing_outcome(&record);
+    assert_eq!(outcome.mode, RoutingMode::Blocked);
+    assert_eq!(outcome.source, RoutingSource::GoalPlan);
+    assert!(outcome.reason.contains("flow confirmation"));
+}
+
+#[test]
+fn routing_outcome_prefers_native_goal_plan_when_flow_is_confirmed() {
+    let record = ActiveSessionRecord {
+        session_id: "session-native".to_string(),
+        workspace_ref: "/tmp/synod-session-model".to_string(),
+        goal: Some("Fix the failing add test".to_string()),
+        authored_brief: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: Some(build_goal_plan(true)),
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Planned,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 20,
+    };
+
+    let outcome = routing_outcome(&record);
+    assert_eq!(outcome.mode, RoutingMode::Native);
+    assert_eq!(outcome.source, RoutingSource::GoalPlan);
+    assert!(outcome.reason.contains("goal plan"));
 }

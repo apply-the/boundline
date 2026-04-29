@@ -52,7 +52,7 @@ When Synod governance is configured to use Canon, the current adapter is
 validated against Canon `0.20.0`.
 
 That is the Canon CLI version explicitly documented as supported for Synod
-`0.9.0`. Earlier or later Canon versions may work, but they are not part of the
+`0.15.0`. Earlier or later Canon versions may work, but they are not part of the
 documented compatibility surface yet.
 
 For contributor setup and validation expectations, see [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -104,7 +104,7 @@ synod doctor --workspace <workspace>
 `--template` is optional. If you omit it, Synod starts with `bug-fix`.
 Available starting templates are `bug-fix`, `change`, and `delivery`.
 
-A template only seeds the generated execution profile. It does not lock the
+A template only seeds the generated compatibility execution profile. It does not lock the
 workspace, and it does not decide the later `synod flow` choice.
 
 If you want a different starting point later, rerun init with `--force`:
@@ -291,7 +291,7 @@ The current implementation covers:
 The local `synod` binary keeps the developer experience local, deterministic,
 and backed by both `<workspace>/.synod/session.json` and
 `<workspace>/.synod/traces/`. `synod init` scaffolds the workspace execution
-profile at `<workspace>/.synod/execution.json`, and `synod config` manages
+profile at `<workspace>/.synod/execution.json` only for the explicit compatibility path, and `synod config` manages
 global and workspace routing defaults.
 
 The primary init + session flow is:
@@ -326,13 +326,13 @@ and
 and
 [`specs/007-multi-agent-review/quickstart.md`](specs/007-multi-agent-review/quickstart.md).
 
-For the adaptive execution manifest shape and bounded replanning behavior in
-`0.9.0`, see [`docs/adaptive-execution.md`](docs/adaptive-execution.md).
+For the adaptive execution manifest shape and bounded compatibility behavior in
+`0.15.0`, see [`docs/adaptive-execution.md`](docs/adaptive-execution.md).
 
 For the concrete review configuration and voting rules still available in
-`0.9.0`, see [`docs/review-voting.md`](docs/review-voting.md).
+`0.15.0`, see [`docs/review-voting.md`](docs/review-voting.md).
 
-In `0.9.0`, governed stages can also project `latest_governance_runtime`,
+In `0.15.0`, governed stages can also project `latest_governance_runtime`,
 `latest_governance_mode`, `latest_governance_run_ref`, packet provenance,
 autopilot candidates, approval waits, and packet rejection outcomes through
 `run`, `status`, `next`, and `inspect`.

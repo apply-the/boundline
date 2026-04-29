@@ -10,7 +10,9 @@ description: "Task list template for feature implementation"
 
 **Tests**: Validation tasks are expected for Synod features. Include them whenever the
 feature defines executable behavior, failure handling, replanning, or trace guarantees.
-Omit them only when the feature is truly documentation-only.
+Omit them only when the feature is truly documentation-only. When the feature changes
+runtime routing or operator-facing summaries, include coverage for those CLI-visible
+surfaces and refresh coverage artifacts such as `lcov.info`.
 
 **Organization**: Tasks are grouped by user story so each slice can deliver bounded,
 inspectable value independently.
@@ -155,9 +157,11 @@ failure handling, and observability primitives in place
 **Purpose**: Improvements that affect multiple user stories
 
 - [ ] TXXX [P] Documentation updates in docs/
+- [ ] TXXX [P] Refresh assistant command packs and contributor guidance when runtime story or CLI surfaces change
 - [ ] TXXX Code cleanup and refactoring
 - [ ] TXXX Performance optimization across all stories after delivery behavior is stable
 - [ ] TXXX [P] Additional unit tests in tests/unit/
+- [ ] TXXX [P] Additional integration coverage in tests/integration/ plus refreshed `lcov.info`
 - [ ] TXXX Harden diagnostics, error messages, and trace readability
 - [ ] TXXX Run quickstart.md validation
 

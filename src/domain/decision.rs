@@ -181,6 +181,7 @@ impl Decision {
             });
         }
         self.status = DecisionStatus::Recovered;
+        self.completed_at = Some(current_timestamp_millis());
         Ok(())
     }
 
