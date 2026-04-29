@@ -17,6 +17,7 @@ You use Synod to:
 - use declarative execution profiles only when you intentionally want compatibility behavior
 - keep session state in `<workspace>/.synod/session.json`
 - keep traces in `<workspace>/.synod/traces/`
+- rely on `run`, `status`, `next`, and `inspect` to tell the same routing and `execution_condition` story
 
 For most users the path is simple: run `synod doctor`, `synod start`, `synod capture`,
 `synod plan`, and `synod run`. `synod init` is optional bootstrap for generated
@@ -28,7 +29,7 @@ state through the same CLI instead of introducing a separate runtime surface.
 The shipped CLI binary is `synod`.
 
 If you enable Synod governance through Canon, the current Synod adapter is
-validated against Canon `0.20.0`.
+validated against Canon `0.24.0`.
 
 ## Install Synod
 
@@ -183,7 +184,8 @@ synod inspect --workspace <workspace>
 
 These commands tell you:
 
-- what Synod is currently doing in the workspace
+- which route is active and why
+- what `execution_condition` currently applies
 - what trace was produced
 - whether the run succeeded, failed, blocked, or needs follow-up
 - what the next CLI action should be
