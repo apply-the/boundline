@@ -15,8 +15,18 @@ fn explicit_compatibility_run_is_visible_when_execution_profile_is_chosen_delibe
 
     assert_eq!(run.status.code(), Some(0), "{run_text}");
     assert!(run_text.contains("routing: compatibility"), "{run_text}");
+    assert!(run_text.contains("execution_condition: terminal -"), "{run_text}");
     assert!(run_text.contains("execution_path: fixture_compatibility"), "{run_text}");
     assert!(!run_text.contains("decision "), "{run_text}");
+
+    let inspect = run_synod_in(&workspace, &["inspect", "--workspace", "."]);
+    let inspect_text = terminal_text(&inspect);
+    assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
+    assert!(
+        inspect_text.contains("routing: compatibility (execution_profile) - trace came from the explicit compatibility runtime"),
+        "{inspect_text}"
+    );
+    assert!(inspect_text.contains("execution_condition: terminal -"), "{inspect_text}");
 }
 
 #[test]
@@ -34,11 +44,14 @@ fn native_session_run_wins_over_execution_profile_when_goal_plan_is_ready() {
     let run = run_synod_in(&workspace, &["run"]);
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(0), "{run_text}");
+    assert!(run_text.contains("routing: native (goal_plan)"), "{run_text}");
+    assert!(run_text.contains("execution_condition: terminal -"), "{run_text}");
     assert!(run_text.contains("decision "), "{run_text}");
 
     let status = run_synod_in(&workspace, &["status"]);
     let status_text = terminal_text(&status);
     assert_eq!(status.status.code(), Some(0), "{status_text}");
+    assert!(status_text.contains("routing: native (goal_plan)"), "{status_text}");
     assert!(status_text.contains("execution_path: native_goal_plan"), "{status_text}");
     assert!(status_text.contains("flow_state: confirmed (bug-fix)"), "{status_text}");
 

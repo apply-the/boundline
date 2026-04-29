@@ -20,7 +20,7 @@ If shell execution is unavailable, provide this exact copyable command:
 Wait for pasted output and then recommend exactly one next command.
 
 ## Output Interpretation
-Summarize `latest_status`, `explanation`, and the CLI-reported `next_command`. Preserve `latest_trace_ref` when present so `/synod-inspect` can reuse it.
+Summarize `routing`, `execution_condition`, `latest_status`, `explanation`, and the CLI-reported `next_command`. Preserve `latest_trace_ref` when present so `/synod-inspect` can reuse it.
 
 ## Next-Step Routing
 Prefer the CLI-reported `next_command`; if it points to inspect, route to `/synod-inspect`, and if the session is missing or invalid, route to `/synod-start`.

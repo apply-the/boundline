@@ -5,7 +5,7 @@ use crate::cli::{CliValidationError, CommandExitStatus, DeveloperCommand};
 use crate::domain::cluster::{ClusterInspectReport, ClusterMemberState};
 use crate::domain::goal_plan::GoalPlanFlowState;
 use crate::domain::session::RoutingOutcome;
-use crate::domain::session::{SessionStatus, SessionStatusView};
+use crate::domain::session::{RoutingMode, RoutingSource, SessionStatus, SessionStatusView};
 use crate::domain::step::{StepKind, StepStatus};
 use crate::domain::task::{TaskRunResponse, TaskStatus};
 use crate::domain::trace::{ExecutionTrace, TraceEventType, TraceSummaryView};
@@ -356,6 +356,12 @@ pub fn render_run_trace(
                 }
             }
         }
+
+        lines.push(render_run_execution_condition(response));
+    }
+
+    if trace.is_none() {
+        lines.push(render_run_execution_condition(response));
     }
 
     if let Some(workspace_slice) = adaptive_workspace_slice_summary(&response.final_context.state) {
@@ -387,6 +393,8 @@ pub fn render_trace_summary(
     if let Some(routing_summary) = &summary.routing_summary {
         lines.push(routing_summary.clone());
     }
+
+    lines.push(render_trace_execution_condition(summary));
 
     if let Some(goal_plan_summary) = &summary.goal_plan_summary {
         lines.push(format!("goal_plan_summary: {goal_plan_summary}"));
@@ -519,6 +527,14 @@ pub fn render_inspect_failure(
     lines.join("\n")
 }
 
+pub fn render_session_projection_prefix(view: &SessionStatusView) -> String {
+    [
+        render_route_outcome(&routing_outcome_for_status_view(view)),
+        render_session_execution_condition(view),
+    ]
+    .join("\n")
+}
+
 pub fn render_session_status(view: &SessionStatusView) -> String {
     let mut lines = vec![
         format!("session_id: {}", view.session_id),
@@ -528,6 +544,8 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
     if let Some(goal) = &view.goal {
         lines.push(format!("goal: {goal}"));
     }
+
+    lines.extend(render_session_projection_prefix(view).lines().map(str::to_string));
 
     if let Some(authored_input_summary) = &view.authored_input_summary {
         lines.push(format!("authored_input_summary: {authored_input_summary}"));
@@ -966,6 +984,199 @@ fn session_status_text(status: SessionStatus) -> &'static str {
     }
 }
 
+fn routing_outcome_for_status_view(view: &SessionStatusView) -> RoutingOutcome {
+    match view.execution_path.as_deref() {
+        Some("native_goal_plan") => RoutingOutcome {
+            mode: RoutingMode::Native,
+            source: RoutingSource::GoalPlan,
+            reason: "goal plan is ready for native execution".to_string(),
+        },
+        Some("fixture_compatibility") => RoutingOutcome {
+            mode: RoutingMode::Compatibility,
+            source: RoutingSource::ExecutionProfile,
+            reason: "compatibility execution remains active from the persisted task".to_string(),
+        },
+        Some("native_goal_plan_pending_flow_confirmation") => RoutingOutcome {
+            mode: RoutingMode::Blocked,
+            source: RoutingSource::GoalPlan,
+            reason: "flow confirmation is still pending before native execution".to_string(),
+        },
+        Some("native_session_pending_plan") => RoutingOutcome {
+            mode: RoutingMode::Blocked,
+            source: RoutingSource::GoalCapture,
+            reason: "goal captured but a goal plan is not ready yet".to_string(),
+        },
+        _ => match view.latest_status {
+            SessionStatus::Initialized => RoutingOutcome {
+                mode: RoutingMode::Blocked,
+                source: RoutingSource::SessionState,
+                reason: "capture a goal before planning or execution can begin".to_string(),
+            },
+            SessionStatus::GoalCaptured => RoutingOutcome {
+                mode: RoutingMode::Blocked,
+                source: RoutingSource::GoalCapture,
+                reason: "goal captured but a goal plan is not ready yet".to_string(),
+            },
+            SessionStatus::Invalid => RoutingOutcome {
+                mode: RoutingMode::Blocked,
+                source: RoutingSource::SessionState,
+                reason: "active session state is invalid and must be recreated".to_string(),
+            },
+            _ => RoutingOutcome {
+                mode: RoutingMode::Blocked,
+                source: RoutingSource::SessionState,
+                reason: "session has no goal plan or compatibility task to route".to_string(),
+            },
+        },
+    }
+}
+
+fn render_session_execution_condition(view: &SessionStatusView) -> String {
+    let (kind, reason) = session_execution_condition_parts(view);
+    format!("execution_condition: {kind} - {reason}")
+}
+
+fn session_execution_condition_parts(view: &SessionStatusView) -> (&'static str, String) {
+    if let Some(governance_state) = view.latest_governance_state.as_deref() {
+        match governance_state {
+            "awaiting_approval" => {
+                return (
+                    "waiting",
+                    "governance approval is still pending before execution can continue"
+                        .to_string(),
+                );
+            }
+            "blocked" => {
+                return (
+                    "blocked",
+                    view.latest_governance_blocked_reason.clone().unwrap_or_else(|| {
+                        "governance blocked further execution until the blocker is resolved"
+                            .to_string()
+                    }),
+                );
+            }
+            _ => {}
+        }
+    }
+
+    match view.execution_path.as_deref() {
+        Some("native_goal_plan_pending_flow_confirmation") => {
+            return (
+                "blocked",
+                "flow confirmation is still pending before native execution".to_string(),
+            );
+        }
+        Some("native_session_pending_plan") => {
+            return ("blocked", "goal captured but a goal plan is not ready yet".to_string());
+        }
+        _ => {}
+    }
+
+    match view.latest_status {
+        SessionStatus::Initialized => {
+            ("blocked", "capture a goal before planning or execution can begin".to_string())
+        }
+        SessionStatus::GoalCaptured => {
+            ("blocked", "goal captured but a goal plan is not ready yet".to_string())
+        }
+        SessionStatus::Planned => (
+            "waiting",
+            if view.current_step_id.is_some() {
+                "a bounded task is ready for the next execution step".to_string()
+            } else {
+                "planning is complete and execution can begin".to_string()
+            },
+        ),
+        SessionStatus::Running => ("running", running_condition_reason(view).to_string()),
+        SessionStatus::Succeeded => ("terminal", "work completed successfully".to_string()),
+        SessionStatus::Failed => {
+            ("terminal", "work stopped after a non-success result".to_string())
+        }
+        SessionStatus::Exhausted => {
+            ("terminal", "retry or recovery limits were exhausted".to_string())
+        }
+        SessionStatus::Aborted => ("terminal", "work was aborted before completion".to_string()),
+        SessionStatus::Invalid => {
+            ("blocked", "active session state is invalid and must be recreated".to_string())
+        }
+    }
+}
+
+fn running_condition_reason(view: &SessionStatusView) -> &'static str {
+    match view.latest_decision_status.as_deref() {
+        Some("pending") => "a bounded decision is pending dispatch",
+        Some("dispatched") => "the latest bounded decision is in flight",
+        Some("verified") => "the latest bounded decision was verified and more work may remain",
+        Some("failed") => "the latest bounded decision failed and recovery is in progress",
+        Some("recovered") => "the latest bounded decision recovered and execution can continue",
+        _ if view.latest_review_trigger.is_some() => {
+            "review is in progress as part of the active session"
+        }
+        _ => "bounded execution is in progress",
+    }
+}
+
+fn render_trace_execution_condition(summary: &TraceSummaryView) -> String {
+    let (kind, reason) = trace_execution_condition_parts(summary);
+    format!("execution_condition: {kind} - {reason}")
+}
+
+fn trace_execution_condition_parts(summary: &TraceSummaryView) -> (&'static str, String) {
+    let governance_waiting =
+        summary.governance_timeline.iter().any(|line| line.contains("awaiting_approval"));
+    let governance_blocked = summary.governance_timeline.iter().any(|line| {
+        line.contains("governance_blocked") || line.contains("governance_packet_rejected")
+    });
+
+    if governance_waiting {
+        return (
+            "waiting",
+            "governance approval is still pending before execution can continue".to_string(),
+        );
+    }
+
+    if governance_blocked {
+        return (
+            "blocked",
+            summary.governance_next_action.clone().unwrap_or_else(|| {
+                "governance blocked further execution until the blocker is resolved".to_string()
+            }),
+        );
+    }
+
+    match summary.terminal_status {
+        TaskStatus::Planned => ("waiting", summary.terminal_reason.message.clone()),
+        TaskStatus::Running => ("running", summary.terminal_reason.message.clone()),
+        TaskStatus::Succeeded
+        | TaskStatus::Failed
+        | TaskStatus::Exhausted
+        | TaskStatus::Aborted => ("terminal", summary.terminal_reason.message.clone()),
+    }
+}
+
+fn render_run_execution_condition(response: &TaskRunResponse) -> String {
+    let kind = match response.terminal_status {
+        TaskStatus::Planned => "waiting",
+        TaskStatus::Running => {
+            let message = response.terminal_reason.message.to_ascii_lowercase();
+            if message.contains("approval")
+                || message.contains("wait")
+                || message.contains("blocked")
+            {
+                "waiting"
+            } else {
+                "running"
+            }
+        }
+        TaskStatus::Succeeded
+        | TaskStatus::Failed
+        | TaskStatus::Exhausted
+        | TaskStatus::Aborted => "terminal",
+    };
+
+    format!("execution_condition: {kind} - {}", response.terminal_reason.message)
+}
+
 fn cluster_member_state_text(state: ClusterMemberState) -> &'static str {
     match state {
         ClusterMemberState::Healthy => "healthy",
@@ -1313,6 +1524,18 @@ mod tests {
 
         let text = render_session_status(&view);
 
+        assert!(
+            text.contains(
+                "routing: compatibility (execution_profile) - compatibility execution remains active from the persisted task"
+            ),
+            "{text}"
+        );
+        assert!(
+            text.contains(
+                "execution_condition: waiting - governance approval is still pending before execution can continue"
+            ),
+            "{text}"
+        );
         assert!(text.contains("latest_review_trigger: pr_ready"), "{text}");
         assert!(text.contains("latest_review_vote: strategy=majority approvals=2 concerns=0 blocks=0 decision=accepted"), "{text}");
         assert!(text.contains("latest_review_outcome: accepted"), "{text}");

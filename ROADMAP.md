@@ -6,31 +6,24 @@ Canon is downstream from Synod in this roadmap: Synod thinks, decides, orchestra
 
 Evolve Synod into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.15.0
+## Current Status: v0.16.0
 
-In addition to all v0.14.0 capabilities, the v0.15.0 release ships the full
-`015-runtime-refoundation` feature:
+In addition to all v0.15.0 capabilities, the v0.16.0 release ships the full
+`016-session-native-surface-unification` feature:
 
-- **Session-Native Runtime Is Primary**: `start → capture → plan → run → status → inspect`
-  is the default operator path, while `init` and `.synod/execution.json` remain
-  available only as explicit compatibility/bootstrap surfaces.
-- **Authoritative Bounded Task Drafts**: `plan` persists a bounded `GoalPlan`
-  derived from captured input, workspace evidence, and bounded Canon context
-  rather than replaying a static manifest as the primary product story.
-- **Explicit Flow State**: planning now persists confirmed, proposed, skipped,
-  or absent flow state so operators can confirm or skip inferred constraints
-  instead of treating flow as hidden metadata.
-- **Live Decision Contracts**: the runtime selects the next bounded action from
-  current evidence and persists inspectable decisions with rationale,
-  expected outcome, evidence inputs, action results, and timestamps.
-- **Terminal Outcomes And Recovery Cues**: success, failure, exhaustion, and
-  no-actionable-state outcomes are explicit in status, run, and inspect output,
-  along with next-command guidance and failure evidence.
-- **Compatibility Routing Is Visible**: direct manifest-backed `synod run --goal`
-  remains supported, but Synod now renders that route as explicit compatibility
-  behavior instead of letting it look like the primary runtime.
-- **Canon Stays Bounded**: Canon remains a stage-boundary governance and
-  evidence surface, not the per-action control plane for the decision loop.
+- **One Coherent Session View**: `run`, `status`, `next`, and `inspect` now
+  project the same route explanation, `execution_condition`, decision summary,
+  and next-step guidance for the primary session-native path.
+- **Unified Optional Mode Projections**: review, adaptive execution, and
+  governance state appear as bounded additions to the same session-owned summary
+  instead of fragmenting the product story into separate runtime modes.
+- **Explicit Compatibility Path**: direct manifest-backed `synod run --goal`
+  remains supported and visibly labeled as compatibility behavior, while a ready
+  session-native plan stays authoritative unless compatibility is requested
+  deliberately.
+- **Canon Compatibility Target Updated**: the documented supported Canon CLI
+  target is now `0.24.0` while Canon remains bounded to governance and evidence
+  overlays rather than the per-action control plane.
 
 ### Secondary follow-up directions
 
