@@ -127,6 +127,7 @@ pub fn summarize_trace(
     let mut decision_timeline: Vec<String> = Vec::new();
     let mut failure_evidence: Vec<String> = Vec::new();
     let mut latest_governance_state: Option<String> = None;
+    let mut saw_native_routing_signal = false;
     let mut step_indexes: HashMap<String, usize> = HashMap::new();
     let mut executed_steps: Vec<TraceStepSummary> = Vec::new();
     let mut recovery_events: Vec<TraceRecoveryEvent> = Vec::new();
@@ -134,6 +135,10 @@ pub fn summarize_trace(
     let mut review_timeline: Vec<String> = Vec::new();
 
     for event in &trace.events {
+        if event.event_type.is_decision_loop_event() {
+            saw_native_routing_signal = true;
+        }
+
         match event.event_type {
             TraceEventType::TaskStarted => {
                 if authored_input_summary.is_none() {
@@ -347,6 +352,7 @@ pub fn summarize_trace(
             | TraceEventType::GovernanceCompleted
             | TraceEventType::GovernanceBlocked
             | TraceEventType::GovernancePacketRejected => {
+                saw_native_routing_signal = true;
                 match event.event_type {
                     TraceEventType::GovernanceAwaitingApproval => {
                         latest_governance_state = Some("awaiting_approval".to_string());
@@ -421,6 +427,26 @@ pub fn summarize_trace(
                 }
             }
         }
+    }
+
+    if routing_summary.is_none() {
+        routing_summary = Some(output::render_route_outcome(&RoutingOutcome {
+            mode: if saw_native_routing_signal {
+                RoutingMode::Native
+            } else {
+                RoutingMode::Compatibility
+            },
+            source: if saw_native_routing_signal {
+                RoutingSource::GoalPlan
+            } else {
+                RoutingSource::ExecutionProfile
+            },
+            reason: if saw_native_routing_signal {
+                "trace came from the session-native runtime".to_string()
+            } else {
+                "trace came from the explicit compatibility runtime".to_string()
+            },
+        }));
     }
 
     Ok(TraceSummaryView {

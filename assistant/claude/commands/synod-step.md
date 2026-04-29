@@ -20,7 +20,7 @@ If shell execution is unavailable, ask only for missing workspace details and th
 Wait for pasted output before continuing.
 
 ## Output Interpretation
-Summarize `latest_status`, any updated `latest_trace_ref`, and the CLI-reported `next_command`.
+Summarize `routing`, `execution_condition`, `latest_status`, any updated `latest_trace_ref`, and the CLI-reported `next_command`.
 
 ## Next-Step Routing
 Prefer the CLI-reported `next_command`; if the session is missing or invalid, route to `/synod-start`.

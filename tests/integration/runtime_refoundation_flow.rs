@@ -15,12 +15,21 @@ fn session_native_runtime_path_runs_without_a_declarative_profile() {
     let plan = run_synod_in(&workspace, &["plan", "--flow", "bug-fix"]);
     let plan_text = terminal_text(&plan);
     assert_eq!(plan.status.code(), Some(0), "{plan_text}");
+    assert!(plan_text.contains("routing: native (goal_plan)"), "{plan_text}");
+    assert!(
+        plan_text.contains(
+            "execution_condition: waiting - planning is complete and execution can begin"
+        ),
+        "{plan_text}"
+    );
     assert!(plan_text.contains("execution_path: native_goal_plan"), "{plan_text}");
     assert!(plan_text.contains("next_command: synod run"), "{plan_text}");
 
     let run = run_synod_in(&workspace, &["run"]);
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(0), "{run_text}");
+    assert!(run_text.contains("routing: native (goal_plan)"), "{run_text}");
+    assert!(run_text.contains("execution_condition: terminal -"), "{run_text}");
     assert!(run_text.contains("decision "), "{run_text}");
     assert!(run_text.contains("terminal_status: succeeded"), "{run_text}");
     assert!(run_text.contains("trace:"), "{run_text}");
@@ -44,6 +53,7 @@ fn inspect_surfaces_route_goal_plan_and_decision_timeline_for_native_run() {
     assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
     assert!(inspect_text.contains("inspection_target: session-trace-ref"), "{inspect_text}");
     assert!(inspect_text.contains("routing: native (goal_plan)"), "{inspect_text}");
+    assert!(inspect_text.contains("execution_condition: terminal -"), "{inspect_text}");
     assert!(inspect_text.contains("goal_plan_summary:"), "{inspect_text}");
     assert!(inspect_text.contains("decision_timeline:"), "{inspect_text}");
     assert!(
@@ -71,6 +81,11 @@ fn status_after_native_run_surfaces_latest_persisted_decision_state() {
     let status_text = terminal_text(&status);
 
     assert_eq!(status.status.code(), Some(0), "{status_text}");
+    assert!(status_text.contains("routing: native (goal_plan)"), "{status_text}");
+    assert!(
+        status_text.contains("execution_condition: terminal - work completed successfully"),
+        "{status_text}"
+    );
     assert!(status_text.contains("execution_path: native_goal_plan"), "{status_text}");
     assert!(status_text.contains("latest_decision_status: verified"), "{status_text}");
     assert!(status_text.contains("latest_decision_target:"), "{status_text}");

@@ -15,14 +15,14 @@ use crate::cli::output;
 use crate::domain::governance::GovernanceRuntimeKind;
 use crate::domain::session::{
     ActiveSessionRecord, SessionStatus, SessionStatusView, decision_status_text,
-    execution_path_text, task_state_attempt_lineage_summary, task_state_governance_approval_text,
-    task_state_governance_blocked_reason, task_state_governance_candidate_actions,
-    task_state_governance_canon_run_ref, task_state_governance_decision_headline,
-    task_state_governance_mode_text, task_state_governance_next_action,
-    task_state_governance_packet_binding_reason, task_state_governance_packet_ref,
-    task_state_governance_packet_source_stage, task_state_governance_runtime_text,
-    task_state_governance_stage_key, task_state_governance_state_text,
-    task_state_workspace_slice_summary,
+    execution_path_text, routing_outcome, task_state_attempt_lineage_summary,
+    task_state_governance_approval_text, task_state_governance_blocked_reason,
+    task_state_governance_candidate_actions, task_state_governance_canon_run_ref,
+    task_state_governance_decision_headline, task_state_governance_mode_text,
+    task_state_governance_next_action, task_state_governance_packet_binding_reason,
+    task_state_governance_packet_ref, task_state_governance_packet_source_stage,
+    task_state_governance_runtime_text, task_state_governance_stage_key,
+    task_state_governance_state_text, task_state_workspace_slice_summary,
 };
 use crate::domain::task::TaskStatus;
 use crate::domain::trace::current_timestamp_millis;
@@ -234,10 +234,14 @@ pub fn execute_run(workspace: Option<&Path>) -> Result<SessionCommandReport, Ses
     let trace = runtime.trace_store().load(Path::new(&response.trace_location)).ok();
     let next_command =
         suggested_next_command(&record).unwrap_or_else(|| "synod inspect".to_string());
+    let routing_prefix = output::render_route_outcome(&routing_outcome(&record));
 
     Ok(SessionCommandReport {
         exit_status: exit_status_for_task(response.terminal_status),
-        terminal_output: output::render_run_trace("run", trace.as_ref(), &response, &next_command),
+        terminal_output: format!(
+            "{routing_prefix}\n{}",
+            output::render_run_trace("run", trace.as_ref(), &response, &next_command),
+        ),
     })
 }
 

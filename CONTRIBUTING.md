@@ -6,7 +6,7 @@ Synod is a bounded delivery orchestrator. Contributions should keep that bias:
 
 - prefer small, inspectable changes over broad refactors
 - preserve explicit session state, traces, and CLI guidance
-- preserve the session-native `start -> capture -> plan -> run -> inspect` story as the default operator path
+- preserve the session-native `start -> capture -> plan -> run -> status -> next -> inspect` story as the default operator path
 - keep the local developer workflow deterministic
 - update tests and docs together with behavior changes
 

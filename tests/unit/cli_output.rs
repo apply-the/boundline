@@ -269,6 +269,10 @@ fn trace_summary_renderer_mentions_steps_recovery_and_terminal_reason() {
 
     assert!(rendered.contains("inspection_target: explicit-trace"));
     assert!(rendered.contains("trace: /tmp/workspace/.synod/traces/task.json"));
+    assert!(
+        rendered.contains("execution_condition: terminal - goal satisfied after step verify"),
+        "{rendered}"
+    );
     assert!(rendered.contains("step analyze (agent) succeeded [1 attempt(s)]"));
     assert!(rendered.contains("step code (agent) succeeded [2 attempt(s)]"));
     assert!(rendered.contains("retry: retrying step code within remaining retry budget"));
@@ -373,6 +377,7 @@ fn render_run_trace_includes_next_command_and_trace_fields() {
     let response = minimal_response(TaskStatus::Succeeded, "goal satisfied");
     let rendered = render_run_trace("run", None, &response, "/synod-status");
 
+    assert!(rendered.contains("execution_condition: terminal - goal satisfied"), "{rendered}");
     assert!(rendered.contains("next_command: /synod-status"), "{rendered}");
     assert!(rendered.contains("terminal_status: succeeded"), "{rendered}");
     assert!(rendered.contains("trace: /tmp/.synod/traces/task-unit.json"), "{rendered}");

@@ -1,10 +1,10 @@
-# Adaptive Execution in Synod 0.15.0
+# Adaptive Execution in Synod 0.16.0
 
-Synod `0.15.0` keeps bounded adaptive execution as an explicit compatibility mode inside the broader session-native runtime. The primary operator path is `start -> capture -> plan -> run -> inspect` with a bounded `GoalPlan`; adaptive behavior still uses `<workspace>/.synod/execution.json` when the operator intentionally chooses the manifest-backed compatibility path.
+Synod `0.16.0` keeps bounded adaptive execution as an explicit compatibility mode inside the broader session-native runtime. The primary operator path is `start -> capture -> plan -> run -> status -> next -> inspect` with a bounded `GoalPlan`; adaptive behavior still uses `<workspace>/.synod/execution.json` when the operator intentionally chooses the manifest-backed compatibility path.
 
 Instead of requiring every attempt to be pre-authored in `<workspace>/.synod/execution.json`, a compatibility execution profile can describe an `adaptive` block and let Synod choose one workspace slice and one deterministic candidate at a time.
 
-In `0.15.0`, operators can still generate the baseline compatibility profile with
+In `0.16.0`, operators can still generate the baseline compatibility profile with
 `synod init`; adaptive behavior is still configured through the execution
 manifest itself.
 
@@ -64,14 +64,14 @@ Each candidate gets a stable signature derived from the file path and replacemen
 
 When adaptive execution is active, the local CLI now exposes:
 
-- `synod run`: explicit compatibility routing plus `workspace_slice`, `attempt_lineage` after replans, changed files, validation result, terminal status, and trace path
-- `synod status`: `latest_workspace_slice`, `latest_selection_headline`, `latest_attempt_lineage` when present, and `latest_validation_status`
+- `synod run`: explicit compatibility routing, `execution_condition`, `workspace_slice`, `attempt_lineage` after replans, changed files, validation result, terminal status, and trace path
+- `synod status`: explicit `routing`, `execution_condition`, `latest_workspace_slice`, `latest_selection_headline`, `latest_attempt_lineage` when present, and `latest_validation_status`
 - `synod next`: the same adaptive session projection plus the CLI-reported next command
-- `synod inspect`: adaptive slice-selection headlines, attempt-specific change headlines, validation results, recovery events, and final terminal reason
+- `synod inspect`: adaptive slice-selection headlines, `execution_condition`, attempt-specific change headlines, validation results, recovery events, and final terminal reason
 
 ## Current scope
 
-The `0.15.0` adaptive slice is intentionally bounded:
+The `0.16.0` adaptive slice is intentionally bounded:
 
 - candidate generation is deterministic, not open-ended
 - workspace selection only considers manifest-declared `read_targets`
