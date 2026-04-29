@@ -1,6 +1,9 @@
 #[path = "support/workspace_fixture.rs"]
 mod workspace_fixture;
 
+#[path = "support/runtime_refoundation.rs"]
+mod runtime_refoundation;
+
 #[path = "integration/sequential_task_run.rs"]
 mod sequential_task_run;
 
@@ -72,3 +75,21 @@ mod cluster_status_flow;
 
 #[path = "integration/cluster_config_flow.rs"]
 mod cluster_config_flow;
+
+#[path = "integration/session_native_flow.rs"]
+mod session_native_flow;
+
+#[path = "integration/fixture_compat_flow.rs"]
+mod fixture_compat_flow;
+
+#[path = "integration/runtime_refoundation_flow.rs"]
+mod runtime_refoundation_flow;
+
+#[path = "integration/runtime_refoundation_failure.rs"]
+mod runtime_refoundation_failure;
+
+#[path = "integration/runtime_refoundation_compat.rs"]
+mod runtime_refoundation_compat;
+
+#[path = "integration/runtime_refoundation_governance.rs"]
+mod runtime_refoundation_governance;

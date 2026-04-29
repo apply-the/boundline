@@ -16,16 +16,17 @@ fn fixture_vertical_slice_drives_a_failing_test_to_green() {
         run_synod_in(&workspace, &["capture", "--goal", "Fix the failing add test"]).status.code(),
         Some(0)
     );
-    assert_eq!(run_synod_in(&workspace, &["plan"]).status.code(), Some(0));
+    assert_eq!(run_synod_in(&workspace, &["plan", "--flow", "bug-fix"]).status.code(), Some(0));
 
     let output = run_synod_in(&workspace, &["run"]);
     let text = terminal_text(&output);
     let trace_path = extract_trace_path(&text);
 
     assert_eq!(output.status.code(), Some(0), "{text}");
-    assert!(text.contains("analyze"), "{text}");
-    assert!(text.contains("code"), "{text}");
-    assert!(text.contains("verify"), "{text}");
+    assert!(text.contains("created: analyze"), "{text}");
+    assert!(text.contains("created: fix"), "{text}");
+    assert!(text.contains("created: test"), "{text}");
+    assert!(text.contains("goal plan completed through the native decision loop"), "{text}");
     assert!(text.contains("terminal_status: succeeded"), "{text}");
     assert!(trace_path.as_ref().is_some_and(|path| path.exists()), "{text}");
 

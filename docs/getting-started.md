@@ -9,18 +9,18 @@ Synod is a local CLI for bounded software-delivery work.
 
 You use Synod to:
 
-- initialize bounded workspace defaults with `synod init`
-- start from a generated execution profile and edit it only when you need finer control
+- run the primary session-native path: `start -> capture -> plan -> run -> status -> inspect`
+- use `synod init` only when you want scaffolded compatibility defaults or assistant setup
 - capture human-authored goals and Markdown briefs without authoring a task JSON request
 - inspect or tune runtime/model routing with `synod config`
-- apply only the changes declared in that manifest
-- run the workspace validation command after each attempt
+- execute bounded actions from live state and recorded evidence
+- use declarative execution profiles only when you intentionally want compatibility behavior
 - keep session state in `<workspace>/.synod/session.json`
 - keep traces in `<workspace>/.synod/traces/`
 
-For most users the path is simple: run `synod init`, let Synod generate the
-starting profile, and edit that profile only when the defaults stop fitting the
-workspace.
+For most users the path is simple: run `synod doctor`, `synod start`, `synod capture`,
+`synod plan`, and `synod run`. `synod init` is optional bootstrap for generated
+compatibility profiles and assistant setup.
 
 If review, adaptive execution, or governance are configured, Synod projects that
 state through the same CLI instead of introducing a separate runtime surface.
@@ -51,9 +51,9 @@ synod --help
 
 ## First Run in a Workspace
 
-### 1. Initialize the Workspace
+### 1. Optional Bootstrap
 
-Run init once per workspace:
+Run init when you want scaffolded compatibility defaults:
 
 ```bash
 synod init --workspace <workspace>
@@ -66,7 +66,7 @@ Available starting templates are:
 - `change`: start from a bounded implementation change
 - `delivery`: start from a broader delivery update
 
-Templates only seed the generated execution profile. They do not lock the
+Templates only seed the generated compatibility execution profile. They do not lock the
 workspace, and they do not replace `synod flow`.
 
 If you want a different starting point later, regenerate it explicitly:
@@ -78,8 +78,8 @@ synod init --workspace <workspace> --force --template change
 If you simply need another task of the same kind, do not rerun init. Start a
 new session and run the workflow again.
 
-If you need finer control than the generated starting point, edit the generated
-profile at `<workspace>/.synod/execution.json` directly. The file shape is:
+If you need finer control than the generated starting point for the explicit
+compatibility path, edit `<workspace>/.synod/execution.json` directly. The file shape is:
 
 ```json
 {
@@ -161,8 +161,8 @@ synod capture --workspace <workspace> \
 
 `synod flow` is optional. Use it when you want to pin the run to one of the
 built-in flows: `bug-fix`, `change`, or `delivery`. This is separate from the
-init template: `init` bootstraps the workspace, while `flow` selects the shape
-of the current run.
+init template: `init` bootstraps an optional compatibility profile, while `flow`
+selects the shape of the current session-native run.
 
 ### 4. Plan and Run
 
@@ -190,37 +190,38 @@ These commands tell you:
 
 ## Direct Run Without the Full Session Flow
 
-Use the direct workflow when you only want to launch one bounded run:
+Use the direct workflow only when you intentionally want the explicit
+compatibility path instead of the session-native operator loop:
 
 ```bash
 synod run --workspace <workspace> --goal "Fix the failing add test"
 ```
 
 Direct run still uses the workspace execution manifest as the bounded execution
-contract; it only skips the explicit session setup.
+contract; it does not replace the normal session-native path.
 
 ## The Core Commands
 
 | Command | What it is for |
 | --- | --- |
-| `synod init` | Bootstrap `.synod` workspace files and optional assistant setup |
+| `synod init` | Bootstrap optional compatibility `.synod` workspace files and assistant setup |
 | `synod config show|set|unset` | Inspect or edit routing defaults at global/workspace scope |
 | `synod cluster init|status|inspect` | Register a bounded multi-workspace cluster and inspect member state |
-| `synod doctor` | Validate the workspace and manifest before running |
+| `synod doctor` | Validate the workspace and any configured compatibility manifest before running |
 | `synod start` | Initialize or reset the active workspace session |
 | `synod capture` | Store the delivery goal in session state |
 | `synod flow` | Select `bug-fix`, `change`, or `delivery` |
 | `synod plan` | Build the next bounded task from the active session |
 | `synod step` | Execute one step of the current task |
-| `synod run` | Execute the current task until completion or operator intervention |
+| `synod run` | Execute the current task until completion or operator intervention, preferring session-native routing when a `GoalPlan` exists |
 | `synod status` | Show the current session snapshot |
 | `synod next` | Show the CLI-reported next action |
 | `synod inspect` | Summarize the latest trace or a specific trace |
 
 ## Choosing the Right Manifest Shape
 
-Synod is intentionally bounded by the workspace manifest; `synod init`
-scaffolds that policy for normal operator workflows.
+Synod keeps declarative manifests as an explicit compatibility surface; `synod init`
+scaffolds that policy when you intentionally want manifest-backed behavior.
 
 - use `attempts` when you want explicit authored change attempts
 - use `adaptive` when you want Synod to choose one bounded workspace slice and

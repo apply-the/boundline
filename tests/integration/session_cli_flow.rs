@@ -24,7 +24,7 @@ fn start_persists_an_active_session_that_follow_up_commands_reuse_from_current_w
 }
 
 #[test]
-fn capture_plan_step_and_run_keep_session_state_and_trace_synchronized() {
+fn capture_plan_and_run_keep_session_state_and_trace_synchronized() {
     let workspace = temp_fixture_workspace("synod-session-flow-state");
 
     let start = run_synod_in(&workspace, &["start"]);
@@ -33,20 +33,13 @@ fn capture_plan_step_and_run_keep_session_state_and_trace_synchronized() {
     let capture = run_synod_in(&workspace, &["capture", "--goal", "Fix the failing add test"]);
     assert_eq!(capture.status.code(), Some(0), "{}", terminal_text(&capture));
 
-    let plan = run_synod_in(&workspace, &["plan"]);
+    let plan = run_synod_in(&workspace, &["plan", "--flow", "bug-fix"]);
     assert_eq!(plan.status.code(), Some(0), "{}", terminal_text(&plan));
-
-    let step = run_synod_in(&workspace, &["step"]);
-    let step_text = terminal_text(&step);
-    assert_eq!(step.status.code(), Some(0), "{step_text}");
-    assert!(step_text.contains("latest_status: running"), "{step_text}");
-    assert!(step_text.contains("latest_trace_ref:"), "{step_text}");
 
     let run = run_synod_in(&workspace, &["run"]);
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(0), "{run_text}");
-    assert!(run_text.contains("changed_files: src/lib.rs"), "{run_text}");
-    assert!(run_text.contains("validation: passed"), "{run_text}");
+    assert!(run_text.contains("decision "), "{run_text}");
     assert!(run_text.contains("terminal_status: succeeded"), "{run_text}");
     assert!(run_text.contains("trace:"), "{run_text}");
 }
@@ -60,20 +53,19 @@ fn status_next_and_inspect_reuse_the_active_session_view_and_trace_reference() {
         run_synod_in(&workspace, &["capture", "--goal", "Fix the failing add test"],).status.code(),
         Some(0)
     );
-    assert_eq!(run_synod_in(&workspace, &["plan"]).status.code(), Some(0));
-    assert_eq!(run_synod_in(&workspace, &["step"]).status.code(), Some(0));
+    assert_eq!(run_synod_in(&workspace, &["plan", "--flow", "bug-fix"]).status.code(), Some(0));
 
     let status = run_synod_in(&workspace, &["status"]);
     let status_text = terminal_text(&status);
     assert_eq!(status.status.code(), Some(0), "{status_text}");
-    assert!(status_text.contains("latest_status: running"), "{status_text}");
-    assert!(status_text.contains("current_step_id: code"), "{status_text}");
-    assert!(status_text.contains("next_command: synod step"), "{status_text}");
+    assert!(status_text.contains("latest_status: planned"), "{status_text}");
+    assert!(status_text.contains("current_stage: investigate"), "{status_text}");
+    assert!(status_text.contains("next_command: synod run"), "{status_text}");
 
     let next = run_synod_in(&workspace, &["next"]);
     let next_text = terminal_text(&next);
     assert_eq!(next.status.code(), Some(0), "{next_text}");
-    assert!(next_text.contains("next_command: synod step"), "{next_text}");
+    assert!(next_text.contains("next_command: synod run"), "{next_text}");
 
     let run = run_synod_in(&workspace, &["run"]);
     assert_eq!(run.status.code(), Some(0), "{}", terminal_text(&run));
@@ -101,7 +93,6 @@ fn status_next_and_inspect_reuse_the_active_session_view_and_trace_reference() {
     assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
     assert!(inspect_text.contains("inspection_target: session-trace-ref"), "{inspect_text}");
     assert!(inspect_text.contains("goal: Fix the failing add test"), "{inspect_text}");
-    assert!(inspect_text.contains("src/lib.rs"), "{inspect_text}");
-    assert!(inspect_text.contains("validation passed"), "{inspect_text}");
+    assert!(inspect_text.contains("terminal_status: succeeded"), "{inspect_text}");
     assert!(!inspect_text.contains("goal: Foreign latest trace"), "{inspect_text}");
 }

@@ -14,14 +14,15 @@ use crate::cli::CommandExitStatus;
 use crate::cli::output;
 use crate::domain::governance::GovernanceRuntimeKind;
 use crate::domain::session::{
-    ActiveSessionRecord, SessionStatus, SessionStatusView, task_state_attempt_lineage_summary,
-    task_state_governance_approval_text, task_state_governance_blocked_reason,
-    task_state_governance_candidate_actions, task_state_governance_canon_run_ref,
-    task_state_governance_decision_headline, task_state_governance_mode_text,
-    task_state_governance_next_action, task_state_governance_packet_binding_reason,
-    task_state_governance_packet_ref, task_state_governance_packet_source_stage,
-    task_state_governance_runtime_text, task_state_governance_stage_key,
-    task_state_governance_state_text, task_state_workspace_slice_summary,
+    ActiveSessionRecord, SessionStatus, SessionStatusView, decision_status_text,
+    execution_path_text, task_state_attempt_lineage_summary, task_state_governance_approval_text,
+    task_state_governance_blocked_reason, task_state_governance_candidate_actions,
+    task_state_governance_canon_run_ref, task_state_governance_decision_headline,
+    task_state_governance_mode_text, task_state_governance_next_action,
+    task_state_governance_packet_binding_reason, task_state_governance_packet_ref,
+    task_state_governance_packet_source_stage, task_state_governance_runtime_text,
+    task_state_governance_stage_key, task_state_governance_state_text,
+    task_state_workspace_slice_summary,
 };
 use crate::domain::task::TaskStatus;
 use crate::domain::trace::current_timestamp_millis;
@@ -45,6 +46,9 @@ pub fn execute_start(
         authored_brief: None,
         active_flow: None,
         active_task: None,
+        goal_plan: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
         latest_status: SessionStatus::Initialized,
         latest_terminal_reason: None,
         latest_trace_ref: None,
@@ -130,7 +134,11 @@ pub fn execute_flow(
     })
 }
 
-pub fn execute_plan(workspace: Option<&Path>) -> Result<SessionCommandReport, SessionCommandError> {
+pub fn execute_plan(
+    workspace: Option<&Path>,
+    requested_flow: Option<&str>,
+    no_flow: bool,
+) -> Result<SessionCommandReport, SessionCommandError> {
     let workspace = resolve_workspace(workspace)?;
     let runtime = SessionRuntime::for_workspace(&workspace);
     let mut record = load_active_session(&workspace)?;
@@ -139,15 +147,15 @@ pub fn execute_plan(workspace: Option<&Path>) -> Result<SessionCommandReport, Se
         return Err(SessionCommandError::MissingCapturedGoal);
     }
 
-    runtime.plan_task(&mut record).map_err(map_runtime_error)?;
+    runtime.plan_task(&mut record, requested_flow, no_flow).map_err(map_runtime_error)?;
     runtime.persist_session(&record).map_err(map_runtime_error)?;
 
     Ok(SessionCommandReport {
         exit_status: CommandExitStatus::Succeeded,
         terminal_output: output::render_session_status(&build_status_view(
             &record,
-            Some("synod step".to_string()),
-            "planned the active goal into a resumable task snapshot",
+            suggested_next_command(&record),
+            planning_summary(&record),
         )),
     })
 }
@@ -199,11 +207,16 @@ pub fn execute_run(workspace: Option<&Path>) -> Result<SessionCommandReport, Ses
         return Err(SessionCommandError::MissingCapturedGoal);
     }
 
-    if record.active_task.is_none() {
+    let uses_native_goal_plan =
+        runtime.uses_native_goal_plan(&record).map_err(map_runtime_error)?;
+
+    if !uses_native_goal_plan && record.active_task.is_none() {
         return Err(SessionCommandError::MissingPlannedTask);
     }
 
-    if runtime.refresh_governance_state(&mut record).map_err(map_runtime_error)? {
+    if !uses_native_goal_plan
+        && runtime.refresh_governance_state(&mut record).map_err(map_runtime_error)?
+    {
         runtime.persist_session(&record).map_err(map_runtime_error)?;
         return Ok(SessionCommandReport {
             exit_status: exit_status_for_session(record.latest_status),
@@ -270,7 +283,8 @@ pub fn execute_next(workspace: Option<&Path>) -> Result<SessionCommandReport, Se
 }
 
 pub fn render_error(command_name: &str, error: &SessionCommandError) -> String {
-    output::render_session_error(command_name, &error.message(), error.next_command())
+    let next_command = error.next_command();
+    output::render_session_error(command_name, &error.message(), next_command.as_deref())
 }
 
 fn resolve_workspace(workspace: Option<&Path>) -> Result<PathBuf, SessionCommandError> {
@@ -316,6 +330,9 @@ fn map_runtime_error(error: SessionRuntimeError) -> SessionCommandError {
             SessionCommandError::ClarificationRequired { headline, prompt }
         }
         SessionRuntimeError::MissingActiveTask => SessionCommandError::MissingPlannedTask,
+        SessionRuntimeError::FlowConfirmationRequired { flow_name } => {
+            SessionCommandError::FlowConfirmationRequired { flow_name }
+        }
         SessionRuntimeError::UnknownFlow { requested, supported } => {
             SessionCommandError::UnknownFlow { requested, supported }
         }
@@ -394,6 +411,10 @@ fn build_status_view(
         requested_governance_zone: governance_intent.and_then(|intent| intent.zone.clone()),
         requested_governance_owner: governance_intent.and_then(|intent| intent.owner.clone()),
         active_flow: record.active_flow.as_ref().map(|flow| flow.flow_name.clone()),
+        flow_state: record
+            .goal_plan
+            .as_ref()
+            .map(|goal_plan| goal_plan.flow_state().summary_text()),
         current_stage_id: record.active_flow.as_ref().map(|flow| flow.current_stage_id.clone()),
         current_stage_index: record.active_flow.as_ref().map(|flow| flow.current_stage_index),
         total_stages: record.active_flow.as_ref().map(|flow| flow.total_stages),
@@ -404,7 +425,13 @@ fn build_status_view(
             .and_then(|task| task.plan.current_step().map(|step| step.id.clone())),
         current_step_index: record.active_task.as_ref().map(|task| task.plan.current_step_index),
         latest_status: record.latest_status,
+        execution_path: execution_path_text(record),
         latest_trace_ref: record.latest_trace_ref.clone(),
+        latest_decision_status: record
+            .decisions
+            .last()
+            .map(|decision| decision_status_text(decision.status).to_string()),
+        latest_decision_target: record.decisions.last().map(|decision| decision.target.clone()),
         latest_changed_files: record.active_task.as_ref().and_then(|task| {
             task.context.state.get("latest_changed_files").and_then(|value| {
                 value.as_array().map(|items| {
@@ -575,13 +602,58 @@ fn suggested_next_command(record: &ActiveSessionRecord) -> Option<String> {
     match record.latest_status {
         SessionStatus::Initialized => Some("synod capture --goal <goal>".to_string()),
         SessionStatus::GoalCaptured => Some("synod plan".to_string()),
-        SessionStatus::Planned | SessionStatus::Running => Some("synod step".to_string()),
+        SessionStatus::Planned => {
+            if let Some(goal_plan) = record.goal_plan.as_ref()
+                && let Some(flow) = goal_plan.flow.as_ref()
+                && !flow.confirmed
+            {
+                return Some(format!("synod plan --flow {}", flow.flow_name));
+            }
+
+            if record.goal_plan.is_some() && record.active_task.is_none() {
+                return Some("synod run".to_string());
+            }
+
+            Some("synod step".to_string())
+        }
+        SessionStatus::Running => Some("synod step".to_string()),
         SessionStatus::Succeeded
         | SessionStatus::Failed
         | SessionStatus::Exhausted
         | SessionStatus::Aborted => Some("synod inspect".to_string()),
         SessionStatus::Invalid => Some("synod start".to_string()),
     }
+}
+
+fn planning_summary(record: &ActiveSessionRecord) -> String {
+    let Some(goal_plan) = record.goal_plan.as_ref() else {
+        return "planned the active goal into a resumable task snapshot".to_string();
+    };
+
+    let task_count = goal_plan.tasks.len();
+    if let Some(flow) = goal_plan.flow.as_ref() {
+        if flow.confirmed {
+            return format!(
+                "planned the active goal into {task_count} bounded goal-plan task(s) with confirmed `{}` flow",
+                flow.flow_name
+            );
+        }
+
+        return format!(
+            "planned the active goal into {task_count} bounded goal-plan task(s); proposed `{}` flow is persisted and awaiting confirmation",
+            flow.flow_name
+        );
+    }
+
+    if goal_plan.flow_skipped {
+        return format!(
+            "planned the active goal into {task_count} bounded goal-plan task(s) with operator-skipped flow constraints"
+        );
+    }
+
+    format!(
+        "planned the active goal into {task_count} bounded goal-plan task(s) without flow constraints"
+    )
 }
 
 #[derive(Debug, Error)]
@@ -598,6 +670,10 @@ pub enum SessionCommandError {
     MissingCapturedGoal,
     #[error("active session has no planned task")]
     MissingPlannedTask,
+    #[error(
+        "active session has a proposed `{flow_name}` flow that must be confirmed or skipped before execution"
+    )]
+    FlowConfirmationRequired { flow_name: String },
     #[error("unknown flow `{requested}`; supported flows: {supported}")]
     UnknownFlow { requested: String, supported: String },
     #[error(
@@ -632,6 +708,11 @@ impl SessionCommandError {
             }
             Self::MissingCapturedGoal => "active session has no captured goal".to_string(),
             Self::MissingPlannedTask => "active session has no planned task".to_string(),
+            Self::FlowConfirmationRequired { flow_name } => {
+                format!(
+                    "active session has a proposed `{flow_name}` flow that must be confirmed or skipped before execution; run `synod plan --flow {flow_name}` to confirm or `synod plan --no-flow` to skip"
+                )
+            }
             Self::UnknownFlow { requested, supported } => {
                 format!("unknown flow `{requested}`; supported flows: {supported}")
             }
@@ -654,20 +735,25 @@ impl SessionCommandError {
         }
     }
 
-    fn next_command(&self) -> Option<&str> {
+    fn next_command(&self) -> Option<String> {
         match self {
             Self::MissingActiveSession
             | Self::WorkspaceMismatch { .. }
-            | Self::InvalidActiveSession(_) => Some("synod start"),
-            Self::MissingCapturedGoal => Some("synod capture --goal <goal>"),
-            Self::MissingPlannedTask => Some("synod plan"),
-            Self::UnknownFlow { .. } => Some("synod flow bug-fix"),
-            Self::FlowReplacementRequiresReset { .. } => Some("synod start"),
-            Self::InvalidFlowState(_) => Some("synod start"),
-            Self::NotImplemented { next_command, .. } => *next_command,
-            Self::ClarificationRequired { .. } => Some("synod capture --goal <narrower goal>"),
+            | Self::InvalidActiveSession(_) => Some("synod start".to_string()),
+            Self::MissingCapturedGoal => Some("synod capture --goal <goal>".to_string()),
+            Self::MissingPlannedTask => Some("synod plan".to_string()),
+            Self::FlowConfirmationRequired { flow_name } => {
+                Some(format!("synod plan --flow {flow_name}"))
+            }
+            Self::UnknownFlow { .. } => Some("synod flow bug-fix".to_string()),
+            Self::FlowReplacementRequiresReset { .. } => Some("synod start".to_string()),
+            Self::InvalidFlowState(_) => Some("synod start".to_string()),
+            Self::NotImplemented { next_command, .. } => next_command.map(str::to_string),
+            Self::ClarificationRequired { .. } => {
+                Some("synod capture --goal <narrower goal>".to_string())
+            }
             Self::WorkspaceResolution(_) | Self::SessionStore(_) | Self::SessionRuntime(_) => None,
-            Self::BriefIngestion(_) => Some("synod capture --goal <goal>"),
+            Self::BriefIngestion(_) => Some("synod capture --goal <goal>".to_string()),
         }
     }
 }
@@ -681,16 +767,17 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        CommandExitStatus, SessionCommandError, execute_capture, execute_next, execute_plan,
-        execute_run, execute_start, execute_status, exit_status_for_session, exit_status_for_task,
-        map_runtime_error, map_store_error, render_error, resolve_workspace,
-        suggested_next_command,
+        CommandExitStatus, SessionCommandError, execute_capture, execute_flow, execute_next,
+        execute_plan, execute_run, execute_start, execute_status, exit_status_for_session,
+        exit_status_for_task, load_active_session, map_runtime_error, map_store_error,
+        render_error, resolve_workspace, suggested_next_command,
     };
     use crate::adapters::session_store::SessionStoreError;
     use crate::adapters::trace_store::TraceStoreError;
     use crate::domain::session::SessionStatus;
-    use crate::domain::task::TaskStatus;
-    use crate::orchestrator::session_runtime::SessionRuntimeError;
+    use crate::domain::task::{Task, TaskStatus};
+    use crate::fixture::{build_fixture_plan_for_goal, build_task_request};
+    use crate::orchestrator::session_runtime::{SessionRuntime, SessionRuntimeError};
 
     const FIXTURE_CARGO_TOML: &str = r#"[package]
 name = "session_cli_fixture"
@@ -825,6 +912,33 @@ fn red_to_green_addition() {
         workspace
     }
 
+    fn seed_fixture_planned_session(workspace: &Path, flow_name: &str) {
+        let canonical_workspace = workspace.canonicalize().unwrap();
+        let runtime = SessionRuntime::for_workspace(&canonical_workspace);
+        let mut record = load_active_session(&canonical_workspace).unwrap();
+        runtime.select_flow(&mut record, flow_name).unwrap();
+
+        let request = build_task_request(
+            &canonical_workspace,
+            record.goal.clone().unwrap_or_default(),
+            record.session_id.clone(),
+            record.authored_brief.as_ref(),
+        )
+        .unwrap();
+        let plan = build_fixture_plan_for_goal(
+            &canonical_workspace,
+            record.active_flow.as_ref(),
+            record.goal.as_deref().unwrap_or_default(),
+        )
+        .unwrap();
+
+        record.active_task = Some(Task::new("task-session-cli", &request, plan).unwrap());
+        record.goal_plan = None;
+        record.active_flow_policy = None;
+        record.latest_status = SessionStatus::Planned;
+        runtime.persist_session(&record).unwrap();
+    }
+
     #[test]
     fn resolve_workspace_and_status_helpers_cover_remaining_branches() {
         let workspace = temp_workspace("synod-cli-session-resolve");
@@ -847,6 +961,9 @@ fn red_to_green_addition() {
                 authored_brief: None,
                 active_flow: None,
                 active_task: None,
+                goal_plan: None,
+                decisions: Vec::new(),
+                active_flow_policy: None,
                 latest_status: SessionStatus::Invalid,
                 latest_terminal_reason: None,
                 latest_trace_ref: None,
@@ -954,8 +1071,15 @@ fn red_to_green_addition() {
             CommandExitStatus::Succeeded
         );
         assert_eq!(
-            execute_plan(Some(&workspace)).unwrap().exit_status,
+            execute_plan(Some(&workspace), None, false).unwrap().exit_status,
             CommandExitStatus::Succeeded
+        );
+
+        let planned = execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
+        assert!(
+            planned.terminal_output.contains("confirmed `bug-fix` flow"),
+            "{}",
+            planned.terminal_output
         );
 
         let run = execute_run(Some(&workspace)).unwrap();
@@ -965,6 +1089,7 @@ fn red_to_green_addition() {
             "{}",
             run.terminal_output
         );
+        assert!(run.terminal_output.contains("decision "), "{}", run.terminal_output);
 
         let status = execute_status(Some(&workspace)).unwrap();
         assert_eq!(status.exit_status, CommandExitStatus::Succeeded);
@@ -1006,9 +1131,11 @@ fn red_to_green_addition() {
             CommandExitStatus::Succeeded
         );
         assert_eq!(
-            execute_plan(Some(&workspace)).unwrap().exit_status,
+            execute_flow(Some(&workspace), "bug-fix").unwrap().exit_status,
             CommandExitStatus::Succeeded
         );
+
+        seed_fixture_planned_session(&workspace, "bug-fix");
 
         let run = execute_run(Some(&workspace)).unwrap();
         assert_eq!(run.exit_status, CommandExitStatus::Succeeded);
@@ -1072,5 +1199,29 @@ fn red_to_green_addition() {
             "{}",
             inspect.terminal_output
         );
+    }
+
+    #[test]
+    fn execute_run_blocks_until_native_flow_is_confirmed() {
+        let workspace = write_execution_workspace("synod-cli-session-flow-confirmation");
+
+        execute_start(Some(&workspace)).unwrap();
+        execute_capture(
+            Some(&workspace),
+            Some("Fix the failing add test"),
+            &[],
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        execute_plan(Some(&workspace), None, false).unwrap();
+
+        let error = execute_run(Some(&workspace)).unwrap_err();
+        assert!(matches!(error, SessionCommandError::FlowConfirmationRequired { .. }));
+
+        let rendered = render_error("run", &error);
+        assert!(rendered.contains("synod plan --flow bug-fix"), "{rendered}");
     }
 }

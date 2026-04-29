@@ -6,47 +6,37 @@ Canon is downstream from Synod in this roadmap: Synod thinks, decides, orchestra
 
 Evolve Synod into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.11.0
+## Current Status: v0.15.0
 
-In addition to all v0.10.0 capabilities, the v0.11.0 release ships the full
-`011-init-model-routing` feature:
+In addition to all v0.14.0 capabilities, the v0.15.0 release ships the full
+`015-runtime-refoundation` feature:
 
-- **Human-Friendly Init**: `synod init` scaffolds `.synod/execution.json` and
-  `.synod/config.toml` from bounded templates (`bug-fix`, `change`, `delivery`),
-  with explicit preview and overwrite safeguards.
-- **Model Routing Configuration**: `synod config show|set|unset` manages runtime
-  and model defaults for planning, implementation, verification, review, named
-  reviewer roles, and adjudication.
-- **Global + Local Precedence**: effective routing resolves deterministically as
-  CLI input > workspace config > global config > built-in defaults, and exposes
-  value source in user-facing output.
-- **Runtime Surfaces**: initial support covers Claude, Codex, Copilot, and
-  Gemini CLI (CLI-only in this slice).
-
-### Priority 1: Next Spec
-
-The next spec should be a product realignment slice, not another incremental
-framework layer. It should land the primary user experience as one coherent
-session-native orchestration step instead of spreading the shift across many
-small specs.
-
-Priority outcomes for that next spec:
-
-- make `start -> capture -> plan -> run -> status -> inspect` the primary UX and push `init` out of the user's everyday mental model
-- shift planning away from static init templates toward plans derived from goal, workspace state, collected documents, and Canon-produced artifacts
-- propose or infer flows automatically, with explicit override only when needed
-- move agent adapters toward real read/modify/test/fix model-guided loops instead of declared static change sets
-- keep Canon as governance and artifact control overlay, not the center of orchestration
-
-Companion architecture review:
-
-- [docs/session-native-orchestrator-review.md](docs/session-native-orchestrator-review.md)
+- **Session-Native Runtime Is Primary**: `start → capture → plan → run → status → inspect`
+  is the default operator path, while `init` and `.synod/execution.json` remain
+  available only as explicit compatibility/bootstrap surfaces.
+- **Authoritative Bounded Task Drafts**: `plan` persists a bounded `GoalPlan`
+  derived from captured input, workspace evidence, and bounded Canon context
+  rather than replaying a static manifest as the primary product story.
+- **Explicit Flow State**: planning now persists confirmed, proposed, skipped,
+  or absent flow state so operators can confirm or skip inferred constraints
+  instead of treating flow as hidden metadata.
+- **Live Decision Contracts**: the runtime selects the next bounded action from
+  current evidence and persists inspectable decisions with rationale,
+  expected outcome, evidence inputs, action results, and timestamps.
+- **Terminal Outcomes And Recovery Cues**: success, failure, exhaustion, and
+  no-actionable-state outcomes are explicit in status, run, and inspect output,
+  along with next-command guidance and failure evidence.
+- **Compatibility Routing Is Visible**: direct manifest-backed `synod run --goal`
+  remains supported, but Synod now renders that route as explicit compatibility
+  behavior instead of letting it look like the primary runtime.
+- **Canon Stays Bounded**: Canon remains a stage-boundary governance and
+  evidence surface, not the per-action control plane for the decision loop.
 
 ### Secondary follow-up directions
 
 - deepen Canon governance with richer escalation and broader governed stage coverage
 - broaden adaptive heuristics beyond the current deterministic local repair patterns
-- deepen delivery and review beyond the current bounded local execution manifests
+- migrate more review and compatibility configuration onto session-native session summaries without losing bounded manifest support
 - expand the new multi-workspace cluster slice into full cross-repository execution planning and mutation
 - advanced goal negotiation and constraint modeling
 

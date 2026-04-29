@@ -15,6 +15,26 @@ This review is intentionally blunt: it calls out what the current code already
 supports, what is misaligned with that thesis, and what the next spec should
 treat as refoundation work instead of polish.
 
+## Status Update
+
+Feature `013-session-native-orchestrator` established the session-native planning
+and decision-loop primitives, feature `014-native-loop-integration` moved the
+real CLI path onto them, and feature `015-runtime-refoundation` completed the
+product-story shift by making `GoalPlan`, routing state, flow state, and
+decision summaries explicit operator-facing surfaces.
+
+Current behavior is now:
+
+- `plan` persists `GoalPlan` plus confirmed, proposed, or absent flow state in the active session
+- `run` prefers the native decision loop whenever a session already has a `goal_plan`
+- decision execution is adapter-backed and persisted into both session state and traces
+- `fixture.rs` remains an explicit compatibility layer for declarative execution profiles rather than the default session path
+
+The rest of this document remains useful as the architectural review that drove
+those changes. Sections that describe fixture-first planning or implicit fixture
+defaults should be read as historical rationale unless they are still explicitly
+called out as open follow-up gaps.
+
 ## Where The Harness Actually Is
 
 This is the part that separates Synod from a framework made of prompt files and
@@ -44,12 +64,13 @@ This is the part that makes Synod more than prompt choreography.
 
 Without this layer, "agent" is still just documentation.
 
-### 4. Concrete workspace harness today
+### 4. Concrete workspace harness and compatibility layer
 
-- [src/fixture.rs](../src/fixture.rs) is where the current product becomes concrete: it registers `analyzer`, `coder`, `reviewer`, and `tester`, applies workspace changes, and runs validation commands.
+- [src/orchestrator/session_runtime.rs](../src/orchestrator/session_runtime.rs) now assembles the native session path around persisted `GoalPlan` state, adapter-backed execution, and persisted decisions.
+- [src/fixture.rs](../src/fixture.rs) remains the explicit compatibility layer for declarative execution profiles and low-level workspace mutation or validation helpers.
 
-This is why Synod is already more than a Markdown framework. It is also where
-the current product is still too execution-profile-first.
+This is why Synod is already more than a Markdown framework while keeping the
+legacy declarative path available without making it the default product story.
 
 ### 5. Persistence and inspection harness
 

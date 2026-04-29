@@ -90,7 +90,9 @@ fn change_flow_status_and_next_include_flow_stage_fields() {
     assert!(status_text.contains("active_flow: change"), "{status_text}");
     assert!(status_text.contains("current_stage: understand-change"), "{status_text}");
     assert!(status_text.contains("stage_progress: 1/3"), "{status_text}");
-    assert!(status_text.contains("current_step_id: understand-change"), "{status_text}");
+    assert!(status_text.contains("execution_path: native_goal_plan"), "{status_text}");
+    assert!(status_text.contains("next_command: synod run"), "{status_text}");
+    assert!(!status_text.contains("current_step_id:"), "{status_text}");
 
     let next_output = run_synod_in(&workspace, &["next"]);
     let next_text = terminal_text(&next_output);
@@ -98,6 +100,7 @@ fn change_flow_status_and_next_include_flow_stage_fields() {
     assert!(next_text.contains("active_flow: change"), "{next_text}");
     assert!(next_text.contains("current_stage: understand-change"), "{next_text}");
     assert!(next_text.contains("stage_progress: 1/3"), "{next_text}");
+    assert!(next_text.contains("next_command: synod run"), "{next_text}");
 }
 
 #[test]

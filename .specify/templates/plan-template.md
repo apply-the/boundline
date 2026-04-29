@@ -35,13 +35,14 @@
 
 - Delivery identity: Explain how this feature directly improves bounded engineering task delivery.
 - Delivery-first scope: Confirm execution, orchestration, decomposition, or validation work is prioritized ahead of optimization or polish.
+- Primary workflow: State whether the main operator path is session-native (`start -> capture -> plan -> run -> inspect`) and identify any explicit compatibility path that remains available.
 - Bounded execution: Identify explicit start conditions, terminal conditions, and max step or retry limits.
 - Stateful execution: Describe shared task context, read and write points, and justify any stateless segment.
 - Mutable planning: Describe initial planning plus replanning, step insertion, or replacement behavior.
 - Sequential-first design: Confirm one-step-at-a-time execution or justify why the constitution allows an exception.
 - Tool-agent symmetry: Show how reasoning and action remain explicit in the execution model.
 - Observability and explicit intelligence: List trace surfaces, visible decisions, failure signals, and any heuristic behavior that must be exposed.
-- Non-goals and external separation: Confirm the plan does not depend on Canon behavior or reintroduce deferred scope such as councils or voting outside an explicitly reprioritized, bounded review slice, provider abstraction complexity beyond the approved slice, long-term memory, UI/UX, or deployment pipelines.
+- Non-goals and external separation: Confirm the plan does not depend on Canon behavior beyond bounded governance/evidence boundaries or reintroduce deferred scope such as councils or voting outside an explicitly reprioritized, bounded review slice, provider abstraction complexity beyond the approved slice, long-term memory, UI/UX, or deployment pipelines.
 - Minimal slice: Explain the smallest independently valuable capability delivered by this plan.
 
 Mark each line as PASS or FAIL in the completed plan and reference the section that satisfies it.
