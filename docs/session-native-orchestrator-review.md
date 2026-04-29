@@ -18,8 +18,10 @@ treat as refoundation work instead of polish.
 ## Status Update
 
 Feature `013-session-native-orchestrator` established the session-native planning
-and decision-loop primitives, and feature `014-native-loop-integration` moved
-the real CLI path onto them.
+and decision-loop primitives, feature `014-native-loop-integration` moved the
+real CLI path onto them, and feature `015-runtime-refoundation` completed the
+product-story shift by making `GoalPlan`, routing state, flow state, and
+decision summaries explicit operator-facing surfaces.
 
 Current behavior is now:
 
@@ -31,7 +33,7 @@ Current behavior is now:
 The rest of this document remains useful as the architectural review that drove
 those changes. Sections that describe fixture-first planning or implicit fixture
 defaults should be read as historical rationale unless they are still explicitly
-called out as open.
+called out as open follow-up gaps.
 
 ## Where The Harness Actually Is
 

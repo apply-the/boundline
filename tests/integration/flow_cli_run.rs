@@ -204,7 +204,7 @@ fn bug_fix_recovery_decision_is_recorded_after_initial_fix_failure() {
             .expect("recovery decision should be recorded");
     assert_eq!(
         recovery_decision.payload.get("decision_type").and_then(|value| value.as_str()),
-        Some("Fix")
+        Some("fix")
     );
 }
 

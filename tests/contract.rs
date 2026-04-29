@@ -1,6 +1,9 @@
 #[path = "support/workspace_fixture.rs"]
 mod workspace_fixture;
 
+#[path = "support/runtime_refoundation.rs"]
+mod runtime_refoundation;
+
 #[path = "contract/orchestrator_run.rs"]
 mod orchestrator_run;
 
@@ -84,3 +87,12 @@ mod decision_loop_contract;
 
 #[path = "contract/goal_plan_contract.rs"]
 mod goal_plan_contract;
+
+#[path = "contract/runtime_refoundation_contract.rs"]
+mod runtime_refoundation_contract;
+
+#[path = "contract/flow_policy_contract.rs"]
+mod flow_policy_contract;
+
+#[path = "contract/runtime_routing_contract.rs"]
+mod runtime_routing_contract;

@@ -6,10 +6,10 @@ use serde_json::Value;
 use thiserror::Error;
 
 use crate::domain::brief::AuthoredBriefBundle;
-use crate::domain::decision::Decision;
+use crate::domain::decision::{Decision, DecisionStatus};
 use crate::domain::flow::SessionFlowState;
 use crate::domain::flow_policy::FlowPolicy;
-use crate::domain::goal_plan::GoalPlan;
+use crate::domain::goal_plan::{GoalPlan, GoalPlanFlowMode};
 use crate::domain::governance::{
     AutopilotDecisionRecord, GovernedStagePacket, GovernedStageRecord, PacketReuseBinding,
 };
@@ -220,6 +220,8 @@ pub struct SessionStatusView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub active_flow: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flow_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current_stage_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current_stage_index: Option<usize>,
@@ -232,6 +234,10 @@ pub struct SessionStatusView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution_path: Option<String>,
     pub latest_trace_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_decision_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_decision_target: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_changed_files: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -318,6 +324,15 @@ impl SessionStatusView {
             });
         }
 
+        let expected_flow_state =
+            record.goal_plan.as_ref().map(|goal_plan| goal_plan.flow_state().summary_text());
+        if self.flow_state != expected_flow_state {
+            return Err(SessionValidationError::StatusViewFlowStateMismatch {
+                expected: expected_flow_state,
+                actual: self.flow_state.clone(),
+            });
+        }
+
         let expected_stage_id =
             record.active_flow.as_ref().map(|flow| flow.current_stage_id.clone());
         if self.current_stage_id != expected_stage_id {
@@ -347,6 +362,26 @@ impl SessionStatusView {
             return Err(SessionValidationError::StatusViewTraceMismatch {
                 expected: record.latest_trace_ref.clone(),
                 actual: self.latest_trace_ref.clone(),
+            });
+        }
+
+        let expected_latest_decision_status = record
+            .decisions
+            .last()
+            .map(|decision| decision_status_text(decision.status).to_string());
+        if self.latest_decision_status != expected_latest_decision_status {
+            return Err(SessionValidationError::StatusViewDecisionStatusMismatch {
+                expected: expected_latest_decision_status,
+                actual: self.latest_decision_status.clone(),
+            });
+        }
+
+        let expected_latest_decision_target =
+            record.decisions.last().map(|decision| decision.target.clone());
+        if self.latest_decision_target != expected_latest_decision_target {
+            return Err(SessionValidationError::StatusViewDecisionTargetMismatch {
+                expected: expected_latest_decision_target,
+                actual: self.latest_decision_target.clone(),
             });
         }
 
@@ -648,26 +683,121 @@ impl SessionStatusView {
     }
 }
 
-pub fn execution_path_text(record: &ActiveSessionRecord) -> Option<String> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RoutingMode {
+    Native,
+    Compatibility,
+    Blocked,
+}
+
+impl RoutingMode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Native => "native",
+            Self::Compatibility => "compatibility",
+            Self::Blocked => "blocked",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RoutingSource {
+    GoalPlan,
+    ExecutionProfile,
+    GoalCapture,
+    SessionState,
+}
+
+impl RoutingSource {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::GoalPlan => "goal_plan",
+            Self::ExecutionProfile => "execution_profile",
+            Self::GoalCapture => "goal_capture",
+            Self::SessionState => "session_state",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RoutingOutcome {
+    pub mode: RoutingMode,
+    pub source: RoutingSource,
+    pub reason: String,
+}
+
+impl RoutingOutcome {
+    pub fn execution_path_key(&self) -> Option<&'static str> {
+        match (self.mode, self.source) {
+            (RoutingMode::Native, RoutingSource::GoalPlan) => Some("native_goal_plan"),
+            (RoutingMode::Compatibility, RoutingSource::ExecutionProfile) => {
+                Some("fixture_compatibility")
+            }
+            (RoutingMode::Blocked, RoutingSource::GoalPlan) => {
+                Some("native_goal_plan_pending_flow_confirmation")
+            }
+            (RoutingMode::Blocked, RoutingSource::GoalCapture) => {
+                Some("native_session_pending_plan")
+            }
+            _ => None,
+        }
+    }
+}
+
+pub fn routing_outcome(record: &ActiveSessionRecord) -> RoutingOutcome {
     if let Some(goal_plan) = record.goal_plan.as_ref() {
-        if let Some(flow) = goal_plan.flow.as_ref()
-            && !flow.confirmed
-        {
-            return Some("native_goal_plan_pending_flow_confirmation".to_string());
+        if goal_plan.flow_state().mode == GoalPlanFlowMode::Proposed {
+            return RoutingOutcome {
+                mode: RoutingMode::Blocked,
+                source: RoutingSource::GoalPlan,
+                reason: "flow confirmation is still pending before native execution".to_string(),
+            };
         }
 
-        return Some("native_goal_plan".to_string());
+        return RoutingOutcome {
+            mode: RoutingMode::Native,
+            source: RoutingSource::GoalPlan,
+            reason: "goal plan is ready for native execution".to_string(),
+        };
     }
 
     if record.active_task.is_some() {
-        return Some("fixture_compatibility".to_string());
+        return RoutingOutcome {
+            mode: RoutingMode::Compatibility,
+            source: RoutingSource::ExecutionProfile,
+            reason: "compatibility execution remains active from the persisted task".to_string(),
+        };
     }
 
     if record.goal.is_some() {
-        return Some("native_session_pending_plan".to_string());
+        return RoutingOutcome {
+            mode: RoutingMode::Blocked,
+            source: RoutingSource::GoalCapture,
+            reason: "goal captured but a goal plan is not ready yet".to_string(),
+        };
     }
 
-    None
+    RoutingOutcome {
+        mode: RoutingMode::Blocked,
+        source: RoutingSource::SessionState,
+        reason: "session has no goal plan or compatibility task to route".to_string(),
+    }
+}
+
+pub fn execution_path_text(record: &ActiveSessionRecord) -> Option<String> {
+    routing_outcome(record).execution_path_key().map(str::to_string)
+}
+
+pub fn decision_status_text(status: DecisionStatus) -> &'static str {
+    match status {
+        DecisionStatus::Pending => "pending",
+        DecisionStatus::Dispatched => "dispatched",
+        DecisionStatus::Verified => "verified",
+        DecisionStatus::Failed => "failed",
+        DecisionStatus::Recovered => "recovered",
+    }
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -712,6 +842,8 @@ pub enum SessionValidationError {
     StatusViewGoalMismatch { expected: Option<String>, actual: Option<String> },
     #[error("status view flow mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewFlowMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view flow state mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewFlowStateMismatch { expected: Option<String>, actual: Option<String> },
     #[error("status view stage mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewStageMismatch { expected: Option<String>, actual: Option<String> },
     #[error("status view stage index mismatch: expected {expected:?}, got {actual:?}")]
@@ -720,6 +852,10 @@ pub enum SessionValidationError {
     StatusViewStageCountMismatch { expected: Option<usize>, actual: Option<usize> },
     #[error("status view trace mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewTraceMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view latest decision status mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewDecisionStatusMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view latest decision target mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewDecisionTargetMismatch { expected: Option<String>, actual: Option<String> },
     #[error("status view changed files mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewChangedFilesMismatch { expected: Option<Vec<String>>, actual: Option<Vec<String>> },
     #[error(
@@ -1107,6 +1243,10 @@ mod tests {
             requested_governance_zone: None,
             requested_governance_owner: None,
             active_flow: record.active_flow.as_ref().map(|flow| flow.flow_name.clone()),
+            flow_state: record
+                .goal_plan
+                .as_ref()
+                .map(|goal_plan| goal_plan.flow_state().summary_text()),
             current_stage_id: record.active_flow.as_ref().map(|flow| flow.current_stage_id.clone()),
             current_stage_index: record.active_flow.as_ref().map(|flow| flow.current_stage_index),
             total_stages: record.active_flow.as_ref().map(|flow| flow.total_stages),
@@ -1122,6 +1262,11 @@ mod tests {
             latest_status: record.latest_status,
             execution_path: execution_path_text(record),
             latest_trace_ref: record.latest_trace_ref.clone(),
+            latest_decision_status: record
+                .decisions
+                .last()
+                .map(|decision| super::decision_status_text(decision.status).to_string()),
+            latest_decision_target: record.decisions.last().map(|decision| decision.target.clone()),
             latest_changed_files: None,
             latest_workspace_slice: None,
             latest_selection_headline: None,

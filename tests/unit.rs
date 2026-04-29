@@ -1,6 +1,9 @@
 #[path = "support/workspace_fixture.rs"]
 mod workspace_fixture;
 
+#[path = "support/runtime_refoundation.rs"]
+mod runtime_refoundation;
+
 #[path = "unit/step_state.rs"]
 mod step_state;
 
@@ -94,6 +97,9 @@ mod goal_plan_model;
 #[path = "unit/flow_policy_model.rs"]
 mod flow_policy_model;
 
+#[path = "unit/flow_confirmation.rs"]
+mod flow_confirmation;
+
 #[path = "unit/tool_result_model.rs"]
 mod tool_result_model;
 
@@ -105,3 +111,6 @@ mod flow_inference;
 
 #[path = "unit/goal_planner.rs"]
 mod goal_planner;
+
+#[path = "unit/runtime_routing.rs"]
+mod runtime_routing;

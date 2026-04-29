@@ -1,0 +1,97 @@
+use synod::adapters::session_store::{FileSessionStore, SessionStore};
+use synod::cli::run::execute_custom_run;
+use synod::cli::session::{execute_capture, execute_plan, execute_run, execute_start};
+
+use crate::runtime_refoundation::{
+    temp_runtime_refoundation_compat_workspace, temp_runtime_refoundation_governed_workspace,
+};
+
+#[test]
+fn confirmed_goal_plan_takes_precedence_over_execution_profile_for_session_run() {
+    let workspace = temp_runtime_refoundation_compat_workspace("runtime-routing-contract-native");
+
+    execute_start(Some(&workspace)).unwrap();
+    execute_capture(
+        Some(&workspace),
+        Some("fix the failing add test"),
+        &[],
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
+
+    let run = execute_run(Some(&workspace)).unwrap();
+    assert!(run.terminal_output.contains("decision "), "{}", run.terminal_output);
+    assert!(!run.terminal_output.contains("routing: compatibility"), "{}", run.terminal_output);
+}
+
+#[test]
+fn explicit_compatibility_run_is_visible_and_preserves_native_session_state() {
+    let workspace = temp_runtime_refoundation_compat_workspace("runtime-routing-contract-compat");
+
+    execute_start(Some(&workspace)).unwrap();
+    execute_capture(
+        Some(&workspace),
+        Some("fix the failing add test"),
+        &[],
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
+
+    let before = FileSessionStore::for_workspace(&workspace).load().unwrap().unwrap();
+    let report = execute_custom_run(
+        &workspace,
+        Some("Fix the failing add test"),
+        &[],
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+
+    assert!(
+        report.terminal_output.contains("routing: compatibility"),
+        "{}",
+        report.terminal_output
+    );
+    assert!(
+        report.terminal_output.contains("execution_path: fixture_compatibility"),
+        "{}",
+        report.terminal_output
+    );
+
+    let after = FileSessionStore::for_workspace(&workspace).load().unwrap().unwrap();
+    assert_eq!(after.goal_plan, before.goal_plan);
+    assert_eq!(after.decisions, before.decisions);
+}
+
+#[test]
+fn canon_artifacts_remain_bounded_evidence_for_native_runs() {
+    let workspace =
+        temp_runtime_refoundation_governed_workspace("runtime-routing-contract-governed");
+
+    execute_start(Some(&workspace)).unwrap();
+    execute_capture(
+        Some(&workspace),
+        Some("fix the failing add test"),
+        &[],
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    execute_plan(Some(&workspace), None, true).unwrap();
+
+    let run = execute_run(Some(&workspace)).unwrap();
+    assert!(run.terminal_output.contains("decision "), "{}", run.terminal_output);
+    assert!(!run.terminal_output.contains("governance_selected:"), "{}", run.terminal_output);
+}

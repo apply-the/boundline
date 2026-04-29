@@ -19,7 +19,9 @@ use crate::domain::governance::{
     PacketReadiness, resolved_canon_mode,
 };
 use crate::domain::limits::{RunLimits, TerminalCondition};
-use crate::domain::session::{ActiveSessionRecord, SessionStatus};
+use crate::domain::session::{
+    ActiveSessionRecord, RoutingMode, RoutingOutcome, SessionStatus, routing_outcome,
+};
 use crate::domain::step::{
     ErrorInfo, ExecutionStatus, Recoverability, Step, StepAttempt, StepExecutionRequest,
     StepExecutionResult, StepKind, StepResultSummary, StepStatus,
@@ -201,7 +203,7 @@ impl SessionRuntime {
         if no_flow {
             session.active_flow = None;
             session.active_flow_policy = None;
-            goal_plan.flow = None;
+            goal_plan.mark_flow_skipped();
             return Ok(());
         }
 
@@ -228,6 +230,7 @@ impl SessionRuntime {
 
         session.active_flow = None;
         session.active_flow_policy = None;
+        goal_plan.flow_skipped = false;
         goal_plan.flow = infer_flow(&goal_plan.goal_text);
         Ok(())
     }
@@ -257,15 +260,28 @@ impl SessionRuntime {
         Ok(())
     }
 
+    pub fn resolve_routing_outcome(
+        &self,
+        session: &ActiveSessionRecord,
+    ) -> Result<RoutingOutcome, SessionRuntimeError> {
+        if let Some(policy) = session.active_flow_policy.as_ref() {
+            policy
+                .validate()
+                .map_err(|error| SessionRuntimeError::InvalidFlowState(error.to_string()))?;
+        }
+
+        Ok(routing_outcome(session))
+    }
+
     pub fn uses_native_goal_plan(
         &self,
         session: &ActiveSessionRecord,
     ) -> Result<bool, SessionRuntimeError> {
-        let Some(goal_plan) = session.goal_plan.as_ref() else {
-            return Ok(false);
-        };
+        let outcome = self.resolve_routing_outcome(session)?;
 
-        if let Some(flow) = goal_plan.flow.as_ref()
+        if outcome.mode == RoutingMode::Blocked
+            && let Some(goal_plan) = session.goal_plan.as_ref()
+            && let Some(flow) = goal_plan.flow.as_ref()
             && !flow.confirmed
         {
             return Err(SessionRuntimeError::FlowConfirmationRequired {
@@ -273,7 +289,7 @@ impl SessionRuntime {
             });
         }
 
-        Ok(true)
+        Ok(outcome.mode == RoutingMode::Native)
     }
 
     fn native_flow_policy(

@@ -1,8 +1,9 @@
-# Review Voting in Synod 0.11.0
+# Review Voting in Synod 0.15.0
 
-Synod `0.11.0` keeps the bounded multi-agent review phase on top of the local
-execution engine. Review configuration lives inside `<workspace>/.synod/execution.json`
-under the `review` key. Runtime/model routing for review roles is configured
+Synod `0.15.0` keeps the bounded multi-agent review phase on top of the session-native
+runtime. Review configuration still lives inside `<workspace>/.synod/execution.json`
+under the `review` key when the explicit compatibility manifest path or a review-configured
+workspace is used. Runtime/model routing for review roles is configured
 through `synod config` in global or workspace scope and resolved by precedence.
 
 ## What the runtime supports
@@ -125,11 +126,11 @@ The persisted trace emits dedicated review events for:
 
 ## Current scope
 
-The `0.8.0` slice is intentionally bounded:
+The `0.15.0` slice is intentionally bounded:
 
 - review is manifest-driven and deterministic
 - reviewers run sequentially, not concurrently
-- the runtime uses local fixture-backed execution and local trace persistence
+- the runtime uses local bounded execution and local trace persistence
 - voting is limited to `majority` and `weighted`
 - adjudication runs at most once
 

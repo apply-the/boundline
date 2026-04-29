@@ -127,10 +127,16 @@ where
             let observation = Observation {
                 workspace_files: remaining.iter().map(|(_, t)| t.to_string()).collect(),
                 last_decision: decisions.last().cloned(),
-                accumulated_evidence: decisions
+                accumulated_evidence: plan
+                    .source_evidence
                     .iter()
-                    .filter(|d| d.tool_result.is_some())
-                    .map(|d| d.as_tool_output_evidence())
+                    .cloned()
+                    .chain(
+                        decisions
+                            .iter()
+                            .filter(|d| d.tool_result.is_some())
+                            .map(|d| d.as_tool_output_evidence()),
+                    )
                     .collect(),
                 remaining_tasks: remaining.iter().map(|(_, t)| t.to_string()).collect(),
             };
@@ -185,11 +191,7 @@ where
                 TraceEventType::DecisionCreated,
                 Some(decision.id.clone()),
                 0,
-                json!({
-                    "decision_type": format!("{:?}", decision.decision_type),
-                    "target": decision.target,
-                    "rationale": decision.rationale,
-                }),
+                decision_event_payload(&decision),
             );
 
             // -- ACT --
@@ -198,7 +200,7 @@ where
                 TraceEventType::DecisionDispatched,
                 Some(decision.id.clone()),
                 0,
-                json!({ "target": decision.target }),
+                decision_event_payload(&decision),
             );
 
             // Simulate tool execution: in the real implementation this dispatches
@@ -212,7 +214,7 @@ where
                     TraceEventType::DecisionVerified,
                     Some(decision.id.clone()),
                     0,
-                    json!({ "target": decision.target }),
+                    decision_event_payload(&decision),
                 );
                 if previous_failed_decision.is_some() {
                     if let Some(previous_decision) = decisions.last_mut() {
@@ -221,10 +223,7 @@ where
                             TraceEventType::DecisionRecovered,
                             Some(previous_decision.id.clone()),
                             0,
-                            json!({
-                                "target": previous_decision.target,
-                                "recovery_decision_id": decision.id,
-                            }),
+                            recovery_event_payload(previous_decision, &decision),
                         );
                     }
                 } else {
@@ -240,7 +239,7 @@ where
                     TraceEventType::DecisionFailed,
                     Some(decision.id.clone()),
                     0,
-                    json!({ "target": decision.target }),
+                    decision_event_payload(&decision),
                 );
 
                 if previous_failed_decision.is_some() {
@@ -309,6 +308,35 @@ where
 
         tool_result_from_step_execution(adapter_name, decision, &step_result)
     }
+}
+
+fn decision_event_payload(decision: &Decision) -> Value {
+    json!({
+        "decision_type": decision.decision_type,
+        "target": decision.target,
+        "rationale": decision.rationale,
+        "expected_outcome": decision.expected_outcome,
+        "evidence_inputs": decision.evidence_inputs,
+        "status": decision.status,
+        "created_at": decision.created_at,
+        "completed_at": decision.completed_at,
+        "action_result": decision.tool_result,
+    })
+}
+
+fn recovery_event_payload(decision: &Decision, recovery_decision: &Decision) -> Value {
+    json!({
+        "decision_type": decision.decision_type,
+        "target": decision.target,
+        "rationale": decision.rationale,
+        "expected_outcome": decision.expected_outcome,
+        "evidence_inputs": decision.evidence_inputs,
+        "status": decision.status,
+        "created_at": decision.created_at,
+        "completed_at": decision.completed_at,
+        "action_result": decision.tool_result,
+        "recovery_decision_id": recovery_decision.id,
+    })
 }
 
 fn recovery_decision_type(

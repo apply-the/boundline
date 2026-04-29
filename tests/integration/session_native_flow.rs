@@ -330,7 +330,7 @@ fn cli_plan_supports_explicit_no_flow_for_native_session() {
 
     let planned = execute_plan(Some(&ws), None, true).unwrap();
     assert!(
-        planned.terminal_output.contains("without flow constraints"),
+        planned.terminal_output.contains("operator-skipped flow constraints"),
         "{}",
         planned.terminal_output
     );
@@ -346,10 +346,12 @@ fn cli_plan_supports_explicit_no_flow_for_native_session() {
         "{}",
         status.terminal_output
     );
+    assert!(status.terminal_output.contains("flow_state: skipped"), "{}", status.terminal_output);
 
     let record = FileSessionStore::for_workspace(&ws).load().unwrap().unwrap();
     assert!(record.goal_plan.is_some());
     assert!(record.goal_plan.as_ref().unwrap().flow.is_none());
+    assert!(record.goal_plan.as_ref().unwrap().flow_skipped);
     assert!(record.active_flow.is_none());
     assert!(record.active_flow_policy.is_none());
 }

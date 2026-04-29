@@ -7,7 +7,9 @@ use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStor
 use crate::adapters::trace_store::{FileTraceStore, TraceStore, TraceStoreError};
 use crate::cli::CommandExitStatus;
 use crate::cli::output;
+use crate::domain::goal_plan::GoalPlanFlowState;
 use crate::domain::session::governance_next_action_for_state;
+use crate::domain::session::{RoutingMode, RoutingOutcome, RoutingSource};
 use crate::domain::step::{StepKind, StepStatus};
 use crate::domain::task::TaskStatus;
 use crate::domain::trace::{
@@ -92,6 +94,17 @@ pub fn render_error(
     )
 }
 
+pub fn render_inspection_routing_summary(
+    outcome: &RoutingOutcome,
+    flow_state: Option<&GoalPlanFlowState>,
+) -> Vec<String> {
+    let mut lines = vec![output::render_route_outcome(outcome)];
+    if let Some(flow_state) = flow_state {
+        lines.push(output::render_goal_plan_flow_state(flow_state));
+    }
+    lines
+}
+
 pub fn summarize_trace(
     trace_ref: impl AsRef<Path>,
     trace: &ExecutionTrace,
@@ -109,6 +122,10 @@ pub fn summarize_trace(
     let mut requested_governance_risk: Option<String> = None;
     let mut requested_governance_zone: Option<String> = None;
     let mut requested_governance_owner: Option<String> = None;
+    let mut routing_summary: Option<String> = None;
+    let mut goal_plan_summary: Option<String> = None;
+    let mut decision_timeline: Vec<String> = Vec::new();
+    let mut failure_evidence: Vec<String> = Vec::new();
     let mut latest_governance_state: Option<String> = None;
     let mut step_indexes: HashMap<String, usize> = HashMap::new();
     let mut executed_steps: Vec<TraceStepSummary> = Vec::new();
@@ -357,14 +374,51 @@ pub fn summarize_trace(
                     review_timeline.push(line);
                 }
             }
+            TraceEventType::GoalPlanCreated => {
+                if routing_summary.is_none() {
+                    routing_summary = Some(output::render_route_outcome(&RoutingOutcome {
+                        mode: RoutingMode::Native,
+                        source: RoutingSource::GoalPlan,
+                        reason: "goal plan trace came from the session-native runtime".to_string(),
+                    }));
+                }
+                if goal_plan_summary.is_none() {
+                    let task_count = event
+                        .payload
+                        .get("task_count")
+                        .and_then(|value| value.as_u64())
+                        .unwrap_or_default();
+                    let goal = event
+                        .payload
+                        .get("goal")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or(&trace.goal);
+                    goal_plan_summary = Some(format!("{task_count} bounded task(s) for {goal}"));
+                }
+            }
+            TraceEventType::FlowInferred => {
+                if let Some(flow_name) =
+                    event.payload.get("flow_name").and_then(|value| value.as_str())
+                {
+                    decision_timeline.push(format!("flow_inferred: {flow_name}"));
+                }
+            }
             TraceEventType::DecisionCreated
             | TraceEventType::DecisionDispatched
             | TraceEventType::DecisionVerified
             | TraceEventType::DecisionFailed
-            | TraceEventType::DecisionRecovered
-            | TraceEventType::GoalPlanCreated
-            | TraceEventType::FlowInferred => {
-                // Decision loop events — handled by decision-specific inspection
+            | TraceEventType::DecisionRecovered => {
+                decision_timeline.extend(decision_timeline_lines(
+                    event.event_type,
+                    event.step_id.as_deref(),
+                    &event.payload,
+                ));
+                if event.event_type == TraceEventType::DecisionFailed
+                    && let Some(evidence) =
+                        decision_failure_evidence(event.step_id.as_deref(), &event.payload)
+                {
+                    failure_evidence.push(evidence);
+                }
             }
         }
     }
@@ -372,6 +426,8 @@ pub fn summarize_trace(
     Ok(TraceSummaryView {
         trace_ref: trace_ref.as_ref().to_string_lossy().into_owned(),
         goal: trace.goal.clone(),
+        routing_summary,
+        goal_plan_summary,
         authored_input_summary,
         authored_input_sources,
         authored_input_deduplicated_sources,
@@ -382,6 +438,8 @@ pub fn summarize_trace(
         requested_governance_risk,
         requested_governance_zone,
         requested_governance_owner,
+        decision_timeline,
+        failure_evidence,
         executed_steps,
         recovery_events,
         governance_timeline,
@@ -393,6 +451,86 @@ pub fn summarize_trace(
         terminal_reason,
         duration: trace.duration_millis(),
     })
+}
+
+fn decision_timeline_lines(
+    event_type: TraceEventType,
+    decision_id: Option<&str>,
+    payload: &serde_json::Value,
+) -> Vec<String> {
+    let decision_id = decision_id.unwrap_or("unknown-decision");
+    let status = payload.get("status").and_then(|value| value.as_str()).unwrap_or("unknown");
+
+    match event_type {
+        TraceEventType::DecisionCreated => {
+            let decision_type =
+                payload.get("decision_type").and_then(|value| value.as_str()).unwrap_or("unknown");
+            let target =
+                payload.get("target").and_then(|value| value.as_str()).unwrap_or("unknown");
+            let mut lines =
+                vec![format!("decision: {decision_id} {decision_type} -> {target} [{status}]")];
+
+            if let Some(rationale) = payload.get("rationale").and_then(|value| value.as_str()) {
+                lines.push(format!("rationale: {rationale}"));
+            }
+            if let Some(expected_outcome) =
+                payload.get("expected_outcome").and_then(|value| value.as_str())
+            {
+                lines.push(format!("expected_outcome: {expected_outcome}"));
+            }
+            if let Some(inputs) = payload.get("evidence_inputs").and_then(|value| value.as_array())
+            {
+                let inputs = inputs.iter().filter_map(format_evidence_input).collect::<Vec<_>>();
+                if !inputs.is_empty() {
+                    lines.push(format!("evidence_inputs: {}", inputs.join(", ")));
+                }
+            }
+
+            lines
+        }
+        TraceEventType::DecisionDispatched => {
+            vec![format!("decision_status: {decision_id} {status}")]
+        }
+        TraceEventType::DecisionVerified | TraceEventType::DecisionFailed => {
+            vec![format!("decision_status: {decision_id} {status}")]
+        }
+        TraceEventType::DecisionRecovered => {
+            let recovery_decision_id = payload
+                .get("recovery_decision_id")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown-decision");
+            vec![format!("decision_status: {decision_id} {status} via {recovery_decision_id}")]
+        }
+        _ => Vec::new(),
+    }
+}
+
+fn decision_failure_evidence(
+    decision_id: Option<&str>,
+    payload: &serde_json::Value,
+) -> Option<String> {
+    let decision_id = decision_id.unwrap_or("unknown-decision");
+    let target = payload.get("target").and_then(|value| value.as_str()).unwrap_or("unknown");
+    let action_result = payload.get("action_result")?;
+
+    let message = action_result
+        .get("stderr")
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            action_result
+                .get("stdout")
+                .and_then(|value| value.as_str())
+                .filter(|value| !value.trim().is_empty())
+        })?;
+
+    Some(format!("{decision_id} {target}: {message}"))
+}
+
+fn format_evidence_input(value: &serde_json::Value) -> Option<String> {
+    let kind = value.get("kind")?.as_str()?;
+    let reference = value.get("reference")?.as_str()?;
+    Some(format!("{kind}:{reference}"))
 }
 
 fn load_trace(
