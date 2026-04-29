@@ -12,6 +12,7 @@ use crate::domain::brief::{
 };
 use crate::domain::governance::GovernanceRuntimeKind;
 use crate::domain::limits::TerminalCondition;
+use crate::domain::session::{RoutingMode, RoutingOutcome, RoutingSource};
 use crate::domain::task::{TaskRunResponse, TaskStatus, TerminalReason};
 use crate::domain::task_context::TaskContext;
 use crate::domain::trace::{ExecutionTrace, TraceEventType};
@@ -99,8 +100,12 @@ pub fn execute_custom_run(
             plan_revision: 0,
             trace_location: trace_location.clone(),
         };
-        let terminal_output =
-            output::render_run_trace("run", loaded_trace.as_ref(), &response, "/synod-inspect");
+        let terminal_output = compatibility_terminal_output(output::render_run_trace(
+            "run",
+            loaded_trace.as_ref(),
+            &response,
+            "/synod-inspect",
+        ));
         return Ok(RunCommandReport {
             exit_status: CommandExitStatus::NonSuccess,
             terminal_output,
@@ -118,12 +123,12 @@ pub fn execute_custom_run(
     } else {
         CommandExitStatus::NonSuccess
     };
-    let terminal_output = output::render_run_trace(
+    let terminal_output = compatibility_terminal_output(output::render_run_trace(
         "run",
         trace.as_ref(),
         &response,
         output::next_command_after_run(response.terminal_status),
-    );
+    ));
 
     Ok(RunCommandReport {
         exit_status,
@@ -142,4 +147,15 @@ pub enum RunCommandError {
     TraceStore(#[from] crate::adapters::trace_store::TraceStoreError),
     #[error("failed to run the orchestrator vertical slice: {0}")]
     Orchestrator(#[from] OrchestratorError),
+}
+
+fn compatibility_terminal_output(body: String) -> String {
+    let routing = output::render_route_outcome(&RoutingOutcome {
+        mode: RoutingMode::Compatibility,
+        source: RoutingSource::ExecutionProfile,
+        reason: "compatibility mode was chosen deliberately from the declarative execution path"
+            .to_string(),
+    });
+
+    format!("{routing}\nexecution_path: fixture_compatibility\n{body}")
 }

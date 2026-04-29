@@ -1,11 +1,11 @@
-# Configuration in Synod 0.11.0
+# Configuration in Synod 0.15.0
 
-Synod `0.11.0` adds a user-friendly setup and routing configuration surface.
+Synod `0.15.0` keeps a user-friendly setup and routing configuration surface for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
 ## What changed
 
-- `synod init` bootstraps a starting workspace profile and local config under `.synod/`
-- `synod config` manages runtime/model routing defaults
+- `synod init` bootstraps an optional compatibility workspace profile and local config under `.synod/`
+- `synod config` manages runtime/model routing defaults for planning, verification, review, and other bounded slots
 - `synod cluster` registers bounded multi-workspace membership and aggregated inspection
 - routing values can be global, cluster-scoped, workspace-local, or command-specific
 - review councils and adjudication can use distinct routing defaults
@@ -57,6 +57,8 @@ synod doctor --workspace <workspace>
 When init would overwrite existing files, Synod shows a preview and requires
 `--force` to apply destructive updates.
 
+You do not need `synod init` to use the primary session-native workflow. Use it when you want scaffolded compatibility defaults or assistant setup.
+
 ## Init templates
 
 `synod init` works without a template flag. If you omit `--template`, Synod
@@ -68,14 +70,14 @@ Available starting templates:
 - `change`: bounded implementation change
 - `delivery`: broader delivery update
 
-Templates are only starting points for the generated execution profile.
+Templates are only starting points for the generated compatibility execution profile.
 
 - Need a different starting point later: rerun `synod init --workspace <workspace> --force --template <bug-fix|change|delivery>`
 - Need another task of the same type: do not rerun init; start a new session and capture a new goal
-- Need something custom: edit `<workspace>/.synod/execution.json` directly
+- Need something custom: edit `<workspace>/.synod/execution.json` directly when you intentionally want compatibility behavior
 
 `init` template and `flow` are separate concerns: `init` bootstraps the
-workspace profile, while `synod flow` selects the current run shape.
+optional compatibility profile, while `synod flow` selects the current session-native run shape.
 
 ## Config commands
 

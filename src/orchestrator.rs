@@ -1,4 +1,7 @@
+pub mod decision_loop;
 pub mod engine;
+pub mod flow_inference;
+pub mod goal_planner;
 pub mod governance;
 pub mod planner;
 pub mod recovery;

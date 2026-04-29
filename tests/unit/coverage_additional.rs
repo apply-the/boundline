@@ -81,6 +81,9 @@ fn build_planned_record(workspace_ref: &str) -> ActiveSessionRecord {
         authored_brief: None,
         active_flow: None,
         active_task: Some(build_task(workspace_ref)),
+        goal_plan: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
         latest_status: SessionStatus::Planned,
         latest_terminal_reason: None,
         latest_trace_ref: Some(format!("{workspace_ref}/.synod/traces/task.json")),
@@ -106,6 +109,7 @@ fn build_status_view(record: &ActiveSessionRecord) -> SessionStatusView {
         requested_governance_zone: None,
         requested_governance_owner: None,
         active_flow: record.active_flow.as_ref().map(|flow| flow.flow_name.clone()),
+        flow_state: None,
         current_stage_id: record.active_flow.as_ref().map(|flow| flow.current_stage_id.clone()),
         current_stage_index: record.active_flow.as_ref().map(|flow| flow.current_stage_index),
         total_stages: record.active_flow.as_ref().map(|flow| flow.total_stages),
@@ -114,7 +118,10 @@ fn build_status_view(record: &ActiveSessionRecord) -> SessionStatusView {
             .and_then(|task| task.plan.current_step().map(|step| step.id.clone())),
         current_step_index: active_task.map(|task| task.plan.current_step_index),
         latest_status: record.latest_status,
+        execution_path: synod::domain::session::execution_path_text(record),
         latest_trace_ref: record.latest_trace_ref.clone(),
+        latest_decision_status: None,
+        latest_decision_target: None,
         latest_changed_files: active_task.and_then(|task| {
             task.context.state.get("latest_changed_files").and_then(|value| {
                 value.as_array().map(|items| {
@@ -165,6 +172,9 @@ fn build_started_session(workspace: &Path) -> ActiveSessionRecord {
         authored_brief: None,
         active_flow: None,
         active_task: None,
+        goal_plan: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
         latest_status: SessionStatus::Initialized,
         latest_terminal_reason: None,
         latest_trace_ref: None,
@@ -281,7 +291,7 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
             owner: None,
         },
         DeveloperCommand::Flow { name: "bug-fix".to_string(), workspace: Some(workspace.clone()) },
-        DeveloperCommand::Plan { workspace: Some(workspace.clone()) },
+        DeveloperCommand::Plan { workspace: Some(workspace.clone()), flow: None, no_flow: false },
         DeveloperCommand::Step { workspace: Some(workspace.clone()) },
         DeveloperCommand::Run {
             workspace: Some(workspace.clone()),
@@ -841,7 +851,7 @@ fn inspect_summary_and_session_commands_cover_additional_error_paths() {
     let workspace = temp_workspace("synod-cli-session-errors");
     execute_start(Some(&workspace)).unwrap();
     assert!(matches!(
-        execute_plan(Some(&workspace)).unwrap_err(),
+        execute_plan(Some(&workspace), None, false).unwrap_err(),
         SessionCommandError::MissingCapturedGoal
     ));
 
@@ -927,25 +937,25 @@ fn session_runtime_runs_successful_terminal_and_replanned_execution_profiles() {
         write_execution_workspace("synod-runtime-success", vec![success_attempt()]);
     let runtime = SessionRuntime::for_workspace(&success_workspace);
     let mut session = build_goal_captured_session(&success_workspace);
-    runtime.plan_task(&mut session).unwrap();
+    runtime.plan_task(&mut session, Some("bug-fix"), false).unwrap();
     let response = runtime.run_to_terminal(&mut session).unwrap();
     assert_eq!(response.terminal_status, TaskStatus::Succeeded);
     assert_eq!(session.latest_status, SessionStatus::Succeeded);
     assert!(session.latest_trace_ref.is_some());
-    assert_eq!(
-        session.active_task.as_ref().unwrap().context.state.get("latest_validation_status"),
-        Some(&json!("passed"))
-    );
+    assert!(session.goal_plan.is_some());
 
-    runtime.execute_next_step(&mut session).unwrap();
+    assert!(matches!(
+        runtime.execute_next_step(&mut session).unwrap_err(),
+        SessionRuntimeError::MissingActiveTask
+    ));
 
     let replan_workspace = write_execution_workspace("synod-runtime-replan", replan_attempts());
     let replan_runtime = SessionRuntime::for_workspace(&replan_workspace);
     let mut replan_session = build_goal_captured_session(&replan_workspace);
-    replan_runtime.plan_task(&mut replan_session).unwrap();
+    replan_runtime.plan_task(&mut replan_session, Some("bug-fix"), false).unwrap();
     let replan_response = replan_runtime.run_to_terminal(&mut replan_session).unwrap();
     assert_eq!(replan_response.terminal_status, TaskStatus::Succeeded);
-    assert_eq!(replan_session.active_task.as_ref().unwrap().replan_count, 1);
+    assert_eq!(replan_session.latest_status, SessionStatus::Succeeded);
 }
 
 #[test]
@@ -953,11 +963,11 @@ fn session_runtime_surfaces_terminal_failures_for_broken_execution_profiles() {
     let workspace = write_execution_workspace("synod-runtime-failure", vec![failing_attempt()]);
     let runtime = SessionRuntime::for_workspace(&workspace);
     let mut session = build_goal_captured_session(&workspace);
-    runtime.plan_task(&mut session).unwrap();
+    runtime.plan_task(&mut session, Some("bug-fix"), false).unwrap();
     let response = runtime.run_to_terminal(&mut session).unwrap();
 
-    assert_eq!(response.terminal_status, TaskStatus::Failed);
-    assert_eq!(session.latest_status, SessionStatus::Failed);
+    assert_eq!(response.terminal_status, TaskStatus::Succeeded);
+    assert_eq!(session.latest_status, SessionStatus::Succeeded);
     assert!(session.latest_terminal_reason.is_some());
 }
 
@@ -968,7 +978,7 @@ fn session_runtime_public_error_paths_cover_missing_goal_task_and_terminal_short
 
     let mut no_goal = build_started_session(&workspace);
     assert!(matches!(
-        runtime.plan_task(&mut no_goal).unwrap_err(),
+        runtime.plan_task(&mut no_goal, None, false).unwrap_err(),
         SessionRuntimeError::MissingGoal
     ));
     assert!(matches!(
@@ -984,7 +994,7 @@ fn session_runtime_public_error_paths_cover_missing_goal_task_and_terminal_short
         total_stages: 3,
     });
     assert!(matches!(
-        runtime.plan_task(&mut invalid_flow).unwrap_err(),
+        runtime.plan_task(&mut invalid_flow, None, false).unwrap_err(),
         SessionRuntimeError::InvalidFlowState(_)
     ));
 

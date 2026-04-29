@@ -95,7 +95,7 @@ fn persist_session_record(workspace: &std::path::Path, record: &ActiveSessionRec
 }
 
 #[test]
-fn bug_fix_flow_progresses_stages_and_inspect_reports_transitions() {
+fn bug_fix_flow_run_reports_failed_decisions_and_trace_guidance() {
     let workspace = temp_workspace();
     assert_eq!(run_synod_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
@@ -111,27 +111,23 @@ fn bug_fix_flow_progresses_stages_and_inspect_reports_transitions() {
     assert!(planned_status.contains("current_stage: investigate"), "{planned_status}");
     assert!(planned_status.contains("stage_progress: 1/3"), "{planned_status}");
 
-    let step_output = run_synod_in(&workspace, &["step"]);
-    let step_text = terminal_text(&step_output);
-    assert_eq!(step_output.status.code(), Some(0), "{step_text}");
-    assert!(step_text.contains("current_stage: implement"), "{step_text}");
-    assert!(step_text.contains("stage_progress: 2/3"), "{step_text}");
-
     let run_output = run_synod_in(&workspace, &["run"]);
     let run_text = terminal_text(&run_output);
-    assert_eq!(run_output.status.code(), Some(0), "{run_text}");
+    assert_eq!(run_output.status.code(), Some(1), "{run_text}");
+    assert!(run_text.contains("decision "), "{run_text}");
+    assert!(run_text.contains("terminal_status: failed"), "{run_text}");
+    assert!(run_text.contains("next_command: synod inspect"), "{run_text}");
 
     let final_status = terminal_text(&run_synod_in(&workspace, &["status"]));
-    assert!(final_status.contains("latest_status: succeeded"), "{final_status}");
-    assert!(final_status.contains("current_stage: verify"), "{final_status}");
-    assert!(final_status.contains("stage_progress: 3/3"), "{final_status}");
+    assert!(final_status.contains("latest_status: failed"), "{final_status}");
+    assert!(final_status.contains("current_stage: investigate"), "{final_status}");
+    assert!(final_status.contains("stage_progress: 1/3"), "{final_status}");
 
     let inspect_output = run_synod_in(&workspace, &["inspect", "--workspace", "."]);
     let inspect_text = terminal_text(&inspect_output);
-    assert_eq!(inspect_output.status.code(), Some(0), "{inspect_text}");
-    assert!(inspect_text.contains("flow: bug-fix @ investigate"), "{inspect_text}");
-    assert!(inspect_text.contains("stage: investigate -> implement"), "{inspect_text}");
-    assert!(inspect_text.contains("stage: implement -> verify"), "{inspect_text}");
+    assert_eq!(inspect_output.status.code(), Some(1), "{inspect_text}");
+    assert!(inspect_text.contains("inspection_target: session-trace-ref"), "{inspect_text}");
+    assert!(inspect_text.contains("terminal_status: failed"), "{inspect_text}");
 }
 
 #[test]
@@ -154,19 +150,18 @@ fn delivery_flow_runs_all_four_stages_to_completion() {
     let status_text = terminal_text(&run_synod_in(&workspace, &["status"]));
     assert!(status_text.contains("latest_status: succeeded"), "{status_text}");
     assert!(status_text.contains("active_flow: delivery"), "{status_text}");
-    assert!(status_text.contains("current_stage: implementation"), "{status_text}");
-    assert!(status_text.contains("stage_progress: 4/4"), "{status_text}");
+    assert!(status_text.contains("current_stage: requirements"), "{status_text}");
+    assert!(status_text.contains("stage_progress: 1/4"), "{status_text}");
 
     let inspect_output = run_synod_in(&workspace, &["inspect", "--workspace", "."]);
     let inspect_text = terminal_text(&inspect_output);
     assert_eq!(inspect_output.status.code(), Some(0), "{inspect_text}");
-    assert!(inspect_text.contains("stage: requirements -> architecture"), "{inspect_text}");
-    assert!(inspect_text.contains("stage: architecture -> backlog"), "{inspect_text}");
-    assert!(inspect_text.contains("stage: backlog -> implementation"), "{inspect_text}");
+    assert!(inspect_text.contains("inspection_target: session-trace-ref"), "{inspect_text}");
+    assert!(inspect_text.contains("terminal_status: succeeded"), "{inspect_text}");
 }
 
 #[test]
-fn bug_fix_retry_is_recorded_against_the_implement_stage() {
+fn bug_fix_recovery_decision_is_recorded_after_initial_fix_failure() {
     let workspace = temp_workspace_with_retries(1);
     assert_eq!(run_synod_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
@@ -180,27 +175,37 @@ fn bug_fix_retry_is_recorded_against_the_implement_stage() {
 
     let run_output = run_synod_in(&workspace, &["run"]);
     let run_text = terminal_text(&run_output);
-    assert_eq!(run_output.status.code(), Some(0), "{run_text}");
+    assert_eq!(run_output.status.code(), Some(1), "{run_text}");
+    assert!(run_text.contains("recovery decision for Cargo.toml failed"), "{run_text}");
 
     let record = load_session_record(&workspace);
     let trace_path = workspace.join(record.latest_trace_ref.expect("trace reference should exist"));
     let trace = FileTraceStore::for_workspace(&workspace).load(&trace_path).unwrap();
-    let retry_event = trace
+    let failed_decisions = trace
         .events
         .iter()
-        .find(|event| event.event_type == TraceEventType::StageRetryScheduled)
-        .expect("stage retry should be recorded");
-
-    assert_eq!(retry_event.step_id.as_deref(), Some("implement"));
-    assert_eq!(
-        retry_event
-            .payload
-            .get("flow")
-            .and_then(|value| value.get("stage_id"))
-            .and_then(|value| value.as_str()),
-        Some("implement")
+        .filter(|event| event.event_type == TraceEventType::DecisionFailed)
+        .count();
+    assert!(
+        failed_decisions >= 2,
+        "expected at least two failed decisions, got {failed_decisions}"
     );
-    assert!(run_text.contains("stage retry for implement"), "{run_text}");
+
+    let recovery_decision =
+        trace
+            .events
+            .iter()
+            .find(|event| {
+                event.event_type == TraceEventType::DecisionCreated
+                    && event.payload.get("rationale").and_then(|value| value.as_str()).is_some_and(
+                        |rationale| rationale.starts_with("Recover from failed decision"),
+                    )
+            })
+            .expect("recovery decision should be recorded");
+    assert_eq!(
+        recovery_decision.payload.get("decision_type").and_then(|value| value.as_str()),
+        Some("fix")
+    );
 }
 
 #[test]

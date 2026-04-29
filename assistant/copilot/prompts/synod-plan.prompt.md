@@ -34,8 +34,8 @@ Ask only for the missing workspace or authored input, then provide the matching 
 Tell the user to run them one at a time and paste the outputs before continuing.
 
 ## Output Interpretation
-Summarize the captured goal or `authored_input_summary`, `authored_input_sources`, any requested governance intent, the resulting plan state, and the CLI-reported `next_command`.
+Summarize the captured goal or `authored_input_summary`, `authored_input_sources`, any requested governance intent, the resulting plan state, any proposed, confirmed, skipped, or absent `flow_state`, any CLI-reported confirm or skip guidance, and the CLI-reported `next_command`.
 
 ## Next-Step Routing
-Prefer the CLI-reported `next_command`; otherwise move to `/synod-step` or `/synod-run` once planning succeeds.
+Prefer the CLI-reported `next_command`; when planning is waiting on flow confirmation or skip, follow that CLI route instead of inventing `/synod-run`.
 Allowed follow-up commands: `/synod-step`, `/synod-run`, `/synod-plan`, `/synod-start`.

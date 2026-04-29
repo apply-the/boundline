@@ -1,6 +1,9 @@
 #[path = "support/workspace_fixture.rs"]
 mod workspace_fixture;
 
+#[path = "support/runtime_refoundation.rs"]
+mod runtime_refoundation;
+
 #[path = "unit/step_state.rs"]
 mod step_state;
 
@@ -27,6 +30,9 @@ mod assistant_assets;
 
 #[path = "unit/session_record.rs"]
 mod session_record;
+
+#[path = "unit/session_model.rs"]
+mod session_model;
 
 #[path = "unit/session_store.rs"]
 mod session_store;
@@ -81,3 +87,30 @@ mod cluster_config_resolution;
 
 #[path = "unit/cluster_projection.rs"]
 mod cluster_projection;
+
+#[path = "unit/decision_model.rs"]
+mod decision_model;
+
+#[path = "unit/goal_plan_model.rs"]
+mod goal_plan_model;
+
+#[path = "unit/flow_policy_model.rs"]
+mod flow_policy_model;
+
+#[path = "unit/flow_confirmation.rs"]
+mod flow_confirmation;
+
+#[path = "unit/tool_result_model.rs"]
+mod tool_result_model;
+
+#[path = "unit/decision_loop.rs"]
+mod decision_loop;
+
+#[path = "unit/flow_inference.rs"]
+mod flow_inference;
+
+#[path = "unit/goal_planner.rs"]
+mod goal_planner;
+
+#[path = "unit/runtime_routing.rs"]
+mod runtime_routing;

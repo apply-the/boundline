@@ -6,6 +6,7 @@ Synod is a bounded delivery orchestrator. Contributions should keep that bias:
 
 - prefer small, inspectable changes over broad refactors
 - preserve explicit session state, traces, and CLI guidance
+- preserve the session-native `start -> capture -> plan -> run -> inspect` story as the default operator path
 - keep the local developer workflow deterministic
 - update tests and docs together with behavior changes
 
@@ -25,7 +26,7 @@ To install the repository git hooks:
 
 ## Repository Layout
 
-- [src](src): library code, CLI, domain model, runtime, and fixture-backed execution
+- [src](src): library code, CLI, session-native runtime, and explicit compatibility execution support
 - [tests](tests): top-level Cargo test harnesses plus `unit`, `integration`, and `contract` modules
 - [assistant](assistant): assistant command packs and shared assistant-facing docs
 - [specs](specs): feature specs, plans, research notes, contracts, quickstarts, and task breakdowns
@@ -89,7 +90,10 @@ If you change a user-visible command, session workflow, or flow behavior, update
 - [README.md](README.md)
 - [assistant/README.md](assistant/README.md)
 - [ROADMAP.md](ROADMAP.md)
+- the relevant assistant command pack files under [assistant](assistant)
 - the relevant feature quickstart under [specs](specs)
+
+When a change affects routing, planning, or compatibility behavior, keep the docs explicit about which path is primary and which path is compatibility-only.
 
 If the crate surface or release scope materially changed, update the crate version in [Cargo.toml](Cargo.toml).
 

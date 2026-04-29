@@ -11,6 +11,7 @@
   IMPORTANT: User stories MUST be prioritized as delivery journeys ordered by importance.
   Each story must improve bounded engineering-task execution and be independently testable.
   If implementing just one story would not produce immediate delivery value, the slice is too broad.
+  When both a session-native workflow and a compatibility workflow exist, the spec MUST name which path is primary and keep compatibility behavior explicit rather than implicit.
 
   At least one acceptance scenario in the spec MUST cover a non-success path such as
   retry, replanning, failure, or exhaustion. Avoid stories that describe generic agent
@@ -72,6 +73,7 @@
 
 - What happens when [execution reaches a configured limit or no credible next step exists]?
 - How does the system handle [a failed step, invalid result, or missing context update]?
+- How does the system surface [primary session-native routing versus any explicit compatibility route]?
 
 ## Requirements *(mandatory)*
 
