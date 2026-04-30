@@ -1,7 +1,9 @@
+use std::fs;
 use std::path::Path;
 
 use crate::workspace_fixture::{
     run_synod_in, temp_canon_approval_workspace, temp_canon_autopilot_blocked_workspace,
+    temp_canon_security_approval_workspace, temp_canon_security_assessment_workspace,
     terminal_text,
 };
 
@@ -15,6 +17,52 @@ fn bootstrap_bug_fix(workspace: &Path) {
     );
     assert_eq!(run_synod_in(workspace, &["flow", "bug-fix"]).status.code(), Some(0));
     assert_eq!(run_synod_in(workspace, &["plan"]).status.code(), Some(0));
+}
+
+fn bootstrap_change(workspace: &Path) {
+    assert_eq!(run_synod_in(workspace, &["start"]).status.code(), Some(0));
+    assert_eq!(
+        run_synod_in(workspace, &["capture", "--goal", "Update the checkout confirmation copy"])
+            .status
+            .code(),
+        Some(0)
+    );
+    assert_eq!(run_synod_in(workspace, &["flow", "change"]).status.code(), Some(0));
+    assert_eq!(run_synod_in(workspace, &["plan"]).status.code(), Some(0));
+}
+
+fn rewrite_governance_flow_name(workspace: &Path, flow_name: &str) {
+    let path = workspace.join(".synod/execution.json");
+    let mut profile: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    let stages = profile
+        .get_mut("governance")
+        .and_then(|governance| governance.get_mut("stages"))
+        .and_then(serde_json::Value::as_array_mut)
+        .expect("governance stages should exist");
+
+    for stage in stages {
+        stage["flow_name"] = serde_json::Value::String(flow_name.to_string());
+    }
+
+    fs::write(path, serde_json::to_string_pretty(&profile).unwrap()).unwrap();
+}
+
+fn rewrite_governance_canon_mode(workspace: &Path, canon_mode: &str) {
+    let path = workspace.join(".synod/execution.json");
+    let mut profile: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    let stages = profile
+        .get_mut("governance")
+        .and_then(|governance| governance.get_mut("stages"))
+        .and_then(serde_json::Value::as_array_mut)
+        .expect("governance stages should exist");
+
+    for stage in stages {
+        stage["canon_mode"] = serde_json::Value::String(canon_mode.to_string());
+    }
+
+    fs::write(path, serde_json::to_string_pretty(&profile).unwrap()).unwrap();
 }
 
 #[test]
@@ -46,4 +94,147 @@ fn governance_autopilot_flow_blocks_required_stage_without_a_canon_runtime() {
     assert!(run_text.contains("decision "), "{run_text}");
     assert!(!run_text.contains("latest_governance_runtime:"), "{run_text}");
     assert!(!run_text.contains("latest_governance_state:"), "{run_text}");
+}
+
+#[test]
+fn governance_autopilot_flow_routes_verify_stage_through_security_assessment() {
+    let workspace =
+        temp_canon_security_assessment_workspace("synod-governance-security-assessment");
+    bootstrap_bug_fix(&workspace);
+
+    let run = run_synod_in(&workspace, &["run"]);
+    let run_text = terminal_text(&run);
+    assert_eq!(run.status.code(), Some(0), "{run_text}");
+    assert!(run_text.contains("routing: native (goal_plan)"), "{run_text}");
+    assert!(
+        run_text.contains("governance_started: bug-fix:verify (security-assessment)"),
+        "{run_text}"
+    );
+    assert!(
+        run_text.contains("governance_completed: security assessment packet ready [.canon/runs/canon-run-security]"),
+        "{run_text}"
+    );
+
+    let status = run_synod_in(&workspace, &["status"]);
+    let status_text = terminal_text(&status);
+    assert_eq!(status.status.code(), Some(0), "{status_text}");
+    assert!(status_text.contains("execution_path: native_goal_plan"), "{status_text}");
+    assert!(status_text.contains("latest_governance_stage: bug-fix:verify"), "{status_text}");
+    assert!(status_text.contains("latest_governance_runtime: canon"), "{status_text}");
+    assert!(status_text.contains("latest_governance_mode: security-assessment"), "{status_text}");
+    assert!(
+        status_text.contains("latest_governance_packet_ref: .canon/runs/canon-run-security"),
+        "{status_text}"
+    );
+
+    let inspect = run_synod_in(&workspace, &["inspect", "--workspace", "."]);
+    let inspect_text = terminal_text(&inspect);
+    assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
+    assert!(
+        inspect_text.contains("governance_started: bug-fix:verify (security-assessment)"),
+        "{inspect_text}"
+    );
+}
+
+#[test]
+fn governance_autopilot_flow_routes_change_verify_stage_through_security_assessment() {
+    let workspace =
+        temp_canon_security_assessment_workspace("synod-governance-change-security-assessment");
+    rewrite_governance_flow_name(&workspace, "change");
+    bootstrap_change(&workspace);
+
+    let run = run_synod_in(&workspace, &["run"]);
+    let run_text = terminal_text(&run);
+    assert_eq!(run.status.code(), Some(0), "{run_text}");
+    assert!(run_text.contains("routing: native (goal_plan)"), "{run_text}");
+    assert!(
+        run_text.contains("governance_started: change:verify (security-assessment)"),
+        "{run_text}"
+    );
+    assert!(
+        run_text.contains(
+            "governance_completed: security assessment packet ready [.canon/runs/canon-run-security]"
+        ),
+        "{run_text}"
+    );
+
+    let status = run_synod_in(&workspace, &["status"]);
+    let status_text = terminal_text(&status);
+    assert_eq!(status.status.code(), Some(0), "{status_text}");
+    assert!(status_text.contains("execution_path: native_goal_plan"), "{status_text}");
+    assert!(status_text.contains("latest_governance_stage: change:verify"), "{status_text}");
+    assert!(status_text.contains("latest_governance_runtime: canon"), "{status_text}");
+    assert!(status_text.contains("latest_governance_mode: security-assessment"), "{status_text}");
+    assert!(
+        status_text.contains("latest_governance_packet_ref: .canon/runs/canon-run-security"),
+        "{status_text}"
+    );
+}
+
+#[test]
+fn governance_autopilot_flow_refreshes_security_assessment_approval_through_status() {
+    let workspace = temp_canon_security_approval_workspace("synod-governance-security-approval");
+    bootstrap_bug_fix(&workspace);
+
+    let run = run_synod_in(&workspace, &["run"]);
+    let run_text = terminal_text(&run);
+    assert_eq!(run.status.code(), Some(0), "{run_text}");
+    assert!(
+        run_text.contains("governance_started: bug-fix:verify (security-assessment)"),
+        "{run_text}"
+    );
+    assert!(
+        run_text.contains(
+            "governance_awaiting_approval: bug-fix:verify (requested) [canon-run-security-approval]"
+        ),
+        "{run_text}"
+    );
+    assert!(
+        run_text.contains("run: governance approval is still pending for bug-fix:verify"),
+        "{run_text}"
+    );
+
+    let status = run_synod_in(&workspace, &["status"]);
+    let status_text = terminal_text(&status);
+    assert_eq!(status.status.code(), Some(0), "{status_text}");
+    assert!(status_text.contains("latest_governance_mode: security-assessment"), "{status_text}");
+    assert!(status_text.contains("latest_governance_state: awaiting_approval"), "{status_text}");
+    assert!(
+        status_text.contains("governance_next_action: wait for approval and rerun synod status"),
+        "{status_text}"
+    );
+    assert!(status_text.contains("next_command: synod status"), "{status_text}");
+
+    fs::write(workspace.join(".canon/approval-state.txt"), "granted\n").unwrap();
+
+    let refreshed = run_synod_in(&workspace, &["status"]);
+    let refreshed_text = terminal_text(&refreshed);
+    assert_eq!(refreshed.status.code(), Some(0), "{refreshed_text}");
+    assert!(refreshed_text.contains("latest_governance_state: governed_ready"), "{refreshed_text}");
+    assert!(refreshed_text.contains("latest_governance_approval: granted"), "{refreshed_text}");
+    assert!(
+        refreshed_text
+            .contains("latest_governance_packet_ref: .canon/runs/canon-run-security-approval"),
+        "{refreshed_text}"
+    );
+    assert!(refreshed_text.contains("next_command: synod step"), "{refreshed_text}");
+}
+
+#[test]
+fn governance_autopilot_flow_rejects_unsupported_future_canon_mode_configuration() {
+    let workspace =
+        temp_canon_security_assessment_workspace("synod-governance-unsupported-security-mode");
+    rewrite_governance_canon_mode(&workspace, "supply-chain-analysis");
+    bootstrap_bug_fix(&workspace);
+
+    let run = run_synod_in(&workspace, &["run"]);
+    let run_text = terminal_text(&run);
+    assert_ne!(run.status.code(), Some(0), "{run_text}");
+    assert!(run_text.contains("run: session error"), "{run_text}");
+    assert!(
+        run_text.contains("fixture runtime is invalid: workspace execution profile is invalid"),
+        "{run_text}"
+    );
+    assert!(run_text.contains("unknown variant `supply-chain-analysis`"), "{run_text}");
+    assert!(run_text.contains("security-assessment"), "{run_text}");
 }
