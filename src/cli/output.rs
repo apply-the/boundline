@@ -1084,6 +1084,46 @@ fn session_execution_condition_parts(view: &SessionStatusView) -> (&'static str,
         }
     }
 
+    if let Some(workflow_phase) = view.workflow_phase.as_deref() {
+        match workflow_phase {
+            "capture" if view.goal.as_deref().map(str::trim).unwrap_or_default().is_empty() => {
+                return (
+                    "waiting",
+                    "workflow is waiting for a captured goal before it can continue".to_string(),
+                );
+            }
+            "clarify"
+                if view.clarification_headline.is_some()
+                    || view.clarification_prompt.is_some()
+                    || view
+                        .clarification_missing_fields
+                        .as_ref()
+                        .is_some_and(|fields| !fields.is_empty()) =>
+            {
+                return (
+                    "waiting",
+                    "clarification is still required before workflow planning can continue"
+                        .to_string(),
+                );
+            }
+            "review" => {
+                return (
+                    "blocked",
+                    "workflow phase `review` is not yet executable from the workflow command surface"
+                        .to_string(),
+                );
+            }
+            "govern" if view.latest_governance_state.is_none() => {
+                return (
+                    "blocked",
+                    "workflow phase `govern` is not yet executable from the workflow command surface"
+                        .to_string(),
+                );
+            }
+            _ => {}
+        }
+    }
+
     match view.execution_path.as_deref() {
         Some("native_goal_plan_pending_flow_confirmation") => {
             return (

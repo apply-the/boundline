@@ -45,16 +45,16 @@
 
 ### Tests for User Story 1
 
-- [ ] T007 [P] [US1] Add contract coverage for the workflow command surface in `/Users/rt/workspace/synod/tests/contract/workflow_command_surface_contract.rs`
-- [ ] T008 [P] [US1] Add integration coverage for running a valid named workflow through the session-native route in `/Users/rt/workspace/synod/tests/integration/workflow_layer_run.rs`
-- [ ] T009 [P] [US1] Add integration coverage for invalid workflow-definition blocking in `/Users/rt/workspace/synod/tests/integration/workflow_layer_run.rs`
+- [X] T007 [P] [US1] Add contract coverage for the workflow command surface in `/Users/rt/workspace/synod/tests/contract/workflow_command_surface_contract.rs`
+- [X] T008 [P] [US1] Add integration coverage for running a valid named workflow through the session-native route in `/Users/rt/workspace/synod/tests/integration/workflow_layer_run.rs`
+- [X] T009 [P] [US1] Add integration coverage for invalid workflow-definition blocking in `/Users/rt/workspace/synod/tests/integration/workflow_layer_run.rs`
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] Add the `workflow` command family and argument parsing in `/Users/rt/workspace/synod/src/cli.rs` and `/Users/rt/workspace/synod/src/cli/workflow.rs`
-- [ ] T011 [US1] Implement workflow-definition loading and validation from workspace-local workflow files in `/Users/rt/workspace/synod/src/cli/workflow.rs` and `/Users/rt/workspace/synod/src/domain/workflow.rs`
-- [ ] T012 [US1] Compile named workflow phases onto the existing session-native runtime in `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs`, `/Users/rt/workspace/synod/src/orchestrator/goal_planner.rs`, and `/Users/rt/workspace/synod/src/orchestrator/planner.rs`
-- [ ] T013 [US1] Persist active workflow state, phase progression, and blocked workflow reasons in `/Users/rt/workspace/synod/src/domain/session.rs`, `/Users/rt/workspace/synod/src/cli/session.rs`, and `/Users/rt/workspace/synod/src/domain/goal_plan.rs`
+- [X] T010 [US1] Add the `workflow` command family and argument parsing in `/Users/rt/workspace/synod/src/cli.rs` and `/Users/rt/workspace/synod/src/cli/workflow.rs`
+- [X] T011 [US1] Implement workflow-definition loading and validation from workspace-local workflow files in `/Users/rt/workspace/synod/src/cli/workflow.rs` and `/Users/rt/workspace/synod/src/domain/workflow.rs`
+- [X] T012 [US1] Compile named workflow phases onto the existing session-native runtime in `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs`, `/Users/rt/workspace/synod/src/orchestrator/goal_planner.rs`, and `/Users/rt/workspace/synod/src/orchestrator/planner.rs`
+- [X] T013 [US1] Persist active workflow state, phase progression, and blocked workflow reasons in `/Users/rt/workspace/synod/src/domain/session.rs`, `/Users/rt/workspace/synod/src/cli/session.rs`, and `/Users/rt/workspace/synod/src/domain/goal_plan.rs`
 
 **Checkpoint**: A named workflow can start real delivery work through the existing session-native route and stop explicitly on invalid or unmet conditions.
 
@@ -68,14 +68,14 @@
 
 ### Tests for User Story 2
 
-- [ ] T014 [P] [US2] Add integration coverage for paused-workflow status and resume behavior in `/Users/rt/workspace/synod/tests/integration/workflow_layer_resume.rs`
-- [ ] T015 [P] [US2] Add unit coverage for workflow-aware session and CLI rendering in `/Users/rt/workspace/synod/tests/unit/cli_output.rs` and `/Users/rt/workspace/synod/tests/unit/workflow_session_projection.rs`
+- [X] T014 [P] [US2] Add integration coverage for paused-workflow status and resume behavior in `/Users/rt/workspace/synod/tests/integration/workflow_layer_resume.rs`
+- [X] T015 [P] [US2] Add unit coverage for workflow-aware session and CLI rendering in `/Users/rt/workspace/synod/tests/unit/cli_output.rs` and `/Users/rt/workspace/synod/tests/unit/workflow_session_projection.rs`
 
 ### Implementation for User Story 2
 
-- [ ] T016 [US2] Implement `workflow status`, `workflow resume`, and `workflow inspect` handlers in `/Users/rt/workspace/synod/src/cli/workflow.rs` and `/Users/rt/workspace/synod/src/cli.rs`
-- [ ] T017 [US2] Extend workflow-aware operator summaries in `/Users/rt/workspace/synod/src/cli/output.rs` and `/Users/rt/workspace/synod/src/cli/inspect.rs`
-- [ ] T018 [US2] Align paused workflow resume behavior, trace-backed next-command guidance, and workflow execution conditions in `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs` and `/Users/rt/workspace/synod/src/domain/session.rs`
+- [X] T016 [US2] Implement `workflow status`, `workflow resume`, and `workflow inspect` handlers in `/Users/rt/workspace/synod/src/cli/workflow.rs` and `/Users/rt/workspace/synod/src/cli.rs`
+- [X] T017 [US2] Extend workflow-aware operator summaries in `/Users/rt/workspace/synod/src/cli/output.rs` and `/Users/rt/workspace/synod/src/cli/inspect.rs`
+- [X] T018 [US2] Align paused workflow resume behavior, trace-backed next-command guidance, and workflow execution conditions in `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs` and `/Users/rt/workspace/synod/src/domain/session.rs`
 
 **Checkpoint**: Workflow progress is resumable and visible through one coherent operator story.
 
@@ -89,13 +89,13 @@
 
 ### Tests for User Story 3
 
-- [ ] T019 [P] [US3] Add contract and unit coverage for unsupported workflow semantics and validation failures in `/Users/rt/workspace/synod/tests/contract/workflow_definition_contract.rs` and `/Users/rt/workspace/synod/tests/unit/workflow_definition.rs`
-- [ ] T020 [P] [US3] Add integration coverage that direct session-native commands and explicit compatibility routing remain available without workflow invocation in `/Users/rt/workspace/synod/tests/integration/workflow_layer_compat.rs`
+- [X] T019 [P] [US3] Add contract and unit coverage for unsupported workflow semantics and validation failures in `/Users/rt/workspace/synod/tests/contract/workflow_definition_contract.rs` and `/Users/rt/workspace/synod/tests/unit/workflow_definition.rs`
+- [X] T020 [P] [US3] Add integration coverage that direct session-native commands and explicit compatibility routing remain available without workflow invocation in `/Users/rt/workspace/synod/tests/integration/workflow_layer_compat.rs`
 
 ### Implementation for User Story 3
 
-- [ ] T021 [US3] Enforce bounded workflow semantics and reject unsupported loops, branching, fan-out, and Canon-owned progression in `/Users/rt/workspace/synod/src/domain/workflow.rs` and `/Users/rt/workspace/synod/src/cli/workflow.rs`
-- [ ] T022 [US3] Preserve direct session-native and explicit compatibility routing behavior when no named workflow is invoked in `/Users/rt/workspace/synod/src/cli/run.rs`, `/Users/rt/workspace/synod/src/cli/session.rs`, and `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs`
+- [X] T021 [US3] Enforce bounded workflow semantics and reject unsupported loops, branching, fan-out, and Canon-owned progression in `/Users/rt/workspace/synod/src/domain/workflow.rs` and `/Users/rt/workspace/synod/src/cli/workflow.rs`
+- [X] T022 [US3] Preserve direct session-native and explicit compatibility routing behavior when no named workflow is invoked in `/Users/rt/workspace/synod/src/cli/run.rs`, `/Users/rt/workspace/synod/src/cli/session.rs`, and `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs`
 
 **Checkpoint**: The workflow layer stays bounded, sequential, and session-owned without taking over every execution path.
 
@@ -105,10 +105,10 @@
 
 **Purpose**: Release alignment, docs, assistant assets, and final validation closeout
 
-- [ ] T023 [P] Refresh generated agent and contributor context for the new workflow surface in `/Users/rt/workspace/synod/AGENTS.md` and `/Users/rt/workspace/synod/CONTRIBUTING.md`
-- [ ] T024 [P] Update `/Users/rt/workspace/synod/README.md`, `/Users/rt/workspace/synod/docs/getting-started.md`, `/Users/rt/workspace/synod/docs/configuration.md`, `/Users/rt/workspace/synod/assistant/README.md`, and workflow-related assistant command or prompt assets under `/Users/rt/workspace/synod/assistant/`
-- [ ] T025 Update `/Users/rt/workspace/synod/ROADMAP.md`, `/Users/rt/workspace/synod/CHANGELOG.md`, and any touched `.specify` templates needed to reflect the `0.18.0` workflow-layer release
-- [ ] T026 Run coverage-aware release validation, refresh `/Users/rt/workspace/synod/lcov.info`, resolve remaining `cargo clippy` issues, run `cargo fmt --all`, and finish with clean validation for touched files under `/Users/rt/workspace/synod/src/` and `/Users/rt/workspace/synod/tests/`
+- [X] T023 [P] Refresh generated agent and contributor context for the new workflow surface in `/Users/rt/workspace/synod/AGENTS.md` and `/Users/rt/workspace/synod/CONTRIBUTING.md`
+- [X] T024 [P] Update `/Users/rt/workspace/synod/README.md`, `/Users/rt/workspace/synod/docs/getting-started.md`, `/Users/rt/workspace/synod/docs/configuration.md`, `/Users/rt/workspace/synod/assistant/README.md`, and workflow-related assistant command or prompt assets under `/Users/rt/workspace/synod/assistant/`
+- [X] T025 Update `/Users/rt/workspace/synod/ROADMAP.md`, `/Users/rt/workspace/synod/CHANGELOG.md`, and any touched `.specify` templates needed to reflect the `0.18.0` workflow-layer release
+- [X] T026 Run coverage-aware release validation, refresh `/Users/rt/workspace/synod/lcov.info`, resolve remaining `cargo clippy` issues, run `cargo fmt --all`, and finish with clean validation for touched files under `/Users/rt/workspace/synod/src/` and `/Users/rt/workspace/synod/tests/`
 
 ---
 

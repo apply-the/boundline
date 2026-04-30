@@ -1,9 +1,11 @@
-# Configuration in Synod 0.17.0
+# Configuration in Synod 0.18.0
 
-Synod `0.17.0` keeps a user-friendly setup and routing configuration surface for the session-native runtime plus explicit compatibility/bootstrap workflows.
+Synod `0.18.0` keeps a user-friendly setup and routing configuration surface for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
-The `0.17.0` release keeps configuration behavior stable while making `status`,
-`next`, and `inspect` reuse the same routing and `execution_condition` story.
+The `0.18.0` release keeps configuration behavior stable while adding the
+workspace-local named workflow registry at `.synod/workflows.toml` and keeping
+`status`, `next`, `inspect`, and `workflow status` aligned on the same routing
+and `execution_condition` story.
 
 ## What changed
 
@@ -19,6 +21,13 @@ The `0.17.0` release keeps configuration behavior stable while making `status`,
 - Cluster-scoped: `<primary-workspace>/.synod/cluster.toml`
 - User-global: `$XDG_CONFIG_HOME/synod/config.toml`
 - User-global fallback: `$HOME/.config/synod/config.toml`
+
+Workflow definitions are separate from routing config:
+
+- Workspace-local workflow registry: `<workspace>/.synod/workflows.toml`
+
+That file declares named bounded workflows. It does not participate in runtime
+or model-routing precedence; it is consumed only by `synod workflow ...`.
 
 ## Resolution precedence
 

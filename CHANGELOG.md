@@ -19,9 +19,28 @@ recorded workspace version.
 
 Delivered specs:
 
-- None recorded after `0.17.0`
+- None recorded after `0.18.0`
 
 Highlights:
+
+## [0.18.0] - 2026-04-30
+
+Delivered specs:
+
+- `018` - Workflow Layer
+
+Highlights:
+
+- Add workspace-local `.synod/workflows.toml` as a bounded named-workflow
+  registry compiled onto Synod's existing session-native phases.
+- Add `synod workflow run`, `status`, `resume`, and `inspect` so named
+  workflows reuse the same session, routing, trace, and next-command story as
+  direct session-native delivery work.
+- Persist workflow identity, active phase, lifecycle pauses, and next-action
+  guidance in the active session while rejecting unsupported workflow semantics
+  explicitly.
+- Preserve direct session-native commands and explicit compatibility routing
+  when no named workflow is invoked.
 
 ## [0.17.0] - 2026-04-29
 

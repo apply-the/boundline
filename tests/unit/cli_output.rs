@@ -737,6 +737,84 @@ fn render_session_status_surfaces_security_assessment_projection() {
 }
 
 #[test]
+fn render_session_status_surfaces_workflow_phase_and_pause_reason() {
+    let view = SessionStatusView {
+        session_id: "session-workflow-status".to_string(),
+        workspace_ref: "/tmp/session-workflow".to_string(),
+        goal: None,
+        authored_input_summary: None,
+        authored_input_sources: None,
+        authored_input_deduplicated_sources: None,
+        clarification_headline: None,
+        clarification_prompt: None,
+        clarification_missing_fields: None,
+        requested_governance_runtime: None,
+        requested_governance_risk: None,
+        requested_governance_zone: None,
+        requested_governance_owner: None,
+        active_flow: None,
+        flow_state: None,
+        active_workflow: Some("default".to_string()),
+        workflow_phase: Some("capture".to_string()),
+        workflow_next_action: Some(
+            "synod capture --workspace /tmp/session-workflow --goal <goal>".to_string(),
+        ),
+        current_stage_id: None,
+        current_stage_index: None,
+        total_stages: None,
+        plan_revision: None,
+        current_step_id: None,
+        current_step_index: None,
+        latest_status: SessionStatus::Initialized,
+        execution_path: None,
+        latest_trace_ref: None,
+        latest_decision_status: None,
+        latest_decision_target: None,
+        latest_changed_files: None,
+        latest_workspace_slice: None,
+        latest_selection_headline: None,
+        latest_attempt_lineage: None,
+        latest_validation_status: None,
+        latest_review_trigger: None,
+        latest_review_vote: None,
+        latest_review_outcome: None,
+        latest_review_headline: None,
+        latest_governance_stage: None,
+        latest_governance_runtime: None,
+        latest_governance_mode: None,
+        latest_governance_run_ref: None,
+        latest_governance_state: None,
+        latest_governance_blocked_reason: None,
+        latest_governance_packet_ref: None,
+        latest_governance_packet_source_stage: None,
+        latest_governance_packet_binding_reason: None,
+        latest_governance_approval: None,
+        latest_governance_decision: None,
+        latest_governance_candidates: None,
+        governance_next_action: None,
+        next_command: None,
+        explanation: "workflow is paused until a goal is captured".to_string(),
+    };
+
+    let rendered = render_session_status(&view);
+
+    assert!(rendered.contains("workflow: default"), "{rendered}");
+    assert!(rendered.contains("workflow_phase: capture"), "{rendered}");
+    assert!(
+        rendered.contains(
+            "execution_condition: waiting - workflow is waiting for a captured goal before it can continue"
+        ),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains(
+            "next_command: synod capture --workspace /tmp/session-workflow --goal <goal>"
+        ),
+        "{rendered}"
+    );
+}
+
+#[test]
 fn resolve_trace_path_prefers_session_trace_ref_when_available() {
     use std::fs;
 

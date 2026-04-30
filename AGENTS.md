@@ -67,4 +67,5 @@ Before 1.0.0, breaking changes MAY occur in minor versions.
 
 
 <!-- MANUAL ADDITIONS START -->
+- Workflow layer release note: `0.18.0` adds workspace-local `.synod/workflows.toml` and the `workflow run|status|resume|inspect` CLI surface as a bounded wrapper over the existing session-native runtime.
 <!-- MANUAL ADDITIONS END -->

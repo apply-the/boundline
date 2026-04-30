@@ -71,15 +71,9 @@ fn build_view(record: &ActiveSessionRecord) -> SessionStatusView {
             .goal_plan
             .as_ref()
             .map(|goal_plan| goal_plan.flow_state().summary_text()),
-        active_workflow: record.goal_plan.as_ref().and_then(|goal_plan| goal_plan.workflow_name()),
-        workflow_phase: record
-            .goal_plan
-            .as_ref()
-            .and_then(|goal_plan| goal_plan.workflow_phase_text()),
-        workflow_next_action: record
-            .goal_plan
-            .as_ref()
-            .and_then(|goal_plan| goal_plan.workflow_next_action()),
+        active_workflow: record.active_workflow_name(),
+        workflow_phase: record.active_workflow_phase_text(),
+        workflow_next_action: record.active_workflow_next_action(),
         current_stage_id: None,
         current_stage_index: None,
         total_stages: None,
@@ -146,4 +140,49 @@ fn session_status_view_rejects_workflow_phase_mismatch() {
         view.validate(&record).unwrap_err(),
         SessionValidationError::StatusViewWorkflowPhaseMismatch { .. }
     ));
+}
+
+#[test]
+fn session_status_view_accepts_session_owned_workflow_progress_without_goal_plan() {
+    let record = ActiveSessionRecord {
+        session_id: "session-workflow-session-owned".to_string(),
+        workspace_ref: "/tmp/synod-workflow-session-owned".to_string(),
+        goal: None,
+        authored_brief: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: None,
+        workflow_progress: Some(WorkflowProgressState {
+            workflow_name: "default".to_string(),
+            lifecycle_state: WorkflowLifecycleState::Paused,
+            current_phase: Some(WorkflowPhase::Capture),
+            completed_phases: Vec::new(),
+            blocked_reason: Some(
+                "workflow is waiting for a captured goal before it can continue".to_string(),
+            ),
+            next_action: Some(
+                "synod capture --workspace /tmp/synod-workflow-session-owned --goal <goal>"
+                    .to_string(),
+            ),
+            routing_summary: Some("routing: blocked (session_state) - session has no goal plan or compatibility task to route".to_string()),
+        }),
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Initialized,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 20,
+    };
+
+    let view = build_view(&record);
+    view.validate(&record).unwrap();
+    assert_eq!(view.active_workflow.as_deref(), Some("default"));
+    assert_eq!(view.workflow_phase.as_deref(), Some("capture"));
+    assert!(
+        view.workflow_next_action
+            .as_deref()
+            .unwrap()
+            .contains("synod capture --workspace /tmp/synod-workflow-session-owned --goal <goal>")
+    );
 }
