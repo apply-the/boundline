@@ -970,6 +970,7 @@ mod tests {
             active_flow: None,
             active_task: None,
             goal_plan: None,
+            workflow_progress: None,
             decisions: Vec::new(),
             active_flow_policy: None,
             latest_status: SessionStatus::GoalCaptured,
