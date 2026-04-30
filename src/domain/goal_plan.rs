@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 use crate::domain::decision::{DecisionType, EvidenceRef};
 use crate::domain::trace::current_timestamp_millis;
+use crate::domain::workflow::WorkflowProgressState;
 
 /// Status of a goal-derived plan.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -118,6 +119,8 @@ pub struct GoalPlan {
     pub flow: Option<InferredFlow>,
     #[serde(default)]
     pub flow_skipped: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_progress: Option<WorkflowProgressState>,
     pub created_at: u64,
     pub status: GoalPlanStatus,
 }
@@ -135,6 +138,7 @@ impl GoalPlan {
             workspace_signals: WorkspaceSignals::default(),
             flow: None,
             flow_skipped: false,
+            workflow_progress: None,
             created_at: current_timestamp_millis(),
             status: GoalPlanStatus::Draft,
         };
@@ -151,6 +155,11 @@ impl GoalPlan {
         }
         for task in &self.tasks {
             task.validate()?;
+        }
+        if let Some(workflow_progress) = &self.workflow_progress {
+            workflow_progress
+                .validate()
+                .map_err(|error| GoalPlanError::InvalidWorkflowProgress(error.to_string()))?;
         }
         Ok(())
     }
@@ -193,6 +202,11 @@ impl GoalPlan {
         self
     }
 
+    pub fn with_workflow_progress(mut self, workflow_progress: WorkflowProgressState) -> Self {
+        self.workflow_progress = Some(workflow_progress);
+        self
+    }
+
     pub fn mark_flow_skipped(&mut self) {
         self.flow = None;
         self.flow_skipped = true;
@@ -220,6 +234,18 @@ impl GoalPlan {
             },
         }
     }
+
+    pub fn workflow_name(&self) -> Option<String> {
+        self.workflow_progress.as_ref().map(|workflow| workflow.workflow_name.clone())
+    }
+
+    pub fn workflow_phase_text(&self) -> Option<String> {
+        self.workflow_progress.as_ref().and_then(WorkflowProgressState::current_phase_text)
+    }
+
+    pub fn workflow_next_action(&self) -> Option<String> {
+        self.workflow_progress.as_ref().and_then(WorkflowProgressState::next_action_text)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -234,6 +260,8 @@ pub enum GoalPlanError {
     MissingTaskDescription { task_id: String },
     #[error("task `{task_id}` target must not be empty")]
     MissingTaskTarget { task_id: String },
+    #[error("goal plan workflow progress is invalid: {0}")]
+    InvalidWorkflowProgress(String),
     #[error("invalid goal plan status transition from {from:?} to {to:?}")]
     InvalidTransition { from: GoalPlanStatus, to: GoalPlanStatus },
 }

@@ -33,6 +33,28 @@ const FIXTURE_TEST_RS: &str = concat!(
     "}\n",
 );
 
+const VALID_WORKFLOWS_TOML: &str = concat!(
+    "[workflow.default]\n",
+    "goal_source = \"session\"\n",
+    "entry = \"capture\"\n",
+    "phases = [\"capture\", \"plan\", \"run\", \"inspect\"]\n",
+    "allow_review = true\n",
+    "allow_governance = true\n\n",
+    "[workflow.default.output]\n",
+    "next_command = true\n",
+    "routing_summary = true\n",
+    "execution_condition = true\n",
+);
+
+const INVALID_WORKFLOWS_TOML: &str = concat!(
+    "[workflow.invalid-flow]\n",
+    "goal_source = \"session\"\n",
+    "entry = \"run\"\n",
+    "phases = [\"run\", \"fan-out\", \"inspect\"]\n",
+    "allow_review = true\n",
+    "allow_governance = true\n",
+);
+
 pub fn temp_fixture_workspace(prefix: &str) -> PathBuf {
     create_fixture_workspace(
         prefix,
@@ -106,6 +128,18 @@ pub fn temp_canon_security_approval_workspace(prefix: &str) -> PathBuf {
     create_canon_governance_fixture_workspace(prefix, CanonFixtureScenario::VerifySecurityApproval)
 }
 
+pub fn temp_workflow_layer_workspace(prefix: &str) -> PathBuf {
+    create_workflow_fixture_workspace(prefix, VALID_WORKFLOWS_TOML, false)
+}
+
+pub fn temp_invalid_workflow_layer_workspace(prefix: &str) -> PathBuf {
+    create_workflow_fixture_workspace(prefix, INVALID_WORKFLOWS_TOML, false)
+}
+
+pub fn temp_workflow_layer_compat_workspace(prefix: &str) -> PathBuf {
+    create_workflow_fixture_workspace(prefix, VALID_WORKFLOWS_TOML, true)
+}
+
 #[allow(dead_code)]
 pub fn temp_replanning_execution_workspace(prefix: &str) -> PathBuf {
     create_fixture_workspace(
@@ -147,6 +181,15 @@ pub fn write_markdown_brief(
     contents: impl AsRef<str>,
 ) -> PathBuf {
     let path = workspace.join(relative_path.as_ref());
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
+    fs::write(&path, contents.as_ref()).unwrap();
+    path
+}
+
+pub fn write_workflow_definitions(workspace: &Path, contents: impl AsRef<str>) -> PathBuf {
+    let path = workspace.join(".synod/workflows.toml");
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).unwrap();
     }
@@ -197,6 +240,28 @@ fn create_fixture_workspace(prefix: &str, attempts: Vec<serde_json::Value>) -> P
     workspace
 }
 
+fn create_workflow_fixture_workspace(
+    prefix: &str,
+    workflow_contents: &str,
+    include_execution_profile: bool,
+) -> PathBuf {
+    let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::create_dir_all(workspace.join("tests")).unwrap();
+    fs::create_dir_all(workspace.join(".synod")).unwrap();
+
+    fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
+    fs::write(workspace.join("src/lib.rs"), RED_LIB_RS).unwrap();
+    fs::write(workspace.join("tests/red_to_green.rs"), FIXTURE_TEST_RS).unwrap();
+    write_workflow_definitions(&workspace, workflow_contents);
+
+    if include_execution_profile {
+        write_basic_execution_profile(&workspace, "workflow-layer-compat-execution");
+    }
+
+    workspace
+}
+
 fn create_adaptive_fixture_workspace(prefix: &str, source_contents: &str) -> PathBuf {
     let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
     fs::create_dir_all(workspace.join("src")).unwrap();
@@ -228,6 +293,31 @@ fn create_adaptive_fixture_workspace(prefix: &str, source_contents: &str) -> Pat
     .unwrap();
 
     workspace
+}
+
+fn write_basic_execution_profile(workspace: &Path, profile_name: &str) {
+    fs::write(
+        workspace.join(".synod/execution.json"),
+        serde_json::to_string_pretty(&serde_json::json!({
+            "name": profile_name,
+            "read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
+            "validation_command": {
+                "program": "cargo",
+                "args": ["test", "--quiet"],
+            },
+            "attempts": [
+                execution_attempt(
+                    "fix-add",
+                    "Replace subtraction with addition",
+                    "terminal",
+                    "left - right",
+                    "left + right",
+                )
+            ],
+        }))
+        .unwrap(),
+    )
+    .unwrap();
 }
 
 fn create_governance_fixture_workspace(prefix: &str, required: bool) -> PathBuf {

@@ -114,3 +114,9 @@ mod goal_planner;
 
 #[path = "unit/runtime_routing.rs"]
 mod runtime_routing;
+
+#[path = "unit/workflow_definition.rs"]
+mod workflow_definition;
+
+#[path = "unit/workflow_session_projection.rs"]
+mod workflow_session_projection;

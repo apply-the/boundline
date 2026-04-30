@@ -53,6 +53,7 @@ pub fn command_name(command: &DeveloperCommand) -> &'static str {
         DeveloperCommand::Plan { .. } => "plan",
         DeveloperCommand::Step { .. } => "step",
         DeveloperCommand::Run { .. } => "run",
+        DeveloperCommand::Workflow { .. } => "workflow",
         DeveloperCommand::Inspect { .. } => "inspect",
         DeveloperCommand::Status { .. } => "status",
         DeveloperCommand::Next { .. } => "next",
@@ -609,6 +610,14 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
         lines.push(format!("flow_state: {flow_state}"));
     }
 
+    if let Some(active_workflow) = &view.active_workflow {
+        lines.push(format!("workflow: {active_workflow}"));
+    }
+
+    if let Some(workflow_phase) = &view.workflow_phase {
+        lines.push(format!("workflow_phase: {workflow_phase}"));
+    }
+
     if let Some(current_stage_id) = &view.current_stage_id {
         lines.push(format!("current_stage: {current_stage_id}"));
     }
@@ -751,7 +760,7 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
         lines.push(format!("governance_next_action: {governance_next_action}"));
     }
 
-    if let Some(next_command) = &view.next_command {
+    if let Some(next_command) = view.next_command.as_ref().or(view.workflow_next_action.as_ref()) {
         lines.push(format!("next_command: {next_command}"));
     }
 
@@ -1250,6 +1259,16 @@ mod tests {
                 },
                 "run",
             ),
+            (
+                DeveloperCommand::Workflow {
+                    command: crate::cli::WorkflowSubcommand::Run {
+                        name: "default".to_string(),
+                        workspace: None,
+                        goal: None,
+                    },
+                },
+                "workflow",
+            ),
             (DeveloperCommand::Inspect { trace: None, workspace: None }, "inspect"),
             (DeveloperCommand::Status { workspace: None }, "status"),
             (DeveloperCommand::Next { workspace: None }, "next"),
@@ -1370,6 +1389,9 @@ mod tests {
             requested_governance_owner: None,
             active_flow: None,
             flow_state: None,
+            active_workflow: None,
+            workflow_phase: None,
+            workflow_next_action: None,
             current_stage_id: None,
             current_stage_index: None,
             total_stages: None,
@@ -1494,6 +1516,9 @@ mod tests {
             requested_governance_owner: None,
             active_flow: None,
             flow_state: None,
+            active_workflow: None,
+            workflow_phase: None,
+            workflow_next_action: None,
             current_stage_id: None,
             current_stage_index: None,
             total_stages: None,
