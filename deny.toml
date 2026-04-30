@@ -18,6 +18,10 @@ yanked = "warn"
 [bans]
 multiple-versions = "warn"
 wildcards = "allow"
+skip = [
+    { name = "wit-bindgen", version = "0.51.0" },
+    { name = "wit-bindgen", version = "0.57.1" },
+]
 
 [sources]
 allow-git = []

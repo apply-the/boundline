@@ -24,7 +24,7 @@
 **Target Platform**: [e.g., macOS/Linux developer workstations, Linux CI or NEEDS CLARIFICATION]
 **Project Type**: [e.g., single library crate, CLI, service, or NEEDS CLARIFICATION]  
 **Execution Model**: [e.g., sequential task loop with bounded retries or NEEDS CLARIFICATION]  
-**Observability Surface**: [e.g., persisted execution trace, structured logs, CLI summary or NEEDS CLARIFICATION]  
+**Observability Surface**: [e.g., persisted execution trace, structured logs, CLI summary, and when governance changes, visible mode/approval/packet-provenance output or NEEDS CLARIFICATION]  
 **Performance Goals**: [delivery-facing targets or NEEDS CLARIFICATION]  
 **Constraints**: [explicit limits, non-goals, and external boundaries or NEEDS CLARIFICATION]  
 **Scale/Scope**: [expected task volume, step count, or user reach or NEEDS CLARIFICATION]

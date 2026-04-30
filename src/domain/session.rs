@@ -18,6 +18,7 @@ use crate::domain::task_context::{
     LATEST_GOVERNANCE_DECISION_KEY, LATEST_GOVERNANCE_PACKET_KEY,
     LATEST_GOVERNANCE_PACKET_REUSE_KEY, LATEST_GOVERNANCE_STAGE_KEY,
 };
+use crate::domain::workflow::WorkflowProgressState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -65,6 +66,8 @@ pub struct ActiveSessionRecord {
     pub active_task: Option<Task>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub goal_plan: Option<GoalPlan>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_progress: Option<WorkflowProgressState>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub decisions: Vec<Decision>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -121,6 +124,12 @@ impl ActiveSessionRecord {
                 .map_err(|error| SessionValidationError::InvalidFlowState(error.to_string()))?;
         }
 
+        if let Some(workflow_progress) = &self.workflow_progress {
+            workflow_progress.validate().map_err(|error| {
+                SessionValidationError::InvalidWorkflowProgress(error.to_string())
+            })?;
+        }
+
         if self.latest_status.is_terminal() && self.latest_terminal_reason.is_none() {
             return Err(SessionValidationError::MissingTerminalReason(self.latest_status));
         }
@@ -156,6 +165,24 @@ impl ActiveSessionRecord {
         }
 
         Ok(())
+    }
+
+    pub fn active_workflow_progress(&self) -> Option<&WorkflowProgressState> {
+        self.workflow_progress.as_ref().or_else(|| {
+            self.goal_plan.as_ref().and_then(|goal_plan| goal_plan.workflow_progress.as_ref())
+        })
+    }
+
+    pub fn active_workflow_name(&self) -> Option<String> {
+        self.active_workflow_progress().map(|workflow| workflow.workflow_name.clone())
+    }
+
+    pub fn active_workflow_phase_text(&self) -> Option<String> {
+        self.active_workflow_progress().and_then(WorkflowProgressState::current_phase_text)
+    }
+
+    pub fn active_workflow_next_action(&self) -> Option<String> {
+        self.active_workflow_progress().and_then(WorkflowProgressState::next_action_text)
     }
 }
 
@@ -221,6 +248,12 @@ pub struct SessionStatusView {
     pub active_flow: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub flow_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_workflow: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_phase: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_next_action: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current_stage_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -330,6 +363,30 @@ impl SessionStatusView {
             return Err(SessionValidationError::StatusViewFlowStateMismatch {
                 expected: expected_flow_state,
                 actual: self.flow_state.clone(),
+            });
+        }
+
+        let expected_active_workflow = record.active_workflow_name();
+        if self.active_workflow != expected_active_workflow {
+            return Err(SessionValidationError::StatusViewWorkflowMismatch {
+                expected: expected_active_workflow,
+                actual: self.active_workflow.clone(),
+            });
+        }
+
+        let expected_workflow_phase = record.active_workflow_phase_text();
+        if self.workflow_phase != expected_workflow_phase {
+            return Err(SessionValidationError::StatusViewWorkflowPhaseMismatch {
+                expected: expected_workflow_phase,
+                actual: self.workflow_phase.clone(),
+            });
+        }
+
+        let expected_workflow_next_action = record.active_workflow_next_action();
+        if self.workflow_next_action != expected_workflow_next_action {
+            return Err(SessionValidationError::StatusViewWorkflowNextActionMismatch {
+                expected: expected_workflow_next_action,
+                actual: self.workflow_next_action.clone(),
             });
         }
 
@@ -826,6 +883,8 @@ pub enum SessionValidationError {
     TraceOutsideWorkspace { workspace_ref: String, trace_ref: String },
     #[error("active task is invalid: {0}")]
     InvalidTask(String),
+    #[error("workflow progress is invalid: {0}")]
+    InvalidWorkflowProgress(String),
     #[error("session transition reason must not be empty")]
     MissingTransitionReason,
     #[error("session transition status mismatch: expected {expected:?}, got {actual:?}")]
@@ -844,6 +903,12 @@ pub enum SessionValidationError {
     StatusViewFlowMismatch { expected: Option<String>, actual: Option<String> },
     #[error("status view flow state mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewFlowStateMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view workflow mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewWorkflowMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view workflow phase mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewWorkflowPhaseMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view workflow next action mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewWorkflowNextActionMismatch { expected: Option<String>, actual: Option<String> },
     #[error("status view stage mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewStageMismatch { expected: Option<String>, actual: Option<String> },
     #[error("status view stage index mismatch: expected {expected:?}, got {actual:?}")]
@@ -1080,6 +1145,24 @@ pub(crate) fn task_state_governance_packet_binding_reason(task: &Task) -> Option
     task_state_governance_packet_reuse(task).map(|binding| binding.binding_reason)
 }
 
+pub(crate) fn governance_packet_provenance_text(
+    packet_source_stage: Option<&str>,
+    packet_binding_reason: Option<&str>,
+) -> Option<String> {
+    let packet_source_stage = packet_source_stage.map(str::trim).filter(|value| !value.is_empty());
+    let packet_binding_reason =
+        packet_binding_reason.map(str::trim).filter(|value| !value.is_empty());
+
+    match (packet_source_stage, packet_binding_reason) {
+        (Some(packet_source_stage), Some(packet_binding_reason)) => {
+            Some(format!("{packet_source_stage} ({packet_binding_reason})"))
+        }
+        (Some(packet_source_stage), None) => Some(packet_source_stage.to_string()),
+        (None, Some(packet_binding_reason)) => Some(packet_binding_reason.to_string()),
+        (None, None) => None,
+    }
+}
+
 pub(crate) fn task_state_governance_approval_text(task: &Task) -> Option<String> {
     task_state_governed_stage(task).and_then(|record| encoded_text(&record.approval_state))
 }
@@ -1217,6 +1300,7 @@ mod tests {
             ),
             active_task: Some(build_task(workspace_ref)),
             goal_plan: None,
+            workflow_progress: None,
             decisions: Vec::new(),
             active_flow_policy: None,
             latest_status: SessionStatus::Planned,
@@ -1247,6 +1331,9 @@ mod tests {
                 .goal_plan
                 .as_ref()
                 .map(|goal_plan| goal_plan.flow_state().summary_text()),
+            active_workflow: record.active_workflow_name(),
+            workflow_phase: record.active_workflow_phase_text(),
+            workflow_next_action: record.active_workflow_next_action(),
             current_stage_id: record.active_flow.as_ref().map(|flow| flow.current_stage_id.clone()),
             current_stage_index: record.active_flow.as_ref().map(|flow| flow.current_stage_index),
             total_stages: record.active_flow.as_ref().map(|flow| flow.total_stages),
@@ -1437,7 +1524,6 @@ mod tests {
             wrong_stage_count.validate(&record).unwrap_err(),
             SessionValidationError::StatusViewStageCountMismatch { .. }
         ));
-
         let mut wrong_trace = build_view(&record);
         wrong_trace.latest_trace_ref = Some("/tmp/other/trace.json".to_string());
         assert!(matches!(
@@ -1451,6 +1537,26 @@ mod tests {
             wrong_step_index.validate(&record).unwrap_err(),
             SessionValidationError::StatusViewStepIndexMismatch { .. }
         ));
+    }
+
+    #[test]
+    fn governance_packet_provenance_text_formats_source_and_binding_reason() {
+        assert_eq!(
+            super::governance_packet_provenance_text(
+                Some("bug-fix:investigate"),
+                Some("upstream_stage_context")
+            ),
+            Some("bug-fix:investigate (upstream_stage_context)".to_string())
+        );
+        assert_eq!(
+            super::governance_packet_provenance_text(Some("bug-fix:investigate"), None),
+            Some("bug-fix:investigate".to_string())
+        );
+        assert_eq!(
+            super::governance_packet_provenance_text(None, Some("same_stage_rerun")),
+            Some("same_stage_rerun".to_string())
+        );
+        assert_eq!(super::governance_packet_provenance_text(None, None), None);
     }
 
     #[test]

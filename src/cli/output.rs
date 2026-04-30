@@ -5,7 +5,9 @@ use crate::cli::{CliValidationError, CommandExitStatus, DeveloperCommand};
 use crate::domain::cluster::{ClusterInspectReport, ClusterMemberState};
 use crate::domain::goal_plan::GoalPlanFlowState;
 use crate::domain::session::RoutingOutcome;
-use crate::domain::session::{RoutingMode, RoutingSource, SessionStatus, SessionStatusView};
+use crate::domain::session::{
+    RoutingMode, RoutingSource, SessionStatus, SessionStatusView, governance_packet_provenance_text,
+};
 use crate::domain::step::{StepKind, StepStatus};
 use crate::domain::task::{TaskRunResponse, TaskStatus};
 use crate::domain::trace::{ExecutionTrace, TraceEventType, TraceSummaryView};
@@ -51,6 +53,7 @@ pub fn command_name(command: &DeveloperCommand) -> &'static str {
         DeveloperCommand::Plan { .. } => "plan",
         DeveloperCommand::Step { .. } => "step",
         DeveloperCommand::Run { .. } => "run",
+        DeveloperCommand::Workflow { .. } => "workflow",
         DeveloperCommand::Inspect { .. } => "inspect",
         DeveloperCommand::Status { .. } => "status",
         DeveloperCommand::Next { .. } => "next",
@@ -607,6 +610,14 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
         lines.push(format!("flow_state: {flow_state}"));
     }
 
+    if let Some(active_workflow) = &view.active_workflow {
+        lines.push(format!("workflow: {active_workflow}"));
+    }
+
+    if let Some(workflow_phase) = &view.workflow_phase {
+        lines.push(format!("workflow_phase: {workflow_phase}"));
+    }
+
     if let Some(current_stage_id) = &view.current_stage_id {
         lines.push(format!("current_stage: {current_stage_id}"));
     }
@@ -749,7 +760,7 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
         lines.push(format!("governance_next_action: {governance_next_action}"));
     }
 
-    if let Some(next_command) = &view.next_command {
+    if let Some(next_command) = view.next_command.as_ref().or(view.workflow_next_action.as_ref()) {
         lines.push(format!("next_command: {next_command}"));
     }
 
@@ -868,7 +879,7 @@ fn governance_event_line(event_type: TraceEventType, payload: &Value) -> Option<
             payload.get("selected_runtime").and_then(Value::as_str).unwrap_or("unknown-runtime")
         )),
         TraceEventType::GovernanceStarted => Some(format!(
-            "governance_started: {}{}{}",
+            "governance_started: {}{}{}{}",
             payload.get("stage_key").and_then(Value::as_str).unwrap_or("unknown-stage"),
             payload
                 .get("canon_mode")
@@ -879,7 +890,8 @@ fn governance_event_line(event_type: TraceEventType, payload: &Value) -> Option<
                 .get("run_ref")
                 .and_then(Value::as_str)
                 .map(|run_ref| format!(" [{run_ref}]"))
-                .unwrap_or_default()
+                .unwrap_or_default(),
+            governance_packet_provenance_suffix(payload)
         )),
         TraceEventType::GovernanceDecisionRecorded => payload
             .get("selected_action")
@@ -892,34 +904,47 @@ fn governance_event_line(event_type: TraceEventType, payload: &Value) -> Option<
                     .map(|reason| format!("governance_decision_blocked: {reason}"))
             }),
         TraceEventType::GovernanceAwaitingApproval => Some(format!(
-            "governance_awaiting_approval: {} ({}){}",
+            "governance_awaiting_approval: {} ({}){}{}",
             payload.get("stage_key").and_then(Value::as_str).unwrap_or("unknown-stage"),
             payload.get("approval_state").and_then(Value::as_str).unwrap_or("unknown"),
             payload
                 .get("run_ref")
                 .and_then(Value::as_str)
                 .map(|run_ref| format!(" [{run_ref}]"))
-                .unwrap_or_default()
+                .unwrap_or_default(),
+            governance_packet_provenance_suffix(payload)
         )),
         TraceEventType::GovernanceCompleted => Some(format!(
-            "governance_completed: {}{}",
+            "governance_completed: {}{}{}",
             payload.get("headline").and_then(Value::as_str).unwrap_or("governed packet ready"),
             payload
                 .get("packet_ref")
                 .and_then(Value::as_str)
                 .map(|packet_ref| format!(" [{packet_ref}]"))
-                .unwrap_or_default()
+                .unwrap_or_default(),
+            governance_packet_provenance_suffix(payload)
         )),
         TraceEventType::GovernanceBlocked => Some(format!(
-            "governance_blocked: {}",
-            payload.get("reason").and_then(Value::as_str).unwrap_or("blocked")
+            "governance_blocked: {}{}",
+            payload.get("reason").and_then(Value::as_str).unwrap_or("blocked"),
+            governance_packet_provenance_suffix(payload)
         )),
         TraceEventType::GovernancePacketRejected => Some(format!(
-            "governance_packet_rejected: {}",
-            payload.get("reason").and_then(Value::as_str).unwrap_or("packet rejected")
+            "governance_packet_rejected: {}{}",
+            payload.get("reason").and_then(Value::as_str).unwrap_or("packet rejected"),
+            governance_packet_provenance_suffix(payload)
         )),
         _ => None,
     }
+}
+
+pub(crate) fn governance_packet_provenance_suffix(payload: &Value) -> String {
+    governance_packet_provenance_text(
+        payload.get("packet_source_stage").and_then(Value::as_str),
+        payload.get("packet_binding_reason").and_then(Value::as_str),
+    )
+    .map(|provenance| format!(" from {provenance}"))
+    .unwrap_or_default()
 }
 
 fn reviewer_event_line(payload: &Value) -> Option<String> {
@@ -1234,6 +1259,16 @@ mod tests {
                 },
                 "run",
             ),
+            (
+                DeveloperCommand::Workflow {
+                    command: crate::cli::WorkflowSubcommand::Run {
+                        name: "default".to_string(),
+                        workspace: None,
+                        goal: None,
+                    },
+                },
+                "workflow",
+            ),
             (DeveloperCommand::Inspect { trace: None, workspace: None }, "inspect"),
             (DeveloperCommand::Status { workspace: None }, "status"),
             (DeveloperCommand::Next { workspace: None }, "next"),
@@ -1354,6 +1389,9 @@ mod tests {
             requested_governance_owner: None,
             active_flow: None,
             flow_state: None,
+            active_workflow: None,
+            workflow_phase: None,
+            workflow_next_action: None,
             current_stage_id: None,
             current_stage_index: None,
             total_stages: None,
@@ -1478,6 +1516,9 @@ mod tests {
             requested_governance_owner: None,
             active_flow: None,
             flow_state: None,
+            active_workflow: None,
+            workflow_phase: None,
+            workflow_next_action: None,
             current_stage_id: None,
             current_stage_index: None,
             total_stages: None,

@@ -41,6 +41,7 @@ fn build_record(workspace_ref: &str) -> ActiveSessionRecord {
         active_flow: None,
         active_task: Some(build_task(workspace_ref)),
         goal_plan: None,
+        workflow_progress: None,
         decisions: Vec::new(),
         active_flow_policy: None,
         latest_status: SessionStatus::Planned,

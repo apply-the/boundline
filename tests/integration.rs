@@ -93,3 +93,12 @@ mod runtime_refoundation_compat;
 
 #[path = "integration/runtime_refoundation_governance.rs"]
 mod runtime_refoundation_governance;
+
+#[path = "integration/workflow_layer_run.rs"]
+mod workflow_layer_run;
+
+#[path = "integration/workflow_layer_resume.rs"]
+mod workflow_layer_resume;
+
+#[path = "integration/workflow_layer_compat.rs"]
+mod workflow_layer_compat;

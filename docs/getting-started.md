@@ -29,7 +29,10 @@ state through the same CLI instead of introducing a separate runtime surface.
 The shipped CLI binary is `synod`.
 
 If you enable Synod governance through Canon, the current Synod adapter is
-validated against Canon `0.24.0`.
+validated against Canon `0.25.0`.
+
+In `0.17.0`, verify-stage Canon `security-assessment` can also remain on the
+same native session route instead of forcing a second operator workflow.
 
 ## Install Synod
 

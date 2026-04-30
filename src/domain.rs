@@ -16,3 +16,4 @@ pub mod task;
 pub mod task_context;
 pub mod tool_result;
 pub mod trace;
+pub mod workflow;

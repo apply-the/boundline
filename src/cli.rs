@@ -16,6 +16,7 @@ pub mod inspect;
 pub mod output;
 pub mod run;
 pub mod session;
+pub mod workflow;
 
 #[derive(Debug, Parser)]
 #[command(name = "synod", about = "Developer CLI for the Synod orchestrator core")]
@@ -28,6 +29,7 @@ pub struct Cli {
 pub enum CommandName {
     Doctor,
     Run,
+    Workflow,
     Inspect,
     Start,
     Capture,
@@ -46,6 +48,7 @@ impl CommandName {
         match self {
             Self::Doctor => "doctor",
             Self::Run => "run",
+            Self::Workflow => "workflow",
             Self::Inspect => "inspect",
             Self::Start => "start",
             Self::Capture => "capture",
@@ -136,6 +139,10 @@ pub enum DeveloperCommand {
         #[arg(long)]
         owner: Option<String>,
     },
+    Workflow {
+        #[command(subcommand)]
+        command: WorkflowSubcommand,
+    },
     Inspect {
         #[arg(long)]
         trace: Option<PathBuf>,
@@ -171,6 +178,29 @@ pub enum DeveloperCommand {
     Cluster {
         #[command(subcommand)]
         command: ClusterSubcommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum WorkflowSubcommand {
+    Run {
+        name: String,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long)]
+        goal: Option<String>,
+    },
+    Status {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+    Resume {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+    Inspect {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
     },
 }
 
@@ -248,6 +278,7 @@ impl DeveloperCommand {
             Self::Plan { .. } => CommandName::Plan,
             Self::Step { .. } => CommandName::Step,
             Self::Run { .. } => CommandName::Run,
+            Self::Workflow { .. } => CommandName::Workflow,
             Self::Inspect { .. } => CommandName::Inspect,
             Self::Status { .. } => CommandName::Status,
             Self::Next { .. } => CommandName::Next,
@@ -359,6 +390,28 @@ impl DeveloperCommandSession {
                 exit_status: None,
                 trace_location: None,
             },
+            DeveloperCommand::Workflow { command } => Self {
+                command_name: CommandName::Workflow,
+                workspace_ref: match command {
+                    WorkflowSubcommand::Run { workspace, .. }
+                    | WorkflowSubcommand::Status { workspace }
+                    | WorkflowSubcommand::Resume { workspace }
+                    | WorkflowSubcommand::Inspect { workspace } => {
+                        workspace.as_ref().map(|path| path.to_string_lossy().into_owned())
+                    }
+                },
+                goal: match command {
+                    WorkflowSubcommand::Run { name, .. } => Some(name.clone()),
+                    WorkflowSubcommand::Status { .. }
+                    | WorkflowSubcommand::Resume { .. }
+                    | WorkflowSubcommand::Inspect { .. } => None,
+                },
+                trace_ref: None,
+                started_at: current_timestamp_millis(),
+                completed_at: None,
+                exit_status: None,
+                trace_location: None,
+            },
             DeveloperCommand::Inspect { trace, workspace } => Self {
                 command_name: CommandName::Inspect,
                 workspace_ref: workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
@@ -464,6 +517,7 @@ impl DeveloperCommandSession {
             | CommandName::Flow
             | CommandName::Plan
             | CommandName::Step
+            | CommandName::Workflow
             | CommandName::Status
             | CommandName::Next
             | CommandName::Init
@@ -618,6 +672,37 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                 }
             }
         }
+        DeveloperCommand::Workflow { command } => match command {
+            WorkflowSubcommand::Run { name, workspace, goal } => {
+                match workflow::execute_run(workspace.as_deref(), name, goal.as_deref()) {
+                    Ok(report) => DispatchOutcome {
+                        exit_status: report.exit_status,
+                        output: report.terminal_output,
+                        trace_location: None,
+                    },
+                    Err(error) => DispatchOutcome {
+                        exit_status: CommandExitStatus::NonSuccess,
+                        output: format!("workflow error: {error}"),
+                        trace_location: None,
+                    },
+                }
+            }
+            WorkflowSubcommand::Status { .. } => DispatchOutcome {
+                exit_status: CommandExitStatus::NonSuccess,
+                output: "workflow status is not implemented yet".to_string(),
+                trace_location: None,
+            },
+            WorkflowSubcommand::Resume { .. } => DispatchOutcome {
+                exit_status: CommandExitStatus::NonSuccess,
+                output: "workflow resume is not implemented yet".to_string(),
+                trace_location: None,
+            },
+            WorkflowSubcommand::Inspect { .. } => DispatchOutcome {
+                exit_status: CommandExitStatus::NonSuccess,
+                output: "workflow inspect is not implemented yet".to_string(),
+                trace_location: None,
+            },
+        },
         DeveloperCommand::Inspect { trace, workspace } => {
             match inspect::execute_inspect(trace.as_deref(), workspace.as_deref()) {
                 Ok(report) => DispatchOutcome {
