@@ -1,10 +1,10 @@
-# Adaptive Execution in Synod 0.16.0
+# Adaptive Execution in Synod 0.17.0
 
-Synod `0.16.0` keeps bounded adaptive execution as an explicit compatibility mode inside the broader session-native runtime. The primary operator path is `start -> capture -> plan -> run -> status -> next -> inspect` with a bounded `GoalPlan`; adaptive behavior still uses `<workspace>/.synod/execution.json` when the operator intentionally chooses the manifest-backed compatibility path.
+Synod `0.17.0` keeps bounded adaptive execution as an explicit compatibility mode inside the broader session-native runtime. The primary operator path is `start -> capture -> plan -> run -> status -> next -> inspect` with a bounded `GoalPlan`; adaptive behavior still uses `<workspace>/.synod/execution.json` when the operator intentionally chooses the manifest-backed compatibility path.
 
 Instead of requiring every attempt to be pre-authored in `<workspace>/.synod/execution.json`, a compatibility execution profile can describe an `adaptive` block and let Synod choose one workspace slice and one deterministic candidate at a time.
 
-In `0.16.0`, operators can still generate the baseline compatibility profile with
+In `0.17.0`, operators can still generate the baseline compatibility profile with
 `synod init`; adaptive behavior is still configured through the execution
 manifest itself.
 
@@ -71,7 +71,7 @@ When adaptive execution is active, the local CLI now exposes:
 
 ## Current scope
 
-The `0.16.0` adaptive slice is intentionally bounded:
+The `0.17.0` adaptive slice is intentionally bounded:
 
 - candidate generation is deterministic, not open-ended
 - workspace selection only considers manifest-declared `read_targets`

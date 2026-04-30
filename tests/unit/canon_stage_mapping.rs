@@ -48,7 +48,7 @@ fn first_slice_canon_stage_mapping_matches_supported_flows() {
     );
     assert_eq!(
         supported_canon_modes_for_stage("change", "verify"),
-        &[CanonMode::Verification, CanonMode::PrReview]
+        &[CanonMode::SecurityAssessment, CanonMode::Verification, CanonMode::PrReview,]
     );
     assert_eq!(
         supported_canon_modes_for_stage("bug-fix", "investigate"),
@@ -60,9 +60,34 @@ fn first_slice_canon_stage_mapping_matches_supported_flows() {
     );
     assert_eq!(
         supported_canon_modes_for_stage("bug-fix", "verify"),
-        &[CanonMode::Verification, CanonMode::PrReview]
+        &[CanonMode::SecurityAssessment, CanonMode::Verification, CanonMode::PrReview,]
     );
     assert!(supported_canon_modes_for_stage("bug-fix", "missing").is_empty());
+}
+
+#[test]
+fn canon_mode_wire_format_matches_canon_and_accepts_legacy_snake_case() {
+    assert_eq!(
+        serde_json::to_string(&CanonMode::SecurityAssessment).unwrap(),
+        "\"security-assessment\""
+    );
+    assert_eq!(serde_json::to_string(&CanonMode::PrReview).unwrap(), "\"pr-review\"");
+    assert_eq!(
+        serde_json::from_str::<CanonMode>("\"security_assessment\"").unwrap(),
+        CanonMode::SecurityAssessment
+    );
+    assert_eq!(serde_json::from_str::<CanonMode>("\"pr_review\"").unwrap(), CanonMode::PrReview);
+}
+
+#[test]
+fn canon_stage_mapping_prefers_security_assessment_for_verify_stage_autopilot_candidates() {
+    let policy = canon_policy("verify", Some(GovernanceRuntimeKind::Canon), None);
+
+    assert_eq!(
+        candidate_canon_modes(&policy, GovernanceRuntimeKind::Local),
+        vec![CanonMode::SecurityAssessment, CanonMode::Verification, CanonMode::PrReview,]
+    );
+    assert_eq!(resolved_canon_mode(&policy, GovernanceRuntimeKind::Local), None);
 }
 
 #[test]
