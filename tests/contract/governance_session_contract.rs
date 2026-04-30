@@ -1,7 +1,8 @@
 use std::path::Path;
 
 use crate::workspace_fixture::{
-    run_synod_in, temp_canon_approval_workspace, temp_canon_governance_workspace, terminal_text,
+    run_synod_in, temp_canon_approval_workspace, temp_canon_governance_workspace,
+    temp_canon_security_assessment_workspace, terminal_text,
 };
 
 fn bootstrap_bug_fix(workspace: &Path) {
@@ -52,4 +53,31 @@ fn governance_session_contract_native_planned_sessions_require_run_instead_of_st
     assert!(status_text.contains("execution_path: native_goal_plan"), "{status_text}");
     assert!(status_text.contains("next_command: synod run"), "{status_text}");
     assert!(!status_text.contains("latest_governance_state:"), "{status_text}");
+}
+
+#[test]
+fn governance_session_contract_surfaces_security_assessment_fields_on_native_route() {
+    let workspace =
+        temp_canon_security_assessment_workspace("synod-governance-security-session-contract");
+    bootstrap_bug_fix(&workspace);
+
+    let run = run_synod_in(&workspace, &["run"]);
+    let run_text = terminal_text(&run);
+    assert_eq!(run.status.code(), Some(0), "{run_text}");
+    assert!(run_text.contains("routing: native (goal_plan)"), "{run_text}");
+    assert!(
+        run_text.contains("governance_started: bug-fix:verify (security-assessment)"),
+        "{run_text}"
+    );
+
+    let status = run_synod_in(&workspace, &["status"]);
+    let status_text = terminal_text(&status);
+    assert_eq!(status.status.code(), Some(0), "{status_text}");
+    assert!(status_text.contains("execution_path: native_goal_plan"), "{status_text}");
+    assert!(status_text.contains("latest_governance_stage: bug-fix:verify"), "{status_text}");
+    assert!(status_text.contains("latest_governance_mode: security-assessment"), "{status_text}");
+    assert!(
+        status_text.contains("latest_governance_packet_ref: .canon/runs/canon-run-security"),
+        "{status_text}"
+    );
 }

@@ -1,12 +1,12 @@
-# Review Voting in Synod 0.16.0
+# Review Voting in Synod 0.17.0
 
-Synod `0.16.0` keeps the bounded multi-agent review phase on top of the session-native
+Synod `0.17.0` keeps the bounded multi-agent review phase on top of the session-native
 runtime. Review configuration still lives inside `<workspace>/.synod/execution.json`
 under the `review` key when the explicit compatibility manifest path or a review-configured
 workspace is used. Runtime/model routing for review roles is configured
 through `synod config` in global or workspace scope and resolved by precedence.
 
-The `0.16.0` surface-unification slice keeps review behavior bounded while
+The `0.17.0` surface-unification slice keeps review behavior bounded while
 making `run`, `status`, `next`, and `inspect` report review state through the
 same route and `execution_condition` summary model as the rest of the session.
 
@@ -130,7 +130,7 @@ The persisted trace emits dedicated review events for:
 
 ## Current scope
 
-The `0.16.0` slice is intentionally bounded:
+The `0.17.0` slice is intentionally bounded:
 
 - review is manifest-driven and deterministic
 - reviewers run sequentially, not concurrently

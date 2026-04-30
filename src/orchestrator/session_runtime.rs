@@ -15,8 +15,8 @@ use crate::domain::flow::{FlowStepMetadata, built_in_flow, supported_flow_names_
 use crate::domain::flow_policy::FlowPolicy;
 use crate::domain::goal_plan::InferredFlow;
 use crate::domain::governance::{
-    ApprovalState, GovernanceLifecycleState, GovernanceRuntimeKind, GovernedStageRecord,
-    PacketReadiness, resolved_canon_mode,
+    ApprovalState, CanonMode, GovernanceLifecycleState, GovernanceRuntimeKind, GovernedStageRecord,
+    PacketReadiness, resolved_canon_mode, supported_canon_modes_for_stage,
 };
 use crate::domain::limits::{RunLimits, TerminalCondition};
 use crate::domain::session::{
@@ -29,7 +29,10 @@ use crate::domain::step::{
 use crate::domain::task::{Task, TaskRequestError, TaskRunResponse, TaskStatus, TerminalReason};
 use crate::domain::task_context::TaskContext;
 use crate::domain::trace::{ExecutionTrace, TraceEventType, current_timestamp_millis};
-use crate::fixture::{FixtureRuntime, FixtureRuntimeError, build_fixture_runtime_for_flow};
+use crate::fixture::{
+    FixtureRuntime, FixtureRuntimeError, build_fixture_plan_for_goal,
+    build_fixture_runtime_for_flow, build_task_request, load_workspace_execution_profile,
+};
 use crate::orchestrator::decision_loop::{DecisionLoop, LoopTerminal};
 use crate::orchestrator::flow_inference::infer_flow;
 use crate::orchestrator::goal_planner::{GoalPlannerError, build_goal_plan};
@@ -277,6 +280,10 @@ impl SessionRuntime {
         &self,
         session: &ActiveSessionRecord,
     ) -> Result<bool, SessionRuntimeError> {
+        if session.active_task.is_some() {
+            return Ok(false);
+        }
+
         let outcome = self.resolve_routing_outcome(session)?;
 
         if outcome.mode == RoutingMode::Blocked
@@ -290,6 +297,77 @@ impl SessionRuntime {
         }
 
         Ok(outcome.mode == RoutingMode::Native)
+    }
+
+    fn should_materialize_security_assessment_task(
+        &self,
+        session: &ActiveSessionRecord,
+    ) -> Result<bool, SessionRuntimeError> {
+        if session.active_task.is_some() || session.goal_plan.is_none() {
+            return Ok(false);
+        }
+
+        let flow_name =
+            session.active_flow.as_ref().map(|flow| flow.flow_name.as_str()).or_else(|| {
+                session
+                    .goal_plan
+                    .as_ref()
+                    .and_then(|goal_plan| goal_plan.flow.as_ref())
+                    .filter(|flow| flow.confirmed)
+                    .map(|flow| flow.flow_name.as_str())
+            });
+        let Some(flow_name) = flow_name else {
+            return Ok(false);
+        };
+
+        let profile = match load_workspace_execution_profile(&self.workspace_ref) {
+            Ok(profile) => profile,
+            Err(FixtureRuntimeError::MissingExecutionProfile(_)) => return Ok(false),
+            Err(error) => return Err(SessionRuntimeError::FixtureRuntime(error)),
+        };
+        let Some(governance) = profile.governance.as_ref() else {
+            return Ok(false);
+        };
+
+        Ok(governance.stages.iter().any(|policy| {
+            policy.enabled
+                && policy.flow_name == flow_name
+                && policy.effective_runtime(governance.default_runtime)
+                    == GovernanceRuntimeKind::Canon
+                && supported_canon_modes_for_stage(&policy.flow_name, &policy.stage_id)
+                    .contains(&CanonMode::SecurityAssessment)
+        }))
+    }
+
+    fn materialize_security_assessment_task(
+        &self,
+        session: &mut ActiveSessionRecord,
+    ) -> Result<bool, SessionRuntimeError> {
+        if !self.should_materialize_security_assessment_task(session)? {
+            return Ok(false);
+        }
+
+        let goal = session.goal.clone().ok_or(SessionRuntimeError::MissingGoal)?;
+        let request = build_task_request(
+            &self.workspace_ref,
+            goal,
+            session.session_id.clone(),
+            session.authored_brief.as_ref(),
+        )
+        .map_err(SessionRuntimeError::FixtureRuntime)?;
+        let plan = build_fixture_plan_for_goal(
+            &self.workspace_ref,
+            session.active_flow.as_ref(),
+            session.goal.as_deref().unwrap_or_default(),
+        )
+        .map_err(SessionRuntimeError::FixtureRuntime)?;
+
+        session.active_task = Some(
+            Task::new(format!("task-{}", session.session_id), &request, plan)
+                .map_err(SessionRuntimeError::TaskRequest)?,
+        );
+        session.updated_at = current_timestamp_millis();
+        Ok(true)
     }
 
     fn native_flow_policy(
@@ -413,6 +491,7 @@ impl SessionRuntime {
         &self,
         session: &mut ActiveSessionRecord,
     ) -> Result<(), SessionRuntimeError> {
+        let _ = self.materialize_security_assessment_task(session)?;
         let runtime = self.build_runtime(session)?;
         let _ = self.execute_single_step(session, &runtime)?;
         Ok(())
@@ -422,6 +501,8 @@ impl SessionRuntime {
         &self,
         session: &mut ActiveSessionRecord,
     ) -> Result<TaskRunResponse, SessionRuntimeError> {
+        let _ = self.materialize_security_assessment_task(session)?;
+
         if self.uses_native_goal_plan(session)? {
             return self.run_goal_plan_to_terminal(session);
         }
@@ -432,7 +513,61 @@ impl SessionRuntime {
             if let Some(response) = self.execute_single_step(session, &runtime)? {
                 return Ok(response);
             }
+
+            if let Some(response) = self.paused_governance_response(session)? {
+                return Ok(response);
+            }
         }
+    }
+
+    fn paused_governance_response(
+        &self,
+        session: &ActiveSessionRecord,
+    ) -> Result<Option<TaskRunResponse>, SessionRuntimeError> {
+        let Some(task) = session.active_task.as_ref() else {
+            return Ok(None);
+        };
+        let Some(record) = task
+            .context
+            .latest_governance_stage()
+            .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?
+        else {
+            return Ok(None);
+        };
+
+        let message = match record.lifecycle_state {
+            GovernanceLifecycleState::AwaitingApproval => {
+                format!("governance approval is still pending for {}", record.stage_key)
+            }
+            GovernanceLifecycleState::Blocked => record
+                .blocked_reason
+                .clone()
+                .unwrap_or_else(|| format!("governance blocked stage {}", record.stage_key)),
+            GovernanceLifecycleState::Failed => record
+                .blocked_reason
+                .clone()
+                .unwrap_or_else(|| format!("governance failed for stage {}", record.stage_key)),
+            _ => return Ok(None),
+        };
+
+        let trace_location =
+            session.latest_trace_ref.clone().ok_or(SessionRuntimeError::MissingTraceReference)?;
+
+        Ok(Some(TaskRunResponse {
+            task_id: task.id.clone(),
+            terminal_status: task.status,
+            terminal_reason: build_terminal_reason(
+                TerminalCondition::NoCredibleNextStep,
+                message,
+                Some(json!({
+                    "stage_key": record.stage_key,
+                    "governance_state": record.lifecycle_state,
+                })),
+            ),
+            final_context: task.context.clone(),
+            plan_revision: task.plan.revision,
+            trace_location,
+        }))
     }
 
     pub fn refresh_governance_state(
@@ -1097,6 +1232,8 @@ impl SessionRuntime {
                     "risk": request.risk,
                     "zone": request.zone,
                     "owner": request.owner,
+                    "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
+                    "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
                 }),
             );
             let response = CanonCliRuntime::new(canon.command.clone())
@@ -1167,6 +1304,8 @@ impl SessionRuntime {
             json!({
                 "stage_key": stage_key,
                 "runtime": GovernanceRuntimeKind::Local,
+                "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
+                "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
             }),
         );
         let response = LocalGovernanceRuntime
@@ -1318,6 +1457,8 @@ impl SessionRuntime {
                     "packet_readiness": packet.readiness,
                     "missing_sections": packet.missing_sections,
                     "reason": blocked_reason.as_deref().unwrap_or(&response.message),
+                    "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
+                    "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
                 }),
             );
         }
@@ -1335,6 +1476,8 @@ impl SessionRuntime {
                         "packet_readiness": response.packet.as_ref().map(|packet| packet.readiness),
                         "document_refs": response.packet.as_ref().map(|packet| packet.document_refs.clone()).unwrap_or_default(),
                         "headline": response.packet.as_ref().map(|packet| packet.headline.clone()).unwrap_or_else(|| response.message.clone()),
+                        "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
+                        "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
                     }),
                 );
                 let trace_location = self.persist_trace(trace)?;
@@ -1358,6 +1501,8 @@ impl SessionRuntime {
                         "runtime": runtime_kind,
                         "approval_state": response.approval_state,
                         "run_ref": response.run_ref,
+                        "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
+                        "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
                     }),
                 );
                 let trace_location = self.persist_trace(trace)?;
@@ -1379,6 +1524,8 @@ impl SessionRuntime {
                         "required": policy.required,
                         "reason": reason,
                         "packet_ref": response.packet.as_ref().map(|packet| packet.packet_ref.clone()),
+                        "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
+                        "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
                     }),
                 );
                 let trace_location = self.persist_trace(trace)?;
@@ -2084,6 +2231,7 @@ fn session_status_for_task_status(status: TaskStatus) -> SessionStatus {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::os::unix::fs::PermissionsExt;
     use std::path::{Path, PathBuf};
 
     use serde_json::{Map, json};
@@ -2755,6 +2903,145 @@ mod tests {
             trace.events.iter().any(|event| event.event_type == TraceEventType::DecisionCreated),
             "{:?}",
             trace.events
+        );
+    }
+
+    #[test]
+    fn run_to_terminal_materializes_security_assessment_task_without_dropping_native_routing() {
+        let workspace = temp_workspace("synod-runtime-security-assessment-route");
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::create_dir_all(workspace.join("tests")).unwrap();
+        fs::create_dir_all(workspace.join(".canon/runs/canon-run-security")).unwrap();
+        fs::write(
+            workspace.join("Cargo.toml"),
+            "[package]\nname = \"security-route\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        )
+        .unwrap();
+        fs::write(
+            workspace.join("src/lib.rs"),
+            "pub fn add(left: i32, right: i32) -> i32 {\n    left - right\n}\n",
+        )
+        .unwrap();
+        fs::write(
+            workspace.join("tests/red_to_green.rs"),
+            "use security_route::add;\n\n#[test]\nfn synod_drives_red_to_green() {\n    assert_eq!(add(2, 2), 4);\n}\n",
+        )
+        .unwrap();
+        fs::write(
+            workspace.join(".canon/runs/canon-run-security/security-assessment.md"),
+            "# Security Assessment\n\nValidated the bounded security review for the verify stage.\n",
+        )
+        .unwrap();
+        fs::write(
+            workspace.join(".synod/canon-stub.sh"),
+            "#!/bin/sh\ncat >/dev/null\nprintf '%s' '{\"status\":\"governed_ready\",\"run_ref\":\"canon-run-security\",\"packet_ref\":\".canon/runs/canon-run-security\",\"expected_document_refs\":[\".canon/runs/canon-run-security/security-assessment.md\"],\"document_refs\":[\".canon/runs/canon-run-security/security-assessment.md\"],\"approval_state\":\"not_needed\",\"packet_readiness\":\"reusable\",\"missing_sections\":[],\"headline\":\"security assessment packet ready\",\"message\":\"Canon completed the governed security assessment\"}'\n",
+        )
+        .unwrap();
+        let mut permissions =
+            fs::metadata(workspace.join(".synod/canon-stub.sh")).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(workspace.join(".synod/canon-stub.sh"), permissions).unwrap();
+        fs::write(
+            workspace.join(".synod/execution.json"),
+            serde_json::to_string_pretty(&WorkspaceExecutionProfile {
+                name: "session-runtime-profile".to_string(),
+                read_targets: vec!["src/lib.rs".to_string(), "tests/red_to_green.rs".to_string()],
+                validation_command: ExecutionCommand {
+                    program: "cargo".to_string(),
+                    args: vec!["test".to_string(), "--quiet".to_string()],
+                },
+                attempts: vec![ExecutionAttemptDefinition {
+                    attempt_id: "fix-add".to_string(),
+                    summary: String::new(),
+                    failure_mode: ExecutionFailureMode::Terminal,
+                    changes: vec![WorkspaceChange {
+                        path: "src/lib.rs".to_string(),
+                        find: "left - right".to_string(),
+                        replace: "left + right".to_string(),
+                    }],
+                }],
+                adaptive: None,
+                limits: RunLimits::default(),
+                governance: Some(GovernanceProfile {
+                    default_runtime: GovernanceRuntimeKind::Local,
+                    canon: Some(CanonRuntimeConfig {
+                        command: workspace
+                            .join(".synod/canon-stub.sh")
+                            .to_string_lossy()
+                            .into_owned(),
+                        default_owner: Some("platform".to_string()),
+                        default_risk: Some("medium".to_string()),
+                        default_zone: Some("engineering".to_string()),
+                        default_system_context: Some(SystemContextBinding::Existing),
+                    }),
+                    stages: vec![StageGovernancePolicy {
+                        flow_name: "bug-fix".to_string(),
+                        stage_id: "verify".to_string(),
+                        enabled: true,
+                        required: true,
+                        autopilot: true,
+                        runtime: Some(GovernanceRuntimeKind::Canon),
+                        canon_mode: None,
+                        system_context: Some(SystemContextBinding::Existing),
+                        risk: Some("medium".to_string()),
+                        zone: Some("engineering".to_string()),
+                        owner: Some("platform".to_string()),
+                    }],
+                }),
+                review: None,
+                legacy_source: None,
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let mut session = ActiveSessionRecord {
+            session_id: "session-runtime".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: None,
+            authored_brief: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Initialized,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 10,
+            updated_at: 10,
+        };
+
+        runtime.capture_goal(&mut session, "fix the broken add function").unwrap();
+        runtime.plan_task(&mut session, Some("bug-fix"), false).unwrap();
+
+        let response = runtime.run_to_terminal(&mut session).unwrap();
+        let routing = runtime.resolve_routing_outcome(&session).unwrap();
+        let task = session.active_task.as_ref().expect("governed task should persist");
+        let governed_stage = task.context.latest_governance_stage().unwrap().unwrap();
+        let governed_packet = task.context.latest_governance_packet().unwrap().unwrap();
+        let trace = runtime
+            .trace_store()
+            .load(Path::new(session.latest_trace_ref.as_ref().unwrap()))
+            .unwrap();
+
+        assert_eq!(response.terminal_status, TaskStatus::Succeeded);
+        assert_eq!(session.latest_status, SessionStatus::Succeeded);
+        assert_eq!(routing.mode, crate::domain::session::RoutingMode::Native);
+        assert_eq!(governed_stage.stage_key, "bug-fix:verify");
+        assert_eq!(governed_stage.runtime, GovernanceRuntimeKind::Canon);
+        assert_eq!(governed_packet.canon_mode, Some(CanonMode::SecurityAssessment));
+        assert_eq!(governed_packet.packet_ref, ".canon/runs/canon-run-security");
+        assert!(trace.events.iter().any(|event| {
+            event.event_type == TraceEventType::GovernanceStarted
+                && event.payload.get("canon_mode") == Some(&json!("security-assessment"))
+        }));
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| { event.event_type == TraceEventType::GovernanceCompleted })
         );
     }
 }

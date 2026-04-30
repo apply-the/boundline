@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use serde_json::Map;
+use serde_json::json;
 use synod::FileTraceStore;
 use synod::adapters::trace_store::TraceStore;
 use synod::cli::diagnostics::{DiagnosticsCheck, DiagnosticsReport, DiagnosticsStatus};
@@ -17,6 +18,7 @@ use synod::cli::{
     CliValidationError, CommandExitStatus, CommandName, DeveloperCommand, DeveloperCommandSession,
 };
 use synod::domain::goal_plan::{GoalPlanFlowMode, GoalPlanFlowState};
+use synod::domain::governance::GovernanceRuntimeKind;
 use synod::domain::limits::{RunLimits, TerminalCondition};
 use synod::domain::session::{
     RoutingMode, RoutingOutcome, RoutingSource, SessionStatus, SessionStatusView,
@@ -25,7 +27,8 @@ use synod::domain::step::{StepKind, StepStatus};
 use synod::domain::task::{TaskRunResponse, TaskStatus, TerminalReason};
 use synod::domain::task_context::TaskContext;
 use synod::domain::trace::{
-    ExecutionTrace, TraceEventType, TraceRecoveryEvent, TraceStepSummary, TraceSummaryView,
+    ExecutionTrace, TraceEvent, TraceEventType, TraceRecoveryEvent, TraceStepSummary,
+    TraceSummaryView,
 };
 use uuid::Uuid;
 
@@ -385,9 +388,6 @@ fn render_run_trace_includes_next_command_and_trace_fields() {
 
 #[test]
 fn render_run_trace_with_trace_events_includes_retry_and_replan_lines() {
-    use serde_json::json;
-    use synod::domain::trace::TraceEvent;
-
     let mut trace = ExecutionTrace::new("task-events", "session", "Goal with events");
     trace.terminal_status = Some(TaskStatus::Succeeded);
     trace.terminal_reason =
@@ -415,6 +415,60 @@ fn render_run_trace_with_trace_events_includes_retry_and_replan_lines() {
     assert!(rendered.contains("retry for analyze: transient error, retrying"), "{rendered}");
     assert!(rendered.contains("replan after analyze: goal shifted, replanning"), "{rendered}");
     assert!(rendered.contains("next_command: /synod-status"), "{rendered}");
+}
+
+#[test]
+fn render_run_trace_surfaces_security_assessment_packet_provenance() {
+    let mut trace = ExecutionTrace::new("task-governance", "session", "Governed goal");
+    trace.terminal_status = Some(TaskStatus::Succeeded);
+    trace.terminal_reason =
+        Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None));
+    trace.events.push(TraceEvent {
+        event_id: "e1".to_string(),
+        event_type: TraceEventType::GovernanceStarted,
+        step_id: Some("verify".to_string()),
+        plan_revision: 1,
+        payload: json!({
+            "stage_key": "bug-fix:verify",
+            "runtime": GovernanceRuntimeKind::Canon,
+            "canon_mode": "security-assessment",
+            "run_ref": "canon-run-security",
+            "packet_source_stage": "bug-fix:implement",
+            "packet_binding_reason": "upstream_stage_context"
+        }),
+        recorded_at: 0,
+    });
+    trace.events.push(TraceEvent {
+        event_id: "e2".to_string(),
+        event_type: TraceEventType::GovernanceCompleted,
+        step_id: Some("verify".to_string()),
+        plan_revision: 1,
+        payload: json!({
+            "stage_key": "bug-fix:verify",
+            "runtime": GovernanceRuntimeKind::Canon,
+            "headline": "security assessment packet ready",
+            "packet_ref": ".canon/runs/canon-run-security",
+            "packet_source_stage": "bug-fix:implement",
+            "packet_binding_reason": "upstream_stage_context"
+        }),
+        recorded_at: 1,
+    });
+
+    let response = minimal_response(TaskStatus::Succeeded, "done");
+    let rendered = render_run_trace("run", Some(&trace), &response, "/synod-status");
+
+    assert!(
+        rendered.contains(
+            "governance_started: bug-fix:verify (security-assessment) [canon-run-security] from bug-fix:implement (upstream_stage_context)"
+        ),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains(
+            "governance_completed: security assessment packet ready [.canon/runs/canon-run-security] from bug-fix:implement (upstream_stage_context)"
+        ),
+        "{rendered}"
+    );
 }
 
 #[test]
@@ -455,9 +509,6 @@ fn execute_inspect_workspace_covers_latest_workspace_trace_target() {
 
 #[test]
 fn summarize_trace_handles_tool_and_decision_step_kinds() {
-    use serde_json::json;
-    use synod::domain::trace::TraceEvent;
-
     let mut trace = ExecutionTrace::new("task-steps", "session", "Steps test");
     trace.terminal_status = Some(TaskStatus::Succeeded);
     trace.terminal_reason =
@@ -506,9 +557,6 @@ fn summarize_trace_handles_tool_and_decision_step_kinds() {
 
 #[test]
 fn summarize_trace_with_unknown_step_status_yields_running_final_status_and_completed_headline() {
-    use serde_json::json;
-    use synod::domain::trace::TraceEvent;
-
     let mut trace = ExecutionTrace::new("task-unk", "session", "Unknown status test");
     trace.terminal_status = Some(TaskStatus::Succeeded);
     trace.terminal_reason =
@@ -603,6 +651,83 @@ fn render_session_status_includes_goal_trace_and_next_command() {
         "{rendered}"
     );
     assert!(rendered.contains("next_command: synod next"), "{rendered}");
+}
+
+#[test]
+fn render_session_status_surfaces_security_assessment_projection() {
+    let view = SessionStatusView {
+        session_id: "session-governed".to_string(),
+        workspace_ref: "/tmp/session-workspace".to_string(),
+        goal: Some("Verify a governed change".to_string()),
+        authored_input_summary: None,
+        authored_input_sources: None,
+        authored_input_deduplicated_sources: None,
+        clarification_headline: None,
+        clarification_prompt: None,
+        clarification_missing_fields: None,
+        requested_governance_runtime: None,
+        requested_governance_risk: None,
+        requested_governance_zone: None,
+        requested_governance_owner: None,
+        active_flow: Some("bug-fix".to_string()),
+        flow_state: Some("confirmed".to_string()),
+        current_stage_id: Some("verify".to_string()),
+        current_stage_index: Some(3),
+        total_stages: Some(4),
+        plan_revision: Some(2),
+        current_step_id: Some("verify".to_string()),
+        current_step_index: Some(2),
+        latest_status: SessionStatus::Running,
+        execution_path: Some("native_goal_plan".to_string()),
+        latest_trace_ref: Some("/tmp/session-workspace/.synod/traces/task.json".to_string()),
+        latest_decision_status: None,
+        latest_decision_target: None,
+        latest_changed_files: None,
+        latest_workspace_slice: None,
+        latest_selection_headline: None,
+        latest_attempt_lineage: None,
+        latest_validation_status: None,
+        latest_review_trigger: None,
+        latest_review_vote: None,
+        latest_review_outcome: None,
+        latest_review_headline: None,
+        latest_governance_stage: Some("bug-fix:verify".to_string()),
+        latest_governance_runtime: Some("canon".to_string()),
+        latest_governance_mode: Some("security-assessment".to_string()),
+        latest_governance_run_ref: Some("canon-run-security".to_string()),
+        latest_governance_state: Some("governed_ready".to_string()),
+        latest_governance_blocked_reason: None,
+        latest_governance_packet_ref: Some(".canon/runs/canon-run-security".to_string()),
+        latest_governance_packet_source_stage: Some("bug-fix:implement".to_string()),
+        latest_governance_packet_binding_reason: Some("upstream_stage_context".to_string()),
+        latest_governance_approval: Some("not_needed".to_string()),
+        latest_governance_decision: Some(
+            "autopilot selected Canon mode SecurityAssessment for bug-fix:verify".to_string(),
+        ),
+        latest_governance_candidates: Some(vec![
+            "select_mode".to_string(),
+            "escalate_pr_review".to_string(),
+        ]),
+        governance_next_action: None,
+        next_command: Some("synod inspect".to_string()),
+        explanation: "governance completed for the current verification stage".to_string(),
+    };
+
+    let rendered = render_session_status(&view);
+
+    assert!(rendered.contains("latest_governance_mode: security-assessment"), "{rendered}");
+    assert!(
+        rendered.contains("latest_governance_packet_ref: .canon/runs/canon-run-security"),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains("latest_governance_packet_source_stage: bug-fix:implement"),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains("latest_governance_packet_binding_reason: upstream_stage_context"),
+        "{rendered}"
+    );
 }
 
 #[test]
@@ -810,6 +935,60 @@ fn render_trace_summary_covers_replan_recovery_label_and_decision_step_kind() {
 
     assert!(rendered.contains("step decide (decision)"), "{rendered}");
     assert!(rendered.contains("replan: goal shifted"), "{rendered}");
+}
+
+#[test]
+fn render_trace_summary_includes_security_assessment_packet_provenance() {
+    let mut trace = ExecutionTrace::new("task-summary-governance", "session", "Governed goal");
+    trace.terminal_status = Some(TaskStatus::Succeeded);
+    trace.terminal_reason =
+        Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None));
+    trace.events.push(TraceEvent {
+        event_id: "e1".to_string(),
+        event_type: TraceEventType::GovernanceStarted,
+        step_id: Some("verify".to_string()),
+        plan_revision: 1,
+        payload: json!({
+            "stage_key": "change:verify",
+            "runtime": GovernanceRuntimeKind::Canon,
+            "canon_mode": "security-assessment",
+            "run_ref": "canon-run-security",
+            "packet_source_stage": "change:implement",
+            "packet_binding_reason": "same_stage_rerun"
+        }),
+        recorded_at: 0,
+    });
+    trace.events.push(TraceEvent {
+        event_id: "e2".to_string(),
+        event_type: TraceEventType::GovernanceCompleted,
+        step_id: Some("verify".to_string()),
+        plan_revision: 1,
+        payload: json!({
+            "stage_key": "change:verify",
+            "runtime": GovernanceRuntimeKind::Canon,
+            "headline": "security assessment packet ready",
+            "packet_ref": ".canon/runs/canon-run-security",
+            "packet_source_stage": "change:implement",
+            "packet_binding_reason": "same_stage_rerun"
+        }),
+        recorded_at: 1,
+    });
+
+    let summary = summarize_trace(PathBuf::from("/tmp/trace.json"), &trace).unwrap();
+    let rendered = render_trace_summary(&summary, "explicit-trace", "/synod-next");
+
+    assert!(
+        rendered.contains(
+            "governance_started: change:verify (security-assessment) [canon-run-security] from change:implement (same_stage_rerun)"
+        ),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains(
+            "governance_completed: security assessment packet ready [.canon/runs/canon-run-security] from change:implement (same_stage_rerun)"
+        ),
+        "{rendered}"
+    );
 }
 
 #[test]
