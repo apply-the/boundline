@@ -11,17 +11,86 @@ introduced between that version bump and the previous one.
 Synod follows Semantic Versioning. Before `1.0.0`, breaking changes may occur
 in minor releases.
 
-The repository history contains no release bumps for `0.2.0` or `0.6.0`, so
-the adjacent feature slices are rolled into the next recorded workspace
-version.
+The repository history contains no release bumps for `0.2.0`, `0.6.0`,
+`0.12.0`, or `0.14.0`, so the adjacent feature slices are rolled into the next
+recorded workspace version.
 
 ## [Unreleased]
 
 Delivered specs:
 
-- None recorded after `0.11.0`
+- None recorded after `0.17.0`
 
 Highlights:
+
+## [0.17.0] - 2026-04-29
+
+Delivered specs:
+
+- `017` - Canon Governance Expansion
+
+Highlights:
+
+- Add verify-stage Canon `security-assessment` coverage for the bounded
+  `bug-fix` and `change` governed analysis path.
+- Keep governed security analysis on the primary session-native route so
+  `run`, `status`, `next`, and `inspect` continue to share one routing and
+  execution-condition story.
+- Surface selected Canon mode, approval state, packet provenance, and next
+  action coherently across session and trace summaries.
+- Update the documented Canon compatibility target to `0.25.0`.
+
+## [0.16.0] - 2026-04-29
+
+Delivered specs:
+
+- `016` - Session-Native Surface Unification
+
+Highlights:
+
+- Unify `run`, `status`, `next`, and `inspect` around one session-owned
+  summary model with consistent route, flow, and decision reporting.
+- Surface review, adaptive execution, and governance state as bounded
+  extensions of the same session-native operator story instead of separate
+  runtime modes.
+- Keep the compatibility path explicit when it is chosen without letting it
+  overwrite the primary session-native explanation.
+
+## [0.15.0] - 2026-04-29
+
+Delivered specs:
+
+- `015` - Runtime Refoundation
+
+Highlights:
+
+- Refound Synod around `start -> capture -> plan -> run -> status -> inspect`
+  as the primary operator journey for bounded delivery work.
+- Treat flow as confirmed policy constraints over bounded decisions rather than
+  as a rigid script, while preserving failure evidence and recovery state for
+  later inspection.
+- Demote declarative execution profiles to an explicit compatibility path and
+  keep Canon as a bounded stage-boundary input instead of the orchestration
+  control plane.
+
+## [0.13.0] - 2026-04-29
+
+Delivered specs:
+
+- `012` - Multi-Workspace Orchestration
+- `013` - Session-Native Orchestrator
+- `014` - Native Loop Integration
+
+Highlights:
+
+- Add cluster-aware multi-workspace registration, configuration precedence,
+  and cross-workspace status or trace inspection.
+- Introduce the session-native observe-decide-act-verify loop with bounded
+  goal-derived planning, inferred flow confirmation, and inspectable decision
+  objects.
+- Route planned sessions through the real adapter-backed decision loop by
+  default while preserving declarative execution manifests as an explicit
+  compatibility path.
 
 ## [0.11.0]
 

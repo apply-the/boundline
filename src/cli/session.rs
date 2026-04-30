@@ -47,6 +47,7 @@ pub fn execute_start(
         active_flow: None,
         active_task: None,
         goal_plan: None,
+        workflow_progress: None,
         decisions: Vec::new(),
         active_flow_policy: None,
         latest_status: SessionStatus::Initialized,
@@ -375,7 +376,7 @@ fn exit_status_for_task(status: TaskStatus) -> CommandExitStatus {
     }
 }
 
-fn build_status_view(
+pub(crate) fn build_status_view(
     record: &ActiveSessionRecord,
     next_command: Option<String>,
     explanation: impl Into<String>,
@@ -419,6 +420,9 @@ fn build_status_view(
             .goal_plan
             .as_ref()
             .map(|goal_plan| goal_plan.flow_state().summary_text()),
+        active_workflow: record.active_workflow_name(),
+        workflow_phase: record.active_workflow_phase_text(),
+        workflow_next_action: record.active_workflow_next_action(),
         current_stage_id: record.active_flow.as_ref().map(|flow| flow.current_stage_id.clone()),
         current_stage_index: record.active_flow.as_ref().map(|flow| flow.current_stage_index),
         total_stages: record.active_flow.as_ref().map(|flow| flow.total_stages),
@@ -966,6 +970,7 @@ fn red_to_green_addition() {
                 active_flow: None,
                 active_task: None,
                 goal_plan: None,
+                workflow_progress: None,
                 decisions: Vec::new(),
                 active_flow_policy: None,
                 latest_status: SessionStatus::Invalid,

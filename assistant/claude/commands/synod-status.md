@@ -19,7 +19,7 @@ If shell execution is unavailable, provide this exact copyable command:
 Then wait for pasted output.
 
 ## Output Interpretation
-Summarize `latest_status`, `routing`, `execution_condition`, `execution_path`, `flow_state`, `latest_decision_status`, `latest_decision_target`, `current_step_id`, any `latest_trace_ref`, `authored_input_summary`, `authored_input_sources`, `authored_input_deduplicated_sources` when present, `governance_next_action` when present, and the CLI-reported `next_command`.
+Summarize `latest_status`, `routing`, `execution_condition`, `execution_path`, `flow_state`, `latest_decision_status`, `latest_decision_target`, `current_step_id`, any `latest_trace_ref`, `authored_input_summary`, `authored_input_sources`, `authored_input_deduplicated_sources`, governance mode, run-ref, packet provenance, and `governance_next_action` when present, plus the CLI-reported `next_command`.
 
 ## Next-Step Routing
 Prefer the CLI-reported `next_command`; if the session is missing or invalid, route to `/synod-start`.

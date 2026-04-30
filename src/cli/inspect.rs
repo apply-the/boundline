@@ -8,8 +8,8 @@ use crate::adapters::trace_store::{FileTraceStore, TraceStore, TraceStoreError};
 use crate::cli::CommandExitStatus;
 use crate::cli::output;
 use crate::domain::goal_plan::GoalPlanFlowState;
-use crate::domain::session::governance_next_action_for_state;
 use crate::domain::session::{RoutingMode, RoutingOutcome, RoutingSource};
+use crate::domain::session::{governance_next_action_for_state, governance_packet_provenance_text};
 use crate::domain::step::{StepKind, StepStatus};
 use crate::domain::task::TaskStatus;
 use crate::domain::trace::{
@@ -692,7 +692,7 @@ fn governance_timeline_line(
                 .unwrap_or("unknown-runtime")
         )),
         TraceEventType::GovernanceStarted => Some(format!(
-            "governance_started: {}{}{}",
+            "governance_started: {}{}{}{}",
             payload.get("stage_key").and_then(|value| value.as_str()).unwrap_or("unknown-stage"),
             payload
                 .get("canon_mode")
@@ -703,7 +703,8 @@ fn governance_timeline_line(
                 .get("run_ref")
                 .and_then(|value| value.as_str())
                 .map(|run_ref| format!(" [{run_ref}]"))
-                .unwrap_or_default()
+                .unwrap_or_default(),
+            governance_packet_provenance_suffix(payload)
         )),
         TraceEventType::GovernanceDecisionRecorded => payload
             .get("selected_action")
@@ -716,17 +717,18 @@ fn governance_timeline_line(
                     .map(|reason| format!("governance_decision_blocked: {reason}"))
             }),
         TraceEventType::GovernanceAwaitingApproval => Some(format!(
-            "governance_awaiting_approval: {} ({}){}",
+            "governance_awaiting_approval: {} ({}){}{}",
             payload.get("stage_key").and_then(|value| value.as_str()).unwrap_or("unknown-stage"),
             payload.get("approval_state").and_then(|value| value.as_str()).unwrap_or("unknown"),
             payload
                 .get("run_ref")
                 .and_then(|value| value.as_str())
                 .map(|run_ref| format!(" [{run_ref}]"))
-                .unwrap_or_default()
+                .unwrap_or_default(),
+            governance_packet_provenance_suffix(payload)
         )),
         TraceEventType::GovernanceCompleted => Some(format!(
-            "governance_completed: {}{}",
+            "governance_completed: {}{}{}",
             payload
                 .get("headline")
                 .and_then(|value| value.as_str())
@@ -735,18 +737,30 @@ fn governance_timeline_line(
                 .get("packet_ref")
                 .and_then(|value| value.as_str())
                 .map(|packet_ref| format!(" [{packet_ref}]"))
-                .unwrap_or_default()
+                .unwrap_or_default(),
+            governance_packet_provenance_suffix(payload)
         )),
         TraceEventType::GovernanceBlocked => Some(format!(
-            "governance_blocked: {}",
-            payload.get("reason").and_then(|value| value.as_str()).unwrap_or("blocked")
+            "governance_blocked: {}{}",
+            payload.get("reason").and_then(|value| value.as_str()).unwrap_or("blocked"),
+            governance_packet_provenance_suffix(payload)
         )),
         TraceEventType::GovernancePacketRejected => Some(format!(
-            "governance_packet_rejected: {}",
-            payload.get("reason").and_then(|value| value.as_str()).unwrap_or("packet rejected")
+            "governance_packet_rejected: {}{}",
+            payload.get("reason").and_then(|value| value.as_str()).unwrap_or("packet rejected"),
+            governance_packet_provenance_suffix(payload)
         )),
         _ => None,
     }
+}
+
+fn governance_packet_provenance_suffix(payload: &serde_json::Value) -> String {
+    governance_packet_provenance_text(
+        payload.get("packet_source_stage").and_then(|value| value.as_str()),
+        payload.get("packet_binding_reason").and_then(|value| value.as_str()),
+    )
+    .map(|provenance| format!(" from {provenance}"))
+    .unwrap_or_default()
 }
 
 fn reviewer_line(payload: &serde_json::Value) -> Option<String> {
@@ -956,6 +970,7 @@ mod tests {
             active_flow: None,
             active_task: None,
             goal_plan: None,
+            workflow_progress: None,
             decisions: Vec::new(),
             active_flow_policy: None,
             latest_status: SessionStatus::GoalCaptured,

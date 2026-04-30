@@ -33,6 +33,28 @@ const FIXTURE_TEST_RS: &str = concat!(
     "}\n",
 );
 
+const VALID_WORKFLOWS_TOML: &str = concat!(
+    "[workflow.default]\n",
+    "goal_source = \"session\"\n",
+    "entry = \"capture\"\n",
+    "phases = [\"capture\", \"plan\", \"run\", \"inspect\"]\n",
+    "allow_review = true\n",
+    "allow_governance = true\n\n",
+    "[workflow.default.output]\n",
+    "next_command = true\n",
+    "routing_summary = true\n",
+    "execution_condition = true\n",
+);
+
+const INVALID_WORKFLOWS_TOML: &str = concat!(
+    "[workflow.invalid-flow]\n",
+    "goal_source = \"session\"\n",
+    "entry = \"run\"\n",
+    "phases = [\"run\", \"fan-out\", \"inspect\"]\n",
+    "allow_review = true\n",
+    "allow_governance = true\n",
+);
+
 pub fn temp_fixture_workspace(prefix: &str) -> PathBuf {
     create_fixture_workspace(
         prefix,
@@ -98,6 +120,26 @@ pub fn temp_canon_autopilot_blocked_workspace(prefix: &str) -> PathBuf {
     create_canon_governance_fixture_workspace(prefix, CanonFixtureScenario::AutopilotBlocked)
 }
 
+pub fn temp_canon_security_assessment_workspace(prefix: &str) -> PathBuf {
+    create_canon_governance_fixture_workspace(prefix, CanonFixtureScenario::VerifySecurityReusable)
+}
+
+pub fn temp_canon_security_approval_workspace(prefix: &str) -> PathBuf {
+    create_canon_governance_fixture_workspace(prefix, CanonFixtureScenario::VerifySecurityApproval)
+}
+
+pub fn temp_workflow_layer_workspace(prefix: &str) -> PathBuf {
+    create_workflow_fixture_workspace(prefix, VALID_WORKFLOWS_TOML, false)
+}
+
+pub fn temp_invalid_workflow_layer_workspace(prefix: &str) -> PathBuf {
+    create_workflow_fixture_workspace(prefix, INVALID_WORKFLOWS_TOML, false)
+}
+
+pub fn temp_workflow_layer_compat_workspace(prefix: &str) -> PathBuf {
+    create_workflow_fixture_workspace(prefix, VALID_WORKFLOWS_TOML, true)
+}
+
 #[allow(dead_code)]
 pub fn temp_replanning_execution_workspace(prefix: &str) -> PathBuf {
     create_fixture_workspace(
@@ -139,6 +181,15 @@ pub fn write_markdown_brief(
     contents: impl AsRef<str>,
 ) -> PathBuf {
     let path = workspace.join(relative_path.as_ref());
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
+    fs::write(&path, contents.as_ref()).unwrap();
+    path
+}
+
+pub fn write_workflow_definitions(workspace: &Path, contents: impl AsRef<str>) -> PathBuf {
+    let path = workspace.join(".synod/workflows.toml");
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).unwrap();
     }
@@ -189,6 +240,28 @@ fn create_fixture_workspace(prefix: &str, attempts: Vec<serde_json::Value>) -> P
     workspace
 }
 
+fn create_workflow_fixture_workspace(
+    prefix: &str,
+    workflow_contents: &str,
+    include_execution_profile: bool,
+) -> PathBuf {
+    let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::create_dir_all(workspace.join("tests")).unwrap();
+    fs::create_dir_all(workspace.join(".synod")).unwrap();
+
+    fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
+    fs::write(workspace.join("src/lib.rs"), RED_LIB_RS).unwrap();
+    fs::write(workspace.join("tests/red_to_green.rs"), FIXTURE_TEST_RS).unwrap();
+    write_workflow_definitions(&workspace, workflow_contents);
+
+    if include_execution_profile {
+        write_basic_execution_profile(&workspace, "workflow-layer-compat-execution");
+    }
+
+    workspace
+}
+
 fn create_adaptive_fixture_workspace(prefix: &str, source_contents: &str) -> PathBuf {
     let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
     fs::create_dir_all(workspace.join("src")).unwrap();
@@ -220,6 +293,31 @@ fn create_adaptive_fixture_workspace(prefix: &str, source_contents: &str) -> Pat
     .unwrap();
 
     workspace
+}
+
+fn write_basic_execution_profile(workspace: &Path, profile_name: &str) {
+    fs::write(
+        workspace.join(".synod/execution.json"),
+        serde_json::to_string_pretty(&serde_json::json!({
+            "name": profile_name,
+            "read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
+            "validation_command": {
+                "program": "cargo",
+                "args": ["test", "--quiet"],
+            },
+            "attempts": [
+                execution_attempt(
+                    "fix-add",
+                    "Replace subtraction with addition",
+                    "terminal",
+                    "left - right",
+                    "left + right",
+                )
+            ],
+        }))
+        .unwrap(),
+    )
+    .unwrap();
 }
 
 fn create_governance_fixture_workspace(prefix: &str, required: bool) -> PathBuf {
@@ -292,6 +390,8 @@ enum CanonFixtureScenario {
     RejectedPacket,
     Approval,
     AutopilotBlocked,
+    VerifySecurityReusable,
+    VerifySecurityApproval,
 }
 
 fn create_canon_governance_fixture_workspace(
@@ -323,6 +423,8 @@ fn create_canon_governance_fixture_workspace(
                 CanonFixtureScenario::RejectedPacket => "canon-packet-rejection-execution",
                 CanonFixtureScenario::Approval => "canon-approval-execution",
                 CanonFixtureScenario::AutopilotBlocked => "canon-autopilot-blocked-execution",
+                CanonFixtureScenario::VerifySecurityReusable => "canon-security-assessment-execution",
+                CanonFixtureScenario::VerifySecurityApproval => "canon-security-approval-execution",
             },
             "read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
             "validation_command": {
@@ -348,6 +450,36 @@ fn create_canon_governance_fixture_workspace(
 }
 
 fn canon_governance_profile(command: &str, scenario: CanonFixtureScenario) -> serde_json::Value {
+    if matches!(
+        scenario,
+        CanonFixtureScenario::VerifySecurityReusable | CanonFixtureScenario::VerifySecurityApproval
+    ) {
+        return serde_json::json!({
+            "default_runtime": "local",
+            "canon": {
+                "command": command,
+                "default_owner": "platform",
+                "default_risk": "medium",
+                "default_zone": "engineering",
+                "default_system_context": "existing"
+            },
+            "stages": [
+                {
+                    "flow_name": "bug-fix",
+                    "stage_id": "verify",
+                    "enabled": true,
+                    "required": true,
+                    "autopilot": true,
+                    "runtime": "canon",
+                    "system_context": "existing",
+                    "risk": "medium",
+                    "zone": "engineering",
+                    "owner": "platform"
+                }
+            ]
+        });
+    }
+
     let investigate_policy = match scenario {
         CanonFixtureScenario::Approval => serde_json::json!({
             "flow_name": "bug-fix",
@@ -440,7 +572,22 @@ fn write_canon_fixture_documents(workspace: &Path, scenario: CanonFixtureScenari
         "# Discovery\n\nApproval-gated governed investigation.\n",
     )
     .unwrap();
+    fs::create_dir_all(workspace.join(".canon/runs/canon-run-security")).unwrap();
+    fs::write(
+        workspace.join(".canon/runs/canon-run-security/security-assessment.md"),
+        "# Security Assessment\n\nValidated the bounded security review for the verify stage.\n",
+    )
+    .unwrap();
+    fs::create_dir_all(workspace.join(".canon/runs/canon-run-security-approval")).unwrap();
+    fs::write(
+        workspace.join(".canon/runs/canon-run-security-approval/security-assessment.md"),
+        "# Security Assessment\n\nApproval-gated governed security review for the verify stage.\n",
+    )
+    .unwrap();
     if matches!(scenario, CanonFixtureScenario::Approval) {
+        fs::write(workspace.join(".canon/approval-state.txt"), "requested\n").unwrap();
+    }
+    if matches!(scenario, CanonFixtureScenario::VerifySecurityApproval) {
         fs::write(workspace.join(".canon/approval-state.txt"), "requested\n").unwrap();
     }
 }
@@ -494,6 +641,30 @@ esac
         }
         CanonFixtureScenario::AutopilotBlocked => {
             unreachable!("blocked scenario should not create a stub")
+        }
+        CanonFixtureScenario::VerifySecurityReusable => {
+            r#"#!/bin/sh
+cat >/dev/null
+printf '{"status":"governed_ready","run_ref":"canon-run-security","packet_ref":".canon/runs/canon-run-security","expected_document_refs":[".canon/runs/canon-run-security/security-assessment.md"],"document_refs":[".canon/runs/canon-run-security/security-assessment.md"],"approval_state":"not_needed","packet_readiness":"reusable","missing_sections":[],"headline":"security assessment packet ready","message":"Canon completed the governed security assessment"}'
+"#
+        }
+        CanonFixtureScenario::VerifySecurityApproval => {
+            r#"#!/bin/sh
+request=$(cat)
+case "$request" in
+    *'"request_kind":"refresh"'*)
+        state=$(cat .canon/approval-state.txt 2>/dev/null | tr -d '\n')
+        if [ "$state" = "granted" ]; then
+            printf '{"status":"governed_ready","run_ref":"canon-run-security-approval","packet_ref":".canon/runs/canon-run-security-approval","expected_document_refs":[".canon/runs/canon-run-security-approval/security-assessment.md"],"document_refs":[".canon/runs/canon-run-security-approval/security-assessment.md"],"approval_state":"granted","packet_readiness":"reusable","missing_sections":[],"headline":"security assessment approval granted","message":"Canon approval granted for the governed security assessment"}'
+        else
+            printf '{"status":"awaiting_approval","run_ref":"canon-run-security-approval","packet_ref":".canon/runs/canon-run-security-approval","expected_document_refs":[".canon/runs/canon-run-security-approval/security-assessment.md"],"document_refs":[],"approval_state":"requested","packet_readiness":"pending","missing_sections":[],"headline":"awaiting security approval","message":"Canon is waiting for security approval"}'
+        fi
+        ;;
+    *)
+        printf '{"status":"awaiting_approval","run_ref":"canon-run-security-approval","packet_ref":".canon/runs/canon-run-security-approval","expected_document_refs":[".canon/runs/canon-run-security-approval/security-assessment.md"],"document_refs":[],"approval_state":"requested","packet_readiness":"pending","missing_sections":[],"headline":"awaiting security approval","message":"Canon is waiting for security approval"}'
+        ;;
+esac
+"#
         }
     };
     fs::write(&script_path, script).unwrap();

@@ -11,9 +11,10 @@ description: "Task list template for feature implementation"
 **Tests**: Validation tasks are expected for Synod features. Include them whenever the
 feature defines executable behavior, failure handling, replanning, or trace guarantees.
 Omit them only when the feature is truly documentation-only. When the feature changes
-runtime routing or operator-facing summaries, include coverage for route explanation,
-`execution_condition`, next-command guidance, and other CLI-visible surfaces, then
-refresh coverage artifacts such as `lcov.info`.
+runtime routing, governance surfaces, or operator-facing summaries, include coverage for
+route explanation, `execution_condition`, selected mode, approval state, packet provenance,
+next-command guidance, and other CLI-visible surfaces, then refresh coverage artifacts such
+as `lcov.info`.
 
 **Organization**: Tasks are grouped by user story so each slice can deliver bounded,
 inspectable value independently.
