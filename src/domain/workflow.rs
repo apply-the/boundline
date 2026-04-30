@@ -388,6 +388,8 @@ pub enum WorkflowDefinitionError {
     MissingWorkflowName,
     #[error("workflow definitions file must contain at least one workflow")]
     MissingWorkflowDefinitions,
+    #[error("workflow `{workflow_name}` is not defined")]
+    MissingNamedWorkflow { workflow_name: String },
     #[error("workflow definitions could not be read: {0}")]
     ReadWorkflowDefinitions(std::io::Error),
     #[error("workflow definitions could not be parsed: {0}")]

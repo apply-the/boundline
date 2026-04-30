@@ -31,8 +31,9 @@ The shipped CLI binary is `synod`.
 If you enable Synod governance through Canon, the current Synod adapter is
 validated against Canon `0.25.0`.
 
-In `0.17.0`, verify-stage Canon `security-assessment` can also remain on the
-same native session route instead of forcing a second operator workflow.
+In `0.18.0`, verify-stage Canon `security-assessment` can also remain on the
+same native session route, and the optional `synod workflow` surface can name
+that bounded route without introducing a second operator workflow.
 
 ## Install Synod
 
@@ -175,6 +176,22 @@ synod plan --workspace <workspace>
 synod run --workspace <workspace>
 ```
 
+### 4a. Optional Named Workflow Layer
+
+If the workspace defines `.synod/workflows.toml`, you can enter the same
+session-owned route through a named workflow:
+
+```bash
+synod workflow run default --workspace <workspace> --goal "Fix the failing add test"
+synod workflow status --workspace <workspace>
+synod workflow resume --workspace <workspace>
+synod workflow inspect --workspace <workspace>
+```
+
+This layer is bounded by the same Synod phases and persists progress in the
+active session. It does not replace `start`, `capture`, `plan`, `run`,
+`status`, or `inspect`; it composes over them.
+
 ### 5. Inspect the Result
 
 After the run, use the read-side commands to understand what happened:
@@ -222,6 +239,7 @@ contract; it does not replace the normal session-native path.
 | `synod status` | Show the current session snapshot |
 | `synod next` | Show the CLI-reported next action |
 | `synod inspect` | Summarize the latest trace or a specific trace |
+| `synod workflow run|status|resume|inspect` | Reuse the same session-native route through a named workflow entrypoint |
 
 ## Choosing the Right Manifest Shape
 

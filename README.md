@@ -8,8 +8,9 @@
 **Synod is a local CLI for bounded software-delivery work. The primary path is
 session-native: start a session, capture a goal, plan a bounded `GoalPlan`, run
 through the decision loop, and inspect the resulting session state and traces.
-`synod init` remains optional bootstrap, and declarative execution profiles
-remain available as an explicit compatibility path.**
+`synod init` remains optional bootstrap, declarative execution profiles remain
+available as an explicit compatibility path, and `synod workflow` adds an
+optional thin named-workflow layer over the same session-owned runtime.**
 
 ## What Synod Does
 
@@ -21,6 +22,7 @@ The main surface is the `synod` CLI:
 - `start`, `capture`, `flow`, `plan`, and `step` drive the session workflow.
 - `run` executes a bounded delivery task end to end, preferring native session planning when a `GoalPlan` exists.
 - `status`, `next`, and `inspect` explain the current session and latest trace.
+- `workflow run|status|resume|inspect` lets a named workflow reuse the same route, session, and trace surfaces without introducing a second runtime.
 
 Use it when you want delivery work to stay bounded and inspectable:
 
@@ -52,12 +54,12 @@ When Synod governance is configured to use Canon, the current adapter is
 validated against Canon `0.25.0`.
 
 That is the Canon CLI version explicitly documented as supported for Synod
-`0.17.0`. Earlier or later Canon versions may work, but they are not part of the
+`0.18.0`. Earlier or later Canon versions may work, but they are not part of the
 documented compatibility surface yet.
 
-The `0.17.0` governance slice keeps Canon bounded to stage-level governance and
-evidence while adding verify-stage `security-assessment` coverage on the primary
-session-native route.
+The `0.18.0` release keeps Canon bounded to stage-level governance and evidence,
+adds the session-native workflow layer, and preserves verify-stage
+`security-assessment` coverage on the primary route.
 
 For contributor setup and validation expectations, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -97,6 +99,20 @@ The shortest way to think about Synod is:
 5. Run `synod plan` to persist a bounded `GoalPlan` and any inferred or explicit flow state.
 6. Run `synod run` to execute through the native decision loop.
 7. Read `status`, `next`, or `inspect` to continue.
+
+When you want a reusable named entrypoint for the same session-owned route, add
+`.synod/workflows.toml` and use:
+
+```bash
+synod workflow run default --workspace <workspace> --goal "Fix the failing add test"
+synod workflow status --workspace <workspace>
+synod workflow resume --workspace <workspace>
+synod workflow inspect --workspace <workspace>
+```
+
+The workflow layer is intentionally bounded: workflows compile into Synod's
+existing `capture`, `clarify`, `plan`, `run`, `review`, `govern`, and `inspect`
+phases instead of introducing a generic automation DSL.
 
 ### 1. Optional bootstrap
 
@@ -171,6 +187,19 @@ What those commands do, in short:
 - `run` executes through the native session route whenever a `GoalPlan` exists; verify-stage Canon `security-assessment` still appears on that same route, while declarative `.synod/execution.json` execution remains the explicit compatibility path.
 - `status` reports the current session snapshot with explicit `routing`, `execution_condition`, and next-step guidance.
 - `inspect` summarizes the latest trace and evidence with the same route and execution-condition story plus trace-specific detail.
+
+Optional named workflow layer:
+
+```bash
+synod workflow run default --workspace <workspace> --goal "Fix the failing add test"
+synod workflow status --workspace <workspace>
+synod workflow resume --workspace <workspace>
+synod workflow inspect --workspace <workspace>
+```
+
+`synod workflow run` reuses the same session-native runtime. It persists named
+workflow progress in the active session and reports the same `routing`,
+`execution_condition`, and `next_command` story as the direct session commands.
 
 ### 3. Use the direct compatibility workflow when you do not need a session
 

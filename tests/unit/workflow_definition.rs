@@ -55,3 +55,33 @@ fn rejects_conditional_phase_that_is_not_declared() {
         WorkflowDefinitionError::ConditionalPhaseMissing { phase: WorkflowPhase::Review, .. }
     ));
 }
+
+#[test]
+fn rejects_review_phase_when_review_is_not_allowed() {
+    let error = WorkflowRegistry::from_toml_str(concat!(
+        "[workflow.default]\n",
+        "goal_source = \"session\"\n",
+        "entry = \"capture\"\n",
+        "phases = [\"capture\", \"review\", \"inspect\"]\n",
+        "allow_review = false\n",
+        "allow_governance = false\n",
+    ))
+    .unwrap_err();
+
+    assert!(matches!(error, WorkflowDefinitionError::ReviewPhaseNotAllowed { .. }));
+}
+
+#[test]
+fn rejects_govern_phase_when_governance_is_not_allowed() {
+    let error = WorkflowRegistry::from_toml_str(concat!(
+        "[workflow.default]\n",
+        "goal_source = \"session\"\n",
+        "entry = \"capture\"\n",
+        "phases = [\"capture\", \"govern\", \"inspect\"]\n",
+        "allow_review = false\n",
+        "allow_governance = false\n",
+    ))
+    .unwrap_err();
+
+    assert!(matches!(error, WorkflowDefinitionError::GovernancePhaseNotAllowed { .. }));
+}

@@ -7,6 +7,7 @@ Synod is a bounded delivery orchestrator. Contributions should keep that bias:
 - prefer small, inspectable changes over broad refactors
 - preserve explicit session state, traces, and CLI guidance
 - preserve the session-native `start -> capture -> plan -> run -> status -> next -> inspect` story as the default operator path
+- treat `synod workflow` as a thin bounded layer over the same session-owned runtime, not as a generic workflow engine
 - keep the local developer workflow deterministic
 - update tests and docs together with behavior changes
 
@@ -27,6 +28,7 @@ To install the repository git hooks:
 ## Repository Layout
 
 - [src](src): library code, CLI, session-native runtime, and explicit compatibility execution support
+- workspace-local `.synod/workflows.toml`: optional named workflow registry compiled onto the existing session-native phases
 - [tests](tests): top-level Cargo test harnesses plus `unit`, `integration`, and `contract` modules
 - [assistant](assistant): assistant command packs and shared assistant-facing docs
 - [specs](specs): feature specs, plans, research notes, contracts, quickstarts, and task breakdowns
@@ -88,6 +90,8 @@ That matches the blocking GitHub lint, test, and coverage workflows.
 If you change a user-visible command, session workflow, or flow behavior, update the relevant docs in the same change. Common files include:
 
 - [README.md](README.md)
+- [docs/getting-started.md](docs/getting-started.md)
+- [docs/configuration.md](docs/configuration.md)
 - [assistant/README.md](assistant/README.md)
 - [ROADMAP.md](ROADMAP.md)
 - the relevant assistant command pack files under [assistant](assistant)

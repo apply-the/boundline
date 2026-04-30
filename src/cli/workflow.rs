@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use uuid::Uuid;
 
+use crate::cli::inspect;
 use crate::cli::session::build_status_view;
 use crate::cli::{CommandExitStatus, output};
 use crate::domain::session::{
@@ -69,14 +70,114 @@ pub fn execute_run(
     Ok(render_workflow_report(&workspace, &record, explanation))
 }
 
+pub fn execute_status(
+    workspace: Option<&Path>,
+) -> Result<WorkflowCommandReport, WorkflowCommandError> {
+    let workspace = resolve_workspace(workspace)?;
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut record = load_active_workflow_session(&runtime)?;
+    let workflow_name =
+        record.active_workflow_name().expect("active workflow was checked before rendering status");
+    let workflow = match load_workflow_definition(&workspace, &workflow_name) {
+        Ok(workflow) => workflow,
+        Err(error) => {
+            return Ok(blocked_definition_report(&workflow_name, &workspace, error.to_string()));
+        }
+    };
+    let refreshed = runtime
+        .refresh_governance_state(&mut record)
+        .map_err(WorkflowCommandError::SessionRuntime)?;
+    if refreshed {
+        runtime.persist_session(&record).map_err(WorkflowCommandError::SessionRuntime)?;
+    }
+    refresh_routing_summary(&mut record);
+
+    Ok(render_workflow_report(
+        &workspace,
+        &record,
+        if refreshed {
+            format!(
+                "refreshed workflow `{}` state from the persisted governed session",
+                workflow.workflow_name
+            )
+        } else {
+            format!("current persisted state for workflow `{}`", workflow.workflow_name)
+        },
+    ))
+}
+
+pub fn execute_resume(
+    workspace: Option<&Path>,
+) -> Result<WorkflowCommandReport, WorkflowCommandError> {
+    let workspace = resolve_workspace(workspace)?;
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut record = load_active_workflow_session(&runtime)?;
+    let workflow_name =
+        record.active_workflow_name().expect("active workflow was checked before resume");
+    let workflow = match load_workflow_definition(&workspace, &workflow_name) {
+        Ok(workflow) => workflow,
+        Err(error) => {
+            return Ok(blocked_definition_report(&workflow_name, &workspace, error.to_string()));
+        }
+    };
+
+    let explanation = advance_workflow(&runtime, &mut record, &workflow, None)?;
+    runtime.persist_session(&record).map_err(WorkflowCommandError::SessionRuntime)?;
+
+    Ok(render_workflow_report(&workspace, &record, explanation))
+}
+
+pub fn execute_inspect(
+    workspace: Option<&Path>,
+) -> Result<WorkflowCommandReport, WorkflowCommandError> {
+    let workspace = resolve_workspace(workspace)?;
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut record = load_active_workflow_session(&runtime)?;
+    let workflow_name =
+        record.active_workflow_name().expect("active workflow was checked before inspect");
+    let workflow = match load_workflow_definition(&workspace, &workflow_name) {
+        Ok(workflow) => workflow,
+        Err(error) => {
+            return Ok(blocked_definition_report(&workflow_name, &workspace, error.to_string()));
+        }
+    };
+    refresh_routing_summary(&mut record);
+    let workflow_report = render_workflow_report(
+        &workspace,
+        &record,
+        format!("inspection summary for workflow `{}`", workflow.workflow_name),
+    );
+
+    if record.latest_trace_ref.is_none() {
+        return Ok(workflow_report);
+    }
+
+    let inspect_report =
+        inspect::execute_inspect(None, Some(&workspace)).map_err(WorkflowCommandError::Inspect)?;
+
+    Ok(WorkflowCommandReport {
+        exit_status: inspect_report.exit_status,
+        terminal_output: format!(
+            "{}\n{}",
+            workflow_report.terminal_output, inspect_report.terminal_output
+        ),
+    })
+}
+
 #[derive(Debug, Error)]
 pub enum WorkflowCommandError {
     #[error("workflow workspace could not be resolved: {0}")]
     WorkspaceResolution(String),
     #[error("workflow runtime error: {0}")]
     SessionRuntime(SessionRuntimeError),
+    #[error("no active workflow session found for the current workspace")]
+    MissingActiveWorkflowSession,
+    #[error("the active session does not currently own a named workflow")]
+    MissingActiveWorkflow,
     #[error("workflow definitions are invalid: {0}")]
     WorkflowDefinition(WorkflowDefinitionError),
+    #[error("workflow inspect failed: {0}")]
+    Inspect(inspect::InspectCommandError),
 }
 
 fn advance_workflow(
@@ -307,14 +408,34 @@ fn render_workflow_report(
     record: &ActiveSessionRecord,
     explanation: String,
 ) -> WorkflowCommandReport {
-    let next_command =
-        record.active_workflow_next_action().or_else(|| default_next_command(workspace, record));
+    let next_command = workflow_next_command(workspace, record);
     let view = build_status_view(record, next_command, explanation);
 
     WorkflowCommandReport {
         exit_status: workflow_exit_status(record),
         terminal_output: output::render_session_status(&view),
     }
+}
+
+fn workflow_next_command(workspace: &Path, record: &ActiveSessionRecord) -> Option<String> {
+    if let Some(progress) = record.active_workflow_progress()
+        && matches!(progress.current_phase, Some(WorkflowPhase::Capture))
+    {
+        if record.goal.as_deref().map(str::trim).unwrap_or_default().is_empty() {
+            return Some(capture_command(workspace));
+        }
+
+        return Some(workflow_resume_command(workspace));
+    }
+
+    if let Some(progress) = record.active_workflow_progress()
+        && matches!(progress.current_phase, Some(WorkflowPhase::Clarify))
+        && record.authored_brief.as_ref().and_then(|bundle| bundle.clarification.as_ref()).is_some()
+    {
+        return Some(capture_command(workspace));
+    }
+
+    record.active_workflow_next_action().or_else(|| default_next_command(workspace, record))
 }
 
 fn default_next_command(workspace: &Path, record: &ActiveSessionRecord) -> Option<String> {
@@ -411,6 +532,43 @@ fn resolve_workspace(workspace: Option<&Path>) -> Result<PathBuf, WorkflowComman
     workspace
         .canonicalize()
         .map_err(|error| WorkflowCommandError::WorkspaceResolution(error.to_string()))
+}
+
+fn load_active_workflow_session(
+    runtime: &SessionRuntime,
+) -> Result<ActiveSessionRecord, WorkflowCommandError> {
+    let Some(record) = runtime.load_session().map_err(WorkflowCommandError::SessionRuntime)? else {
+        return Err(WorkflowCommandError::MissingActiveWorkflowSession);
+    };
+
+    if record.active_workflow_name().is_none() {
+        return Err(WorkflowCommandError::MissingActiveWorkflow);
+    }
+
+    Ok(record)
+}
+
+fn load_workflow_definition(
+    workspace: &Path,
+    workflow_name: &str,
+) -> Result<WorkflowDefinition, WorkflowDefinitionError> {
+    let registry = WorkflowRegistry::load(&workspace.join(".synod/workflows.toml"))?;
+    registry.workflow(workflow_name).cloned().ok_or_else(|| {
+        WorkflowDefinitionError::MissingNamedWorkflow { workflow_name: workflow_name.to_string() }
+    })
+}
+
+fn refresh_routing_summary(record: &mut ActiveSessionRecord) {
+    let routing_summary =
+        Some(output::render_route_outcome(&crate::domain::session::routing_outcome(record)));
+    if let Some(progress) = record.workflow_progress.as_mut() {
+        progress.routing_summary = routing_summary.clone();
+    }
+    if let Some(goal_plan) = record.goal_plan.as_mut()
+        && let Some(workflow_progress) = goal_plan.workflow_progress.as_mut()
+    {
+        workflow_progress.routing_summary = routing_summary;
+    }
 }
 
 fn should_skip_phase(

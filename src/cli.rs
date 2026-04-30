@@ -687,21 +687,48 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                     },
                 }
             }
-            WorkflowSubcommand::Status { .. } => DispatchOutcome {
-                exit_status: CommandExitStatus::NonSuccess,
-                output: "workflow status is not implemented yet".to_string(),
-                trace_location: None,
-            },
-            WorkflowSubcommand::Resume { .. } => DispatchOutcome {
-                exit_status: CommandExitStatus::NonSuccess,
-                output: "workflow resume is not implemented yet".to_string(),
-                trace_location: None,
-            },
-            WorkflowSubcommand::Inspect { .. } => DispatchOutcome {
-                exit_status: CommandExitStatus::NonSuccess,
-                output: "workflow inspect is not implemented yet".to_string(),
-                trace_location: None,
-            },
+            WorkflowSubcommand::Status { workspace } => {
+                match workflow::execute_status(workspace.as_deref()) {
+                    Ok(report) => DispatchOutcome {
+                        exit_status: report.exit_status,
+                        output: report.terminal_output,
+                        trace_location: None,
+                    },
+                    Err(error) => DispatchOutcome {
+                        exit_status: CommandExitStatus::NonSuccess,
+                        output: format!("workflow error: {error}"),
+                        trace_location: None,
+                    },
+                }
+            }
+            WorkflowSubcommand::Resume { workspace } => {
+                match workflow::execute_resume(workspace.as_deref()) {
+                    Ok(report) => DispatchOutcome {
+                        exit_status: report.exit_status,
+                        output: report.terminal_output,
+                        trace_location: None,
+                    },
+                    Err(error) => DispatchOutcome {
+                        exit_status: CommandExitStatus::NonSuccess,
+                        output: format!("workflow error: {error}"),
+                        trace_location: None,
+                    },
+                }
+            }
+            WorkflowSubcommand::Inspect { workspace } => {
+                match workflow::execute_inspect(workspace.as_deref()) {
+                    Ok(report) => DispatchOutcome {
+                        exit_status: report.exit_status,
+                        output: report.terminal_output,
+                        trace_location: None,
+                    },
+                    Err(error) => DispatchOutcome {
+                        exit_status: CommandExitStatus::NonSuccess,
+                        output: format!("workflow error: {error}"),
+                        trace_location: None,
+                    },
+                }
+            }
         },
         DeveloperCommand::Inspect { trace, workspace } => {
             match inspect::execute_inspect(trace.as_deref(), workspace.as_deref()) {
