@@ -353,6 +353,40 @@ fn governance_profile_validation_rejects_missing_canon_configuration_and_forbidd
 }
 
 #[test]
+fn governance_profile_deserialization_rejects_future_canon_modes_outside_the_current_slice() {
+    let error = serde_json::from_value::<GovernanceProfile>(json!({
+        "default_runtime": "canon",
+        "canon": {
+            "command": "canon",
+            "default_owner": "platform",
+            "default_risk": "medium",
+            "default_zone": "engineering",
+            "default_system_context": "existing"
+        },
+        "stages": [
+            {
+                "flow_name": "bug-fix",
+                "stage_id": "verify",
+                "enabled": true,
+                "required": true,
+                "autopilot": false,
+                "runtime": "canon",
+                "canon_mode": "supply-chain-analysis",
+                "system_context": "existing",
+                "risk": "medium",
+                "zone": "engineering",
+                "owner": "platform"
+            }
+        ]
+    }))
+    .unwrap_err();
+
+    let message = error.to_string();
+    assert!(message.contains("unknown variant `supply-chain-analysis`"), "{message}");
+    assert!(message.contains("security-assessment"), "{message}");
+}
+
+#[test]
 fn governance_profile_validation_rejects_missing_canon_fields() {
     for missing_field in ["system_context", "risk", "zone", "owner"] {
         let mut policy = sample_canon_policy("bug-fix", "investigate", CanonMode::Discovery);
@@ -427,6 +461,7 @@ fn canon_mode_helpers_expose_primary_documents_and_context_requirements() {
         (CanonMode::Discovery, "discovery.md", false),
         (CanonMode::Implementation, "implementation.md", true),
         (CanonMode::Verification, "verification.md", true),
+        (CanonMode::SecurityAssessment, "security-assessment.md", true),
         (CanonMode::PrReview, "pr-review.md", true),
     ];
 
@@ -439,6 +474,10 @@ fn canon_mode_helpers_expose_primary_documents_and_context_requirements() {
         CanonMode::Verification.expected_document_refs(".canon/packets/verify-1"),
         vec![".canon/packets/verify-1/verification.md".to_string()]
     );
+    assert_eq!(
+        CanonMode::SecurityAssessment.expected_document_refs(".canon/packets/security-1"),
+        vec![".canon/packets/security-1/security-assessment.md".to_string()]
+    );
 }
 
 #[test]
@@ -450,10 +489,18 @@ fn supported_canon_modes_include_expected_stage_whitelist_entries() {
         ("delivery", "implementation", vec![CanonMode::Implementation]),
         ("change", "understand-change", vec![CanonMode::Change]),
         ("change", "implement", vec![CanonMode::Implementation]),
-        ("change", "verify", vec![CanonMode::Verification, CanonMode::PrReview]),
+        (
+            "change",
+            "verify",
+            vec![CanonMode::SecurityAssessment, CanonMode::Verification, CanonMode::PrReview],
+        ),
         ("bug-fix", "investigate", vec![CanonMode::Discovery, CanonMode::Change]),
         ("bug-fix", "implement", vec![CanonMode::Implementation]),
-        ("bug-fix", "verify", vec![CanonMode::Verification, CanonMode::PrReview]),
+        (
+            "bug-fix",
+            "verify",
+            vec![CanonMode::SecurityAssessment, CanonMode::Verification, CanonMode::PrReview],
+        ),
     ];
 
     for (flow_name, stage_id, expected_modes) in expectations {
@@ -461,6 +508,52 @@ fn supported_canon_modes_include_expected_stage_whitelist_entries() {
     }
 
     assert!(supported_canon_modes_for_stage("delivery", "unknown").is_empty());
+}
+
+#[test]
+fn autopilot_selects_security_assessment_first_for_verification_stage() {
+    let metadata = FlowStepMetadata {
+        flow_name: "bug-fix".to_string(),
+        stage_id: "verify".to_string(),
+        stage_index: 2,
+        total_stages: 3,
+    };
+    let policy = StageGovernancePolicy {
+        flow_name: "bug-fix".to_string(),
+        stage_id: "verify".to_string(),
+        enabled: true,
+        required: false,
+        autopilot: true,
+        runtime: Some(GovernanceRuntimeKind::Canon),
+        canon_mode: None,
+        system_context: Some(SystemContextBinding::Existing),
+        risk: Some("medium".to_string()),
+        zone: Some("engineering".to_string()),
+        owner: Some("platform".to_string()),
+    };
+
+    let decision = build_autopilot_decision(
+        "attempt-security-assessment",
+        &policy,
+        GovernanceRuntimeKind::Local,
+        &metadata,
+        &GovernanceBoundedContext {
+            read_targets: vec!["src/lib.rs".to_string()],
+            stage_brief_ref: None,
+            reused_packets: Vec::new(),
+        },
+        None,
+        Some(ApprovalState::NotNeeded),
+        Some(PacketReadiness::Reusable),
+    )
+    .expect("decision should exist");
+
+    assert_eq!(decision.selected_action, Some(AutopilotAction::SelectMode));
+    assert_eq!(decision.selected_mode, Some(CanonMode::SecurityAssessment));
+    assert_eq!(
+        decision.candidate_modes,
+        vec![CanonMode::SecurityAssessment, CanonMode::Verification, CanonMode::PrReview,]
+    );
 }
 
 #[test]

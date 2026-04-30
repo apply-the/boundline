@@ -33,7 +33,7 @@ pub enum SystemContextBinding {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "kebab-case")]
 pub enum CanonMode {
     Requirements,
     Architecture,
@@ -42,6 +42,9 @@ pub enum CanonMode {
     Discovery,
     Implementation,
     Verification,
+    #[serde(alias = "security_assessment")]
+    SecurityAssessment,
+    #[serde(alias = "pr_review")]
     PrReview,
 }
 
@@ -55,6 +58,7 @@ impl CanonMode {
             Self::Discovery => "discovery.md",
             Self::Implementation => "implementation.md",
             Self::Verification => "verification.md",
+            Self::SecurityAssessment => "security-assessment.md",
             Self::PrReview => "pr-review.md",
         }
     }
@@ -66,6 +70,7 @@ impl CanonMode {
                 | Self::Change
                 | Self::Implementation
                 | Self::Verification
+                | Self::SecurityAssessment
                 | Self::PrReview
         )
     }
@@ -81,10 +86,12 @@ const DELIVERY_BACKLOG_MODES: [CanonMode; 1] = [CanonMode::Backlog];
 const DELIVERY_IMPLEMENTATION_MODES: [CanonMode; 1] = [CanonMode::Implementation];
 const CHANGE_UNDERSTAND_MODES: [CanonMode; 1] = [CanonMode::Change];
 const CHANGE_IMPLEMENT_MODES: [CanonMode; 1] = [CanonMode::Implementation];
-const CHANGE_VERIFY_MODES: [CanonMode; 2] = [CanonMode::Verification, CanonMode::PrReview];
+const CHANGE_VERIFY_MODES: [CanonMode; 3] =
+    [CanonMode::SecurityAssessment, CanonMode::Verification, CanonMode::PrReview];
 const BUG_FIX_INVESTIGATE_MODES: [CanonMode; 2] = [CanonMode::Discovery, CanonMode::Change];
 const BUG_FIX_IMPLEMENT_MODES: [CanonMode; 1] = [CanonMode::Implementation];
-const BUG_FIX_VERIFY_MODES: [CanonMode; 2] = [CanonMode::Verification, CanonMode::PrReview];
+const BUG_FIX_VERIFY_MODES: [CanonMode; 3] =
+    [CanonMode::SecurityAssessment, CanonMode::Verification, CanonMode::PrReview];
 const NO_CANON_MODES: [CanonMode; 0] = [];
 
 pub fn supported_canon_modes_for_stage(flow_name: &str, stage_id: &str) -> &'static [CanonMode] {

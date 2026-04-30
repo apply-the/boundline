@@ -169,3 +169,100 @@ fn canon_runtime_contract_marks_scaffold_packets_as_rejected() {
     assert_eq!(packet.readiness, synod::PacketReadiness::Rejected);
     assert_eq!(packet.missing_sections, vec!["substantive_body".to_string()]);
 }
+
+#[test]
+fn canon_runtime_contract_serializes_security_assessment_mode_in_start_requests() {
+    let workspace = temp_workspace("synod-canon-security-start-contract");
+    let capture_path = workspace.join("canon-security-request.json");
+    let script_path = workspace.join("canon-security-stub.sh");
+    fs::write(
+        &script_path,
+        format!(
+            "#!/bin/sh\nrequest=$(cat)\nprintf '%s' \"$request\" > '{}'\nprintf '%s' '{{\"status\":\"governed_ready\",\"run_ref\":\"canon-run-security\",\"packet_ref\":\".canon/runs/canon-run-security\",\"expected_document_refs\":[\".canon/runs/canon-run-security/security-assessment.md\"],\"document_refs\":[\".canon/runs/canon-run-security/security-assessment.md\"],\"approval_state\":\"not_needed\",\"packet_readiness\":\"reusable\",\"missing_sections\":[],\"headline\":\"security assessment packet ready\",\"message\":\"Canon completed the governed security assessment\"}}'\n",
+            capture_path.display()
+        ),
+    )
+    .unwrap();
+    let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&script_path, permissions).unwrap();
+    write_workspace_file(
+        &workspace,
+        ".canon/runs/canon-run-security/security-assessment.md",
+        "# Security Assessment\n\nValidated the bounded security review.\n",
+    );
+
+    let runtime = CanonCliRuntime::new(script_path.to_string_lossy().into_owned())
+        .with_working_directory(&workspace);
+    let response = runtime
+        .execute(&GovernanceRuntimeRequest {
+            stage_key: "bug-fix:verify".to_string(),
+            mode: Some(synod::CanonMode::SecurityAssessment),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            ..request()
+        })
+        .unwrap();
+
+    let request_json = fs::read_to_string(capture_path).unwrap();
+    assert!(request_json.contains("\"stage_key\":\"bug-fix:verify\""), "{request_json}");
+    assert!(request_json.contains("\"mode\":\"security-assessment\""), "{request_json}");
+    let packet = response.packet.expect("packet should be present");
+    assert_eq!(packet.packet_ref, ".canon/runs/canon-run-security");
+    assert_eq!(packet.readiness, synod::PacketReadiness::Reusable);
+}
+
+#[test]
+fn canon_runtime_contract_preserves_security_assessment_refresh_lineage() {
+    let workspace = temp_workspace("synod-canon-security-refresh-contract");
+    let capture_path = workspace.join("canon-security-refresh-request.json");
+    let script_path = workspace.join("canon-security-refresh-stub.sh");
+    fs::write(
+        &script_path,
+        format!(
+            "#!/bin/sh\nrequest=$(cat)\nprintf '%s' \"$request\" > '{}'\nprintf '%s' '{{\"status\":\"governed_ready\",\"run_ref\":\"canon-run-security-refresh\",\"packet_ref\":\".canon/runs/canon-run-security-refresh\",\"expected_document_refs\":[\".canon/runs/canon-run-security-refresh/security-assessment.md\"],\"document_refs\":[\".canon/runs/canon-run-security-refresh/security-assessment.md\"],\"approval_state\":\"granted\",\"packet_readiness\":\"reusable\",\"missing_sections\":[],\"headline\":\"security refresh packet ready\",\"message\":\"Canon refreshed the governed security packet\"}}'\n",
+            capture_path.display()
+        ),
+    )
+    .unwrap();
+    let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&script_path, permissions).unwrap();
+    write_workspace_file(
+        &workspace,
+        ".canon/runs/canon-run-security-refresh/security-assessment.md",
+        "# Security Assessment\n\nRefreshed bounded security review.\n",
+    );
+
+    let runtime = CanonCliRuntime::new(script_path.to_string_lossy().into_owned())
+        .with_working_directory(&workspace);
+    let response = runtime
+        .execute(&GovernanceRuntimeRequest {
+            request_kind: GovernanceRequestKind::Refresh,
+            governance_attempt_id: "canon-contract-security-refresh".to_string(),
+            stage_key: "bug-fix:verify".to_string(),
+            goal: "Verify the bounded security fix".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            autopilot: true,
+            mode: Some(synod::CanonMode::SecurityAssessment),
+            system_context: Some(SystemContextBinding::Existing),
+            risk: Some("medium".to_string()),
+            zone: Some("engineering".to_string()),
+            owner: Some("platform".to_string()),
+            run_ref: Some("canon-run-security-refresh".to_string()),
+            packet_ref: Some(".canon/runs/canon-run-security-refresh".to_string()),
+            bounded_context: GovernanceBoundedContext {
+                read_targets: vec!["src/lib.rs".to_string()],
+                stage_brief_ref: None,
+                reused_packets: Vec::new(),
+            },
+            input_documents: Vec::new(),
+        })
+        .unwrap();
+
+    let request_json = fs::read_to_string(capture_path).unwrap();
+    assert!(request_json.contains("\"request_kind\":\"refresh\""), "{request_json}");
+    assert!(request_json.contains("\"mode\":\"security-assessment\""), "{request_json}");
+    assert!(request_json.contains("\"run_ref\":\"canon-run-security-refresh\""), "{request_json}");
+    assert_eq!(response.approval_state, synod::ApprovalState::Granted);
+    assert_eq!(response.run_ref.as_deref(), Some("canon-run-security-refresh"));
+}

@@ -1080,6 +1080,24 @@ pub(crate) fn task_state_governance_packet_binding_reason(task: &Task) -> Option
     task_state_governance_packet_reuse(task).map(|binding| binding.binding_reason)
 }
 
+pub(crate) fn governance_packet_provenance_text(
+    packet_source_stage: Option<&str>,
+    packet_binding_reason: Option<&str>,
+) -> Option<String> {
+    let packet_source_stage = packet_source_stage.map(str::trim).filter(|value| !value.is_empty());
+    let packet_binding_reason =
+        packet_binding_reason.map(str::trim).filter(|value| !value.is_empty());
+
+    match (packet_source_stage, packet_binding_reason) {
+        (Some(packet_source_stage), Some(packet_binding_reason)) => {
+            Some(format!("{packet_source_stage} ({packet_binding_reason})"))
+        }
+        (Some(packet_source_stage), None) => Some(packet_source_stage.to_string()),
+        (None, Some(packet_binding_reason)) => Some(packet_binding_reason.to_string()),
+        (None, None) => None,
+    }
+}
+
 pub(crate) fn task_state_governance_approval_text(task: &Task) -> Option<String> {
     task_state_governed_stage(task).and_then(|record| encoded_text(&record.approval_state))
 }
@@ -1437,7 +1455,6 @@ mod tests {
             wrong_stage_count.validate(&record).unwrap_err(),
             SessionValidationError::StatusViewStageCountMismatch { .. }
         ));
-
         let mut wrong_trace = build_view(&record);
         wrong_trace.latest_trace_ref = Some("/tmp/other/trace.json".to_string());
         assert!(matches!(
@@ -1451,6 +1468,26 @@ mod tests {
             wrong_step_index.validate(&record).unwrap_err(),
             SessionValidationError::StatusViewStepIndexMismatch { .. }
         ));
+    }
+
+    #[test]
+    fn governance_packet_provenance_text_formats_source_and_binding_reason() {
+        assert_eq!(
+            super::governance_packet_provenance_text(
+                Some("bug-fix:investigate"),
+                Some("upstream_stage_context")
+            ),
+            Some("bug-fix:investigate (upstream_stage_context)".to_string())
+        );
+        assert_eq!(
+            super::governance_packet_provenance_text(Some("bug-fix:investigate"), None),
+            Some("bug-fix:investigate".to_string())
+        );
+        assert_eq!(
+            super::governance_packet_provenance_text(None, Some("same_stage_rerun")),
+            Some("same_stage_rerun".to_string())
+        );
+        assert_eq!(super::governance_packet_provenance_text(None, None), None);
     }
 
     #[test]

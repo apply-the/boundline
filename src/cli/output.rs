@@ -5,7 +5,9 @@ use crate::cli::{CliValidationError, CommandExitStatus, DeveloperCommand};
 use crate::domain::cluster::{ClusterInspectReport, ClusterMemberState};
 use crate::domain::goal_plan::GoalPlanFlowState;
 use crate::domain::session::RoutingOutcome;
-use crate::domain::session::{RoutingMode, RoutingSource, SessionStatus, SessionStatusView};
+use crate::domain::session::{
+    RoutingMode, RoutingSource, SessionStatus, SessionStatusView, governance_packet_provenance_text,
+};
 use crate::domain::step::{StepKind, StepStatus};
 use crate::domain::task::{TaskRunResponse, TaskStatus};
 use crate::domain::trace::{ExecutionTrace, TraceEventType, TraceSummaryView};
@@ -868,7 +870,7 @@ fn governance_event_line(event_type: TraceEventType, payload: &Value) -> Option<
             payload.get("selected_runtime").and_then(Value::as_str).unwrap_or("unknown-runtime")
         )),
         TraceEventType::GovernanceStarted => Some(format!(
-            "governance_started: {}{}{}",
+            "governance_started: {}{}{}{}",
             payload.get("stage_key").and_then(Value::as_str).unwrap_or("unknown-stage"),
             payload
                 .get("canon_mode")
@@ -879,7 +881,8 @@ fn governance_event_line(event_type: TraceEventType, payload: &Value) -> Option<
                 .get("run_ref")
                 .and_then(Value::as_str)
                 .map(|run_ref| format!(" [{run_ref}]"))
-                .unwrap_or_default()
+                .unwrap_or_default(),
+            governance_packet_provenance_suffix(payload)
         )),
         TraceEventType::GovernanceDecisionRecorded => payload
             .get("selected_action")
@@ -892,34 +895,47 @@ fn governance_event_line(event_type: TraceEventType, payload: &Value) -> Option<
                     .map(|reason| format!("governance_decision_blocked: {reason}"))
             }),
         TraceEventType::GovernanceAwaitingApproval => Some(format!(
-            "governance_awaiting_approval: {} ({}){}",
+            "governance_awaiting_approval: {} ({}){}{}",
             payload.get("stage_key").and_then(Value::as_str).unwrap_or("unknown-stage"),
             payload.get("approval_state").and_then(Value::as_str).unwrap_or("unknown"),
             payload
                 .get("run_ref")
                 .and_then(Value::as_str)
                 .map(|run_ref| format!(" [{run_ref}]"))
-                .unwrap_or_default()
+                .unwrap_or_default(),
+            governance_packet_provenance_suffix(payload)
         )),
         TraceEventType::GovernanceCompleted => Some(format!(
-            "governance_completed: {}{}",
+            "governance_completed: {}{}{}",
             payload.get("headline").and_then(Value::as_str).unwrap_or("governed packet ready"),
             payload
                 .get("packet_ref")
                 .and_then(Value::as_str)
                 .map(|packet_ref| format!(" [{packet_ref}]"))
-                .unwrap_or_default()
+                .unwrap_or_default(),
+            governance_packet_provenance_suffix(payload)
         )),
         TraceEventType::GovernanceBlocked => Some(format!(
-            "governance_blocked: {}",
-            payload.get("reason").and_then(Value::as_str).unwrap_or("blocked")
+            "governance_blocked: {}{}",
+            payload.get("reason").and_then(Value::as_str).unwrap_or("blocked"),
+            governance_packet_provenance_suffix(payload)
         )),
         TraceEventType::GovernancePacketRejected => Some(format!(
-            "governance_packet_rejected: {}",
-            payload.get("reason").and_then(Value::as_str).unwrap_or("packet rejected")
+            "governance_packet_rejected: {}{}",
+            payload.get("reason").and_then(Value::as_str).unwrap_or("packet rejected"),
+            governance_packet_provenance_suffix(payload)
         )),
         _ => None,
     }
+}
+
+pub(crate) fn governance_packet_provenance_suffix(payload: &Value) -> String {
+    governance_packet_provenance_text(
+        payload.get("packet_source_stage").and_then(Value::as_str),
+        payload.get("packet_binding_reason").and_then(Value::as_str),
+    )
+    .map(|provenance| format!(" from {provenance}"))
+    .unwrap_or_default()
 }
 
 fn reviewer_event_line(payload: &Value) -> Option<String> {
