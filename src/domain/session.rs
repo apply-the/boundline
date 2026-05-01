@@ -329,9 +329,17 @@ pub struct SessionStatusView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_selection_headline: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_candidate_family: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_selection_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_rejected_candidates: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_attempt_lineage: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_validation_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_exhaustion_reason: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_review_trigger: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1107,7 +1115,7 @@ fn trace_within_workspace(workspace_ref: &str, trace_ref: &str) -> bool {
     }
 }
 
-fn task_state_string(task: &Task, key: &str) -> Option<String> {
+pub(crate) fn task_state_string(task: &Task, key: &str) -> Option<String> {
     task.context.state.get(key).and_then(|value| value.as_str().map(str::to_string))
 }
 
@@ -1115,7 +1123,7 @@ fn task_state_json<T: DeserializeOwned>(task: &Task, key: &str) -> Option<T> {
     task.context.state.get(key).cloned().and_then(|value| serde_json::from_value(value).ok())
 }
 
-fn task_state_strings(task: &Task, key: &str) -> Option<Vec<String>> {
+pub(crate) fn task_state_strings(task: &Task, key: &str) -> Option<Vec<String>> {
     task.context.state.get(key).and_then(|value| {
         value.as_array().map(|items| {
             items.iter().filter_map(|item| item.as_str().map(str::to_string)).collect::<Vec<_>>()
@@ -1410,8 +1418,12 @@ mod tests {
             latest_changed_files: None,
             latest_workspace_slice: None,
             latest_selection_headline: None,
+            latest_candidate_family: None,
+            latest_selection_reason: None,
+            latest_rejected_candidates: None,
             latest_attempt_lineage: None,
             latest_validation_status: None,
+            latest_exhaustion_reason: None,
             latest_review_trigger: None,
             latest_review_vote: None,
             latest_review_outcome: None,
@@ -1535,8 +1547,12 @@ mod tests {
         view.clarification_missing_fields =
             record.authored_brief.as_ref().and_then(|bundle| bundle.clarification_missing_fields());
         view.latest_selection_headline = task_state_string(task, "latest_selection_headline");
+        view.latest_candidate_family = task_state_string(task, "latest_candidate_family");
+        view.latest_selection_reason = task_state_string(task, "latest_selection_reason");
+        view.latest_rejected_candidates = task_state_strings(task, "latest_rejected_candidates");
         view.latest_attempt_lineage = task_state_attempt_lineage_summary(task);
         view.latest_validation_status = task_state_string(task, "latest_validation_status");
+        view.latest_exhaustion_reason = task_state_string(task, "latest_exhaustion_reason");
         view.latest_review_trigger = task_state_string(task, "latest_review_trigger");
         view.latest_review_vote = task_state_string(task, "latest_review_vote");
         view.latest_review_outcome = task_state_string(task, "latest_review_outcome");

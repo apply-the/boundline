@@ -376,6 +376,28 @@ pub fn render_run_trace(
         lines.push(format!("attempt_lineage: {attempt_lineage}"));
     }
 
+    if let Some(candidate_family) = adaptive_candidate_family_summary(&response.final_context.state)
+    {
+        lines.push(format!("candidate_family: {candidate_family}"));
+    }
+
+    if let Some(selection_reason) = adaptive_selection_reason_summary(&response.final_context.state)
+    {
+        lines.push(format!("selection_reason: {selection_reason}"));
+    }
+
+    if let Some(rejected_candidates) =
+        adaptive_rejected_candidates_summary(&response.final_context.state)
+    {
+        lines.push(format!("rejected_candidates: {rejected_candidates}"));
+    }
+
+    if let Some(exhaustion_reason) =
+        adaptive_exhaustion_reason_summary(&response.final_context.state)
+    {
+        lines.push(format!("adaptive_exhaustion: {exhaustion_reason}"));
+    }
+
     lines.push(format!("terminal_status: {}", task_status_text(response.terminal_status)));
     lines.push(format!("terminal_reason: {}", response.terminal_reason.message));
     lines.push(format!("trace: {}", response.trace_location));
@@ -459,6 +481,11 @@ pub fn render_trace_summary(
     if !summary.failure_evidence.is_empty() {
         lines.push("failure_evidence:".to_string());
         lines.extend(summary.failure_evidence.iter().cloned());
+    }
+
+    if !summary.adaptive_evidence.is_empty() {
+        lines.push("adaptive_evidence:".to_string());
+        lines.extend(summary.adaptive_evidence.iter().cloned());
     }
 
     for step in &summary.executed_steps {
@@ -686,12 +713,33 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
         lines.push(format!("latest_selection_headline: {latest_selection_headline}"));
     }
 
+    if let Some(latest_candidate_family) = &view.latest_candidate_family {
+        lines.push(format!("latest_candidate_family: {latest_candidate_family}"));
+    }
+
+    if let Some(latest_selection_reason) = &view.latest_selection_reason {
+        lines.push(format!("latest_selection_reason: {latest_selection_reason}"));
+    }
+
+    if let Some(latest_rejected_candidates) = &view.latest_rejected_candidates
+        && !latest_rejected_candidates.is_empty()
+    {
+        lines.push(format!(
+            "latest_rejected_candidates: {}",
+            latest_rejected_candidates.join(" | ")
+        ));
+    }
+
     if let Some(latest_attempt_lineage) = &view.latest_attempt_lineage {
         lines.push(format!("latest_attempt_lineage: {latest_attempt_lineage}"));
     }
 
     if let Some(latest_validation_status) = &view.latest_validation_status {
         lines.push(format!("latest_validation_status: {latest_validation_status}"));
+    }
+
+    if let Some(latest_exhaustion_reason) = &view.latest_exhaustion_reason {
+        lines.push(format!("latest_exhaustion_reason: {latest_exhaustion_reason}"));
     }
 
     if let Some(latest_review_trigger) = &view.latest_review_trigger {
@@ -837,6 +885,24 @@ fn adaptive_attempt_lineage_summary(state: &serde_json::Map<String, Value>) -> O
         || Some(format!("{current} ({transition})")),
         |previous| Some(format!("{current} {transition} {previous}")),
     )
+}
+
+fn adaptive_candidate_family_summary(state: &serde_json::Map<String, Value>) -> Option<String> {
+    state.get("latest_candidate_family")?.as_str().map(str::to_string)
+}
+
+fn adaptive_selection_reason_summary(state: &serde_json::Map<String, Value>) -> Option<String> {
+    state.get("latest_selection_reason")?.as_str().map(str::to_string)
+}
+
+fn adaptive_rejected_candidates_summary(state: &serde_json::Map<String, Value>) -> Option<String> {
+    let rejected = state.get("latest_rejected_candidates")?.as_array()?;
+    let rejected = rejected.iter().filter_map(|item| item.as_str()).collect::<Vec<_>>();
+    if rejected.is_empty() { None } else { Some(rejected.join(" | ")) }
+}
+
+fn adaptive_exhaustion_reason_summary(state: &serde_json::Map<String, Value>) -> Option<String> {
+    state.get("latest_exhaustion_reason")?.as_str().map(str::to_string)
 }
 
 pub const fn next_command_after_inspect(_: TaskStatus) -> &'static str {
@@ -1241,9 +1307,15 @@ fn session_execution_condition_parts(view: &SessionStatusView) -> (&'static str,
         SessionStatus::Running => ("running", running_condition_reason(view).to_string()),
         SessionStatus::Succeeded => ("terminal", "work completed successfully".to_string()),
         SessionStatus::Failed => {
+            if let Some(reason) = view.latest_exhaustion_reason.clone() {
+                return ("terminal", reason);
+            }
             ("terminal", "work stopped after a non-success result".to_string())
         }
         SessionStatus::Exhausted => {
+            if let Some(reason) = view.latest_exhaustion_reason.clone() {
+                return ("terminal", reason);
+            }
             ("terminal", "retry or recovery limits were exhausted".to_string())
         }
         SessionStatus::Aborted => ("terminal", "work was aborted before completion".to_string()),
@@ -1296,6 +1368,11 @@ fn trace_execution_condition_parts(summary: &TraceSummaryView) -> (&'static str,
     }
 
     match summary.terminal_status {
+        TaskStatus::Failed | TaskStatus::Exhausted
+            if trace_adaptive_exhaustion_reason(summary).is_some() =>
+        {
+            ("terminal", trace_adaptive_exhaustion_reason(summary).unwrap())
+        }
         TaskStatus::Planned => ("waiting", summary.terminal_reason.message.clone()),
         TaskStatus::Running => ("running", summary.terminal_reason.message.clone()),
         TaskStatus::Succeeded
@@ -1303,6 +1380,13 @@ fn trace_execution_condition_parts(summary: &TraceSummaryView) -> (&'static str,
         | TaskStatus::Exhausted
         | TaskStatus::Aborted => ("terminal", summary.terminal_reason.message.clone()),
     }
+}
+
+fn trace_adaptive_exhaustion_reason(summary: &TraceSummaryView) -> Option<String> {
+    summary
+        .adaptive_evidence
+        .iter()
+        .find_map(|line| line.strip_prefix("adaptive_exhaustion: ").map(str::to_string))
 }
 
 fn render_run_execution_condition(response: &TaskRunResponse) -> String {
@@ -1454,6 +1538,7 @@ mod tests {
             requested_governance_owner: None,
             decision_timeline: Vec::new(),
             failure_evidence: Vec::new(),
+            adaptive_evidence: Vec::new(),
             executed_steps: vec![TraceStepSummary {
                 step_id: "verify".to_string(),
                 step_kind: StepKind::Tool,
@@ -1534,8 +1619,12 @@ mod tests {
             latest_changed_files: Some(Vec::new()),
             latest_workspace_slice: None,
             latest_selection_headline: None,
+            latest_candidate_family: None,
+            latest_selection_reason: None,
+            latest_rejected_candidates: None,
             latest_attempt_lineage: None,
             latest_validation_status: None,
+            latest_exhaustion_reason: None,
             latest_review_trigger: None,
             latest_review_vote: None,
             latest_review_outcome: None,
@@ -1663,8 +1752,12 @@ mod tests {
             latest_changed_files: None,
             latest_workspace_slice: None,
             latest_selection_headline: None,
+            latest_candidate_family: None,
+            latest_selection_reason: None,
+            latest_rejected_candidates: None,
             latest_attempt_lineage: None,
             latest_validation_status: Some("passed".to_string()),
+            latest_exhaustion_reason: None,
             latest_review_trigger: Some("pr_ready".to_string()),
             latest_review_vote: Some(
                 "strategy=majority approvals=2 concerns=0 blocks=0 decision=accepted".to_string(),
@@ -1744,6 +1837,7 @@ mod tests {
             requested_governance_owner: None,
             decision_timeline: Vec::new(),
             failure_evidence: Vec::new(),
+            adaptive_evidence: Vec::new(),
             executed_steps: vec![],
             recovery_events: vec![],
             governance_timeline: vec![

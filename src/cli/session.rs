@@ -23,8 +23,8 @@ use crate::domain::session::{
     task_state_governance_mode_text, task_state_governance_next_action,
     task_state_governance_packet_binding_reason, task_state_governance_packet_ref,
     task_state_governance_packet_source_stage, task_state_governance_runtime_text,
-    task_state_governance_stage_key, task_state_governance_state_text,
-    task_state_workspace_slice_summary,
+    task_state_governance_stage_key, task_state_governance_state_text, task_state_string,
+    task_state_strings, task_state_workspace_slice_summary,
 };
 use crate::domain::task::TaskStatus;
 use crate::domain::trace::current_timestamp_millis;
@@ -546,6 +546,18 @@ pub(crate) fn build_status_view_with_follow_up(
                 .get("latest_selection_headline")
                 .and_then(|value| value.as_str().map(str::to_string))
         }),
+        latest_candidate_family: record
+            .active_task
+            .as_ref()
+            .and_then(|task| task_state_string(task, "latest_candidate_family")),
+        latest_selection_reason: record
+            .active_task
+            .as_ref()
+            .and_then(|task| task_state_string(task, "latest_selection_reason")),
+        latest_rejected_candidates: record
+            .active_task
+            .as_ref()
+            .and_then(|task| task_state_strings(task, "latest_rejected_candidates")),
         latest_attempt_lineage: record
             .active_task
             .as_ref()
@@ -556,6 +568,10 @@ pub(crate) fn build_status_view_with_follow_up(
                 .get("latest_validation_status")
                 .and_then(|value| value.as_str().map(str::to_string))
         }),
+        latest_exhaustion_reason: record
+            .active_task
+            .as_ref()
+            .and_then(|task| task_state_string(task, "latest_exhaustion_reason")),
         latest_review_trigger: record.active_task.as_ref().and_then(|task| {
             task.context
                 .state

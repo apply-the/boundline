@@ -126,6 +126,7 @@ pub fn summarize_trace(
     let mut goal_plan_summary: Option<String> = None;
     let mut decision_timeline: Vec<String> = Vec::new();
     let mut failure_evidence: Vec<String> = Vec::new();
+    let mut adaptive_evidence: Vec<String> = Vec::new();
     let mut latest_governance_state: Option<String> = None;
     let mut saw_native_routing_signal = false;
     let mut step_indexes: HashMap<String, usize> = HashMap::new();
@@ -328,6 +329,11 @@ pub fn summarize_trace(
                 };
                 executed_steps[index].final_status = final_status;
                 executed_steps[index].headline = headline;
+                for line in adaptive_evidence_lines(&event.payload) {
+                    if !adaptive_evidence.contains(&line) {
+                        adaptive_evidence.push(line);
+                    }
+                }
             }
             TraceEventType::RetryScheduled
             | TraceEventType::StageRetryScheduled
@@ -483,6 +489,7 @@ pub fn summarize_trace(
         requested_governance_owner,
         decision_timeline,
         failure_evidence,
+        adaptive_evidence,
         executed_steps,
         recovery_events,
         governance_timeline,
@@ -813,13 +820,17 @@ fn synthesized_in_progress_reason(latest_governance_state: Option<&str>) -> Term
 }
 
 fn success_headline(payload: &serde_json::Value, attempts: usize) -> String {
+    let selection_reason = adaptive_selection_reason(payload);
     if let Some(headline) = payload
         .get("output")
         .and_then(|output| output.get("workspace_slice"))
         .and_then(|slice| slice.get("headline"))
         .and_then(|value| value.as_str())
     {
-        return format!("adaptive slice {headline}");
+        return selection_reason.map_or_else(
+            || format!("adaptive slice {headline}"),
+            |reason| format!("adaptive slice {headline}: {reason}"),
+        );
     }
 
     if let Some(change) = payload
@@ -862,18 +873,87 @@ fn success_headline(payload: &serde_json::Value, attempts: usize) -> String {
 }
 
 fn failure_headline(payload: &serde_json::Value, attempts: usize) -> String {
+    if let Some(exhaustion_reason) = payload
+        .get("evidence")
+        .and_then(|evidence| evidence.get("exhaustion_reason"))
+        .and_then(|value| value.as_str())
+    {
+        return format!(
+            "adaptive repair exhausted after {attempts} attempt(s): {exhaustion_reason}"
+        );
+    }
+
     if let Some(validation) =
         payload.get("evidence").and_then(|evidence| evidence.get("validation_record"))
     {
         let command =
             validation.get("command").and_then(|value| value.as_str()).unwrap_or("validation");
         let exit_code = validation.get("exit_code").and_then(|value| value.as_i64()).unwrap_or(-1);
-        return format!(
-            "validation failed after {attempts} attempt(s) via {command} (exit_code={exit_code})"
+        return adaptive_selection_reason(payload).map_or_else(
+            || {
+                format!(
+                    "validation failed after {attempts} attempt(s) via {command} (exit_code={exit_code})"
+                )
+            },
+            |reason| {
+                format!(
+                    "validation failed after {attempts} attempt(s) via {command} (exit_code={exit_code}) while {reason}"
+                )
+            },
         );
     }
 
     format!("failed after {attempts} attempt(s)")
+}
+
+fn adaptive_selection_reason(payload: &serde_json::Value) -> Option<String> {
+    payload
+        .get("output")
+        .and_then(|output| output.get("selection_evidence"))
+        .or_else(|| payload.get("evidence").and_then(|evidence| evidence.get("selection_evidence")))
+        .and_then(|selection| selection.get("reason"))
+        .and_then(|value| value.as_str().map(str::to_string))
+}
+
+fn adaptive_evidence_lines(payload: &serde_json::Value) -> Vec<String> {
+    let mut lines = Vec::new();
+    let selection =
+        payload.get("output").and_then(|output| output.get("selection_evidence")).or_else(|| {
+            payload.get("evidence").and_then(|evidence| evidence.get("selection_evidence"))
+        });
+
+    if let Some(selection) = selection {
+        if let Some(candidate_family) =
+            selection.get("candidate_family").and_then(|value| value.as_str())
+        {
+            lines.push(format!("candidate_family: {candidate_family}"));
+        }
+
+        if let Some(reason) = selection.get("reason").and_then(|value| value.as_str()) {
+            lines.push(format!("selection_reason: {reason}"));
+        }
+
+        if let Some(rejected_candidates) =
+            selection.get("rejected_candidates").and_then(|value| value.as_array())
+        {
+            lines.extend(
+                rejected_candidates
+                    .iter()
+                    .filter_map(|item| item.as_str())
+                    .map(|item| format!("rejected_candidate: {item}")),
+            );
+        }
+    }
+
+    if let Some(exhaustion_reason) = payload
+        .get("evidence")
+        .and_then(|evidence| evidence.get("exhaustion_reason"))
+        .and_then(|value| value.as_str())
+    {
+        lines.push(format!("adaptive_exhaustion: {exhaustion_reason}"));
+    }
+
+    lines
 }
 
 fn parse_step_kind(raw: &str) -> Result<StepKind, TraceSummaryError> {

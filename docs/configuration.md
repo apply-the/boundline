@@ -1,14 +1,16 @@
-# Configuration in Synod 0.22.0
+# Configuration in Synod 0.23.0
 
-Synod `0.22.0` keeps a user-friendly setup and routing configuration surface for the session-native runtime plus explicit compatibility/bootstrap workflows.
+Synod `0.23.0` keeps a user-friendly setup and routing configuration surface
+for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
-The `0.22.0` release keeps configuration behavior stable while preserving the
+The `0.23.0` release keeps configuration behavior stable while preserving the
 same governed routing defaults across earlier `bug-fix:investigate` work,
 later verify-stage `security-assessment`, workflow-aware projection of the
-same bounded governance state, and the new continuity-aware read-side follow-up
-story. Adaptive repair depth still lives in the explicit compatibility
-execution manifest; there is no separate routing knob for validation-guided
-slice reselection or compatibility continuity.
+same bounded governance state, continuity-aware read-side follow-up, and the
+broader bounded adaptive repair slice. Adaptive repair still lives in the
+explicit compatibility execution manifest; there is no separate routing knob
+for mutation-family selection, credibility ranking, or explicit adaptive
+exhaustion.
 
 ## What changed
 
@@ -17,6 +19,8 @@ slice reselection or compatibility continuity.
 - `synod cluster` registers bounded multi-workspace membership and aggregated inspection
 - continuity between explicit compatibility traces and read-side commands is projected by the CLI surfaces, not by a new config key
 - adaptive validation-guided repair remains configured in `.synod/execution.json`, not in `config.toml`
+- broader adaptive mutation families and explicit exhaustion behavior are still
+  configured by the execution manifest, not by new config keys
 - routing values can be global, cluster-scoped, workspace-local, or command-specific
 - review councils and adjudication can use distinct routing defaults
 
