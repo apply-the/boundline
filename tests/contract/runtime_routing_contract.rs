@@ -1,6 +1,8 @@
 use synod::adapters::session_store::{FileSessionStore, SessionStore};
 use synod::cli::run::execute_custom_run;
-use synod::cli::session::{execute_capture, execute_plan, execute_run, execute_start};
+use synod::cli::session::{
+    execute_capture, execute_next, execute_plan, execute_run, execute_start,
+};
 
 use crate::runtime_refoundation::{
     temp_runtime_refoundation_compat_workspace, temp_runtime_refoundation_governed_workspace,
@@ -72,6 +74,77 @@ fn explicit_compatibility_run_is_visible_and_preserves_native_session_state() {
     let after = FileSessionStore::for_workspace(&workspace).load().unwrap().unwrap();
     assert_eq!(after.goal_plan, before.goal_plan);
     assert_eq!(after.decisions, before.decisions);
+}
+
+#[test]
+fn native_and_compatibility_follow_up_keep_shared_routing_and_execution_condition_labels() {
+    let compatibility_workspace =
+        temp_runtime_refoundation_compat_workspace("runtime-routing-contract-shared-summary");
+
+    let compatibility_next = execute_next(Some(&compatibility_workspace)).unwrap_err();
+    assert!(compatibility_next.to_string().contains("no active session found"));
+
+    let compatibility_run = execute_custom_run(
+        &compatibility_workspace,
+        Some("Fix the failing add test"),
+        &[],
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    assert!(
+        compatibility_run.terminal_output.contains("routing: compatibility"),
+        "{}",
+        compatibility_run.terminal_output
+    );
+    assert!(
+        compatibility_run.terminal_output.contains("execution_condition: terminal -"),
+        "{}",
+        compatibility_run.terminal_output
+    );
+
+    let compatibility_follow_up = execute_next(Some(&compatibility_workspace)).unwrap();
+    assert!(
+        compatibility_follow_up
+            .terminal_output
+            .contains("routing: compatibility (execution_profile)"),
+        "{}",
+        compatibility_follow_up.terminal_output
+    );
+    assert!(
+        compatibility_follow_up.terminal_output.contains("execution_condition: terminal -"),
+        "{}",
+        compatibility_follow_up.terminal_output
+    );
+
+    let native_workspace =
+        temp_runtime_refoundation_compat_workspace("runtime-routing-contract-native-summary");
+    execute_start(Some(&native_workspace)).unwrap();
+    execute_capture(
+        Some(&native_workspace),
+        Some("fix the failing add test"),
+        &[],
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    execute_plan(Some(&native_workspace), Some("bug-fix"), false).unwrap();
+
+    let native_run = execute_run(Some(&native_workspace)).unwrap();
+    assert!(
+        native_run.terminal_output.contains("routing: native (goal_plan)"),
+        "{}",
+        native_run.terminal_output
+    );
+    assert!(
+        native_run.terminal_output.contains("execution_condition: terminal -"),
+        "{}",
+        native_run.terminal_output
+    );
 }
 
 #[test]

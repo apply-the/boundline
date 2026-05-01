@@ -50,6 +50,9 @@ fn test_shared_assistant_readme_covers_supported_surfaces_and_fallback_rules() {
     assert!(readme.contains("Continuing a Workflow (User Story 2)"), "{readme}");
     assert!(readme.contains("Inspecting Prior Runs (User Story 3)"), "{readme}");
     assert!(readme.contains("inspection_target"), "{readme}");
+    assert!(readme.contains("continuity_authority"), "{readme}");
+    assert!(readme.contains("compatibility_follow_up"), "{readme}");
+    assert!(readme.contains("compatibility_follow_up_command"), "{readme}");
     assert!(readme.contains("corrected_command"), "{readme}");
     assert!(readme.contains("next_command"), "{readme}");
 }

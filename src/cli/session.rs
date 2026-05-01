@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::adapters::trace_store::TraceStore;
+use crate::adapters::trace_store::{FileTraceStore, TraceStore};
 use crate::domain::brief::{
     AuthoredBriefBundle, BriefIngestionError, normalize_governance_intent,
     normalize_inputs_with_governance,
@@ -11,18 +11,20 @@ use uuid::Uuid;
 
 use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
 use crate::cli::CommandExitStatus;
+use crate::cli::inspect::summarize_trace;
 use crate::cli::output;
 use crate::domain::governance::GovernanceRuntimeKind;
 use crate::domain::session::{
-    ActiveSessionRecord, SessionStatus, SessionStatusView, decision_status_text,
-    execution_path_text, routing_outcome, task_state_attempt_lineage_summary,
-    task_state_governance_approval_text, task_state_governance_blocked_reason,
-    task_state_governance_candidate_actions, task_state_governance_canon_run_ref,
-    task_state_governance_decision_headline, task_state_governance_mode_text,
-    task_state_governance_next_action, task_state_governance_packet_binding_reason,
-    task_state_governance_packet_ref, task_state_governance_packet_source_stage,
-    task_state_governance_runtime_text, task_state_governance_stage_key,
-    task_state_governance_state_text, task_state_workspace_slice_summary,
+    ActiveSessionRecord, CompatibilityFollowUpMode, CompatibilityFollowUpView, ContinuityAuthority,
+    SessionStatus, SessionStatusView, decision_status_text, execution_path_text, routing_outcome,
+    task_state_attempt_lineage_summary, task_state_governance_approval_text,
+    task_state_governance_blocked_reason, task_state_governance_candidate_actions,
+    task_state_governance_canon_run_ref, task_state_governance_decision_headline,
+    task_state_governance_mode_text, task_state_governance_next_action,
+    task_state_governance_packet_binding_reason, task_state_governance_packet_ref,
+    task_state_governance_packet_source_stage, task_state_governance_runtime_text,
+    task_state_governance_stage_key, task_state_governance_state_text,
+    task_state_workspace_slice_summary,
 };
 use crate::domain::task::TaskStatus;
 use crate::domain::trace::current_timestamp_millis;
@@ -251,40 +253,111 @@ pub fn execute_status(
 ) -> Result<SessionCommandReport, SessionCommandError> {
     let workspace = resolve_workspace(workspace)?;
     let runtime = SessionRuntime::for_workspace(&workspace);
-    let mut record = load_active_session(&workspace)?;
-    let refreshed = runtime.refresh_governance_state(&mut record).map_err(map_runtime_error)?;
-    if refreshed {
-        runtime.persist_session(&record).map_err(map_runtime_error)?;
-    }
-
-    Ok(SessionCommandReport {
-        exit_status: CommandExitStatus::Succeeded,
-        terminal_output: output::render_session_status(&build_status_view(
-            &record,
-            suggested_next_command(&record),
+    match load_active_session(&workspace) {
+        Ok(mut record) => {
+            let refreshed =
+                runtime.refresh_governance_state(&mut record).map_err(map_runtime_error)?;
             if refreshed {
-                "refreshed governance approval state for the active workspace session"
-            } else {
-                "current active session state for the workspace"
-            },
-        )),
-    })
+                runtime.persist_session(&record).map_err(map_runtime_error)?;
+            }
+            let compatibility_follow_up = latest_workspace_compatibility_follow_up(
+                &workspace,
+                record.latest_trace_ref.as_deref(),
+            )?;
+
+            Ok(SessionCommandReport {
+                exit_status: CommandExitStatus::Succeeded,
+                terminal_output: output::render_session_status(&build_status_view_with_follow_up(
+                    &record,
+                    suggested_next_command(&record),
+                    if compatibility_follow_up.is_some() {
+                        "current active session state for the workspace; latest compatibility follow-up remains inspect-only"
+                    } else if refreshed {
+                        "refreshed governance approval state for the active workspace session"
+                    } else {
+                        "current active session state for the workspace"
+                    },
+                    compatibility_follow_up,
+                )),
+            })
+        }
+        Err(SessionCommandError::MissingActiveSession) => {
+            let Some(compatibility_follow_up) =
+                latest_workspace_compatibility_follow_up(&workspace, None)?
+            else {
+                return Err(SessionCommandError::MissingActiveSession);
+            };
+
+            Ok(SessionCommandReport {
+                exit_status: CommandExitStatus::Succeeded,
+                terminal_output: output::render_compatibility_follow_up_status(
+                    &workspace.to_string_lossy(),
+                    ContinuityAuthority::CompatibilityTrace,
+                    &compatibility_follow_up,
+                    "no active session exists; latest compatibility trace is the authoritative follow-up state for the workspace",
+                ),
+            })
+        }
+        Err(error) => Err(error),
+    }
 }
 
 pub fn execute_next(workspace: Option<&Path>) -> Result<SessionCommandReport, SessionCommandError> {
     let workspace = resolve_workspace(workspace)?;
-    let record = load_active_session(&workspace)?;
-    let next_command = suggested_next_command(&record)
-        .ok_or(SessionCommandError::NotImplemented { command_name: "next", next_command: None })?;
+    match load_active_session(&workspace) {
+        Ok(record) => {
+            let next_command =
+                suggested_next_command(&record).ok_or(SessionCommandError::NotImplemented {
+                    command_name: "next",
+                    next_command: None,
+                })?;
+            let compatibility_follow_up = latest_workspace_compatibility_follow_up(
+                &workspace,
+                record.latest_trace_ref.as_deref(),
+            )?;
 
-    Ok(SessionCommandReport {
-        exit_status: CommandExitStatus::Succeeded,
-        terminal_output: output::render_session_status(&build_status_view(
-            &record,
-            Some(next_command.clone()),
-            format!("next recommended command for the active session is `{next_command}`"),
-        )),
-    })
+            Ok(SessionCommandReport {
+                exit_status: CommandExitStatus::Succeeded,
+                terminal_output: output::render_session_status(&build_status_view_with_follow_up(
+                    &record,
+                    Some(next_command.clone()),
+                    if let Some(follow_up) = &compatibility_follow_up {
+                        format!(
+                            "next recommended command for the active session is `{next_command}`; latest compatibility follow-up remains {} via `{}`",
+                            follow_up.follow_up_mode.as_str(),
+                            follow_up.next_command
+                        )
+                    } else {
+                        format!(
+                            "next recommended command for the active session is `{next_command}`"
+                        )
+                    },
+                    compatibility_follow_up,
+                )),
+            })
+        }
+        Err(SessionCommandError::MissingActiveSession) => {
+            let Some(compatibility_follow_up) =
+                latest_workspace_compatibility_follow_up(&workspace, None)?
+            else {
+                return Err(SessionCommandError::MissingActiveSession);
+            };
+
+            Ok(SessionCommandReport {
+                exit_status: CommandExitStatus::Succeeded,
+                terminal_output: output::render_compatibility_follow_up_status(
+                    &workspace.to_string_lossy(),
+                    ContinuityAuthority::CompatibilityTrace,
+                    &compatibility_follow_up,
+                    format!(
+                        "next recommended command for the latest compatibility follow-up is `{}`",
+                        compatibility_follow_up.next_command
+                    ),
+                ),
+            })
+        }
+        Err(error) => Err(error),
+    }
 }
 
 pub fn render_error(command_name: &str, error: &SessionCommandError) -> String {
@@ -381,6 +454,15 @@ pub(crate) fn build_status_view(
     next_command: Option<String>,
     explanation: impl Into<String>,
 ) -> SessionStatusView {
+    build_status_view_with_follow_up(record, next_command, explanation, None)
+}
+
+pub(crate) fn build_status_view_with_follow_up(
+    record: &ActiveSessionRecord,
+    next_command: Option<String>,
+    explanation: impl Into<String>,
+    compatibility_follow_up: Option<CompatibilityFollowUpView>,
+) -> SessionStatusView {
     let governance_intent =
         record.authored_brief.as_ref().and_then(|bundle| bundle.governance_intent.as_ref());
 
@@ -423,6 +505,10 @@ pub(crate) fn build_status_view(
         active_workflow: record.active_workflow_name(),
         workflow_phase: record.active_workflow_phase_text(),
         workflow_next_action: record.active_workflow_next_action(),
+        continuity_authority: compatibility_follow_up
+            .as_ref()
+            .map(|_| ContinuityAuthority::NativeSession),
+        compatibility_follow_up,
         current_stage_id: record.active_flow.as_ref().map(|flow| flow.current_stage_id.clone()),
         current_stage_index: record.active_flow.as_ref().map(|flow| flow.current_stage_index),
         total_stages: record.active_flow.as_ref().map(|flow| flow.total_stages),
@@ -544,6 +630,46 @@ pub(crate) fn build_status_view(
         next_command,
         explanation: explanation.into(),
     }
+}
+
+fn latest_workspace_compatibility_follow_up(
+    workspace: &Path,
+    session_trace_ref: Option<&str>,
+) -> Result<Option<CompatibilityFollowUpView>, SessionCommandError> {
+    let store = FileTraceStore::for_workspace(workspace);
+    let Some(trace_path) = store.latest().map_err(|error| {
+        SessionCommandError::SessionRuntime(SessionRuntimeError::TraceStore(error))
+    })?
+    else {
+        return Ok(None);
+    };
+
+    if session_trace_ref.is_some_and(|trace_ref| Path::new(trace_ref) == trace_path.as_path()) {
+        return Ok(None);
+    }
+
+    let trace = store.load(&trace_path).map_err(|error| {
+        SessionCommandError::SessionRuntime(SessionRuntimeError::TraceStore(error))
+    })?;
+    let summary = summarize_trace(&trace_path, &trace)
+        .map_err(|error| SessionCommandError::TraceSummary(error.to_string()))?;
+    let Some(routing_summary) = summary.routing_summary.clone() else {
+        return Ok(None);
+    };
+
+    if !routing_summary.starts_with("routing: compatibility") {
+        return Ok(None);
+    }
+
+    Ok(Some(CompatibilityFollowUpView {
+        follow_up_mode: CompatibilityFollowUpMode::InspectOnly,
+        trace_ref: trace_path.to_string_lossy().into_owned(),
+        routing_summary,
+        execution_condition: output::trace_execution_condition_text(&summary),
+        terminal_status: summary.terminal_status,
+        terminal_reason: summary.terminal_reason.message.clone(),
+        next_command: format!("synod inspect --workspace {}", workspace.display()),
+    }))
 }
 
 fn requested_governance_runtime_text(runtime: GovernanceRuntimeKind) -> &'static str {
@@ -696,6 +822,8 @@ pub enum SessionCommandError {
     SessionRuntime(#[from] SessionRuntimeError),
     #[error("failed to ingest authored brief: {0}")]
     BriefIngestion(#[from] BriefIngestionError),
+    #[error("failed to summarize the latest compatibility trace: {0}")]
+    TraceSummary(String),
     #[error("{headline}: {prompt}")]
     ClarificationRequired { headline: String, prompt: String },
     #[error("`{command_name}` session workflow is not implemented yet")]
@@ -739,6 +867,9 @@ impl SessionCommandError {
             Self::SessionStore(error) => error.to_string(),
             Self::SessionRuntime(error) => error.to_string(),
             Self::BriefIngestion(error) => format!("failed to ingest authored brief: {error}"),
+            Self::TraceSummary(message) => {
+                format!("failed to summarize the latest compatibility trace: {message}")
+            }
             Self::ClarificationRequired { headline, prompt } => format!("{headline}: {prompt}"),
         }
     }
@@ -761,6 +892,7 @@ impl SessionCommandError {
                 Some("synod capture --goal <narrower goal>".to_string())
             }
             Self::WorkspaceResolution(_) | Self::SessionStore(_) | Self::SessionRuntime(_) => None,
+            Self::TraceSummary(_) => None,
             Self::BriefIngestion(_) => Some("synod capture --goal <goal>".to_string()),
         }
     }

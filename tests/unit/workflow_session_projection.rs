@@ -74,6 +74,8 @@ fn build_view(record: &ActiveSessionRecord) -> SessionStatusView {
         active_workflow: record.active_workflow_name(),
         workflow_phase: record.active_workflow_phase_text(),
         workflow_next_action: record.active_workflow_next_action(),
+        continuity_authority: None,
+        compatibility_follow_up: None,
         current_stage_id: None,
         current_stage_index: None,
         total_stages: None,

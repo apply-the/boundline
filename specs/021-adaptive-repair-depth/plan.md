@@ -1,13 +1,13 @@
-# Implementation Plan: Adaptive Repair Depth
+# Implementation Plan: [FEATURE]
 
-**Branch**: `021-adaptive-repair-depth` | **Date**: 2026-05-01 | **Spec**: [/Users/rt/workspace/synod/specs/021-adaptive-repair-depth/spec.md](/Users/rt/workspace/synod/specs/021-adaptive-repair-depth/spec.md)
-**Input**: Feature specification from `/specs/021-adaptive-repair-depth/spec.md`
+**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
+**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
 
 ## Summary
 
-Deepen Synod's bounded adaptive delivery story by letting adaptive replans use validation failure evidence to choose a more credible next repair candidate while preserving explicit workspace-slice, selection-headline, and attempt-lineage evidence across `run`, `status`, `next`, and `inspect`. The slice stays intentionally narrow: adaptive execution remains an explicit compatibility path backed by `.synod/execution.json`, the heuristics stay local and bounded, and the release closes as `0.21.0` with updated docs, changelog, coverage refresh for modified Rust files, clippy cleanup, and formatting.
+[Extract from feature spec: primary requirement + technical approach from research]
 
 ## Technical Context
 
@@ -17,17 +17,17 @@ Deepen Synod's bounded adaptive delivery story by letting adaptive replans use v
   the iteration process.
 -->
 
-**Language/Version**: Rust 1.95.0, edition 2024  
-**Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for this slice  
-**Storage**: Workspace-local `.synod/execution.json`, `.synod/session.json`, `.synod/traces/`, and release-aligned repository docs plus assistant assets  
-**Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --no-run --all-targets`, targeted `cargo test` suites for adaptive unit, integration, and contract coverage, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, plus repository-standard `cargo nextest run --workspace --all-features` and `cargo deny check licenses advisories bans sources` during release closeout  
-**Target Platform**: macOS/Linux developer workstations and Linux CI
-**Project Type**: Single Rust CLI/library crate with workspace-local persisted execution state  
-**Execution Model**: Sequential explicit compatibility execution inside the broader session runtime, with one adaptive attempt active at a time, bounded replanning after validation failure, and explicit route reporting when workflows, review, or governance also exist in the workspace  
-**Observability Surface**: Persisted task context state, execution traces, `run`, `status`, `next`, and `inspect`, adaptive workspace-slice summaries, selection headlines, attempt lineage, validation records, and explicit routing plus execution-condition output  
-**Performance Goals**: Representative adaptive replans should choose a materially different bounded candidate within one normal CLI round-trip after validation failure; developers should identify the latest adaptive selection reason and route state from CLI output in under 2 minutes  
-**Constraints**: Adaptive execution remains an explicit compatibility path for this slice; no hidden background exploration, no unbounded candidate search, no workflow-owned or Canon-owned adaptive control flow, no new top-level runtime surface, and crate version must bump to `0.21.0` with docs and changelog updates  
-**Scale/Scope**: One active adaptive run, one selected workspace slice at a time, bounded `read_targets`, validation-guided candidate ranking within local repository context, and release updates limited to touched runtime, docs, and test surfaces
+**Language/Version**: [e.g., Rust 1.95.0, Python 3.11 or NEEDS CLARIFICATION]  
+**Primary Dependencies**: [core libraries and runtime dependencies or NEEDS CLARIFICATION]  
+**Storage**: [e.g., in-memory state, files, database, or N/A]  
+**Testing**: [e.g., cargo test, pytest, contract tests or NEEDS CLARIFICATION]  
+**Target Platform**: [e.g., macOS/Linux developer workstations, Linux CI or NEEDS CLARIFICATION]
+**Project Type**: [e.g., single library crate, CLI, service, or NEEDS CLARIFICATION]  
+**Execution Model**: [e.g., sequential task loop with bounded retries or NEEDS CLARIFICATION]  
+**Observability Surface**: [e.g., persisted execution trace, structured logs, CLI summary, and when governance changes, visible mode/approval/packet-provenance output or NEEDS CLARIFICATION]  
+**Performance Goals**: [delivery-facing targets or NEEDS CLARIFICATION]  
+**Constraints**: [explicit limits, non-goals, and external boundaries or NEEDS CLARIFICATION]  
+**Scale/Scope**: [expected task volume, step count, or user reach or NEEDS CLARIFICATION]
 
 ## Constitution Check
 
@@ -45,32 +45,19 @@ Deepen Synod's bounded adaptive delivery story by letting adaptive replans use v
 - Non-goals and external separation: Confirm the plan does not depend on Canon behavior beyond bounded governance/evidence boundaries or reintroduce deferred scope such as councils or voting outside an explicitly reprioritized, bounded review slice, provider abstraction complexity beyond the approved slice, long-term memory, UI/UX, or deployment pipelines.
 - Minimal slice: Explain the smallest independently valuable capability delivered by this plan.
 
-- **PASS** Delivery identity: The slice directly improves bounded delivery execution by choosing better adaptive repair candidates after validation failure instead of widening Synod into a generic agent system. See Summary, Technical Context, and [spec.md](/Users/rt/workspace/synod/specs/021-adaptive-repair-depth/spec.md).
-- **PASS** Delivery-first scope: The work prioritizes adaptive execution quality, explicit replanning, and inspectability before polish. See Summary, Technical Context, and research decisions.
-- **PASS** Primary workflow: The main operator path remains session-native; adaptive repair stays an explicit compatibility path and the plan keeps that relationship visible when workflows, review, or governance also exist. See Summary, Technical Context, quickstart, and contracts.
-- **PASS** Bounded execution: Adaptive replans still respect configured selected-target, generated-attempt, retry, and replan limits, and terminate explicitly when no credible candidate remains. See Technical Context, data model, and quickstart.
-- **PASS** Stateful execution: Validation guidance, selected workspace slice, selection headline, attempt lineage, and validation record remain persisted in task context, session summaries, and traces. See Summary, data model, and contracts.
-- **PASS** Mutable planning: The slice deepens existing replan behavior by making candidate ranking responsive to validation evidence while keeping plan mutation explicit and traceable. See Summary, research, and data model.
-- **PASS** Sequential-first design: One adaptive attempt remains active at a time with explicit validation, replanning, and terminal stop conditions. See Technical Context, research, and [spec.md](/Users/rt/workspace/synod/specs/021-adaptive-repair-depth/spec.md).
-- **PASS** Tool-agent symmetry: Adaptive analysis, code mutation, validation, and replanning remain visible as explicit steps rather than hidden heuristics. See Summary, research, quickstart, and contracts.
-- **PASS** Observability and explicit intelligence: Validation-guided selection reasons, workspace slices, attempt lineage, routing, and terminal outcomes remain visible in CLI and trace surfaces. See Technical Context, quickstart, and contracts.
-- **PASS** Non-goals and external separation: The plan does not move adaptive control to workflows or Canon, does not add provider abstraction or long-term memory, and keeps UI and deployment work out of scope. See Constraints, research, and [spec.md](/Users/rt/workspace/synod/specs/021-adaptive-repair-depth/spec.md).
-- **PASS** Minimal slice: The smallest independently valuable capability is validation-guided adaptive candidate selection on the existing compatibility path with explicit route and inspection guidance. See Summary and research.
+Mark each line as PASS or FAIL in the completed plan and reference the section that satisfies it.
 
 ## Project Structure
 
 ### Documentation (this feature)
 
 ```text
-specs/021-adaptive-repair-depth/
+specs/[###-feature]/
 ├── plan.md
 ├── research.md
 ├── data-model.md
 ├── quickstart.md
 ├── contracts/
-│   ├── adaptive-command-surface-contract.md
-│   ├── adaptive-selection-evidence-contract.md
-│   └── adaptive-route-guidance-contract.md
 └── tasks.md
 ```
 
@@ -84,35 +71,27 @@ specs/021-adaptive-repair-depth/
 
 ```text
 src/
-├── cli/
-│   ├── inspect.rs
-│   ├── output.rs
-│   └── session.rs
 ├── domain/
-│   ├── execution.rs
-│   └── session.rs
-├── fixture.rs
-└── lib.rs
+├── orchestrator/
+├── agents/
+├── tools/
+└── tracing/
 
 tests/
-├── contract/
-├── integration/
-├── support/
 └── unit/
-
-assistant/
-└── README.md
-
-docs/
-├── adaptive-execution.md
-├── configuration.md
-└── getting-started.md
+├── integration/
+└── contract/
 ```
 
-**Structure Decision**: Keep the slice inside the existing adaptive execution domain, fixture planner, CLI projection, docs, and test-fixture surfaces. No new top-level runtime or workflow surface is justified because the feature deepens candidate ranking and observability on the existing compatibility path rather than introducing a new execution mode.
+**Structure Decision**: [Document the selected structure and reference the real
+directories captured above. If new top-level directories are introduced, explain why
+the constitution allows that additional complexity.]
 
 ## Complexity Tracking
 
 > **Fill ONLY if Constitution Check has violations that must be justified**
 
-No constitution violations are expected for this slice.
+| Violation | Why Needed | Simpler Alternative Rejected Because |
+|-----------|------------|-------------------------------------|
+| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
+| [e.g., background worker] | [specific delivery need] | [why sequential execution is insufficient] |

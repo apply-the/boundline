@@ -97,6 +97,9 @@ mod flow_policy_contract;
 #[path = "contract/runtime_routing_contract.rs"]
 mod runtime_routing_contract;
 
+#[path = "contract/compatibility_continuity_contract.rs"]
+mod compatibility_continuity_contract;
+
 #[path = "contract/workflow_command_surface_contract.rs"]
 mod workflow_command_surface_contract;
 

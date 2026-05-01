@@ -23,8 +23,12 @@ fn assistant_readme_documents_session_native_continuity_rules() {
         "cargo run --bin synod -- status --workspace <workspace>",
         "cargo run --bin synod -- next --workspace <workspace>",
         "Preserve confirmed `workspace_ref`, captured goal, confirmed brief paths, authored input summary, and latest trace reference across assistant turns.",
+        "continuity_authority",
+        "compatibility_follow_up",
+        "compatibility_follow_up_command",
         "Workspace-based inspect may reuse the active session's `latest_trace_ref` before falling back to the latest workspace trace.",
         "When CLI output includes `next_command`, prefer that route instead of inventing a follow-up.",
+        "When `status` or `next` reports `continuity_authority: compatibility_trace` or `compatibility_follow_up: inspect_only`, route to `/synod-inspect` instead of `/synod-start`.",
         "governance_next_action",
     ] {
         assert!(content.contains(snippet), "assistant/README.md missing {snippet}");
@@ -123,6 +127,8 @@ fn assistant_command_packs_expose_session_native_backend_mappings() {
             &[
                 "cargo run --bin synod -- status --workspace <workspace>",
                 "authored_input_summary",
+                "continuity_authority",
+                "compatibility_follow_up",
                 "governance_next_action",
             ][..],
         ),
@@ -131,6 +137,8 @@ fn assistant_command_packs_expose_session_native_backend_mappings() {
             &[
                 "cargo run --bin synod -- status --workspace <workspace>",
                 "authored_input_summary",
+                "continuity_authority",
+                "compatibility_follow_up",
                 "governance_next_action",
             ][..],
         ),
@@ -139,20 +147,34 @@ fn assistant_command_packs_expose_session_native_backend_mappings() {
             &[
                 "cargo run --bin synod -- status --workspace <workspace>",
                 "authored_input_summary",
+                "continuity_authority",
+                "compatibility_follow_up",
                 "governance_next_action",
             ][..],
         ),
         (
             "assistant/claude/commands/synod-next.md",
-            &["cargo run --bin synod -- next --workspace <workspace>"][..],
+            &[
+                "cargo run --bin synod -- next --workspace <workspace>",
+                "continuity_authority",
+                "compatibility_follow_up",
+            ][..],
         ),
         (
             "assistant/codex/commands/synod-next.md",
-            &["cargo run --bin synod -- next --workspace <workspace>"][..],
+            &[
+                "cargo run --bin synod -- next --workspace <workspace>",
+                "continuity_authority",
+                "compatibility_follow_up",
+            ][..],
         ),
         (
             "assistant/copilot/prompts/synod-next.prompt.md",
-            &["cargo run --bin synod -- next --workspace <workspace>"][..],
+            &[
+                "cargo run --bin synod -- next --workspace <workspace>",
+                "continuity_authority",
+                "compatibility_follow_up",
+            ][..],
         ),
     ];
 

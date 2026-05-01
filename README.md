@@ -21,7 +21,7 @@ The main surface is the `synod` CLI:
 - `config` shows, sets, and unsets global or workspace routing defaults.
 - `start`, `capture`, `flow`, `plan`, and `step` drive the session workflow.
 - `run` executes a bounded delivery task end to end, preferring native session planning when a `GoalPlan` exists.
-- `status`, `next`, and `inspect` explain the current session and latest trace.
+- `status`, `next`, and `inspect` explain the current session, latest compatibility trace, and authoritative follow-up state.
 - `workflow list|run|status|resume|inspect` lets a named workflow reuse the same route, session, and trace surfaces without introducing a second runtime.
 
 Use it when you want delivery work to stay bounded and inspectable:
@@ -54,13 +54,14 @@ When Synod governance is configured to use Canon, the current adapter is
 validated against Canon `0.25.0`.
 
 That is the Canon CLI version explicitly documented as supported for Synod
-`0.21.0`. Earlier or later Canon versions may work, but they are not part of the
+`0.22.0`. Earlier or later Canon versions may work, but they are not part of the
 documented compatibility surface yet.
 
-The `0.21.0` release keeps Canon bounded to stage-level governance and evidence,
-extends the primary route to governed `bug-fix:investigate`, preserves later
-verify-stage `security-assessment` reuse, and deepens explicit compatibility
-adaptive repair with validation-guided bounded slice reselection.
+The `0.22.0` release keeps Canon bounded to stage-level governance and evidence,
+preserves governed `bug-fix:investigate` plus later verify-stage
+`security-assessment` reuse, and makes explicit compatibility follow-up visible
+through `status`, `next`, and `inspect` via `continuity_authority`,
+inspect-only compatibility guidance, and the correct workspace inspect command.
 
 For contributor setup and validation expectations, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -223,6 +224,13 @@ If the execution profile includes an `adaptive` block, failed validation can
 re-rank the next bounded candidate from the latest validation evidence without
 leaving the manifest-declared `read_targets` set.
 
+After an explicit compatibility run, `synod status --workspace <workspace>` and
+`synod next --workspace <workspace>` remain usable even when no active session
+exists. In that case Synod now reports `continuity_authority:
+compatibility_trace`, an inspect-only compatibility follow-up, and
+`next_command: synod inspect --workspace <workspace>` so the operator can keep
+working from the latest workspace trace without guessing.
+
 ### 4. Inspect what happened
 
 Synod writes:
@@ -234,6 +242,7 @@ Synod writes:
 Depending on the manifest, that output can also include:
 
 - route explanation, `execution_condition`, and CLI-reported next-command guidance
+- `continuity_authority`, compatibility follow-up mode, and inspect-only workspace guidance after explicit compatibility runs that do not leave a resumable session
 - changed files and validation status
 - adaptive workspace-slice selection and attempt lineage
 - review triggers, findings, votes, and outcomes
@@ -374,17 +383,19 @@ and
 [`specs/007-multi-agent-review/quickstart.md`](specs/007-multi-agent-review/quickstart.md).
 
 For the adaptive execution manifest shape and bounded compatibility behavior in
-`0.21.0`, see [`docs/adaptive-execution.md`](docs/adaptive-execution.md).
+`0.22.0`, see [`docs/adaptive-execution.md`](docs/adaptive-execution.md).
 
 For the concrete review configuration and voting rules still available in
 `0.17.0`, see [`docs/review-voting.md`](docs/review-voting.md).
 
-In `0.21.0`, governed stages can also project `latest_governance_runtime`,
+In `0.22.0`, governed stages can also project `latest_governance_runtime`,
 `latest_governance_mode`, `latest_governance_run_ref`, packet provenance,
 autopilot candidates, approval waits, packet rejection outcomes, and bounded
 `bug-fix:investigate` to `verify` lineage through `run`, `status`, `next`,
-`inspect`, and the workflow-aware surfaces without breaking the shared
-`routing` plus `execution_condition` summary model.
+`inspect`, and the workflow-aware surfaces. Explicit compatibility follow-up
+can now also surface `continuity_authority`, `compatibility_follow_up`, and
+inspect-only guidance through those same read-side commands without implying
+that the route silently became session-native.
 
 ## Assistant Command Packs
 

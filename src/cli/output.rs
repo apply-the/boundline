@@ -6,7 +6,8 @@ use crate::domain::cluster::{ClusterInspectReport, ClusterMemberState};
 use crate::domain::goal_plan::GoalPlanFlowState;
 use crate::domain::session::RoutingOutcome;
 use crate::domain::session::{
-    RoutingMode, RoutingSource, SessionStatus, SessionStatusView, governance_packet_provenance_text,
+    CompatibilityFollowUpView, ContinuityAuthority, RoutingMode, RoutingSource, SessionStatus,
+    SessionStatusView, governance_packet_provenance_text,
 };
 use crate::domain::step::{StepKind, StepStatus};
 use crate::domain::task::{TaskRunResponse, TaskStatus};
@@ -550,6 +551,19 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
 
     lines.extend(render_session_projection_prefix(view).lines().map(str::to_string));
 
+    if let Some(continuity_authority) = view.continuity_authority {
+        lines.push(format!("continuity_authority: {}", continuity_authority.as_str()));
+    }
+
+    if let Some(compatibility_follow_up) = &view.compatibility_follow_up {
+        lines.extend(render_compatibility_follow_up_lines(
+            compatibility_follow_up,
+            "compatibility_routing",
+            "compatibility_execution_condition",
+            "compatibility_follow_up_command",
+        ));
+    }
+
     if let Some(authored_input_summary) = &view.authored_input_summary {
         lines.push(format!("authored_input_summary: {authored_input_summary}"));
     }
@@ -768,6 +782,24 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
     lines.join("\n")
 }
 
+pub fn render_compatibility_follow_up_status(
+    workspace_ref: &str,
+    continuity_authority: ContinuityAuthority,
+    follow_up: &CompatibilityFollowUpView,
+    explanation: impl Into<String>,
+) -> String {
+    let mut lines = vec![format!("workspace_ref: {workspace_ref}")];
+    lines.push(format!("continuity_authority: {}", continuity_authority.as_str()));
+    lines.extend(render_compatibility_follow_up_lines(
+        follow_up,
+        "routing",
+        "execution_condition",
+        "next_command",
+    ));
+    lines.push(format!("explanation: {}", explanation.into()));
+    lines.join("\n")
+}
+
 pub fn render_session_error(action: &str, message: &str, next_command: Option<&str>) -> String {
     let mut lines = vec![format!("{action}: session error"), format!("reason: {message}")];
 
@@ -809,6 +841,11 @@ fn adaptive_attempt_lineage_summary(state: &serde_json::Map<String, Value>) -> O
 
 pub const fn next_command_after_inspect(_: TaskStatus) -> &'static str {
     "/synod-next"
+}
+
+pub fn trace_execution_condition_text(summary: &TraceSummaryView) -> String {
+    let (kind, reason) = trace_execution_condition_parts(summary);
+    format!("{kind} - {reason}")
 }
 
 fn value_as_string_list(value: &Value) -> Option<Vec<String>> {
@@ -975,6 +1012,26 @@ fn task_status_text(status: TaskStatus) -> &'static str {
         TaskStatus::Exhausted => "exhausted",
         TaskStatus::Aborted => "aborted",
     }
+}
+
+fn render_compatibility_follow_up_lines(
+    follow_up: &CompatibilityFollowUpView,
+    routing_label: &str,
+    execution_condition_label: &str,
+    next_command_label: &str,
+) -> Vec<String> {
+    let routing_summary =
+        follow_up.routing_summary.strip_prefix("routing: ").unwrap_or(&follow_up.routing_summary);
+
+    vec![
+        format!("compatibility_follow_up: {}", follow_up.follow_up_mode.as_str()),
+        format!("compatibility_trace_ref: {}", follow_up.trace_ref),
+        format!("{routing_label}: {routing_summary}"),
+        format!("{execution_condition_label}: {}", follow_up.execution_condition),
+        format!("compatibility_terminal_status: {}", task_status_text(follow_up.terminal_status)),
+        format!("compatibility_terminal_reason: {}", follow_up.terminal_reason),
+        format!("{next_command_label}: {}", follow_up.next_command),
+    ]
 }
 
 fn step_kind_text(kind: StepKind) -> &'static str {
@@ -1461,6 +1518,8 @@ mod tests {
             active_workflow: None,
             workflow_phase: None,
             workflow_next_action: None,
+            continuity_authority: None,
+            compatibility_follow_up: None,
             current_stage_id: None,
             current_stage_index: None,
             total_stages: None,
@@ -1588,6 +1647,8 @@ mod tests {
             active_workflow: None,
             workflow_phase: None,
             workflow_next_action: None,
+            continuity_authority: None,
+            compatibility_follow_up: None,
             current_stage_id: None,
             current_stage_index: None,
             total_stages: None,
