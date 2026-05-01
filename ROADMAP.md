@@ -6,35 +6,41 @@ Canon is downstream from Synod in this roadmap: Synod thinks, decides, orchestra
 
 Evolve Synod into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.19.0
+## Current Status: v0.20.0
 
-Synod now has its core session-native orchestration baseline plus the first
-bounded workflow follow-through slice in place:
+Synod now has its core session-native orchestration baseline, bounded workflow
+follow-through, and a deeper governed-stage slice in place:
 
 - session-native orchestration remains the primary operator path
 - `workflow list`, `workflow run`, `workflow status`, `workflow resume`, and `workflow inspect` now project named workflow state onto the same session, route, trace, and `execution_condition` surfaces
 - bounded `review` and `govern` phases are now executable from the workflow surface, stopping in explicit paused, blocked, failed, or completed states instead of remaining declaration-only blockers
 - workflow definitions live in workspace-local `.synod/workflows.toml`, can ship optional discovery metadata, and remain bounded to existing Synod phases instead of becoming a generic workflow DSL
 - direct session-native commands and explicit compatibility routing remain available when no named workflow is invoked
-- Canon is still integrated as a bounded stage-boundary governance runtime, including verify-stage `security-assessment`
+- Canon is still integrated as a bounded stage-boundary governance runtime, now including governed `bug-fix:investigate` on the primary route plus later verify-stage `security-assessment` reuse
 
-## Next Priority: Broaden Governed Stage Depth
+## Next Priority: Broaden Adaptive Repair Depth
 
-The next slice should build on `0.19.0` by deepening bounded governed-stage
-coverage without widening Synod into a general-purpose workflow engine or
-letting Canon take orchestration ownership.
+The next slice should build on `0.20.0` by broadening adaptive repair depth
+without widening Synod into a general-purpose workflow engine or letting Canon
+take orchestration ownership.
 
 The next spec direction should explicitly deliver three things:
 
-- broader governed-stage coverage beyond the current verify-stage `security-assessment` slice
-- richer packet reuse, approval refresh, and blocked-state guidance across more bounded stage transitions
-- the same session-native and workflow-aware route story without introducing Canon-owned orchestration or hidden background progression
+- stronger adaptive heuristics beyond deterministic local repair patterns
+- the same session-native and workflow-aware route story when adaptive retries, reviews, and governance all coexist
+- continued bounded orchestration ownership inside Synod without hidden background progression
 
 ### Priority rationale
 
-- this deepens real governed delivery value on the existing primary route instead of adding another surface for operators to reason about
-- it uses the now-complete first workflow slice as a stable projection layer while improving the underlying governed stage story
-- it keeps Synod authoritative for orchestration while making Canon evidence reuse more useful across bounded delivery flows
+- this deepens real delivery value on the existing primary route instead of adding another surface for operators to reason about
+- it builds on the now-stable governed-stage and workflow projections instead of reopening orchestration ownership questions
+- it keeps Synod authoritative for orchestration while making bounded retries more credible on real repository work
+
+### Delivered in 0.20.0
+
+- govern `bug-fix:investigate` on the primary session-native route while preserving later governed verify reuse
+- refresh approval state and blocked guidance through `status`, `next`, `inspect`, and the workflow-aware surfaces
+- keep inspect summaries usable for paused or blocked governance traces instead of failing on non-terminal evidence
 
 ### Delivered in 0.19.0
 

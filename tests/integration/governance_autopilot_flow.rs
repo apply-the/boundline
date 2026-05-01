@@ -73,14 +73,38 @@ fn governance_autopilot_flow_selects_mode_and_refreshes_after_approval() {
     let run = run_synod_in(&workspace, &["run"]);
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(0), "{run_text}");
-    assert!(run_text.contains("decision "), "{run_text}");
-    assert!(!run_text.contains("latest_governance_state:"), "{run_text}");
+    assert!(run_text.contains("governance_started: bug-fix:investigate (discovery)"), "{run_text}");
+    assert!(
+        run_text.contains(
+            "governance_awaiting_approval: bug-fix:investigate (requested) [canon-run-approval]"
+        ),
+        "{run_text}"
+    );
+    assert!(run_text.contains("execution_condition: waiting - governance approval is still pending for bug-fix:investigate"), "{run_text}");
 
     let status = run_synod_in(&workspace, &["status"]);
     let status_text = terminal_text(&status);
     assert_eq!(status.status.code(), Some(0), "{status_text}");
-    assert!(status_text.contains("latest_status: succeeded"), "{status_text}");
-    assert!(!status_text.contains("latest_governance_state:"), "{status_text}");
+    assert!(status_text.contains("latest_governance_stage: bug-fix:investigate"), "{status_text}");
+    assert!(status_text.contains("latest_governance_mode: discovery"), "{status_text}");
+    assert!(status_text.contains("latest_governance_state: awaiting_approval"), "{status_text}");
+    assert!(
+        status_text.contains("governance_next_action: wait for approval and rerun synod status"),
+        "{status_text}"
+    );
+    assert!(status_text.contains("next_command: synod status"), "{status_text}");
+
+    fs::write(workspace.join(".canon/approval-state.txt"), "granted\n").unwrap();
+
+    let refreshed = run_synod_in(&workspace, &["status"]);
+    let refreshed_text = terminal_text(&refreshed);
+    assert_eq!(refreshed.status.code(), Some(0), "{refreshed_text}");
+    assert!(refreshed_text.contains("latest_governance_state: governed_ready"), "{refreshed_text}");
+    assert!(refreshed_text.contains("latest_governance_approval: granted"), "{refreshed_text}");
+    assert!(
+        refreshed_text.contains("latest_governance_packet_ref: .canon/runs/canon-run-approval"),
+        "{refreshed_text}"
+    );
 }
 
 #[test]
@@ -90,10 +114,18 @@ fn governance_autopilot_flow_blocks_required_stage_without_a_canon_runtime() {
 
     let run = run_synod_in(&workspace, &["run"]);
     let run_text = terminal_text(&run);
-    assert_eq!(run.status.code(), Some(0), "{run_text}");
-    assert!(run_text.contains("decision "), "{run_text}");
-    assert!(!run_text.contains("latest_governance_runtime:"), "{run_text}");
-    assert!(!run_text.contains("latest_governance_state:"), "{run_text}");
+    assert_eq!(run.status.code(), Some(1), "{run_text}");
+    assert!(run_text.contains("governance_blocked: governance required Canon for bug-fix:investigate, but command 'canon-missing' is unavailable"), "{run_text}");
+    assert!(run_text.contains("terminal_status: failed"), "{run_text}");
+
+    let status = run_synod_in(&workspace, &["status"]);
+    let status_text = terminal_text(&status);
+    assert_eq!(status.status.code(), Some(0), "{status_text}");
+    assert!(status_text.contains("latest_status: failed"), "{status_text}");
+    assert!(status_text.contains("latest_governance_stage: bug-fix:investigate"), "{status_text}");
+    assert!(status_text.contains("latest_governance_runtime: canon"), "{status_text}");
+    assert!(status_text.contains("latest_governance_state: blocked"), "{status_text}");
+    assert!(status_text.contains("next_command: synod inspect"), "{status_text}");
 }
 
 #[test]

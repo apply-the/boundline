@@ -217,6 +217,18 @@ pub fn temp_workflow_follow_through_blocked_workspace(prefix: &str) -> PathBuf {
     create_workflow_fixture_workspace(prefix, BLOCKED_GOVERN_WORKFLOW_TOML, false)
 }
 
+pub fn temp_workflow_governed_stage_workspace(prefix: &str) -> PathBuf {
+    let workspace = temp_canon_governance_workspace(prefix);
+    write_workflow_definitions(&workspace, VALID_WORKFLOWS_TOML);
+    workspace
+}
+
+pub fn temp_workflow_governed_stage_approval_workspace(prefix: &str) -> PathBuf {
+    let workspace = temp_canon_approval_workspace(prefix);
+    write_workflow_definitions(&workspace, VALID_WORKFLOWS_TOML);
+    workspace
+}
+
 #[allow(dead_code)]
 pub fn temp_replanning_execution_workspace(prefix: &str) -> PathBuf {
     create_fixture_workspace(

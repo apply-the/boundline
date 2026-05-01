@@ -19,9 +19,28 @@ recorded workspace version.
 
 Delivered specs:
 
-- None recorded after `0.19.0`
+- None recorded after `0.20.0`
 
 Highlights:
+
+## [0.20.0] - 2026-05-01
+
+Delivered specs:
+
+- `020` - Governed Stage Depth
+
+Highlights:
+
+- Extend the primary session-native route to govern `bug-fix:investigate`
+  before later governed verify work, while keeping Canon bounded to stage
+  governance rather than orchestration ownership.
+- Preserve packet reuse lineage, approval refresh, and explicit blocked-state
+  guidance across `run`, `status`, `next`, `inspect`, and workflow-aware
+  projection surfaces.
+- Allow `inspect` to summarize paused or blocked governance traces instead of
+  failing when the trace is still running.
+- Update README, getting-started, configuration, assistant guidance, roadmap,
+  and contributor docs for the governed-stage-depth release.
 
 ## [0.19.0] - 2026-05-01
 
