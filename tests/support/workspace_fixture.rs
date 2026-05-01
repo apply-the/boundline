@@ -34,6 +34,18 @@ const GUIDED_ADAPTIVE_LIB_RS: &str = concat!(
 const GUIDED_ADAPTIVE_HELPER_RS: &str =
     concat!("pub fn add_pair(left: i32, right: i32) -> i32 {\n", "    left - right\n", "}\n",);
 
+const ORDERING_BOUNDARY_LIB_RS: &str =
+    concat!("pub fn includes_threshold(value: i32) -> bool {\n", "    value > 3\n", "}\n",);
+
+const ORDERING_BOUNDARY_TEST_RS: &str = concat!(
+    "use synod_fixture::includes_threshold;\n\n",
+    "#[test]\n",
+    "fn threshold_is_inclusive() {\n",
+    "    assert!(includes_threshold(3));\n",
+    "    assert!(!includes_threshold(2));\n",
+    "}\n",
+);
+
 const GUIDED_ADAPTIVE_VALIDATE_SH: &str = concat!(
     "#!/bin/sh\n",
     "set +e\n",
@@ -165,6 +177,10 @@ pub fn temp_adaptive_replanning_workspace(prefix: &str) -> PathBuf {
 
 pub fn temp_adaptive_guided_replanning_workspace(prefix: &str) -> PathBuf {
     create_adaptive_guided_fixture_workspace(prefix)
+}
+
+pub fn temp_adaptive_ordering_boundary_workspace(prefix: &str) -> PathBuf {
+    create_adaptive_ordering_boundary_workspace(prefix)
 }
 
 pub fn temp_optional_governance_workspace(prefix: &str) -> PathBuf {
@@ -442,6 +458,39 @@ fn create_adaptive_guided_fixture_workspace(prefix: &str) -> PathBuf {
                 "max_generated_attempts": 4,
                 "path_preferences": ["src/lib.rs"],
                 "allowed_change_kinds": ["arithmetic_swap"],
+            },
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    workspace
+}
+
+fn create_adaptive_ordering_boundary_workspace(prefix: &str) -> PathBuf {
+    let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::create_dir_all(workspace.join("tests")).unwrap();
+    fs::create_dir_all(workspace.join(".synod")).unwrap();
+
+    fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
+    fs::write(workspace.join("src/lib.rs"), ORDERING_BOUNDARY_LIB_RS).unwrap();
+    fs::write(workspace.join("tests/red_to_green.rs"), ORDERING_BOUNDARY_TEST_RS).unwrap();
+    fs::write(
+        workspace.join(".synod/execution.json"),
+        serde_json::to_string_pretty(&serde_json::json!({
+            "name": "adaptive-ordering-boundary-execution",
+            "read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
+            "validation_command": {
+                "program": "cargo",
+                "args": ["test", "--quiet"],
+            },
+            "attempts": [],
+            "adaptive": {
+                "max_selected_targets": 1,
+                "max_generated_attempts": 4,
+                "path_preferences": ["src/"],
+                "allowed_change_kinds": ["ordering_boundary_flip"],
             },
         }))
         .unwrap(),
