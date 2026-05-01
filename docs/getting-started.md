@@ -31,10 +31,13 @@ The shipped CLI binary is `synod`.
 If you enable Synod governance through Canon, the current Synod adapter is
 validated against Canon `0.25.0`.
 
-In `0.20.0`, governed `bug-fix:investigate` and later verify-stage Canon
+In `0.21.0`, governed `bug-fix:investigate` and later verify-stage Canon
 `security-assessment` can remain on the same native session route, and the
 optional `synod workflow` surface projects the same approval, blocked, and
-packet-lineage story without introducing a second operator workflow.
+packet-lineage story without introducing a second operator workflow. On the
+explicit compatibility path, adaptive execution can also shift the next bounded
+repair file when failed validation points to a different manifest-declared
+target.
 
 ## Install Synod
 
@@ -227,6 +230,10 @@ synod run --workspace <workspace> --goal "Fix the failing add test"
 
 Direct run still uses the workspace execution manifest as the bounded execution
 contract; it does not replace the normal session-native path.
+
+If that manifest defines `adaptive`, failed validation can reprioritize the next
+bounded adaptive attempt from the latest validation record while keeping the
+route explicit as compatibility execution.
 
 ## The Core Commands
 

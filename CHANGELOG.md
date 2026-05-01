@@ -19,9 +19,27 @@ recorded workspace version.
 
 Delivered specs:
 
-- None recorded after `0.20.0`
+- None recorded after `0.21.0`
 
 Highlights:
+
+## [0.21.0] - 2026-05-01
+
+Delivered specs:
+
+- `021` - Adaptive Repair Depth
+
+Highlights:
+
+- Re-rank bounded adaptive repair candidates from the latest validation record
+  and failure evidence so replans can shift to a new manifest-declared target
+  when the current slice is no longer credible.
+- Keep adaptive execution on the explicit compatibility path while surfacing the
+  latest workspace slice, validation-guided selection headline, and attempt
+  lineage more clearly in `run` and `inspect`.
+- Update README, adaptive-execution, getting-started, configuration, assistant
+  guidance, roadmap, and contributor docs for the adaptive-repair-depth
+  release.
 
 ## [0.20.0] - 2026-05-01
 
