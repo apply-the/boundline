@@ -114,3 +114,6 @@ mod workflow_follow_through_compat;
 
 #[path = "integration/workflow_follow_through_blocked.rs"]
 mod workflow_follow_through_blocked;
+
+#[path = "integration/governed_stage_depth_workflow.rs"]
+mod governed_stage_depth_workflow;

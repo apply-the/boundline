@@ -54,13 +54,14 @@ When Synod governance is configured to use Canon, the current adapter is
 validated against Canon `0.25.0`.
 
 That is the Canon CLI version explicitly documented as supported for Synod
-`0.19.0`. Earlier or later Canon versions may work, but they are not part of the
+`0.20.0`. Earlier or later Canon versions may work, but they are not part of the
 documented compatibility surface yet.
 
-The `0.19.0` release keeps Canon bounded to stage-level governance and evidence,
-adds executable workflow follow-through for bounded `review` and `govern`
-phases, adds `workflow list` for named-workflow discovery, and preserves
-verify-stage `security-assessment` coverage on the primary route.
+The `0.20.0` release keeps Canon bounded to stage-level governance and evidence,
+extends the primary route to governed `bug-fix:investigate`, preserves later
+verify-stage `security-assessment` reuse, and keeps approval refresh plus
+blocked-state guidance aligned across direct session and named-workflow
+surfaces.
 
 For contributor setup and validation expectations, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -189,7 +190,7 @@ What those commands do, in short:
 - `capture` stores human-authored goal and brief input in session state.
 - `flow` optionally selects `bug-fix`, `change`, or `delivery` ahead of planning.
 - `plan` derives the next bounded `GoalPlan` from captured input plus workspace state, and persists confirmed, proposed, or absent flow state.
-- `run` executes through the native session route whenever a `GoalPlan` exists; verify-stage Canon `security-assessment` still appears on that same route, while declarative `.synod/execution.json` execution remains the explicit compatibility path.
+- `run` executes through the native session route whenever a `GoalPlan` exists; governed `bug-fix:investigate` and later verify-stage Canon `security-assessment` can stay on that same route, while declarative `.synod/execution.json` execution remains the explicit compatibility path.
 - `status` reports the current session snapshot with explicit `routing`, `execution_condition`, and next-step guidance.
 - `inspect` summarizes the latest trace and evidence with the same route and execution-condition story plus trace-specific detail.
 
@@ -374,11 +375,12 @@ For the adaptive execution manifest shape and bounded compatibility behavior in
 For the concrete review configuration and voting rules still available in
 `0.17.0`, see [`docs/review-voting.md`](docs/review-voting.md).
 
-In `0.17.0`, governed stages can also project `latest_governance_runtime`,
+In `0.20.0`, governed stages can also project `latest_governance_runtime`,
 `latest_governance_mode`, `latest_governance_run_ref`, packet provenance,
-autopilot candidates, approval waits, packet rejection outcomes, and verify-stage
-`security-assessment` state through `run`, `status`, `next`, and `inspect`, all
-without breaking the shared `routing` plus `execution_condition` summary model.
+autopilot candidates, approval waits, packet rejection outcomes, and bounded
+`bug-fix:investigate` to `verify` lineage through `run`, `status`, `next`,
+`inspect`, and the workflow-aware surfaces without breaking the shared
+`routing` plus `execution_condition` summary model.
 
 ## Assistant Command Packs
 

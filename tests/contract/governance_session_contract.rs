@@ -18,23 +18,35 @@ fn bootstrap_bug_fix(workspace: &Path) {
 }
 
 #[test]
-fn governance_session_contract_native_run_does_not_project_fixture_governance_fields() {
+fn governance_session_contract_native_run_projects_fixture_governance_fields() {
     let workspace = temp_canon_governance_workspace("synod-governance-session-contract");
     bootstrap_bug_fix(&workspace);
 
     let run = run_synod_in(&workspace, &["run"]);
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(0), "{run_text}");
-    assert!(run_text.contains("decision "), "{run_text}");
-    assert!(!run_text.contains("governance_selected:"), "{run_text}");
+    assert!(run_text.contains("governance_selected: bug-fix:investigate -> canon"), "{run_text}");
+    assert!(run_text.contains("governance_started: bug-fix:implement (implementation) from bug-fix:investigate (upstream_stage_context)"), "{run_text}");
 
     let status = run_synod_in(&workspace, &["status"]);
     let status_text = terminal_text(&status);
     assert_eq!(status.status.code(), Some(0), "{status_text}");
     assert!(status_text.contains("execution_path: native_goal_plan"), "{status_text}");
-    assert!(!status_text.contains("latest_governance_runtime:"), "{status_text}");
-    assert!(!status_text.contains("latest_governance_mode:"), "{status_text}");
-    assert!(!status_text.contains("latest_governance_run_ref:"), "{status_text}");
+    assert!(status_text.contains("latest_governance_stage: bug-fix:implement"), "{status_text}");
+    assert!(status_text.contains("latest_governance_runtime: canon"), "{status_text}");
+    assert!(status_text.contains("latest_governance_mode: implementation"), "{status_text}");
+    assert!(
+        status_text.contains("latest_governance_run_ref: canon-run-implement"),
+        "{status_text}"
+    );
+    assert!(
+        status_text.contains("latest_governance_packet_source_stage: bug-fix:investigate"),
+        "{status_text}"
+    );
+    assert!(
+        status_text.contains("latest_governance_packet_binding_reason: upstream_stage_context"),
+        "{status_text}"
+    );
 }
 
 #[test]
