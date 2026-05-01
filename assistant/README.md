@@ -7,8 +7,8 @@ The primary delivery surface is session-native: `start -> capture -> plan -> run
 `synod init` still scaffolds `<workspace>/.synod/execution.json` plus local routing config, but that manifest is now an explicit compatibility/bootstrap surface rather than the default product story.
 
 When a workspace defines `.synod/workflows.toml`, assistants may also use the
-bounded named-workflow surface: `workflow run -> workflow status -> workflow
-resume -> workflow inspect`. Those commands reuse the same session and trace
+bounded named-workflow surface: `workflow list -> workflow run -> workflow
+status -> workflow resume -> workflow inspect`. Those commands reuse the same session and trace
 story instead of opening a second runtime.
 
 ## Directory Structure
@@ -58,9 +58,10 @@ If the user explicitly selects a built-in flow, assistants should run `cargo run
 
 ### Named Workflow Layer (Workflow Slice)
 - There is no separate assistant pack yet for `synod workflow`. Use the raw CLI subcommands directly when a workspace provides `.synod/workflows.toml`.
-- `cargo run --bin synod -- workflow run <name> --workspace <workspace> [--goal "<goal>"]` should summarize `workflow`, `workflow_phase`, `routing`, `execution_condition`, and `next_command`.
+- `cargo run --bin synod -- workflow list --workspace <workspace>` should summarize the available workflow names, any shipped summary or `recommended_when` guidance, the declared phase chain, and the exact `workflow run` command to start each one.
+- `cargo run --bin synod -- workflow run <name> --workspace <workspace> [--goal "<goal>"]` should summarize `workflow`, `workflow_phase`, `routing`, `execution_condition`, and `next_command`, including actionable paused or blocked states when bounded `review` or `govern` follow-through cannot complete yet.
 - `cargo run --bin synod -- workflow status --workspace <workspace>` should report the same session story as `status`, with workflow identity and active phase added.
-- `cargo run --bin synod -- workflow resume --workspace <workspace>` should be preferred over inventing a phase-specific follow-up when the CLI reports it as `next_command`.
+- `cargo run --bin synod -- workflow resume --workspace <workspace>` should be preferred over inventing a phase-specific follow-up when the CLI reports it as `next_command`, especially for bounded `review` or `govern` follow-through.
 - `cargo run --bin synod -- workflow inspect --workspace <workspace>` should combine workflow projection with trace inspection when a trace exists.
 
 ### Inspecting Prior Runs (User Story 3)

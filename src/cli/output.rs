@@ -1107,18 +1107,47 @@ fn session_execution_condition_parts(view: &SessionStatusView) -> (&'static str,
                 );
             }
             "review" => {
+                if matches!(
+                    view.latest_status,
+                    SessionStatus::Failed | SessionStatus::Exhausted | SessionStatus::Aborted
+                ) {
+                    return ("terminal", "work stopped after a non-success result".to_string());
+                }
+
+                if view.latest_review_trigger.is_some() && view.latest_review_outcome.is_none() {
+                    return (
+                        "waiting",
+                        "review outcome is still pending before workflow can continue".to_string(),
+                    );
+                }
+
                 return (
                     "blocked",
-                    "workflow phase `review` is not yet executable from the workflow command surface"
+                    "workflow review phase requires review evidence from the active session"
                         .to_string(),
                 );
             }
             "govern" if view.latest_governance_state.is_none() => {
+                if matches!(
+                    view.latest_status,
+                    SessionStatus::Failed | SessionStatus::Exhausted | SessionStatus::Aborted
+                ) {
+                    return ("terminal", "work stopped after a non-success result".to_string());
+                }
+
                 return (
                     "blocked",
-                    "workflow phase `govern` is not yet executable from the workflow command surface"
+                    "workflow govern phase requires governance evidence from the active session"
                         .to_string(),
                 );
+            }
+            "govern"
+                if matches!(
+                    view.latest_governance_state.as_deref(),
+                    Some("governed_ready" | "completed")
+                ) && !view.latest_status.is_terminal() =>
+            {
+                return ("waiting", "governance is ready and workflow can resume".to_string());
             }
             _ => {}
         }

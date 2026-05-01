@@ -28,7 +28,7 @@ To install the repository git hooks:
 ## Repository Layout
 
 - [src](src): library code, CLI, session-native runtime, and explicit compatibility execution support
-- workspace-local `.synod/workflows.toml`: optional named workflow registry compiled onto the existing session-native phases
+- workspace-local `.synod/workflows.toml`: optional named workflow registry compiled onto the existing session-native phases, with optional `summary` and `recommended_when` metadata surfaced by `synod workflow list`
 - [tests](tests): top-level Cargo test harnesses plus `unit`, `integration`, and `contract` modules
 - [assistant](assistant): assistant command packs and shared assistant-facing docs
 - [specs](specs): feature specs, plans, research notes, contracts, quickstarts, and task breakdowns
@@ -98,6 +98,8 @@ If you change a user-visible command, session workflow, or flow behavior, update
 - the relevant feature quickstart under [specs](specs)
 
 When a change affects routing, planning, or compatibility behavior, keep the docs explicit about which path is primary and which path is compatibility-only.
+
+If you change `.synod/workflows.toml` semantics or `synod workflow ...` output, keep the docs explicit about workflow discovery guidance, bounded `review`/`govern` follow-through, and unsupported workflow-engine semantics.
 
 If the crate surface or release scope materially changed, update the crate version in [Cargo.toml](Cargo.toml).
 
