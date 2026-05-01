@@ -1,4 +1,7 @@
-use crate::workspace_fixture::{run_synod_in, temp_adaptive_replanning_workspace, terminal_text};
+use crate::workspace_fixture::{
+    run_synod, run_synod_in, temp_adaptive_guided_replanning_workspace,
+    temp_adaptive_replanning_workspace, terminal_text,
+};
 
 #[test]
 fn status_next_and_inspect_surface_adaptive_terminal_failure_cues() {
@@ -40,4 +43,39 @@ fn status_next_and_inspect_surface_adaptive_terminal_failure_cues() {
     assert_eq!(inspect.status.code(), Some(1), "{inspect_text}");
     assert!(inspect_text.contains("inspection_target: session-trace-ref"), "{inspect_text}");
     assert!(inspect_text.contains("terminal_status: failed"), "{inspect_text}");
+}
+
+#[test]
+fn inspect_surfaces_validation_guided_adaptive_recovery_on_compatibility_route() {
+    let workspace = temp_adaptive_guided_replanning_workspace("synod-session-adaptive-guided");
+
+    let run = run_synod(&[
+        "run",
+        "--goal",
+        "Recover after validation points to helper.rs",
+        "--workspace",
+        workspace.to_string_lossy().as_ref(),
+    ]);
+    let run_text = terminal_text(&run);
+    assert_eq!(run.status.code(), Some(0), "{run_text}");
+    assert!(run_text.contains("workspace_slice: src/helper.rs"), "{run_text}");
+
+    let inspect =
+        run_synod_in(&workspace, &["inspect", "--workspace", workspace.to_string_lossy().as_ref()]);
+    let inspect_text = terminal_text(&inspect);
+    assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
+    assert!(inspect_text.contains("inspection_target: latest-workspace-trace"), "{inspect_text}");
+    assert!(
+        inspect_text.contains(
+            "routing: compatibility (execution_profile) - trace came from the explicit compatibility runtime"
+        ),
+        "{inspect_text}"
+    );
+    assert!(
+        inspect_text.contains(
+            "adaptive slice selected src/helper.rs for adaptive delivery after validation guidance"
+        ),
+        "{inspect_text}"
+    );
+    assert!(inspect_text.contains("terminal_status: succeeded"), "{inspect_text}");
 }
