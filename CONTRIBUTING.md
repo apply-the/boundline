@@ -7,6 +7,7 @@ Synod is a bounded delivery orchestrator. Contributions should keep that bias:
 - prefer small, inspectable changes over broad refactors
 - preserve explicit session state, traces, and CLI guidance
 - preserve the session-native `start -> capture -> plan -> run -> status -> next -> inspect` story as the default operator path
+- keep continuity explicit when a workspace moves from session-native state to compatibility-trace follow-up
 - treat `synod workflow` as a thin bounded layer over the same session-owned runtime, not as a generic workflow engine
 - keep the local developer workflow deterministic
 - update tests and docs together with behavior changes
@@ -102,6 +103,10 @@ When a change affects routing, planning, or compatibility behavior, keep the doc
 If you change `.synod/workflows.toml` semantics or `synod workflow ...` output, keep the docs explicit about workflow discovery guidance, bounded `review`/`govern` follow-through, and unsupported workflow-engine semantics.
 
 If you change governed-stage behavior, keep the docs explicit about which stage now stops for governance, how packet lineage is reused on later stages, and how waiting or blocked guidance appears on both direct session and workflow-aware surfaces.
+
+If you change adaptive compatibility behavior, keep the docs explicit about validation-guided slice reselection, bounded `read_targets`, and the fact that adaptive repair still remains on the explicit compatibility path in this release.
+
+If you change how `status`, `next`, or `inspect` choose the authoritative follow-up state, keep the docs explicit about `continuity_authority`, inspect-only compatibility follow-up, and when `synod start` is or is not actually required.
 
 If the crate surface or release scope materially changed, update the crate version in [Cargo.toml](Cargo.toml).
 

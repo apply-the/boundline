@@ -40,6 +40,9 @@ mod session_cli_flow;
 #[path = "integration/session_adaptive_flow.rs"]
 mod session_adaptive_flow;
 
+#[path = "integration/session_compatibility_continuity.rs"]
+mod session_compatibility_continuity;
+
 #[path = "integration/flow_cli_run.rs"]
 mod flow_cli_run;
 
