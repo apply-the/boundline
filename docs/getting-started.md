@@ -31,10 +31,10 @@ The shipped CLI binary is `synod`.
 If you enable Synod governance through Canon, the current Synod adapter is
 validated against Canon `0.25.0`.
 
-In `0.19.0`, verify-stage Canon `security-assessment` can also remain on the
-same native session route, and the optional `synod workflow` surface can now
-discover named workflows and continue bounded `review` plus `govern` follow-through
-without introducing a second operator workflow.
+In `0.20.0`, governed `bug-fix:investigate` and later verify-stage Canon
+`security-assessment` can remain on the same native session route, and the
+optional `synod workflow` surface projects the same approval, blocked, and
+packet-lineage story without introducing a second operator workflow.
 
 ## Install Synod
 

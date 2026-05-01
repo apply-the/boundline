@@ -8,10 +8,11 @@ use crate::adapters::trace_store::{FileTraceStore, TraceStore, TraceStoreError};
 use crate::cli::CommandExitStatus;
 use crate::cli::output;
 use crate::domain::goal_plan::GoalPlanFlowState;
+use crate::domain::limits::TerminalCondition;
 use crate::domain::session::{RoutingMode, RoutingOutcome, RoutingSource};
 use crate::domain::session::{governance_next_action_for_state, governance_packet_provenance_text};
 use crate::domain::step::{StepKind, StepStatus};
-use crate::domain::task::TaskStatus;
+use crate::domain::task::{TaskStatus, TerminalReason};
 use crate::domain::trace::{
     ExecutionTrace, TraceEventType, TraceRecoveryEvent, TraceStepSummary, TraceSummaryView,
 };
@@ -109,9 +110,8 @@ pub fn summarize_trace(
     trace_ref: impl AsRef<Path>,
     trace: &ExecutionTrace,
 ) -> Result<TraceSummaryView, TraceSummaryError> {
-    let terminal_status = trace.terminal_status.ok_or(TraceSummaryError::MissingTerminalStatus)?;
-    let terminal_reason =
-        trace.terminal_reason.clone().ok_or(TraceSummaryError::MissingTerminalReason)?;
+    let persisted_terminal_status = trace.terminal_status;
+    let persisted_terminal_reason = trace.terminal_reason.clone();
     let mut authored_input_summary: Option<String> = None;
     let mut authored_input_sources: Vec<String> = Vec::new();
     let mut authored_input_deduplicated_sources: Vec<String> = Vec::new();
@@ -449,6 +449,23 @@ pub fn summarize_trace(
         }));
     }
 
+    let (terminal_status, terminal_reason) =
+        match (persisted_terminal_status, persisted_terminal_reason) {
+            (Some(terminal_status), Some(terminal_reason)) => (terminal_status, terminal_reason),
+            (None, None) => {
+                if latest_governance_state.is_some() {
+                    (
+                        TaskStatus::Running,
+                        synthesized_in_progress_reason(latest_governance_state.as_deref()),
+                    )
+                } else {
+                    return Err(TraceSummaryError::MissingTerminalStatus);
+                }
+            }
+            (None, Some(_)) => return Err(TraceSummaryError::MissingTerminalStatus),
+            (Some(_), None) => return Err(TraceSummaryError::MissingTerminalReason),
+        };
+
     Ok(TraceSummaryView {
         trace_ref: trace_ref.as_ref().to_string_lossy().into_owned(),
         goal: trace.goal.clone(),
@@ -784,6 +801,17 @@ fn reviewer_line(payload: &serde_json::Value) -> Option<String> {
         .map(|reason| format!("reviewer {reviewer_id} failed: {reason}"))
 }
 
+fn synthesized_in_progress_reason(latest_governance_state: Option<&str>) -> TerminalReason {
+    let message = match latest_governance_state {
+        Some("awaiting_approval") => "governance approval is still pending",
+        Some("blocked") => "governed work is blocked pending intervention",
+        Some("governed_ready") => "governed work is ready for the next bounded step",
+        _ => "trace is still in progress",
+    };
+
+    TerminalReason::new(TerminalCondition::NoCredibleNextStep, message, None)
+}
+
 fn success_headline(payload: &serde_json::Value, attempts: usize) -> String {
     if let Some(headline) = payload
         .get("output")
@@ -1111,6 +1139,47 @@ mod tests {
                     .to_string(),
                 "review_outcome: accepted".to_string(),
             ]
+        );
+    }
+
+    #[test]
+    fn summarize_trace_synthesizes_running_summary_for_paused_governance_traces() {
+        let mut trace = ExecutionTrace::new("task-inspect", "session-inspect", "Inspect trace");
+        trace.record_event(
+            TraceEventType::GovernanceStarted,
+            Some("investigate".to_string()),
+            0,
+            json!({
+                "stage_key": "bug-fix:investigate",
+                "canon_mode": "discovery"
+            }),
+        );
+        trace.record_event(
+            TraceEventType::GovernanceBlocked,
+            Some("investigate".to_string()),
+            0,
+            json!({
+                "stage_key": "bug-fix:investigate",
+                "reason": "governance blocked stage bug-fix:investigate"
+            }),
+        );
+
+        let summary = summarize_trace("/tmp/trace.json", &trace).unwrap();
+
+        assert_eq!(summary.terminal_status, TaskStatus::Running);
+        assert_eq!(
+            summary.terminal_reason.message,
+            "governed work is blocked pending intervention"
+        );
+        assert!(
+            summary
+                .governance_timeline
+                .iter()
+                .any(|line| { line == "governance_started: bug-fix:investigate (discovery)" })
+        );
+        assert_eq!(
+            summary.governance_next_action.as_deref(),
+            Some("resolve the governance blocker, then rerun synod step")
         );
     }
 }

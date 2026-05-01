@@ -71,20 +71,30 @@ fn explicit_canon_request_blocks_without_local_fallback() {
 
     let run = run_synod_in(&workspace, &["run"]);
     let run_text = terminal_text(&run);
-    assert_eq!(run.status.code(), Some(0), "{run_text}");
-    assert!(run_text.contains("decision "), "{run_text}");
+    assert_eq!(run.status.code(), Some(1), "{run_text}");
+    assert!(
+        run_text.contains("governance_blocked: governance required Canon for bug-fix:investigate"),
+        "{run_text}"
+    );
 
     let status = run_synod_in(&workspace, &["status"]);
     let text = terminal_text(&status);
     assert_eq!(status.status.code(), Some(0), "{text}");
     assert!(text.contains("requested_governance_runtime: canon"), "{text}");
-    assert!(text.contains("latest_status: succeeded"), "{text}");
+    assert!(text.contains("latest_status: failed"), "{text}");
+    assert!(text.contains("latest_governance_stage: bug-fix:investigate"), "{text}");
+    assert!(text.contains("latest_governance_state: blocked"), "{text}");
 
     let inspect =
         run_synod_in(&workspace, &["inspect", "--workspace", workspace.to_string_lossy().as_ref()]);
     let inspect_text = terminal_text(&inspect);
-    assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
-    assert!(inspect_text.contains("terminal_status: succeeded"), "{inspect_text}");
+    assert_eq!(inspect.status.code(), Some(1), "{inspect_text}");
+    assert!(inspect_text.contains("terminal_status: failed"), "{inspect_text}");
+    assert!(
+        inspect_text
+            .contains("governance_blocked: governance required Canon for bug-fix:investigate"),
+        "{inspect_text}"
+    );
 }
 
 #[test]
