@@ -19,9 +19,27 @@ recorded workspace version.
 
 Delivered specs:
 
-- None recorded after `0.21.0`
+- None recorded after `0.22.0`
 
 Highlights:
+
+## [0.22.0] - 2026-05-01
+
+Delivered specs:
+
+- `022` - Session Compatibility Continuity
+
+Highlights:
+
+- Keep `status` and `next` usable after explicit compatibility `run` by
+  surfacing `continuity_authority`, inspect-only compatibility follow-up, and
+  the correct CLI-reported inspect command instead of failing on a missing
+  active session.
+- Reuse one route and `execution_condition` summary vocabulary across native
+  session and compatibility follow-up surfaces without hiding which route ran.
+- Update README, getting-started, configuration, adaptive-execution,
+  assistant guidance, roadmap, contributor docs, and changelog for the
+  continuity release.
 
 ## [0.21.0] - 2026-05-01
 

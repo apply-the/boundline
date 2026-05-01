@@ -1,10 +1,10 @@
-# Adaptive Execution in Synod 0.21.0
+# Adaptive Execution in Synod 0.22.0
 
-Synod `0.21.0` keeps bounded adaptive execution as an explicit compatibility mode inside the broader session-native runtime. The primary operator path is still `start -> capture -> plan -> run -> status -> next -> inspect` with a bounded `GoalPlan`; adaptive behavior still uses `<workspace>/.synod/execution.json` when the operator intentionally chooses the manifest-backed compatibility path.
+Synod `0.22.0` keeps bounded adaptive execution as an explicit compatibility mode inside the broader session-native runtime. The primary operator path is still `start -> capture -> plan -> run -> status -> next -> inspect` with a bounded `GoalPlan`; adaptive behavior still uses `<workspace>/.synod/execution.json` when the operator intentionally chooses the manifest-backed compatibility path.
 
-Instead of requiring every attempt to be pre-authored in `<workspace>/.synod/execution.json`, a compatibility execution profile can describe an `adaptive` block and let Synod choose one bounded workspace slice and one bounded candidate at a time. In `0.21.0`, failed validation can also guide the next adaptive slice selection when the latest validation record points to a more credible manifest-declared target.
+Instead of requiring every attempt to be pre-authored in `<workspace>/.synod/execution.json`, a compatibility execution profile can describe an `adaptive` block and let Synod choose one bounded workspace slice and one bounded candidate at a time. In `0.22.0`, failed validation can also guide the next adaptive slice selection when the latest validation record points to a more credible manifest-declared target, and the read-side commands can still point operators at the latest compatibility trace when no active session is resumable.
 
-In `0.17.0`, operators can still generate the baseline compatibility profile with
+In `0.22.0`, operators can still generate the baseline compatibility profile with
 `synod init`; adaptive behavior is still configured through the execution
 manifest itself.
 
@@ -70,13 +70,13 @@ Validation guidance changes ranking, not boundedness. Synod still only considers
 When adaptive execution is active, the local CLI now exposes:
 
 - `synod run`: explicit compatibility routing, `execution_condition`, `workspace_slice`, validation-guided `attempt_lineage` after replans, changed files, validation result, terminal status, and trace path
-- `synod status`: explicit `routing`, `execution_condition`, `latest_workspace_slice`, `latest_selection_headline`, `latest_attempt_lineage` when present, and `latest_validation_status`
-- `synod next`: the same adaptive session projection plus the CLI-reported next command
+- `synod status`: explicit `routing`, `execution_condition`, `latest_workspace_slice`, `latest_selection_headline`, `latest_attempt_lineage` when present, `latest_validation_status`, and `continuity_authority` when the latest compatibility trace is the authoritative follow-up state
+- `synod next`: the same adaptive session projection plus the CLI-reported next command, including inspect-only compatibility follow-up when no active session exists
 - `synod inspect`: adaptive slice-selection headlines for both the initial and replacement attempts, `execution_condition`, validation results, recovery events, and final terminal reason
 
 ## Current scope
 
-The `0.21.0` adaptive slice is intentionally bounded:
+The `0.22.0` adaptive slice is intentionally bounded:
 
 - candidate generation stays deterministic and bounded to the built-in local heuristics
 - workspace selection only considers manifest-declared `read_targets`

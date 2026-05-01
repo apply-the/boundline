@@ -9,7 +9,7 @@ Synod is a local CLI for bounded software-delivery work.
 
 You use Synod to:
 
-- run the primary session-native path: `start -> capture -> plan -> run -> status -> inspect`
+- run the primary session-native path: `start -> capture -> plan -> run -> status -> next -> inspect`
 - use `synod init` only when you want scaffolded compatibility defaults or assistant setup
 - capture human-authored goals and Markdown briefs without authoring a task JSON request
 - inspect or tune runtime/model routing with `synod config`
@@ -31,13 +31,15 @@ The shipped CLI binary is `synod`.
 If you enable Synod governance through Canon, the current Synod adapter is
 validated against Canon `0.25.0`.
 
-In `0.21.0`, governed `bug-fix:investigate` and later verify-stage Canon
+In `0.22.0`, governed `bug-fix:investigate` and later verify-stage Canon
 `security-assessment` can remain on the same native session route, and the
 optional `synod workflow` surface projects the same approval, blocked, and
 packet-lineage story without introducing a second operator workflow. On the
-explicit compatibility path, adaptive execution can also shift the next bounded
-repair file when failed validation points to a different manifest-declared
-target.
+explicit compatibility path, adaptive execution can still shift the next
+bounded repair file when failed validation points to a different
+manifest-declared target, and `status` plus `next` now stay usable by naming
+the latest compatibility trace as the authoritative inspect-only follow-up when
+no active session exists.
 
 ## Install Synod
 
@@ -214,6 +216,7 @@ synod inspect --workspace <workspace>
 These commands tell you:
 
 - which route is active and why
+- whether the authoritative follow-up state comes from the active session or the latest compatibility trace
 - what `execution_condition` currently applies
 - what trace was produced
 - whether the run succeeded, failed, blocked, or needs follow-up
@@ -234,6 +237,13 @@ contract; it does not replace the normal session-native path.
 If that manifest defines `adaptive`, failed validation can reprioritize the next
 bounded adaptive attempt from the latest validation record while keeping the
 route explicit as compatibility execution.
+
+After a direct compatibility run, `synod status --workspace <workspace>` and
+`synod next --workspace <workspace>` can now point you back to
+`synod inspect --workspace <workspace>` even when there is no resumable active
+session. Look for `continuity_authority: compatibility_trace` and the CLI-
+reported inspect command instead of assuming you must restart from `synod
+start`.
 
 ## The Core Commands
 

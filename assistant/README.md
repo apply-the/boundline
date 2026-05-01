@@ -6,6 +6,10 @@ The primary delivery surface is session-native: `start -> capture -> plan -> run
 
 `synod init` still scaffolds `<workspace>/.synod/execution.json` plus local routing config, but that manifest is now an explicit compatibility/bootstrap surface rather than the default product story.
 
+When an explicit compatibility run leaves no resumable session, assistants
+should treat `continuity_authority: compatibility_trace` as an inspect-only
+follow-up state rather than a reason to restart from `synod start`.
+
 When a workspace defines `.synod/workflows.toml`, assistants may also use the
 bounded named-workflow surface: `workflow list -> workflow run -> workflow
 status -> workflow resume -> workflow inspect`. Those commands reuse the same session and trace
@@ -54,8 +58,8 @@ If the user explicitly selects a built-in flow, assistants should run `cargo run
 ### Continuing a Workflow (User Story 2)
 - `/synod-step`: Executes `cargo run --bin synod -- step --workspace <workspace>` and summarizes `routing`, `execution_condition`, `latest_status`, any updated `latest_trace_ref`, `next_command`, and flow-stage fields when present.
 - `/synod-run`: Executes `cargo run --bin synod -- run --workspace <workspace>` and summarizes `routing`, `execution_condition`, `execution_path`, `flow_state`, `terminal_status`, `terminal_reason`, `changed_files`, validation summaries, `trace`, `next_command`, and any flow/stage lifecycle events. When adaptive execution is active, also summarize `workspace_slice`, any validation-guided `selection_headline`, and `attempt_lineage`. When review is configured, also summarize `review_trigger`, reviewer findings, `review_vote`, and `review_outcome`. When governance is active, also summarize `latest_governance_stage`, `latest_governance_runtime`, `latest_governance_mode`, `latest_governance_run_ref`, packet provenance including `latest_governance_packet_ref` and any binding reason, approval state, any packet rejection or blocked rationale, and `governance_next_action` when present.
-- `/synod-status`: Executes `cargo run --bin synod -- status --workspace <workspace>` and summarizes the active session state for the current workspace, including `routing`, `execution_condition`, `execution_path`, `flow_state`, `latest_decision_status`, `latest_decision_target`, `active_flow`, `current_stage`, `stage_progress`, `authored_input_summary`, `authored_input_sources`, `authored_input_deduplicated_sources`, `latest_changed_files`, `latest_workspace_slice`, `latest_selection_headline`, `latest_attempt_lineage`, `latest_validation_status`, and the latest review fields when available. When governance is active, surface `latest_governance_stage`, `latest_governance_state`, `latest_governance_mode`, `latest_governance_run_ref`, `latest_governance_packet_ref`, any packet binding reason, autopilot candidates, and `governance_next_action` so the operator knows whether to wait for approval or resolve a blocker instead of continuing execution.
-- `/synod-next`: Executes `cargo run --bin synod -- next --workspace <workspace>` and summarizes `routing`, `execution_condition`, `latest_status`, `explanation`, and the CLI-reported `next_command`, plus flow-stage context, the latest adaptive slice and validation state, and the latest review outcome when present.
+- `/synod-status`: Executes `cargo run --bin synod -- status --workspace <workspace>` and summarizes the active session state or latest compatibility follow-up for the current workspace, including `routing`, `execution_condition`, `continuity_authority`, `compatibility_follow_up`, `compatibility_trace_ref`, `compatibility_follow_up_command`, `execution_path`, `flow_state`, `latest_decision_status`, `latest_decision_target`, `active_flow`, `current_stage`, `stage_progress`, `authored_input_summary`, `authored_input_sources`, `authored_input_deduplicated_sources`, `latest_changed_files`, `latest_workspace_slice`, `latest_selection_headline`, `latest_attempt_lineage`, `latest_validation_status`, and the latest review fields when available. When governance is active, surface `latest_governance_stage`, `latest_governance_state`, `latest_governance_mode`, `latest_governance_run_ref`, `latest_governance_packet_ref`, any packet binding reason, autopilot candidates, and `governance_next_action` so the operator knows whether to wait for approval or resolve a blocker instead of continuing execution.
+- `/synod-next`: Executes `cargo run --bin synod -- next --workspace <workspace>` and summarizes `routing`, `execution_condition`, `continuity_authority`, `compatibility_follow_up`, `compatibility_trace_ref`, `latest_status`, `explanation`, and the CLI-reported `next_command`, plus flow-stage context, the latest adaptive slice and validation state, and the latest review outcome when present.
 
 ### Named Workflow Layer (Workflow Slice)
 - There is no separate assistant pack yet for `synod workflow`. Use the raw CLI subcommands directly when a workspace provides `.synod/workflows.toml`.
@@ -76,10 +80,12 @@ For the current review manifest shape and vote semantics, see [`docs/review-voti
 
 ## Continuity Rules
 - Preserve confirmed `workspace_ref`, captured goal, confirmed brief paths, authored input summary, and latest trace reference across assistant turns.
+- Preserve `continuity_authority`, `compatibility_trace_ref`, and `compatibility_follow_up_command` when the CLI reports them after an explicit compatibility run.
 - Preserve the selected flow name when the user has committed to `bug-fix`, `change`, or `delivery`.
 - Ask only for missing fields before recommending or executing a command.
 - In chat-only mode, always provide exact copyable commands, wait for the user to run them, and update the workflow state only after pasted output.
 - Preserve `inspection_target` when the user is working from an explicit trace instead of the latest workspace trace.
 - When CLI output includes `next_command`, prefer that route instead of inventing a follow-up.
+- When `status` or `next` reports `continuity_authority: compatibility_trace` or `compatibility_follow_up: inspect_only`, route to `/synod-inspect` instead of `/synod-start`.
 - When CLI output includes `corrected_command`, reuse it instead of inventing a replacement inspect invocation.
 - When governance output reports `awaiting_approval` or `blocked`, do not suggest an ungoverned bypass; prefer `status` or `inspect` exactly as the CLI recommends and surface `governance_next_action` when the CLI provides it.

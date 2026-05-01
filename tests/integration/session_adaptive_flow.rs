@@ -78,4 +78,12 @@ fn inspect_surfaces_validation_guided_adaptive_recovery_on_compatibility_route()
         "{inspect_text}"
     );
     assert!(inspect_text.contains("terminal_status: succeeded"), "{inspect_text}");
+
+    let next =
+        run_synod_in(&workspace, &["next", "--workspace", workspace.to_string_lossy().as_ref()]);
+    let next_text = terminal_text(&next);
+    assert_eq!(next.status.code(), Some(0), "{next_text}");
+    assert!(next_text.contains("continuity_authority: compatibility_trace"), "{next_text}");
+    assert!(next_text.contains("routing: compatibility (execution_profile)"), "{next_text}");
+    assert!(next_text.contains("execution_condition: terminal -"), "{next_text}");
 }

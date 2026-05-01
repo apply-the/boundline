@@ -114,6 +114,8 @@ fn build_status_view(record: &ActiveSessionRecord) -> SessionStatusView {
         active_workflow: None,
         workflow_phase: None,
         workflow_next_action: None,
+        continuity_authority: None,
+        compatibility_follow_up: None,
         current_stage_id: record.active_flow.as_ref().map(|flow| flow.current_stage_id.clone()),
         current_stage_index: record.active_flow.as_ref().map(|flow| flow.current_stage_index),
         total_stages: record.active_flow.as_ref().map(|flow| flow.total_stages),

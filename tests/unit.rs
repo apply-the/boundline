@@ -115,6 +115,9 @@ mod goal_planner;
 #[path = "unit/runtime_routing.rs"]
 mod runtime_routing;
 
+#[path = "unit/compatibility_continuity.rs"]
+mod compatibility_continuity;
+
 #[path = "unit/workflow_definition.rs"]
 mod workflow_definition;
 

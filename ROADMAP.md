@@ -6,11 +6,12 @@ Canon is downstream from Synod in this roadmap: Synod thinks, decides, orchestra
 
 Evolve Synod into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.21.0
+## Current Status: v0.22.0
 
 Synod now has its core session-native orchestration baseline, bounded workflow
-follow-through, a deeper governed-stage slice, and stronger bounded adaptive
-repair depth in place:
+follow-through, a deeper governed-stage slice, stronger bounded adaptive
+repair depth, and explicit continuity between session-native and
+compatibility follow-up in place:
 
 - session-native orchestration remains the primary operator path
 - `workflow list`, `workflow run`, `workflow status`, `workflow resume`, and `workflow inspect` now project named workflow state onto the same session, route, trace, and `execution_condition` surfaces
@@ -19,48 +20,56 @@ repair depth in place:
 - direct session-native commands and explicit compatibility routing remain available when no named workflow is invoked
 - Canon is still integrated as a bounded stage-boundary governance runtime, now including governed `bug-fix:investigate` on the primary route plus later verify-stage `security-assessment` reuse
 - adaptive compatibility execution can now use validation evidence to shift the next bounded repair slice without leaving manifest-declared `read_targets`
+- `status` and `next` now surface `continuity_authority`, compatibility follow-up mode, and inspect-only guidance when the latest authoritative follow-up state comes from an explicit compatibility trace instead of an active session
+- `status`, `next`, and `inspect` now reuse one route plus `execution_condition` vocabulary across native and compatibility follow-up while keeping route ownership explicit
 
-## Next Priority: Tighten Session And Compatibility Continuity
+## Next Priority: Broaden Bounded Adaptive Repair
 
-The next slice should build on `0.21.0` by tightening how explicit
-compatibility runs reconnect to session and trace follow-up surfaces without
-widening Synod into a general-purpose workflow engine or letting Canon take
-orchestration ownership.
+Now that `0.22.0` makes explicit compatibility follow-up usable through
+`status`, `next`, and `inspect`, the next slice should strengthen bounded
+adaptive repair itself without reopening route ownership or continuity
+semantics.
 
-Suggested release target: `0.22.0`
+Suggested release target: `0.23.x`
 
 The next spec direction should explicitly deliver three things:
 
-- clearer continuity between explicit compatibility runs and later `status`, `next`, or `inspect` follow-up when a workspace expects one operator story
-- more shared review, governance, and adaptive summaries across native and compatibility traces without hiding which route actually ran
-- continued bounded orchestration ownership inside Synod without hidden background progression
+- broader bounded mutation families beyond the current local heuristics
+- stronger adaptive exhaustion and credibility handling when the current bounded slice stops looking plausible
+- continued reuse of the new continuity-aware `status`, `next`, and `inspect` summary model so stronger adaptive behavior still ends in explicit follow-up
 
-### What 0.22.0 should concretely deliver
+### What 0.23.x should concretely deliver
 
-- define which persisted state is authoritative after an explicit compatibility `run`: active session, latest workspace trace, or an explicit no-session result
-- make `status`, `next`, and `inspect` report that continuity model consistently instead of leaving operators to infer whether a compatibility run can be resumed or only inspected
-- reuse the same adaptive, review, and governance summary vocabulary across native and compatibility traces where the concepts overlap
-- keep route ownership explicit in all follow-up surfaces so compatibility execution never appears to have silently become session-native or workflow-owned
-- preserve explicit terminal states when no resumable session exists instead of inventing background progression or implicit recovery
+- expand adaptive change kinds beyond the current arithmetic, comparison, and boolean flips while keeping generation deterministic and bounded
+- improve how adaptive runs explain exhaustion, replacement-slice credibility, and why a bounded candidate was or was not chosen next
+- keep adaptive selection bounded to manifest-declared scope and explicit validation evidence instead of drifting into open-ended mutation
+- preserve explicit compatibility ownership even when adaptive traces get richer or more recoverable
 
-### What 0.22.0 should not do
+### What 0.23.x should not do
 
-- no hidden promotion of compatibility runs into the primary session-native route
-- no generic workflow engine or background daemon for trace reconciliation
-- no Canon-owned orchestration or Canon-driven follow-up selection
-- no attempt to broaden adaptive mutation families in the same slice unless continuity work depends on a narrowly scoped projection fix
+- no open-ended autonomous code generation outside the manifest-bounded compatibility surface
+- no hidden promotion of compatibility repair into the primary session-native route
+- no generic workflow engine or background daemon for adaptive retries
+- no Canon-owned orchestration or Canon-driven adaptive planning
 
 ### Priority rationale
 
-- this improves the operator handoff story after explicit compatibility runs instead of adding another top-level surface
-- it builds on the now-stable governed-stage, workflow, and adaptive projections instead of reopening orchestration ownership questions
-- it keeps Synod authoritative for orchestration while reducing ambiguity about which state or trace surface should drive the next action
+- continuity and follow-up ownership are now explicit enough that stronger adaptive behavior will not leave operators guessing which surface is authoritative
+- adaptive repair is already useful but still intentionally narrow; expanding it is a better next return than opening another top-level product surface
+- bounded orchestration ownership stays inside Synod while reuse of traces, validation evidence, and continuity-aware summaries gets deeper
 
 ### Why this comes before the other roadmap items
 
-- the current platform value is already high enough that operator ambiguity between session state and trace state is now a more immediate problem than adding new execution power
-- `0.19.0` through `0.21.0` added workflow, governance, and adaptive depth; the next useful step is to make those surfaces feel coherent when an operator moves between routes
-- broader adaptive heuristics or cluster expansion will be easier to reason about once follow-up ownership and inspection semantics are explicit
+- `0.22.0` removed the immediate continuity ambiguity, so the next leverage point is making the bounded compatibility path more capable without changing its ownership model
+- stronger adaptive repair benefits directly from the clearer `status` and `next` follow-up semantics now in place
+- multi-workspace expansion and broader summary unification will be easier once adaptive compatibility behavior is less narrow
+
+### Delivered in 0.22.0
+
+- define `continuity_authority` and inspect-only compatibility follow-up when the latest authoritative workspace state comes from an explicit compatibility trace
+- make `status` and `next` usable after explicit compatibility `run` even when no active session exists, preferring workspace `inspect` instead of a false resumability story
+- reuse the same route and `execution_condition` vocabulary across native session and compatibility follow-up surfaces while keeping routing ownership explicit
+- update README, getting-started, configuration, adaptive-execution, assistant guidance, roadmap, and contributor docs for the release
 
 ### Delivered in 0.21.0
 
