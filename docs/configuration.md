@@ -1,11 +1,11 @@
-# Configuration in Synod 0.18.0
+# Configuration in Synod 0.19.0
 
-Synod `0.18.0` keeps a user-friendly setup and routing configuration surface for the session-native runtime plus explicit compatibility/bootstrap workflows.
+Synod `0.19.0` keeps a user-friendly setup and routing configuration surface for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
-The `0.18.0` release keeps configuration behavior stable while adding the
-workspace-local named workflow registry at `.synod/workflows.toml` and keeping
-`status`, `next`, `inspect`, and `workflow status` aligned on the same routing
-and `execution_condition` story.
+The `0.19.0` release keeps configuration behavior stable while extending the
+workspace-local named workflow registry at `.synod/workflows.toml` with optional
+discovery metadata and executable workflow follow-through for bounded `review`
+and `govern` phases.
 
 ## What changed
 
@@ -28,6 +28,30 @@ Workflow definitions are separate from routing config:
 
 That file declares named bounded workflows. It does not participate in runtime
 or model-routing precedence; it is consumed only by `synod workflow ...`.
+
+Optional workflow-discovery metadata lives in the same registry file:
+
+```toml
+[workflow.governed-delivery]
+goal_source = "session"
+entry = "capture"
+phases = ["capture", "plan", "run", "review", "govern", "inspect"]
+allow_review = true
+allow_governance = true
+summary = "bounded delivery path with review and governance before completion"
+recommended_when = "the task needs explicit review and governance evidence"
+
+[workflow.governed-delivery.when]
+review = "review_triggered"
+governance = "governance_required"
+```
+
+Use `synod workflow list --workspace <workspace>` to render the discovered
+workflow names, phase chains, summary text, and invocation guidance. If
+`summary` or `recommended_when` are omitted, Synod falls back to the workflow
+name plus declared phases. The registry remains bounded: no branching, loops,
+fan-out, fan-in, hidden background progression, or Canon-owned workflow control
+are supported.
 
 ## Resolution precedence
 

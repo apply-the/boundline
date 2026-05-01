@@ -8,6 +8,7 @@ use crate::cli::session::build_status_view;
 use crate::cli::{CommandExitStatus, output};
 use crate::domain::session::{
     ActiveSessionRecord, RoutingMode, RoutingOutcome, RoutingSource, SessionStatus,
+    task_state_governance_blocked_reason, task_state_governance_state_text,
 };
 use crate::domain::trace::current_timestamp_millis;
 use crate::domain::workflow::{
@@ -70,6 +71,21 @@ pub fn execute_run(
     Ok(render_workflow_report(&workspace, &record, explanation))
 }
 
+pub fn execute_list(
+    workspace: Option<&Path>,
+) -> Result<WorkflowCommandReport, WorkflowCommandError> {
+    let workspace = resolve_workspace(workspace)?;
+    let workflow_path = workspace.join(".synod/workflows.toml");
+
+    match WorkflowRegistry::load(&workflow_path) {
+        Ok(registry) => Ok(render_workflow_discovery_report(
+            &workspace,
+            &registry.discovery_entries(&workspace),
+        )),
+        Err(error) => Ok(render_workflow_registry_error_report(&workspace, &error)),
+    }
+}
+
 pub fn execute_status(
     workspace: Option<&Path>,
 ) -> Result<WorkflowCommandReport, WorkflowCommandError> {
@@ -120,6 +136,10 @@ pub fn execute_resume(
             return Ok(blocked_definition_report(&workflow_name, &workspace, error.to_string()));
         }
     };
+
+    let _ = runtime
+        .refresh_governance_state(&mut record)
+        .map_err(WorkflowCommandError::SessionRuntime)?;
 
     let explanation = advance_workflow(&runtime, &mut record, &workflow, None)?;
     runtime.persist_session(&record).map_err(WorkflowCommandError::SessionRuntime)?;
@@ -273,8 +293,20 @@ fn advance_workflow(
             WorkflowPhase::Plan => {
                 if record.goal_plan.is_none() {
                     runtime
-                        .plan_task(record, None, true)
+                        .plan_task(record, None, false)
                         .map_err(WorkflowCommandError::SessionRuntime)?;
+
+                    if let Some(flow_name) = record
+                        .goal_plan
+                        .as_ref()
+                        .and_then(|goal_plan| goal_plan.flow.as_ref())
+                        .filter(|flow| !flow.confirmed)
+                        .map(|flow| flow.flow_name.clone())
+                    {
+                        runtime
+                            .plan_task(record, Some(&flow_name), false)
+                            .map_err(WorkflowCommandError::SessionRuntime)?;
+                    }
                 }
 
                 push_completed_phase(&mut completed_phases, WorkflowPhase::Plan);
@@ -296,6 +328,17 @@ fn advance_workflow(
                 }
 
                 push_completed_phase(&mut completed_phases, WorkflowPhase::Run);
+
+                let next_phase = next_pending_phase(workflow, &completed_phases);
+                if matches!(next_phase, Some(WorkflowPhase::Review | WorkflowPhase::Govern)) {
+                    continue;
+                }
+
+                if matches!(next_phase, Some(WorkflowPhase::Inspect))
+                    && record.latest_status.is_terminal()
+                {
+                    continue;
+                }
 
                 if record.latest_status.is_terminal() {
                     let next_phase = workflow
@@ -353,23 +396,111 @@ fn advance_workflow(
                     workflow.workflow_name
                 ));
             }
-            WorkflowPhase::Review | WorkflowPhase::Govern => {
+            WorkflowPhase::Review => {
+                if latest_review_outcome(record).is_some() {
+                    push_completed_phase(&mut completed_phases, WorkflowPhase::Review);
+                    continue;
+                }
+
+                let terminal_failure = workflow_terminal_failure(record);
+                let lifecycle_state = if terminal_failure.is_some() {
+                    WorkflowLifecycleState::Failed
+                } else if latest_review_trigger(record).is_some() {
+                    WorkflowLifecycleState::Paused
+                } else {
+                    WorkflowLifecycleState::Blocked
+                };
+                let blocked_reason = terminal_failure.unwrap_or_else(|| {
+                    if latest_review_trigger(record).is_some() {
+                        "review outcome is still pending before workflow can continue".to_string()
+                    } else {
+                        "workflow review phase requires review evidence from the active session"
+                            .to_string()
+                    }
+                });
+                let next_action = if matches!(lifecycle_state, WorkflowLifecycleState::Paused) {
+                    Some(workflow_resume_command(runtime.workspace_ref()))
+                } else {
+                    Some(workflow_inspect_command(runtime.workspace_ref()))
+                };
                 update_workflow_progress(
                     record,
                     workflow,
-                    WorkflowLifecycleState::Blocked,
-                    Some(*phase),
+                    lifecycle_state,
+                    Some(WorkflowPhase::Review),
                     completed_phases.clone(),
-                    Some(format!(
-                        "workflow phase `{}` is not yet executable from the workflow command surface",
-                        phase.as_str()
-                    )),
-                    Some(workflow_inspect_command(runtime.workspace_ref())),
+                    Some(blocked_reason.clone()),
+                    next_action,
                 );
                 return Ok(format!(
-                    "workflow `{}` is blocked because phase `{}` cannot execute yet",
+                    "workflow `{}` stopped at review because {blocked_reason}",
                     workflow.workflow_name,
-                    phase.as_str()
+                ));
+            }
+            WorkflowPhase::Govern => {
+                if should_resume_governed_execution(record) {
+                    update_workflow_progress(
+                        record,
+                        workflow,
+                        WorkflowLifecycleState::Active,
+                        Some(WorkflowPhase::Govern),
+                        completed_phases.clone(),
+                        None,
+                        Some(workflow_resume_command(runtime.workspace_ref())),
+                    );
+                    runtime
+                        .run_to_terminal(record)
+                        .map_err(WorkflowCommandError::SessionRuntime)?;
+                }
+
+                if govern_phase_completed(record) {
+                    push_completed_phase(&mut completed_phases, WorkflowPhase::Govern);
+                    continue;
+                }
+
+                let terminal_failure = workflow_terminal_failure(record);
+                let lifecycle_state = if terminal_failure.is_some() {
+                    WorkflowLifecycleState::Failed
+                } else if matches!(
+                    latest_governance_state(record).as_deref(),
+                    Some("awaiting_approval")
+                ) {
+                    WorkflowLifecycleState::Paused
+                } else {
+                    WorkflowLifecycleState::Blocked
+                };
+                let blocked_reason = terminal_failure.unwrap_or_else(|| {
+                    match latest_governance_state(record).as_deref() {
+                        Some("awaiting_approval") => {
+                            "governance approval is still required before workflow progression can continue".to_string()
+                        }
+                        Some("blocked") => latest_governance_blocked_reason(record).unwrap_or_else(|| {
+                            "governance cannot continue until the required approval state is resolved".to_string()
+                        }),
+                        Some("failed") => latest_governance_blocked_reason(record).unwrap_or_else(|| {
+                            "governance failed before workflow progression could continue".to_string()
+                        }),
+                        _ => "workflow govern phase requires governance evidence from the active session"
+                            .to_string(),
+                    }
+                });
+                let next_action = if matches!(lifecycle_state, WorkflowLifecycleState::Paused) {
+                    Some(workflow_resume_command(runtime.workspace_ref()))
+                } else {
+                    Some(workflow_inspect_command(runtime.workspace_ref()))
+                };
+                update_workflow_progress(
+                    record,
+                    workflow,
+                    lifecycle_state,
+                    Some(WorkflowPhase::Govern),
+                    completed_phases.clone(),
+                    Some(blocked_reason.clone()),
+                    next_action,
+                );
+                return Ok(format!(
+                    "workflow `{}` stopped at govern because {blocked_reason}",
+                    workflow.workflow_name,
                 ));
             }
             WorkflowPhase::Inspect => {
@@ -417,6 +548,68 @@ fn render_workflow_report(
     }
 }
 
+fn render_workflow_discovery_report(
+    workspace: &Path,
+    entries: &[crate::domain::workflow::WorkflowDiscoveryEntry],
+) -> WorkflowCommandReport {
+    let mut lines = vec![
+        "workflow registry status: ready".to_string(),
+        format!("workflow_count: {}", entries.len()),
+    ];
+
+    for entry in entries {
+        lines.push(format!("workflow: {}", entry.workflow_name));
+        lines.push(format!("summary: {}", entry.summary));
+        lines.push(format!(
+            "phases: {}",
+            entry.phases.iter().map(|phase| phase.as_str()).collect::<Vec<_>>().join(" -> ")
+        ));
+        if let Some(recommended_when) = entry.recommended_when.as_deref() {
+            lines.push(format!("recommended_when: {recommended_when}"));
+        }
+        lines.push(format!("invoke_with: {}", entry.invocation_command));
+    }
+
+    lines.push(format!(
+        "explanation: discovered {} workflow definition(s) in workspace {}",
+        entries.len(),
+        workspace.display()
+    ));
+
+    WorkflowCommandReport {
+        exit_status: CommandExitStatus::Succeeded,
+        terminal_output: lines.join("\n"),
+    }
+}
+
+fn render_workflow_registry_error_report(
+    workspace: &Path,
+    error: &WorkflowDefinitionError,
+) -> WorkflowCommandReport {
+    let status = match error {
+        WorkflowDefinitionError::ReadWorkflowDefinitions(io_error)
+            if io_error.kind() == std::io::ErrorKind::NotFound =>
+        {
+            "missing"
+        }
+        _ => "invalid",
+    };
+
+    WorkflowCommandReport {
+        exit_status: CommandExitStatus::NonSuccess,
+        terminal_output: [
+            format!("workflow registry status: {status}"),
+            format!("reason: {error}"),
+            format!("next_command: {}", workflow_inspect_command(workspace)),
+            format!(
+                "explanation: named workflow discovery is unavailable in workspace {} until .synod/workflows.toml is valid",
+                workspace.display()
+            ),
+        ]
+        .join("\n"),
+    }
+}
+
 fn workflow_next_command(workspace: &Path, record: &ActiveSessionRecord) -> Option<String> {
     if let Some(progress) = record.active_workflow_progress()
         && matches!(progress.current_phase, Some(WorkflowPhase::Capture))
@@ -451,16 +644,23 @@ fn default_next_command(workspace: &Path, record: &ActiveSessionRecord) -> Optio
 }
 
 fn workflow_exit_status(record: &ActiveSessionRecord) -> CommandExitStatus {
-    match record.active_workflow_progress().map(|progress| progress.lifecycle_state) {
-        Some(WorkflowLifecycleState::Blocked | WorkflowLifecycleState::Failed) => {
+    if let Some(progress) = record.active_workflow_progress() {
+        match progress.lifecycle_state {
+            WorkflowLifecycleState::Blocked | WorkflowLifecycleState::Failed => {
+                return CommandExitStatus::NonSuccess;
+            }
+            WorkflowLifecycleState::Idle
+            | WorkflowLifecycleState::Active
+            | WorkflowLifecycleState::Paused
+            | WorkflowLifecycleState::Completed => {}
+        }
+    }
+
+    match record.latest_status {
+        SessionStatus::Failed | SessionStatus::Exhausted | SessionStatus::Aborted => {
             CommandExitStatus::NonSuccess
         }
-        _ => match record.latest_status {
-            SessionStatus::Failed | SessionStatus::Exhausted | SessionStatus::Aborted => {
-                CommandExitStatus::NonSuccess
-            }
-            _ => CommandExitStatus::Succeeded,
-        },
+        _ => CommandExitStatus::Succeeded,
     }
 }
 
@@ -613,6 +813,70 @@ fn condition_is_met(record: &ActiveSessionRecord, condition_kind: WorkflowCondit
                     .is_some()
         }
     }
+}
+
+fn next_pending_phase(
+    workflow: &WorkflowDefinition,
+    completed_phases: &[WorkflowPhase],
+) -> Option<WorkflowPhase> {
+    workflow.phases.iter().find(|candidate| !completed_phases.contains(candidate)).copied()
+}
+
+fn latest_review_trigger(record: &ActiveSessionRecord) -> Option<&str> {
+    record
+        .active_task
+        .as_ref()
+        .and_then(|task| task.context.state.get("latest_review_trigger"))
+        .and_then(serde_json::Value::as_str)
+}
+
+fn latest_review_outcome(record: &ActiveSessionRecord) -> Option<&str> {
+    record
+        .active_task
+        .as_ref()
+        .and_then(|task| task.context.state.get("latest_review_outcome"))
+        .and_then(serde_json::Value::as_str)
+}
+
+fn latest_governance_state(record: &ActiveSessionRecord) -> Option<String> {
+    record.active_task.as_ref().and_then(task_state_governance_state_text)
+}
+
+fn latest_governance_blocked_reason(record: &ActiveSessionRecord) -> Option<String> {
+    record.active_task.as_ref().and_then(task_state_governance_blocked_reason)
+}
+
+fn workflow_terminal_failure(record: &ActiveSessionRecord) -> Option<String> {
+    matches!(
+        record.latest_status,
+        SessionStatus::Failed
+            | SessionStatus::Exhausted
+            | SessionStatus::Aborted
+            | SessionStatus::Invalid
+    )
+    .then(|| {
+        terminal_reason(record).unwrap_or_else(|| {
+            "the underlying session ended with a non-success outcome".to_string()
+        })
+    })
+}
+
+fn should_resume_governed_execution(record: &ActiveSessionRecord) -> bool {
+    record.active_task.is_some()
+        && !record.latest_status.is_terminal()
+        && governance_state_in(
+            record,
+            &["pending_selection", "running", "governed_ready", "completed"],
+        )
+}
+
+fn govern_phase_completed(record: &ActiveSessionRecord) -> bool {
+    record.latest_status.is_terminal()
+        && governance_state_in(record, &["governed_ready", "completed"])
+}
+
+fn governance_state_in(record: &ActiveSessionRecord, expected_states: &[&str]) -> bool {
+    latest_governance_state(record).as_deref().is_some_and(|state| expected_states.contains(&state))
 }
 
 fn update_workflow_progress(

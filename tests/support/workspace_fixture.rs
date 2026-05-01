@@ -55,6 +55,51 @@ const INVALID_WORKFLOWS_TOML: &str = concat!(
     "allow_governance = true\n",
 );
 
+const WORKFLOW_FOLLOW_THROUGH_TOML: &str = concat!(
+    "[workflow.governed-delivery]\n",
+    "goal_source = \"session\"\n",
+    "entry = \"capture\"\n",
+    "phases = [\"capture\", \"plan\", \"run\", \"review\", \"govern\", \"inspect\"]\n",
+    "allow_review = true\n",
+    "allow_governance = true\n\n",
+    "[workflow.governed-delivery.when]\n",
+    "review = \"review_triggered\"\n",
+    "governance = \"governance_required\"\n\n",
+    "[workflow.governed-delivery.output]\n",
+    "next_command = true\n",
+    "routing_summary = true\n",
+    "execution_condition = true\n",
+);
+
+const DISCOVERY_WORKFLOWS_TOML: &str = concat!(
+    "[workflow.governed-delivery]\n",
+    "goal_source = \"session\"\n",
+    "entry = \"capture\"\n",
+    "phases = [\"capture\", \"plan\", \"run\", \"review\", \"govern\", \"inspect\"]\n",
+    "allow_review = true\n",
+    "allow_governance = true\n",
+    "summary = \"bounded delivery path with review and governance before completion\"\n",
+    "recommended_when = \"the task needs explicit review and governance evidence\"\n\n",
+    "[workflow.governed-delivery.when]\n",
+    "review = \"review_triggered\"\n",
+    "governance = \"governance_required\"\n\n",
+    "[workflow.quick-fix]\n",
+    "goal_source = \"session\"\n",
+    "entry = \"capture\"\n",
+    "phases = [\"capture\", \"plan\", \"run\", \"inspect\"]\n",
+    "allow_review = false\n",
+    "allow_governance = false\n",
+);
+
+const BLOCKED_GOVERN_WORKFLOW_TOML: &str = concat!(
+    "[workflow.blocked-delivery]\n",
+    "goal_source = \"session\"\n",
+    "entry = \"capture\"\n",
+    "phases = [\"capture\", \"plan\", \"run\", \"govern\", \"inspect\"]\n",
+    "allow_review = false\n",
+    "allow_governance = true\n",
+);
+
 pub fn temp_fixture_workspace(prefix: &str) -> PathBuf {
     create_fixture_workspace(
         prefix,
@@ -138,6 +183,38 @@ pub fn temp_invalid_workflow_layer_workspace(prefix: &str) -> PathBuf {
 
 pub fn temp_workflow_layer_compat_workspace(prefix: &str) -> PathBuf {
     create_workflow_fixture_workspace(prefix, VALID_WORKFLOWS_TOML, true)
+}
+
+pub fn temp_workflow_follow_through_workspace(prefix: &str) -> PathBuf {
+    let workspace = create_canon_governance_fixture_workspace(
+        prefix,
+        CanonFixtureScenario::VerifySecurityReusable,
+    );
+    write_workflow_definitions(&workspace, WORKFLOW_FOLLOW_THROUGH_TOML);
+    write_review_profile_into_execution_profile(&workspace);
+    workspace
+}
+
+pub fn temp_workflow_follow_through_approval_workspace(prefix: &str) -> PathBuf {
+    let workspace = create_canon_governance_fixture_workspace(
+        prefix,
+        CanonFixtureScenario::VerifySecurityApproval,
+    );
+    write_workflow_definitions(&workspace, WORKFLOW_FOLLOW_THROUGH_TOML);
+    write_review_profile_into_execution_profile(&workspace);
+    workspace
+}
+
+pub fn temp_workflow_discovery_workspace(prefix: &str) -> PathBuf {
+    create_workflow_fixture_workspace(prefix, DISCOVERY_WORKFLOWS_TOML, false)
+}
+
+pub fn temp_workflow_discovery_compat_workspace(prefix: &str) -> PathBuf {
+    create_workflow_fixture_workspace(prefix, DISCOVERY_WORKFLOWS_TOML, true)
+}
+
+pub fn temp_workflow_follow_through_blocked_workspace(prefix: &str) -> PathBuf {
+    create_workflow_fixture_workspace(prefix, BLOCKED_GOVERN_WORKFLOW_TOML, false)
 }
 
 #[allow(dead_code)]
@@ -382,6 +459,50 @@ fn create_governance_fixture_workspace(prefix: &str, required: bool) -> PathBuf 
     .unwrap();
 
     workspace
+}
+
+fn write_review_profile_into_execution_profile(workspace: &Path) {
+    let path = workspace.join(".synod/execution.json");
+    let mut profile: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    profile["review"] = serde_json::json!({
+        "triggers": ["pr_ready"],
+        "reviewers": [
+            {
+                "reviewer_id": "safety",
+                "role": "Safety",
+                "source": "gpt",
+                "weight": 1
+            },
+            {
+                "reviewer_id": "maintainability",
+                "role": "Maintainability",
+                "source": "claude",
+                "weight": 1
+            }
+        ],
+        "vote_rule": {
+            "strategy": "majority"
+        },
+        "scenarios": [
+            {
+                "trigger": "pr_ready",
+                "findings": [
+                    {
+                        "reviewer_id": "safety",
+                        "disposition": "approve",
+                        "summary": "No blockers"
+                    },
+                    {
+                        "reviewer_id": "maintainability",
+                        "disposition": "approve",
+                        "summary": "Ready to ship"
+                    }
+                ]
+            }
+        ]
+    });
+    fs::write(path, serde_json::to_string_pretty(&profile).unwrap()).unwrap();
 }
 
 #[derive(Clone, Copy)]

@@ -148,6 +148,10 @@ pub struct WorkflowDefinition {
     pub conditional_phases: Vec<ConditionalWorkflowPhase>,
     #[serde(default)]
     pub output_preferences: WorkflowOutputPreferences,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recommended_when: Option<String>,
 }
 
 impl WorkflowDefinition {
@@ -220,6 +224,38 @@ impl WorkflowDefinition {
 
         Ok(())
     }
+
+    pub fn discovery_summary(&self) -> String {
+        self.summary.clone().unwrap_or_else(|| {
+            format!(
+                "bounded workflow covering {}",
+                self.phases.iter().map(|phase| phase.as_str()).collect::<Vec<_>>().join(" -> ")
+            )
+        })
+    }
+
+    pub fn phase_chain_text(&self) -> String {
+        self.phases.iter().map(|phase| phase.as_str()).collect::<Vec<_>>().join(" -> ")
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowAvailabilityState {
+    Ready,
+    Invalid,
+    Unsupported,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkflowDiscoveryEntry {
+    pub workflow_name: String,
+    pub summary: String,
+    pub phases: Vec<WorkflowPhase>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recommended_when: Option<String>,
+    pub invocation_command: String,
+    pub availability_state: WorkflowAvailabilityState,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -257,6 +293,24 @@ impl WorkflowRegistry {
 
     pub fn workflow_names(&self) -> Vec<&str> {
         self.workflows.keys().map(String::as_str).collect()
+    }
+
+    pub fn discovery_entries(&self, workspace: &Path) -> Vec<WorkflowDiscoveryEntry> {
+        self.workflows
+            .values()
+            .map(|workflow| WorkflowDiscoveryEntry {
+                workflow_name: workflow.workflow_name.clone(),
+                summary: workflow.discovery_summary(),
+                phases: workflow.phases.clone(),
+                recommended_when: workflow.recommended_when.clone(),
+                invocation_command: format!(
+                    "synod workflow run {} --workspace {}",
+                    workflow.workflow_name,
+                    workspace.display()
+                ),
+                availability_state: WorkflowAvailabilityState::Ready,
+            })
+            .collect()
     }
 }
 
@@ -326,6 +380,10 @@ struct WorkflowDefinitionToml {
     when: WorkflowConditionToml,
     #[serde(default, rename = "output")]
     output_preferences: WorkflowOutputPreferences,
+    #[serde(default)]
+    summary: Option<String>,
+    #[serde(default)]
+    recommended_when: Option<String>,
 }
 
 impl WorkflowDefinitionToml {
@@ -365,6 +423,8 @@ impl WorkflowDefinitionToml {
             allow_governance: self.allow_governance,
             conditional_phases,
             output_preferences: self.output_preferences,
+            summary: self.summary,
+            recommended_when: self.recommended_when,
         };
         definition.validate()?;
         Ok(definition)
