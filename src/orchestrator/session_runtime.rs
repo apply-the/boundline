@@ -15,8 +15,8 @@ use crate::domain::flow::{FlowStepMetadata, built_in_flow, supported_flow_names_
 use crate::domain::flow_policy::FlowPolicy;
 use crate::domain::goal_plan::InferredFlow;
 use crate::domain::governance::{
-    ApprovalState, CanonMode, GovernanceLifecycleState, GovernanceRuntimeKind, GovernedStageRecord,
-    PacketReadiness, resolved_canon_mode, supported_canon_modes_for_stage,
+    ApprovalState, GovernanceLifecycleState, GovernanceRuntimeKind, GovernedStageRecord,
+    PacketReadiness, resolved_canon_mode,
 };
 use crate::domain::limits::{RunLimits, TerminalCondition};
 use crate::domain::session::{
@@ -299,7 +299,7 @@ impl SessionRuntime {
         Ok(outcome.mode == RoutingMode::Native)
     }
 
-    fn should_materialize_security_assessment_task(
+    fn should_materialize_governed_task(
         &self,
         session: &ActiveSessionRecord,
     ) -> Result<bool, SessionRuntimeError> {
@@ -334,16 +334,14 @@ impl SessionRuntime {
                 && policy.flow_name == flow_name
                 && policy.effective_runtime(governance.default_runtime)
                     == GovernanceRuntimeKind::Canon
-                && supported_canon_modes_for_stage(&policy.flow_name, &policy.stage_id)
-                    .contains(&CanonMode::SecurityAssessment)
         }))
     }
 
-    fn materialize_security_assessment_task(
+    fn materialize_governed_task(
         &self,
         session: &mut ActiveSessionRecord,
     ) -> Result<bool, SessionRuntimeError> {
-        if !self.should_materialize_security_assessment_task(session)? {
+        if !self.should_materialize_governed_task(session)? {
             return Ok(false);
         }
 
@@ -491,7 +489,7 @@ impl SessionRuntime {
         &self,
         session: &mut ActiveSessionRecord,
     ) -> Result<(), SessionRuntimeError> {
-        let _ = self.materialize_security_assessment_task(session)?;
+        let _ = self.materialize_governed_task(session)?;
         let runtime = self.build_runtime(session)?;
         let _ = self.execute_single_step(session, &runtime)?;
         Ok(())
@@ -501,7 +499,7 @@ impl SessionRuntime {
         &self,
         session: &mut ActiveSessionRecord,
     ) -> Result<TaskRunResponse, SessionRuntimeError> {
-        let _ = self.materialize_security_assessment_task(session)?;
+        let _ = self.materialize_governed_task(session)?;
 
         if self.uses_native_goal_plan(session)? {
             return self.run_goal_plan_to_terminal(session);

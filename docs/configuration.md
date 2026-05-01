@@ -1,11 +1,11 @@
-# Configuration in Synod 0.19.0
+# Configuration in Synod 0.20.0
 
-Synod `0.19.0` keeps a user-friendly setup and routing configuration surface for the session-native runtime plus explicit compatibility/bootstrap workflows.
+Synod `0.20.0` keeps a user-friendly setup and routing configuration surface for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
-The `0.19.0` release keeps configuration behavior stable while extending the
-workspace-local named workflow registry at `.synod/workflows.toml` with optional
-discovery metadata and executable workflow follow-through for bounded `review`
-and `govern` phases.
+The `0.20.0` release keeps configuration behavior stable while extending the
+same governed routing defaults across earlier `bug-fix:investigate` work,
+later verify-stage `security-assessment`, and workflow-aware projection of the
+same bounded governance state.
 
 ## What changed
 

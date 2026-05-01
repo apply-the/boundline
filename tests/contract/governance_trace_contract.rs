@@ -18,36 +18,58 @@ fn bootstrap_bug_fix(workspace: &Path) {
 }
 
 #[test]
-fn governance_trace_contract_native_inspect_omits_fixture_governance_wait_events() {
+fn governance_trace_contract_native_inspect_surfaces_fixture_governance_wait_events() {
     let workspace = temp_canon_approval_workspace("synod-governance-trace-approval");
     bootstrap_bug_fix(&workspace);
 
     let run = run_synod_in(&workspace, &["run"]);
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(0), "{run_text}");
-    assert!(run_text.contains("decision "), "{run_text}");
+    assert!(run_text.contains("governance_started: bug-fix:investigate (discovery)"), "{run_text}");
 
     let inspect = run_synod_in(&workspace, &["inspect", "--workspace", "."]);
     let inspect_text = terminal_text(&inspect);
-    assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
-    assert!(!inspect_text.contains("governance_decision:"), "{inspect_text}");
-    assert!(!inspect_text.contains("governance_started:"), "{inspect_text}");
-    assert!(!inspect_text.contains("governance_awaiting_approval:"), "{inspect_text}");
+    assert_eq!(inspect.status.code(), Some(1), "{inspect_text}");
+    assert!(
+        inspect_text.contains("governance_started: bug-fix:investigate (discovery)"),
+        "{inspect_text}"
+    );
+    assert!(
+        inspect_text.contains(
+            "governance_awaiting_approval: bug-fix:investigate (requested) [canon-run-approval]"
+        ),
+        "{inspect_text}"
+    );
+    assert!(inspect_text.contains("terminal_status: running"), "{inspect_text}");
 }
 
 #[test]
-fn governance_trace_contract_native_inspect_omits_packet_rejection_and_block_events() {
+fn governance_trace_contract_native_inspect_surfaces_packet_rejection_and_block_events() {
     let workspace = temp_canon_packet_rejection_workspace("synod-governance-trace-rejected");
     bootstrap_bug_fix(&workspace);
 
     let run = run_synod_in(&workspace, &["run"]);
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(0), "{run_text}");
-    assert!(run_text.contains("decision "), "{run_text}");
+    assert!(
+        run_text.contains(
+            "governance_blocked: governance packet was Rejected for stage bug-fix:investigate"
+        ),
+        "{run_text}"
+    );
 
     let inspect = run_synod_in(&workspace, &["inspect", "--workspace", "."]);
     let inspect_text = terminal_text(&inspect);
-    assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
-    assert!(!inspect_text.contains("governance_packet_rejected:"), "{inspect_text}");
-    assert!(!inspect_text.contains("governance_blocked:"), "{inspect_text}");
+    assert_eq!(inspect.status.code(), Some(1), "{inspect_text}");
+    assert!(inspect_text.contains("governance_packet_rejected: governance packet was Rejected for stage bug-fix:investigate"), "{inspect_text}");
+    assert!(
+        inspect_text.contains(
+            "governance_blocked: governance packet was Rejected for stage bug-fix:investigate"
+        ),
+        "{inspect_text}"
+    );
+    assert!(
+        inspect_text.contains("terminal_reason: governed work is blocked pending intervention"),
+        "{inspect_text}"
+    );
 }

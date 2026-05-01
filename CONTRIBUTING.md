@@ -101,6 +101,8 @@ When a change affects routing, planning, or compatibility behavior, keep the doc
 
 If you change `.synod/workflows.toml` semantics or `synod workflow ...` output, keep the docs explicit about workflow discovery guidance, bounded `review`/`govern` follow-through, and unsupported workflow-engine semantics.
 
+If you change governed-stage behavior, keep the docs explicit about which stage now stops for governance, how packet lineage is reused on later stages, and how waiting or blocked guidance appears on both direct session and workflow-aware surfaces.
+
 If the crate surface or release scope materially changed, update the crate version in [Cargo.toml](Cargo.toml).
 
 ## Pull Requests
