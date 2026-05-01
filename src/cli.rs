@@ -183,6 +183,10 @@ pub enum DeveloperCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum WorkflowSubcommand {
+    List {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
     Run {
         name: String,
         #[arg(long)]
@@ -393,7 +397,8 @@ impl DeveloperCommandSession {
             DeveloperCommand::Workflow { command } => Self {
                 command_name: CommandName::Workflow,
                 workspace_ref: match command {
-                    WorkflowSubcommand::Run { workspace, .. }
+                    WorkflowSubcommand::List { workspace }
+                    | WorkflowSubcommand::Run { workspace, .. }
                     | WorkflowSubcommand::Status { workspace }
                     | WorkflowSubcommand::Resume { workspace }
                     | WorkflowSubcommand::Inspect { workspace } => {
@@ -401,6 +406,7 @@ impl DeveloperCommandSession {
                     }
                 },
                 goal: match command {
+                    WorkflowSubcommand::List { .. } => None,
                     WorkflowSubcommand::Run { name, .. } => Some(name.clone()),
                     WorkflowSubcommand::Status { .. }
                     | WorkflowSubcommand::Resume { .. }
@@ -673,6 +679,20 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
             }
         }
         DeveloperCommand::Workflow { command } => match command {
+            WorkflowSubcommand::List { workspace } => {
+                match workflow::execute_list(workspace.as_deref()) {
+                    Ok(report) => DispatchOutcome {
+                        exit_status: report.exit_status,
+                        output: report.terminal_output,
+                        trace_location: None,
+                    },
+                    Err(error) => DispatchOutcome {
+                        exit_status: CommandExitStatus::NonSuccess,
+                        output: format!("workflow error: {error}"),
+                        trace_location: None,
+                    },
+                }
+            }
             WorkflowSubcommand::Run { name, workspace, goal } => {
                 match workflow::execute_run(workspace.as_deref(), name, goal.as_deref()) {
                     Ok(report) => DispatchOutcome {

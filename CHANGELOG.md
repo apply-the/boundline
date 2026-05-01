@@ -19,9 +19,29 @@ recorded workspace version.
 
 Delivered specs:
 
-- None recorded after `0.18.0`
+- None recorded after `0.19.0`
 
 Highlights:
+
+## [0.19.0] - 2026-05-01
+
+Delivered specs:
+
+- `019` - Workflow Follow-Through
+
+Highlights:
+
+- Make bounded `review` and `govern` phases executable from `synod workflow`
+  so named workflows can complete or stop in explicit paused, blocked, failed,
+  or completed states on the same session-owned route.
+- Add `synod workflow list` plus optional workflow-registry discovery metadata
+  (`summary`, `recommended_when`) so operators and assistants can choose the
+  correct named workflow without reading raw registry files.
+- Keep direct session-native commands and explicit compatibility routing
+  available when no named workflow is invoked, even when a workspace defines
+  `.synod/workflows.toml`.
+- Update README, getting-started, configuration, assistant guidance, roadmap,
+  and contributor docs for the completed workflow follow-through slice.
 
 ## [0.18.0] - 2026-04-30
 

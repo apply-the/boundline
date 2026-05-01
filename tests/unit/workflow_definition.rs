@@ -1,7 +1,10 @@
-use synod::domain::workflow::{WorkflowDefinitionError, WorkflowPhase, WorkflowRegistry};
+use synod::domain::workflow::{
+    WorkflowAvailabilityState, WorkflowDefinitionError, WorkflowPhase, WorkflowRegistry,
+};
 
 use crate::workspace_fixture::{
-    temp_invalid_workflow_layer_workspace, temp_workflow_layer_workspace,
+    temp_invalid_workflow_layer_workspace, temp_workflow_discovery_workspace,
+    temp_workflow_layer_workspace,
 };
 
 #[test]
@@ -84,4 +87,28 @@ fn rejects_govern_phase_when_governance_is_not_allowed() {
     .unwrap_err();
 
     assert!(matches!(error, WorkflowDefinitionError::GovernancePhaseNotAllowed { .. }));
+}
+
+#[test]
+fn loads_optional_discovery_metadata_and_fallback_summary() {
+    let workspace = temp_workflow_discovery_workspace("workflow-definition-discovery");
+
+    let registry = WorkflowRegistry::load(&workspace.join(".synod/workflows.toml")).unwrap();
+    let entries = registry.discovery_entries(&workspace);
+
+    let governed = entries.iter().find(|entry| entry.workflow_name == "governed-delivery").unwrap();
+    assert_eq!(governed.availability_state, WorkflowAvailabilityState::Ready);
+    assert_eq!(
+        governed.summary,
+        "bounded delivery path with review and governance before completion"
+    );
+    assert_eq!(
+        governed.recommended_when.as_deref(),
+        Some("the task needs explicit review and governance evidence")
+    );
+
+    let quick_fix = entries.iter().find(|entry| entry.workflow_name == "quick-fix").unwrap();
+    assert_eq!(quick_fix.summary, "bounded workflow covering capture -> plan -> run -> inspect");
+    assert!(quick_fix.recommended_when.is_none());
+    assert!(quick_fix.invocation_command.contains("synod workflow run quick-fix --workspace "));
 }

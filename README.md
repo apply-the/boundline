@@ -22,7 +22,7 @@ The main surface is the `synod` CLI:
 - `start`, `capture`, `flow`, `plan`, and `step` drive the session workflow.
 - `run` executes a bounded delivery task end to end, preferring native session planning when a `GoalPlan` exists.
 - `status`, `next`, and `inspect` explain the current session and latest trace.
-- `workflow run|status|resume|inspect` lets a named workflow reuse the same route, session, and trace surfaces without introducing a second runtime.
+- `workflow list|run|status|resume|inspect` lets a named workflow reuse the same route, session, and trace surfaces without introducing a second runtime.
 
 Use it when you want delivery work to stay bounded and inspectable:
 
@@ -54,12 +54,13 @@ When Synod governance is configured to use Canon, the current adapter is
 validated against Canon `0.25.0`.
 
 That is the Canon CLI version explicitly documented as supported for Synod
-`0.18.0`. Earlier or later Canon versions may work, but they are not part of the
+`0.19.0`. Earlier or later Canon versions may work, but they are not part of the
 documented compatibility surface yet.
 
-The `0.18.0` release keeps Canon bounded to stage-level governance and evidence,
-adds the session-native workflow layer, and preserves verify-stage
-`security-assessment` coverage on the primary route.
+The `0.19.0` release keeps Canon bounded to stage-level governance and evidence,
+adds executable workflow follow-through for bounded `review` and `govern`
+phases, adds `workflow list` for named-workflow discovery, and preserves
+verify-stage `security-assessment` coverage on the primary route.
 
 For contributor setup and validation expectations, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -104,7 +105,8 @@ When you want a reusable named entrypoint for the same session-owned route, add
 `.synod/workflows.toml` and use:
 
 ```bash
-synod workflow run default --workspace <workspace> --goal "Fix the failing add test"
+synod workflow list --workspace <workspace>
+synod workflow run governed-delivery --workspace <workspace> --goal "Fix the failing add test"
 synod workflow status --workspace <workspace>
 synod workflow resume --workspace <workspace>
 synod workflow inspect --workspace <workspace>
@@ -112,7 +114,10 @@ synod workflow inspect --workspace <workspace>
 
 The workflow layer is intentionally bounded: workflows compile into Synod's
 existing `capture`, `clarify`, `plan`, `run`, `review`, `govern`, and `inspect`
-phases instead of introducing a generic automation DSL.
+phases instead of introducing a generic automation DSL. `workflow list` exposes
+named workflow summaries plus invocation guidance, and `workflow run|resume`
+can now carry bounded `review` and `govern` phases to completion or an explicit
+paused, blocked, or failed state on the same session-owned route.
 
 ### 1. Optional bootstrap
 
@@ -191,7 +196,8 @@ What those commands do, in short:
 Optional named workflow layer:
 
 ```bash
-synod workflow run default --workspace <workspace> --goal "Fix the failing add test"
+synod workflow list --workspace <workspace>
+synod workflow run governed-delivery --workspace <workspace> --goal "Fix the failing add test"
 synod workflow status --workspace <workspace>
 synod workflow resume --workspace <workspace>
 synod workflow inspect --workspace <workspace>
@@ -200,6 +206,8 @@ synod workflow inspect --workspace <workspace>
 `synod workflow run` reuses the same session-native runtime. It persists named
 workflow progress in the active session and reports the same `routing`,
 `execution_condition`, and `next_command` story as the direct session commands.
+Use `workflow list` first when the workspace offers multiple named workflows or
+when an assistant needs discovery guidance instead of reading the raw registry.
 
 ### 3. Use the direct compatibility workflow when you do not need a session
 
