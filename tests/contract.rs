@@ -102,3 +102,12 @@ mod workflow_command_surface_contract;
 
 #[path = "contract/workflow_definition_contract.rs"]
 mod workflow_definition_contract;
+
+#[path = "contract/workflow_discovery_contract.rs"]
+mod workflow_discovery_contract;
+
+#[path = "contract/workflow_follow_through_command_contract.rs"]
+mod workflow_follow_through_command_contract;
+
+#[path = "contract/workflow_registry_guidance_contract.rs"]
+mod workflow_registry_guidance_contract;

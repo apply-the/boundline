@@ -102,3 +102,15 @@ mod workflow_layer_resume;
 
 #[path = "integration/workflow_layer_compat.rs"]
 mod workflow_layer_compat;
+
+#[path = "integration/workflow_follow_through.rs"]
+mod workflow_follow_through;
+
+#[path = "integration/workflow_discovery.rs"]
+mod workflow_discovery;
+
+#[path = "integration/workflow_follow_through_compat.rs"]
+mod workflow_follow_through_compat;
+
+#[path = "integration/workflow_follow_through_blocked.rs"]
+mod workflow_follow_through_blocked;

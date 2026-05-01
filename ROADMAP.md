@@ -6,53 +6,60 @@ Canon is downstream from Synod in this roadmap: Synod thinks, decides, orchestra
 
 Evolve Synod into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.18.0
+## Current Status: v0.19.0
 
 Synod now has its core session-native orchestration baseline plus the first
-bounded workflow layer in place:
+bounded workflow follow-through slice in place:
 
 - session-native orchestration remains the primary operator path
-- `workflow run`, `workflow status`, `workflow resume`, and `workflow inspect` now project named workflow state onto the same session, route, trace, and `execution_condition` surfaces
-- workflow definitions live in workspace-local `.synod/workflows.toml` and remain bounded to existing Synod phases instead of becoming a generic workflow DSL
+- `workflow list`, `workflow run`, `workflow status`, `workflow resume`, and `workflow inspect` now project named workflow state onto the same session, route, trace, and `execution_condition` surfaces
+- bounded `review` and `govern` phases are now executable from the workflow surface, stopping in explicit paused, blocked, failed, or completed states instead of remaining declaration-only blockers
+- workflow definitions live in workspace-local `.synod/workflows.toml`, can ship optional discovery metadata, and remain bounded to existing Synod phases instead of becoming a generic workflow DSL
 - direct session-native commands and explicit compatibility routing remain available when no named workflow is invoked
 - Canon is still integrated as a bounded stage-boundary governance runtime, including verify-stage `security-assessment`
 
-## Next Priority: Deepen Bounded Workflow Follow-Through
+## Next Priority: Broaden Governed Stage Depth
 
-The next slice should build on `0.18.0` by making more of the bounded
-workflow-phase story executable without widening Synod into a general-purpose
-workflow engine.
+The next slice should build on `0.19.0` by deepening bounded governed-stage
+coverage without widening Synod into a general-purpose workflow engine or
+letting Canon take orchestration ownership.
 
 The next spec direction should explicitly deliver three things:
 
-- bounded execution semantics for `review` and `govern` phases from the workflow surface
-- stronger assistant ergonomics around named workflow discovery and invocation without forking the primary CLI story
-- clearer operator guidance for authored workflow registries, including reusable examples and migration notes
+- broader governed-stage coverage beyond the current verify-stage `security-assessment` slice
+- richer packet reuse, approval refresh, and blocked-state guidance across more bounded stage transitions
+- the same session-native and workflow-aware route story without introducing Canon-owned orchestration or hidden background progression
 
 ### Priority rationale
 
-- this keeps workflow support bounded and useful without reopening the generic workflow-engine problem
-- it deepens the operator value of the new workflow surface instead of leaving `review` and `govern` as declaration-only phases
-- it improves assistant and contributor ergonomics now that `.synod/workflows.toml` is a real product surface
+- this deepens real governed delivery value on the existing primary route instead of adding another surface for operators to reason about
+- it uses the now-complete first workflow slice as a stable projection layer while improving the underlying governed stage story
+- it keeps Synod authoritative for orchestration while making Canon evidence reuse more useful across bounded delivery flows
 
-### Delivered in 0.18.0
+### Delivered in 0.19.0
 
-- `synod workflow run <name>` starts a named workflow against the existing session-native runtime
-- `synod workflow status`, `resume`, and `inspect` expose workflow identity, current phase, routing, `execution_condition`, and next-command guidance
-- workflow progress persists in `.synod/session.json` and reuses `.synod/traces/`
-- unsupported bounded-semantics are rejected explicitly instead of silently widening the workflow model
+- `synod workflow list` exposes named workflows, phase chains, summary text, and invocation guidance from `.synod/workflows.toml`
+- `synod workflow run <name>` and `resume` can now carry bounded `review` and `govern` phases to explicit paused, blocked, failed, or completed outcomes on the existing session-native route
+- workflow progress persists in `.synod/session.json` and reuses `.synod/traces/` while direct session-native commands and explicit compatibility routing remain available when no named workflow is invoked
+- authored workflow registries now have clearer bounded guidance through optional `summary` and `recommended_when` metadata plus updated operator and assistant docs
 
 Representative workflow registry shape:
 
 ```toml
-[workflow.default]
+[workflow.governed-delivery]
 goal_source = "session"
 entry = "capture"
-phases = ["capture", "plan", "run", "inspect"]
+phases = ["capture", "plan", "run", "review", "govern", "inspect"]
 allow_review = true
 allow_governance = true
+summary = "bounded delivery path with review and governance before completion"
+recommended_when = "the task needs explicit review and governance evidence"
 
-[workflow.default.output]
+[workflow.governed-delivery.when]
+review = "review_triggered"
+governance = "governance_required"
+
+[workflow.governed-delivery.output]
 next_command = true
 routing_summary = true
 execution_condition = true
@@ -60,7 +67,6 @@ execution_condition = true
 
 ### Secondary follow-up directions
 
-- deepen Canon governance beyond the first `security-assessment` slice with richer escalation and broader governed stage coverage
 - broaden adaptive heuristics beyond the current deterministic local repair patterns
 - migrate more review and compatibility configuration onto session-native summaries without losing bounded manifest support
 - expand multi-workspace cluster support into full cross-repository execution planning and mutation

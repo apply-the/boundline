@@ -31,9 +31,10 @@ The shipped CLI binary is `synod`.
 If you enable Synod governance through Canon, the current Synod adapter is
 validated against Canon `0.25.0`.
 
-In `0.18.0`, verify-stage Canon `security-assessment` can also remain on the
-same native session route, and the optional `synod workflow` surface can name
-that bounded route without introducing a second operator workflow.
+In `0.19.0`, verify-stage Canon `security-assessment` can also remain on the
+same native session route, and the optional `synod workflow` surface can now
+discover named workflows and continue bounded `review` plus `govern` follow-through
+without introducing a second operator workflow.
 
 ## Install Synod
 
@@ -178,11 +179,13 @@ synod run --workspace <workspace>
 
 ### 4a. Optional Named Workflow Layer
 
-If the workspace defines `.synod/workflows.toml`, you can enter the same
-session-owned route through a named workflow:
+If the workspace defines `.synod/workflows.toml`, you can discover the
+available named workflows and enter the same session-owned route through one of
+them:
 
 ```bash
-synod workflow run default --workspace <workspace> --goal "Fix the failing add test"
+synod workflow list --workspace <workspace>
+synod workflow run governed-delivery --workspace <workspace> --goal "Fix the failing add test"
 synod workflow status --workspace <workspace>
 synod workflow resume --workspace <workspace>
 synod workflow inspect --workspace <workspace>
@@ -190,7 +193,10 @@ synod workflow inspect --workspace <workspace>
 
 This layer is bounded by the same Synod phases and persists progress in the
 active session. It does not replace `start`, `capture`, `plan`, `run`,
-`status`, or `inspect`; it composes over them.
+`status`, or `inspect`; it composes over them. `workflow list` provides the
+named workflow summary, phase chain, and invocation guidance, while
+`workflow run|resume` can now stop at actionable `review` or `govern` follow-through
+states instead of treating those phases as static blockers.
 
 ### 5. Inspect the Result
 
@@ -239,7 +245,7 @@ contract; it does not replace the normal session-native path.
 | `synod status` | Show the current session snapshot |
 | `synod next` | Show the CLI-reported next action |
 | `synod inspect` | Summarize the latest trace or a specific trace |
-| `synod workflow run|status|resume|inspect` | Reuse the same session-native route through a named workflow entrypoint |
+| `synod workflow list|run|status|resume|inspect` | Discover and reuse the same session-native route through a named workflow entrypoint |
 
 ## Choosing the Right Manifest Shape
 

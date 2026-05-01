@@ -54,9 +54,9 @@ pub use domain::step::{
 };
 pub use domain::task::{TaskRunRequest, TaskRunResponse, TaskStatus, TerminalReason};
 pub use domain::workflow::{
-    ConditionalWorkflowPhase, WorkflowConditionKind, WorkflowDefinition, WorkflowDefinitionError,
-    WorkflowGoalSource, WorkflowLifecycleState, WorkflowOutputPreferences, WorkflowPhase,
-    WorkflowProgressState, WorkflowRegistry,
+    ConditionalWorkflowPhase, WorkflowAvailabilityState, WorkflowConditionKind, WorkflowDefinition,
+    WorkflowDefinitionError, WorkflowDiscoveryEntry, WorkflowGoalSource, WorkflowLifecycleState,
+    WorkflowOutputPreferences, WorkflowPhase, WorkflowProgressState, WorkflowRegistry,
 };
 pub use orchestrator::governance::{
     GovernanceStatePatchError, GovernanceStateSelectionError, GovernanceStepDecision,
