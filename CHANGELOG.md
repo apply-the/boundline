@@ -19,9 +19,28 @@ recorded workspace version.
 
 Delivered specs:
 
-- None recorded after `0.22.0`
+- None recorded after `0.23.0`
 
 Highlights:
+
+## [0.23.0] - 2026-05-01
+
+Delivered specs:
+
+- `023` - Broaden Bounded Adaptive Repair
+
+Highlights:
+
+- Broaden bounded adaptive repair beyond arithmetic, comparison, and boolean
+  flips with new deterministic local families for ordering boundaries, result
+  status, and bounded numeric literals.
+- Surface adaptive `candidate_family`, selection credibility, rejected
+  candidates, and explicit exhaustion reasons through `run`, `status`, `next`,
+  and `inspect` while keeping the route explicitly on the compatibility path.
+- Stop adaptive replans explicitly when validation evidence is absent or
+  insufficient for another materially different bounded candidate, and update
+  README, getting-started, configuration, adaptive-execution, assistant
+  guidance, roadmap, contributor docs, and changelog for the release.
 
 ## [0.22.0] - 2026-05-01
 

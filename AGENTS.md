@@ -66,9 +66,9 @@ Crate versioning follows Semantic Versioning.
 Before 1.0.0, breaking changes MAY occur in minor versions.
 
 ## Recent Changes
+- 023-broaden-bounded-adaptive-repair: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for this slice
+- 023-broaden-bounded-adaptive-repair: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for this slice
 - 022-session-compatibility-continuity: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem and path APIs; no new runtime dependencies planned for this slice
-- 021-adaptive-repair-depth: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for this slice
-- 020-governed-stage-depth: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for this slice
 
 
 <!-- MANUAL ADDITIONS START -->

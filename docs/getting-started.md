@@ -31,15 +31,16 @@ The shipped CLI binary is `synod`.
 If you enable Synod governance through Canon, the current Synod adapter is
 validated against Canon `0.25.0`.
 
-In `0.22.0`, governed `bug-fix:investigate` and later verify-stage Canon
+In `0.23.0`, governed `bug-fix:investigate` and later verify-stage Canon
 `security-assessment` can remain on the same native session route, and the
 optional `synod workflow` surface projects the same approval, blocked, and
 packet-lineage story without introducing a second operator workflow. On the
-explicit compatibility path, adaptive execution can still shift the next
-bounded repair file when failed validation points to a different
-manifest-declared target, and `status` plus `next` now stay usable by naming
-the latest compatibility trace as the authoritative inspect-only follow-up when
-no active session exists.
+explicit compatibility path, adaptive execution can now choose broader bounded
+repair families, surface explicit `candidate_family` plus credibility and
+rejection guidance, and stop cleanly when validation evidence is too weak to
+justify another materially different bounded attempt. `status` plus `next`
+also remain usable by naming the latest compatibility trace as the
+authoritative inspect-only follow-up when no active session exists.
 
 ## Install Synod
 
@@ -236,7 +237,10 @@ contract; it does not replace the normal session-native path.
 
 If that manifest defines `adaptive`, failed validation can reprioritize the next
 bounded adaptive attempt from the latest validation record while keeping the
-route explicit as compatibility execution.
+route explicit as compatibility execution. In `0.23.0`, the same path can also
+choose bounded ordering-boundary, result-status, and numeric-literal repairs,
+and it reports explicit exhaustion instead of continuing blindly when the
+validation evidence is absent or insufficient.
 
 After a direct compatibility run, `synod status --workspace <workspace>` and
 `synod next --workspace <workspace>` can now point you back to

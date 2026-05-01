@@ -29,7 +29,9 @@ use crate::orchestrator::governance::{
 use crate::orchestrator::planner::{Planner, PlanningError};
 use crate::orchestrator::recovery::{RecoveryDecision, decide_recovery};
 use crate::orchestrator::review_trace::{record_review_step_completed, record_review_step_started};
-use crate::orchestrator::terminal::{build_terminal_reason, task_status_for_condition};
+use crate::orchestrator::terminal::{
+    build_planning_failure_reason, build_terminal_reason, task_status_for_condition,
+};
 use crate::registry::agent_registry::AgentRegistry;
 use crate::registry::tool_registry::ToolRegistry;
 
@@ -281,11 +283,14 @@ where
                             ) {
                                 Ok(replacements) => replacements,
                                 Err(error) => {
-                                    let reason = build_terminal_reason(
-                                        TerminalCondition::TaskNotCredible,
-                                        "planner could not produce a credible replacement plan",
-                                        Some(json!({"error": error.to_string()})),
-                                    );
+                                    if let PlanningError::ReplanUnavailable(message) = &error {
+                                        task.context.state.insert(
+                                            "latest_exhaustion_reason".to_string(),
+                                            json!(message),
+                                        );
+                                    }
+                                    let reason =
+                                        build_planning_failure_reason(&step_snapshot.id, &error);
                                     break self.finalize_task(&mut task, &mut trace, reason)?;
                                 }
                             };

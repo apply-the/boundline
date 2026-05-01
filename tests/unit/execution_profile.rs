@@ -212,6 +212,9 @@ fn adaptive_execution_profile_defaults_builtin_change_kinds() {
             AdaptiveChangeKind::ArithmeticSwap,
             AdaptiveChangeKind::ComparisonFlip,
             AdaptiveChangeKind::BooleanFlip,
+            AdaptiveChangeKind::OrderingBoundaryFlip,
+            AdaptiveChangeKind::ResultStatusFlip,
+            AdaptiveChangeKind::NumericLiteralFlip,
         ]
     );
 }

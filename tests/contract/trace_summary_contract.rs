@@ -1,6 +1,6 @@
 use crate::workspace_fixture::{
-    extract_trace_path, run_synod, temp_broken_fixture_workspace, temp_fixture_workspace,
-    terminal_text, write_markdown_brief,
+    extract_trace_path, run_synod, temp_adaptive_ordering_boundary_workspace,
+    temp_broken_fixture_workspace, temp_fixture_workspace, terminal_text, write_markdown_brief,
 };
 use synod::adapters::trace_store::{FileTraceStore, TraceStore};
 use synod::cli::inspect::summarize_trace;
@@ -113,5 +113,38 @@ fn trace_summary_uses_shared_route_and_execution_condition_vocabulary_for_compat
     assert_eq!(
         trace_execution_condition_text(&summary),
         format!("terminal - {}", summary.terminal_reason.message)
+    );
+}
+
+#[test]
+fn trace_summary_surfaces_broader_adaptive_family_evidence() {
+    let workspace = temp_adaptive_ordering_boundary_workspace("synod-trace-summary-ordering");
+    let output = run_synod(&[
+        "run",
+        "--goal",
+        "Fix the inclusive threshold boundary",
+        "--workspace",
+        workspace.to_string_lossy().as_ref(),
+    ]);
+    let text = terminal_text(&output);
+    let trace_path = extract_trace_path(&text).expect(&text);
+    let store = FileTraceStore::for_workspace(&workspace);
+    let trace = store.load(&trace_path).unwrap();
+    let summary = summarize_trace(&trace_path, &trace).unwrap();
+
+    assert!(
+        summary
+            .adaptive_evidence
+            .iter()
+            .any(|line| line == "candidate_family: ordering_boundary_flip"),
+        "{:?}",
+        summary.adaptive_evidence
+    );
+    assert!(
+        summary.adaptive_evidence.iter().any(|line| {
+            line.contains("selection_reason: selected src/lib.rs via ordering_boundary_flip")
+        }),
+        "{:?}",
+        summary.adaptive_evidence
     );
 }

@@ -1,6 +1,7 @@
 use crate::workspace_fixture::{
     extract_trace_path, run_synod, temp_adaptive_fixture_workspace,
-    temp_adaptive_guided_replanning_workspace, temp_adaptive_replanning_workspace, terminal_text,
+    temp_adaptive_guided_replanning_workspace, temp_adaptive_ordering_boundary_workspace,
+    temp_adaptive_replanning_workspace, terminal_text,
 };
 
 #[test]
@@ -64,6 +65,26 @@ fn custom_run_uses_validation_guidance_to_shift_the_adaptive_target() {
         text.contains("attempt_lineage: adaptive-attempt-2 replaced adaptive-attempt-1"),
         "{text}"
     );
+    assert!(text.contains("validation: passed"), "{text}");
+    assert!(text.contains("terminal_status: succeeded"), "{text}");
+}
+
+#[test]
+fn custom_run_can_repair_an_ordering_boundary_with_a_broader_family() {
+    let workspace =
+        temp_adaptive_ordering_boundary_workspace("synod-cli-adaptive-ordering-boundary");
+    let output = run_synod(&[
+        "run",
+        "--goal",
+        "Fix the inclusive threshold boundary",
+        "--workspace",
+        workspace.to_string_lossy().as_ref(),
+    ]);
+    let text = terminal_text(&output);
+
+    assert_eq!(output.status.code(), Some(0), "{text}");
+    assert!(text.contains("candidate_family: ordering_boundary_flip"), "{text}");
+    assert!(text.contains("changed_files: src/lib.rs"), "{text}");
     assert!(text.contains("validation: passed"), "{text}");
     assert!(text.contains("terminal_status: succeeded"), "{text}");
 }
