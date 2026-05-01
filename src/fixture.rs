@@ -9,8 +9,11 @@ use serde_json::{Map, Value, json};
 use thiserror::Error;
 
 use crate::adapters::agent::FnAgentAdapter;
+use crate::adapters::cluster_store::FileClusterStore;
+use crate::adapters::config_store::FileConfigStore;
 use crate::adapters::tool::FnToolAdapter;
 use crate::domain::brief::AuthoredBriefBundle;
+use crate::domain::configuration::{RoutingOverrides, resolve_effective_routing};
 use crate::domain::execution::{
     AdaptiveChangeKind, AttemptLineage, AttemptTransitionKind, ChangeEvidence, ChangeStatus,
     ExecutionAttemptDefinition, ExecutionCommand, ExecutionFailureMode, ExecutionProfileError,
@@ -28,6 +31,7 @@ use crate::domain::review::{
     ReviewOutcome, ReviewProfile, ReviewTrigger, ReviewerDisposition, ReviewerFinding,
     ReviewerParticipation, ReviewerParticipationStatus, VoteDecision, VoteResolution,
 };
+use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::step::{
     ErrorInfo, Recoverability, Step, StepError, StepExecutionRequest, StepExecutionResult,
 };
@@ -221,6 +225,10 @@ pub fn build_task_request(
     input.insert("execution_profile".to_string(), json!(profile.name));
     input.insert("flow".to_string(), json!("workspace_execution"));
 
+    if let Some(routing_projection) = workspace_routing_projection(workspace) {
+        input.insert("routing_projection".to_string(), json!(routing_projection));
+    }
+
     let negotiation_packet = negotiation_packet.cloned().or_else(|| {
         authored_brief.map(|bundle| {
             NegotiatedDeliveryPacket::from_authored_brief(
@@ -300,6 +308,25 @@ pub fn build_task_request(
         limits: profile.limits,
         initial_context: (!initial_context.is_empty()).then_some(initial_context),
     })
+}
+
+fn workspace_routing_projection(workspace: &Path) -> Option<RoutingDecisionProjection> {
+    let workspace_routing =
+        FileConfigStore::for_workspace(workspace).local_routing().ok().flatten();
+    let cluster_routing = FileClusterStore::for_workspace(workspace)
+        .load()
+        .ok()
+        .flatten()
+        .map(|config| config.routing);
+    let global_routing = FileConfigStore::global_routing().ok().flatten();
+    let effective = resolve_effective_routing(
+        &RoutingOverrides::default(),
+        workspace_routing.as_ref(),
+        cluster_routing.as_ref(),
+        global_routing.as_ref(),
+    );
+    let projection = RoutingDecisionProjection::from_effective_routing(&effective);
+    (!projection.is_empty()).then_some(projection)
 }
 
 pub fn build_fixture_runtime(workspace: &Path) -> Result<FixtureRuntime, FixtureRuntimeError> {

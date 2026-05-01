@@ -6,13 +6,14 @@ Canon is downstream from Synod in this roadmap: Synod thinks, decides, orchestra
 
 Evolve Synod into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.26.0
+## Current Status: v0.27.0
 
 Synod now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
 continuity between session-native and compatibility follow-up, stronger
 route-summary plus config projection, bounded multi-workspace clustered
-delivery, and negotiated delivery modeling in place:
+delivery, negotiated delivery modeling, and inspectable routing plus assistant
+decoupling in place:
 
 - session-native orchestration remains the primary operator path
 - `capture` now derives one negotiated delivery packet from direct goals, authored briefs, and governance context before planning begins
@@ -24,19 +25,21 @@ delivery, and negotiated delivery modeling in place:
 - adaptive compatibility execution still stays inside manifest-declared `read_targets` while surfacing candidate credibility, rejection, and exhaustion reasons explicitly
 - `status` and `next` still surface `continuity_authority`, compatibility follow-up mode, and inspect-only guidance when the latest authoritative follow-up state comes from an explicit compatibility trace instead of an active session
 - `run`, `status`, `next`, `inspect`, and compatibility follow-up still surface explicit `route_owner` plus material `route_config_projection` cues when workflow metadata, governance intent, or workspace-local routing defaults explain the current follow-up story
+- `config show`, `run`, `status`, `next`, and `inspect` now surface effective slot routing, assistant bindings, and persisted route snapshots instead of forcing operators to reconstruct backend ownership from current config files
+- native execution now rejects implementation or verification routes that are outside declared `assistant_runtimes` capabilities instead of silently accepting a hard-wired backend
 - session-native commands still accept `--cluster <primary-workspace>` so one authoritative primary-owned session can plan and deliver a bounded change across registered member repositories
 - clustered `run`, `status`, `next`, and `inspect` still surface authoritative workspace, clustered execution condition, participating workspaces, and any blocking member without implying distributed orchestration ownership
 
-## Next Priority: Post-0.26 Platform Surface Decision
+## Next Priority: TBD After Backend Clarity Slice
 
-Now that `0.26.0` makes acceptance boundaries and blocking constraints explicit
-before execution begins, the next slice should improve how Synod chooses and
-explains model or assistant backends without diluting session ownership.
+Now that `0.27.0` makes backend ownership, assistant bindings, and persisted
+route snapshots explicit without diluting session ownership, the next slice can
+return to broader follow-up priorities instead of hidden backend selection.
 
 Candidate focus:
 
-- make provider or model routing more explicit and inspectable on existing CLI surfaces
-- decouple assistant command packs from hard-wired backends without inventing a second orchestration runtime
+- deepen follow-through where the current bounded runtime already has one clear authority
+- prefer slices that reuse persisted session and trace evidence before adding new control planes
 - preserve bounded orchestration ownership inside Synod instead of moving it into config or provider control planes
 - avoid background daemons, distributed orchestration, or hidden fan-out control loops
 
@@ -45,6 +48,13 @@ Candidate focus:
 - negotiation is now operator-visible at capture, plan, run, status, next, and inspect, so the next leverage point is backend clarity rather than more hidden planning depth
 - existing session, trace, and config surfaces should be reused before adding a broader control plane
 - route, continuity, governance, and cluster ownership are explicit enough that backend selection can stay inspectable instead of becoming implicit runtime magic
+
+### Delivered in 0.27.0
+
+- make effective routing plus assistant bindings explicit on `config show`, `run`, `status`, `next`, and `inspect`
+- persist routing snapshots on native and explicit compatibility traces so inspection keeps historical backend ownership even after config changes
+- stop native execution explicitly when the active implementation or verification route requires an assistant runtime outside declared `assistant_runtimes`
+- update README, getting-started, configuration, assistant guidance, roadmap, contributor docs, and changelog for the release
 
 ### Delivered in 0.26.0
 
@@ -122,19 +132,16 @@ execution_condition = true
 
 ### Secondary follow-up directions
 
-The remaining roadmap after `0.26.0` is best read as an ordered sequence rather
+The remaining roadmap after `0.27.0` is best read as an ordered sequence rather
 than an unordered backlog.
 
-### Proposed sequence after 0.26.0
+### Proposed sequence after 0.27.0
 
-#### Post-0.26 - Routing And Assistant Decoupling
+#### Post-0.27 - Follow-On Priorities
 
-- make provider or model routing more inspectable on the same CLI and trace surfaces
-- loosen assistant/backend coupling without replacing the session-owned runtime
-- keep backend choice operator-visible rather than hiding it inside assistant-specific wrappers
-
-This is strategically important now that capture and follow-up already expose the
-bounded delivery story clearly enough for backend selection to remain explicit.
+- keep choosing slices that deepen bounded execution without reopening hidden backend control planes
+- reuse the explicit routing, assistant-binding, and continuity story before introducing broader provider-gateway scope
+- preserve the rule that backend or provider work remains operator-visible rather than assistant-owned
 
 ### Decision rule for sequencing
 

@@ -9,6 +9,7 @@ use crate::domain::configuration::{
     ConfigFile, ConfigShowScope, ConfigWriteScope, ModelRoute, RouteSlot, RoutingOverrides,
     RuntimeKind, ValueSource, resolve_effective_routing,
 };
+use crate::domain::routing_decision::RoutingDecisionProjection;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfigCommandReport {
@@ -119,6 +120,10 @@ pub fn execute_show(
                     ));
                 }
             }
+
+            lines.extend(
+                RoutingDecisionProjection::from_effective_routing(&resolved).projection_lines(),
+            );
 
             lines.join("\n")
         }

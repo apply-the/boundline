@@ -19,6 +19,13 @@ fn test_command_pack_covers_inspect_commands() {
     assert_pack_commands_exist(US3_COMMANDS);
 }
 
+#[test]
+fn test_gemini_cli_fallback_notes_exist() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let readme = manifest_dir.join("assistant/gemini/README.md");
+    assert!(readme.is_file(), "missing gemini fallback notes: {}", readme.display());
+}
+
 fn asset_path(root: &Path, command: &str, suffix: &str) -> PathBuf {
     root.join(format!("{command}{suffix}"))
 }

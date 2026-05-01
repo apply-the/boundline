@@ -13,15 +13,19 @@ through the decision loop, and inspect the resulting session state and traces.
 `synod init` remains optional bootstrap, declarative execution profiles remain
 available as an explicit compatibility path, and `synod workflow` adds an
 optional thin named-workflow layer over the same session-owned runtime. In
-`0.26.0`, `capture` persists one negotiated delivery packet before planning,
-`plan` stops early when that negotiation is not yet credible, and `run`,
-`status`, `next`, and `inspect` project `negotiation_goal_summary`,
-`negotiation_resolution`, and `negotiation_acceptance_boundary` across the
-same session and trace story. The same session-native surfaces can also run against
-`--cluster <primary-workspace>` so one authoritative session can plan and
+`0.27.0`, `capture` persists one negotiated delivery packet before planning,
+`plan` stops early when that negotiation is not yet credible, and `config
+show`, `run`, `status`, `next`, and `inspect` project negotiated-delivery
+fields plus effective routing, assistant bindings, and persisted route
+snapshots across the same session and trace story. Native execution now fails
+explicitly when the active implementation or verification route requires an
+assistant runtime outside declared `assistant_runtimes`. The same
+session-native surfaces can also run against `--cluster <primary-workspace>`
+so one authoritative session can plan and
 deliver a bounded change across registered member repositories while `run`,
 `status`, `next`, and `inspect` keep `route_owner`, material
-`route_config_projection`, `cluster_route_owner`,
+`route_config_projection` including `effective_routing` and
+`assistant_bindings`, `cluster_route_owner`,
 `cluster_authoritative_workspace`, `cluster_execution_condition`,
 participating workspaces, and any blocking member explicit.**
 
@@ -31,10 +35,10 @@ The main surface is the `synod` CLI:
 
 - `doctor` validates that a workspace is ready to run.
 - `init` optionally bootstraps `.synod` workspace files and assistant runtime setup.
-- `config` shows, sets, and unsets global or workspace routing defaults.
+- `config` shows, sets, and unsets routing defaults plus declared assistant runtime capabilities.
 - `start`, `capture`, `flow`, `plan`, and `step` drive the session workflow, with `capture` deriving one negotiated delivery packet before planning.
 - `run` executes a bounded delivery task end to end, preferring native session planning when a `GoalPlan` exists.
-- `status`, `next`, and `inspect` explain the current session, latest compatibility trace, authoritative follow-up state, explicit `route_owner`, material `route_config_projection`, the active negotiation summary, and cluster authority when a registered cluster owns the run.
+- `status`, `next`, and `inspect` explain the current session, latest compatibility trace, authoritative follow-up state, explicit `route_owner`, material `route_config_projection`, effective routing, assistant bindings, the active negotiation summary, and cluster authority when a registered cluster owns the run.
 - `workflow list|run|status|resume|inspect` lets a named workflow reuse the same route, session, and trace surfaces without introducing a second runtime.
 
 Use it when you want delivery work to stay bounded and inspectable:
@@ -78,7 +82,7 @@ of orchestration truth:
 
 - Markdown briefs can be captured as human-authored input
 - assistant command packs can wrap the CLI for Copilot, Codex, Claude, and
-	Gemini
+	Gemini while following route-slot binding instead of hard-wired providers
 - named workflow definitions can reuse the same bounded session-owned runtime
 
 Synod excels when delivery work must stay inspectable, resumable, and bounded.
@@ -198,6 +202,10 @@ synod config set --workspace <workspace> --scope workspace --reviewer safety --r
 synod config show --workspace <workspace> --scope effective
 ```
 
+The effective view now reports the resolved slot route, its authority source,
+and the assistant binding implied by that route so backend ownership is clear
+before execution starts.
+
 Optional clustered setup across two repositories:
 
 ```bash
@@ -291,15 +299,16 @@ synod run --workspace <workspace> --goal "Fix the failing add test"
 
 This path uses the workspace execution profile and remains useful for compatibility and test-oriented workflows.
 
-In `0.26.0`, the direct compatibility path also carries the negotiated delivery
+In `0.27.0`, the direct compatibility path also carries the negotiated delivery
 summary into `run` and `inspect` so `negotiation_goal_summary`,
 `negotiation_resolution`, and `negotiation_acceptance_boundary` stay visible
 even when the authoritative follow-up state comes from an explicit
-compatibility trace.
+compatibility trace, and the persisted `effective_routing` plus
+`assistant_bindings` snapshot remain inspectable after later config changes.
 
 If the execution profile includes an `adaptive` block, failed validation can
 re-rank the next bounded candidate from the latest validation evidence without
-leaving the manifest-declared `read_targets` set. In `0.26.0`, that bounded
+leaving the manifest-declared `read_targets` set. In `0.27.0`, that bounded
 repair path can also choose broader local families such as
 `ordering_boundary_flip`, `result_status_flip`, and `numeric_literal_flip`,
 surfaces the selected `candidate_family` plus credibility and rejection
@@ -476,7 +485,7 @@ the current release, see [`docs/adaptive-execution.md`](docs/adaptive-execution.
 For the concrete review configuration and voting rules still available in
 `0.17.0`, see [`docs/review-voting.md`](docs/review-voting.md).
 
-In `0.26.0`, governed stages can also project `latest_governance_runtime`,
+In `0.27.0`, governed stages can also project `latest_governance_runtime`,
 `latest_governance_mode`, `latest_governance_run_ref`, packet provenance,
 autopilot candidates, approval waits, packet rejection outcomes, and bounded
 `bug-fix:investigate` to `verify` lineage through `run`, `status`, `next`,

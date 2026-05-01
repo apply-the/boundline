@@ -10,6 +10,7 @@ use crate::cli::output;
 use crate::domain::cluster::ClusterDeliveryStory;
 use crate::domain::goal_plan::GoalPlanFlowState;
 use crate::domain::limits::TerminalCondition;
+use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::session::{RoutingMode, RoutingOutcome, RoutingSource};
 use crate::domain::session::{governance_next_action_for_state, governance_packet_provenance_text};
 use crate::domain::step::{StepKind, StepStatus};
@@ -128,6 +129,7 @@ pub fn summarize_trace(
     let mut negotiation_acceptance_boundary: Option<String> = None;
     let mut cluster_delivery_story: Option<ClusterDeliveryStory> = None;
     let mut routing_summary: Option<String> = None;
+    let mut routing_projection = RoutingDecisionProjection::default();
     let mut goal_plan_summary: Option<String> = None;
     let mut decision_timeline: Vec<String> = Vec::new();
     let mut failure_evidence: Vec<String> = Vec::new();
@@ -141,6 +143,12 @@ pub fn summarize_trace(
     let mut review_timeline: Vec<String> = Vec::new();
 
     for event in &trace.events {
+        if routing_projection.is_empty()
+            && let Some(projection) = RoutingDecisionProjection::from_event_payload(&event.payload)
+        {
+            routing_projection = projection;
+        }
+
         if event.event_type.is_decision_loop_event() {
             saw_native_routing_signal = true;
         }
@@ -531,6 +539,7 @@ pub fn summarize_trace(
         negotiation_acceptance_boundary,
         cluster_delivery_story,
         routing_summary,
+        routing_projection,
         goal_plan_summary,
         authored_input_summary,
         authored_input_sources,

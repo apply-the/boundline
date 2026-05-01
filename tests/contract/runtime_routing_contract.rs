@@ -1,5 +1,8 @@
+use std::path::Path;
+
 use synod::FileConfigStore;
 use synod::adapters::session_store::{FileSessionStore, SessionStore};
+use synod::cli::inspect::execute_inspect;
 use synod::cli::run::execute_custom_run;
 use synod::cli::session::{
     execute_capture, execute_next, execute_plan, execute_run, execute_start, execute_status,
@@ -205,6 +208,162 @@ fn status_projects_workspace_routing_defaults_for_native_follow_up() {
             .contains("route_config_projection: workspace_routing: planning=codex/gpt-5-codex, implementation=copilot/gpt-5.4"),
         "{}",
         status.terminal_output
+    );
+}
+
+#[test]
+fn compatibility_inspect_uses_persisted_routing_snapshot_after_config_changes() {
+    let workspace =
+        temp_runtime_refoundation_compat_workspace("runtime-routing-contract-compat-snapshot");
+
+    let before = ConfigFile {
+        routing: RoutingConfig {
+            review: Some(ModelRoute {
+                runtime: RuntimeKind::Claude,
+                model: "reviewer-before".to_string(),
+            }),
+            ..RoutingConfig::default()
+        },
+        ..ConfigFile::default()
+    };
+    FileConfigStore::for_workspace(&workspace).save_local(&before).unwrap();
+
+    let report = execute_custom_run(
+        &workspace,
+        Some("Fix the failing add test"),
+        &[],
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let trace_ref = report.trace_location.unwrap();
+
+    let after = ConfigFile {
+        routing: RoutingConfig {
+            review: Some(ModelRoute {
+                runtime: RuntimeKind::Claude,
+                model: "reviewer-after".to_string(),
+            }),
+            ..RoutingConfig::default()
+        },
+        ..ConfigFile::default()
+    };
+    FileConfigStore::for_workspace(&workspace).save_local(&after).unwrap();
+
+    let inspect = execute_inspect(Some(Path::new(&trace_ref)), None).unwrap();
+
+    assert!(
+        inspect
+            .terminal_output
+            .contains("effective_routing: planning=codex/gpt-5-codex [built-in], implementation=codex/gpt-5-codex [built-in], verification=copilot/gpt-5.4 [built-in], review=claude/reviewer-before [workspace], adjudication=codex/gpt-5-codex [built-in]"),
+        "{}",
+        inspect.terminal_output
+    );
+    assert!(!inspect.terminal_output.contains("reviewer-after"), "{}", inspect.terminal_output);
+}
+
+#[test]
+fn native_inspect_uses_persisted_routing_snapshot_after_config_changes() {
+    let workspace =
+        temp_runtime_refoundation_compat_workspace("runtime-routing-contract-native-snapshot");
+
+    let before = ConfigFile {
+        routing: RoutingConfig {
+            review: Some(ModelRoute {
+                runtime: RuntimeKind::Claude,
+                model: "reviewer-before".to_string(),
+            }),
+            ..RoutingConfig::default()
+        },
+        ..ConfigFile::default()
+    };
+    FileConfigStore::for_workspace(&workspace).save_local(&before).unwrap();
+
+    execute_start(Some(&workspace)).unwrap();
+    execute_capture(
+        Some(&workspace),
+        Some("fix the failing add test"),
+        &[],
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
+    execute_run(Some(&workspace)).unwrap();
+
+    let trace_ref = FileSessionStore::for_workspace(&workspace)
+        .load()
+        .unwrap()
+        .unwrap()
+        .latest_trace_ref
+        .unwrap();
+
+    let after = ConfigFile {
+        routing: RoutingConfig {
+            review: Some(ModelRoute {
+                runtime: RuntimeKind::Claude,
+                model: "reviewer-after".to_string(),
+            }),
+            ..RoutingConfig::default()
+        },
+        ..ConfigFile::default()
+    };
+    FileConfigStore::for_workspace(&workspace).save_local(&after).unwrap();
+
+    let inspect = execute_inspect(Some(Path::new(&trace_ref)), None).unwrap();
+
+    assert!(
+        inspect
+            .terminal_output
+            .contains("effective_routing: planning=codex/gpt-5-codex [built-in], implementation=codex/gpt-5-codex [built-in], verification=copilot/gpt-5.4 [built-in], review=claude/reviewer-before [workspace], adjudication=codex/gpt-5-codex [built-in]"),
+        "{}",
+        inspect.terminal_output
+    );
+    assert!(!inspect.terminal_output.contains("reviewer-after"), "{}", inspect.terminal_output);
+}
+
+#[test]
+fn native_run_rejects_route_runtimes_missing_from_declared_assistant_capabilities() {
+    let workspace =
+        temp_runtime_refoundation_compat_workspace("runtime-routing-contract-unsupported-binding");
+
+    let config = ConfigFile {
+        routing: RoutingConfig {
+            implementation: Some(ModelRoute {
+                runtime: RuntimeKind::Gemini,
+                model: "gemini-2.5-pro".to_string(),
+            }),
+            assistant_runtimes: vec![RuntimeKind::Codex],
+            ..RoutingConfig::default()
+        },
+        ..ConfigFile::default()
+    };
+    FileConfigStore::for_workspace(&workspace).save_local(&config).unwrap();
+
+    execute_start(Some(&workspace)).unwrap();
+    execute_capture(
+        Some(&workspace),
+        Some("fix the failing add test"),
+        &[],
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
+
+    let error = execute_run(Some(&workspace)).unwrap_err();
+
+    assert!(
+        error.to_string().contains(
+            "assistant binding for implementation requires gemini, but available assistant runtimes are: codex"
+        ),
+        "{error}"
     );
 }
 

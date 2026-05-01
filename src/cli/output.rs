@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use crate::adapters::cluster_store::FileClusterStore;
 use crate::adapters::config_store::FileConfigStore;
 use serde_json::Value;
 
@@ -9,8 +10,11 @@ use crate::domain::cluster::{
     ClusterDeliveryStory, ClusterInspectReport, ClusterMemberState, ClusteredExecutionKind,
     WorkspaceParticipationKind,
 };
-use crate::domain::configuration::{ModelRoute, RoutingConfig};
+use crate::domain::configuration::{
+    ModelRoute, RoutingConfig, RoutingOverrides, resolve_effective_routing,
+};
 use crate::domain::goal_plan::GoalPlanFlowState;
+use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::session::RoutingOutcome;
 use crate::domain::session::{
     CompatibilityFollowUpView, ContinuityAuthority, RoutingMode, RoutingSource, SessionStatus,
@@ -1401,11 +1405,7 @@ fn trace_route_owner(summary: &TraceSummaryView) -> &'static str {
 }
 
 fn route_config_projection_for_status_view(view: &SessionStatusView) -> Vec<String> {
-    let mut projection = Vec::new();
-
-    if let Some(workspace_routing) = workspace_routing_projection(Path::new(&view.workspace_ref)) {
-        projection.push(workspace_routing);
-    }
+    let mut projection = current_routing_projection(Path::new(&view.workspace_ref));
 
     if let Some(active_workflow) = &view.active_workflow {
         projection.push(format!("workflow={active_workflow}"));
@@ -1439,12 +1439,12 @@ fn route_config_projection_for_status_view(view: &SessionStatusView) -> Vec<Stri
 }
 
 fn route_config_projection_for_trace_summary(summary: &TraceSummaryView) -> Vec<String> {
-    let mut projection = Vec::new();
+    let mut projection = summary.routing_projection.projection_lines();
 
-    if let Some(workspace) = workspace_from_trace_ref(Path::new(&summary.trace_ref))
-        && let Some(workspace_routing) = workspace_routing_projection(&workspace)
+    if projection.is_empty()
+        && let Some(workspace) = workspace_from_trace_ref(Path::new(&summary.trace_ref))
     {
-        projection.push(workspace_routing);
+        projection.extend(current_routing_projection(&workspace));
     }
 
     if let Some(requested_governance_runtime) = &summary.requested_governance_runtime {
@@ -1467,12 +1467,12 @@ fn route_config_projection_for_trace_summary(summary: &TraceSummaryView) -> Vec<
 }
 
 fn route_config_projection_for_run_trace(trace: &ExecutionTrace, trace_ref: &Path) -> Vec<String> {
-    let mut projection = Vec::new();
+    let mut projection = trace_routing_projection(trace);
 
-    if let Some(workspace) = workspace_from_trace_ref(trace_ref)
-        && let Some(workspace_routing) = workspace_routing_projection(&workspace)
+    if projection.is_empty()
+        && let Some(workspace) = workspace_from_trace_ref(trace_ref)
     {
-        projection.push(workspace_routing);
+        projection.extend(current_routing_projection(&workspace));
     }
 
     if let Some(input) = trace.events.iter().find_map(|event| {
@@ -1503,6 +1503,15 @@ fn route_config_projection_for_run_trace(trace: &ExecutionTrace, trace_ref: &Pat
     }
 
     projection
+}
+
+fn trace_routing_projection(trace: &ExecutionTrace) -> Vec<String> {
+    trace
+        .events
+        .iter()
+        .find_map(|event| RoutingDecisionProjection::from_event_payload(&event.payload))
+        .map(|projection| projection.projection_lines())
+        .unwrap_or_default()
 }
 
 fn run_trace_route_owner(trace: &ExecutionTrace) -> &'static str {
@@ -1557,6 +1566,30 @@ fn workspace_from_trace_ref(trace_ref: &Path) -> Option<std::path::PathBuf> {
 fn workspace_routing_projection(workspace: &Path) -> Option<String> {
     let routing = FileConfigStore::for_workspace(workspace).local_routing().ok().flatten()?;
     summarize_routing_config("workspace_routing", &routing)
+}
+
+fn current_routing_projection(workspace: &Path) -> Vec<String> {
+    let workspace_routing =
+        FileConfigStore::for_workspace(workspace).local_routing().ok().flatten();
+    let cluster_routing = FileClusterStore::for_workspace(workspace)
+        .load()
+        .ok()
+        .flatten()
+        .map(|config| config.routing);
+    let global_routing = FileConfigStore::global_routing().ok().flatten();
+
+    let mut projection = workspace_routing_projection(workspace).into_iter().collect::<Vec<_>>();
+
+    let effective = resolve_effective_routing(
+        &RoutingOverrides::default(),
+        workspace_routing.as_ref(),
+        cluster_routing.as_ref(),
+        global_routing.as_ref(),
+    );
+    projection
+        .extend(RoutingDecisionProjection::from_effective_routing(&effective).projection_lines());
+
+    projection
 }
 
 fn summarize_routing_config(label: &str, routing: &RoutingConfig) -> Option<String> {
@@ -1839,6 +1872,7 @@ mod tests {
     use super::{command_name, render_run_trace, render_session_status, render_trace_summary};
     use crate::cli::DeveloperCommand;
     use crate::domain::limits::{RunLimits, TerminalCondition};
+    use crate::domain::routing_decision::RoutingDecisionProjection;
     use crate::domain::session::{SessionStatus, SessionStatusView};
     use crate::domain::step::{StepKind, StepStatus};
     use crate::domain::task::{TaskRunResponse, TaskStatus, TerminalReason};
@@ -1956,6 +1990,7 @@ mod tests {
             negotiation_acceptance_boundary: None,
             cluster_delivery_story: None,
             routing_summary: None,
+            routing_projection: RoutingDecisionProjection::default(),
             goal_plan_summary: None,
             authored_input_summary: None,
             authored_input_sources: Vec::new(),
@@ -2267,6 +2302,7 @@ mod tests {
             negotiation_acceptance_boundary: None,
             cluster_delivery_story: None,
             routing_summary: None,
+            routing_projection: RoutingDecisionProjection::default(),
             goal_plan_summary: None,
             authored_input_summary: None,
             authored_input_sources: Vec::new(),
