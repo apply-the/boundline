@@ -103,6 +103,8 @@ If you change `.synod/workflows.toml` semantics or `synod workflow ...` output, 
 
 If you change governed-stage behavior, keep the docs explicit about which stage now stops for governance, how packet lineage is reused on later stages, and how waiting or blocked guidance appears on both direct session and workflow-aware surfaces.
 
+If you change adaptive compatibility behavior, keep the docs explicit about validation-guided slice reselection, bounded `read_targets`, and the fact that adaptive repair still remains on the explicit compatibility path in this release.
+
 If the crate surface or release scope materially changed, update the crate version in [Cargo.toml](Cargo.toml).
 
 ## Pull Requests
