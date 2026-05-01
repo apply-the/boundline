@@ -31,7 +31,7 @@ The shipped CLI binary is `synod`.
 If you enable Synod governance through Canon, the current Synod adapter is
 validated against Canon `0.25.0`.
 
-In `0.23.0`, governed `bug-fix:investigate` and later verify-stage Canon
+In `0.24.0`, governed `bug-fix:investigate` and later verify-stage Canon
 `security-assessment` can remain on the same native session route, and the
 optional `synod workflow` surface projects the same approval, blocked, and
 packet-lineage story without introducing a second operator workflow. On the
@@ -40,7 +40,10 @@ repair families, surface explicit `candidate_family` plus credibility and
 rejection guidance, and stop cleanly when validation evidence is too weak to
 justify another materially different bounded attempt. `status` plus `next`
 also remain usable by naming the latest compatibility trace as the
-authoritative inspect-only follow-up when no active session exists.
+authoritative inspect-only follow-up when no active session exists. The same
+read-side surfaces now also emit `route_owner` and `route_config_projection`
+when workflow, governance intent, or workspace-local routing defaults are
+material to the follow-up story.
 
 ## Install Synod
 
@@ -217,7 +220,9 @@ synod inspect --workspace <workspace>
 These commands tell you:
 
 - which route is active and why
+- which `route_owner` currently controls the follow-up story
 - whether the authoritative follow-up state comes from the active session or the latest compatibility trace
+- which material route or config inputs affected the current interpretation
 - what `execution_condition` currently applies
 - what trace was produced
 - whether the run succeeded, failed, blocked, or needs follow-up
@@ -237,7 +242,7 @@ contract; it does not replace the normal session-native path.
 
 If that manifest defines `adaptive`, failed validation can reprioritize the next
 bounded adaptive attempt from the latest validation record while keeping the
-route explicit as compatibility execution. In `0.23.0`, the same path can also
+route explicit as compatibility execution. In `0.24.0`, the same path can also
 choose bounded ordering-boundary, result-status, and numeric-literal repairs,
 and it reports explicit exhaustion instead of continuing blindly when the
 validation evidence is absent or insufficient.
@@ -247,7 +252,9 @@ After a direct compatibility run, `synod status --workspace <workspace>` and
 `synod inspect --workspace <workspace>` even when there is no resumable active
 session. Look for `continuity_authority: compatibility_trace` and the CLI-
 reported inspect command instead of assuming you must restart from `synod
-start`.
+start`. In `0.24.0`, the same outputs also surface `route_owner: compatibility`
+and any relevant `route_config_projection` so the inspect-only route stays
+explicit even when summary wording otherwise matches the native path.
 
 ## The Core Commands
 

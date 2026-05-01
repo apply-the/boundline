@@ -1,8 +1,12 @@
+use std::path::Path;
+
+use crate::adapters::config_store::FileConfigStore;
 use serde_json::Value;
 
 use crate::cli::diagnostics::{DiagnosticsReport, DiagnosticsStatus};
 use crate::cli::{CliValidationError, CommandExitStatus, DeveloperCommand};
 use crate::domain::cluster::{ClusterInspectReport, ClusterMemberState};
+use crate::domain::configuration::{ModelRoute, RoutingConfig};
 use crate::domain::goal_plan::GoalPlanFlowState;
 use crate::domain::session::RoutingOutcome;
 use crate::domain::session::{
@@ -167,6 +171,12 @@ pub fn render_run_trace(
 
     if let Some(trace) = trace {
         lines.insert(0, format!("goal: {}", trace.goal));
+        lines.insert(1, format!("route_owner: {}", run_trace_route_owner(trace)));
+        if let Some(route_config_projection) = render_route_config_projection(
+            route_config_projection_for_run_trace(trace, Path::new(&response.trace_location)),
+        ) {
+            lines.insert(2, route_config_projection);
+        }
 
         if let Some(input) = trace.events.iter().find_map(|event| {
             (event.event_type == TraceEventType::TaskStarted)
@@ -420,6 +430,13 @@ pub fn render_trace_summary(
         lines.push(routing_summary.clone());
     }
 
+    lines.push(format!("route_owner: {}", trace_route_owner(summary)));
+    if let Some(route_config_projection) =
+        render_route_config_projection(route_config_projection_for_trace_summary(summary))
+    {
+        lines.push(route_config_projection);
+    }
+
     lines.push(render_trace_execution_condition(summary));
 
     if let Some(goal_plan_summary) = &summary.goal_plan_summary {
@@ -577,6 +594,13 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
     }
 
     lines.extend(render_session_projection_prefix(view).lines().map(str::to_string));
+    lines.push(format!("route_owner: {}", session_route_owner(view)));
+
+    if let Some(route_config_projection) =
+        render_route_config_projection(route_config_projection_for_status_view(view))
+    {
+        lines.push(route_config_projection);
+    }
 
     if let Some(continuity_authority) = view.continuity_authority {
         lines.push(format!("continuity_authority: {}", continuity_authority.as_str()));
@@ -837,6 +861,7 @@ pub fn render_compatibility_follow_up_status(
     explanation: impl Into<String>,
 ) -> String {
     let mut lines = vec![format!("workspace_ref: {workspace_ref}")];
+    lines.push("route_owner: compatibility".to_string());
     lines.push(format!("continuity_authority: {}", continuity_authority.as_str()));
     lines.extend(render_compatibility_follow_up_lines(
         follow_up,
@@ -1177,6 +1202,245 @@ fn routing_outcome_for_status_view(view: &SessionStatusView) -> RoutingOutcome {
             },
         },
     }
+}
+
+fn render_route_config_projection(projection: Vec<String>) -> Option<String> {
+    (!projection.is_empty()).then(|| format!("route_config_projection: {}", projection.join(" | ")))
+}
+
+fn session_route_owner(view: &SessionStatusView) -> &'static str {
+    if view.latest_governance_state.is_some() || view.latest_governance_stage.is_some() {
+        return "governance";
+    }
+
+    if view.latest_review_trigger.is_some()
+        || view.latest_review_vote.is_some()
+        || view.latest_review_outcome.is_some()
+        || view.latest_review_headline.is_some()
+    {
+        return "review";
+    }
+
+    if view.active_workflow.is_some() {
+        return "workflow";
+    }
+
+    if matches!(view.continuity_authority, Some(ContinuityAuthority::CompatibilityTrace))
+        || matches!(view.execution_path.as_deref(), Some("fixture_compatibility"))
+    {
+        return "compatibility";
+    }
+
+    "native"
+}
+
+fn trace_route_owner(summary: &TraceSummaryView) -> &'static str {
+    if !summary.governance_timeline.is_empty() {
+        return "governance";
+    }
+
+    if !summary.review_timeline.is_empty() {
+        return "review";
+    }
+
+    if summary
+        .routing_summary
+        .as_deref()
+        .is_some_and(|routing| routing.starts_with("routing: compatibility"))
+    {
+        return "compatibility";
+    }
+
+    "native"
+}
+
+fn route_config_projection_for_status_view(view: &SessionStatusView) -> Vec<String> {
+    let mut projection = Vec::new();
+
+    if let Some(workspace_routing) = workspace_routing_projection(Path::new(&view.workspace_ref)) {
+        projection.push(workspace_routing);
+    }
+
+    if let Some(active_workflow) = &view.active_workflow {
+        projection.push(format!("workflow={active_workflow}"));
+    }
+
+    if let Some(workflow_phase) = &view.workflow_phase {
+        projection.push(format!("workflow_phase={workflow_phase}"));
+    }
+
+    if let Some(flow_state) = &view.flow_state {
+        projection.push(format!("flow_state={flow_state}"));
+    }
+
+    if let Some(requested_governance_runtime) = &view.requested_governance_runtime {
+        projection.push(format!("requested_governance_runtime={requested_governance_runtime}"));
+    }
+
+    if let Some(requested_governance_risk) = &view.requested_governance_risk {
+        projection.push(format!("requested_governance_risk={requested_governance_risk}"));
+    }
+
+    if let Some(requested_governance_zone) = &view.requested_governance_zone {
+        projection.push(format!("requested_governance_zone={requested_governance_zone}"));
+    }
+
+    if let Some(requested_governance_owner) = &view.requested_governance_owner {
+        projection.push(format!("requested_governance_owner={requested_governance_owner}"));
+    }
+
+    projection
+}
+
+fn route_config_projection_for_trace_summary(summary: &TraceSummaryView) -> Vec<String> {
+    let mut projection = Vec::new();
+
+    if let Some(workspace) = workspace_from_trace_ref(Path::new(&summary.trace_ref))
+        && let Some(workspace_routing) = workspace_routing_projection(&workspace)
+    {
+        projection.push(workspace_routing);
+    }
+
+    if let Some(requested_governance_runtime) = &summary.requested_governance_runtime {
+        projection.push(format!("requested_governance_runtime={requested_governance_runtime}"));
+    }
+
+    if let Some(requested_governance_risk) = &summary.requested_governance_risk {
+        projection.push(format!("requested_governance_risk={requested_governance_risk}"));
+    }
+
+    if let Some(requested_governance_zone) = &summary.requested_governance_zone {
+        projection.push(format!("requested_governance_zone={requested_governance_zone}"));
+    }
+
+    if let Some(requested_governance_owner) = &summary.requested_governance_owner {
+        projection.push(format!("requested_governance_owner={requested_governance_owner}"));
+    }
+
+    projection
+}
+
+fn route_config_projection_for_run_trace(trace: &ExecutionTrace, trace_ref: &Path) -> Vec<String> {
+    let mut projection = Vec::new();
+
+    if let Some(workspace) = workspace_from_trace_ref(trace_ref)
+        && let Some(workspace_routing) = workspace_routing_projection(&workspace)
+    {
+        projection.push(workspace_routing);
+    }
+
+    if let Some(input) = trace.events.iter().find_map(|event| {
+        (event.event_type == TraceEventType::TaskStarted)
+            .then(|| event.payload.get("input"))
+            .flatten()
+    }) {
+        if let Some(requested_governance_runtime) =
+            input.get("requested_governance_runtime").and_then(Value::as_str)
+        {
+            projection.push(format!("requested_governance_runtime={requested_governance_runtime}"));
+        }
+        if let Some(requested_governance_risk) =
+            input.get("requested_governance_risk").and_then(Value::as_str)
+        {
+            projection.push(format!("requested_governance_risk={requested_governance_risk}"));
+        }
+        if let Some(requested_governance_zone) =
+            input.get("requested_governance_zone").and_then(Value::as_str)
+        {
+            projection.push(format!("requested_governance_zone={requested_governance_zone}"));
+        }
+        if let Some(requested_governance_owner) =
+            input.get("requested_governance_owner").and_then(Value::as_str)
+        {
+            projection.push(format!("requested_governance_owner={requested_governance_owner}"));
+        }
+    }
+
+    projection
+}
+
+fn run_trace_route_owner(trace: &ExecutionTrace) -> &'static str {
+    let mut saw_native_routing_signal = false;
+    let mut saw_review_signal = false;
+    let mut saw_governance_signal = false;
+
+    for event in &trace.events {
+        if event.event_type.is_decision_loop_event() {
+            saw_native_routing_signal = true;
+        }
+
+        match event.event_type {
+            TraceEventType::GovernanceSelected
+            | TraceEventType::GovernanceStarted
+            | TraceEventType::GovernanceDecisionRecorded
+            | TraceEventType::GovernanceAwaitingApproval
+            | TraceEventType::GovernanceCompleted
+            | TraceEventType::GovernanceBlocked
+            | TraceEventType::GovernancePacketRejected => saw_governance_signal = true,
+            TraceEventType::ReviewStarted
+            | TraceEventType::ReviewTriggerIgnored
+            | TraceEventType::ReviewerCompleted
+            | TraceEventType::ReviewVoteResolved
+            | TraceEventType::ReviewAdjudicated
+            | TraceEventType::ReviewTerminalRecorded => saw_review_signal = true,
+            _ => {}
+        }
+    }
+
+    if saw_governance_signal {
+        "governance"
+    } else if saw_review_signal {
+        "review"
+    } else if saw_native_routing_signal {
+        "native"
+    } else {
+        "compatibility"
+    }
+}
+
+fn workspace_from_trace_ref(trace_ref: &Path) -> Option<std::path::PathBuf> {
+    let traces_dir = trace_ref.parent()?;
+    let synod_dir = traces_dir.parent()?;
+    if traces_dir.file_name()? != "traces" || synod_dir.file_name()? != ".synod" {
+        return None;
+    }
+
+    synod_dir.parent().map(Path::to_path_buf)
+}
+
+fn workspace_routing_projection(workspace: &Path) -> Option<String> {
+    let routing = FileConfigStore::for_workspace(workspace).local_routing().ok().flatten()?;
+    summarize_routing_config("workspace_routing", &routing)
+}
+
+fn summarize_routing_config(label: &str, routing: &RoutingConfig) -> Option<String> {
+    let mut configured_routes = Vec::new();
+
+    if let Some(route) = routing.planning.as_ref() {
+        configured_routes.push(format!("planning={}", format_model_route(route)));
+    }
+    if let Some(route) = routing.implementation.as_ref() {
+        configured_routes.push(format!("implementation={}", format_model_route(route)));
+    }
+    if let Some(route) = routing.verification.as_ref() {
+        configured_routes.push(format!("verification={}", format_model_route(route)));
+    }
+    if let Some(route) = routing.review.as_ref() {
+        configured_routes.push(format!("review={}", format_model_route(route)));
+    }
+    if let Some(route) = routing.adjudication.as_ref() {
+        configured_routes.push(format!("adjudication={}", format_model_route(route)));
+    }
+
+    if configured_routes.is_empty() {
+        None
+    } else {
+        Some(format!("{label}: {}", configured_routes.join(", ")))
+    }
+}
+
+fn format_model_route(route: &ModelRoute) -> String {
+    format!("{}/{}", route.runtime.as_str(), route.model)
 }
 
 fn render_session_execution_condition(view: &SessionStatusView) -> String {

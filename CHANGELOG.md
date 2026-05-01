@@ -19,9 +19,28 @@ recorded workspace version.
 
 Delivered specs:
 
-- None recorded after `0.23.0`
+- None recorded after `0.24.0`
 
 Highlights:
+
+## [0.24.0] - 2026-05-01
+
+Delivered specs:
+
+- `024` - Unify Route Summaries And Config Projection
+
+Highlights:
+
+- Add explicit `route_owner` and shared `route_config_projection` cues across
+  `run`, `status`, `next`, `inspect`, and compatibility follow-up so aligned
+  summary wording no longer hides which route currently owns the work.
+- Project material route inputs such as workspace-local routing defaults,
+  workflow or flow cues, and requested governance intent onto the same
+  operator-facing summary family while preserving `continuity_authority` and
+  explicit compatibility ownership.
+- Update README, getting-started, configuration, adaptive-execution,
+  assistant guidance, roadmap, contributor docs, and changelog for the
+  release.
 
 ## [0.23.0] - 2026-05-01
 
