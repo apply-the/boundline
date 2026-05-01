@@ -2,9 +2,11 @@ use crate::workspace_fixture::{
     extract_trace_path, run_synod, temp_adaptive_ordering_boundary_workspace,
     temp_broken_fixture_workspace, temp_fixture_workspace, terminal_text, write_markdown_brief,
 };
+use synod::FileConfigStore;
 use synod::adapters::trace_store::{FileTraceStore, TraceStore};
 use synod::cli::inspect::summarize_trace;
-use synod::cli::output::trace_execution_condition_text;
+use synod::cli::output::{render_trace_summary, trace_execution_condition_text};
+use synod::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
 
 #[test]
 fn trace_summary_preserves_step_order_and_terminal_reason() {
@@ -146,5 +148,41 @@ fn trace_summary_surfaces_broader_adaptive_family_evidence() {
         }),
         "{:?}",
         summary.adaptive_evidence
+    );
+}
+
+#[test]
+fn trace_summary_projects_route_owner_and_workspace_routing_defaults() {
+    let workspace = temp_fixture_workspace("synod-trace-summary-route-config");
+    let config = ConfigFile {
+        routing: RoutingConfig {
+            review: Some(ModelRoute {
+                runtime: RuntimeKind::Claude,
+                model: "reviewer-1".to_string(),
+            }),
+            ..RoutingConfig::default()
+        },
+        ..ConfigFile::default()
+    };
+    FileConfigStore::for_workspace(&workspace).save_local(&config).unwrap();
+
+    let output = run_synod(&[
+        "run",
+        "--goal",
+        "Fix the failing add test",
+        "--workspace",
+        workspace.to_string_lossy().as_ref(),
+    ]);
+    let text = terminal_text(&output);
+    let trace_path = extract_trace_path(&text).expect(&text);
+    let store = FileTraceStore::for_workspace(&workspace);
+    let trace = store.load(&trace_path).unwrap();
+    let summary = summarize_trace(&trace_path, &trace).unwrap();
+    let rendered = render_trace_summary(&summary, "explicit-trace", "/synod-next");
+
+    assert!(rendered.contains("route_owner: compatibility"), "{rendered}");
+    assert!(
+        rendered.contains("route_config_projection: workspace_routing: review=claude/reviewer-1"),
+        "{rendered}"
     );
 }

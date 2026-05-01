@@ -1,6 +1,6 @@
-# Adaptive Execution in Synod 0.23.0
+# Adaptive Execution in Synod 0.24.0
 
-Synod `0.23.0` keeps bounded adaptive execution as an explicit compatibility
+Synod `0.24.0` keeps bounded adaptive execution as an explicit compatibility
 mode inside the broader session-native runtime. The primary operator path is
 still `start -> capture -> plan -> run -> status -> next -> inspect` with a
 bounded `GoalPlan`; adaptive behavior still uses
@@ -10,7 +10,7 @@ manifest-backed compatibility path.
 Instead of requiring every attempt to be pre-authored in
 `<workspace>/.synod/execution.json`, a compatibility execution profile can
 describe an `adaptive` block and let Synod choose one bounded workspace slice
-and one bounded candidate at a time. In `0.23.0`, failed validation can guide
+and one bounded candidate at a time. In `0.24.0`, failed validation can guide
 the next adaptive slice selection, rank one bounded mutation family over the
 rest, and stop explicitly when the latest bounded evidence is absent or
 insufficient for another materially different candidate.
@@ -112,10 +112,13 @@ instead of drifting into open-ended retries.
 When adaptive execution is active, the local CLI now exposes:
 
 - `synod run`: explicit compatibility routing, `execution_condition`,
+  `route_owner`, `route_config_projection` when workspace-local routing defaults
+  or requested governance intent materially explain the run,
   `workspace_slice`, `candidate_family`, selection reason, rejected candidate
   summaries, validation-guided `attempt_lineage` after replans, changed files,
   validation result, terminal status, and trace path
 - `synod status`: explicit `routing`, `execution_condition`,
+  `route_owner`, `route_config_projection`,
   `latest_workspace_slice`, `latest_selection_headline`,
   `latest_candidate_family`, `latest_selection_reason`,
   `latest_rejected_candidates`, `latest_attempt_lineage`,
@@ -126,12 +129,14 @@ When adaptive execution is active, the local CLI now exposes:
   command, including inspect-only compatibility follow-up when no active
   session exists
 - `synod inspect`: adaptive slice-selection headlines, `adaptive_evidence`
-  lines, validation results, recovery events, and final terminal reason for
+  lines, `route_owner`, `route_config_projection` when workspace-local routing
+  defaults materially explain the trace, validation results, recovery events,
+  and final terminal reason for
   both the selected candidate and explicit exhaustion cases
 
 ## Current scope
 
-The `0.23.0` adaptive slice is intentionally bounded:
+The `0.24.0` adaptive slice is intentionally bounded:
 
 - candidate generation stays deterministic and bounded to the built-in local
   heuristics

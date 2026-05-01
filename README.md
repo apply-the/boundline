@@ -12,7 +12,10 @@ session-native: start a session, capture a goal, plan a bounded `GoalPlan`, run
 through the decision loop, and inspect the resulting session state and traces.
 `synod init` remains optional bootstrap, declarative execution profiles remain
 available as an explicit compatibility path, and `synod workflow` adds an
-optional thin named-workflow layer over the same session-owned runtime.**
+optional thin named-workflow layer over the same session-owned runtime. In
+`0.24.0`, the same follow-up surfaces also report explicit `route_owner` and
+material `route_config_projection` cues so aligned summaries do not hide which
+route or workspace defaults are controlling the next step.**
 
 ## What Synod Does
 
@@ -23,7 +26,7 @@ The main surface is the `synod` CLI:
 - `config` shows, sets, and unsets global or workspace routing defaults.
 - `start`, `capture`, `flow`, `plan`, and `step` drive the session workflow.
 - `run` executes a bounded delivery task end to end, preferring native session planning when a `GoalPlan` exists.
-- `status`, `next`, and `inspect` explain the current session, latest compatibility trace, and authoritative follow-up state.
+- `status`, `next`, and `inspect` explain the current session, latest compatibility trace, authoritative follow-up state, explicit `route_owner`, and material `route_config_projection` when it affects interpretation.
 - `workflow list|run|status|resume|inspect` lets a named workflow reuse the same route, session, and trace surfaces without introducing a second runtime.
 
 Use it when you want delivery work to stay bounded and inspectable:
@@ -35,36 +38,69 @@ Use it when you want delivery work to stay bounded and inspectable:
 - fall back to declarative execution profiles only when that compatibility path is intentional
 
 Local execution is the default. When governance is configured, Synod can also
-route stages through Canon while keeping the same CLI surface.
+route stages through [Canon](https://github.com/apply-the/canon) while keeping
+the same CLI surface.
 
 ## Why This Is Better Than Markdown-Only Agent Frameworks
 
-A framework built from Markdown-defined agents can describe roles, prompts, and
-handoff conventions. Synod adds the missing harness: persisted session state,
-execution traces, a bounded run loop, named agent and tool dispatch, real
-workspace mutation, validation command execution, retry and replan semantics,
-and governance overlay when required.
+No-code and Markdown-centric agent frameworks are useful when you want to
+declare behavior without building much runtime. They are usually good at three
+things:
 
-Markdown can still be useful as input. The difference is that Synod does not
-stop at describing how agents should behave. It owns the executable control
-plane that decides what runs next, records what happened, and lets the operator
-resume or inspect the work afterward.
+- no-code frameworks: model roles, prompts, routing rules, and handoff shapes
+- Markdown-only agents and skills: package reusable instructions, constraints,
+	and operator guidance
+- workflow files: name repeatable paths and phase order for common tasks
+
+Some orchestration can absolutely be done that way. Markdown agents can route
+between roles, skills can constrain behavior, and workflow files can define a
+repeatable sequence of phases. That is often enough for lightweight automation
+or prompt-driven collaboration.
+
+Where Synod differs is not that orchestration is impossible without it. The
+difference is that Markdown and workflow files alone usually make orchestration
+convention-based rather than runtime-owned. They describe what should happen,
+but they do not by themselves provide an authoritative session model, bounded
+planning and replanning, validation execution, resumable state transitions,
+trace storage, or governed evidence capture.
+
+Synod uses those artifacts as inputs and interfaces rather than as the source
+of orchestration truth:
+
+- Markdown briefs can be captured as human-authored input
+- assistant command packs can wrap the CLI for Copilot, Codex, Claude, and
+	Gemini
+- named workflow definitions can reuse the same bounded session-owned runtime
+
+Synod excels when delivery work must stay inspectable, resumable, and bounded.
+It owns the executable control plane: it decides what runs next, records what
+happened, mutates the workspace, runs validation, preserves session
+continuity, projects the same state through `run`, `status`, `next`, and
+`inspect`, and can layer governance on top without changing the operator
+surface.
 
 ## Canon Compatibility
 
-When Synod governance is configured to use Canon, the current adapter is
-validated against Canon `0.25.0`.
+Canon is the governed runtime Synod can use for policy gates, artifact
+contracts, approvals, and evidence capture. Synod still owns orchestration;
+Canon owns how governed work is recorded and validated.
 
-That is the Canon CLI version explicitly documented as supported for Synod
-`0.23.0`. Earlier or later Canon versions may work, but they are not part of the
-documented compatibility surface yet.
+Canon is not a mandatory dependency for Synod. You can use Synod on its own
+for the default local and session-native workflows; Canon is only needed when
+you explicitly enable governed routes.
 
-The `0.23.0` release keeps Canon bounded to stage-level governance and evidence,
-preserves governed `bug-fix:investigate` plus later verify-stage
-`security-assessment` reuse, and pairs that with broader bounded adaptive
-repair on the explicit compatibility route, including surfaced
-`candidate_family`, credibility, rejected-candidate, and exhaustion guidance
-through `run`, `status`, `next`, and `inspect`.
+When Synod governance is configured to use
+[Canon](https://github.com/apply-the/canon), the current adapter is validated
+against Canon `0.25.0`.
+
+This compatibility note refers to the Canon CLI version only. Earlier or later
+Canon versions may work, but they are not part of the documented compatibility
+surface yet.
+
+Current Canon support in Synod remains intentionally bounded: Canon governs
+stage-level policy, approvals, artifacts, and evidence, while Synod keeps
+orchestration ownership and can reuse governed `bug-fix:investigate` plus later
+verify-stage `security-assessment` on the same operator surface.
 
 For contributor setup and validation expectations, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -225,7 +261,7 @@ This path uses the workspace execution profile and remains useful for compatibil
 
 If the execution profile includes an `adaptive` block, failed validation can
 re-rank the next bounded candidate from the latest validation evidence without
-leaving the manifest-declared `read_targets` set. In `0.23.0`, that bounded
+leaving the manifest-declared `read_targets` set. In `0.24.0`, that bounded
 repair path can also choose broader local families such as
 `ordering_boundary_flip`, `result_status_flip`, and `numeric_literal_flip`,
 surfaces the selected `candidate_family` plus credibility and rejection
@@ -394,12 +430,12 @@ and
 [`specs/007-multi-agent-review/quickstart.md`](specs/007-multi-agent-review/quickstart.md).
 
 For the adaptive execution manifest shape and bounded compatibility behavior in
-`0.23.0`, see [`docs/adaptive-execution.md`](docs/adaptive-execution.md).
+`0.24.0`, see [`docs/adaptive-execution.md`](docs/adaptive-execution.md).
 
 For the concrete review configuration and voting rules still available in
 `0.17.0`, see [`docs/review-voting.md`](docs/review-voting.md).
 
-In `0.23.0`, governed stages can also project `latest_governance_runtime`,
+In `0.24.0`, governed stages can also project `latest_governance_runtime`,
 `latest_governance_mode`, `latest_governance_run_ref`, packet provenance,
 autopilot candidates, approval waits, packet rejection outcomes, and bounded
 `bug-fix:investigate` to `verify` lineage through `run`, `status`, `next`,

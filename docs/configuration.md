@@ -1,16 +1,19 @@
-# Configuration in Synod 0.23.0
+# Configuration in Synod 0.24.0
 
-Synod `0.23.0` keeps a user-friendly setup and routing configuration surface
+Synod `0.24.0` keeps a user-friendly setup and routing configuration surface
 for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
-The `0.23.0` release keeps configuration behavior stable while preserving the
+The `0.24.0` release keeps configuration behavior stable while preserving the
 same governed routing defaults across earlier `bug-fix:investigate` work,
 later verify-stage `security-assessment`, workflow-aware projection of the
 same bounded governance state, continuity-aware read-side follow-up, and the
 broader bounded adaptive repair slice. Adaptive repair still lives in the
 explicit compatibility execution manifest; there is no separate routing knob
 for mutation-family selection, credibility ranking, or explicit adaptive
-exhaustion.
+exhaustion. The main CLI read-side surfaces now also project material routing
+facts through `route_config_projection` and keep the active `route_owner`
+explicit when a workspace mixes native, workflow, governance, or compatibility
+state.
 
 ## What changed
 
@@ -23,6 +26,9 @@ exhaustion.
   configured by the execution manifest, not by new config keys
 - routing values can be global, cluster-scoped, workspace-local, or command-specific
 - review councils and adjudication can use distinct routing defaults
+- `status`, `next`, and `inspect` now surface material workspace-local routing
+	defaults when they explain the current follow-up story instead of forcing the
+	operator to cross-reference `synod config show`
 
 ## Config locations
 
@@ -74,6 +80,12 @@ Synod resolves each routing slot with this order:
 
 Use `synod config show --scope effective --workspace <workspace> --cluster <primary-workspace>` to inspect
 resolved values and their source.
+
+When follow-up commands already know which route owns the current work,
+Synod reuses that information and projects only the routing/config facts that
+materially explain the current state. In practice, `route_config_projection`
+may include workspace-local routing defaults, workflow cues, or requested
+governance intent; it intentionally does not dump every possible config value.
 
 ## Cluster workflow
 

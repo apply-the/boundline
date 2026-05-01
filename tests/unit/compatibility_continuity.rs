@@ -29,6 +29,7 @@ fn render_compatibility_follow_up_status_surfaces_authority_and_inspect_command(
     );
 
     assert!(rendered.contains("continuity_authority: compatibility_trace"), "{rendered}");
+    assert!(rendered.contains("route_owner: compatibility"), "{rendered}");
     assert!(
         rendered.contains(
             "routing: compatibility (execution_profile) - trace came from the explicit compatibility runtime"
@@ -109,7 +110,14 @@ fn render_session_status_surfaces_compatibility_follow_up_without_replacing_nati
     });
 
     assert!(rendered.contains("routing: native (goal_plan)"), "{rendered}");
+    assert!(rendered.contains("route_owner: native"), "{rendered}");
     assert!(rendered.contains("continuity_authority: native_session"), "{rendered}");
+    assert!(
+        rendered.contains(
+            "route_config_projection: flow_state=confirmed (bug-fix) - operator confirmed flow during planning"
+        ),
+        "{rendered}"
+    );
     assert!(rendered.contains("compatibility_follow_up: inspect_only"), "{rendered}");
     assert!(
         rendered

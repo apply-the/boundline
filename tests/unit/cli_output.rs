@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use serde_json::Map;
 use serde_json::json;
+use synod::FileConfigStore;
 use synod::FileTraceStore;
 use synod::adapters::trace_store::TraceStore;
 use synod::cli::diagnostics::{DiagnosticsCheck, DiagnosticsReport, DiagnosticsStatus};
@@ -17,6 +18,7 @@ use synod::cli::output::{
 use synod::cli::{
     CliValidationError, CommandExitStatus, CommandName, DeveloperCommand, DeveloperCommandSession,
 };
+use synod::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
 use synod::domain::goal_plan::{GoalPlanFlowMode, GoalPlanFlowState};
 use synod::domain::governance::GovernanceRuntimeKind;
 use synod::domain::limits::{RunLimits, TerminalCondition};
@@ -994,6 +996,199 @@ fn render_trace_summary_handles_all_terminal_status_variants() {
             "status {status:?}: {rendered}"
         );
     }
+}
+
+#[test]
+fn render_trace_summary_surfaces_route_owner_and_config_projection() {
+    let summary = TraceSummaryView {
+        trace_ref: "/tmp/trace.json".to_string(),
+        goal: "test".to_string(),
+        routing_summary: Some(
+            "routing: compatibility (execution_profile) - trace came from the explicit compatibility runtime"
+                .to_string(),
+        ),
+        goal_plan_summary: None,
+        authored_input_summary: None,
+        authored_input_sources: Vec::new(),
+        authored_input_deduplicated_sources: Vec::new(),
+        clarification_headline: None,
+        clarification_prompt: None,
+        clarification_missing_fields: Vec::new(),
+        requested_governance_runtime: Some("canon".to_string()),
+        requested_governance_risk: Some("high".to_string()),
+        requested_governance_zone: None,
+        requested_governance_owner: None,
+        decision_timeline: Vec::new(),
+        failure_evidence: Vec::new(),
+        adaptive_evidence: Vec::new(),
+        executed_steps: Vec::new(),
+        recovery_events: Vec::new(),
+        governance_timeline: Vec::new(),
+        governance_next_action: None,
+        review_timeline: Vec::new(),
+        terminal_status: TaskStatus::Succeeded,
+        terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None),
+        duration: None,
+    };
+
+    let rendered = render_trace_summary(&summary, "explicit-trace", "/synod-next");
+
+    assert!(rendered.contains("route_owner: compatibility"), "{rendered}");
+    assert!(
+        rendered.contains(
+            "route_config_projection: requested_governance_runtime=canon | requested_governance_risk=high"
+        ),
+        "{rendered}"
+    );
+}
+
+#[test]
+fn render_session_status_projects_workspace_routing_defaults() {
+    let workspace =
+        std::env::temp_dir().join(format!("synod-route-config-status-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&workspace).unwrap();
+
+    let config = ConfigFile {
+        routing: RoutingConfig {
+            planning: Some(ModelRoute {
+                runtime: RuntimeKind::Codex,
+                model: "gpt-5-codex".to_string(),
+            }),
+            implementation: Some(ModelRoute {
+                runtime: RuntimeKind::Copilot,
+                model: "gpt-5.4".to_string(),
+            }),
+            ..RoutingConfig::default()
+        },
+        ..ConfigFile::default()
+    };
+    FileConfigStore::for_workspace(&workspace).save_local(&config).unwrap();
+
+    let rendered = render_session_status(&SessionStatusView {
+        session_id: "session-config-projection".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: Some("Project route defaults".to_string()),
+        authored_input_summary: None,
+        authored_input_sources: None,
+        authored_input_deduplicated_sources: None,
+        clarification_headline: None,
+        clarification_prompt: None,
+        clarification_missing_fields: None,
+        requested_governance_runtime: None,
+        requested_governance_risk: None,
+        requested_governance_zone: None,
+        requested_governance_owner: None,
+        active_flow: None,
+        flow_state: None,
+        active_workflow: None,
+        workflow_phase: None,
+        workflow_next_action: None,
+        continuity_authority: None,
+        compatibility_follow_up: None,
+        current_stage_id: None,
+        current_stage_index: None,
+        total_stages: None,
+        plan_revision: None,
+        current_step_id: None,
+        current_step_index: None,
+        latest_status: SessionStatus::Initialized,
+        execution_path: None,
+        latest_trace_ref: None,
+        latest_decision_status: None,
+        latest_decision_target: None,
+        latest_changed_files: None,
+        latest_workspace_slice: None,
+        latest_selection_headline: None,
+        latest_candidate_family: None,
+        latest_selection_reason: None,
+        latest_rejected_candidates: None,
+        latest_attempt_lineage: None,
+        latest_validation_status: None,
+        latest_exhaustion_reason: None,
+        latest_review_trigger: None,
+        latest_review_vote: None,
+        latest_review_outcome: None,
+        latest_review_headline: None,
+        latest_governance_stage: None,
+        latest_governance_runtime: None,
+        latest_governance_mode: None,
+        latest_governance_run_ref: None,
+        latest_governance_state: None,
+        latest_governance_blocked_reason: None,
+        latest_governance_packet_ref: None,
+        latest_governance_packet_source_stage: None,
+        latest_governance_packet_binding_reason: None,
+        latest_governance_approval: None,
+        latest_governance_decision: None,
+        latest_governance_candidates: None,
+        governance_next_action: None,
+        next_command: Some("synod capture --goal <goal>".to_string()),
+        explanation: "session is waiting for a goal".to_string(),
+    });
+
+    assert!(
+        rendered.contains(
+            "route_config_projection: workspace_routing: planning=codex/gpt-5-codex, implementation=copilot/gpt-5.4"
+        ),
+        "{rendered}"
+    );
+}
+
+#[test]
+fn render_trace_summary_projects_workspace_routing_defaults() {
+    let workspace =
+        std::env::temp_dir().join(format!("synod-route-config-trace-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&workspace).unwrap();
+
+    let config = ConfigFile {
+        routing: RoutingConfig {
+            review: Some(ModelRoute {
+                runtime: RuntimeKind::Claude,
+                model: "reviewer-1".to_string(),
+            }),
+            ..RoutingConfig::default()
+        },
+        ..ConfigFile::default()
+    };
+    FileConfigStore::for_workspace(&workspace).save_local(&config).unwrap();
+
+    let trace_ref = workspace.join(".synod").join("traces").join("trace.json");
+    let summary = TraceSummaryView {
+        trace_ref: trace_ref.to_string_lossy().into_owned(),
+        goal: "test".to_string(),
+        routing_summary: Some(
+            "routing: native (goal_plan) - trace came from the session-native runtime".to_string(),
+        ),
+        goal_plan_summary: None,
+        authored_input_summary: None,
+        authored_input_sources: Vec::new(),
+        authored_input_deduplicated_sources: Vec::new(),
+        clarification_headline: None,
+        clarification_prompt: None,
+        clarification_missing_fields: Vec::new(),
+        requested_governance_runtime: None,
+        requested_governance_risk: None,
+        requested_governance_zone: None,
+        requested_governance_owner: None,
+        decision_timeline: Vec::new(),
+        failure_evidence: Vec::new(),
+        adaptive_evidence: Vec::new(),
+        executed_steps: Vec::new(),
+        recovery_events: Vec::new(),
+        governance_timeline: Vec::new(),
+        governance_next_action: None,
+        review_timeline: Vec::new(),
+        terminal_status: TaskStatus::Succeeded,
+        terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None),
+        duration: None,
+    };
+
+    let rendered = render_trace_summary(&summary, "explicit-trace", "/synod-next");
+
+    assert!(
+        rendered.contains("route_config_projection: workspace_routing: review=claude/reviewer-1"),
+        "{rendered}"
+    );
 }
 
 #[test]
