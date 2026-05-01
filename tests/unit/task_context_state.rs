@@ -1,4 +1,8 @@
 use serde_json::{Map, Value, json};
+use synod::domain::cluster::{
+    ClusterDeliveryStory, ClusterRouteOwner, ClusterSessionProjection, ClusteredExecutionCondition,
+    ClusteredExecutionKind, WorkspaceParticipationKind, WorkspaceParticipationRecord,
+};
 use synod::domain::governance::{
     ApprovalState, AutopilotAction, AutopilotDecisionRecord, GovernanceLifecycleState,
     GovernanceRuntimeKind, GovernedStagePacket, GovernedStageRecord, PacketReadiness,
@@ -172,4 +176,70 @@ fn task_context_round_trips_clarification_and_derived_draft_records() {
 
     assert_eq!(context.latest_clarification().unwrap(), Some(clarification));
     assert_eq!(context.derived_task_draft().unwrap(), Some(draft));
+}
+
+#[test]
+fn task_context_round_trips_cluster_session_projection() {
+    let mut context = TaskContext::new(
+        "session-context",
+        "/tmp/cluster-primary",
+        RunLimits::default(),
+        Map::new(),
+    );
+    let projection = ClusterSessionProjection {
+        cluster_id: "cluster-1".to_string(),
+        primary_workspace_ref: "/tmp/cluster-primary".to_string(),
+        member_workspace_refs: vec![
+            "/tmp/cluster-primary".to_string(),
+            "/tmp/cluster-member".to_string(),
+        ],
+        started_from_command: "run".to_string(),
+        updated_at: 42,
+    };
+
+    context.set_cluster_session_projection(&projection).unwrap();
+
+    assert_eq!(context.cluster_session_projection().unwrap(), Some(projection));
+}
+
+#[test]
+fn task_context_round_trips_cluster_delivery_story() {
+    let mut context = TaskContext::new(
+        "session-context",
+        "/tmp/cluster-primary",
+        RunLimits::default(),
+        Map::new(),
+    );
+    let story = ClusterDeliveryStory {
+        cluster_id: "cluster-1".to_string(),
+        primary_workspace_ref: "/tmp/cluster-primary".to_string(),
+        authoritative_workspace_ref: "/tmp/cluster-member".to_string(),
+        route_owner: ClusterRouteOwner::Native,
+        member_workspace_refs: vec![
+            "/tmp/cluster-primary".to_string(),
+            "/tmp/cluster-member".to_string(),
+        ],
+        participating_workspaces: vec![WorkspaceParticipationRecord {
+            workspace_ref: "/tmp/cluster-primary".to_string(),
+            participation_kind: WorkspaceParticipationKind::Entry,
+            order: 0,
+            latest_trace_ref: Some("/tmp/cluster-primary/.synod/traces/task.json".to_string()),
+            latest_status: Some("succeeded".to_string()),
+            headline: "primary workspace executed the entry slice".to_string(),
+            terminal_reason: None,
+        }],
+        started_from_command: "run".to_string(),
+        execution_condition: ClusteredExecutionCondition {
+            kind: ClusteredExecutionKind::Paused,
+            active_workspace_ref: Some("/tmp/cluster-member".to_string()),
+            blocking_workspace_ref: None,
+            summary: "handoff to the next workspace is ready".to_string(),
+            recovery_allowed: true,
+        },
+        updated_at: 42,
+    };
+
+    context.set_cluster_delivery_story(&story).unwrap();
+
+    assert_eq!(context.cluster_delivery_story().unwrap(), Some(story));
 }

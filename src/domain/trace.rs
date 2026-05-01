@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
+use crate::domain::cluster::ClusterDeliveryStory;
 use crate::domain::step::{StepKind, StepStatus};
 use crate::domain::task::{TaskStatus, TerminalReason};
 
@@ -103,6 +104,8 @@ pub struct ExecutionTrace {
 pub struct TraceSummaryView {
     pub trace_ref: String,
     pub goal: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cluster_delivery_story: Option<ClusterDeliveryStory>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub routing_summary: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

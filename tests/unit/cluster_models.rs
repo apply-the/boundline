@@ -1,6 +1,8 @@
 use synod::domain::cluster::{
-    ClusterConfigFile, ClusterMemberRegistration, ClusterMemberRole, ClusterSessionProjection,
-    WorkspaceCluster,
+    ClusterConfigFile, ClusterDeliveryStory, ClusterFollowUpAuthority, ClusterMemberRegistration,
+    ClusterMemberRole, ClusterRouteOwner, ClusterSessionProjection, ClusteredExecutionCondition,
+    ClusteredExecutionKind, WorkspaceCluster, WorkspaceParticipationKind,
+    WorkspaceParticipationRecord,
 };
 use synod::domain::configuration::{ModelRoute, RoutingConfig, RuntimeKind};
 
@@ -75,4 +77,49 @@ fn cluster_config_validation_reuses_routing_validation() {
 
     let error = config.validate().unwrap_err();
     assert!(error.to_string().contains("cluster routing is invalid"));
+}
+
+#[test]
+fn cluster_delivery_story_requires_member_backed_authority_and_participation() {
+    let story = ClusterDeliveryStory {
+        cluster_id: "delivery-a".to_string(),
+        primary_workspace_ref: "/tmp/a".to_string(),
+        authoritative_workspace_ref: "/tmp/b".to_string(),
+        route_owner: ClusterRouteOwner::Native,
+        member_workspace_refs: vec!["/tmp/a".to_string(), "/tmp/b".to_string()],
+        participating_workspaces: vec![WorkspaceParticipationRecord {
+            workspace_ref: "/tmp/a".to_string(),
+            participation_kind: WorkspaceParticipationKind::Entry,
+            order: 0,
+            latest_trace_ref: None,
+            latest_status: Some("running".to_string()),
+            headline: "entry workspace is active".to_string(),
+            terminal_reason: None,
+        }],
+        started_from_command: "run".to_string(),
+        execution_condition: ClusteredExecutionCondition {
+            kind: ClusteredExecutionKind::Paused,
+            active_workspace_ref: Some("/tmp/b".to_string()),
+            blocking_workspace_ref: None,
+            summary: "secondary workspace is ready for the next bounded step".to_string(),
+            recovery_allowed: true,
+        },
+        updated_at: 20,
+    };
+
+    assert!(story.validate().is_ok());
+}
+
+#[test]
+fn cluster_follow_up_authority_requires_visible_workspace_and_next_command() {
+    let authority = ClusterFollowUpAuthority {
+        authority_kind: synod::domain::cluster::ClusterAuthorityKind::InspectOnly,
+        route_owner: ClusterRouteOwner::Compatibility,
+        authoritative_workspace_ref: String::new(),
+        continuity_reason: String::new(),
+        next_command: String::new(),
+    };
+
+    let error = authority.validate().unwrap_err();
+    assert!(error.to_string().contains("authoritative workspace"));
 }

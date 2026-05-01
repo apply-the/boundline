@@ -11,6 +11,10 @@ use thiserror::Error;
 
 use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
 use crate::adapters::trace_store::{FileTraceStore, TraceStore, TraceStoreError};
+use crate::domain::cluster::{
+    ClusterDeliveryStory, ClusterRouteOwner, ClusterSessionProjection, ClusteredExecutionCondition,
+    ClusteredExecutionKind, WorkspaceParticipationKind, WorkspaceParticipationRecord,
+};
 use crate::domain::flow::{FlowStepMetadata, built_in_flow, supported_flow_names_csv};
 use crate::domain::flow_policy::FlowPolicy;
 use crate::domain::goal_plan::InferredFlow;
@@ -96,6 +100,50 @@ impl SessionRuntime {
 
     pub fn latest_trace(&self) -> Result<Option<PathBuf>, SessionRuntimeError> {
         self.trace_store.latest().map_err(SessionRuntimeError::TraceStore)
+    }
+
+    pub fn prepare_cluster_run(
+        &self,
+        session: &mut ActiveSessionRecord,
+        projection: &ClusterSessionProjection,
+    ) -> Result<(), SessionRuntimeError> {
+        projection
+            .validate()
+            .map_err(|error| SessionRuntimeError::InvalidClusterState(error.to_string()))?;
+
+        if let Some(task) = session.active_task.as_mut() {
+            if task
+                .context
+                .cluster_session_projection()
+                .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?
+                .is_some()
+            {
+                return Ok(());
+            }
+
+            let story = initial_cluster_delivery_story(projection, &task.context.workspace_ref);
+            task.context
+                .set_cluster_session_projection(projection)
+                .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?;
+            task.context
+                .set_cluster_delivery_story(&story)
+                .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?;
+            return Ok(());
+        }
+
+        let story = initial_cluster_delivery_story(projection, &projection.primary_workspace_ref);
+        let task = self.build_cluster_task(
+            session,
+            projection,
+            &story,
+            projection.primary_workspace_ref.as_str(),
+        )?;
+        session.active_task = Some(task);
+        session.latest_status = SessionStatus::Planned;
+        session.latest_terminal_reason = None;
+        session.updated_at = current_timestamp_millis();
+
+        Ok(())
     }
 
     pub fn capture_goal(
@@ -507,9 +555,8 @@ impl SessionRuntime {
             return self.run_goal_plan_to_terminal(session);
         }
 
-        let runtime = self.build_runtime(session)?;
-
         loop {
+            let runtime = self.build_runtime(session)?;
             if let Some(response) = self.execute_single_step(session, &runtime)? {
                 return Ok(response);
             }
@@ -655,7 +702,13 @@ impl SessionRuntime {
             return Err(SessionRuntimeError::MissingGoal);
         }
 
-        build_fixture_runtime_for_flow(&self.workspace_ref, session.active_flow.as_ref())
+        let runtime_workspace = session
+            .active_task
+            .as_ref()
+            .map(|task| PathBuf::from(&task.context.workspace_ref))
+            .unwrap_or_else(|| self.workspace_ref.clone());
+
+        build_fixture_runtime_for_flow(&runtime_workspace, session.active_flow.as_ref())
             .map_err(SessionRuntimeError::FixtureRuntime)
     }
 
@@ -684,7 +737,9 @@ impl SessionRuntime {
 
         let mut trace = self.load_or_create_trace(session, &task)?;
         let response = self.advance_task(session, &mut task, &mut trace, runtime)?;
-        session.active_task = Some(task);
+        if session.active_task.is_none() {
+            session.active_task = Some(task);
+        }
 
         Ok(response)
     }
@@ -756,7 +811,7 @@ impl SessionRuntime {
             &task.context.state,
             task.plan.revision,
         );
-        let trace_location = self.persist_trace(trace)?;
+        let trace_location = self.persist_task_trace(task, trace)?;
         session.latest_trace_ref = Some(trace_location);
 
         let result = self.execute_step(runtime, &step_snapshot, &task.context);
@@ -812,6 +867,9 @@ impl SessionRuntime {
                             "step_id": step_snapshot.id,
                         })),
                     );
+                    if self.continue_cluster_after_success(session, task, trace, &reason)? {
+                        return Ok(None);
+                    }
                     return self.finalize_task(session, task, trace, reason).map(Some);
                 }
 
@@ -834,7 +892,7 @@ impl SessionRuntime {
                 }
 
                 task.plan.advance();
-                let trace_location = self.persist_trace(trace)?;
+                let trace_location = self.persist_task_trace(task, trace)?;
                 session.latest_status = SessionStatus::Running;
                 session.latest_terminal_reason = None;
                 session.latest_trace_ref = Some(trace_location);
@@ -873,7 +931,7 @@ impl SessionRuntime {
 
                 match decide_recovery(task, &task.plan.steps[step_index], &result) {
                     RecoveryDecision::Continue => {
-                        let trace_location = self.persist_trace(trace)?;
+                        let trace_location = self.persist_task_trace(task, trace)?;
                         session.latest_status = SessionStatus::Running;
                         session.latest_terminal_reason = None;
                         session.latest_trace_ref = Some(trace_location);
@@ -907,7 +965,7 @@ impl SessionRuntime {
                             task.plan.revision,
                             payload,
                         );
-                        let trace_location = self.persist_trace(trace)?;
+                        let trace_location = self.persist_task_trace(task, trace)?;
                         session.latest_status = SessionStatus::Running;
                         session.latest_terminal_reason = None;
                         session.latest_trace_ref = Some(trace_location);
@@ -974,7 +1032,7 @@ impl SessionRuntime {
                             revision.to_revision,
                             payload,
                         );
-                        let trace_location = self.persist_trace(trace)?;
+                        let trace_location = self.persist_task_trace(task, trace)?;
                         session.latest_status = SessionStatus::Running;
                         session.latest_terminal_reason = None;
                         session.latest_trace_ref = Some(trace_location);
@@ -1483,7 +1541,7 @@ impl SessionRuntime {
                         "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
                     }),
                 );
-                let trace_location = self.persist_trace(trace)?;
+                let trace_location = self.persist_task_trace(task, trace)?;
                 session.latest_status = SessionStatus::Running;
                 session.latest_terminal_reason = None;
                 session.latest_trace_ref = Some(trace_location);
@@ -1508,7 +1566,7 @@ impl SessionRuntime {
                         "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
                     }),
                 );
-                let trace_location = self.persist_trace(trace)?;
+                let trace_location = self.persist_task_trace(task, trace)?;
                 session.latest_status = SessionStatus::Running;
                 session.latest_terminal_reason = None;
                 session.latest_trace_ref = Some(trace_location);
@@ -1531,7 +1589,7 @@ impl SessionRuntime {
                         "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
                     }),
                 );
-                let trace_location = self.persist_trace(trace)?;
+                let trace_location = self.persist_task_trace(task, trace)?;
                 session.latest_status = SessionStatus::Running;
                 session.latest_terminal_reason = None;
                 session.latest_trace_ref = Some(trace_location);
@@ -1601,7 +1659,7 @@ impl SessionRuntime {
                 "reason": block.reason,
             }),
         );
-        let trace_location = self.persist_trace(trace)?;
+        let trace_location = self.persist_task_trace(task, trace)?;
         session.latest_trace_ref = Some(trace_location);
         session.updated_at = current_timestamp_millis();
 
@@ -1630,8 +1688,7 @@ impl SessionRuntime {
         task: &Task,
     ) -> Result<ExecutionTrace, SessionRuntimeError> {
         if let Some(trace_ref) = &session.latest_trace_ref {
-            return self
-                .trace_store
+            return FileTraceStore::for_workspace(Path::new(&task.context.workspace_ref))
                 .load(Path::new(trace_ref))
                 .map_err(SessionRuntimeError::TraceStore);
         }
@@ -1664,7 +1721,8 @@ impl SessionRuntime {
                 }),
             );
         }
-        let trace_location = self.persist_trace(&mut trace)?;
+        let trace_location =
+            self.persist_trace_for_workspace(Path::new(&task.context.workspace_ref), &mut trace)?;
         session.latest_trace_ref = Some(trace_location);
 
         Ok(trace)
@@ -1911,6 +1969,8 @@ impl SessionRuntime {
                 .unwrap_or_else(|| "terminal".to_string());
             self.record_stage_failure(trace, session, &step_id, task.plan.revision, &reason);
         }
+        task.apply_terminal(terminal_status, reason.clone());
+        let cluster_story = preview_cluster_story_after_terminal(task, terminal_status, &reason)?;
         trace.record_event(
             TraceEventType::TerminalRecorded,
             None,
@@ -1918,11 +1978,12 @@ impl SessionRuntime {
             json!({
                 "terminal_status": terminal_status,
                 "terminal_reason": reason,
+                "cluster_delivery_story": cluster_story,
             }),
         );
-        task.apply_terminal(terminal_status, reason.clone());
         trace.finalize(terminal_status, reason.clone());
-        let trace_location = self.persist_trace(trace)?;
+        let trace_location = self.persist_task_trace(task, trace)?;
+        update_cluster_story_for_terminal(task, &trace_location, terminal_status, &reason)?;
 
         session.latest_status = session_status_for_task_status(terminal_status);
         session.latest_terminal_reason = Some(reason.clone());
@@ -1939,13 +2000,329 @@ impl SessionRuntime {
         })
     }
 
-    fn persist_trace(&self, trace: &mut ExecutionTrace) -> Result<String, SessionRuntimeError> {
-        let path = self.trace_store.persist(trace).map_err(SessionRuntimeError::TraceStore)?;
+    fn persist_trace_for_workspace(
+        &self,
+        workspace_ref: &Path,
+        trace: &mut ExecutionTrace,
+    ) -> Result<String, SessionRuntimeError> {
+        let store = FileTraceStore::for_workspace(workspace_ref);
+        let path = store.persist(trace).map_err(SessionRuntimeError::TraceStore)?;
         let trace_location = path.to_string_lossy().into_owned();
         trace.set_trace_location(trace_location.clone());
-        self.trace_store.persist(trace).map_err(SessionRuntimeError::TraceStore)?;
+        store.persist(trace).map_err(SessionRuntimeError::TraceStore)?;
         Ok(trace_location)
     }
+
+    fn persist_task_trace(
+        &self,
+        task: &Task,
+        trace: &mut ExecutionTrace,
+    ) -> Result<String, SessionRuntimeError> {
+        self.persist_trace_for_workspace(Path::new(&task.context.workspace_ref), trace)
+    }
+
+    fn build_cluster_task(
+        &self,
+        session: &ActiveSessionRecord,
+        projection: &ClusterSessionProjection,
+        story: &ClusterDeliveryStory,
+        workspace_ref: &str,
+    ) -> Result<Task, SessionRuntimeError> {
+        let workspace = PathBuf::from(workspace_ref);
+        let request = build_task_request(
+            &workspace,
+            session.goal.clone().ok_or(SessionRuntimeError::MissingGoal)?,
+            session.session_id.clone(),
+            session.authored_brief.as_ref(),
+        )
+        .map_err(SessionRuntimeError::FixtureRuntime)?;
+        let plan = build_fixture_plan_for_goal(
+            &workspace,
+            session.active_flow.as_ref(),
+            session.goal.as_deref().unwrap_or_default(),
+        )
+        .map_err(SessionRuntimeError::FixtureRuntime)?;
+        let mut task = Task::new(format!("task-{}", session.session_id), &request, plan)
+            .map_err(SessionRuntimeError::TaskRequest)?;
+        task.context
+            .set_cluster_session_projection(projection)
+            .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?;
+        task.context
+            .set_cluster_delivery_story(story)
+            .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?;
+        Ok(task)
+    }
+
+    fn continue_cluster_after_success(
+        &self,
+        session: &mut ActiveSessionRecord,
+        task: &mut Task,
+        trace: &mut ExecutionTrace,
+        reason: &TerminalReason,
+    ) -> Result<bool, SessionRuntimeError> {
+        let Some(projection) = task
+            .context
+            .cluster_session_projection()
+            .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?
+        else {
+            return Ok(false);
+        };
+        let Some(mut story) = task
+            .context
+            .cluster_delivery_story()
+            .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?
+        else {
+            return Ok(false);
+        };
+
+        let current_workspace_ref = task.context.workspace_ref.clone();
+        let next_workspace_ref = projection
+            .member_workspace_refs
+            .iter()
+            .find(|workspace_ref| {
+                *workspace_ref != &current_workspace_ref
+                    && !story
+                        .participating_workspaces
+                        .iter()
+                        .any(|record| record.workspace_ref == **workspace_ref)
+            })
+            .cloned();
+        let Some(next_workspace_ref) = next_workspace_ref else {
+            return Ok(false);
+        };
+
+        task.apply_terminal(TaskStatus::Succeeded, reason.clone());
+
+        let participation_order = story.participating_workspaces.len();
+        record_cluster_participation(
+            &mut story,
+            WorkspaceParticipationRecord {
+                workspace_ref: current_workspace_ref.clone(),
+                participation_kind: participation_kind_for_success(task),
+                order: participation_order,
+                latest_trace_ref: None,
+                latest_status: Some("succeeded".to_string()),
+                headline: format!("completed bounded work in {current_workspace_ref}"),
+                terminal_reason: Some(reason.message.clone()),
+            },
+        );
+        story.authoritative_workspace_ref = next_workspace_ref.clone();
+        story.execution_condition = ClusteredExecutionCondition {
+            kind: ClusteredExecutionKind::Paused,
+            active_workspace_ref: Some(next_workspace_ref.clone()),
+            blocking_workspace_ref: None,
+            summary: format!("handoff prepared for {next_workspace_ref}"),
+            recovery_allowed: true,
+        };
+        story.updated_at = current_timestamp_millis();
+
+        trace.record_event(
+            TraceEventType::TerminalRecorded,
+            None,
+            task.plan.revision,
+            json!({
+                "terminal_status": TaskStatus::Succeeded,
+                "terminal_reason": reason,
+                "cluster_delivery_story": &story,
+            }),
+        );
+        trace.finalize(TaskStatus::Succeeded, reason.clone());
+        let trace_location = self.persist_task_trace(task, trace)?;
+        record_cluster_participation(
+            &mut story,
+            WorkspaceParticipationRecord {
+                workspace_ref: current_workspace_ref.clone(),
+                participation_kind: participation_kind_for_success(task),
+                order: participation_order,
+                latest_trace_ref: Some(trace_location.clone()),
+                latest_status: Some("succeeded".to_string()),
+                headline: format!("completed bounded work in {current_workspace_ref}"),
+                terminal_reason: Some(reason.message.clone()),
+            },
+        );
+
+        let next_task =
+            self.build_cluster_task(session, &projection, &story, &next_workspace_ref)?;
+        session.active_task = Some(next_task);
+        session.latest_status = SessionStatus::Running;
+        session.latest_terminal_reason = None;
+        session.latest_trace_ref = Some(trace_location);
+        session.updated_at = current_timestamp_millis();
+        Ok(true)
+    }
+}
+
+fn initial_cluster_delivery_story(
+    projection: &ClusterSessionProjection,
+    authoritative_workspace_ref: &str,
+) -> ClusterDeliveryStory {
+    ClusterDeliveryStory {
+        cluster_id: projection.cluster_id.clone(),
+        primary_workspace_ref: projection.primary_workspace_ref.clone(),
+        authoritative_workspace_ref: authoritative_workspace_ref.to_string(),
+        route_owner: ClusterRouteOwner::Native,
+        member_workspace_refs: projection.member_workspace_refs.clone(),
+        participating_workspaces: Vec::new(),
+        started_from_command: projection.started_from_command.clone(),
+        execution_condition: ClusteredExecutionCondition {
+            kind: ClusteredExecutionKind::Paused,
+            active_workspace_ref: Some(authoritative_workspace_ref.to_string()),
+            blocking_workspace_ref: None,
+            summary: format!("clustered delivery is ready in {authoritative_workspace_ref}"),
+            recovery_allowed: true,
+        },
+        updated_at: current_timestamp_millis(),
+    }
+}
+
+fn participation_kind_for_success(task: &Task) -> WorkspaceParticipationKind {
+    let changed_files = task
+        .context
+        .state
+        .get("latest_changed_files")
+        .and_then(Value::as_array)
+        .map(|items| !items.is_empty())
+        .unwrap_or(false);
+    if changed_files {
+        WorkspaceParticipationKind::Mutated
+    } else {
+        WorkspaceParticipationKind::ReadOnly
+    }
+}
+
+fn record_cluster_participation(
+    story: &mut ClusterDeliveryStory,
+    record: WorkspaceParticipationRecord,
+) {
+    if let Some(existing) = story
+        .participating_workspaces
+        .iter_mut()
+        .find(|existing| existing.workspace_ref == record.workspace_ref)
+    {
+        *existing = record;
+    } else {
+        story.participating_workspaces.push(record);
+    }
+}
+
+fn update_cluster_story_for_terminal(
+    task: &mut Task,
+    trace_location: &str,
+    terminal_status: TaskStatus,
+    reason: &TerminalReason,
+) -> Result<(), SessionRuntimeError> {
+    let Some(mut story) = preview_cluster_story_after_terminal(task, terminal_status, reason)?
+    else {
+        return Ok(());
+    };
+    let current_workspace_ref = task.context.workspace_ref.clone();
+    let participation_order = story
+        .participating_workspaces
+        .iter()
+        .position(|record| record.workspace_ref == current_workspace_ref)
+        .unwrap_or(story.participating_workspaces.len());
+    record_cluster_participation(
+        &mut story,
+        WorkspaceParticipationRecord {
+            workspace_ref: current_workspace_ref.clone(),
+            participation_kind: participation_kind_for_terminal(task, terminal_status),
+            order: participation_order,
+            latest_trace_ref: Some(trace_location.to_string()),
+            latest_status: Some(task_status_text(terminal_status).to_string()),
+            headline: terminal_headline(&current_workspace_ref, terminal_status),
+            terminal_reason: Some(reason.message.clone()),
+        },
+    );
+    story.updated_at = current_timestamp_millis();
+
+    task.context
+        .set_cluster_delivery_story(&story)
+        .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))
+}
+
+fn preview_cluster_story_after_terminal(
+    task: &Task,
+    terminal_status: TaskStatus,
+    reason: &TerminalReason,
+) -> Result<Option<ClusterDeliveryStory>, SessionRuntimeError> {
+    let Some(mut story) = task
+        .context
+        .cluster_delivery_story()
+        .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?
+    else {
+        return Ok(None);
+    };
+
+    let current_workspace_ref = task.context.workspace_ref.clone();
+    let participation_order = story
+        .participating_workspaces
+        .iter()
+        .position(|record| record.workspace_ref == current_workspace_ref)
+        .unwrap_or(story.participating_workspaces.len());
+    record_cluster_participation(
+        &mut story,
+        WorkspaceParticipationRecord {
+            workspace_ref: current_workspace_ref.clone(),
+            participation_kind: participation_kind_for_terminal(task, terminal_status),
+            order: participation_order,
+            latest_trace_ref: None,
+            latest_status: Some(task_status_text(terminal_status).to_string()),
+            headline: terminal_headline(&current_workspace_ref, terminal_status),
+            terminal_reason: Some(reason.message.clone()),
+        },
+    );
+    story.authoritative_workspace_ref = current_workspace_ref.clone();
+    story.execution_condition = ClusteredExecutionCondition {
+        kind: execution_kind_for_status(terminal_status),
+        active_workspace_ref: None,
+        blocking_workspace_ref: if matches!(terminal_status, TaskStatus::Succeeded) {
+            None
+        } else {
+            Some(current_workspace_ref.clone())
+        },
+        summary: terminal_headline(&current_workspace_ref, terminal_status),
+        recovery_allowed: !matches!(terminal_status, TaskStatus::Succeeded),
+    };
+    story.updated_at = current_timestamp_millis();
+
+    Ok(Some(story))
+}
+
+fn participation_kind_for_terminal(
+    task: &Task,
+    terminal_status: TaskStatus,
+) -> WorkspaceParticipationKind {
+    match terminal_status {
+        TaskStatus::Succeeded => participation_kind_for_success(task),
+        TaskStatus::Failed | TaskStatus::Exhausted | TaskStatus::Aborted => {
+            WorkspaceParticipationKind::Blocked
+        }
+        TaskStatus::Planned | TaskStatus::Running => WorkspaceParticipationKind::Entry,
+    }
+}
+
+fn execution_kind_for_status(status: TaskStatus) -> ClusteredExecutionKind {
+    match status {
+        TaskStatus::Succeeded => ClusteredExecutionKind::Success,
+        TaskStatus::Failed | TaskStatus::Aborted => ClusteredExecutionKind::Failed,
+        TaskStatus::Exhausted => ClusteredExecutionKind::Exhausted,
+        TaskStatus::Planned | TaskStatus::Running => ClusteredExecutionKind::Paused,
+    }
+}
+
+fn task_status_text(status: TaskStatus) -> &'static str {
+    match status {
+        TaskStatus::Planned => "planned",
+        TaskStatus::Running => "running",
+        TaskStatus::Succeeded => "succeeded",
+        TaskStatus::Failed => "failed",
+        TaskStatus::Exhausted => "exhausted",
+        TaskStatus::Aborted => "aborted",
+    }
+}
+
+fn terminal_headline(workspace_ref: &str, terminal_status: TaskStatus) -> String {
+    format!("{workspace_ref} finished with {}", task_status_text(terminal_status))
 }
 
 struct GovernanceBlockContext {
@@ -1971,6 +2348,8 @@ pub enum SessionRuntimeError {
     GoalPlanner(#[from] GoalPlannerError),
     #[error("goal plan state is invalid: {0}")]
     InvalidGoalPlan(String),
+    #[error("cluster delivery state is invalid: {0}")]
+    InvalidClusterState(String),
     #[error(
         "native execution cannot continue until the proposed `{flow_name}` flow is confirmed or skipped"
     )]
@@ -2241,7 +2620,10 @@ mod tests {
     use uuid::Uuid;
 
     use super::{SessionRuntime, session_status_for_task_status};
-    use crate::adapters::trace_store::TraceStore;
+    use crate::adapters::trace_store::{FileTraceStore, TraceStore};
+    use crate::domain::cluster::{
+        ClusterSessionProjection, ClusteredExecutionKind, WorkspaceParticipationKind,
+    };
     use crate::domain::execution::{
         ExecutionAttemptDefinition, ExecutionCommand, ExecutionFailureMode, WorkspaceChange,
         WorkspaceExecutionProfile,
@@ -2274,6 +2656,34 @@ mod tests {
         attempts: Vec<ExecutionAttemptDefinition>,
     ) -> PathBuf {
         write_governed_execution_profile_workspace(prefix, attempts, Vec::new(), None)
+    }
+
+    fn write_cluster_delivery_workspace(prefix: &str) -> PathBuf {
+        let workspace = write_execution_profile_workspace(
+            prefix,
+            vec![ExecutionAttemptDefinition {
+                attempt_id: "fix-add".to_string(),
+                summary: "Replace subtraction with addition".to_string(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left - right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+        );
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::write(
+            workspace.join("Cargo.toml"),
+            "[package]\nname = \"cluster-runtime\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        )
+        .unwrap();
+        fs::write(
+            workspace.join("src/lib.rs"),
+            "pub fn add(left: i32, right: i32) -> i32 { left - right }\n",
+        )
+        .unwrap();
+        workspace
     }
 
     fn write_governed_execution_profile_workspace(
@@ -2914,6 +3324,84 @@ mod tests {
             "{:?}",
             trace.events
         );
+    }
+
+    #[test]
+    fn run_to_terminal_hands_off_clustered_success_between_member_workspaces() {
+        let primary = write_cluster_delivery_workspace("synod-runtime-cluster-primary");
+        let secondary = write_cluster_delivery_workspace("synod-runtime-cluster-secondary");
+        let runtime = SessionRuntime::for_workspace(&primary);
+        let mut session = ActiveSessionRecord {
+            session_id: "session-runtime-cluster".to_string(),
+            workspace_ref: primary.to_string_lossy().into_owned(),
+            goal: None,
+            authored_brief: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Initialized,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 10,
+            updated_at: 10,
+        };
+
+        runtime.capture_goal(&mut session, "fix the broken add function").unwrap();
+        runtime.plan_task(&mut session, Some("bug-fix"), false).unwrap();
+        runtime
+            .prepare_cluster_run(
+                &mut session,
+                &ClusterSessionProjection {
+                    cluster_id: "cluster-1".to_string(),
+                    primary_workspace_ref: primary.to_string_lossy().into_owned(),
+                    member_workspace_refs: vec![
+                        primary.to_string_lossy().into_owned(),
+                        secondary.to_string_lossy().into_owned(),
+                    ],
+                    started_from_command: "run".to_string(),
+                    updated_at: 20,
+                },
+            )
+            .unwrap();
+
+        let response = runtime.run_to_terminal(&mut session).unwrap();
+
+        assert_eq!(response.terminal_status, TaskStatus::Succeeded);
+        assert_eq!(session.latest_status, SessionStatus::Succeeded);
+        assert_eq!(
+            fs::read_to_string(primary.join("src/lib.rs")).unwrap(),
+            "pub fn add(left: i32, right: i32) -> i32 { left + right }\n"
+        );
+        assert_eq!(
+            fs::read_to_string(secondary.join("src/lib.rs")).unwrap(),
+            "pub fn add(left: i32, right: i32) -> i32 { left + right }\n"
+        );
+
+        let primary_trace = FileTraceStore::for_workspace(&primary).latest().unwrap().unwrap();
+        let secondary_trace = FileTraceStore::for_workspace(&secondary).latest().unwrap().unwrap();
+        assert_ne!(primary_trace, secondary_trace);
+
+        let story = session
+            .active_task
+            .as_ref()
+            .unwrap()
+            .context
+            .cluster_delivery_story()
+            .unwrap()
+            .unwrap();
+        assert_eq!(story.execution_condition.kind, ClusteredExecutionKind::Success);
+        assert_eq!(story.participating_workspaces.len(), 2);
+        assert!(story.participating_workspaces.iter().any(|record| {
+            record.workspace_ref == primary.to_string_lossy()
+                && record.participation_kind == WorkspaceParticipationKind::Mutated
+        }));
+        assert!(story.participating_workspaces.iter().any(|record| {
+            record.workspace_ref == secondary.to_string_lossy()
+                && record.participation_kind == WorkspaceParticipationKind::Mutated
+        }));
     }
 
     #[test]

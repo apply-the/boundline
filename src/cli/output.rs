@@ -5,7 +5,10 @@ use serde_json::Value;
 
 use crate::cli::diagnostics::{DiagnosticsReport, DiagnosticsStatus};
 use crate::cli::{CliValidationError, CommandExitStatus, DeveloperCommand};
-use crate::domain::cluster::{ClusterInspectReport, ClusterMemberState};
+use crate::domain::cluster::{
+    ClusterDeliveryStory, ClusterInspectReport, ClusterMemberState, ClusteredExecutionKind,
+    WorkspaceParticipationKind,
+};
 use crate::domain::configuration::{ModelRoute, RoutingConfig};
 use crate::domain::goal_plan::GoalPlanFlowState;
 use crate::domain::session::RoutingOutcome;
@@ -408,6 +411,10 @@ pub fn render_run_trace(
         lines.push(format!("adaptive_exhaustion: {exhaustion_reason}"));
     }
 
+    if let Ok(Some(cluster_story)) = response.final_context.cluster_delivery_story() {
+        lines.extend(render_cluster_story_lines(&cluster_story));
+    }
+
     lines.push(format!("terminal_status: {}", task_status_text(response.terminal_status)));
     lines.push(format!("terminal_reason: {}", response.terminal_reason.message));
     lines.push(format!("trace: {}", response.trace_location));
@@ -425,6 +432,10 @@ pub fn render_trace_summary(
         format!("trace: {}", summary.trace_ref),
         format!("goal: {}", summary.goal),
     ];
+
+    if let Some(cluster_story) = &summary.cluster_delivery_story {
+        lines.extend(render_cluster_story_lines(cluster_story));
+    }
 
     if let Some(routing_summary) = &summary.routing_summary {
         lines.push(routing_summary.clone());
@@ -613,6 +624,10 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
             "compatibility_execution_condition",
             "compatibility_follow_up_command",
         ));
+    }
+
+    if let Some(cluster_story) = &view.cluster_delivery_story {
+        lines.extend(render_cluster_story_lines(cluster_story));
     }
 
     if let Some(authored_input_summary) = &view.authored_input_summary {
@@ -1208,6 +1223,72 @@ fn render_route_config_projection(projection: Vec<String>) -> Option<String> {
     (!projection.is_empty()).then(|| format!("route_config_projection: {}", projection.join(" | ")))
 }
 
+fn render_cluster_story_lines(story: &ClusterDeliveryStory) -> Vec<String> {
+    let mut lines = vec![
+        format!("cluster_id: {}", story.cluster_id),
+        format!("cluster_route_owner: {}", cluster_route_owner_text(story)),
+        format!("cluster_authoritative_workspace: {}", story.authoritative_workspace_ref),
+        format!(
+            "cluster_execution_condition: {} - {}",
+            cluster_execution_kind_text(story.execution_condition.kind),
+            story.execution_condition.summary
+        ),
+    ];
+
+    if let Some(blocking_workspace_ref) = &story.execution_condition.blocking_workspace_ref {
+        lines.push(format!("cluster_blocking_workspace: {blocking_workspace_ref}"));
+    }
+
+    if !story.participating_workspaces.is_empty() {
+        lines.push(format!(
+            "cluster_participating_workspaces: {}",
+            story
+                .participating_workspaces
+                .iter()
+                .map(|record| format!(
+                    "{} [{}]",
+                    record.workspace_ref,
+                    participation_kind_text(record.participation_kind)
+                ))
+                .collect::<Vec<_>>()
+                .join(" | ")
+        ));
+    }
+
+    lines
+}
+
+fn cluster_execution_kind_text(kind: ClusteredExecutionKind) -> &'static str {
+    match kind {
+        ClusteredExecutionKind::Success => "success",
+        ClusteredExecutionKind::Paused => "paused",
+        ClusteredExecutionKind::Blocked => "blocked",
+        ClusteredExecutionKind::Failed => "failed",
+        ClusteredExecutionKind::Exhausted => "exhausted",
+        ClusteredExecutionKind::InspectOnly => "inspect_only",
+    }
+}
+
+fn participation_kind_text(kind: WorkspaceParticipationKind) -> &'static str {
+    match kind {
+        WorkspaceParticipationKind::Entry => "entry",
+        WorkspaceParticipationKind::ReadOnly => "read_only",
+        WorkspaceParticipationKind::Mutated => "mutated",
+        WorkspaceParticipationKind::Blocked => "blocked",
+        WorkspaceParticipationKind::Skipped => "skipped",
+    }
+}
+
+fn cluster_route_owner_text(story: &ClusterDeliveryStory) -> &'static str {
+    match story.route_owner {
+        crate::domain::cluster::ClusterRouteOwner::Native => "native",
+        crate::domain::cluster::ClusterRouteOwner::Workflow => "workflow",
+        crate::domain::cluster::ClusterRouteOwner::Review => "review",
+        crate::domain::cluster::ClusterRouteOwner::Governance => "governance",
+        crate::domain::cluster::ClusterRouteOwner::Compatibility => "compatibility",
+    }
+}
+
 fn session_route_owner(view: &SessionStatusView) -> &'static str {
     if view.latest_governance_state.is_some() || view.latest_governance_stage.is_some() {
         return "governance";
@@ -1705,10 +1786,11 @@ mod tests {
     fn command_name_covers_every_developer_subcommand() {
         let commands = [
             (DeveloperCommand::Doctor { workspace: "/tmp/workspace".into() }, "doctor"),
-            (DeveloperCommand::Start { workspace: None }, "start"),
+            (DeveloperCommand::Start { workspace: None, cluster: None }, "start"),
             (
                 DeveloperCommand::Capture {
                     workspace: None,
+                    cluster: None,
                     goal: Some("goal".to_string()),
                     brief: Vec::new(),
                     governance: None,
@@ -1718,12 +1800,28 @@ mod tests {
                 },
                 "capture",
             ),
-            (DeveloperCommand::Flow { name: "bug-fix".to_string(), workspace: None }, "flow"),
-            (DeveloperCommand::Plan { workspace: None, flow: None, no_flow: false }, "plan"),
-            (DeveloperCommand::Step { workspace: None }, "step"),
+            (
+                DeveloperCommand::Flow {
+                    name: "bug-fix".to_string(),
+                    workspace: None,
+                    cluster: None,
+                },
+                "flow",
+            ),
+            (
+                DeveloperCommand::Plan {
+                    workspace: None,
+                    cluster: None,
+                    flow: None,
+                    no_flow: false,
+                },
+                "plan",
+            ),
+            (DeveloperCommand::Step { workspace: None, cluster: None }, "step"),
             (
                 DeveloperCommand::Run {
                     workspace: None,
+                    cluster: None,
                     goal: None,
                     brief: Vec::new(),
                     governance: None,
@@ -1743,9 +1841,9 @@ mod tests {
                 },
                 "workflow",
             ),
-            (DeveloperCommand::Inspect { trace: None, workspace: None }, "inspect"),
-            (DeveloperCommand::Status { workspace: None }, "status"),
-            (DeveloperCommand::Next { workspace: None }, "next"),
+            (DeveloperCommand::Inspect { trace: None, workspace: None, cluster: None }, "inspect"),
+            (DeveloperCommand::Status { workspace: None, cluster: None }, "status"),
+            (DeveloperCommand::Next { workspace: None, cluster: None }, "next"),
         ];
 
         for (command, expected) in commands {
@@ -1788,6 +1886,7 @@ mod tests {
         let summary = TraceSummaryView {
             trace_ref: "/tmp/workspace/.synod/traces/task-output.json".to_string(),
             goal: "Render trace summary".to_string(),
+            cluster_delivery_story: None,
             routing_summary: None,
             goal_plan_summary: None,
             authored_input_summary: None,
@@ -1852,6 +1951,7 @@ mod tests {
             session_id: "session-output".to_string(),
             workspace_ref: "/tmp/workspace".to_string(),
             goal: None,
+            cluster_delivery_story: None,
             authored_input_summary: None,
             authored_input_sources: None,
             authored_input_deduplicated_sources: None,
@@ -1985,6 +2085,7 @@ mod tests {
             session_id: "session-review-status".to_string(),
             workspace_ref: "/tmp/workspace".to_string(),
             goal: Some("Ship review output".to_string()),
+            cluster_delivery_story: None,
             authored_input_summary: None,
             authored_input_sources: None,
             authored_input_deduplicated_sources: None,
@@ -2087,6 +2188,7 @@ mod tests {
         let summary = TraceSummaryView {
             trace_ref: "/tmp/workspace/.synod/traces/task-review-output.json".to_string(),
             goal: "Render trace summary".to_string(),
+            cluster_delivery_story: None,
             routing_summary: None,
             goal_plan_summary: None,
             authored_input_summary: None,

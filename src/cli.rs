@@ -87,10 +87,14 @@ pub enum DeveloperCommand {
     Start {
         #[arg(long)]
         workspace: Option<PathBuf>,
+        #[arg(long)]
+        cluster: Option<PathBuf>,
     },
     Capture {
         #[arg(long)]
         workspace: Option<PathBuf>,
+        #[arg(long)]
+        cluster: Option<PathBuf>,
         #[arg(long)]
         goal: Option<String>,
         /// One or more Markdown brief files (.md or .markdown) inside the workspace.
@@ -109,10 +113,14 @@ pub enum DeveloperCommand {
         name: String,
         #[arg(long)]
         workspace: Option<PathBuf>,
+        #[arg(long)]
+        cluster: Option<PathBuf>,
     },
     Plan {
         #[arg(long)]
         workspace: Option<PathBuf>,
+        #[arg(long)]
+        cluster: Option<PathBuf>,
         #[arg(long, conflicts_with = "no_flow")]
         flow: Option<String>,
         #[arg(long = "no-flow")]
@@ -121,10 +129,14 @@ pub enum DeveloperCommand {
     Step {
         #[arg(long)]
         workspace: Option<PathBuf>,
+        #[arg(long)]
+        cluster: Option<PathBuf>,
     },
     Run {
         #[arg(long)]
         workspace: Option<PathBuf>,
+        #[arg(long)]
+        cluster: Option<PathBuf>,
         #[arg(long)]
         goal: Option<String>,
         /// One or more Markdown brief files (.md or .markdown) inside the workspace.
@@ -148,14 +160,20 @@ pub enum DeveloperCommand {
         trace: Option<PathBuf>,
         #[arg(long)]
         workspace: Option<PathBuf>,
+        #[arg(long)]
+        cluster: Option<PathBuf>,
     },
     Status {
         #[arg(long)]
         workspace: Option<PathBuf>,
+        #[arg(long)]
+        cluster: Option<PathBuf>,
     },
     Next {
         #[arg(long)]
         workspace: Option<PathBuf>,
+        #[arg(long)]
+        cluster: Option<PathBuf>,
     },
     Init {
         /// Workspace directory to bootstrap.
@@ -318,9 +336,12 @@ impl DeveloperCommandSession {
                 exit_status: None,
                 trace_location: None,
             },
-            DeveloperCommand::Start { workspace } => Self {
+            DeveloperCommand::Start { workspace, cluster } => Self {
                 command_name: CommandName::Start,
-                workspace_ref: workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
+                workspace_ref: workspace
+                    .as_ref()
+                    .or(cluster.as_ref())
+                    .map(|path| path.to_string_lossy().into_owned()),
                 goal: None,
                 trace_ref: None,
                 started_at: current_timestamp_millis(),
@@ -330,6 +351,7 @@ impl DeveloperCommandSession {
             },
             DeveloperCommand::Capture {
                 workspace,
+                cluster,
                 goal,
                 brief: _,
                 governance: _,
@@ -338,7 +360,10 @@ impl DeveloperCommandSession {
                 owner: _,
             } => Self {
                 command_name: CommandName::Capture,
-                workspace_ref: workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
+                workspace_ref: workspace
+                    .as_ref()
+                    .or(cluster.as_ref())
+                    .map(|path| path.to_string_lossy().into_owned()),
                 goal: goal.clone(),
                 trace_ref: None,
                 started_at: current_timestamp_millis(),
@@ -346,9 +371,12 @@ impl DeveloperCommandSession {
                 exit_status: None,
                 trace_location: None,
             },
-            DeveloperCommand::Flow { name, workspace } => Self {
+            DeveloperCommand::Flow { name, workspace, cluster } => Self {
                 command_name: CommandName::Flow,
-                workspace_ref: workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
+                workspace_ref: workspace
+                    .as_ref()
+                    .or(cluster.as_ref())
+                    .map(|path| path.to_string_lossy().into_owned()),
                 goal: Some(name.clone()),
                 trace_ref: None,
                 started_at: current_timestamp_millis(),
@@ -356,9 +384,12 @@ impl DeveloperCommandSession {
                 exit_status: None,
                 trace_location: None,
             },
-            DeveloperCommand::Plan { workspace, .. } => Self {
+            DeveloperCommand::Plan { workspace, cluster, .. } => Self {
                 command_name: CommandName::Plan,
-                workspace_ref: workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
+                workspace_ref: workspace
+                    .as_ref()
+                    .or(cluster.as_ref())
+                    .map(|path| path.to_string_lossy().into_owned()),
                 goal: None,
                 trace_ref: None,
                 started_at: current_timestamp_millis(),
@@ -366,9 +397,12 @@ impl DeveloperCommandSession {
                 exit_status: None,
                 trace_location: None,
             },
-            DeveloperCommand::Step { workspace } => Self {
+            DeveloperCommand::Step { workspace, cluster } => Self {
                 command_name: CommandName::Step,
-                workspace_ref: workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
+                workspace_ref: workspace
+                    .as_ref()
+                    .or(cluster.as_ref())
+                    .map(|path| path.to_string_lossy().into_owned()),
                 goal: None,
                 trace_ref: None,
                 started_at: current_timestamp_millis(),
@@ -378,15 +412,21 @@ impl DeveloperCommandSession {
             },
             DeveloperCommand::Run {
                 workspace,
+                cluster,
                 goal,
-                brief: _,
+                brief,
                 governance: _,
                 risk: _,
                 zone: _,
                 owner: _,
             } => Self {
                 command_name: CommandName::Run,
-                workspace_ref: workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
+                workspace_ref: if goal.is_some() || !brief.is_empty() {
+                    workspace.as_ref()
+                } else {
+                    workspace.as_ref().or(cluster.as_ref())
+                }
+                .map(|path| path.to_string_lossy().into_owned()),
                 goal: goal.clone(),
                 trace_ref: None,
                 started_at: current_timestamp_millis(),
@@ -418,9 +458,12 @@ impl DeveloperCommandSession {
                 exit_status: None,
                 trace_location: None,
             },
-            DeveloperCommand::Inspect { trace, workspace } => Self {
+            DeveloperCommand::Inspect { trace, workspace, cluster } => Self {
                 command_name: CommandName::Inspect,
-                workspace_ref: workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
+                workspace_ref: workspace
+                    .as_ref()
+                    .or(cluster.as_ref())
+                    .map(|path| path.to_string_lossy().into_owned()),
                 goal: None,
                 trace_ref: trace.as_ref().map(|path| path.to_string_lossy().into_owned()),
                 started_at: current_timestamp_millis(),
@@ -428,9 +471,12 @@ impl DeveloperCommandSession {
                 exit_status: None,
                 trace_location: None,
             },
-            DeveloperCommand::Status { workspace } => Self {
+            DeveloperCommand::Status { workspace, cluster } => Self {
                 command_name: CommandName::Status,
-                workspace_ref: workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
+                workspace_ref: workspace
+                    .as_ref()
+                    .or(cluster.as_ref())
+                    .map(|path| path.to_string_lossy().into_owned()),
                 goal: None,
                 trace_ref: None,
                 started_at: current_timestamp_millis(),
@@ -438,9 +484,12 @@ impl DeveloperCommandSession {
                 exit_status: None,
                 trace_location: None,
             },
-            DeveloperCommand::Next { workspace } => Self {
+            DeveloperCommand::Next { workspace, cluster } => Self {
                 command_name: CommandName::Next,
-                workspace_ref: workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
+                workspace_ref: workspace
+                    .as_ref()
+                    .or(cluster.as_ref())
+                    .map(|path| path.to_string_lossy().into_owned()),
                 goal: None,
                 trace_ref: None,
                 started_at: current_timestamp_millis(),
@@ -617,7 +666,16 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                 trace_location: None,
             }
         }
-        DeveloperCommand::Run { workspace, goal, brief, governance, risk, zone, owner } => {
+        DeveloperCommand::Run {
+            workspace,
+            cluster,
+            goal,
+            brief,
+            governance,
+            risk,
+            zone,
+            owner,
+        } => {
             let custom = goal.is_some()
                 || !brief.is_empty()
                 || governance.is_some()
@@ -664,7 +722,7 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                     },
                 }
             } else {
-                match session::execute_run(workspace.as_deref()) {
+                match session::execute_run_with_target(workspace.as_deref(), cluster.as_deref()) {
                     Ok(report) => DispatchOutcome {
                         exit_status: report.exit_status,
                         output: report.terminal_output,
@@ -750,8 +808,11 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                 }
             }
         },
-        DeveloperCommand::Inspect { trace, workspace } => {
-            match inspect::execute_inspect(trace.as_deref(), workspace.as_deref()) {
+        DeveloperCommand::Inspect { trace, workspace, cluster } => {
+            match inspect::execute_inspect(
+                trace.as_deref(),
+                workspace.as_deref().or(cluster.as_deref()),
+            ) {
                 Ok(report) => DispatchOutcome {
                     exit_status: report.exit_status,
                     output: report.terminal_output,
@@ -764,27 +825,42 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                         }
                         _ => CommandExitStatus::TraceReadFailure,
                     },
-                    output: inspect::render_error(trace.as_deref(), workspace.as_deref(), &error),
+                    output: inspect::render_error(
+                        trace.as_deref(),
+                        workspace.as_deref().or(cluster.as_deref()),
+                        &error,
+                    ),
                     trace_location: None,
                 },
             }
         }
-        DeveloperCommand::Start { workspace } => match session::execute_start(workspace.as_deref())
-        {
-            Ok(report) => DispatchOutcome {
-                exit_status: report.exit_status,
-                output: report.terminal_output,
-                trace_location: None,
-            },
-            Err(error) => DispatchOutcome {
-                exit_status: CommandExitStatus::NonSuccess,
-                output: session::render_error(command.name().as_str(), &error),
-                trace_location: None,
-            },
-        },
-        DeveloperCommand::Capture { workspace, goal, brief, governance, risk, zone, owner } => {
-            match session::execute_capture(
+        DeveloperCommand::Start { workspace, cluster } => {
+            match session::execute_start_with_target(workspace.as_deref(), cluster.as_deref()) {
+                Ok(report) => DispatchOutcome {
+                    exit_status: report.exit_status,
+                    output: report.terminal_output,
+                    trace_location: None,
+                },
+                Err(error) => DispatchOutcome {
+                    exit_status: CommandExitStatus::NonSuccess,
+                    output: session::render_error(command.name().as_str(), &error),
+                    trace_location: None,
+                },
+            }
+        }
+        DeveloperCommand::Capture {
+            workspace,
+            cluster,
+            goal,
+            brief,
+            governance,
+            risk,
+            zone,
+            owner,
+        } => {
+            match session::execute_capture_with_target(
                 workspace.as_deref(),
+                cluster.as_deref(),
                 goal.as_deref(),
                 brief,
                 *governance,
@@ -804,8 +880,9 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                 },
             }
         }
-        DeveloperCommand::Flow { name, workspace } => {
-            match session::execute_flow(workspace.as_deref(), name) {
+        DeveloperCommand::Flow { name, workspace, cluster } => {
+            match session::execute_flow_with_target(workspace.as_deref(), cluster.as_deref(), name)
+            {
                 Ok(report) => DispatchOutcome {
                     exit_status: report.exit_status,
                     output: report.terminal_output,
@@ -818,8 +895,13 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                 },
             }
         }
-        DeveloperCommand::Plan { workspace, flow, no_flow } => {
-            match session::execute_plan(workspace.as_deref(), flow.as_deref(), *no_flow) {
+        DeveloperCommand::Plan { workspace, cluster, flow, no_flow } => {
+            match session::execute_plan_with_target(
+                workspace.as_deref(),
+                cluster.as_deref(),
+                flow.as_deref(),
+                *no_flow,
+            ) {
                 Ok(report) => DispatchOutcome {
                     exit_status: report.exit_status,
                     output: report.terminal_output,
@@ -832,20 +914,8 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                 },
             }
         }
-        DeveloperCommand::Step { workspace } => match session::execute_step(workspace.as_deref()) {
-            Ok(report) => DispatchOutcome {
-                exit_status: report.exit_status,
-                output: report.terminal_output,
-                trace_location: None,
-            },
-            Err(error) => DispatchOutcome {
-                exit_status: CommandExitStatus::NonSuccess,
-                output: session::render_error(command.name().as_str(), &error),
-                trace_location: None,
-            },
-        },
-        DeveloperCommand::Status { workspace } => {
-            match session::execute_status(workspace.as_deref()) {
+        DeveloperCommand::Step { workspace, cluster } => {
+            match session::execute_step_with_target(workspace.as_deref(), cluster.as_deref()) {
                 Ok(report) => DispatchOutcome {
                     exit_status: report.exit_status,
                     output: report.terminal_output,
@@ -858,18 +928,34 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                 },
             }
         }
-        DeveloperCommand::Next { workspace } => match session::execute_next(workspace.as_deref()) {
-            Ok(report) => DispatchOutcome {
-                exit_status: report.exit_status,
-                output: report.terminal_output,
-                trace_location: None,
-            },
-            Err(error) => DispatchOutcome {
-                exit_status: CommandExitStatus::NonSuccess,
-                output: session::render_error(command.name().as_str(), &error),
-                trace_location: None,
-            },
-        },
+        DeveloperCommand::Status { workspace, cluster } => {
+            match session::execute_status_with_target(workspace.as_deref(), cluster.as_deref()) {
+                Ok(report) => DispatchOutcome {
+                    exit_status: report.exit_status,
+                    output: report.terminal_output,
+                    trace_location: None,
+                },
+                Err(error) => DispatchOutcome {
+                    exit_status: CommandExitStatus::NonSuccess,
+                    output: session::render_error(command.name().as_str(), &error),
+                    trace_location: None,
+                },
+            }
+        }
+        DeveloperCommand::Next { workspace, cluster } => {
+            match session::execute_next_with_target(workspace.as_deref(), cluster.as_deref()) {
+                Ok(report) => DispatchOutcome {
+                    exit_status: report.exit_status,
+                    output: report.terminal_output,
+                    trace_location: None,
+                },
+                Err(error) => DispatchOutcome {
+                    exit_status: CommandExitStatus::NonSuccess,
+                    output: session::render_error(command.name().as_str(), &error),
+                    trace_location: None,
+                },
+            }
+        }
         DeveloperCommand::Init { workspace, template, assistant, force } => {
             match init::execute_init(workspace, *template, assistant, *force) {
                 Ok(report) => DispatchOutcome {
@@ -1055,6 +1141,7 @@ fn red_to_green_addition() {
         let commands = [
             DeveloperCommand::Capture {
                 workspace: Some(workspace.clone()),
+                cluster: None,
                 goal: Some("goal".to_string()),
                 brief: Vec::new(),
                 governance: None,
@@ -1065,15 +1152,17 @@ fn red_to_green_addition() {
             DeveloperCommand::Flow {
                 name: "bug-fix".to_string(),
                 workspace: Some(workspace.clone()),
+                cluster: None,
             },
             DeveloperCommand::Plan {
                 workspace: Some(workspace.clone()),
+                cluster: None,
                 flow: None,
                 no_flow: false,
             },
-            DeveloperCommand::Step { workspace: Some(workspace.clone()) },
-            DeveloperCommand::Status { workspace: Some(workspace.clone()) },
-            DeveloperCommand::Next { workspace: Some(workspace.clone()) },
+            DeveloperCommand::Step { workspace: Some(workspace.clone()), cluster: None },
+            DeveloperCommand::Status { workspace: Some(workspace.clone()), cluster: None },
+            DeveloperCommand::Next { workspace: Some(workspace.clone()), cluster: None },
         ];
 
         for command in commands {
@@ -1082,8 +1171,11 @@ fn red_to_green_addition() {
             assert!(outcome.output.contains("session error"), "{}", outcome.output);
         }
 
-        let inspect =
-            dispatch(&DeveloperCommand::Inspect { trace: None, workspace: Some(workspace) });
+        let inspect = dispatch(&DeveloperCommand::Inspect {
+            trace: None,
+            workspace: Some(workspace),
+            cluster: None,
+        });
         assert_eq!(inspect.exit_status, CommandExitStatus::TraceReadFailure);
         assert!(inspect.output.contains("inspect: trace read failure"), "{}", inspect.output);
     }
@@ -1095,6 +1187,7 @@ fn red_to_green_addition() {
 
         let custom_run = dispatch(&DeveloperCommand::Run {
             workspace: Some(custom_workspace.clone()),
+            cluster: None,
             goal: Some("Fix the failing add test".to_string()),
             brief: Vec::new(),
             governance: None,
@@ -1106,12 +1199,15 @@ fn red_to_green_addition() {
         assert!(custom_run.output.contains("terminal_status: succeeded"), "{}", custom_run.output);
         assert!(custom_run.trace_location.is_some());
 
-        let start =
-            dispatch(&DeveloperCommand::Start { workspace: Some(session_workspace.clone()) });
+        let start = dispatch(&DeveloperCommand::Start {
+            workspace: Some(session_workspace.clone()),
+            cluster: None,
+        });
         assert_eq!(start.exit_status, CommandExitStatus::Succeeded);
 
         let capture = dispatch(&DeveloperCommand::Capture {
             workspace: Some(session_workspace.clone()),
+            cluster: None,
             goal: Some("Fix the failing add test".to_string()),
             brief: Vec::new(),
             governance: None,
@@ -1123,6 +1219,7 @@ fn red_to_green_addition() {
 
         let plan = dispatch(&DeveloperCommand::Plan {
             workspace: Some(session_workspace.clone()),
+            cluster: None,
             flow: Some("bug-fix".to_string()),
             no_flow: false,
         });
@@ -1131,6 +1228,7 @@ fn red_to_green_addition() {
 
         let run = dispatch(&DeveloperCommand::Run {
             workspace: Some(session_workspace.clone()),
+            cluster: None,
             goal: None,
             brief: Vec::new(),
             governance: None,
@@ -1141,16 +1239,22 @@ fn red_to_green_addition() {
         assert_eq!(run.exit_status, CommandExitStatus::Succeeded);
         assert!(run.output.contains("terminal_status: succeeded"), "{}", run.output);
 
-        let status =
-            dispatch(&DeveloperCommand::Status { workspace: Some(session_workspace.clone()) });
+        let status = dispatch(&DeveloperCommand::Status {
+            workspace: Some(session_workspace.clone()),
+            cluster: None,
+        });
         assert_eq!(status.exit_status, CommandExitStatus::Succeeded);
 
-        let next = dispatch(&DeveloperCommand::Next { workspace: Some(session_workspace.clone()) });
+        let next = dispatch(&DeveloperCommand::Next {
+            workspace: Some(session_workspace.clone()),
+            cluster: None,
+        });
         assert_eq!(next.exit_status, CommandExitStatus::Succeeded);
 
         let inspect = dispatch(&DeveloperCommand::Inspect {
             trace: None,
             workspace: Some(session_workspace.clone()),
+            cluster: None,
         });
         assert_eq!(inspect.exit_status, CommandExitStatus::Succeeded);
         assert!(inspect.output.contains("inspection_target:"), "{}", inspect.output);
@@ -1158,6 +1262,7 @@ fn red_to_green_addition() {
         let invalid_workspace = temp_workspace("synod-cli-dispatch-invalid");
         let invalid = dispatch(&DeveloperCommand::Run {
             workspace: Some(invalid_workspace),
+            cluster: None,
             goal: Some("Fix the failing add test".to_string()),
             brief: Vec::new(),
             governance: None,

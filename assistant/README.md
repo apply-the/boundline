@@ -15,6 +15,24 @@ When `run`, `status`, `next`, or `inspect` report `route_owner` and
 working state and use them when explaining why a route or config default is
 authoritative.
 
+When a bounded delivery story spans a registered cluster, assistants should use
+`--cluster <primary-workspace>` for the session-native commands instead of
+switching ownership to a member workspace. Preserve `cluster_route_owner`,
+`cluster_authoritative_workspace`, `cluster_execution_condition`,
+`cluster_participating_workspaces`, and `cluster_blocking_workspace` when those
+fields appear in CLI output.
+
+Clustered session-native delivery uses the same CLI surface through the primary
+workspace:
+
+- `cargo run --bin synod -- start --cluster <primary-workspace>`
+- `cargo run --bin synod -- capture --cluster <primary-workspace> --goal "<goal>"`
+- `cargo run --bin synod -- plan --cluster <primary-workspace>`
+- `cargo run --bin synod -- run --cluster <primary-workspace>`
+- `cargo run --bin synod -- status --cluster <primary-workspace>`
+- `cargo run --bin synod -- next --cluster <primary-workspace>`
+- `cargo run --bin synod -- inspect --cluster <primary-workspace>`
+
 When a workspace defines `.synod/workflows.toml`, assistants may also use the
 bounded named-workflow surface: `workflow list -> workflow run -> workflow
 status -> workflow resume -> workflow inspect`. Those commands reuse the same session and trace
@@ -86,6 +104,7 @@ For the current review manifest shape and vote semantics, see [`docs/review-voti
 ## Continuity Rules
 - Preserve confirmed `workspace_ref`, captured goal, confirmed brief paths, authored input summary, and latest trace reference across assistant turns.
 - Preserve `continuity_authority`, `compatibility_trace_ref`, and `compatibility_follow_up_command` when the CLI reports them after an explicit compatibility run.
+- Preserve `cluster_id`, `cluster_route_owner`, `cluster_authoritative_workspace`, `cluster_execution_condition`, `cluster_participating_workspaces`, and `cluster_blocking_workspace` when the CLI reports them during clustered delivery.
 - Preserve `latest_candidate_family`, `latest_selection_reason`, and `latest_exhaustion_reason` when adaptive compatibility output includes them.
 - Preserve the selected flow name when the user has committed to `bug-fix`, `change`, or `delivery`.
 - Ask only for missing fields before recommending or executing a command.
@@ -95,3 +114,4 @@ For the current review manifest shape and vote semantics, see [`docs/review-voti
 - When `status` or `next` reports `continuity_authority: compatibility_trace` or `compatibility_follow_up: inspect_only`, route to `/synod-inspect` instead of `/synod-start`.
 - When CLI output includes `corrected_command`, reuse it instead of inventing a replacement inspect invocation.
 - When governance output reports `awaiting_approval` or `blocked`, do not suggest an ungoverned bypass; prefer `status` or `inspect` exactly as the CLI recommends and surface `governance_next_action` when the CLI provides it.
+- When a user is operating on a registered cluster, keep the primary workspace authoritative and prefer the CLI-reported `--cluster <primary-workspace>` follow-up instead of replacing it with member-scoped `--workspace` commands.

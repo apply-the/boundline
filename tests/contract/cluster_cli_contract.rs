@@ -58,3 +58,64 @@ fn cluster_status_and_inspect_accept_primary_workspace() {
         other => panic!("expected Cluster inspect, got {other:?}"),
     }
 }
+
+#[test]
+fn session_native_commands_accept_cluster_entrypoint() {
+    let start = Cli::try_parse_from(["synod", "start", "--cluster", "/tmp/primary"]).unwrap();
+    let capture = Cli::try_parse_from([
+        "synod",
+        "capture",
+        "--cluster",
+        "/tmp/primary",
+        "--goal",
+        "clustered delivery",
+    ])
+    .unwrap();
+    let plan = Cli::try_parse_from(["synod", "plan", "--cluster", "/tmp/primary"]).unwrap();
+    let status = Cli::try_parse_from(["synod", "status", "--cluster", "/tmp/primary"]).unwrap();
+
+    match start.command {
+        DeveloperCommand::Start { cluster, .. } => {
+            assert_eq!(cluster, Some(PathBuf::from("/tmp/primary")));
+        }
+        other => panic!("expected Start, got {other:?}"),
+    }
+
+    match capture.command {
+        DeveloperCommand::Capture { cluster, goal, .. } => {
+            assert_eq!(cluster, Some(PathBuf::from("/tmp/primary")));
+            assert_eq!(goal.as_deref(), Some("clustered delivery"));
+        }
+        other => panic!("expected Capture, got {other:?}"),
+    }
+
+    match plan.command {
+        DeveloperCommand::Plan { cluster, .. } => {
+            assert_eq!(cluster, Some(PathBuf::from("/tmp/primary")));
+        }
+        other => panic!("expected Plan, got {other:?}"),
+    }
+
+    match status.command {
+        DeveloperCommand::Status { cluster, .. } => {
+            assert_eq!(cluster, Some(PathBuf::from("/tmp/primary")));
+        }
+        other => panic!("expected Status, got {other:?}"),
+    }
+}
+
+#[test]
+fn session_run_preserves_workspace_requirement_for_custom_compatibility_mode() {
+    let cli = Cli::try_parse_from([
+        "synod",
+        "run",
+        "--cluster",
+        "/tmp/primary",
+        "--goal",
+        "fix the failing add test",
+    ])
+    .unwrap();
+    let session = synod::cli::DeveloperCommandSession::from_command(&cli.command);
+
+    assert!(session.validate().is_err());
+}

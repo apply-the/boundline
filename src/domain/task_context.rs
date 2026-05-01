@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use thiserror::Error;
 
+use crate::domain::cluster::{ClusterDeliveryStory, ClusterSessionProjection};
 use crate::domain::governance::{
     AutopilotDecisionRecord, GovernedStagePacket, GovernedStageRecord, PacketReuseBinding,
 };
@@ -16,6 +17,8 @@ pub const LATEST_GOVERNANCE_PACKET_REUSE_KEY: &str = "latest_governance_packet_r
 pub const LATEST_GOVERNANCE_DECISION_KEY: &str = "latest_governance_decision";
 pub const LATEST_CLARIFICATION_KEY: &str = "latest_clarification";
 pub const LATEST_DERIVED_TASK_DRAFT_KEY: &str = "derived_task_draft";
+pub const CLUSTER_SESSION_PROJECTION_KEY: &str = "cluster_session_projection";
+pub const CLUSTER_DELIVERY_STORY_KEY: &str = "cluster_delivery_story";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TaskContext {
@@ -174,6 +177,30 @@ impl TaskContext {
 
     pub fn derived_task_draft(&self) -> Result<Option<DerivedTaskDraft>, TaskContextError> {
         self.load_serialized(LATEST_DERIVED_TASK_DRAFT_KEY)
+    }
+
+    pub fn set_cluster_session_projection(
+        &mut self,
+        projection: &ClusterSessionProjection,
+    ) -> Result<(), TaskContextError> {
+        self.store_serialized(CLUSTER_SESSION_PROJECTION_KEY, projection)
+    }
+
+    pub fn cluster_session_projection(
+        &self,
+    ) -> Result<Option<ClusterSessionProjection>, TaskContextError> {
+        self.load_serialized(CLUSTER_SESSION_PROJECTION_KEY)
+    }
+
+    pub fn set_cluster_delivery_story(
+        &mut self,
+        story: &ClusterDeliveryStory,
+    ) -> Result<(), TaskContextError> {
+        self.store_serialized(CLUSTER_DELIVERY_STORY_KEY, story)
+    }
+
+    pub fn cluster_delivery_story(&self) -> Result<Option<ClusterDeliveryStory>, TaskContextError> {
+        self.load_serialized(CLUSTER_DELIVERY_STORY_KEY)
     }
 
     fn merge_into_state(&mut self, patch: &Map<String, Value>) {
