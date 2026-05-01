@@ -193,9 +193,36 @@ pub struct SelectionEvidence {
     pub goal_terms: Vec<String>,
     #[serde(default)]
     pub validation_terms: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation_guidance: Option<ValidationGuidance>,
     #[serde(default)]
     pub path_scores: Vec<PathScore>,
     pub reason: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ValidationGuidanceSource {
+    ValidationRecord,
+    FailureMessage,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ValidationGuidanceConfidence {
+    Hinted,
+    Strong,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ValidationGuidance {
+    pub source: ValidationGuidanceSource,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub matched_paths: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub matched_terms: Vec<String>,
+    pub headline: String,
+    pub confidence: ValidationGuidanceConfidence,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -19,9 +19,45 @@ recorded workspace version.
 
 Delivered specs:
 
-- None recorded after `0.20.0`
+- None recorded after `0.22.0`
 
 Highlights:
+
+## [0.22.0] - 2026-05-01
+
+Delivered specs:
+
+- `022` - Session Compatibility Continuity
+
+Highlights:
+
+- Keep `status` and `next` usable after explicit compatibility `run` by
+  surfacing `continuity_authority`, inspect-only compatibility follow-up, and
+  the correct CLI-reported inspect command instead of failing on a missing
+  active session.
+- Reuse one route and `execution_condition` summary vocabulary across native
+  session and compatibility follow-up surfaces without hiding which route ran.
+- Update README, getting-started, configuration, adaptive-execution,
+  assistant guidance, roadmap, contributor docs, and changelog for the
+  continuity release.
+
+## [0.21.0] - 2026-05-01
+
+Delivered specs:
+
+- `021` - Adaptive Repair Depth
+
+Highlights:
+
+- Re-rank bounded adaptive repair candidates from the latest validation record
+  and failure evidence so replans can shift to a new manifest-declared target
+  when the current slice is no longer credible.
+- Keep adaptive execution on the explicit compatibility path while surfacing the
+  latest workspace slice, validation-guided selection headline, and attempt
+  lineage more clearly in `run` and `inspect`.
+- Update README, adaptive-execution, getting-started, configuration, assistant
+  guidance, roadmap, and contributor docs for the adaptive-repair-depth
+  release.
 
 ## [0.20.0] - 2026-05-01
 

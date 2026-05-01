@@ -219,6 +219,53 @@ impl SessionTransition {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContinuityAuthority {
+    NativeSession,
+    CompatibilityTrace,
+    NoFollowUpState,
+}
+
+impl ContinuityAuthority {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::NativeSession => "native_session",
+            Self::CompatibilityTrace => "compatibility_trace",
+            Self::NoFollowUpState => "no_follow_up_state",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CompatibilityFollowUpMode {
+    InspectOnly,
+    Resumable,
+    Superseded,
+}
+
+impl CompatibilityFollowUpMode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::InspectOnly => "inspect_only",
+            Self::Resumable => "resumable",
+            Self::Superseded => "superseded",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CompatibilityFollowUpView {
+    pub follow_up_mode: CompatibilityFollowUpMode,
+    pub trace_ref: String,
+    pub routing_summary: String,
+    pub execution_condition: String,
+    pub terminal_status: TaskStatus,
+    pub terminal_reason: String,
+    pub next_command: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionStatusView {
     pub session_id: String,
@@ -254,6 +301,10 @@ pub struct SessionStatusView {
     pub workflow_phase: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow_next_action: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub continuity_authority: Option<ContinuityAuthority>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compatibility_follow_up: Option<CompatibilityFollowUpView>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current_stage_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1334,6 +1385,8 @@ mod tests {
             active_workflow: record.active_workflow_name(),
             workflow_phase: record.active_workflow_phase_text(),
             workflow_next_action: record.active_workflow_next_action(),
+            continuity_authority: None,
+            compatibility_follow_up: None,
             current_stage_id: record.active_flow.as_ref().map(|flow| flow.current_stage_id.clone()),
             current_stage_index: record.active_flow.as_ref().map(|flow| flow.current_stage_index),
             total_stages: record.active_flow.as_ref().map(|flow| flow.total_stages),

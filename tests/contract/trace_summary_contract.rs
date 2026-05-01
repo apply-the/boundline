@@ -4,6 +4,7 @@ use crate::workspace_fixture::{
 };
 use synod::adapters::trace_store::{FileTraceStore, TraceStore};
 use synod::cli::inspect::summarize_trace;
+use synod::cli::output::trace_execution_condition_text;
 
 #[test]
 fn trace_summary_preserves_step_order_and_terminal_reason() {
@@ -84,5 +85,33 @@ fn trace_summary_carries_authored_input_summary_and_source_order() {
             "attached_markdown: docs/explicit.md".to_string(),
             "referenced_markdown: docs/referenced.md".to_string(),
         ]
+    );
+}
+
+#[test]
+fn trace_summary_uses_shared_route_and_execution_condition_vocabulary_for_compatibility_traces() {
+    let workspace = temp_fixture_workspace("synod-trace-summary-shared-vocabulary");
+    let output = run_synod(&[
+        "run",
+        "--goal",
+        "Fix the failing add test",
+        "--workspace",
+        workspace.to_string_lossy().as_ref(),
+    ]);
+    let text = terminal_text(&output);
+    let trace_path = extract_trace_path(&text).expect(&text);
+    let store = FileTraceStore::for_workspace(&workspace);
+    let trace = store.load(&trace_path).unwrap();
+    let summary = summarize_trace(&trace_path, &trace).unwrap();
+
+    assert_eq!(
+        summary.routing_summary.as_deref(),
+        Some(
+            "routing: compatibility (execution_profile) - trace came from the explicit compatibility runtime"
+        )
+    );
+    assert_eq!(
+        trace_execution_condition_text(&summary),
+        format!("terminal - {}", summary.terminal_reason.message)
     );
 }

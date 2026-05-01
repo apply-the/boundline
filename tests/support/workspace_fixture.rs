@@ -23,6 +23,28 @@ const GREEN_LIB_RS: &str =
 const MULTIPLY_LIB_RS: &str =
     concat!("pub fn add(left: i32, right: i32) -> i32 {\n", "    left * right\n", "}\n",);
 
+const GUIDED_ADAPTIVE_LIB_RS: &str = concat!(
+    "mod helper;\n\n",
+    "pub fn add(left: i32, right: i32) -> i32 {\n",
+    "    let _unused = left - right;\n",
+    "    helper::add_pair(left, right)\n",
+    "}\n",
+);
+
+const GUIDED_ADAPTIVE_HELPER_RS: &str =
+    concat!("pub fn add_pair(left: i32, right: i32) -> i32 {\n", "    left - right\n", "}\n",);
+
+const GUIDED_ADAPTIVE_VALIDATE_SH: &str = concat!(
+    "#!/bin/sh\n",
+    "set +e\n",
+    "cargo test --quiet\n",
+    "status=$?\n",
+    "if [ \"$status\" -ne 0 ]; then\n",
+    "  printf 'validation hint: inspect src/helper.rs for the remaining failing arithmetic path\\n' >&2\n",
+    "fi\n",
+    "exit \"$status\"\n",
+);
+
 const MISSING_CANON_COMMAND: &str = "/definitely/missing/canon";
 
 const FIXTURE_TEST_RS: &str = concat!(
@@ -139,6 +161,10 @@ pub fn temp_adaptive_fixture_workspace(prefix: &str) -> PathBuf {
 
 pub fn temp_adaptive_replanning_workspace(prefix: &str) -> PathBuf {
     create_adaptive_fixture_workspace(prefix, MULTIPLY_LIB_RS)
+}
+
+pub fn temp_adaptive_guided_replanning_workspace(prefix: &str) -> PathBuf {
+    create_adaptive_guided_fixture_workspace(prefix)
 }
 
 pub fn temp_optional_governance_workspace(prefix: &str) -> PathBuf {
@@ -374,6 +400,47 @@ fn create_adaptive_fixture_workspace(prefix: &str, source_contents: &str) -> Pat
                 "max_selected_targets": 1,
                 "max_generated_attempts": 4,
                 "path_preferences": ["src/"],
+                "allowed_change_kinds": ["arithmetic_swap"],
+            },
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    workspace
+}
+
+fn create_adaptive_guided_fixture_workspace(prefix: &str) -> PathBuf {
+    let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::create_dir_all(workspace.join("tests")).unwrap();
+    fs::create_dir_all(workspace.join(".synod")).unwrap();
+
+    fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
+    fs::write(workspace.join("src/lib.rs"), GUIDED_ADAPTIVE_LIB_RS).unwrap();
+    fs::write(workspace.join("src/helper.rs"), GUIDED_ADAPTIVE_HELPER_RS).unwrap();
+    fs::write(workspace.join("tests/red_to_green.rs"), FIXTURE_TEST_RS).unwrap();
+
+    let validate_script = workspace.join("validate.sh");
+    fs::write(&validate_script, GUIDED_ADAPTIVE_VALIDATE_SH).unwrap();
+    let mut permissions = fs::metadata(&validate_script).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&validate_script, permissions).unwrap();
+
+    fs::write(
+        workspace.join(".synod/execution.json"),
+        serde_json::to_string_pretty(&serde_json::json!({
+            "name": "adaptive-guided-replanning-execution",
+            "read_targets": ["src/lib.rs", "src/helper.rs", "tests/red_to_green.rs"],
+            "validation_command": {
+                "program": "./validate.sh",
+                "args": [],
+            },
+            "attempts": [],
+            "adaptive": {
+                "max_selected_targets": 1,
+                "max_generated_attempts": 4,
+                "path_preferences": ["src/lib.rs"],
                 "allowed_change_kinds": ["arithmetic_swap"],
             },
         }))
