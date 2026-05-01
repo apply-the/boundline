@@ -7,6 +7,7 @@ Synod is a bounded delivery orchestrator. Contributions should keep that bias:
 - prefer small, inspectable changes over broad refactors
 - preserve explicit session state, traces, and CLI guidance
 - preserve the session-native `start -> capture -> plan -> run -> status -> next -> inspect` story as the default operator path
+- keep negotiated delivery packets, acceptance boundaries, and blocking constraints explicit from capture through follow-up surfaces
 - keep clustered delivery sequential-first with one authoritative primary workspace session owner
 - keep continuity explicit when a workspace moves from session-native state to compatibility-trace follow-up
 - treat `synod workflow` as a thin bounded layer over the same session-owned runtime, not as a generic workflow engine
@@ -114,6 +115,8 @@ explicit compatibility path in this release.
 If you change how `status`, `next`, or `inspect` choose the authoritative follow-up state, keep the docs explicit about `continuity_authority`, inspect-only compatibility follow-up, and when `synod start` is or is not actually required.
 
 If you change how `run`, `status`, `next`, or `inspect` align route-summary wording, keep the docs explicit about `route_owner`, any material `route_config_projection`, and the rule that summary convergence must not hide the real owning route.
+
+If you change negotiated capture, plan gating, or acceptance-boundary projection, keep the docs explicit about `negotiation_goal_summary`, `negotiation_resolution`, `negotiation_acceptance_boundary`, and whether the follow-up story comes from the native goal-plan route or an explicit compatibility trace.
 
 If you change clustered delivery behavior, keep the docs explicit about the
 primary workspace remaining authoritative, member-local trace persistence,

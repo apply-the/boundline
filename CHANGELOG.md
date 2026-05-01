@@ -19,9 +19,26 @@ recorded workspace version.
 
 Delivered specs:
 
-- None recorded after `0.25.0`
+- None recorded after `0.26.0`
 
 Highlights:
+
+## [0.26.0] - 2026-05-01
+
+Delivered specs:
+
+- `026` - Goal Negotiation And Constraint Modeling
+
+Highlights:
+
+- Derive one negotiated delivery packet during `capture` from direct goals,
+  authored briefs, and governance context before planning begins.
+- Gate `plan` on a credible negotiation result and keep
+  `negotiation_goal_summary`, `negotiation_resolution`, and
+  `negotiation_acceptance_boundary` visible in `GoalPlan`, `run`, `status`,
+  `next`, and `inspect` on both native and explicit compatibility routes.
+- Update README, getting-started, configuration, assistant guidance, roadmap,
+  contributor docs, and changelog for the release.
 
 ## [0.25.0] - 2026-05-01
 

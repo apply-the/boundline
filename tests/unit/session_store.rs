@@ -38,6 +38,7 @@ fn build_record(workspace_ref: &str) -> ActiveSessionRecord {
         workspace_ref: workspace_ref.to_string(),
         goal: Some("Deliver a session-backed CLI".to_string()),
         authored_brief: None,
+        negotiation_packet: None,
         active_flow: None,
         active_task: Some(build_task(workspace_ref)),
         goal_plan: None,

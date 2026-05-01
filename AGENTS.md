@@ -42,6 +42,7 @@ Auto-generated from all feature plans. Last updated: 2026-05-01
 - Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, and collections APIs; no new runtime dependencies planned for this slice (024-unify-route-summaries)
 - Workspace-local `.synod/session.json`, `.synod/traces/`, `.synod/execution.json`, `.synod/config.toml`, optional `.synod/workflows.toml`, and release-aligned repository docs plus assistant assets (024-unify-route-summaries)
 - Workspace-local `.synod/cluster.toml`, `.synod/session.json`, `.synod/traces/`, `.synod/execution.json`, `.synod/config.toml`, optional `.synod/workflows.toml`, and release-aligned repository docs plus assistant assets (025-multi-workspace-delivery)
+- Workspace-local `.synod/session.json`, `.synod/traces/`, task-context state embedded in persisted session tasks, optional cluster projection in primary-workspace session state, and release-aligned repository docs plus assistant assets (026-goal-constraint-modeling)
 
 - Rust 1.95.0, edition 2024 + Rust standard library plus `serde`, `serde_json`, `thiserror`, `tracing`, and `uuid` for structured state, trace serialization, error handling, instrumentation, and stable identifiers (001-delivery-orchestrator-core)
 
@@ -70,11 +71,10 @@ Crate versioning follows Semantic Versioning.
 Before 1.0.0, breaking changes MAY occur in minor versions.
 
 ## Recent Changes
+- 026-goal-constraint-modeling: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, and collections APIs; no new runtime dependencies planned for this slice
 - 025-multi-workspace-delivery: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, and collections APIs; no new runtime dependencies planned for this slice
 - 024-unify-route-summaries: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, and collections APIs; no new runtime dependencies planned for this slice
-- 023-broaden-bounded-adaptive-repair: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for this slice
 
 
 <!-- MANUAL ADDITIONS START -->
-- Clustered delivery keeps the authoritative session in the primary workspace's `.synod/session.json`; member workspaces persist their own terminal traces under `.synod/traces/` during bounded handoff.
 <!-- MANUAL ADDITIONS END -->

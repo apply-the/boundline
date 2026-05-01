@@ -56,6 +56,7 @@ fn adaptive_replan_uses_latest_validation_record_to_shift_selected_target() {
         "Recover after validation points to helper.rs",
         "session-adaptive-guided",
         None,
+        None,
     )
     .unwrap();
     let plan = build_fixture_plan_for_goal(

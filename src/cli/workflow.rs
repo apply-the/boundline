@@ -708,6 +708,7 @@ fn initialize_session(workspace: &Path) -> ActiveSessionRecord {
         workspace_ref: workspace.to_string_lossy().into_owned(),
         goal: None,
         authored_brief: None,
+        negotiation_packet: None,
         active_flow: None,
         active_task: None,
         goal_plan: None,

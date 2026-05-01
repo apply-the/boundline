@@ -16,6 +16,7 @@ use crate::cli::inspect::summarize_trace;
 use crate::cli::output;
 use crate::domain::cluster::ClusterSessionProjection;
 use crate::domain::governance::GovernanceRuntimeKind;
+use crate::domain::negotiation::NegotiatedDeliveryPacket;
 use crate::domain::session::{
     ActiveSessionRecord, CompatibilityFollowUpMode, CompatibilityFollowUpView, ContinuityAuthority,
     SessionStatus, SessionStatusView, decision_status_text, execution_path_text, routing_outcome,
@@ -62,6 +63,7 @@ pub fn execute_start_with_target(
         workspace_ref: workspace.to_string_lossy().into_owned(),
         goal: None,
         authored_brief: None,
+        negotiation_packet: None,
         active_flow: None,
         active_task: None,
         goal_plan: None,
@@ -127,6 +129,12 @@ pub fn execute_capture_with_target(
 
     runtime.capture_goal(&mut record, &effective_goal).map_err(map_runtime_error)?;
     record.authored_brief = Some(bundle.clone());
+    record.negotiation_packet = Some(NegotiatedDeliveryPacket::from_authored_brief(
+        &record.session_id,
+        &record.workspace_ref,
+        &effective_goal,
+        &bundle,
+    ));
     runtime.persist_session(&record).map_err(map_runtime_error)?;
 
     let summary = if bundle.clarification.is_some() {
@@ -605,6 +613,18 @@ pub(crate) fn build_status_view_with_follow_up(
         session_id: record.session_id.clone(),
         workspace_ref: record.workspace_ref.clone(),
         goal: record.goal.clone(),
+        negotiation_goal_summary: record
+            .negotiation_packet
+            .as_ref()
+            .map(|packet| packet.goal_summary.clone()),
+        negotiation_resolution: record
+            .negotiation_packet
+            .as_ref()
+            .map(|packet| packet.resolution_state.as_str().to_string()),
+        negotiation_acceptance_boundary: record
+            .negotiation_packet
+            .as_ref()
+            .map(|packet| packet.acceptance_boundary.success_headline.clone()),
         cluster_delivery_story: record
             .active_task
             .as_ref()
@@ -1233,6 +1253,7 @@ fn red_to_green_addition() {
             record.goal.clone().unwrap_or_default(),
             record.session_id.clone(),
             record.authored_brief.as_ref(),
+            record.negotiation_packet.as_ref(),
         )
         .unwrap();
         let plan = build_fixture_plan_for_goal(
@@ -1269,6 +1290,7 @@ fn red_to_green_addition() {
                 workspace_ref: "/tmp/workspace".to_string(),
                 goal: None,
                 authored_brief: None,
+                negotiation_packet: None,
                 active_flow: None,
                 active_task: None,
                 goal_plan: None,

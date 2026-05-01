@@ -44,6 +44,11 @@ pub use domain::governance::{
     classify_packet_readiness, resolved_canon_mode, supported_canon_modes_for_stage,
 };
 pub use domain::limits::{RunLimits, TerminalCondition};
+pub use domain::negotiation::{
+    AcceptanceBoundary, NegotiatedDeliveryPacket, NegotiationConstraint, NegotiationConstraintKind,
+    NegotiationConstraintSource, NegotiationConstraintState, NegotiationResolutionState,
+    TradeoffDecision,
+};
 pub use domain::plan::Plan;
 pub use domain::review::{
     AdjudicationDefinition, ReviewOutcome, ReviewProfile, ReviewScenario, ReviewTrigger,

@@ -227,6 +227,9 @@ fn trace_summary_renderer_mentions_steps_recovery_and_terminal_reason() {
     let summary = TraceSummaryView {
         trace_ref: "/tmp/workspace/.synod/traces/task.json".to_string(),
         goal: "Inspect a recorded run".to_string(),
+        negotiation_goal_summary: None,
+        negotiation_resolution: None,
+        negotiation_acceptance_boundary: None,
         cluster_delivery_story: None,
         routing_summary: None,
         goal_plan_summary: None,
@@ -430,6 +433,83 @@ fn render_run_trace_with_trace_events_includes_retry_and_replan_lines() {
 }
 
 #[test]
+fn render_run_trace_surfaces_goal_plan_negotiation_projection() {
+    let mut trace = ExecutionTrace::new("task-negotiation", "session", "Goal with negotiation");
+    trace.terminal_status = Some(TaskStatus::Succeeded);
+    trace.terminal_reason =
+        Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None));
+    trace.events.push(TraceEvent {
+        event_id: "e1".to_string(),
+        event_type: TraceEventType::GoalPlanCreated,
+        step_id: None,
+        plan_revision: 0,
+        payload: json!({
+            "plan_id": "plan-1",
+            "goal": "Goal with negotiation",
+            "task_count": 2,
+            "negotiation_goal_summary": "Stabilize the failing add flow",
+            "negotiation_resolution": "credible",
+            "negotiation_acceptance_boundary": "deliver the bounded outcome: Stabilize the failing add flow"
+        }),
+        recorded_at: 0,
+    });
+
+    let response = minimal_response(TaskStatus::Succeeded, "done");
+    let rendered = render_run_trace("run", Some(&trace), &response, "/synod-status");
+
+    assert!(
+        rendered.contains("negotiation_goal_summary: Stabilize the failing add flow"),
+        "{rendered}"
+    );
+    assert!(rendered.contains("negotiation_resolution: credible"), "{rendered}");
+    assert!(
+        rendered.contains(
+            "negotiation_acceptance_boundary: deliver the bounded outcome: Stabilize the failing add flow"
+        ),
+        "{rendered}"
+    );
+}
+
+#[test]
+fn render_run_trace_surfaces_task_started_negotiation_projection() {
+    let mut trace = ExecutionTrace::new("task-negotiation-compat", "session", "Compat goal");
+    trace.terminal_status = Some(TaskStatus::Succeeded);
+    trace.terminal_reason =
+        Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None));
+    trace.events.push(TraceEvent {
+        event_id: "e1".to_string(),
+        event_type: TraceEventType::TaskStarted,
+        step_id: None,
+        plan_revision: 0,
+        payload: json!({
+            "goal": "Compat goal",
+            "input": {
+                "negotiation_goal_summary": "Stabilize the failing add flow",
+                "negotiation_resolution": "credible",
+                "negotiation_acceptance_boundary": "deliver the bounded outcome: Stabilize the failing add flow"
+            },
+            "limits": RunLimits::default()
+        }),
+        recorded_at: 0,
+    });
+
+    let response = minimal_response(TaskStatus::Succeeded, "done");
+    let rendered = render_run_trace("run", Some(&trace), &response, "/synod-status");
+
+    assert!(
+        rendered.contains("negotiation_goal_summary: Stabilize the failing add flow"),
+        "{rendered}"
+    );
+    assert!(rendered.contains("negotiation_resolution: credible"), "{rendered}");
+    assert!(
+        rendered.contains(
+            "negotiation_acceptance_boundary: deliver the bounded outcome: Stabilize the failing add flow"
+        ),
+        "{rendered}"
+    );
+}
+
+#[test]
 fn render_run_trace_surfaces_security_assessment_packet_provenance() {
     let mut trace = ExecutionTrace::new("task-governance", "session", "Governed goal");
     trace.terminal_status = Some(TaskStatus::Succeeded);
@@ -520,6 +600,97 @@ fn execute_inspect_workspace_covers_latest_workspace_trace_target() {
 }
 
 #[test]
+fn execute_inspect_surfaces_goal_plan_negotiation_projection() {
+    use std::fs;
+
+    let dir =
+        std::env::temp_dir().join(format!("synod-unit-inspect-negotiation-{}", Uuid::new_v4()));
+    fs::create_dir_all(&dir).unwrap();
+
+    let mut trace = minimal_trace("task-negotiation-inspect");
+    trace.goal = "Goal with negotiation".to_string();
+    trace.events.push(TraceEvent {
+        event_id: "e1".to_string(),
+        event_type: TraceEventType::GoalPlanCreated,
+        step_id: None,
+        plan_revision: 0,
+        payload: json!({
+            "plan_id": "plan-1",
+            "goal": "Goal with negotiation",
+            "task_count": 2,
+            "negotiation_goal_summary": "Stabilize the failing add flow",
+            "negotiation_resolution": "credible",
+            "negotiation_acceptance_boundary": "deliver the bounded outcome: Stabilize the failing add flow"
+        }),
+        recorded_at: 0,
+    });
+
+    let store = FileTraceStore::new(&dir);
+    let trace_path = store.persist(&trace).unwrap();
+
+    let report = execute_inspect(Some(&trace_path), None).unwrap();
+    let output = &report.terminal_output;
+
+    assert!(
+        output.contains("negotiation_goal_summary: Stabilize the failing add flow"),
+        "{output}"
+    );
+    assert!(output.contains("negotiation_resolution: credible"), "{output}");
+    assert!(
+        output.contains(
+            "negotiation_acceptance_boundary: deliver the bounded outcome: Stabilize the failing add flow"
+        ),
+        "{output}"
+    );
+}
+
+#[test]
+fn execute_inspect_surfaces_task_started_negotiation_projection() {
+    use std::fs;
+
+    let dir = std::env::temp_dir()
+        .join(format!("synod-unit-inspect-negotiation-compat-{}", Uuid::new_v4()));
+    fs::create_dir_all(&dir).unwrap();
+
+    let mut trace = minimal_trace("task-negotiation-inspect-compat");
+    trace.goal = "Compat goal".to_string();
+    trace.events.push(TraceEvent {
+        event_id: "e1".to_string(),
+        event_type: TraceEventType::TaskStarted,
+        step_id: None,
+        plan_revision: 0,
+        payload: json!({
+            "goal": "Compat goal",
+            "input": {
+                "negotiation_goal_summary": "Stabilize the failing add flow",
+                "negotiation_resolution": "credible",
+                "negotiation_acceptance_boundary": "deliver the bounded outcome: Stabilize the failing add flow"
+            },
+            "limits": RunLimits::default()
+        }),
+        recorded_at: 0,
+    });
+
+    let store = FileTraceStore::new(&dir);
+    let trace_path = store.persist(&trace).unwrap();
+
+    let report = execute_inspect(Some(&trace_path), None).unwrap();
+    let output = &report.terminal_output;
+
+    assert!(
+        output.contains("negotiation_goal_summary: Stabilize the failing add flow"),
+        "{output}"
+    );
+    assert!(output.contains("negotiation_resolution: credible"), "{output}");
+    assert!(
+        output.contains(
+            "negotiation_acceptance_boundary: deliver the bounded outcome: Stabilize the failing add flow"
+        ),
+        "{output}"
+    );
+}
+
+#[test]
 fn summarize_trace_handles_tool_and_decision_step_kinds() {
     let mut trace = ExecutionTrace::new("task-steps", "session", "Steps test");
     trace.terminal_status = Some(TaskStatus::Succeeded);
@@ -603,6 +774,9 @@ fn render_session_status_includes_goal_trace_and_next_command() {
         session_id: "session-status".to_string(),
         workspace_ref: "/tmp/session-workspace".to_string(),
         goal: Some("Ship a bounded change".to_string()),
+        negotiation_goal_summary: None,
+        negotiation_resolution: None,
+        negotiation_acceptance_boundary: None,
         cluster_delivery_story: None,
         authored_input_summary: None,
         authored_input_sources: None,
@@ -681,6 +855,9 @@ fn render_session_status_surfaces_security_assessment_projection() {
         session_id: "session-governed".to_string(),
         workspace_ref: "/tmp/session-workspace".to_string(),
         goal: Some("Verify a governed change".to_string()),
+        negotiation_goal_summary: None,
+        negotiation_resolution: None,
+        negotiation_acceptance_boundary: None,
         cluster_delivery_story: None,
         authored_input_summary: None,
         authored_input_sources: None,
@@ -768,6 +945,9 @@ fn render_session_status_surfaces_workflow_phase_and_pause_reason() {
         session_id: "session-workflow-status".to_string(),
         workspace_ref: "/tmp/session-workflow".to_string(),
         goal: None,
+        negotiation_goal_summary: None,
+        negotiation_resolution: None,
+        negotiation_acceptance_boundary: None,
         cluster_delivery_story: None,
         authored_input_summary: None,
         authored_input_sources: None,
@@ -975,6 +1155,9 @@ fn render_trace_summary_handles_all_terminal_status_variants() {
         let summary = TraceSummaryView {
             trace_ref: "/tmp/trace.json".to_string(),
             goal: "test".to_string(),
+            negotiation_goal_summary: None,
+            negotiation_resolution: None,
+            negotiation_acceptance_boundary: None,
             cluster_delivery_story: None,
             routing_summary: None,
             goal_plan_summary: None,
@@ -1017,6 +1200,9 @@ fn render_trace_summary_surfaces_route_owner_and_config_projection() {
     let summary = TraceSummaryView {
         trace_ref: "/tmp/trace.json".to_string(),
         goal: "test".to_string(),
+        negotiation_goal_summary: None,
+        negotiation_resolution: None,
+        negotiation_acceptance_boundary: None,
         cluster_delivery_story: None,
         routing_summary: Some(
             "routing: compatibility (execution_profile) - trace came from the explicit compatibility runtime"
@@ -1083,6 +1269,9 @@ fn render_session_status_projects_workspace_routing_defaults() {
         session_id: "session-config-projection".to_string(),
         workspace_ref: workspace.to_string_lossy().into_owned(),
         goal: Some("Project route defaults".to_string()),
+        negotiation_goal_summary: None,
+        negotiation_resolution: None,
+        negotiation_acceptance_boundary: None,
         cluster_delivery_story: None,
         authored_input_summary: None,
         authored_input_sources: None,
@@ -1172,6 +1361,9 @@ fn render_trace_summary_projects_workspace_routing_defaults() {
     let summary = TraceSummaryView {
         trace_ref: trace_ref.to_string_lossy().into_owned(),
         goal: "test".to_string(),
+        negotiation_goal_summary: None,
+        negotiation_resolution: None,
+        negotiation_acceptance_boundary: None,
         cluster_delivery_story: None,
         routing_summary: Some(
             "routing: native (goal_plan) - trace came from the session-native runtime".to_string(),
@@ -1213,6 +1405,9 @@ fn render_trace_summary_covers_replan_recovery_label_and_decision_step_kind() {
     let summary = TraceSummaryView {
         trace_ref: "/tmp/trace.json".to_string(),
         goal: "test".to_string(),
+        negotiation_goal_summary: None,
+        negotiation_resolution: None,
+        negotiation_acceptance_boundary: None,
         cluster_delivery_story: None,
         routing_summary: None,
         goal_plan_summary: None,
@@ -1321,6 +1516,9 @@ fn render_trace_summary_covers_pending_running_and_skipped_step_statuses() {
         let summary = TraceSummaryView {
             trace_ref: "/tmp/trace.json".to_string(),
             goal: "test".to_string(),
+            negotiation_goal_summary: None,
+            negotiation_resolution: None,
+            negotiation_acceptance_boundary: None,
             cluster_delivery_story: None,
             routing_summary: None,
             goal_plan_summary: None,
@@ -1366,6 +1564,9 @@ fn render_session_status_surfaces_cluster_delivery_story() {
         session_id: "cluster-session".to_string(),
         workspace_ref: "/tmp/primary".to_string(),
         goal: Some("Ship a clustered fix".to_string()),
+        negotiation_goal_summary: None,
+        negotiation_resolution: None,
+        negotiation_acceptance_boundary: None,
         cluster_delivery_story: Some(sample_cluster_delivery_story()),
         authored_input_summary: None,
         authored_input_sources: None,
@@ -1449,6 +1650,9 @@ fn render_trace_summary_surfaces_cluster_delivery_story() {
         &TraceSummaryView {
             trace_ref: "/tmp/secondary/.synod/traces/task.json".to_string(),
             goal: "Ship a clustered fix".to_string(),
+            negotiation_goal_summary: None,
+            negotiation_resolution: None,
+            negotiation_acceptance_boundary: None,
             cluster_delivery_story: Some(sample_cluster_delivery_story()),
             routing_summary: Some(
                 "routing: native (goal_plan) - trace came from the session-native runtime"

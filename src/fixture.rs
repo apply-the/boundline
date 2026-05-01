@@ -22,6 +22,7 @@ use crate::domain::flow::{
     FLOW_METADATA_KEY, FlowStepMetadata, SessionFlowState, attach_stage_metadata, built_in_flow,
 };
 use crate::domain::limits::RunLimits;
+use crate::domain::negotiation::NegotiatedDeliveryPacket;
 use crate::domain::plan::Plan;
 use crate::domain::review::{
     ReviewOutcome, ReviewProfile, ReviewTrigger, ReviewerDisposition, ReviewerFinding,
@@ -210,12 +211,36 @@ pub fn build_task_request(
     goal: impl Into<String>,
     session_id: impl Into<String>,
     authored_brief: Option<&AuthoredBriefBundle>,
+    negotiation_packet: Option<&NegotiatedDeliveryPacket>,
 ) -> Result<TaskRunRequest, FixtureRuntimeError> {
     let profile = load_workspace_execution_profile(workspace)?;
+    let goal = goal.into();
+    let session_id = session_id.into();
     let mut input = Map::new();
     let mut initial_context = Map::new();
     input.insert("execution_profile".to_string(), json!(profile.name));
     input.insert("flow".to_string(), json!("workspace_execution"));
+
+    let negotiation_packet = negotiation_packet.cloned().or_else(|| {
+        authored_brief.map(|bundle| {
+            NegotiatedDeliveryPacket::from_authored_brief(
+                &session_id,
+                &workspace.to_string_lossy(),
+                &goal,
+                bundle,
+            )
+        })
+    });
+
+    if let Some(packet) = negotiation_packet.as_ref() {
+        input.insert("negotiation_goal_summary".to_string(), json!(&packet.goal_summary));
+        input.insert("negotiation_resolution".to_string(), json!(packet.resolution_state.as_str()));
+        input.insert(
+            "negotiation_acceptance_boundary".to_string(),
+            json!(&packet.acceptance_boundary.success_headline),
+        );
+    }
+
     if let Some(authored_brief) = authored_brief {
         input.insert("authored_brief".to_string(), json!(authored_brief));
         input.insert("authored_input_summary".to_string(), json!(authored_brief.summary_text()));
@@ -268,9 +293,9 @@ pub fn build_task_request(
     }
 
     Ok(TaskRunRequest {
-        goal: goal.into(),
+        goal,
         input: Value::Object(input),
-        session_id: session_id.into(),
+        session_id,
         workspace_ref: workspace.to_string_lossy().into_owned(),
         limits: profile.limits,
         initial_context: (!initial_context.is_empty()).then_some(initial_context),
@@ -3480,7 +3505,7 @@ mod tests {
         );
 
         let task_request =
-            build_task_request(&workspace, "Fix the workspace", "session-1", None).unwrap();
+            build_task_request(&workspace, "Fix the workspace", "session-1", None, None).unwrap();
         assert_eq!(task_request.input["execution_profile"], json!("fixture-profile"));
         assert_eq!(task_request.input["flow"], json!("workspace_execution"));
 

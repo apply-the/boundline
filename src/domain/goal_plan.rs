@@ -110,6 +110,12 @@ impl PlannedTask {
 pub struct GoalPlan {
     pub plan_id: String,
     pub goal_text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub negotiation_goal_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub negotiation_resolution: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub negotiation_acceptance_boundary: Option<String>,
     pub tasks: Vec<PlannedTask>,
     #[serde(default)]
     pub source_evidence: Vec<EvidenceRef>,
@@ -133,6 +139,9 @@ impl GoalPlan {
         let plan = Self {
             plan_id: Uuid::new_v4().to_string(),
             goal_text: goal_text.into(),
+            negotiation_goal_summary: None,
+            negotiation_resolution: None,
+            negotiation_acceptance_boundary: None,
             tasks,
             source_evidence: Vec::new(),
             workspace_signals: WorkspaceSignals::default(),
@@ -204,6 +213,18 @@ impl GoalPlan {
 
     pub fn with_workflow_progress(mut self, workflow_progress: WorkflowProgressState) -> Self {
         self.workflow_progress = Some(workflow_progress);
+        self
+    }
+
+    pub fn with_negotiation_projection(
+        mut self,
+        goal_summary: impl Into<String>,
+        resolution: impl Into<String>,
+        acceptance_boundary: impl Into<String>,
+    ) -> Self {
+        self.negotiation_goal_summary = Some(goal_summary.into());
+        self.negotiation_resolution = Some(resolution.into());
+        self.negotiation_acceptance_boundary = Some(acceptance_boundary.into());
         self
     }
 

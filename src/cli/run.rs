@@ -45,6 +45,7 @@ pub fn execute_custom_run(
         goal,
         format!("run-{}", crate::domain::trace::current_timestamp_millis()),
         Some(&bundle),
+        None,
     )?;
 
     if let Some(clarification) = bundle.clarification.as_ref() {

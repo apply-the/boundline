@@ -91,6 +91,9 @@ mod decision_loop_contract;
 #[path = "contract/goal_plan_contract.rs"]
 mod goal_plan_contract;
 
+#[path = "contract/negotiated_capture_contract.rs"]
+mod negotiated_capture_contract;
+
 #[path = "contract/runtime_refoundation_contract.rs"]
 mod runtime_refoundation_contract;
 

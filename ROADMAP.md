@@ -6,65 +6,52 @@ Canon is downstream from Synod in this roadmap: Synod thinks, decides, orchestra
 
 Evolve Synod into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.25.0
+## Current Status: v0.26.0
 
 Synod now has its core session-native orchestration baseline, bounded workflow
-follow-through, a deeper governed-stage slice, stronger bounded adaptive
-repair depth, explicit continuity between session-native and compatibility
-follow-up, stronger route-summary plus config projection, and bounded
-multi-workspace clustered delivery in place:
+follow-through, deeper governed-stage plus adaptive slices, explicit
+continuity between session-native and compatibility follow-up, stronger
+route-summary plus config projection, bounded multi-workspace clustered
+delivery, and negotiated delivery modeling in place:
 
 - session-native orchestration remains the primary operator path
-- `workflow list`, `workflow run`, `workflow status`, `workflow resume`, and `workflow inspect` now project named workflow state onto the same session, route, trace, and `execution_condition` surfaces
-- bounded `review` and `govern` phases are now executable from the workflow surface, stopping in explicit paused, blocked, failed, or completed states instead of remaining declaration-only blockers
-- workflow definitions live in workspace-local `.synod/workflows.toml`, can ship optional discovery metadata, and remain bounded to existing Synod phases instead of becoming a generic workflow DSL
+- `capture` now derives one negotiated delivery packet from direct goals, authored briefs, and governance context before planning begins
+- `plan` now stops early when `negotiation_resolution` is not yet credible instead of silently inventing a bounded change
+- `run`, `status`, `next`, and `inspect` now project `negotiation_goal_summary`, `negotiation_resolution`, and `negotiation_acceptance_boundary` across native goal-plan traces and explicit compatibility traces
+- `workflow list`, `workflow run`, `workflow status`, `workflow resume`, and `workflow inspect` still project named workflow state onto the same session, route, trace, and `execution_condition` surfaces
 - direct session-native commands and explicit compatibility routing remain available when no named workflow is invoked
-- Canon is still integrated as a bounded stage-boundary governance runtime, now including governed `bug-fix:investigate` on the primary route plus later verify-stage `security-assessment` reuse
-- adaptive compatibility execution can now use broader bounded mutation families, rank one `candidate_family` over another from validation evidence, surface rejection plus exhaustion reasons, and still remain inside manifest-declared `read_targets`
-- `status` and `next` now surface `continuity_authority`, compatibility follow-up mode, and inspect-only guidance when the latest authoritative follow-up state comes from an explicit compatibility trace instead of an active session
-- `status`, `next`, and `inspect` now reuse one route plus `execution_condition` vocabulary across native and compatibility follow-up while keeping route ownership explicit
-- `run`, `status`, `next`, `inspect`, and compatibility follow-up now also surface explicit `route_owner` plus material `route_config_projection` cues when workflow metadata, governance intent, or workspace-local routing defaults explain the current follow-up story
-- session-native commands now accept `--cluster <primary-workspace>` so one authoritative primary-owned session can plan and deliver a bounded change across registered member repositories
-- clustered `run`, `status`, `next`, and `inspect` now surface authoritative workspace, clustered execution condition, participating workspaces, and any blocking member without implying distributed orchestration ownership
+- Canon remains a bounded stage-boundary governance runtime with governed `bug-fix:investigate` plus later verify-stage `security-assessment` reuse on the same operator surface
+- adaptive compatibility execution still stays inside manifest-declared `read_targets` while surfacing candidate credibility, rejection, and exhaustion reasons explicitly
+- `status` and `next` still surface `continuity_authority`, compatibility follow-up mode, and inspect-only guidance when the latest authoritative follow-up state comes from an explicit compatibility trace instead of an active session
+- `run`, `status`, `next`, `inspect`, and compatibility follow-up still surface explicit `route_owner` plus material `route_config_projection` cues when workflow metadata, governance intent, or workspace-local routing defaults explain the current follow-up story
+- session-native commands still accept `--cluster <primary-workspace>` so one authoritative primary-owned session can plan and deliver a bounded change across registered member repositories
+- clustered `run`, `status`, `next`, and `inspect` still surface authoritative workspace, clustered execution condition, participating workspaces, and any blocking member without implying distributed orchestration ownership
 
-## Next Priority: Goal Negotiation And Constraint Modeling
+## Next Priority: Post-0.26 Platform Surface Decision
 
-Now that `0.25.0` makes bounded multi-workspace delivery feel like one operator
-story with one authoritative owner, the next slice should make acceptance
-boundaries and constraint tradeoffs more explicit before execution begins.
+Now that `0.26.0` makes acceptance boundaries and blocking constraints explicit
+before execution begins, the next slice should improve how Synod chooses and
+explains model or assistant backends without diluting session ownership.
 
-Suggested release target: `0.26.x`
+Candidate focus:
 
-The next spec direction should explicitly deliver three things:
-
-- richer goal negotiation before planning locks a bounded change
-- explicit constraint modeling for scope, risk, and acceptance boundaries
-- operator-visible tradeoffs instead of hiding those decisions inside planning heuristics
-
-### What 0.26.x should concretely deliver
-
-- add goal negotiation and constraint capture before execution begins
-- make acceptance boundaries and tradeoffs explicit in the session-owned story
-- keep negotiation outputs inspectable instead of burying them in planner internals
-
-### What 0.26.x should not do
-
-- no background daemons, distributed autonomous workers, or hidden fan-out control loops
-- no provider-agnostic control plane or generic workflow engine
-- no Canon-owned orchestration or config-owned execution control flow
-- no negotiation layer that hides which constraints are binding or why a tradeoff was chosen
+- make provider or model routing more explicit and inspectable on existing CLI surfaces
+- decouple assistant command packs from hard-wired backends without inventing a second orchestration runtime
+- preserve bounded orchestration ownership inside Synod instead of moving it into config or provider control planes
+- avoid background daemons, distributed orchestration, or hidden fan-out control loops
 
 ### Priority rationale
 
-- clustered delivery authority is now explicit enough that more advanced planning can stay inspectable instead of becoming hidden negotiation logic
-- goal and constraint capture become more valuable once session, continuity, and cluster semantics are already stable
-- bounded orchestration ownership stays inside Synod while the reasoning that shapes a plan becomes easier for operators to challenge before execution begins
+- negotiation is now operator-visible at capture, plan, run, status, next, and inspect, so the next leverage point is backend clarity rather than more hidden planning depth
+- existing session, trace, and config surfaces should be reused before adding a broader control plane
+- route, continuity, governance, and cluster ownership are explicit enough that backend selection can stay inspectable instead of becoming implicit runtime magic
 
-### Why this comes before the other roadmap items
+### Delivered in 0.26.0
 
-- `0.25.0` made multi-workspace execution feel like one bounded system, so the next leverage point is improving what the system decides before it mutates code
-- explicit route and cluster authority now make constraint negotiation easier to project without hiding ownership
-- stronger upfront constraint modeling is more tractable now that read-side follow-up surfaces are already aligned across workspace, compatibility, workflow, governance, and cluster states
+- derive a negotiated delivery packet during capture from direct goals, authored briefs, and governance context before planning begins
+- gate planning on a credible negotiation result and keep acceptance-boundary wording visible in `GoalPlan` state
+- project negotiated delivery summary, resolution, and acceptance boundary through `run`, `status`, `next`, and `inspect` on both native and explicit compatibility routes
+- update README, getting-started, configuration, assistant guidance, roadmap, contributor docs, and changelog for the release
 
 ### Delivered in 0.25.0
 
@@ -135,18 +122,19 @@ execution_condition = true
 
 ### Secondary follow-up directions
 
-The remaining roadmap after `0.25.0` is best read as an ordered sequence rather
+The remaining roadmap after `0.26.0` is best read as an ordered sequence rather
 than an unordered backlog.
 
-### Proposed sequence after 0.25.0
+### Proposed sequence after 0.26.0
 
-#### 0.26.x - Goal Negotiation And Constraint Modeling
+#### Post-0.26 - Routing And Assistant Decoupling
 
-- add more advanced goal negotiation and constraint modeling
-- make acceptance boundaries, tradeoffs, and delivery limits more explicit before execution begins
-- keep these constraints operator-visible rather than hiding them inside planning heuristics
+- make provider or model routing more inspectable on the same CLI and trace surfaces
+- loosen assistant/backend coupling without replacing the session-owned runtime
+- keep backend choice operator-visible rather than hiding it inside assistant-specific wrappers
 
-This is strategically important, but it becomes much more valuable once the runtime surfaces, continuity, and cluster semantics are already stable.
+This is strategically important now that capture and follow-up already expose the
+bounded delivery story clearly enough for backend selection to remain explicit.
 
 ### Decision rule for sequencing
 

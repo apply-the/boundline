@@ -23,6 +23,7 @@ use crate::domain::governance::{
     PacketReadiness, resolved_canon_mode,
 };
 use crate::domain::limits::{RunLimits, TerminalCondition};
+use crate::domain::negotiation::NegotiatedDeliveryPacket;
 use crate::domain::session::{
     ActiveSessionRecord, RoutingMode, RoutingOutcome, SessionStatus, routing_outcome,
 };
@@ -159,6 +160,11 @@ impl SessionRuntime {
         session.goal = Some(goal.to_string());
         session.active_task = None;
         session.goal_plan = None;
+        session.negotiation_packet = Some(NegotiatedDeliveryPacket::from_goal(
+            &session.session_id,
+            &session.workspace_ref,
+            goal,
+        ));
         session.decisions.clear();
         session.active_flow_policy = None;
         session.latest_status = SessionStatus::GoalCaptured;
@@ -214,6 +220,24 @@ impl SessionRuntime {
         no_flow: bool,
     ) -> Result<(), SessionRuntimeError> {
         let goal = session.goal.clone().ok_or(SessionRuntimeError::MissingGoal)?;
+        if let Some(packet) = session.negotiation_packet.as_ref()
+            && packet.resolution_state
+                != crate::domain::negotiation::NegotiationResolutionState::Credible
+        {
+            let headline = packet.clarification_headline.clone().unwrap_or_else(|| {
+                "clarification required: resolve the active negotiation state before planning"
+                    .to_string()
+            });
+            let prompt = packet
+                .constraints
+                .iter()
+                .find(|constraint| constraint.blocks_planning)
+                .map(|constraint| constraint.summary.clone())
+                .unwrap_or_else(|| {
+                    "resolve the active negotiation constraint before planning".to_string()
+                });
+            return Err(SessionRuntimeError::ClarificationRequired { headline, prompt });
+        }
         if let Some(bundle) = session.authored_brief.as_ref()
             && let Some(clarification) = bundle.clarification.as_ref()
         {
@@ -230,6 +254,13 @@ impl SessionRuntime {
 
         let mut goal_plan = build_goal_plan(&goal, &self.workspace_ref)
             .map_err(SessionRuntimeError::GoalPlanner)?;
+        if let Some(packet) = session.negotiation_packet.as_ref() {
+            goal_plan = goal_plan.with_negotiation_projection(
+                packet.goal_summary.clone(),
+                packet.resolution_state.as_str(),
+                packet.acceptance_boundary.success_headline.clone(),
+            );
+        }
         self.apply_planning_flow_selection(session, &mut goal_plan, requested_flow, no_flow)?;
         goal_plan
             .confirm()
@@ -401,6 +432,7 @@ impl SessionRuntime {
             goal,
             session.session_id.clone(),
             session.authored_brief.as_ref(),
+            session.negotiation_packet.as_ref(),
         )
         .map_err(SessionRuntimeError::FixtureRuntime)?;
         let plan = build_fixture_plan_for_goal(
@@ -2034,6 +2066,7 @@ impl SessionRuntime {
             session.goal.clone().ok_or(SessionRuntimeError::MissingGoal)?,
             session.session_id.clone(),
             session.authored_brief.as_ref(),
+            session.negotiation_packet.as_ref(),
         )
         .map_err(SessionRuntimeError::FixtureRuntime)?;
         let plan = build_fixture_plan_for_goal(
@@ -2737,6 +2770,7 @@ mod tests {
             workspace_ref: workspace.to_string_lossy().into_owned(),
             goal: Some("Drive a session runtime branch".to_string()),
             authored_brief: None,
+            negotiation_packet: None,
             active_flow: None,
             active_task: Some(task),
             goal_plan: None,
@@ -2757,6 +2791,7 @@ mod tests {
             session.goal.clone().unwrap_or_else(|| "Drive a session runtime branch".to_string()),
             session.session_id.clone(),
             session.authored_brief.as_ref(),
+            session.negotiation_packet.as_ref(),
         )
         .unwrap();
         let plan = build_fixture_plan_for_goal(
@@ -2915,6 +2950,7 @@ mod tests {
             workspace_ref: workspace.to_string_lossy().into_owned(),
             goal: Some("Drive a session runtime branch".to_string()),
             authored_brief: None,
+            negotiation_packet: None,
             active_flow: Some(flow.initial_state()),
             active_task: Some(task.clone()),
             goal_plan: None,
@@ -3060,6 +3096,7 @@ mod tests {
             workspace_ref: workspace.to_string_lossy().into_owned(),
             goal: None,
             authored_brief: None,
+            negotiation_packet: None,
             active_flow: None,
             active_task: None,
             goal_plan: None,
@@ -3153,6 +3190,7 @@ mod tests {
             workspace_ref: workspace.to_string_lossy().into_owned(),
             goal: None,
             authored_brief: None,
+            negotiation_packet: None,
             active_flow: None,
             active_task: None,
             goal_plan: None,
@@ -3211,6 +3249,7 @@ mod tests {
             workspace_ref: workspace.to_string_lossy().into_owned(),
             goal: None,
             authored_brief: None,
+            negotiation_packet: None,
             active_flow: None,
             active_task: None,
             goal_plan: None,
@@ -3250,6 +3289,7 @@ mod tests {
             workspace_ref: workspace.to_string_lossy().into_owned(),
             goal: None,
             authored_brief: None,
+            negotiation_packet: None,
             active_flow: None,
             active_task: None,
             goal_plan: None,
@@ -3293,6 +3333,7 @@ mod tests {
             workspace_ref: workspace.to_string_lossy().into_owned(),
             goal: None,
             authored_brief: None,
+            negotiation_packet: None,
             active_flow: None,
             active_task: None,
             goal_plan: None,
@@ -3336,6 +3377,7 @@ mod tests {
             workspace_ref: primary.to_string_lossy().into_owned(),
             goal: None,
             authored_brief: None,
+            negotiation_packet: None,
             active_flow: None,
             active_task: None,
             goal_plan: None,
@@ -3499,6 +3541,7 @@ mod tests {
             workspace_ref: workspace.to_string_lossy().into_owned(),
             goal: None,
             authored_brief: None,
+            negotiation_packet: None,
             active_flow: None,
             active_task: None,
             goal_plan: None,
