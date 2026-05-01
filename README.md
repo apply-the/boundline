@@ -1,5 +1,7 @@
 # synod
 
+![Synod banner](docs/images/synod-banner.jpg)
+
 [![CI](https://github.com/apply-the/synod/actions/workflows/ci.yml/badge.svg)](https://github.com/apply-the/synod/actions/workflows/ci.yml)
 [![Lint](https://github.com/apply-the/synod/actions/workflows/lint.yml/badge.svg)](https://github.com/apply-the/synod/actions/workflows/lint.yml)
 [![Vulnerabilities](https://github.com/apply-the/synod/actions/workflows/vulnerabilities.yml/badge.svg)](https://github.com/apply-the/synod/actions/workflows/vulnerabilities.yml)

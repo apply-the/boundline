@@ -2946,11 +2946,20 @@ mod tests {
 
     use super::{
         ExecutionAttemptDefinition, ExecutionCommand, ExecutionFailureMode, FilePatch,
-        FixtureRuntimeError, WorkspaceChange, WorkspaceExecutionProfile, WorkspaceFixture,
-        analyze_workspace_fixture, apply_fixture_patches, apply_workspace_fixture,
-        build_fixture_plan, build_fixture_runtime, build_task_request, build_vertical_slice_plan,
-        execution_manifest_path, load_workspace_execution_profile, resolve_review_vote,
-        run_fixture_command, verify_workspace_fixture,
+        FixtureRuntimeError, GeneratedAdaptiveCandidate, RankedAdaptiveCandidate, WorkspaceChange,
+        WorkspaceExecutionProfile, WorkspaceFixture, adaptive_failure_evidence,
+        adaptive_no_candidate_reason, adaptive_replan_blocker, adaptive_selection_headline,
+        adaptive_selection_reason, adaptive_transition_kind, analyze_workspace_fixture,
+        apply_fixture_patches, apply_workspace_fixture, build_fixture_plan, build_fixture_runtime,
+        build_rejected_candidate_summaries, build_task_request, build_vertical_slice_plan,
+        execution_manifest_path, guidance_paths_from_text, load_workspace_execution_profile,
+        numeric_literal_flip_candidates, ordering_boundary_flip_candidates, resolve_review_vote,
+        result_status_flip_candidates, run_fixture_command, score_adaptive_candidate,
+        verify_workspace_fixture,
+    };
+    use crate::domain::execution::{
+        AdaptiveChangeKind, AttemptTransitionKind, PathScore, ValidationGuidance,
+        ValidationGuidanceConfidence, ValidationGuidanceSource, ValidationRecord,
     };
     use crate::domain::flow::{attach_stage_metadata, built_in_flow};
     use crate::domain::governance::{
@@ -3637,5 +3646,269 @@ mod tests {
         let error = load_workspace_execution_profile(&workspace).unwrap_err();
 
         assert!(matches!(error, FixtureRuntimeError::MissingExecutionProfile(_)));
+    }
+
+    #[test]
+    fn adaptive_helpers_cover_guidance_blockers_headlines_and_reasons() {
+        let strong_guidance = ValidationGuidance {
+            source: ValidationGuidanceSource::ValidationRecord,
+            matched_paths: vec!["src/lib.rs".to_string()],
+            matched_terms: vec!["threshold".to_string(), "boundary".to_string()],
+            headline: "validation guided the next attempt toward src/lib.rs".to_string(),
+            confidence: ValidationGuidanceConfidence::Strong,
+        };
+        let hinted_guidance = ValidationGuidance {
+            source: ValidationGuidanceSource::FailureMessage,
+            matched_paths: Vec::new(),
+            matched_terms: vec!["hint".to_string()],
+            headline: "fallback".to_string(),
+            confidence: ValidationGuidanceConfidence::Hinted,
+        };
+
+        assert_eq!(
+            adaptive_replan_blocker(None),
+            Some(
+                "adaptive planner exhausted bounded repair because validation evidence was absent"
+                    .to_string()
+            )
+        );
+        assert_eq!(
+            adaptive_replan_blocker(Some(&hinted_guidance)),
+            Some(
+                "adaptive planner exhausted bounded repair because validation evidence was insufficient to justify another materially different candidate"
+                    .to_string()
+            )
+        );
+        assert_eq!(adaptive_replan_blocker(Some(&strong_guidance)), None);
+        assert_eq!(
+            adaptive_no_candidate_reason(Some(&strong_guidance)),
+            "adaptive planner exhausted bounded repair because no remaining candidate stayed credible after validation pointed to src/lib.rs"
+        );
+        assert_eq!(
+            adaptive_selection_headline(
+                "src/lib.rs",
+                AdaptiveChangeKind::OrderingBoundaryFlip,
+                Some(&strong_guidance),
+            ),
+            "selected src/lib.rs via ordering_boundary_flip for adaptive delivery after validation guidance"
+        );
+
+        let guided_reason = adaptive_selection_reason(
+            "src/lib.rs",
+            AdaptiveChangeKind::OrderingBoundaryFlip,
+            2,
+            Some(&strong_guidance),
+            &["boundary evidence stayed strongest".to_string()],
+        );
+        assert!(guided_reason.contains("validation pointed to src/lib.rs"));
+        assert!(guided_reason.contains("boundary evidence stayed strongest"));
+
+        let hinted_reason = adaptive_selection_reason(
+            "src/lib.rs",
+            AdaptiveChangeKind::NumericLiteralFlip,
+            2,
+            Some(&ValidationGuidance {
+                matched_terms: vec!["literal".to_string(), "count".to_string()],
+                ..hinted_guidance.clone()
+            }),
+            &[],
+        );
+        assert!(hinted_reason.contains("reprioritized the bounded slice"));
+        assert!(hinted_reason.contains("it remained the most credible bounded candidate"));
+
+        let unguided_reason = adaptive_selection_reason(
+            "src/lib.rs",
+            AdaptiveChangeKind::ArithmeticSwap,
+            1,
+            None,
+            &[],
+        );
+        assert!(unguided_reason.contains("selected src/lib.rs via arithmetic_swap"));
+    }
+
+    #[test]
+    fn adaptive_helpers_cover_path_matching_transition_rejections_and_failure_evidence() {
+        let read_targets = vec!["src/lib.rs".to_string(), "tests/red_to_green.rs".to_string()];
+        assert_eq!(
+            guidance_paths_from_text("lib.rs and red_to_green.rs still fail", &read_targets),
+            vec!["src/lib.rs".to_string()]
+        );
+
+        let selected_targets = vec!["src/lib.rs".to_string()];
+        let path_scores = vec![PathScore {
+            path: "src/lib.rs".to_string(),
+            score: 100,
+            reasons: vec!["matched path preference src/".to_string()],
+        }];
+        let candidate = RankedAdaptiveCandidate {
+            change_kind: AdaptiveChangeKind::OrderingBoundaryFlip,
+            change: WorkspaceChange {
+                path: "src/lib.rs".to_string(),
+                find: " > ".to_string(),
+                replace: " >= ".to_string(),
+            },
+            signature: "sig-ordering-boundary".to_string(),
+            score: 130,
+            order_index: 0,
+            reasons: vec!["boundary mismatch remained strongest".to_string()],
+        };
+
+        assert_eq!(
+            build_rejected_candidate_summaries(
+                0,
+                &selected_targets,
+                &path_scores,
+                2,
+                &candidate,
+            ),
+            vec![
+                "later bounded candidates were rejected because ordering_boundary_flip on src/lib.rs remained more credible"
+                    .to_string()
+            ]
+        );
+        assert!(
+            build_rejected_candidate_summaries(1, &selected_targets, &path_scores, 2, &candidate,)
+                .is_empty()
+        );
+
+        let previous = vec!["src/lib.rs".to_string(), "tests/red_to_green.rs".to_string()];
+        let narrowed = vec!["src/lib.rs".to_string()];
+        let broadened = vec!["src/lib.rs".to_string(), "tests/red_to_green.rs".to_string()];
+        let replaced = vec!["src/helper.rs".to_string()];
+        assert_eq!(adaptive_transition_kind(None, &narrowed), AttemptTransitionKind::Initial);
+        assert_eq!(
+            adaptive_transition_kind(Some(&previous), &narrowed),
+            AttemptTransitionKind::Narrowed
+        );
+        assert_eq!(
+            adaptive_transition_kind(Some(&narrowed), &broadened),
+            AttemptTransitionKind::Broadened
+        );
+        assert_eq!(
+            adaptive_transition_kind(Some(&narrowed), &replaced),
+            AttemptTransitionKind::Replaced
+        );
+
+        let evidence = adaptive_failure_evidence(
+            &json!({
+                "selection_evidence": {
+                    "candidate_family": "ordering_boundary_flip",
+                    "reason": "selected src/lib.rs via ordering_boundary_flip"
+                },
+                "workspace_slice": {
+                    "selection_id": "adaptive-slice-1",
+                    "selected_targets": ["src/lib.rs"],
+                    "scored_candidates": [],
+                    "headline": "selected src/lib.rs via ordering_boundary_flip for adaptive delivery"
+                },
+                "attempt_lineage": {
+                    "previous_attempt_id": "adaptive-attempt-1",
+                    "current_attempt_id": "adaptive-attempt-2",
+                    "transition_kind": "replaced",
+                    "reason": "validation reprioritized the bounded slice"
+                }
+            }),
+            &ValidationRecord {
+                command: "cargo test --quiet".to_string(),
+                exit_code: 101,
+                stdout: String::new(),
+                stderr: "threshold still fails".to_string(),
+                succeeded: false,
+            },
+            Some("bounded recovery exhausted".to_string()),
+        );
+
+        assert_eq!(
+            evidence["selection_evidence"]["candidate_family"],
+            json!("ordering_boundary_flip")
+        );
+        assert_eq!(evidence["workspace_slice"]["selected_targets"], json!(["src/lib.rs"]));
+        assert_eq!(evidence["attempt_lineage"]["current_attempt_id"], json!("adaptive-attempt-2"));
+        assert_eq!(evidence["exhaustion_reason"], json!("bounded recovery exhausted"));
+    }
+
+    #[test]
+    fn adaptive_helpers_cover_new_candidate_generators_and_family_scoring() {
+        let ordering_candidates =
+            ordering_boundary_flip_candidates("src/lib.rs", "if value <= 3 { return true; }");
+        assert_eq!(ordering_candidates[0].find, " <= ");
+        assert_eq!(ordering_candidates[0].replace, " < ");
+
+        let result_error_candidates =
+            result_status_flip_candidates("src/lib.rs", "fn load() -> Result<(), ()> { Err(()) }");
+        assert_eq!(result_error_candidates[0].find, "Err(");
+        assert_eq!(result_error_candidates[0].replace, "Ok(");
+
+        let result_ok_candidates =
+            result_status_flip_candidates("src/lib.rs", "fn load() -> Result<(), ()> { Ok(()) }");
+        assert_eq!(result_ok_candidates[0].find, "Ok(");
+        assert_eq!(result_ok_candidates[0].replace, "Err(");
+
+        let numeric_candidates =
+            numeric_literal_flip_candidates("src/lib.rs", "if count == 0 { return 1; }");
+        assert_eq!(numeric_candidates[0].find, " == 0");
+        assert_eq!(numeric_candidates[0].replace, " == 1");
+
+        let path_score = PathScore {
+            path: "src/lib.rs".to_string(),
+            score: 70,
+            reasons: vec!["matched path preference src/".to_string()],
+        };
+        let hinted_guidance = ValidationGuidance {
+            source: ValidationGuidanceSource::FailureMessage,
+            matched_paths: Vec::new(),
+            matched_terms: vec!["result".to_string(), "error".to_string()],
+            headline: "fallback".to_string(),
+            confidence: ValidationGuidanceConfidence::Hinted,
+        };
+        let strong_guidance = ValidationGuidance {
+            source: ValidationGuidanceSource::ValidationRecord,
+            matched_paths: vec!["src/lib.rs".to_string()],
+            matched_terms: vec!["zero".to_string(), "constant".to_string()],
+            headline: "validation guided the next attempt toward src/lib.rs".to_string(),
+            confidence: ValidationGuidanceConfidence::Strong,
+        };
+
+        let result_candidate = GeneratedAdaptiveCandidate {
+            change_kind: AdaptiveChangeKind::ResultStatusFlip,
+            change: result_error_candidates[0].clone(),
+        };
+        let (result_score, result_reasons) = score_adaptive_candidate(
+            &path_score,
+            &result_candidate,
+            &[],
+            &["result".to_string(), "error".to_string()],
+            Some(&hinted_guidance),
+        );
+        assert!(result_score > path_score.score);
+        assert!(result_reasons.iter().any(|reason| reason.contains("outcome-status mismatch")));
+        assert!(
+            result_reasons
+                .iter()
+                .any(|reason| reason.contains("validation hints supported the bounded replan"))
+        );
+
+        let numeric_candidate = GeneratedAdaptiveCandidate {
+            change_kind: AdaptiveChangeKind::NumericLiteralFlip,
+            change: numeric_candidates[0].clone(),
+        };
+        let (numeric_score, numeric_reasons) = score_adaptive_candidate(
+            &path_score,
+            &numeric_candidate,
+            &["src".to_string()],
+            &["zero".to_string(), "constant".to_string()],
+            Some(&strong_guidance),
+        );
+        assert!(numeric_score > result_score);
+        assert!(
+            numeric_reasons
+                .iter()
+                .any(|reason| reason.contains("goal terms aligned with the candidate change"))
+        );
+        assert!(numeric_reasons.iter().any(|reason| reason.contains("numeric literal mismatch")));
+        assert!(numeric_reasons.iter().any(|reason| reason.contains("bounded numeric literal")));
+        assert!(numeric_reasons.iter().any(|reason| {
+            reason.contains("strong validation guidance supported the bounded replan")
+        }));
     }
 }
