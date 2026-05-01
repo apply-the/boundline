@@ -6,12 +6,12 @@ Canon is downstream from Synod in this roadmap: Synod thinks, decides, orchestra
 
 Evolve Synod into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.23.0
+## Current Status: v0.24.0
 
 Synod now has its core session-native orchestration baseline, bounded workflow
 follow-through, a deeper governed-stage slice, stronger bounded adaptive
-repair depth, and explicit continuity between session-native and
-compatibility follow-up in place:
+repair depth, explicit continuity between session-native and compatibility
+follow-up, and stronger route-summary plus config projection in place:
 
 - session-native orchestration remains the primary operator path
 - `workflow list`, `workflow run`, `workflow status`, `workflow resume`, and `workflow inspect` now project named workflow state onto the same session, route, trace, and `execution_condition` surfaces
@@ -22,34 +22,35 @@ compatibility follow-up in place:
 - adaptive compatibility execution can now use broader bounded mutation families, rank one `candidate_family` over another from validation evidence, surface rejection plus exhaustion reasons, and still remain inside manifest-declared `read_targets`
 - `status` and `next` now surface `continuity_authority`, compatibility follow-up mode, and inspect-only guidance when the latest authoritative follow-up state comes from an explicit compatibility trace instead of an active session
 - `status`, `next`, and `inspect` now reuse one route plus `execution_condition` vocabulary across native and compatibility follow-up while keeping route ownership explicit
+- `run`, `status`, `next`, `inspect`, and compatibility follow-up now also surface explicit `route_owner` plus material `route_config_projection` cues when workflow metadata, governance intent, or workspace-local routing defaults explain the current follow-up story
 
-## Next Priority: Unify Route Summaries And Config Projection
+## Next Priority: Expand Multi-Workspace Delivery
 
-Now that `0.23.0` broadens bounded adaptive repair while keeping continuity and
-route ownership explicit, the next slice should unify more route summaries and
-config projection without erasing which route actually owns the work.
+Now that `0.24.0` makes one workspace feel more like one bounded system with
+explicit `route_owner` and material config projection, the next slice should
+extend that same clarity toward bounded multi-workspace delivery without
+splitting orchestration authority.
 
-Suggested release target: `0.24.x`
+Suggested release target: `0.25.x`
 
 The next spec direction should explicitly deliver three things:
 
-- stronger convergence of native, workflow, review, governance, and compatibility summary vocabulary
-- projection of more configuration and follow-up state onto the same operator-facing surfaces
-- explicit preservation of route ownership even when the summaries align more closely
+- bounded cross-repository execution planning and mutation that still reads like one operator story
+- explicit preservation of one authoritative orchestration owner even when work spans multiple repositories
+- inspectable cluster-aware summaries and follow-up guidance that do not hide which workspace or route is authoritative
 
-### What 0.24.x should concretely deliver
+### What 0.25.x should concretely deliver
 
-- migrate more review and compatibility state onto the session-native summary model
-- converge overlapping `run`, `status`, `next`, `inspect`, and workflow wording without hiding route-specific ownership
-- keep config and routing projections explicit when a workspace mixes native, workflow, review, governance, and compatibility surfaces
-- preserve explicit compatibility ownership even when follow-up surfaces become more uniform
+- extend cluster support toward bounded cross-repository planning and mutation
+- preserve one authoritative route and follow-up story even when multiple repositories participate
+- keep workspace-local and cluster-level state inspectable instead of drifting into distributed autonomous execution
 
-### What 0.24.x should not do
+### What 0.25.x should not do
 
-- no hidden promotion of compatibility behavior into the primary session-native route
+- no background daemons, distributed autonomous workers, or hidden fan-out control loops
 - no provider-agnostic control plane or generic workflow engine
 - no Canon-owned orchestration or config-owned execution control flow
-- no background daemons, distributed orchestration, or summary surfaces that hide the real authority
+- no summary surface that hides which workspace or route remains authoritative
 
 ### Priority rationale
 
@@ -59,9 +60,15 @@ The next spec direction should explicitly deliver three things:
 
 ### Why this comes before the other roadmap items
 
-- `0.23.0` removed the biggest adaptive narrowness without reopening route ownership, so the next leverage point is making the operator-facing surfaces feel like one bounded system
-- broader summary and config projection work now benefits from richer adaptive evidence already being explicit
-- multi-workspace expansion will be easier once route summaries are less fragmented within one workspace
+- `0.24.0` made the operator-facing surfaces feel more like one bounded system, so the next leverage point is extending that clarity across multiple workspaces
+- explicit `route_owner` and material config projection now make cross-workspace follow-up easier to reason about without hiding authority
+- multi-workspace expansion is more tractable now that one-workspace route summaries are less fragmented
+
+### Delivered in 0.24.0
+
+- converge `run`, `status`, `next`, `inspect`, and compatibility follow-up around explicit `route_owner` plus one aligned route-summary vocabulary
+- project material route/config cues such as workspace-local routing defaults, workflow or flow context, and requested governance intent through the same operator-facing surfaces
+- update README, getting-started, configuration, adaptive-execution, assistant guidance, roadmap, contributor docs, and changelog for the release
 
 ### Delivered in 0.23.0
 
@@ -120,18 +127,10 @@ execution_condition = true
 
 ### Secondary follow-up directions
 
-The remaining roadmap after `0.23.0` is best read as an ordered sequence rather
+The remaining roadmap after `0.24.0` is best read as an ordered sequence rather
 than an unordered backlog.
 
-### Proposed sequence after 0.23.0
-
-#### 0.24.x - Unify Route Summaries And Config Projection
-
-- migrate more review and compatibility configuration onto session-native summaries without losing bounded manifest support
-- converge the operator-facing summary vocabulary used by direct session, workflow, and compatibility routes
-- keep route-specific ownership visible even when summaries become more uniform
-
-This is the point where Synod should feel more like one bounded system with multiple entry paths, rather than multiple partially aligned surfaces.
+### Proposed sequence after 0.24.0
 
 #### 0.25.x - Expand Multi-Workspace Delivery
 

@@ -112,6 +112,8 @@ explicit compatibility path in this release.
 
 If you change how `status`, `next`, or `inspect` choose the authoritative follow-up state, keep the docs explicit about `continuity_authority`, inspect-only compatibility follow-up, and when `synod start` is or is not actually required.
 
+If you change how `run`, `status`, `next`, or `inspect` align route-summary wording, keep the docs explicit about `route_owner`, any material `route_config_projection`, and the rule that summary convergence must not hide the real owning route.
+
 If the crate surface or release scope materially changed, update the crate version in [Cargo.toml](Cargo.toml).
 
 ## Pull Requests

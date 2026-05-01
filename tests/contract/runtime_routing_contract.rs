@@ -1,8 +1,10 @@
+use synod::FileConfigStore;
 use synod::adapters::session_store::{FileSessionStore, SessionStore};
 use synod::cli::run::execute_custom_run;
 use synod::cli::session::{
-    execute_capture, execute_next, execute_plan, execute_run, execute_start,
+    execute_capture, execute_next, execute_plan, execute_run, execute_start, execute_status,
 };
+use synod::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
 
 use crate::runtime_refoundation::{
     temp_runtime_refoundation_compat_workspace, temp_runtime_refoundation_governed_workspace,
@@ -100,6 +102,11 @@ fn native_and_compatibility_follow_up_keep_shared_routing_and_execution_conditio
         compatibility_run.terminal_output
     );
     assert!(
+        compatibility_run.terminal_output.contains("route_owner: compatibility"),
+        "{}",
+        compatibility_run.terminal_output
+    );
+    assert!(
         compatibility_run.terminal_output.contains("execution_condition: terminal -"),
         "{}",
         compatibility_run.terminal_output
@@ -110,6 +117,11 @@ fn native_and_compatibility_follow_up_keep_shared_routing_and_execution_conditio
         compatibility_follow_up
             .terminal_output
             .contains("routing: compatibility (execution_profile)"),
+        "{}",
+        compatibility_follow_up.terminal_output
+    );
+    assert!(
+        compatibility_follow_up.terminal_output.contains("route_owner: compatibility"),
         "{}",
         compatibility_follow_up.terminal_output
     );
@@ -141,9 +153,58 @@ fn native_and_compatibility_follow_up_keep_shared_routing_and_execution_conditio
         native_run.terminal_output
     );
     assert!(
+        native_run.terminal_output.contains("route_owner: native"),
+        "{}",
+        native_run.terminal_output
+    );
+    assert!(
         native_run.terminal_output.contains("execution_condition: terminal -"),
         "{}",
         native_run.terminal_output
+    );
+}
+
+#[test]
+fn status_projects_workspace_routing_defaults_for_native_follow_up() {
+    let workspace = temp_runtime_refoundation_compat_workspace("runtime-routing-contract-config");
+
+    let config = ConfigFile {
+        routing: RoutingConfig {
+            planning: Some(ModelRoute {
+                runtime: RuntimeKind::Codex,
+                model: "gpt-5-codex".to_string(),
+            }),
+            implementation: Some(ModelRoute {
+                runtime: RuntimeKind::Copilot,
+                model: "gpt-5.4".to_string(),
+            }),
+            ..RoutingConfig::default()
+        },
+        ..ConfigFile::default()
+    };
+    FileConfigStore::for_workspace(&workspace).save_local(&config).unwrap();
+
+    execute_start(Some(&workspace)).unwrap();
+    execute_capture(
+        Some(&workspace),
+        Some("fix the failing add test"),
+        &[],
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
+
+    let status = execute_status(Some(&workspace)).unwrap();
+    assert!(status.terminal_output.contains("route_owner: native"), "{}", status.terminal_output);
+    assert!(
+        status
+            .terminal_output
+            .contains("route_config_projection: workspace_routing: planning=codex/gpt-5-codex, implementation=copilot/gpt-5.4"),
+        "{}",
+        status.terminal_output
     );
 }
 
