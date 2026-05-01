@@ -4,7 +4,7 @@ This directory contains Markdown-based commands to run `synod` from various AI a
 
 The primary delivery surface is session-native: `start -> capture -> plan -> run -> status -> next -> inspect` against `<workspace>/.synod/session.json` and `<workspace>/.synod/traces/`.
 
-In `0.26.0`, `capture` persists `negotiation_goal_summary`,
+In `0.27.0`, `capture` persists `negotiation_goal_summary`,
 `negotiation_resolution`, and `negotiation_acceptance_boundary` before
 planning. Assistants should preserve those fields across `plan`, `run`,
 `status`, `next`, and `inspect` instead of paraphrasing them away.
@@ -19,6 +19,17 @@ When `run`, `status`, `next`, or `inspect` report `route_owner` and
 `route_config_projection`, assistants should preserve those fields in their
 working state and use them when explaining why a route or config default is
 authoritative.
+
+When `route_config_projection` includes `effective_routing` or
+`assistant_bindings`, preserve those values exactly. They now describe the
+resolved slot route, its source, the bound assistant family, and the persisted
+route snapshot used during execution rather than only the current workspace
+config file.
+
+When a native run reports an assistant-binding failure because the active route
+requires a runtime outside declared `assistant_runtimes`, treat that as a real
+stop condition. Do not silently switch assistant families; tell the user to
+change routing or assistant capabilities first.
 
 When those same commands report negotiated delivery fields, assistants should
 keep the active acceptance boundary explicit and treat
@@ -61,6 +72,10 @@ Each AI assistant has its own local or remote configuration. Currently, all comm
 - **Claude**: Load the respective `.md` files as projects or upload as attachments to the context window.
 - **Codex**: Import into the corresponding workbench.
 - **Gemini CLI**: Reference the command docs from this directory and run the mapped Synod CLI commands locally.
+
+Gemini remains an explicit CLI fallback in this release. Claude, Codex, and
+Copilot command packs should follow the active route slot binding instead of
+assuming one hard-wired backend.
 
 ## Fallback Conventions
 Since an assistant may be executed in a context *without* shell access (e.g., standard chat window), each command must gracefully degrade.

@@ -1,9 +1,9 @@
-# Configuration in Synod 0.26.0
+# Configuration in Synod 0.27.0
 
-Synod `0.26.0` keeps a user-friendly setup and routing configuration surface
+Synod `0.27.0` keeps a user-friendly setup and routing configuration surface
 for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
-The `0.26.0` release keeps configuration behavior stable while preserving the
+The `0.27.0` release keeps configuration behavior stable while preserving the
 same governed routing defaults across earlier `bug-fix:investigate` work,
 later verify-stage `security-assessment`, workflow-aware projection of the
 same bounded governance state, continuity-aware read-side follow-up, the
@@ -29,9 +29,14 @@ ranking, explicit adaptive exhaustion, or negotiation-state overrides.
   configured by the execution manifest, not by new config keys
 - routing values can be global, cluster-scoped, workspace-local, or command-specific
 - review councils and adjudication can use distinct routing defaults
-- `status`, `next`, and `inspect` now surface material workspace-local routing
-	defaults when they explain the current follow-up story instead of forcing the
-	operator to cross-reference `synod config show`
+- `config show --scope effective` now exposes the resolved slot route, source,
+	and assistant binding for each bounded slot
+- `run`, `status`, `next`, and `inspect` now surface effective routing plus
+	assistant bindings, and native or compatibility traces persist the route
+	snapshot used during execution
+- when `assistant_runtimes` is non-empty, native execution now fails explicitly
+	if the active implementation or verification route requires a missing
+	assistant family instead of silently falling back
 
 ## Config locations
 
@@ -84,11 +89,16 @@ Synod resolves each routing slot with this order:
 Use `synod config show --scope effective --workspace <workspace> --cluster <primary-workspace>` to inspect
 resolved values and their source.
 
+The effective view is now the operator-facing source of truth for backend
+ownership: it shows the resolved route for each slot, the source that won
+precedence, and the assistant binding implied by that route.
+
 When follow-up commands already know which route owns the current work,
 Synod reuses that information and projects only the routing/config facts that
 materially explain the current state. In practice, `route_config_projection`
-may include workspace-local routing defaults, workflow cues, or requested
-governance intent; it intentionally does not dump every possible config value.
+may include persisted `effective_routing`, `assistant_bindings`,
+workspace-local routing defaults, workflow cues, or requested governance
+intent; it intentionally does not dump every possible config value.
 
 ## Cluster workflow
 
@@ -196,4 +206,7 @@ Initial runtime support for routing and assistant setup:
 - Copilot
 - Gemini CLI
 
-Gemini is currently treated as CLI-only in this slice.
+Gemini is currently treated as an explicit Gemini CLI fallback in this slice.
+If a workspace declares `assistant_runtimes` and the active implementation or
+verification route chooses a runtime outside that capability list, native
+execution stops with an explicit assistant-binding error.

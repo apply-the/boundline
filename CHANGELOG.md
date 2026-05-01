@@ -19,9 +19,29 @@ recorded workspace version.
 
 Delivered specs:
 
-- None recorded after `0.26.0`
+- None recorded after `0.27.0`
 
 Highlights:
+
+## [0.27.0] - 2026-05-01
+
+Delivered specs:
+
+- `027` - Inspectable Routing And Assistant Decoupling
+
+Highlights:
+
+- Make effective slot routing and assistant binding explicit on `config show`,
+  `run`, `status`, `next`, and `inspect`, including persisted routing
+  snapshots on native and explicit compatibility traces.
+- Preserve route snapshots when configuration changes after execution so
+  inspection keeps the historical backend story instead of replaying the
+  current workspace config.
+- Fail native execution explicitly when the active implementation or
+  verification route requires an assistant runtime outside the declared
+  `assistant_runtimes` capability list.
+- Update README, getting-started, configuration, assistant guidance, roadmap,
+  contributor docs, and changelog for the release.
 
 ## [0.26.0] - 2026-05-01
 

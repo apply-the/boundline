@@ -5,6 +5,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::domain::cluster::ClusterDeliveryStory;
+use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::step::{StepKind, StepStatus};
 use crate::domain::task::{TaskStatus, TerminalReason};
 
@@ -114,6 +115,8 @@ pub struct TraceSummaryView {
     pub cluster_delivery_story: Option<ClusterDeliveryStory>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub routing_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "RoutingDecisionProjection::is_empty")]
+    pub routing_projection: RoutingDecisionProjection,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub goal_plan_summary: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

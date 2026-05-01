@@ -26,6 +26,7 @@ use synod::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, Runtim
 use synod::domain::goal_plan::{GoalPlanFlowMode, GoalPlanFlowState};
 use synod::domain::governance::GovernanceRuntimeKind;
 use synod::domain::limits::{RunLimits, TerminalCondition};
+use synod::domain::routing_decision::RoutingDecisionProjection;
 use synod::domain::session::{
     RoutingMode, RoutingOutcome, RoutingSource, SessionStatus, SessionStatusView,
 };
@@ -232,6 +233,7 @@ fn trace_summary_renderer_mentions_steps_recovery_and_terminal_reason() {
         negotiation_acceptance_boundary: None,
         cluster_delivery_story: None,
         routing_summary: None,
+        routing_projection: RoutingDecisionProjection::default(),
         goal_plan_summary: None,
         authored_input_summary: None,
         authored_input_sources: Vec::new(),
@@ -1160,6 +1162,7 @@ fn render_trace_summary_handles_all_terminal_status_variants() {
             negotiation_acceptance_boundary: None,
             cluster_delivery_story: None,
             routing_summary: None,
+            routing_projection: RoutingDecisionProjection::default(),
             goal_plan_summary: None,
             authored_input_summary: None,
             authored_input_sources: Vec::new(),
@@ -1208,6 +1211,7 @@ fn render_trace_summary_surfaces_route_owner_and_config_projection() {
             "routing: compatibility (execution_profile) - trace came from the explicit compatibility runtime"
                 .to_string(),
         ),
+        routing_projection: RoutingDecisionProjection::default(),
         goal_plan_summary: None,
         authored_input_summary: None,
         authored_input_sources: Vec::new(),
@@ -1337,6 +1341,18 @@ fn render_session_status_projects_workspace_routing_defaults() {
         ),
         "{rendered}"
     );
+    assert!(
+        rendered.contains(
+            "effective_routing: planning=codex/gpt-5-codex [workspace], implementation=copilot/gpt-5.4 [workspace], verification=copilot/gpt-5.4 [built-in], review=claude/sonnet-4 [built-in], adjudication=codex/gpt-5-codex [built-in]"
+        ),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains(
+            "assistant_bindings: planning=codex, implementation=copilot, verification=copilot, review=claude, adjudication=codex"
+        ),
+        "{rendered}"
+    );
 }
 
 #[test]
@@ -1368,6 +1384,7 @@ fn render_trace_summary_projects_workspace_routing_defaults() {
         routing_summary: Some(
             "routing: native (goal_plan) - trace came from the session-native runtime".to_string(),
         ),
+        routing_projection: RoutingDecisionProjection::default(),
         goal_plan_summary: None,
         authored_input_summary: None,
         authored_input_sources: Vec::new(),
@@ -1401,6 +1418,65 @@ fn render_trace_summary_projects_workspace_routing_defaults() {
 }
 
 #[test]
+fn render_trace_summary_prefers_persisted_routing_snapshot_over_current_workspace_config() {
+    let workspace =
+        std::env::temp_dir().join(format!("synod-route-config-trace-snapshot-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&workspace).unwrap();
+
+    let current_config = ConfigFile {
+        routing: RoutingConfig {
+            review: Some(ModelRoute {
+                runtime: RuntimeKind::Claude,
+                model: "reviewer-now".to_string(),
+            }),
+            ..RoutingConfig::default()
+        },
+        ..ConfigFile::default()
+    };
+    FileConfigStore::for_workspace(&workspace).save_local(&current_config).unwrap();
+
+    let trace_ref = workspace.join(".synod").join("traces").join("trace.json");
+    let mut trace = ExecutionTrace::new("task-1", "session-1", "test");
+    trace.terminal_status = Some(TaskStatus::Succeeded);
+    trace.terminal_reason =
+        Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None));
+    trace.events.push(TraceEvent {
+        event_id: "event-1".to_string(),
+        event_type: TraceEventType::TaskStarted,
+        step_id: None,
+        plan_revision: 0,
+        payload: json!({
+            "goal": "test",
+            "input": {
+                "routing_projection": {
+                    "effective_routing": [
+                        "planning=codex/gpt-5-codex [workspace]",
+                        "verification=copilot/gpt-5.4 [built-in]"
+                    ],
+                    "assistant_bindings": [
+                        "planning=codex",
+                        "verification=copilot"
+                    ]
+                }
+            },
+            "limits": RunLimits::default(),
+        }),
+        recorded_at: 0,
+    });
+
+    let summary = summarize_trace(&trace_ref, &trace).unwrap();
+    let rendered = render_trace_summary(&summary, "explicit-trace", "/synod-next");
+
+    assert!(
+        rendered.contains(
+            "route_config_projection: effective_routing: planning=codex/gpt-5-codex [workspace], verification=copilot/gpt-5.4 [built-in] | assistant_bindings: planning=codex, verification=copilot"
+        ),
+        "{rendered}"
+    );
+    assert!(!rendered.contains("reviewer-now"), "{rendered}");
+}
+
+#[test]
 fn render_trace_summary_covers_replan_recovery_label_and_decision_step_kind() {
     let summary = TraceSummaryView {
         trace_ref: "/tmp/trace.json".to_string(),
@@ -1410,6 +1486,7 @@ fn render_trace_summary_covers_replan_recovery_label_and_decision_step_kind() {
         negotiation_acceptance_boundary: None,
         cluster_delivery_story: None,
         routing_summary: None,
+        routing_projection: RoutingDecisionProjection::default(),
         goal_plan_summary: None,
         authored_input_summary: None,
         authored_input_sources: Vec::new(),
@@ -1521,6 +1598,7 @@ fn render_trace_summary_covers_pending_running_and_skipped_step_statuses() {
             negotiation_acceptance_boundary: None,
             cluster_delivery_story: None,
             routing_summary: None,
+            routing_projection: RoutingDecisionProjection::default(),
             goal_plan_summary: None,
             authored_input_summary: None,
             authored_input_sources: Vec::new(),
@@ -1658,6 +1736,7 @@ fn render_trace_summary_surfaces_cluster_delivery_story() {
                 "routing: native (goal_plan) - trace came from the session-native runtime"
                     .to_string(),
             ),
+            routing_projection: RoutingDecisionProjection::default(),
             goal_plan_summary: None,
             authored_input_summary: None,
             authored_input_sources: Vec::new(),

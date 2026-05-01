@@ -55,6 +55,7 @@ pub use domain::review::{
     ReviewerDefinition, ReviewerDisposition, ReviewerFinding, ReviewerParticipation,
     ReviewerParticipationStatus, VoteDecision, VoteResolution, VoteRuleDefinition, VoteStrategy,
 };
+pub use domain::routing_decision::RoutingDecisionProjection;
 pub use domain::step::{
     ErrorInfo, Recoverability, Step, StepExecutionRequest, StepExecutionResult, StepKind,
     StepStatus,

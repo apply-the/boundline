@@ -9,12 +9,15 @@ use crate::adapters::tool::FnToolAdapter;
 use serde_json::{Map, Value, json};
 use thiserror::Error;
 
+use crate::adapters::cluster_store::FileClusterStore;
+use crate::adapters::config_store::FileConfigStore;
 use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
 use crate::adapters::trace_store::{FileTraceStore, TraceStore, TraceStoreError};
 use crate::domain::cluster::{
     ClusterDeliveryStory, ClusterRouteOwner, ClusterSessionProjection, ClusteredExecutionCondition,
     ClusteredExecutionKind, WorkspaceParticipationKind, WorkspaceParticipationRecord,
 };
+use crate::domain::configuration::{RoutingOverrides, resolve_effective_routing};
 use crate::domain::flow::{FlowStepMetadata, built_in_flow, supported_flow_names_csv};
 use crate::domain::flow_policy::FlowPolicy;
 use crate::domain::goal_plan::InferredFlow;
@@ -24,6 +27,7 @@ use crate::domain::governance::{
 };
 use crate::domain::limits::{RunLimits, TerminalCondition};
 use crate::domain::negotiation::NegotiatedDeliveryPacket;
+use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::session::{
     ActiveSessionRecord, RoutingMode, RoutingOutcome, SessionStatus, routing_outcome,
 };
@@ -479,6 +483,8 @@ impl SessionRuntime {
     fn native_adapter_registries(
         &self,
     ) -> Result<(AgentRegistry, ToolRegistry), SessionRuntimeError> {
+        self.validate_native_assistant_bindings()?;
+
         let mut agents = AgentRegistry::new();
         let analyzer_workspace = self.workspace_ref.clone();
         agents
@@ -518,6 +524,66 @@ impl SessionRuntime {
         Ok((agents, tools))
     }
 
+    fn validate_native_assistant_bindings(&self) -> Result<(), SessionRuntimeError> {
+        let local_config =
+            FileConfigStore::for_workspace(&self.workspace_ref).load_local().ok().flatten();
+        let available_runtimes = local_config
+            .as_ref()
+            .map(|config| config.routing.assistant_runtimes.clone())
+            .unwrap_or_default();
+
+        if available_runtimes.is_empty() {
+            return Ok(());
+        }
+
+        let cluster_routing = FileClusterStore::for_workspace(&self.workspace_ref)
+            .load()
+            .ok()
+            .flatten()
+            .map(|config| config.routing);
+        let global_routing = FileConfigStore::global_routing().ok().flatten();
+        let effective = resolve_effective_routing(
+            &RoutingOverrides::default(),
+            local_config.as_ref().map(|config| &config.routing),
+            cluster_routing.as_ref(),
+            global_routing.as_ref(),
+        );
+
+        Self::ensure_runtime_available(
+            "implementation",
+            effective.implementation.route.runtime,
+            &available_runtimes,
+        )?;
+        Self::ensure_runtime_available(
+            "verification",
+            effective.verification.route.runtime,
+            &available_runtimes,
+        )?;
+
+        Ok(())
+    }
+
+    fn ensure_runtime_available(
+        slot: &str,
+        runtime: crate::domain::configuration::RuntimeKind,
+        available_runtimes: &[crate::domain::configuration::RuntimeKind],
+    ) -> Result<(), SessionRuntimeError> {
+        if available_runtimes.contains(&runtime) {
+            return Ok(());
+        }
+
+        let available = available_runtimes
+            .iter()
+            .map(|candidate| candidate.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        Err(SessionRuntimeError::UnsupportedAssistantBinding {
+            slot: slot.to_string(),
+            runtime: runtime.as_str().to_string(),
+            available,
+        })
+    }
+
     fn run_goal_plan_to_terminal(
         &self,
         session: &mut ActiveSessionRecord,
@@ -534,6 +600,9 @@ impl SessionRuntime {
         let (terminal, decisions, mut trace) = loop_runner
             .run(&goal_plan, flow_policy.as_ref(), &session.workspace_ref, &session.session_id)
             .map_err(|error| SessionRuntimeError::DecisionLoop(error.to_string()))?;
+        if let Some(routing_projection) = Self::workspace_routing_projection(&self.workspace_ref) {
+            Self::persist_routing_projection(&mut trace, &routing_projection);
+        }
         let (condition, message, details) = native_terminal_outcome(&terminal);
         let terminal_reason = build_terminal_reason(condition, message, details);
         let terminal_status = task_status_for_condition(condition);
@@ -565,6 +634,45 @@ impl SessionRuntime {
             plan_revision: 0,
             trace_location,
         })
+    }
+
+    fn workspace_routing_projection(workspace: &Path) -> Option<RoutingDecisionProjection> {
+        let workspace_routing =
+            FileConfigStore::for_workspace(workspace).local_routing().ok().flatten();
+        let cluster_routing = FileClusterStore::for_workspace(workspace)
+            .load()
+            .ok()
+            .flatten()
+            .map(|config| config.routing);
+        let global_routing = FileConfigStore::global_routing().ok().flatten();
+        let effective = resolve_effective_routing(
+            &RoutingOverrides::default(),
+            workspace_routing.as_ref(),
+            cluster_routing.as_ref(),
+            global_routing.as_ref(),
+        );
+        let projection = RoutingDecisionProjection::from_effective_routing(&effective);
+        (!projection.is_empty()).then_some(projection)
+    }
+
+    fn persist_routing_projection(
+        trace: &mut ExecutionTrace,
+        projection: &RoutingDecisionProjection,
+    ) {
+        let Some(event) = trace.events.iter_mut().find(|event| {
+            matches!(
+                event.event_type,
+                TraceEventType::GoalPlanCreated | TraceEventType::TaskStarted
+            )
+        }) else {
+            return;
+        };
+
+        let Some(payload) = event.payload.as_object_mut() else {
+            return;
+        };
+
+        payload.insert("routing_projection".to_string(), json!(projection));
     }
 
     pub fn execute_next_step(
@@ -2413,6 +2521,10 @@ pub enum SessionRuntimeError {
     GovernanceRuntime(String),
     #[error("decision loop failed: {0}")]
     DecisionLoop(String),
+    #[error(
+        "assistant binding for {slot} requires {runtime}, but available assistant runtimes are: {available}"
+    )]
+    UnsupportedAssistantBinding { slot: String, runtime: String, available: String },
 }
 
 fn native_terminal_outcome(terminal: &LoopTerminal) -> (TerminalCondition, String, Option<Value>) {

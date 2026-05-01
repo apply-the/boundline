@@ -152,7 +152,7 @@ fn trace_summary_surfaces_broader_adaptive_family_evidence() {
 }
 
 #[test]
-fn trace_summary_projects_route_owner_and_workspace_routing_defaults() {
+fn trace_summary_projects_route_owner_and_effective_routing_snapshot() {
     let workspace = temp_fixture_workspace("synod-trace-summary-route-config");
     let config = ConfigFile {
         routing: RoutingConfig {
@@ -182,7 +182,15 @@ fn trace_summary_projects_route_owner_and_workspace_routing_defaults() {
 
     assert!(rendered.contains("route_owner: compatibility"), "{rendered}");
     assert!(
-        rendered.contains("route_config_projection: workspace_routing: review=claude/reviewer-1"),
+        rendered.contains(
+            "route_config_projection: effective_routing: planning=codex/gpt-5-codex [built-in], implementation=codex/gpt-5-codex [built-in], verification=copilot/gpt-5.4 [built-in], review=claude/reviewer-1 [workspace], adjudication=codex/gpt-5-codex [built-in]"
+        ),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains(
+            "assistant_bindings: planning=codex, implementation=codex, verification=copilot, review=claude, adjudication=codex"
+        ),
         "{rendered}"
     );
 }

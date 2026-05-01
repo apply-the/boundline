@@ -20,7 +20,7 @@ If shell execution is unavailable, provide this exact copyable command:
 Wait for pasted output and then recommend exactly one next command.
 
 ## Output Interpretation
-Summarize `routing`, `execution_condition`, `continuity_authority`, `compatibility_follow_up`, `compatibility_trace_ref`, `latest_status`, `explanation`, and the CLI-reported `next_command`. Preserve `latest_trace_ref` when present so `/synod-inspect` can reuse it.
+Summarize `routing`, `route_owner`, `route_config_projection`, `execution_condition`, `continuity_authority`, `compatibility_follow_up`, `compatibility_trace_ref`, `latest_status`, `explanation`, and the CLI-reported `next_command`. Preserve `latest_trace_ref` when present so `/synod-inspect` can reuse it, and keep any `effective_routing` or `assistant_bindings` values surfaced inside `route_config_projection`.
 
 ## Next-Step Routing
 Prefer the CLI-reported `next_command`; if it points to inspect or `continuity_authority: compatibility_trace` is present, route to `/synod-inspect`. Route to `/synod-start` only when the CLI reports no active session and no compatibility follow-up.

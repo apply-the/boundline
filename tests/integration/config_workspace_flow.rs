@@ -102,3 +102,67 @@ fn config_set_show_and_unset_workspace_slot() {
     assert_eq!(show_after.status.code(), Some(0), "{show_after_text}");
     assert!(show_after_text.contains("planning: <unset>"), "{show_after_text}");
 }
+
+#[test]
+fn config_show_effective_surfaces_assistant_bindings() {
+    let workspace = empty_workspace("synod-config-effective");
+
+    let init = run_synod_in(
+        &workspace,
+        &[
+            "init",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--template",
+            "change",
+            "--assistant",
+            "copilot",
+        ],
+    );
+    assert_eq!(init.status.code(), Some(0), "{}", terminal_text(&init));
+
+    let set = run_synod_in(
+        &workspace,
+        &[
+            "config",
+            "set",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--scope",
+            "workspace",
+            "--slot",
+            "planning",
+            "--runtime",
+            "codex",
+            "--model",
+            "gpt-5-codex",
+        ],
+    );
+    assert_eq!(set.status.code(), Some(0), "{}", terminal_text(&set));
+
+    let show = run_synod_in(
+        &workspace,
+        &[
+            "config",
+            "show",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--scope",
+            "effective",
+        ],
+    );
+    let show_text = terminal_text(&show);
+    assert_eq!(show.status.code(), Some(0), "{show_text}");
+    assert!(
+        show_text.contains(
+            "effective_routing: planning=codex/gpt-5-codex [workspace], implementation=codex/gpt-5-codex [built-in]"
+        ),
+        "{show_text}"
+    );
+    assert!(
+        show_text.contains(
+            "assistant_bindings: planning=codex, implementation=codex, verification=copilot, review=claude, adjudication=codex"
+        ),
+        "{show_text}"
+    );
+}
