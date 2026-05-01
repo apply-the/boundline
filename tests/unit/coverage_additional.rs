@@ -140,6 +140,9 @@ fn build_status_view(record: &ActiveSessionRecord) -> SessionStatusView {
         }),
         latest_workspace_slice: None,
         latest_selection_headline: None,
+        latest_candidate_family: None,
+        latest_selection_reason: None,
+        latest_rejected_candidates: None,
         latest_attempt_lineage: None,
         latest_validation_status: active_task.and_then(|task| {
             task.context
@@ -147,6 +150,7 @@ fn build_status_view(record: &ActiveSessionRecord) -> SessionStatusView {
                 .get("latest_validation_status")
                 .and_then(|value| value.as_str().map(str::to_string))
         }),
+        latest_exhaustion_reason: None,
         latest_review_trigger: None,
         latest_review_vote: None,
         latest_review_outcome: None,

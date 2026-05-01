@@ -104,7 +104,11 @@ If you change `.synod/workflows.toml` semantics or `synod workflow ...` output, 
 
 If you change governed-stage behavior, keep the docs explicit about which stage now stops for governance, how packet lineage is reused on later stages, and how waiting or blocked guidance appears on both direct session and workflow-aware surfaces.
 
-If you change adaptive compatibility behavior, keep the docs explicit about validation-guided slice reselection, bounded `read_targets`, and the fact that adaptive repair still remains on the explicit compatibility path in this release.
+If you change adaptive compatibility behavior, keep the docs explicit about
+bounded mutation-family selection, validation-guided slice reselection,
+bounded `read_targets`, candidate credibility and rejection wording, explicit
+exhaustion behavior, and the fact that adaptive repair still remains on the
+explicit compatibility path in this release.
 
 If you change how `status`, `next`, or `inspect` choose the authoritative follow-up state, keep the docs explicit about `continuity_authority`, inspect-only compatibility follow-up, and when `synod start` is or is not actually required.
 

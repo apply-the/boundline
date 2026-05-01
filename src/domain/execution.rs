@@ -111,6 +111,22 @@ pub enum AdaptiveChangeKind {
     ArithmeticSwap,
     ComparisonFlip,
     BooleanFlip,
+    OrderingBoundaryFlip,
+    ResultStatusFlip,
+    NumericLiteralFlip,
+}
+
+impl AdaptiveChangeKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ArithmeticSwap => "arithmetic_swap",
+            Self::ComparisonFlip => "comparison_flip",
+            Self::BooleanFlip => "boolean_flip",
+            Self::OrderingBoundaryFlip => "ordering_boundary_flip",
+            Self::ResultStatusFlip => "result_status_flip",
+            Self::NumericLiteralFlip => "numeric_literal_flip",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -162,6 +178,9 @@ impl AdaptiveExecutionProfile {
                 AdaptiveChangeKind::ArithmeticSwap,
                 AdaptiveChangeKind::ComparisonFlip,
                 AdaptiveChangeKind::BooleanFlip,
+                AdaptiveChangeKind::OrderingBoundaryFlip,
+                AdaptiveChangeKind::ResultStatusFlip,
+                AdaptiveChangeKind::NumericLiteralFlip,
             ]
         } else {
             self.allowed_change_kinds.clone()
@@ -197,6 +216,10 @@ pub struct SelectionEvidence {
     pub validation_guidance: Option<ValidationGuidance>,
     #[serde(default)]
     pub path_scores: Vec<PathScore>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub candidate_family: Option<AdaptiveChangeKind>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rejected_candidates: Vec<String>,
     pub reason: String,
 }
 

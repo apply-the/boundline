@@ -38,6 +38,7 @@ use crate::registry::agent_registry::{AgentRegistry, RegistryError as AgentRegis
 use crate::registry::tool_registry::{RegistryError as ToolRegistryError, ToolRegistry};
 
 const EXECUTION_RELATIVE_PATH: &str = ".synod/execution.json";
+const MIN_ADAPTIVE_REPLAN_SCORE: i64 = 60;
 
 #[derive(Clone)]
 pub struct FixtureRuntime {
@@ -69,6 +70,22 @@ struct AdaptiveCandidateContext<'a> {
 struct WorkspaceTargetSource {
     path: String,
     contents: String,
+}
+
+#[derive(Debug, Clone)]
+struct GeneratedAdaptiveCandidate {
+    change_kind: AdaptiveChangeKind,
+    change: WorkspaceChange,
+}
+
+#[derive(Debug, Clone)]
+struct RankedAdaptiveCandidate {
+    change_kind: AdaptiveChangeKind,
+    change: WorkspaceChange,
+    signature: String,
+    score: i64,
+    order_index: usize,
+    reasons: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -678,6 +695,9 @@ fn build_adaptive_replan_steps(
         failure,
         &fallback_reason,
     );
+    if let Some(reason) = adaptive_replan_blocker(validation_guidance.as_ref()) {
+        return Err(PlanningError::ReplanUnavailable(reason));
+    }
     let lineage_reason = validation_guidance
         .as_ref()
         .map(|guidance| guidance.headline.clone())
@@ -698,9 +718,9 @@ fn build_adaptive_replan_steps(
     .map_err(|error| PlanningError::Internal(error.to_string()))?
     .into_iter()
     .next() else {
-        return Err(PlanningError::ReplanUnavailable(
-            "adaptive planner could not synthesize a new candidate".to_string(),
-        ));
+        return Err(PlanningError::ReplanUnavailable(adaptive_no_candidate_reason(
+            validation_guidance.as_ref(),
+        )));
     };
 
     build_adaptive_attempt_steps(profile, active_flow, &candidate)
@@ -743,11 +763,10 @@ fn build_adaptive_candidates(
         right.score.cmp(&left.score).then_with(|| left.path.cmp(&right.path))
     });
 
-    let mut raw_candidates = Vec::new();
     let mut seen_signatures = BTreeSet::new();
-    let mut selected_targets = Vec::new();
+    let mut selected_sources = Vec::new();
     for scored_target in &path_scores {
-        if selected_targets.len() >= adaptive.max_selected_targets {
+        if selected_sources.len() >= adaptive.max_selected_targets {
             break;
         }
 
@@ -755,9 +774,20 @@ fn build_adaptive_candidates(
             continue;
         };
 
-        let mut target_contributed = false;
-        for change in adaptive_changes_for_target(&source.path, &source.contents, adaptive) {
-            let signature = workspace_change_signature(&change);
+        if adaptive_changes_for_target(&source.path, &source.contents, adaptive).is_empty() {
+            continue;
+        }
+
+        selected_sources.push((source, scored_target));
+    }
+
+    let selected_targets =
+        selected_sources.iter().map(|(source, _)| source.path.clone()).collect::<Vec<_>>();
+    let mut ranked_candidates = Vec::new();
+    let mut order_index = 0_usize;
+    for (source, scored_target) in selected_sources {
+        for generated in adaptive_changes_for_target(&source.path, &source.contents, adaptive) {
+            let signature = workspace_change_signature(&generated.change);
             if !seen_signatures.insert(signature.clone()) {
                 continue;
             }
@@ -766,61 +796,91 @@ fn build_adaptive_candidates(
                 continue;
             }
 
-            raw_candidates.push((change, signature));
-            target_contributed = true;
-            if raw_candidates.len() >= adaptive.max_generated_attempts {
-                break;
-            }
-        }
-
-        if target_contributed {
-            selected_targets.push(source.path.clone());
-        }
-
-        if raw_candidates.len() >= adaptive.max_generated_attempts {
-            break;
+            let (score, reasons) = score_adaptive_candidate(
+                scored_target,
+                &generated,
+                &goal_terms,
+                &validation_terms,
+                context.validation_guidance,
+            );
+            ranked_candidates.push(RankedAdaptiveCandidate {
+                change_kind: generated.change_kind,
+                change: generated.change,
+                signature,
+                score,
+                order_index,
+                reasons,
+            });
+            order_index += 1;
         }
     }
 
-    let available_count = raw_candidates.len();
+    ranked_candidates.sort_by(|left, right| {
+        right.score.cmp(&left.score).then_with(|| left.order_index.cmp(&right.order_index))
+    });
 
-    Ok(raw_candidates
+    if context.previous_attempt_id.is_some() {
+        ranked_candidates.retain(|candidate| candidate.score >= MIN_ADAPTIVE_REPLAN_SCORE);
+    }
+
+    if ranked_candidates.len() > adaptive.max_generated_attempts {
+        ranked_candidates.truncate(adaptive.max_generated_attempts);
+    }
+
+    let available_count = ranked_candidates.len();
+
+    Ok(ranked_candidates
         .into_iter()
         .enumerate()
-        .map(|(index, (change, signature))| {
+        .map(|(index, candidate)| {
             let attempt_id =
                 format!("adaptive-attempt-{}", context.used_signatures.len() + index + 1);
             let workspace_slice = WorkspaceSliceSelection {
                 selection_id: format!("adaptive-slice-{attempt_id}"),
                 selected_targets: selected_targets.clone(),
                 scored_candidates: path_scores.clone(),
-                headline: adaptive_selection_headline(&change.path, context.validation_guidance),
+                headline: adaptive_selection_headline(
+                    &candidate.change.path,
+                    candidate.change_kind,
+                    context.validation_guidance,
+                ),
             };
             let selection_evidence = SelectionEvidence {
                 goal_terms: goal_terms.clone(),
                 validation_terms: validation_terms.clone(),
                 validation_guidance: context.validation_guidance.cloned(),
                 path_scores: path_scores.clone(),
+                candidate_family: Some(candidate.change_kind),
+                rejected_candidates: build_rejected_candidate_summaries(
+                    index,
+                    &selected_targets,
+                    &workspace_slice.scored_candidates,
+                    available_count,
+                    &candidate,
+                ),
                 reason: adaptive_selection_reason(
-                    &change.path,
+                    &candidate.change.path,
+                    candidate.change_kind,
                     selected_targets.len(),
                     context.validation_guidance,
+                    &candidate.reasons,
                 ),
             };
             let attempt = ExecutionAttemptDefinition {
                 attempt_id: attempt_id.clone(),
                 summary: format!(
-                    "Adaptively update {} by replacing '{}' with '{}'",
-                    change.path,
-                    excerpt(&change.find),
-                    excerpt(&change.replace)
+                    "Adaptively apply {} in {} by replacing '{}' with '{}'",
+                    candidate.change_kind.as_str(),
+                    candidate.change.path,
+                    excerpt(&candidate.change.find),
+                    excerpt(&candidate.change.replace)
                 ),
                 failure_mode: if index + 1 < available_count {
                     ExecutionFailureMode::Replan
                 } else {
                     ExecutionFailureMode::Terminal
                 },
-                changes: vec![change],
+                changes: vec![candidate.change.clone()],
             };
             let attempt_lineage = AttemptLineage {
                 previous_attempt_id: context.previous_attempt_id.map(str::to_string),
@@ -836,7 +896,7 @@ fn build_adaptive_candidates(
                 attempt,
                 workspace_slice,
                 selection_evidence,
-                candidate_signature: signature,
+                candidate_signature: candidate.signature,
                 attempt_lineage,
             }
         })
@@ -1011,16 +1071,137 @@ fn adaptive_changes_for_target(
     path: &str,
     contents: &str,
     adaptive: &crate::domain::execution::AdaptiveExecutionProfile,
-) -> Vec<WorkspaceChange> {
+) -> Vec<GeneratedAdaptiveCandidate> {
     let mut changes = Vec::new();
     for kind in adaptive.effective_change_kinds() {
-        changes.extend(match kind {
+        let generated = match kind {
             AdaptiveChangeKind::ArithmeticSwap => arithmetic_swap_candidates(path, contents),
             AdaptiveChangeKind::ComparisonFlip => comparison_flip_candidates(path, contents),
             AdaptiveChangeKind::BooleanFlip => boolean_flip_candidates(path, contents),
-        });
+            AdaptiveChangeKind::OrderingBoundaryFlip => {
+                ordering_boundary_flip_candidates(path, contents)
+            }
+            AdaptiveChangeKind::ResultStatusFlip => result_status_flip_candidates(path, contents),
+            AdaptiveChangeKind::NumericLiteralFlip => {
+                numeric_literal_flip_candidates(path, contents)
+            }
+        };
+        changes.extend(
+            generated
+                .into_iter()
+                .map(|change| GeneratedAdaptiveCandidate { change_kind: kind, change }),
+        );
     }
     changes
+}
+
+fn score_adaptive_candidate(
+    path_score: &PathScore,
+    candidate: &GeneratedAdaptiveCandidate,
+    goal_terms: &[String],
+    validation_terms: &[String],
+    validation_guidance: Option<&ValidationGuidance>,
+) -> (i64, Vec<String>) {
+    let mut score = path_score.score;
+    let mut reasons = Vec::new();
+
+    if let Some(reason) = path_score.reasons.first() {
+        reasons.push(reason.clone());
+    }
+
+    score += 10;
+    reasons.push(format!(
+        "{} remained available as a bounded local repair",
+        candidate.change_kind.as_str()
+    ));
+
+    if goal_terms.iter().any(|term| {
+        candidate.change.path.to_ascii_lowercase().contains(term)
+            || candidate.change.find.to_ascii_lowercase().contains(term)
+            || candidate.change.replace.to_ascii_lowercase().contains(term)
+    }) {
+        score += 10;
+        reasons.push("goal terms aligned with the candidate change".to_string());
+    }
+
+    match candidate.change_kind {
+        AdaptiveChangeKind::ArithmeticSwap => {
+            if terms_include_any(
+                validation_terms,
+                &["arith", "math", "add", "sum", "multiply", "divide"],
+            ) {
+                score += 30;
+                reasons.push("validation evidence suggested an arithmetic mismatch".to_string());
+            }
+        }
+        AdaptiveChangeKind::ComparisonFlip => {
+            if terms_include_any(validation_terms, &["equal", "match", "compar", "assert"]) {
+                score += 30;
+                reasons.push("validation evidence suggested an equality mismatch".to_string());
+            }
+        }
+        AdaptiveChangeKind::BooleanFlip => {
+            if terms_include_any(validation_terms, &["true", "false", "bool"]) {
+                score += 30;
+                reasons.push("validation evidence suggested a boolean mismatch".to_string());
+            }
+        }
+        AdaptiveChangeKind::OrderingBoundaryFlip => {
+            score += 8;
+            if terms_include_any(
+                validation_terms,
+                &["bound", "range", "threshold", "minimum", "maximum", "greater", "less"],
+            ) {
+                score += 35;
+                reasons.push("validation evidence suggested a boundary mismatch".to_string());
+            }
+        }
+        AdaptiveChangeKind::ResultStatusFlip => {
+            score += 8;
+            if terms_include_any(
+                validation_terms,
+                &["error", "result", "failed", "success", "panic"],
+            ) {
+                score += 35;
+                reasons
+                    .push("validation evidence suggested an outcome-status mismatch".to_string());
+            }
+        }
+        AdaptiveChangeKind::NumericLiteralFlip => {
+            score += 5;
+            if terms_include_any(
+                validation_terms,
+                &["zero", "one", "count", "length", "literal", "constant"],
+            ) {
+                score += 30;
+                reasons
+                    .push("validation evidence suggested a numeric literal mismatch".to_string());
+            }
+            if candidate.change.find.contains('0') || candidate.change.find.contains('1') {
+                score += 8;
+                reasons.push("candidate repairs a bounded numeric literal".to_string());
+            }
+        }
+    }
+
+    if let Some(validation_guidance) = validation_guidance {
+        match validation_guidance.confidence {
+            ValidationGuidanceConfidence::Strong => {
+                score += 25;
+                reasons.push("strong validation guidance supported the bounded replan".to_string());
+            }
+            ValidationGuidanceConfidence::Hinted => {
+                score += 10;
+                reasons.push("validation hints supported the bounded replan".to_string());
+            }
+        }
+    }
+
+    (score, reasons)
+}
+
+fn terms_include_any(terms: &[String], keywords: &[&str]) -> bool {
+    terms.iter().any(|term| keywords.iter().any(|keyword| term.contains(keyword)))
 }
 
 fn arithmetic_swap_candidates(path: &str, contents: &str) -> Vec<WorkspaceChange> {
@@ -1082,6 +1263,71 @@ fn boolean_flip_candidates(path: &str, contents: &str) -> Vec<WorkspaceChange> {
             find: "true".to_string(),
             replace: "false".to_string(),
         }];
+    }
+
+    Vec::new()
+}
+
+fn ordering_boundary_flip_candidates(path: &str, contents: &str) -> Vec<WorkspaceChange> {
+    let patterns = [(" >= ", " > "), (" <= ", " < "), (" > ", " >= "), (" < ", " <= ")];
+
+    for (find, replace) in patterns {
+        if contents.contains(find) {
+            return vec![WorkspaceChange {
+                path: path.to_string(),
+                find: find.to_string(),
+                replace: replace.to_string(),
+            }];
+        }
+    }
+
+    Vec::new()
+}
+
+fn result_status_flip_candidates(path: &str, contents: &str) -> Vec<WorkspaceChange> {
+    if contents.contains("Err(") {
+        return vec![WorkspaceChange {
+            path: path.to_string(),
+            find: "Err(".to_string(),
+            replace: "Ok(".to_string(),
+        }];
+    }
+
+    if contents.contains("Ok(") {
+        return vec![WorkspaceChange {
+            path: path.to_string(),
+            find: "Ok(".to_string(),
+            replace: "Err(".to_string(),
+        }];
+    }
+
+    Vec::new()
+}
+
+fn numeric_literal_flip_candidates(path: &str, contents: &str) -> Vec<WorkspaceChange> {
+    let patterns = [
+        (" == 0", " == 1"),
+        (" == 1", " == 0"),
+        (" != 0", " != 1"),
+        (" != 1", " != 0"),
+        ("(0)", "(1)"),
+        ("(1)", "(0)"),
+        (" = 0;", " = 1;"),
+        (" = 1;", " = 0;"),
+        (" 0;", " 1;"),
+        (" 1;", " 0;"),
+        ("return 0;", "return 1;"),
+        ("return 1;", "return 0;"),
+    ];
+
+    for (find, replace) in patterns {
+        if contents.contains(find) {
+            return vec![WorkspaceChange {
+                path: path.to_string(),
+                find: find.to_string(),
+                replace: replace.to_string(),
+            }];
+        }
     }
 
     Vec::new()
@@ -1170,6 +1416,36 @@ fn build_validation_guidance(
     Some(ValidationGuidance { source, matched_paths, matched_terms, headline, confidence })
 }
 
+fn adaptive_replan_blocker(validation_guidance: Option<&ValidationGuidance>) -> Option<String> {
+    match validation_guidance {
+        None => Some(
+            "adaptive planner exhausted bounded repair because validation evidence was absent"
+                .to_string(),
+        ),
+        Some(guidance) if guidance.matched_paths.is_empty() && guidance.matched_terms.len() < 2 => {
+            Some(
+                "adaptive planner exhausted bounded repair because validation evidence was insufficient to justify another materially different candidate"
+                    .to_string(),
+            )
+        }
+        _ => None,
+    }
+}
+
+fn adaptive_no_candidate_reason(validation_guidance: Option<&ValidationGuidance>) -> String {
+    if let Some(guidance) = validation_guidance
+        && !guidance.matched_paths.is_empty()
+    {
+        return format!(
+            "adaptive planner exhausted bounded repair because no remaining candidate stayed credible after validation pointed to {}",
+            guidance.matched_paths.join(", ")
+        );
+    }
+
+    "adaptive planner exhausted bounded repair because no remaining candidate stayed credible"
+        .to_string()
+}
+
 fn collect_text_segments(value: &Value, segments: &mut Vec<String>) {
     match value {
         Value::String(text) if !text.trim().is_empty() => segments.push(text.clone()),
@@ -1207,6 +1483,10 @@ fn guidance_paths_from_text(text: &str, read_targets: &[String]) -> Vec<String> 
         }
     }
 
+    if matches.iter().any(|target| target.starts_with("src/")) {
+        matches.retain(|target| target.starts_with("src/"));
+    }
+
     matches.sort();
     matches.dedup();
     matches
@@ -1214,36 +1494,76 @@ fn guidance_paths_from_text(text: &str, read_targets: &[String]) -> Vec<String> 
 
 fn adaptive_selection_headline(
     path: &str,
+    change_kind: AdaptiveChangeKind,
     validation_guidance: Option<&ValidationGuidance>,
 ) -> String {
     if let Some(validation_guidance) = validation_guidance
         && !validation_guidance.matched_paths.is_empty()
     {
-        return format!("selected {path} for adaptive delivery after validation guidance");
+        return format!(
+            "selected {path} via {} for adaptive delivery after validation guidance",
+            change_kind.as_str()
+        );
     }
 
-    format!("selected {path} for adaptive delivery")
+    format!("selected {path} via {} for adaptive delivery", change_kind.as_str())
 }
 
 fn adaptive_selection_reason(
     path: &str,
+    change_kind: AdaptiveChangeKind,
     selected_target_count: usize,
     validation_guidance: Option<&ValidationGuidance>,
+    candidate_reasons: &[String],
 ) -> String {
+    let credibility_reason = candidate_reasons
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "it remained the most credible bounded candidate".to_string());
+
     if let Some(validation_guidance) = validation_guidance {
         if !validation_guidance.matched_paths.is_empty() {
             return format!(
-                "selected {path} from {selected_target_count} scored read target(s) after validation pointed to {}",
-                validation_guidance.matched_paths.join(", ")
+                "selected {path} via {} from {selected_target_count} scored read target(s) after validation pointed to {} because {}",
+                change_kind.as_str(),
+                validation_guidance.matched_paths.join(", "),
+                credibility_reason
             );
         }
 
         return format!(
-            "selected {path} from {selected_target_count} scored read target(s) after validation evidence reprioritized the bounded slice"
+            "selected {path} via {} from {selected_target_count} scored read target(s) after validation evidence reprioritized the bounded slice because {}",
+            change_kind.as_str(),
+            credibility_reason
         );
     }
 
-    format!("selected {path} from {selected_target_count} scored read target(s)")
+    format!(
+        "selected {path} via {} from {selected_target_count} scored read target(s) because {}",
+        change_kind.as_str(),
+        credibility_reason
+    )
+}
+
+fn build_rejected_candidate_summaries(
+    selected_index: usize,
+    _selected_targets: &[String],
+    _path_scores: &[PathScore],
+    available_count: usize,
+    selected_candidate: &RankedAdaptiveCandidate,
+) -> Vec<String> {
+    if available_count <= 1 {
+        return Vec::new();
+    }
+
+    vec![format!(
+        "later bounded candidates were rejected because {} on {} remained more credible",
+        selected_candidate.change_kind.as_str(),
+        selected_candidate.change.path
+    )]
+    .into_iter()
+    .take(if selected_index == 0 { 1 } else { 0 })
+    .collect()
 }
 
 fn adaptive_transition_kind(
@@ -1361,6 +1681,16 @@ fn insert_adaptive_state_from_input(
 
     if let Some(selection_evidence) = input.get("selection_evidence") {
         state_patch.insert("latest_selection_evidence".to_string(), selection_evidence.clone());
+        if let Some(reason) = selection_evidence.get("reason") {
+            state_patch.insert("latest_selection_reason".to_string(), reason.clone());
+        }
+        if let Some(candidate_family) = selection_evidence.get("candidate_family") {
+            state_patch.insert("latest_candidate_family".to_string(), candidate_family.clone());
+        }
+        if let Some(rejected_candidates) = selection_evidence.get("rejected_candidates") {
+            state_patch
+                .insert("latest_rejected_candidates".to_string(), rejected_candidates.clone());
+        }
     }
 
     if let Some(attempt_lineage) = input.get("attempt_lineage") {
@@ -1897,6 +2227,16 @@ fn verify_workspace_fixture(
             .with_details(output.details()),
             attempt.failure_mode.recoverability(),
         )
+        .with_evidence(adaptive_failure_evidence(
+            &request.input,
+            &output.to_validation_record(),
+            (attempt.failure_mode == ExecutionFailureMode::Terminal).then(|| {
+                format!(
+                    "adaptive planner exhausted bounded repair after {} because no further preselected candidate remained",
+                    attempt.attempt_id
+                )
+            }),
+        ))
         .with_state_patch({
             let mut patch = Map::new();
             patch.insert("latest_validation_status".to_string(), json!("failed"));
@@ -1909,6 +2249,15 @@ fn verify_workspace_fixture(
                 &request.input,
                 &request.task_snapshot.state,
             );
+            if attempt.failure_mode == ExecutionFailureMode::Terminal {
+                patch.insert(
+                    "latest_exhaustion_reason".to_string(),
+                    json!(format!(
+                        "adaptive planner exhausted bounded repair after {} because no further preselected candidate remained",
+                        attempt.attempt_id
+                    )),
+                );
+            }
             patch
         }),
         Err(error) => StepExecutionResult::failure(
@@ -1919,6 +2268,31 @@ fn verify_workspace_fixture(
             Recoverability::Terminal,
         ),
     }
+}
+
+fn adaptive_failure_evidence(
+    input: &Value,
+    validation_record: &ValidationRecord,
+    exhaustion_reason: Option<String>,
+) -> Value {
+    let mut evidence = json!({
+        "validation_record": validation_record,
+    });
+
+    if let Some(selection_evidence) = input.get("selection_evidence") {
+        evidence["selection_evidence"] = selection_evidence.clone();
+    }
+    if let Some(workspace_slice) = input.get("workspace_slice") {
+        evidence["workspace_slice"] = workspace_slice.clone();
+    }
+    if let Some(attempt_lineage) = input.get("attempt_lineage") {
+        evidence["attempt_lineage"] = attempt_lineage.clone();
+    }
+    if let Some(exhaustion_reason) = exhaustion_reason {
+        evidence["exhaustion_reason"] = json!(exhaustion_reason);
+    }
+
+    evidence
 }
 
 fn review_workspace_fixture(
@@ -2572,11 +2946,20 @@ mod tests {
 
     use super::{
         ExecutionAttemptDefinition, ExecutionCommand, ExecutionFailureMode, FilePatch,
-        FixtureRuntimeError, WorkspaceChange, WorkspaceExecutionProfile, WorkspaceFixture,
-        analyze_workspace_fixture, apply_fixture_patches, apply_workspace_fixture,
-        build_fixture_plan, build_fixture_runtime, build_task_request, build_vertical_slice_plan,
-        execution_manifest_path, load_workspace_execution_profile, resolve_review_vote,
-        run_fixture_command, verify_workspace_fixture,
+        FixtureRuntimeError, GeneratedAdaptiveCandidate, RankedAdaptiveCandidate, WorkspaceChange,
+        WorkspaceExecutionProfile, WorkspaceFixture, adaptive_failure_evidence,
+        adaptive_no_candidate_reason, adaptive_replan_blocker, adaptive_selection_headline,
+        adaptive_selection_reason, adaptive_transition_kind, analyze_workspace_fixture,
+        apply_fixture_patches, apply_workspace_fixture, build_fixture_plan, build_fixture_runtime,
+        build_rejected_candidate_summaries, build_task_request, build_vertical_slice_plan,
+        execution_manifest_path, guidance_paths_from_text, load_workspace_execution_profile,
+        numeric_literal_flip_candidates, ordering_boundary_flip_candidates, resolve_review_vote,
+        result_status_flip_candidates, run_fixture_command, score_adaptive_candidate,
+        verify_workspace_fixture,
+    };
+    use crate::domain::execution::{
+        AdaptiveChangeKind, AttemptTransitionKind, PathScore, ValidationGuidance,
+        ValidationGuidanceConfidence, ValidationGuidanceSource, ValidationRecord,
     };
     use crate::domain::flow::{attach_stage_metadata, built_in_flow};
     use crate::domain::governance::{
@@ -3263,5 +3646,269 @@ mod tests {
         let error = load_workspace_execution_profile(&workspace).unwrap_err();
 
         assert!(matches!(error, FixtureRuntimeError::MissingExecutionProfile(_)));
+    }
+
+    #[test]
+    fn adaptive_helpers_cover_guidance_blockers_headlines_and_reasons() {
+        let strong_guidance = ValidationGuidance {
+            source: ValidationGuidanceSource::ValidationRecord,
+            matched_paths: vec!["src/lib.rs".to_string()],
+            matched_terms: vec!["threshold".to_string(), "boundary".to_string()],
+            headline: "validation guided the next attempt toward src/lib.rs".to_string(),
+            confidence: ValidationGuidanceConfidence::Strong,
+        };
+        let hinted_guidance = ValidationGuidance {
+            source: ValidationGuidanceSource::FailureMessage,
+            matched_paths: Vec::new(),
+            matched_terms: vec!["hint".to_string()],
+            headline: "fallback".to_string(),
+            confidence: ValidationGuidanceConfidence::Hinted,
+        };
+
+        assert_eq!(
+            adaptive_replan_blocker(None),
+            Some(
+                "adaptive planner exhausted bounded repair because validation evidence was absent"
+                    .to_string()
+            )
+        );
+        assert_eq!(
+            adaptive_replan_blocker(Some(&hinted_guidance)),
+            Some(
+                "adaptive planner exhausted bounded repair because validation evidence was insufficient to justify another materially different candidate"
+                    .to_string()
+            )
+        );
+        assert_eq!(adaptive_replan_blocker(Some(&strong_guidance)), None);
+        assert_eq!(
+            adaptive_no_candidate_reason(Some(&strong_guidance)),
+            "adaptive planner exhausted bounded repair because no remaining candidate stayed credible after validation pointed to src/lib.rs"
+        );
+        assert_eq!(
+            adaptive_selection_headline(
+                "src/lib.rs",
+                AdaptiveChangeKind::OrderingBoundaryFlip,
+                Some(&strong_guidance),
+            ),
+            "selected src/lib.rs via ordering_boundary_flip for adaptive delivery after validation guidance"
+        );
+
+        let guided_reason = adaptive_selection_reason(
+            "src/lib.rs",
+            AdaptiveChangeKind::OrderingBoundaryFlip,
+            2,
+            Some(&strong_guidance),
+            &["boundary evidence stayed strongest".to_string()],
+        );
+        assert!(guided_reason.contains("validation pointed to src/lib.rs"));
+        assert!(guided_reason.contains("boundary evidence stayed strongest"));
+
+        let hinted_reason = adaptive_selection_reason(
+            "src/lib.rs",
+            AdaptiveChangeKind::NumericLiteralFlip,
+            2,
+            Some(&ValidationGuidance {
+                matched_terms: vec!["literal".to_string(), "count".to_string()],
+                ..hinted_guidance.clone()
+            }),
+            &[],
+        );
+        assert!(hinted_reason.contains("reprioritized the bounded slice"));
+        assert!(hinted_reason.contains("it remained the most credible bounded candidate"));
+
+        let unguided_reason = adaptive_selection_reason(
+            "src/lib.rs",
+            AdaptiveChangeKind::ArithmeticSwap,
+            1,
+            None,
+            &[],
+        );
+        assert!(unguided_reason.contains("selected src/lib.rs via arithmetic_swap"));
+    }
+
+    #[test]
+    fn adaptive_helpers_cover_path_matching_transition_rejections_and_failure_evidence() {
+        let read_targets = vec!["src/lib.rs".to_string(), "tests/red_to_green.rs".to_string()];
+        assert_eq!(
+            guidance_paths_from_text("lib.rs and red_to_green.rs still fail", &read_targets),
+            vec!["src/lib.rs".to_string()]
+        );
+
+        let selected_targets = vec!["src/lib.rs".to_string()];
+        let path_scores = vec![PathScore {
+            path: "src/lib.rs".to_string(),
+            score: 100,
+            reasons: vec!["matched path preference src/".to_string()],
+        }];
+        let candidate = RankedAdaptiveCandidate {
+            change_kind: AdaptiveChangeKind::OrderingBoundaryFlip,
+            change: WorkspaceChange {
+                path: "src/lib.rs".to_string(),
+                find: " > ".to_string(),
+                replace: " >= ".to_string(),
+            },
+            signature: "sig-ordering-boundary".to_string(),
+            score: 130,
+            order_index: 0,
+            reasons: vec!["boundary mismatch remained strongest".to_string()],
+        };
+
+        assert_eq!(
+            build_rejected_candidate_summaries(
+                0,
+                &selected_targets,
+                &path_scores,
+                2,
+                &candidate,
+            ),
+            vec![
+                "later bounded candidates were rejected because ordering_boundary_flip on src/lib.rs remained more credible"
+                    .to_string()
+            ]
+        );
+        assert!(
+            build_rejected_candidate_summaries(1, &selected_targets, &path_scores, 2, &candidate,)
+                .is_empty()
+        );
+
+        let previous = vec!["src/lib.rs".to_string(), "tests/red_to_green.rs".to_string()];
+        let narrowed = vec!["src/lib.rs".to_string()];
+        let broadened = vec!["src/lib.rs".to_string(), "tests/red_to_green.rs".to_string()];
+        let replaced = vec!["src/helper.rs".to_string()];
+        assert_eq!(adaptive_transition_kind(None, &narrowed), AttemptTransitionKind::Initial);
+        assert_eq!(
+            adaptive_transition_kind(Some(&previous), &narrowed),
+            AttemptTransitionKind::Narrowed
+        );
+        assert_eq!(
+            adaptive_transition_kind(Some(&narrowed), &broadened),
+            AttemptTransitionKind::Broadened
+        );
+        assert_eq!(
+            adaptive_transition_kind(Some(&narrowed), &replaced),
+            AttemptTransitionKind::Replaced
+        );
+
+        let evidence = adaptive_failure_evidence(
+            &json!({
+                "selection_evidence": {
+                    "candidate_family": "ordering_boundary_flip",
+                    "reason": "selected src/lib.rs via ordering_boundary_flip"
+                },
+                "workspace_slice": {
+                    "selection_id": "adaptive-slice-1",
+                    "selected_targets": ["src/lib.rs"],
+                    "scored_candidates": [],
+                    "headline": "selected src/lib.rs via ordering_boundary_flip for adaptive delivery"
+                },
+                "attempt_lineage": {
+                    "previous_attempt_id": "adaptive-attempt-1",
+                    "current_attempt_id": "adaptive-attempt-2",
+                    "transition_kind": "replaced",
+                    "reason": "validation reprioritized the bounded slice"
+                }
+            }),
+            &ValidationRecord {
+                command: "cargo test --quiet".to_string(),
+                exit_code: 101,
+                stdout: String::new(),
+                stderr: "threshold still fails".to_string(),
+                succeeded: false,
+            },
+            Some("bounded recovery exhausted".to_string()),
+        );
+
+        assert_eq!(
+            evidence["selection_evidence"]["candidate_family"],
+            json!("ordering_boundary_flip")
+        );
+        assert_eq!(evidence["workspace_slice"]["selected_targets"], json!(["src/lib.rs"]));
+        assert_eq!(evidence["attempt_lineage"]["current_attempt_id"], json!("adaptive-attempt-2"));
+        assert_eq!(evidence["exhaustion_reason"], json!("bounded recovery exhausted"));
+    }
+
+    #[test]
+    fn adaptive_helpers_cover_new_candidate_generators_and_family_scoring() {
+        let ordering_candidates =
+            ordering_boundary_flip_candidates("src/lib.rs", "if value <= 3 { return true; }");
+        assert_eq!(ordering_candidates[0].find, " <= ");
+        assert_eq!(ordering_candidates[0].replace, " < ");
+
+        let result_error_candidates =
+            result_status_flip_candidates("src/lib.rs", "fn load() -> Result<(), ()> { Err(()) }");
+        assert_eq!(result_error_candidates[0].find, "Err(");
+        assert_eq!(result_error_candidates[0].replace, "Ok(");
+
+        let result_ok_candidates =
+            result_status_flip_candidates("src/lib.rs", "fn load() -> Result<(), ()> { Ok(()) }");
+        assert_eq!(result_ok_candidates[0].find, "Ok(");
+        assert_eq!(result_ok_candidates[0].replace, "Err(");
+
+        let numeric_candidates =
+            numeric_literal_flip_candidates("src/lib.rs", "if count == 0 { return 1; }");
+        assert_eq!(numeric_candidates[0].find, " == 0");
+        assert_eq!(numeric_candidates[0].replace, " == 1");
+
+        let path_score = PathScore {
+            path: "src/lib.rs".to_string(),
+            score: 70,
+            reasons: vec!["matched path preference src/".to_string()],
+        };
+        let hinted_guidance = ValidationGuidance {
+            source: ValidationGuidanceSource::FailureMessage,
+            matched_paths: Vec::new(),
+            matched_terms: vec!["result".to_string(), "error".to_string()],
+            headline: "fallback".to_string(),
+            confidence: ValidationGuidanceConfidence::Hinted,
+        };
+        let strong_guidance = ValidationGuidance {
+            source: ValidationGuidanceSource::ValidationRecord,
+            matched_paths: vec!["src/lib.rs".to_string()],
+            matched_terms: vec!["zero".to_string(), "constant".to_string()],
+            headline: "validation guided the next attempt toward src/lib.rs".to_string(),
+            confidence: ValidationGuidanceConfidence::Strong,
+        };
+
+        let result_candidate = GeneratedAdaptiveCandidate {
+            change_kind: AdaptiveChangeKind::ResultStatusFlip,
+            change: result_error_candidates[0].clone(),
+        };
+        let (result_score, result_reasons) = score_adaptive_candidate(
+            &path_score,
+            &result_candidate,
+            &[],
+            &["result".to_string(), "error".to_string()],
+            Some(&hinted_guidance),
+        );
+        assert!(result_score > path_score.score);
+        assert!(result_reasons.iter().any(|reason| reason.contains("outcome-status mismatch")));
+        assert!(
+            result_reasons
+                .iter()
+                .any(|reason| reason.contains("validation hints supported the bounded replan"))
+        );
+
+        let numeric_candidate = GeneratedAdaptiveCandidate {
+            change_kind: AdaptiveChangeKind::NumericLiteralFlip,
+            change: numeric_candidates[0].clone(),
+        };
+        let (numeric_score, numeric_reasons) = score_adaptive_candidate(
+            &path_score,
+            &numeric_candidate,
+            &["src".to_string()],
+            &["zero".to_string(), "constant".to_string()],
+            Some(&strong_guidance),
+        );
+        assert!(numeric_score > result_score);
+        assert!(
+            numeric_reasons
+                .iter()
+                .any(|reason| reason.contains("goal terms aligned with the candidate change"))
+        );
+        assert!(numeric_reasons.iter().any(|reason| reason.contains("numeric literal mismatch")));
+        assert!(numeric_reasons.iter().any(|reason| reason.contains("bounded numeric literal")));
+        assert!(numeric_reasons.iter().any(|reason| {
+            reason.contains("strong validation guidance supported the bounded replan")
+        }));
     }
 }

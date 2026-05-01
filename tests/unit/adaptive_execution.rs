@@ -10,7 +10,7 @@ use synod::orchestrator::planner::Planner;
 
 use crate::workspace_fixture::{
     temp_adaptive_fixture_workspace, temp_adaptive_guided_replanning_workspace,
-    temp_adaptive_replanning_workspace,
+    temp_adaptive_ordering_boundary_workspace, temp_adaptive_replanning_workspace,
 };
 
 #[test]
@@ -27,7 +27,7 @@ fn adaptive_profile_builds_a_goal_aware_initial_plan_without_authored_attempts()
     assert_eq!(plan.steps[1].input["attempt_id"], json!("adaptive-attempt-1"));
     assert_eq!(
         plan.steps[0].input["selection_headline"],
-        json!("selected src/lib.rs for adaptive delivery")
+        json!("selected src/lib.rs via arithmetic_swap for adaptive delivery")
     );
     assert_eq!(plan.steps[1].input["adaptive_attempt"]["changes"][0]["path"], json!("src/lib.rs"));
     assert!(
@@ -108,4 +108,19 @@ fn adaptive_replan_uses_latest_validation_record_to_shift_selected_target() {
             .as_str()
             .is_some_and(|reason| reason.contains("validation"))
     );
+}
+
+#[test]
+fn adaptive_profile_can_select_the_ordering_boundary_family() {
+    let workspace = temp_adaptive_ordering_boundary_workspace("synod-adaptive-ordering-boundary");
+    let plan =
+        build_fixture_plan_for_goal(&workspace, None, "Fix the inclusive threshold boundary")
+            .unwrap();
+
+    assert_eq!(
+        plan.steps[1].input["selection_evidence"]["candidate_family"],
+        json!("ordering_boundary_flip")
+    );
+    assert_eq!(plan.steps[1].input["adaptive_attempt"]["changes"][0]["find"], json!(" > "));
+    assert_eq!(plan.steps[1].input["adaptive_attempt"]["changes"][0]["replace"], json!(" >= "));
 }

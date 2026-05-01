@@ -73,7 +73,7 @@ fn inspect_surfaces_validation_guided_adaptive_recovery_on_compatibility_route()
     );
     assert!(
         inspect_text.contains(
-            "adaptive slice selected src/helper.rs for adaptive delivery after validation guidance"
+            "adaptive slice selected src/helper.rs via arithmetic_swap for adaptive delivery after validation guidance"
         ),
         "{inspect_text}"
     );

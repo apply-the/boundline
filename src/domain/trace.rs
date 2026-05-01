@@ -131,6 +131,8 @@ pub struct TraceSummaryView {
     pub decision_timeline: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub failure_evidence: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub adaptive_evidence: Vec<String>,
     pub executed_steps: Vec<TraceStepSummary>,
     pub recovery_events: Vec<TraceRecoveryEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
