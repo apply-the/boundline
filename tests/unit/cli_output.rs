@@ -18,6 +18,10 @@ use synod::cli::output::{
 use synod::cli::{
     CliValidationError, CommandExitStatus, CommandName, DeveloperCommand, DeveloperCommandSession,
 };
+use synod::domain::cluster::{
+    ClusterDeliveryStory, ClusterRouteOwner, ClusteredExecutionCondition, ClusteredExecutionKind,
+    WorkspaceParticipationKind, WorkspaceParticipationRecord,
+};
 use synod::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
 use synod::domain::goal_plan::{GoalPlanFlowMode, GoalPlanFlowState};
 use synod::domain::governance::GovernanceRuntimeKind;
@@ -47,12 +51,14 @@ fn command_names_render_from_subcommands() {
     let command = DeveloperCommand::Flow {
         name: "bug-fix".to_string(),
         workspace: Some(PathBuf::from("/tmp/workspace")),
+        cluster: None,
     };
     assert_eq!(command_name(&command), "flow");
     assert_eq!(command.name(), CommandName::Flow);
 
     let command = DeveloperCommand::Run {
         workspace: Some(PathBuf::from("/tmp/workspace")),
+        cluster: None,
         goal: None,
         brief: Vec::new(),
         governance: None,
@@ -68,6 +74,7 @@ fn command_names_render_from_subcommands() {
 fn run_session_requires_a_non_empty_goal() {
     let command = DeveloperCommand::Run {
         workspace: Some(PathBuf::from("/tmp/workspace")),
+        cluster: None,
         goal: Some("   ".to_string()),
         brief: Vec::new(),
         governance: None,
@@ -84,6 +91,7 @@ fn run_session_requires_a_non_empty_goal() {
 fn run_without_legacy_flags_is_valid_for_session_native_execution() {
     let command = DeveloperCommand::Run {
         workspace: None,
+        cluster: None,
         goal: None,
         brief: Vec::new(),
         governance: None,
@@ -219,6 +227,7 @@ fn trace_summary_renderer_mentions_steps_recovery_and_terminal_reason() {
     let summary = TraceSummaryView {
         trace_ref: "/tmp/workspace/.synod/traces/task.json".to_string(),
         goal: "Inspect a recorded run".to_string(),
+        cluster_delivery_story: None,
         routing_summary: None,
         goal_plan_summary: None,
         authored_input_summary: None,
@@ -594,6 +603,7 @@ fn render_session_status_includes_goal_trace_and_next_command() {
         session_id: "session-status".to_string(),
         workspace_ref: "/tmp/session-workspace".to_string(),
         goal: Some("Ship a bounded change".to_string()),
+        cluster_delivery_story: None,
         authored_input_summary: None,
         authored_input_sources: None,
         authored_input_deduplicated_sources: None,
@@ -671,6 +681,7 @@ fn render_session_status_surfaces_security_assessment_projection() {
         session_id: "session-governed".to_string(),
         workspace_ref: "/tmp/session-workspace".to_string(),
         goal: Some("Verify a governed change".to_string()),
+        cluster_delivery_story: None,
         authored_input_summary: None,
         authored_input_sources: None,
         authored_input_deduplicated_sources: None,
@@ -757,6 +768,7 @@ fn render_session_status_surfaces_workflow_phase_and_pause_reason() {
         session_id: "session-workflow-status".to_string(),
         workspace_ref: "/tmp/session-workflow".to_string(),
         goal: None,
+        cluster_delivery_story: None,
         authored_input_summary: None,
         authored_input_sources: None,
         authored_input_deduplicated_sources: None,
@@ -933,6 +945,7 @@ fn command_names_render_for_all_four_subcommands() {
     assert_eq!(
         command_name(&DeveloperCommand::Run {
             workspace: Some(PathBuf::from("/tmp")),
+            cluster: None,
             goal: Some("x".to_string()),
             brief: Vec::new(),
             governance: None,
@@ -943,7 +956,7 @@ fn command_names_render_for_all_four_subcommands() {
         "run"
     );
     assert_eq!(
-        command_name(&DeveloperCommand::Inspect { trace: None, workspace: None }),
+        command_name(&DeveloperCommand::Inspect { trace: None, workspace: None, cluster: None }),
         "inspect"
     );
 }
@@ -962,6 +975,7 @@ fn render_trace_summary_handles_all_terminal_status_variants() {
         let summary = TraceSummaryView {
             trace_ref: "/tmp/trace.json".to_string(),
             goal: "test".to_string(),
+            cluster_delivery_story: None,
             routing_summary: None,
             goal_plan_summary: None,
             authored_input_summary: None,
@@ -1003,6 +1017,7 @@ fn render_trace_summary_surfaces_route_owner_and_config_projection() {
     let summary = TraceSummaryView {
         trace_ref: "/tmp/trace.json".to_string(),
         goal: "test".to_string(),
+        cluster_delivery_story: None,
         routing_summary: Some(
             "routing: compatibility (execution_profile) - trace came from the explicit compatibility runtime"
                 .to_string(),
@@ -1068,6 +1083,7 @@ fn render_session_status_projects_workspace_routing_defaults() {
         session_id: "session-config-projection".to_string(),
         workspace_ref: workspace.to_string_lossy().into_owned(),
         goal: Some("Project route defaults".to_string()),
+        cluster_delivery_story: None,
         authored_input_summary: None,
         authored_input_sources: None,
         authored_input_deduplicated_sources: None,
@@ -1156,6 +1172,7 @@ fn render_trace_summary_projects_workspace_routing_defaults() {
     let summary = TraceSummaryView {
         trace_ref: trace_ref.to_string_lossy().into_owned(),
         goal: "test".to_string(),
+        cluster_delivery_story: None,
         routing_summary: Some(
             "routing: native (goal_plan) - trace came from the session-native runtime".to_string(),
         ),
@@ -1196,6 +1213,7 @@ fn render_trace_summary_covers_replan_recovery_label_and_decision_step_kind() {
     let summary = TraceSummaryView {
         trace_ref: "/tmp/trace.json".to_string(),
         goal: "test".to_string(),
+        cluster_delivery_story: None,
         routing_summary: None,
         goal_plan_summary: None,
         authored_input_summary: None,
@@ -1303,6 +1321,7 @@ fn render_trace_summary_covers_pending_running_and_skipped_step_statuses() {
         let summary = TraceSummaryView {
             trace_ref: "/tmp/trace.json".to_string(),
             goal: "test".to_string(),
+            cluster_delivery_story: None,
             routing_summary: None,
             goal_plan_summary: None,
             authored_input_summary: None,
@@ -1338,5 +1357,177 @@ fn render_trace_summary_covers_pending_running_and_skipped_step_statuses() {
             rendered.contains(&format!("(agent) {expected} [1")),
             "status {status:?}: {rendered}"
         );
+    }
+}
+
+#[test]
+fn render_session_status_surfaces_cluster_delivery_story() {
+    let rendered = render_session_status(&SessionStatusView {
+        session_id: "cluster-session".to_string(),
+        workspace_ref: "/tmp/primary".to_string(),
+        goal: Some("Ship a clustered fix".to_string()),
+        cluster_delivery_story: Some(sample_cluster_delivery_story()),
+        authored_input_summary: None,
+        authored_input_sources: None,
+        authored_input_deduplicated_sources: None,
+        clarification_headline: None,
+        clarification_prompt: None,
+        clarification_missing_fields: None,
+        requested_governance_runtime: None,
+        requested_governance_risk: None,
+        requested_governance_zone: None,
+        requested_governance_owner: None,
+        active_flow: None,
+        flow_state: None,
+        active_workflow: None,
+        workflow_phase: None,
+        workflow_next_action: None,
+        continuity_authority: None,
+        compatibility_follow_up: None,
+        current_stage_id: None,
+        current_stage_index: None,
+        total_stages: None,
+        plan_revision: Some(1),
+        current_step_id: Some("handoff".to_string()),
+        current_step_index: Some(1),
+        latest_status: SessionStatus::Failed,
+        execution_path: Some("native_goal_plan".to_string()),
+        latest_trace_ref: Some("/tmp/secondary/.synod/traces/task.json".to_string()),
+        latest_decision_status: None,
+        latest_decision_target: None,
+        latest_changed_files: None,
+        latest_workspace_slice: None,
+        latest_selection_headline: None,
+        latest_candidate_family: None,
+        latest_selection_reason: None,
+        latest_rejected_candidates: None,
+        latest_attempt_lineage: None,
+        latest_validation_status: None,
+        latest_exhaustion_reason: None,
+        latest_review_trigger: None,
+        latest_review_vote: None,
+        latest_review_outcome: None,
+        latest_review_headline: None,
+        latest_governance_stage: None,
+        latest_governance_runtime: None,
+        latest_governance_mode: None,
+        latest_governance_run_ref: None,
+        latest_governance_state: None,
+        latest_governance_blocked_reason: None,
+        latest_governance_packet_ref: None,
+        latest_governance_packet_source_stage: None,
+        latest_governance_packet_binding_reason: None,
+        latest_governance_approval: None,
+        latest_governance_decision: None,
+        latest_governance_candidates: None,
+        governance_next_action: None,
+        next_command: Some("synod inspect --cluster /tmp/primary".to_string()),
+        explanation: "secondary workspace could not continue the bounded handoff".to_string(),
+    });
+
+    assert!(rendered.contains("cluster_id: cluster-1"), "{rendered}");
+    assert!(rendered.contains("cluster_route_owner: native"), "{rendered}");
+    assert!(rendered.contains("cluster_authoritative_workspace: /tmp/primary"), "{rendered}");
+    assert!(
+        rendered.contains(
+            "cluster_execution_condition: failed - secondary workspace could not continue the bounded handoff"
+        ),
+        "{rendered}"
+    );
+    assert!(rendered.contains("cluster_blocking_workspace: /tmp/secondary"), "{rendered}");
+    assert!(
+        rendered.contains(
+            "cluster_participating_workspaces: /tmp/primary [entry] | /tmp/secondary [blocked]"
+        ),
+        "{rendered}"
+    );
+}
+
+#[test]
+fn render_trace_summary_surfaces_cluster_delivery_story() {
+    let rendered = render_trace_summary(
+        &TraceSummaryView {
+            trace_ref: "/tmp/secondary/.synod/traces/task.json".to_string(),
+            goal: "Ship a clustered fix".to_string(),
+            cluster_delivery_story: Some(sample_cluster_delivery_story()),
+            routing_summary: Some(
+                "routing: native (goal_plan) - trace came from the session-native runtime"
+                    .to_string(),
+            ),
+            goal_plan_summary: None,
+            authored_input_summary: None,
+            authored_input_sources: Vec::new(),
+            authored_input_deduplicated_sources: Vec::new(),
+            clarification_headline: None,
+            clarification_prompt: None,
+            clarification_missing_fields: Vec::new(),
+            requested_governance_runtime: None,
+            requested_governance_risk: None,
+            requested_governance_zone: None,
+            requested_governance_owner: None,
+            decision_timeline: Vec::new(),
+            failure_evidence: Vec::new(),
+            adaptive_evidence: Vec::new(),
+            executed_steps: Vec::new(),
+            recovery_events: Vec::new(),
+            governance_timeline: Vec::new(),
+            governance_next_action: None,
+            review_timeline: Vec::new(),
+            terminal_status: TaskStatus::Failed,
+            terminal_reason: TerminalReason::new(
+                TerminalCondition::UnrecoverableError,
+                "secondary workspace could not continue the bounded handoff",
+                None,
+            ),
+            duration: None,
+        },
+        "explicit-trace",
+        "/synod-next",
+    );
+
+    assert!(rendered.contains("cluster_id: cluster-1"), "{rendered}");
+    assert!(rendered.contains("cluster_route_owner: native"), "{rendered}");
+    assert!(rendered.contains("cluster_authoritative_workspace: /tmp/primary"), "{rendered}");
+    assert!(rendered.contains("cluster_blocking_workspace: /tmp/secondary"), "{rendered}");
+}
+
+fn sample_cluster_delivery_story() -> ClusterDeliveryStory {
+    ClusterDeliveryStory {
+        cluster_id: "cluster-1".to_string(),
+        primary_workspace_ref: "/tmp/primary".to_string(),
+        authoritative_workspace_ref: "/tmp/primary".to_string(),
+        route_owner: ClusterRouteOwner::Native,
+        member_workspace_refs: vec!["/tmp/primary".to_string(), "/tmp/secondary".to_string()],
+        participating_workspaces: vec![
+            WorkspaceParticipationRecord {
+                workspace_ref: "/tmp/primary".to_string(),
+                participation_kind: WorkspaceParticipationKind::Entry,
+                order: 0,
+                latest_trace_ref: Some("/tmp/primary/.synod/traces/task.json".to_string()),
+                latest_status: Some("running".to_string()),
+                headline: "primary workspace started the clustered run".to_string(),
+                terminal_reason: None,
+            },
+            WorkspaceParticipationRecord {
+                workspace_ref: "/tmp/secondary".to_string(),
+                participation_kind: WorkspaceParticipationKind::Blocked,
+                order: 1,
+                latest_trace_ref: Some("/tmp/secondary/.synod/traces/task.json".to_string()),
+                latest_status: Some("failed".to_string()),
+                headline: "secondary workspace could not continue the bounded handoff".to_string(),
+                terminal_reason: Some(
+                    "secondary workspace could not continue the bounded handoff".to_string(),
+                ),
+            },
+        ],
+        started_from_command: "run".to_string(),
+        execution_condition: ClusteredExecutionCondition {
+            kind: ClusteredExecutionKind::Failed,
+            active_workspace_ref: Some("/tmp/secondary".to_string()),
+            blocking_workspace_ref: Some("/tmp/secondary".to_string()),
+            summary: "secondary workspace could not continue the bounded handoff".to_string(),
+            recovery_allowed: false,
+        },
+        updated_at: 42,
     }
 }

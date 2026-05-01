@@ -79,6 +79,12 @@ mod cluster_status_flow;
 #[path = "integration/cluster_config_flow.rs"]
 mod cluster_config_flow;
 
+#[path = "integration/cluster_delivery_flow.rs"]
+mod cluster_delivery_flow;
+
+#[path = "integration/cluster_delivery_blocked.rs"]
+mod cluster_delivery_blocked;
+
 #[path = "integration/session_native_flow.rs"]
 mod session_native_flow;
 

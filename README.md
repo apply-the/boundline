@@ -13,9 +13,13 @@ through the decision loop, and inspect the resulting session state and traces.
 `synod init` remains optional bootstrap, declarative execution profiles remain
 available as an explicit compatibility path, and `synod workflow` adds an
 optional thin named-workflow layer over the same session-owned runtime. In
-`0.24.0`, the same follow-up surfaces also report explicit `route_owner` and
-material `route_config_projection` cues so aligned summaries do not hide which
-route or workspace defaults are controlling the next step.**
+`0.25.0`, the same session-native surfaces can also run against
+`--cluster <primary-workspace>` so one authoritative session can plan and
+deliver a bounded change across registered member repositories while `run`,
+`status`, `next`, and `inspect` keep `route_owner`, material
+`route_config_projection`, `cluster_route_owner`,
+`cluster_authoritative_workspace`, `cluster_execution_condition`,
+participating workspaces, and any blocking member explicit.**
 
 ## What Synod Does
 
@@ -26,7 +30,7 @@ The main surface is the `synod` CLI:
 - `config` shows, sets, and unsets global or workspace routing defaults.
 - `start`, `capture`, `flow`, `plan`, and `step` drive the session workflow.
 - `run` executes a bounded delivery task end to end, preferring native session planning when a `GoalPlan` exists.
-- `status`, `next`, and `inspect` explain the current session, latest compatibility trace, authoritative follow-up state, explicit `route_owner`, and material `route_config_projection` when it affects interpretation.
+- `status`, `next`, and `inspect` explain the current session, latest compatibility trace, authoritative follow-up state, explicit `route_owner`, material `route_config_projection`, and cluster authority when a registered cluster owns the run.
 - `workflow list|run|status|resume|inspect` lets a named workflow reuse the same route, session, and trace surfaces without introducing a second runtime.
 
 Use it when you want delivery work to stay bounded and inspectable:
@@ -203,6 +207,17 @@ synod config set --cluster <primary-workspace> --scope cluster --slot planning -
 synod config show --workspace <secondary-workspace> --cluster <primary-workspace> --scope effective
 ```
 
+Session-native clustered delivery keeps the primary workspace authoritative:
+
+```bash
+synod start --cluster <primary-workspace>
+synod capture --cluster <primary-workspace> --goal "Fix the failing add test"
+synod plan --cluster <primary-workspace>
+synod run --cluster <primary-workspace>
+synod status --cluster <primary-workspace>
+synod inspect --cluster <primary-workspace>
+```
+
 ### 2. Run the session workflow
 
 ```bash
@@ -222,6 +237,18 @@ synod status --workspace <workspace>
 synod inspect --workspace <workspace>
 ```
 
+When the change spans a registered cluster, enter the same session-native flow
+through the primary workspace instead of switching ownership to a member:
+
+```bash
+synod start --cluster <primary-workspace>
+synod capture --cluster <primary-workspace> --goal "Fix the failing add test"
+synod plan --cluster <primary-workspace>
+synod run --cluster <primary-workspace>
+synod status --cluster <primary-workspace>
+synod inspect --cluster <primary-workspace>
+```
+
 What those commands do, in short:
 
 - `doctor` checks that the workspace and execution manifest are usable.
@@ -230,8 +257,8 @@ What those commands do, in short:
 - `flow` optionally selects `bug-fix`, `change`, or `delivery` ahead of planning.
 - `plan` derives the next bounded `GoalPlan` from captured input plus workspace state, and persists confirmed, proposed, or absent flow state.
 - `run` executes through the native session route whenever a `GoalPlan` exists; governed `bug-fix:investigate` and later verify-stage Canon `security-assessment` can stay on that same route, while declarative `.synod/execution.json` execution remains the explicit compatibility path.
-- `status` reports the current session snapshot with explicit `routing`, `execution_condition`, and next-step guidance.
-- `inspect` summarizes the latest trace and evidence with the same route and execution-condition story plus trace-specific detail.
+- `status` reports the current session snapshot with explicit `routing`, `execution_condition`, next-step guidance, and clustered authority or participation cues when the run spans a registered cluster.
+- `inspect` summarizes the latest trace and evidence with the same route and execution-condition story plus trace-specific cluster detail.
 
 Optional named workflow layer:
 
@@ -261,7 +288,7 @@ This path uses the workspace execution profile and remains useful for compatibil
 
 If the execution profile includes an `adaptive` block, failed validation can
 re-rank the next bounded candidate from the latest validation evidence without
-leaving the manifest-declared `read_targets` set. In `0.24.0`, that bounded
+leaving the manifest-declared `read_targets` set. In `0.25.0`, that bounded
 repair path can also choose broader local families such as
 `ordering_boundary_flip`, `result_status_flip`, and `numeric_literal_flip`,
 surfaces the selected `candidate_family` plus credibility and rejection
@@ -287,6 +314,7 @@ Depending on the manifest, that output can also include:
 
 - route explanation, `execution_condition`, and CLI-reported next-command guidance
 - `continuity_authority`, compatibility follow-up mode, and inspect-only workspace guidance after explicit compatibility runs that do not leave a resumable session
+- `cluster_route_owner`, `cluster_authoritative_workspace`, `cluster_execution_condition`, participating workspaces, and any blocking workspace when a registered cluster owns the run
 - changed files and validation status
 - adaptive workspace-slice selection, `candidate_family`, selection reason,
   rejected candidates, explicit exhaustion reason, and attempt lineage
@@ -368,7 +396,7 @@ The current repository implements the delivery orchestrator core as a Rust libra
 - `synod::StaticPlanner`: provides deterministic initial plans and queued replans for tests.
 - `synod::AgentRegistry` and `synod::ToolRegistry`: register named execution endpoints.
 - `synod::FileTraceStore`: persists execution traces under `<workspace>/.synod/traces/`.
-- `synod::FileSessionStore` and `synod::SessionRuntime`: persist and resume active session state under `<workspace>/.synod/session.json`.
+- `synod::FileSessionStore` and `synod::SessionRuntime`: persist and resume active session state under `<workspace>/.synod/session.json`, with clustered delivery keeping the authoritative session in the primary workspace while member workspaces persist their own terminal traces.
 - `synod::FileConfigStore` and configuration-domain types: persist global and workspace routing defaults with explicit source precedence.
 - `synod::ReviewProfile` and related review-domain types: configure bounded councils, reviewer findings, voting, and optional adjudication from `.synod/execution.json`.
 - `synod::TaskRunRequest` and `synod::TaskRunResponse`: define the run contract used by tests and future delivery flows.
@@ -377,7 +405,7 @@ The current repository implements the delivery orchestrator core as a Rust libra
 The current implementation covers:
 
 - explicit bounded task lifecycle
-- persisted workspace-scoped active sessions
+- persisted workspace-scoped active sessions, including primary-owned clustered sessions with member-local traces
 - shared task context across steps
 - bounded retries and bounded replanning
 - deterministic terminal states
@@ -385,6 +413,7 @@ The current implementation covers:
 - bounded review councils with manifest-driven reviewers, vote resolution, and optional adjudication
 - bounded adaptive execution with workspace-slice selection, validation-guided slice reselection, deterministic local candidate synthesis, and signature-based replanning
 - review evidence projected into `run`, `status`, `next`, and `inspect`
+- clustered delivery authority, participation, blocking, and inspectable member-trace handoff under one primary session owner
 
 ## Developer CLI
 
@@ -430,12 +459,12 @@ and
 [`specs/007-multi-agent-review/quickstart.md`](specs/007-multi-agent-review/quickstart.md).
 
 For the adaptive execution manifest shape and bounded compatibility behavior in
-`0.24.0`, see [`docs/adaptive-execution.md`](docs/adaptive-execution.md).
+the current release, see [`docs/adaptive-execution.md`](docs/adaptive-execution.md).
 
 For the concrete review configuration and voting rules still available in
 `0.17.0`, see [`docs/review-voting.md`](docs/review-voting.md).
 
-In `0.24.0`, governed stages can also project `latest_governance_runtime`,
+In `0.25.0`, governed stages can also project `latest_governance_runtime`,
 `latest_governance_mode`, `latest_governance_run_ref`, packet provenance,
 autopilot candidates, approval waits, packet rejection outcomes, and bounded
 `bug-fix:investigate` to `verify` lineage through `run`, `status`, `next`,
@@ -443,7 +472,10 @@ autopilot candidates, approval waits, packet rejection outcomes, and bounded
 can now also surface `continuity_authority`, `compatibility_follow_up`,
 broader adaptive candidate credibility, and inspect-only guidance through
 those same read-side commands without implying that the route silently became
-session-native.
+session-native. Clustered session-native delivery also keeps the primary
+workspace authoritative while surfacing `cluster_route_owner`,
+`cluster_authoritative_workspace`, `cluster_execution_condition`, and any
+blocking member explicitly on the same read-side surfaces.
 
 ## Assistant Command Packs
 

@@ -56,6 +56,7 @@ fn build_view(record: &ActiveSessionRecord) -> SessionStatusView {
         session_id: record.session_id.clone(),
         workspace_ref: record.workspace_ref.clone(),
         goal: record.goal.clone(),
+        cluster_delivery_story: None,
         authored_input_summary: None,
         authored_input_sources: None,
         authored_input_deduplicated_sources: None,

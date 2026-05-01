@@ -6,6 +6,7 @@ use serde_json::Value;
 use thiserror::Error;
 
 use crate::domain::brief::AuthoredBriefBundle;
+use crate::domain::cluster::ClusterDeliveryStory;
 use crate::domain::decision::{Decision, DecisionStatus};
 use crate::domain::flow::SessionFlowState;
 use crate::domain::flow_policy::FlowPolicy;
@@ -96,15 +97,6 @@ impl ActiveSessionRecord {
             });
         }
 
-        if let Some(trace_ref) = &self.latest_trace_ref
-            && !trace_within_workspace(&self.workspace_ref, trace_ref)
-        {
-            return Err(SessionValidationError::TraceOutsideWorkspace {
-                workspace_ref: self.workspace_ref.clone(),
-                trace_ref: trace_ref.clone(),
-            });
-        }
-
         if status_requires_goal(self.latest_status)
             && self.goal.as_deref().map(str::trim).unwrap_or_default().is_empty()
         {
@@ -138,7 +130,7 @@ impl ActiveSessionRecord {
             task.validate_persisted_state()
                 .map_err(|error| SessionValidationError::InvalidTask(error.to_string()))?;
 
-            if !task.context.belongs_to_workspace(&self.workspace_ref) {
+            if !task_belongs_to_session_workspace(self, task)? {
                 return Err(SessionValidationError::TaskWorkspaceMismatch {
                     expected: self.workspace_ref.clone(),
                     actual: task.context.workspace_ref.clone(),
@@ -164,6 +156,15 @@ impl ActiveSessionRecord {
             }
         }
 
+        if let Some(trace_ref) = &self.latest_trace_ref
+            && !trace_within_session_scope(self, trace_ref)
+        {
+            return Err(SessionValidationError::TraceOutsideWorkspace {
+                workspace_ref: self.workspace_ref.clone(),
+                trace_ref: trace_ref.clone(),
+            });
+        }
+
         Ok(())
     }
 
@@ -184,6 +185,33 @@ impl ActiveSessionRecord {
     pub fn active_workflow_next_action(&self) -> Option<String> {
         self.active_workflow_progress().and_then(WorkflowProgressState::next_action_text)
     }
+}
+
+fn task_belongs_to_session_workspace(
+    record: &ActiveSessionRecord,
+    task: &Task,
+) -> Result<bool, SessionValidationError> {
+    if task.context.belongs_to_workspace(&record.workspace_ref) {
+        return Ok(true);
+    }
+
+    let Some(projection) = task
+        .context
+        .cluster_session_projection()
+        .map_err(|error| SessionValidationError::InvalidTask(error.to_string()))?
+    else {
+        return Ok(false);
+    };
+
+    projection
+        .validate()
+        .map_err(|error| SessionValidationError::InvalidTask(error.to_string()))?;
+
+    Ok(projection.primary_workspace_ref == record.workspace_ref
+        && projection
+            .member_workspace_refs
+            .iter()
+            .any(|workspace_ref| workspace_ref == &task.context.workspace_ref))
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -271,6 +299,8 @@ pub struct SessionStatusView {
     pub session_id: String,
     pub workspace_ref: String,
     pub goal: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cluster_delivery_story: Option<ClusterDeliveryStory>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authored_input_summary: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1115,6 +1145,21 @@ fn trace_within_workspace(workspace_ref: &str, trace_ref: &str) -> bool {
     }
 }
 
+fn trace_within_session_scope(record: &ActiveSessionRecord, trace_ref: &str) -> bool {
+    if trace_within_workspace(&record.workspace_ref, trace_ref) {
+        return true;
+    }
+
+    record.active_task.as_ref().is_some_and(|task| {
+        task.context.cluster_session_projection().ok().flatten().is_some_and(|projection| {
+            projection
+                .member_workspace_refs
+                .iter()
+                .any(|workspace_ref| trace_within_workspace(workspace_ref, trace_ref))
+        })
+    })
+}
+
 pub(crate) fn task_state_string(task: &Task, key: &str) -> Option<String> {
     task.context.state.get(key).and_then(|value| value.as_str().map(str::to_string))
 }
@@ -1375,6 +1420,7 @@ mod tests {
             session_id: record.session_id.clone(),
             workspace_ref: record.workspace_ref.clone(),
             goal: record.goal.clone(),
+            cluster_delivery_story: None,
             authored_input_summary: None,
             authored_input_sources: None,
             authored_input_deduplicated_sources: None,

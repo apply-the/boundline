@@ -99,6 +99,7 @@ fn build_status_view(record: &ActiveSessionRecord) -> SessionStatusView {
         session_id: record.session_id.clone(),
         workspace_ref: record.workspace_ref.clone(),
         goal: record.goal.clone(),
+        cluster_delivery_story: None,
         authored_input_summary: None,
         authored_input_sources: None,
         authored_input_deduplicated_sources: None,
@@ -291,9 +292,10 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
     let trace = PathBuf::from("/tmp/synod-cli/trace.json");
     let commands = vec![
         DeveloperCommand::Doctor { workspace: workspace.clone() },
-        DeveloperCommand::Start { workspace: Some(workspace.clone()) },
+        DeveloperCommand::Start { workspace: Some(workspace.clone()), cluster: None },
         DeveloperCommand::Capture {
             workspace: Some(workspace.clone()),
+            cluster: None,
             goal: Some("capture goal".to_string()),
             brief: Vec::new(),
             governance: None,
@@ -301,11 +303,21 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
             zone: None,
             owner: None,
         },
-        DeveloperCommand::Flow { name: "bug-fix".to_string(), workspace: Some(workspace.clone()) },
-        DeveloperCommand::Plan { workspace: Some(workspace.clone()), flow: None, no_flow: false },
-        DeveloperCommand::Step { workspace: Some(workspace.clone()) },
+        DeveloperCommand::Flow {
+            name: "bug-fix".to_string(),
+            workspace: Some(workspace.clone()),
+            cluster: None,
+        },
+        DeveloperCommand::Plan {
+            workspace: Some(workspace.clone()),
+            cluster: None,
+            flow: None,
+            no_flow: false,
+        },
+        DeveloperCommand::Step { workspace: Some(workspace.clone()), cluster: None },
         DeveloperCommand::Run {
             workspace: Some(workspace.clone()),
+            cluster: None,
             goal: Some("ship it".to_string()),
             brief: Vec::new(),
             governance: None,
@@ -316,9 +328,10 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
         DeveloperCommand::Inspect {
             trace: Some(trace.clone()),
             workspace: Some(workspace.clone()),
+            cluster: None,
         },
-        DeveloperCommand::Status { workspace: Some(workspace.clone()) },
-        DeveloperCommand::Next { workspace: Some(workspace.clone()) },
+        DeveloperCommand::Status { workspace: Some(workspace.clone()), cluster: None },
+        DeveloperCommand::Next { workspace: Some(workspace.clone()), cluster: None },
     ];
 
     for command in &commands {
@@ -347,6 +360,7 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
 
     let invalid_capture = DeveloperCommandSession::from_command(&DeveloperCommand::Capture {
         workspace: Some(workspace.clone()),
+        cluster: None,
         goal: Some("  ".to_string()),
         brief: Vec::new(),
         governance: None,
@@ -362,11 +376,13 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
     let invalid_flow = DeveloperCommandSession::from_command(&DeveloperCommand::Flow {
         name: " ".to_string(),
         workspace: Some(workspace.clone()),
+        cluster: None,
     });
     assert_eq!(invalid_flow.validate().unwrap_err(), CliValidationError::MissingFlowName);
 
     let invalid_run_workspace = DeveloperCommandSession::from_command(&DeveloperCommand::Run {
         workspace: None,
+        cluster: None,
         goal: Some("ship".to_string()),
         brief: Vec::new(),
         governance: None,
@@ -381,6 +397,7 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
 
     let invalid_run_goal = DeveloperCommandSession::from_command(&DeveloperCommand::Run {
         workspace: Some(workspace.clone()),
+        cluster: None,
         goal: Some(" ".to_string()),
         brief: Vec::new(),
         governance: None,
@@ -396,11 +413,13 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
     let invalid_inspect = DeveloperCommandSession::from_command(&DeveloperCommand::Inspect {
         trace: None,
         workspace: None,
+        cluster: None,
     });
     assert_eq!(invalid_inspect.validate().unwrap_err(), CliValidationError::MissingTraceSelection);
 
     let mut completed = DeveloperCommandSession::from_command(&DeveloperCommand::Status {
         workspace: Some(workspace),
+        cluster: None,
     });
     let exit_code = completed
         .complete(CommandExitStatus::NonSuccess, Some(trace.to_string_lossy().into_owned()));

@@ -19,9 +19,26 @@ recorded workspace version.
 
 Delivered specs:
 
-- None recorded after `0.24.0`
+- None recorded after `0.25.0`
 
 Highlights:
+
+## [0.25.0] - 2026-05-01
+
+Delivered specs:
+
+- `025` - Multi-Workspace Delivery
+
+Highlights:
+
+- Extend the session-native commands with `--cluster <primary-workspace>` so
+  one authoritative session can plan and deliver a bounded change across
+  registered member repositories without splitting orchestration ownership.
+- Persist clustered delivery participation plus member-local traces while
+  keeping the active clustered session authoritative in the primary workspace.
+- Surface clustered authority, execution condition, participating workspaces,
+  and blocking-member guidance through `run`, `status`, `next`, `inspect`,
+  assistant guidance, roadmap, contributor docs, and release notes.
 
 ## [0.24.0] - 2026-05-01
 

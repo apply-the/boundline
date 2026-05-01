@@ -6,12 +6,13 @@ Canon is downstream from Synod in this roadmap: Synod thinks, decides, orchestra
 
 Evolve Synod into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.24.0
+## Current Status: v0.25.0
 
 Synod now has its core session-native orchestration baseline, bounded workflow
 follow-through, a deeper governed-stage slice, stronger bounded adaptive
 repair depth, explicit continuity between session-native and compatibility
-follow-up, and stronger route-summary plus config projection in place:
+follow-up, stronger route-summary plus config projection, and bounded
+multi-workspace clustered delivery in place:
 
 - session-native orchestration remains the primary operator path
 - `workflow list`, `workflow run`, `workflow status`, `workflow resume`, and `workflow inspect` now project named workflow state onto the same session, route, trace, and `execution_condition` surfaces
@@ -23,46 +24,53 @@ follow-up, and stronger route-summary plus config projection in place:
 - `status` and `next` now surface `continuity_authority`, compatibility follow-up mode, and inspect-only guidance when the latest authoritative follow-up state comes from an explicit compatibility trace instead of an active session
 - `status`, `next`, and `inspect` now reuse one route plus `execution_condition` vocabulary across native and compatibility follow-up while keeping route ownership explicit
 - `run`, `status`, `next`, `inspect`, and compatibility follow-up now also surface explicit `route_owner` plus material `route_config_projection` cues when workflow metadata, governance intent, or workspace-local routing defaults explain the current follow-up story
+- session-native commands now accept `--cluster <primary-workspace>` so one authoritative primary-owned session can plan and deliver a bounded change across registered member repositories
+- clustered `run`, `status`, `next`, and `inspect` now surface authoritative workspace, clustered execution condition, participating workspaces, and any blocking member without implying distributed orchestration ownership
 
-## Next Priority: Expand Multi-Workspace Delivery
+## Next Priority: Goal Negotiation And Constraint Modeling
 
-Now that `0.24.0` makes one workspace feel more like one bounded system with
-explicit `route_owner` and material config projection, the next slice should
-extend that same clarity toward bounded multi-workspace delivery without
-splitting orchestration authority.
+Now that `0.25.0` makes bounded multi-workspace delivery feel like one operator
+story with one authoritative owner, the next slice should make acceptance
+boundaries and constraint tradeoffs more explicit before execution begins.
 
-Suggested release target: `0.25.x`
+Suggested release target: `0.26.x`
 
 The next spec direction should explicitly deliver three things:
 
-- bounded cross-repository execution planning and mutation that still reads like one operator story
-- explicit preservation of one authoritative orchestration owner even when work spans multiple repositories
-- inspectable cluster-aware summaries and follow-up guidance that do not hide which workspace or route is authoritative
+- richer goal negotiation before planning locks a bounded change
+- explicit constraint modeling for scope, risk, and acceptance boundaries
+- operator-visible tradeoffs instead of hiding those decisions inside planning heuristics
 
-### What 0.25.x should concretely deliver
+### What 0.26.x should concretely deliver
 
-- extend cluster support toward bounded cross-repository planning and mutation
-- preserve one authoritative route and follow-up story even when multiple repositories participate
-- keep workspace-local and cluster-level state inspectable instead of drifting into distributed autonomous execution
+- add goal negotiation and constraint capture before execution begins
+- make acceptance boundaries and tradeoffs explicit in the session-owned story
+- keep negotiation outputs inspectable instead of burying them in planner internals
 
-### What 0.25.x should not do
+### What 0.26.x should not do
 
 - no background daemons, distributed autonomous workers, or hidden fan-out control loops
 - no provider-agnostic control plane or generic workflow engine
 - no Canon-owned orchestration or config-owned execution control flow
-- no summary surface that hides which workspace or route remains authoritative
+- no negotiation layer that hides which constraints are binding or why a tradeoff was chosen
 
 ### Priority rationale
 
-- continuity and follow-up ownership are now explicit enough that stronger adaptive behavior will not leave operators guessing which surface is authoritative
-- adaptive repair is already useful but still intentionally narrow; expanding it is a better next return than opening another top-level product surface
-- bounded orchestration ownership stays inside Synod while reuse of traces, validation evidence, and continuity-aware summaries gets deeper
+- clustered delivery authority is now explicit enough that more advanced planning can stay inspectable instead of becoming hidden negotiation logic
+- goal and constraint capture become more valuable once session, continuity, and cluster semantics are already stable
+- bounded orchestration ownership stays inside Synod while the reasoning that shapes a plan becomes easier for operators to challenge before execution begins
 
 ### Why this comes before the other roadmap items
 
-- `0.24.0` made the operator-facing surfaces feel more like one bounded system, so the next leverage point is extending that clarity across multiple workspaces
-- explicit `route_owner` and material config projection now make cross-workspace follow-up easier to reason about without hiding authority
-- multi-workspace expansion is more tractable now that one-workspace route summaries are less fragmented
+- `0.25.0` made multi-workspace execution feel like one bounded system, so the next leverage point is improving what the system decides before it mutates code
+- explicit route and cluster authority now make constraint negotiation easier to project without hiding ownership
+- stronger upfront constraint modeling is more tractable now that read-side follow-up surfaces are already aligned across workspace, compatibility, workflow, governance, and cluster states
+
+### Delivered in 0.25.0
+
+- extend session-native commands with `--cluster <primary-workspace>` so one authoritative session can plan and deliver a bounded change across registered member repositories
+- persist clustered delivery participation and member-local traces while keeping the active session authoritative in the primary workspace
+- project clustered authority, execution condition, participating workspaces, and blocking member cues through `run`, `status`, `next`, `inspect`, assistant guidance, roadmap, contributor docs, and changelog
 
 ### Delivered in 0.24.0
 
@@ -127,18 +135,10 @@ execution_condition = true
 
 ### Secondary follow-up directions
 
-The remaining roadmap after `0.24.0` is best read as an ordered sequence rather
+The remaining roadmap after `0.25.0` is best read as an ordered sequence rather
 than an unordered backlog.
 
-### Proposed sequence after 0.24.0
-
-#### 0.25.x - Expand Multi-Workspace Delivery
-
-- extend multi-workspace cluster support toward full cross-repository execution planning and mutation
-- preserve one authoritative orchestration story even when work spans more than one repository
-- keep cluster behavior bounded and inspectable instead of drifting into distributed autonomous execution
-
-This should stay behind continuity and summary unification work because cross-repository execution will multiply any ambiguity already present in single-workspace routing.
+### Proposed sequence after 0.25.0
 
 #### 0.26.x - Goal Negotiation And Constraint Modeling
 

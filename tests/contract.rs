@@ -82,6 +82,9 @@ mod cluster_cli_contract;
 #[path = "contract/cluster_config_contract.rs"]
 mod cluster_config_contract;
 
+#[path = "contract/cluster_delivery_contract.rs"]
+mod cluster_delivery_contract;
+
 #[path = "contract/decision_loop_contract.rs"]
 mod decision_loop_contract;
 

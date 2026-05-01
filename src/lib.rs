@@ -20,9 +20,11 @@ pub use domain::brief::{
     normalize_inputs as normalize_brief_inputs, normalize_inputs_with_governance,
 };
 pub use domain::cluster::{
-    ClusterConfigFile, ClusterError, ClusterInspectReport, ClusterMemberRegistration,
-    ClusterMemberRole, ClusterMemberState, ClusterMemberStatusView, ClusterSessionProjection,
-    WorkspaceCluster,
+    ClusterAuthorityKind, ClusterConfigFile, ClusterDeliveryStory, ClusterError,
+    ClusterFollowUpAuthority, ClusterInspectReport, ClusterMemberRegistration, ClusterMemberRole,
+    ClusterMemberState, ClusterMemberStatusView, ClusterRouteOwner, ClusterSessionProjection,
+    ClusteredExecutionCondition, ClusteredExecutionKind, WorkspaceCluster,
+    WorkspaceParticipationKind, WorkspaceParticipationRecord,
 };
 pub use domain::configuration::{
     ConfigFile, ConfigShowScope, ConfigWriteScope, EffectiveRouting, InitTemplate, ModelRoute,

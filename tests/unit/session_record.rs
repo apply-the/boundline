@@ -1,6 +1,7 @@
 use serde_json::json;
 use std::fs;
 use synod::domain::brief::normalize_inputs;
+use synod::domain::cluster::ClusterSessionProjection;
 use synod::domain::flow::built_in_flow;
 use synod::domain::goal_plan::{GoalPlan, PlannedTask};
 use synod::domain::limits::RunLimits;
@@ -86,6 +87,7 @@ fn session_record_round_trips_and_status_values_serialize() {
         session_id: record.session_id.clone(),
         workspace_ref: record.workspace_ref.clone(),
         goal: record.goal.clone(),
+        cluster_delivery_story: None,
         authored_input_summary: None,
         authored_input_sources: None,
         authored_input_deduplicated_sources: None,
@@ -174,6 +176,42 @@ fn session_record_validation_rejects_workspace_mismatches_and_external_traces() 
             actual: "/tmp/other-workspace".to_string(),
         }
     );
+}
+
+#[test]
+fn session_record_validation_allows_cluster_member_tasks_when_projection_is_present() {
+    let mut task = build_task("/tmp/cluster-member");
+    task.context
+        .set_cluster_session_projection(&ClusterSessionProjection {
+            cluster_id: "cluster-1".to_string(),
+            primary_workspace_ref: "/tmp/synod-session-record".to_string(),
+            member_workspace_refs: vec![
+                "/tmp/synod-session-record".to_string(),
+                "/tmp/cluster-member".to_string(),
+            ],
+            started_from_command: "run".to_string(),
+            updated_at: 20,
+        })
+        .unwrap();
+    let record = ActiveSessionRecord {
+        session_id: "session-cluster".to_string(),
+        workspace_ref: "/tmp/synod-session-record".to_string(),
+        goal: Some("Deliver a session-backed CLI".to_string()),
+        authored_brief: None,
+        active_flow: None,
+        active_task: Some(task),
+        goal_plan: None,
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Planned,
+        latest_terminal_reason: None,
+        latest_trace_ref: Some("/tmp/synod-session-record/.synod/traces/task-1.json".to_string()),
+        created_at: 10,
+        updated_at: 20,
+    };
+
+    record.validate().unwrap();
 }
 
 #[test]
@@ -300,6 +338,7 @@ fn goal_captured_status_view_can_project_clarification_fields_from_authored_brie
         session_id: record.session_id.clone(),
         workspace_ref: record.workspace_ref.clone(),
         goal: record.goal.clone(),
+        cluster_delivery_story: None,
         authored_input_summary: Some(bundle.summary_text()),
         authored_input_sources: Some(bundle.ordered_source_labels()),
         authored_input_deduplicated_sources: None,

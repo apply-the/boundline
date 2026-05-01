@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use crate::adapters::cluster_store::{ClusterStoreError, FileClusterStore};
 use crate::adapters::trace_store::{FileTraceStore, TraceStore};
 use crate::domain::brief::{
     AuthoredBriefBundle, BriefIngestionError, normalize_governance_intent,
@@ -13,6 +14,7 @@ use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStor
 use crate::cli::CommandExitStatus;
 use crate::cli::inspect::summarize_trace;
 use crate::cli::output;
+use crate::domain::cluster::ClusterSessionProjection;
 use crate::domain::governance::GovernanceRuntimeKind;
 use crate::domain::session::{
     ActiveSessionRecord, CompatibilityFollowUpMode, CompatibilityFollowUpView, ContinuityAuthority,
@@ -36,10 +38,24 @@ pub struct SessionCommandReport {
     pub terminal_output: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ResolvedSessionTarget {
+    owner_workspace: PathBuf,
+    cluster_projection: Option<ClusterSessionProjection>,
+}
+
 pub fn execute_start(
     workspace: Option<&Path>,
 ) -> Result<SessionCommandReport, SessionCommandError> {
-    let workspace = resolve_workspace(workspace)?;
+    execute_start_with_target(workspace, None)
+}
+
+pub fn execute_start_with_target(
+    workspace: Option<&Path>,
+    cluster: Option<&Path>,
+) -> Result<SessionCommandReport, SessionCommandError> {
+    let target = resolve_session_target(workspace, cluster, "start")?;
+    let workspace = target.owner_workspace;
     let now = current_timestamp_millis();
     let record = ActiveSessionRecord {
         session_id: Uuid::new_v4().to_string(),
@@ -66,7 +82,11 @@ pub fn execute_start(
         terminal_output: output::render_session_status(&build_status_view(
             &record,
             Some("synod capture --goal <goal>".to_string()),
-            "active session initialized for the current workspace",
+            if target.cluster_projection.is_some() {
+                "active clustered session initialized for the current primary workspace"
+            } else {
+                "active session initialized for the current workspace"
+            },
         )),
     })
 }
@@ -80,7 +100,22 @@ pub fn execute_capture(
     zone: Option<&str>,
     owner: Option<&str>,
 ) -> Result<SessionCommandReport, SessionCommandError> {
-    let workspace = resolve_workspace(workspace)?;
+    execute_capture_with_target(workspace, None, goal, briefs, governance, risk, zone, owner)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn execute_capture_with_target(
+    workspace: Option<&Path>,
+    cluster: Option<&Path>,
+    goal: Option<&str>,
+    briefs: &[PathBuf],
+    governance: Option<GovernanceRuntimeKind>,
+    risk: Option<&str>,
+    zone: Option<&str>,
+    owner: Option<&str>,
+) -> Result<SessionCommandReport, SessionCommandError> {
+    let target = resolve_session_target(workspace, cluster, "capture")?;
+    let workspace = target.owner_workspace;
     let runtime = SessionRuntime::for_workspace(&workspace);
     let mut record = load_active_session(&workspace)?;
 
@@ -111,7 +146,11 @@ pub fn execute_capture(
         terminal_output: output::render_session_status(&build_status_view(
             &record,
             Some("synod plan".to_string()),
-            summary,
+            if target.cluster_projection.is_some() {
+                format!("{summary} for the current clustered delivery session")
+            } else {
+                summary
+            },
         )),
     })
 }
@@ -120,7 +159,16 @@ pub fn execute_flow(
     workspace: Option<&Path>,
     name: &str,
 ) -> Result<SessionCommandReport, SessionCommandError> {
-    let workspace = resolve_workspace(workspace)?;
+    execute_flow_with_target(workspace, None, name)
+}
+
+pub fn execute_flow_with_target(
+    workspace: Option<&Path>,
+    cluster: Option<&Path>,
+    name: &str,
+) -> Result<SessionCommandReport, SessionCommandError> {
+    let target = resolve_session_target(workspace, cluster, "flow")?;
+    let workspace = target.owner_workspace;
     let runtime = SessionRuntime::for_workspace(&workspace);
     let mut record = load_active_session(&workspace)?;
 
@@ -132,7 +180,11 @@ pub fn execute_flow(
         terminal_output: output::render_session_status(&build_status_view(
             &record,
             suggested_next_command(&record),
-            format!("selected the `{}` delivery flow for the active workspace session", name),
+            if target.cluster_projection.is_some() {
+                format!("selected the `{}` delivery flow for the active clustered session", name)
+            } else {
+                format!("selected the `{}` delivery flow for the active workspace session", name)
+            },
         )),
     })
 }
@@ -142,7 +194,17 @@ pub fn execute_plan(
     requested_flow: Option<&str>,
     no_flow: bool,
 ) -> Result<SessionCommandReport, SessionCommandError> {
-    let workspace = resolve_workspace(workspace)?;
+    execute_plan_with_target(workspace, None, requested_flow, no_flow)
+}
+
+pub fn execute_plan_with_target(
+    workspace: Option<&Path>,
+    cluster: Option<&Path>,
+    requested_flow: Option<&str>,
+    no_flow: bool,
+) -> Result<SessionCommandReport, SessionCommandError> {
+    let target = resolve_session_target(workspace, cluster, "plan")?;
+    let workspace = target.owner_workspace;
     let runtime = SessionRuntime::for_workspace(&workspace);
     let mut record = load_active_session(&workspace)?;
 
@@ -158,13 +220,24 @@ pub fn execute_plan(
         terminal_output: output::render_session_status(&build_status_view(
             &record,
             suggested_next_command(&record),
-            planning_summary(&record),
+            if target.cluster_projection.is_some() {
+                format!("{} for the clustered delivery story", planning_summary(&record))
+            } else {
+                planning_summary(&record)
+            },
         )),
     })
 }
 
 pub fn execute_step(workspace: Option<&Path>) -> Result<SessionCommandReport, SessionCommandError> {
-    let workspace = resolve_workspace(workspace)?;
+    execute_step_with_target(workspace, None)
+}
+
+pub fn execute_step_with_target(
+    workspace: Option<&Path>,
+    cluster: Option<&Path>,
+) -> Result<SessionCommandReport, SessionCommandError> {
+    let workspace = resolve_session_target(workspace, cluster, "step")?.owner_workspace;
     let runtime = SessionRuntime::for_workspace(&workspace);
     let mut record = load_active_session(&workspace)?;
 
@@ -202,12 +275,24 @@ pub fn execute_step(workspace: Option<&Path>) -> Result<SessionCommandReport, Se
 }
 
 pub fn execute_run(workspace: Option<&Path>) -> Result<SessionCommandReport, SessionCommandError> {
-    let workspace = resolve_workspace(workspace)?;
+    execute_run_with_target(workspace, None)
+}
+
+pub fn execute_run_with_target(
+    workspace: Option<&Path>,
+    cluster: Option<&Path>,
+) -> Result<SessionCommandReport, SessionCommandError> {
+    let target = resolve_session_target(workspace, cluster, "run")?;
+    let workspace = target.owner_workspace;
     let runtime = SessionRuntime::for_workspace(&workspace);
     let mut record = load_active_session(&workspace)?;
 
     if record.goal.as_deref().map(str::trim).unwrap_or_default().is_empty() {
         return Err(SessionCommandError::MissingCapturedGoal);
+    }
+
+    if let Some(projection) = target.cluster_projection.as_ref() {
+        runtime.prepare_cluster_run(&mut record, projection).map_err(map_runtime_error)?;
     }
 
     let uses_native_goal_plan =
@@ -251,7 +336,14 @@ pub fn execute_run(workspace: Option<&Path>) -> Result<SessionCommandReport, Ses
 pub fn execute_status(
     workspace: Option<&Path>,
 ) -> Result<SessionCommandReport, SessionCommandError> {
-    let workspace = resolve_workspace(workspace)?;
+    execute_status_with_target(workspace, None)
+}
+
+pub fn execute_status_with_target(
+    workspace: Option<&Path>,
+    cluster: Option<&Path>,
+) -> Result<SessionCommandReport, SessionCommandError> {
+    let workspace = resolve_session_target(workspace, cluster, "status")?.owner_workspace;
     let runtime = SessionRuntime::for_workspace(&workspace);
     match load_active_session(&workspace) {
         Ok(mut record) => {
@@ -303,7 +395,14 @@ pub fn execute_status(
 }
 
 pub fn execute_next(workspace: Option<&Path>) -> Result<SessionCommandReport, SessionCommandError> {
-    let workspace = resolve_workspace(workspace)?;
+    execute_next_with_target(workspace, None)
+}
+
+pub fn execute_next_with_target(
+    workspace: Option<&Path>,
+    cluster: Option<&Path>,
+) -> Result<SessionCommandReport, SessionCommandError> {
+    let workspace = resolve_session_target(workspace, cluster, "next")?.owner_workspace;
     match load_active_session(&workspace) {
         Ok(record) => {
             let next_command =
@@ -373,6 +472,42 @@ fn resolve_workspace(workspace: Option<&Path>) -> Result<PathBuf, SessionCommand
     };
 
     Ok(candidate.canonicalize().unwrap_or(candidate))
+}
+
+fn resolve_session_target(
+    workspace: Option<&Path>,
+    cluster: Option<&Path>,
+    command_name: &'static str,
+) -> Result<ResolvedSessionTarget, SessionCommandError> {
+    if let Some(cluster_workspace) = cluster {
+        let owner_workspace = resolve_workspace(Some(cluster_workspace))?;
+        let cluster_store = FileClusterStore::for_workspace(&owner_workspace);
+        let Some(config) = cluster_store.load().map_err(SessionCommandError::ClusterStore)? else {
+            return Err(SessionCommandError::MissingClusterConfig {
+                workspace: owner_workspace,
+                command_name,
+            });
+        };
+        let projection = ClusterSessionProjection {
+            cluster_id: config.cluster.cluster_id,
+            primary_workspace_ref: config.cluster.primary_workspace_ref,
+            member_workspace_refs: config
+                .cluster
+                .members
+                .into_iter()
+                .map(|member| member.workspace_ref)
+                .collect(),
+            started_from_command: command_name.to_string(),
+            updated_at: current_timestamp_millis(),
+        };
+
+        return Ok(ResolvedSessionTarget { owner_workspace, cluster_projection: Some(projection) });
+    }
+
+    Ok(ResolvedSessionTarget {
+        owner_workspace: resolve_workspace(workspace)?,
+        cluster_projection: None,
+    })
 }
 
 fn load_active_session(workspace: &Path) -> Result<ActiveSessionRecord, SessionCommandError> {
@@ -470,6 +605,10 @@ pub(crate) fn build_status_view_with_follow_up(
         session_id: record.session_id.clone(),
         workspace_ref: record.workspace_ref.clone(),
         goal: record.goal.clone(),
+        cluster_delivery_story: record
+            .active_task
+            .as_ref()
+            .and_then(|task| task.context.cluster_delivery_story().ok().flatten()),
         authored_input_summary: record.authored_brief.as_ref().map(|bundle| bundle.summary_text()),
         authored_input_sources: record
             .authored_brief
@@ -838,6 +977,10 @@ pub enum SessionCommandError {
     SessionRuntime(#[from] SessionRuntimeError),
     #[error("failed to ingest authored brief: {0}")]
     BriefIngestion(#[from] BriefIngestionError),
+    #[error("cluster store operation failed: {0}")]
+    ClusterStore(#[from] ClusterStoreError),
+    #[error("`{command_name}` requires a valid cluster config in {workspace}")]
+    MissingClusterConfig { workspace: PathBuf, command_name: &'static str },
     #[error("failed to summarize the latest compatibility trace: {0}")]
     TraceSummary(String),
     #[error("{headline}: {prompt}")]
@@ -883,6 +1026,13 @@ impl SessionCommandError {
             Self::SessionStore(error) => error.to_string(),
             Self::SessionRuntime(error) => error.to_string(),
             Self::BriefIngestion(error) => format!("failed to ingest authored brief: {error}"),
+            Self::ClusterStore(error) => error.to_string(),
+            Self::MissingClusterConfig { workspace, command_name } => {
+                format!(
+                    "`{command_name}` requires a valid cluster config in {}",
+                    workspace.display()
+                )
+            }
             Self::TraceSummary(message) => {
                 format!("failed to summarize the latest compatibility trace: {message}")
             }
@@ -907,9 +1057,13 @@ impl SessionCommandError {
             Self::ClarificationRequired { .. } => {
                 Some("synod capture --goal <narrower goal>".to_string())
             }
-            Self::WorkspaceResolution(_) | Self::SessionStore(_) | Self::SessionRuntime(_) => None,
+            Self::WorkspaceResolution(_)
+            | Self::SessionStore(_)
+            | Self::SessionRuntime(_)
+            | Self::ClusterStore(_) => None,
             Self::TraceSummary(_) => None,
             Self::BriefIngestion(_) => Some("synod capture --goal <goal>".to_string()),
+            Self::MissingClusterConfig { .. } => Some("synod cluster init --workspace <primary> --cluster-id <id> --member <workspace> --member <workspace>".to_string()),
         }
     }
 }
@@ -924,9 +1078,9 @@ mod tests {
 
     use super::{
         CommandExitStatus, SessionCommandError, execute_capture, execute_flow, execute_next,
-        execute_plan, execute_run, execute_start, execute_status, exit_status_for_session,
-        exit_status_for_task, load_active_session, map_runtime_error, map_store_error,
-        render_error, resolve_workspace, suggested_next_command,
+        execute_plan, execute_run, execute_start, execute_start_with_target, execute_status,
+        exit_status_for_session, exit_status_for_task, load_active_session, map_runtime_error,
+        map_store_error, render_error, resolve_workspace, suggested_next_command,
     };
     use crate::adapters::session_store::SessionStoreError;
     use crate::adapters::trace_store::TraceStoreError;
@@ -1203,6 +1357,29 @@ fn red_to_green_addition() {
             SessionCommandError::SessionRuntime(SessionRuntimeError::MissingTraceReference);
         let text = render_error("run", &runtime_error);
         assert!(!text.contains("next_command:"), "{text}");
+    }
+
+    #[test]
+    fn clustered_session_commands_resolve_the_primary_workspace_explicitly() {
+        let primary = write_execution_workspace("synod-cli-session-cluster-primary");
+        let secondary = write_execution_workspace("synod-cli-session-cluster-secondary");
+        crate::cli::cluster::execute_init(
+            &primary,
+            "cluster-1",
+            &[primary.clone(), secondary.clone()],
+        )
+        .unwrap();
+
+        let report = execute_start_with_target(None, Some(&primary)).unwrap();
+
+        assert_eq!(report.exit_status, CommandExitStatus::Succeeded);
+        assert!(
+            report
+                .terminal_output
+                .contains("active clustered session initialized for the current primary workspace"),
+            "{}",
+            report.terminal_output
+        );
     }
 
     #[test]

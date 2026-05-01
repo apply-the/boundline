@@ -49,6 +49,7 @@ fn render_session_status_surfaces_compatibility_follow_up_without_replacing_nati
         session_id: "session-1".to_string(),
         workspace_ref: "/tmp/workspace".to_string(),
         goal: Some("Fix the failing add test".to_string()),
+        cluster_delivery_story: None,
         authored_input_summary: None,
         authored_input_sources: None,
         authored_input_deduplicated_sources: None,

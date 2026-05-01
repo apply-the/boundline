@@ -31,19 +31,22 @@ The shipped CLI binary is `synod`.
 If you enable Synod governance through Canon, the current Synod adapter is
 validated against Canon `0.25.0`.
 
-In `0.24.0`, governed `bug-fix:investigate` and later verify-stage Canon
+In `0.25.0`, governed `bug-fix:investigate` and later verify-stage Canon
 `security-assessment` can remain on the same native session route, and the
 optional `synod workflow` surface projects the same approval, blocked, and
-packet-lineage story without introducing a second operator workflow. On the
-explicit compatibility path, adaptive execution can now choose broader bounded
-repair families, surface explicit `candidate_family` plus credibility and
-rejection guidance, and stop cleanly when validation evidence is too weak to
-justify another materially different bounded attempt. `status` plus `next`
+packet-lineage story without introducing a second operator workflow. The same
+session-native commands can also run against `--cluster <primary-workspace>` so
+one authoritative session can plan and deliver a bounded change across
+registered member repositories while `run`, `status`, `next`, and `inspect`
+surface `route_owner`, `route_config_projection`, `cluster_route_owner`,
+`cluster_authoritative_workspace`, `cluster_execution_condition`,
+participating workspaces, and any blocking workspace explicitly. On the
+explicit compatibility path, adaptive execution can still choose broader
+bounded repair families, surface explicit `candidate_family` plus credibility
+and rejection guidance, and stop cleanly when validation evidence is too weak
+to justify another materially different bounded attempt. `status` plus `next`
 also remain usable by naming the latest compatibility trace as the
-authoritative inspect-only follow-up when no active session exists. The same
-read-side surfaces now also emit `route_owner` and `route_config_projection`
-when workflow, governance intent, or workspace-local routing defaults are
-material to the follow-up story.
+authoritative inspect-only follow-up when no active session exists.
 
 ## Install Synod
 
@@ -152,6 +155,11 @@ synod config set --cluster <primary-workspace> --scope cluster --slot planning -
 synod config show --workspace <secondary-workspace> --cluster <primary-workspace> --scope effective
 ```
 
+The primary workspace keeps the authoritative session at
+`<primary-workspace>/.synod/session.json`. Member workspaces can still persist
+their own terminal traces under `<member-workspace>/.synod/traces/` during a
+clustered handoff.
+
 ### 3. Start the Session and Capture the Goal
 
 Use the session workflow when you want the full operator loop:
@@ -160,6 +168,15 @@ Use the session workflow when you want the full operator loop:
 synod start --workspace <workspace>
 synod capture --workspace <workspace> --goal "Fix the failing add test"
 synod flow bug-fix --workspace <workspace>
+```
+
+When the same bounded change spans a registered cluster, use the primary
+workspace as the session-native entrypoint instead:
+
+```bash
+synod start --cluster <primary-workspace>
+synod capture --cluster <primary-workspace> --goal "Fix the failing add test"
+synod flow bug-fix --cluster <primary-workspace>
 ```
 
 Since `0.10.0`, `synod capture` (and `synod run`) also accept one or more
@@ -184,6 +201,13 @@ selects the shape of the current session-native run.
 ```bash
 synod plan --workspace <workspace>
 synod run --workspace <workspace>
+```
+
+Or continue the same bounded cluster-owned session:
+
+```bash
+synod plan --cluster <primary-workspace>
+synod run --cluster <primary-workspace>
 ```
 
 ### 4a. Optional Named Workflow Layer
@@ -217,13 +241,23 @@ synod next --workspace <workspace>
 synod inspect --workspace <workspace>
 ```
 
+For clustered work, read the same surfaces through the primary workspace:
+
+```bash
+synod status --cluster <primary-workspace>
+synod next --cluster <primary-workspace>
+synod inspect --cluster <primary-workspace>
+```
+
 These commands tell you:
 
 - which route is active and why
 - which `route_owner` currently controls the follow-up story
+- which clustered workspace remains authoritative when the run spans a registered cluster
 - whether the authoritative follow-up state comes from the active session or the latest compatibility trace
 - which material route or config inputs affected the current interpretation
 - what `execution_condition` currently applies
+- which `cluster_execution_condition` currently applies, which workspaces participated, and whether a member is blocking continuation
 - what trace was produced
 - whether the run succeeded, failed, blocked, or needs follow-up
 - what the next CLI action should be
@@ -242,7 +276,7 @@ contract; it does not replace the normal session-native path.
 
 If that manifest defines `adaptive`, failed validation can reprioritize the next
 bounded adaptive attempt from the latest validation record while keeping the
-route explicit as compatibility execution. In `0.24.0`, the same path can also
+route explicit as compatibility execution. In `0.25.0`, the same path can also
 choose bounded ordering-boundary, result-status, and numeric-literal repairs,
 and it reports explicit exhaustion instead of continuing blindly when the
 validation evidence is absent or insufficient.
@@ -252,7 +286,7 @@ After a direct compatibility run, `synod status --workspace <workspace>` and
 `synod inspect --workspace <workspace>` even when there is no resumable active
 session. Look for `continuity_authority: compatibility_trace` and the CLI-
 reported inspect command instead of assuming you must restart from `synod
-start`. In `0.24.0`, the same outputs also surface `route_owner: compatibility`
+start`. In `0.25.0`, the same outputs also surface `route_owner: compatibility`
 and any relevant `route_config_projection` so the inspect-only route stays
 explicit even when summary wording otherwise matches the native path.
 

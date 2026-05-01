@@ -7,6 +7,7 @@ use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStor
 use crate::adapters::trace_store::{FileTraceStore, TraceStore, TraceStoreError};
 use crate::cli::CommandExitStatus;
 use crate::cli::output;
+use crate::domain::cluster::ClusterDeliveryStory;
 use crate::domain::goal_plan::GoalPlanFlowState;
 use crate::domain::limits::TerminalCondition;
 use crate::domain::session::{RoutingMode, RoutingOutcome, RoutingSource};
@@ -122,6 +123,7 @@ pub fn summarize_trace(
     let mut requested_governance_risk: Option<String> = None;
     let mut requested_governance_zone: Option<String> = None;
     let mut requested_governance_owner: Option<String> = None;
+    let mut cluster_delivery_story: Option<ClusterDeliveryStory> = None;
     let mut routing_summary: Option<String> = None;
     let mut goal_plan_summary: Option<String> = None;
     let mut decision_timeline: Vec<String> = Vec::new();
@@ -234,7 +236,14 @@ pub fn summarize_trace(
                         .and_then(|value| value.as_str().map(str::to_string));
                 }
             }
-            TraceEventType::TerminalRecorded | TraceEventType::ReviewerStarted => {}
+            TraceEventType::TerminalRecorded => {
+                cluster_delivery_story = event
+                    .payload
+                    .get("cluster_delivery_story")
+                    .cloned()
+                    .and_then(|value| serde_json::from_value(value).ok());
+            }
+            TraceEventType::ReviewerStarted => {}
             TraceEventType::FlowSelected => {
                 recovery_events.push(TraceRecoveryEvent {
                     event_type: event.event_type,
@@ -475,6 +484,7 @@ pub fn summarize_trace(
     Ok(TraceSummaryView {
         trace_ref: trace_ref.as_ref().to_string_lossy().into_owned(),
         goal: trace.goal.clone(),
+        cluster_delivery_story,
         routing_summary,
         goal_plan_summary,
         authored_input_summary,

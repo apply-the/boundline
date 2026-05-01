@@ -36,6 +36,28 @@ fn assistant_readme_documents_session_native_continuity_rules() {
 }
 
 #[test]
+fn assistant_readme_documents_clustered_session_guidance() {
+    let content = read_asset("assistant/README.md");
+
+    for snippet in [
+        "cargo run --bin synod -- start --cluster <primary-workspace>",
+        "cargo run --bin synod -- capture --cluster <primary-workspace> --goal \"<goal>\"",
+        "cargo run --bin synod -- plan --cluster <primary-workspace>",
+        "cargo run --bin synod -- run --cluster <primary-workspace>",
+        "cargo run --bin synod -- status --cluster <primary-workspace>",
+        "cargo run --bin synod -- next --cluster <primary-workspace>",
+        "cargo run --bin synod -- inspect --cluster <primary-workspace>",
+        "cluster_route_owner",
+        "cluster_authoritative_workspace",
+        "cluster_execution_condition",
+        "cluster_participating_workspaces",
+        "cluster_blocking_workspace",
+    ] {
+        assert!(content.contains(snippet), "assistant/README.md missing {snippet}");
+    }
+}
+
+#[test]
 fn inspect_assets_document_session_trace_reuse_and_start_recovery() {
     let assets = [
         "assistant/claude/commands/synod-inspect.md",

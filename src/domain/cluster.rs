@@ -153,6 +153,223 @@ impl ClusterSessionProjection {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkspaceParticipationKind {
+    Entry,
+    ReadOnly,
+    Mutated,
+    Blocked,
+    Skipped,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspaceParticipationRecord {
+    pub workspace_ref: String,
+    pub participation_kind: WorkspaceParticipationKind,
+    pub order: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_trace_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_status: Option<String>,
+    pub headline: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal_reason: Option<String>,
+}
+
+impl WorkspaceParticipationRecord {
+    pub fn validate(&self) -> Result<(), ClusterError> {
+        if self.workspace_ref.trim().is_empty() {
+            return Err(ClusterError::EmptyMemberWorkspace);
+        }
+
+        if self.headline.trim().is_empty() {
+            return Err(ClusterError::MissingParticipationHeadline(self.workspace_ref.clone()));
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ClusterAuthorityKind {
+    ActiveSession,
+    CompatibilityTrace,
+    InspectOnly,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ClusterRouteOwner {
+    Native,
+    Workflow,
+    Review,
+    Governance,
+    Compatibility,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClusterFollowUpAuthority {
+    pub authority_kind: ClusterAuthorityKind,
+    pub route_owner: ClusterRouteOwner,
+    pub authoritative_workspace_ref: String,
+    pub continuity_reason: String,
+    pub next_command: String,
+}
+
+impl ClusterFollowUpAuthority {
+    pub fn validate(&self) -> Result<(), ClusterError> {
+        if self.authoritative_workspace_ref.trim().is_empty() {
+            return Err(ClusterError::MissingAuthoritativeWorkspace);
+        }
+
+        if self.continuity_reason.trim().is_empty() {
+            return Err(ClusterError::MissingContinuityReason);
+        }
+
+        if self.next_command.trim().is_empty() {
+            return Err(ClusterError::MissingNextCommand);
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ClusteredExecutionKind {
+    Success,
+    Paused,
+    Blocked,
+    Failed,
+    Exhausted,
+    InspectOnly,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClusteredExecutionCondition {
+    pub kind: ClusteredExecutionKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_workspace_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocking_workspace_ref: Option<String>,
+    pub summary: String,
+    pub recovery_allowed: bool,
+}
+
+impl ClusteredExecutionCondition {
+    pub fn validate(&self) -> Result<(), ClusterError> {
+        if self.summary.trim().is_empty() {
+            return Err(ClusterError::MissingExecutionSummary);
+        }
+
+        if self.active_workspace_ref.as_deref().is_some_and(|value| value.trim().is_empty()) {
+            return Err(ClusterError::MissingActiveWorkspace);
+        }
+
+        if self.blocking_workspace_ref.as_deref().is_some_and(|value| value.trim().is_empty()) {
+            return Err(ClusterError::MissingBlockingWorkspace);
+        }
+
+        if matches!(self.kind, ClusteredExecutionKind::Blocked)
+            && self.blocking_workspace_ref.is_none()
+        {
+            return Err(ClusterError::MissingBlockingWorkspace);
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClusterDeliveryStory {
+    pub cluster_id: String,
+    pub primary_workspace_ref: String,
+    pub authoritative_workspace_ref: String,
+    pub route_owner: ClusterRouteOwner,
+    pub member_workspace_refs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub participating_workspaces: Vec<WorkspaceParticipationRecord>,
+    pub started_from_command: String,
+    pub execution_condition: ClusteredExecutionCondition,
+    pub updated_at: u64,
+}
+
+impl ClusterDeliveryStory {
+    pub fn validate(&self) -> Result<(), ClusterError> {
+        if self.cluster_id.trim().is_empty() {
+            return Err(ClusterError::MissingClusterId);
+        }
+
+        if self.primary_workspace_ref.trim().is_empty() {
+            return Err(ClusterError::MissingPrimaryWorkspace);
+        }
+
+        if self.authoritative_workspace_ref.trim().is_empty() {
+            return Err(ClusterError::MissingAuthoritativeWorkspace);
+        }
+
+        if self.member_workspace_refs.is_empty() {
+            return Err(ClusterError::ProjectionMissingMembers);
+        }
+
+        if self.started_from_command.trim().is_empty() {
+            return Err(ClusterError::ProjectionMissingCommand);
+        }
+
+        self.execution_condition.validate()?;
+
+        let mut members = BTreeSet::new();
+        let mut contains_primary = false;
+        let mut contains_authoritative = false;
+        for workspace_ref in &self.member_workspace_refs {
+            let canonical = workspace_ref.trim();
+            if canonical.is_empty() {
+                return Err(ClusterError::EmptyMemberWorkspace);
+            }
+            if !members.insert(canonical.to_string()) {
+                return Err(ClusterError::DuplicateMemberWorkspace(canonical.to_string()));
+            }
+            if canonical == self.primary_workspace_ref.trim() {
+                contains_primary = true;
+            }
+            if canonical == self.authoritative_workspace_ref.trim() {
+                contains_authoritative = true;
+            }
+        }
+
+        if !contains_primary {
+            return Err(ClusterError::PrimaryWorkspaceNotMember(
+                self.primary_workspace_ref.clone(),
+            ));
+        }
+
+        if !contains_authoritative {
+            return Err(ClusterError::AuthoritativeWorkspaceNotMember(
+                self.authoritative_workspace_ref.clone(),
+            ));
+        }
+
+        let mut participating = BTreeSet::new();
+        for record in &self.participating_workspaces {
+            record.validate()?;
+            if !members.contains(record.workspace_ref.trim()) {
+                return Err(ClusterError::ParticipatingWorkspaceNotMember(
+                    record.workspace_ref.clone(),
+                ));
+            }
+            if !participating.insert(record.workspace_ref.trim().to_string()) {
+                return Err(ClusterError::DuplicateParticipatingWorkspace(
+                    record.workspace_ref.clone(),
+                ));
+            }
+        }
+
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClusterConfigFile {
     #[serde(default = "default_version")]
@@ -242,6 +459,26 @@ pub enum ClusterError {
     ProjectionMissingMembers,
     #[error("cluster session projection must record its triggering command")]
     ProjectionMissingCommand,
+    #[error("cluster follow-up authority must name an authoritative workspace")]
+    MissingAuthoritativeWorkspace,
+    #[error("cluster follow-up authority must explain its continuity reason")]
+    MissingContinuityReason,
+    #[error("cluster follow-up authority must include a next command")]
+    MissingNextCommand,
+    #[error("clustered execution condition must include a summary")]
+    MissingExecutionSummary,
+    #[error("clustered execution condition must name an active workspace when present")]
+    MissingActiveWorkspace,
+    #[error("clustered execution condition must name a blocking workspace for blocked states")]
+    MissingBlockingWorkspace,
+    #[error("workspace participation for {0} must include a headline")]
+    MissingParticipationHeadline(String),
+    #[error("authoritative workspace is not registered as a cluster member: {0}")]
+    AuthoritativeWorkspaceNotMember(String),
+    #[error("participating workspace is not registered as a cluster member: {0}")]
+    ParticipatingWorkspaceNotMember(String),
+    #[error("duplicate participating workspace: {0}")]
+    DuplicateParticipatingWorkspace(String),
     #[error("cluster routing is invalid: {0}")]
     InvalidRouting(String),
 }

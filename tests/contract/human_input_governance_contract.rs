@@ -25,7 +25,9 @@ fn capture_accepts_human_governance_intent_flags() {
     .unwrap();
 
     match cli.command {
-        DeveloperCommand::Capture { workspace, goal, brief, governance, risk, zone, owner } => {
+        DeveloperCommand::Capture {
+            workspace, goal, brief, governance, risk, zone, owner, ..
+        } => {
             assert_eq!(workspace, Some(PathBuf::from("/tmp/ws")));
             assert_eq!(goal.as_deref(), Some("Fix the failing checkout flow"));
             assert!(brief.is_empty());
@@ -53,7 +55,7 @@ fn run_accepts_local_governance_without_business_fields() {
     .unwrap();
 
     match cli.command {
-        DeveloperCommand::Run { workspace, goal, brief, governance, risk, zone, owner } => {
+        DeveloperCommand::Run { workspace, goal, brief, governance, risk, zone, owner, .. } => {
             assert_eq!(workspace, Some(PathBuf::from("/tmp/ws")));
             assert_eq!(goal.as_deref(), Some("Fix the failing checkout flow"));
             assert!(brief.is_empty());
