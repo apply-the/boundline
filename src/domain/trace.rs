@@ -105,6 +105,12 @@ pub struct TraceSummaryView {
     pub trace_ref: String,
     pub goal: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub negotiation_goal_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub negotiation_resolution: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub negotiation_acceptance_boundary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cluster_delivery_story: Option<ClusterDeliveryStory>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub routing_summary: Option<String>,

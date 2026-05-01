@@ -201,6 +201,47 @@ pub fn render_run_trace(
             {
                 lines.push(format!("clarification_prompt: {clarification_prompt}"));
             }
+            if let Some(negotiation_goal_summary) =
+                input.get("negotiation_goal_summary").and_then(Value::as_str)
+            {
+                lines.push(format!("negotiation_goal_summary: {negotiation_goal_summary}"));
+            }
+            if let Some(negotiation_resolution) =
+                input.get("negotiation_resolution").and_then(Value::as_str)
+            {
+                lines.push(format!("negotiation_resolution: {negotiation_resolution}"));
+            }
+            if let Some(negotiation_acceptance_boundary) =
+                input.get("negotiation_acceptance_boundary").and_then(Value::as_str)
+            {
+                lines.push(format!(
+                    "negotiation_acceptance_boundary: {negotiation_acceptance_boundary}"
+                ));
+            }
+        }
+
+        if let Some(goal_plan_created) =
+            trace.events.iter().find(|event| event.event_type == TraceEventType::GoalPlanCreated)
+        {
+            if let Some(negotiation_goal_summary) =
+                goal_plan_created.payload.get("negotiation_goal_summary").and_then(Value::as_str)
+            {
+                lines.push(format!("negotiation_goal_summary: {negotiation_goal_summary}"));
+            }
+            if let Some(negotiation_resolution) =
+                goal_plan_created.payload.get("negotiation_resolution").and_then(Value::as_str)
+            {
+                lines.push(format!("negotiation_resolution: {negotiation_resolution}"));
+            }
+            if let Some(negotiation_acceptance_boundary) = goal_plan_created
+                .payload
+                .get("negotiation_acceptance_boundary")
+                .and_then(Value::as_str)
+            {
+                lines.push(format!(
+                    "negotiation_acceptance_boundary: {negotiation_acceptance_boundary}"
+                ));
+            }
         }
 
         for event in &trace.events {
@@ -454,6 +495,18 @@ pub fn render_trace_summary(
         lines.push(format!("goal_plan_summary: {goal_plan_summary}"));
     }
 
+    if let Some(negotiation_goal_summary) = &summary.negotiation_goal_summary {
+        lines.push(format!("negotiation_goal_summary: {negotiation_goal_summary}"));
+    }
+
+    if let Some(negotiation_resolution) = &summary.negotiation_resolution {
+        lines.push(format!("negotiation_resolution: {negotiation_resolution}"));
+    }
+
+    if let Some(negotiation_acceptance_boundary) = &summary.negotiation_acceptance_boundary {
+        lines.push(format!("negotiation_acceptance_boundary: {negotiation_acceptance_boundary}"));
+    }
+
     if let Some(authored_input_summary) = &summary.authored_input_summary {
         lines.push(format!("authored_input_summary: {authored_input_summary}"));
     }
@@ -602,6 +655,18 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
 
     if let Some(goal) = &view.goal {
         lines.push(format!("goal: {goal}"));
+    }
+
+    if let Some(negotiation_goal_summary) = &view.negotiation_goal_summary {
+        lines.push(format!("negotiation_goal_summary: {negotiation_goal_summary}"));
+    }
+
+    if let Some(negotiation_resolution) = &view.negotiation_resolution {
+        lines.push(format!("negotiation_resolution: {negotiation_resolution}"));
+    }
+
+    if let Some(negotiation_acceptance_boundary) = &view.negotiation_acceptance_boundary {
+        lines.push(format!("negotiation_acceptance_boundary: {negotiation_acceptance_boundary}"));
     }
 
     lines.extend(render_session_projection_prefix(view).lines().map(str::to_string));
@@ -1886,6 +1951,9 @@ mod tests {
         let summary = TraceSummaryView {
             trace_ref: "/tmp/workspace/.synod/traces/task-output.json".to_string(),
             goal: "Render trace summary".to_string(),
+            negotiation_goal_summary: None,
+            negotiation_resolution: None,
+            negotiation_acceptance_boundary: None,
             cluster_delivery_story: None,
             routing_summary: None,
             goal_plan_summary: None,
@@ -1951,6 +2019,9 @@ mod tests {
             session_id: "session-output".to_string(),
             workspace_ref: "/tmp/workspace".to_string(),
             goal: None,
+            negotiation_goal_summary: None,
+            negotiation_resolution: None,
+            negotiation_acceptance_boundary: None,
             cluster_delivery_story: None,
             authored_input_summary: None,
             authored_input_sources: None,
@@ -2085,6 +2156,9 @@ mod tests {
             session_id: "session-review-status".to_string(),
             workspace_ref: "/tmp/workspace".to_string(),
             goal: Some("Ship review output".to_string()),
+            negotiation_goal_summary: None,
+            negotiation_resolution: None,
+            negotiation_acceptance_boundary: None,
             cluster_delivery_story: None,
             authored_input_summary: None,
             authored_input_sources: None,
@@ -2188,6 +2262,9 @@ mod tests {
         let summary = TraceSummaryView {
             trace_ref: "/tmp/workspace/.synod/traces/task-review-output.json".to_string(),
             goal: "Render trace summary".to_string(),
+            negotiation_goal_summary: None,
+            negotiation_resolution: None,
+            negotiation_acceptance_boundary: None,
             cluster_delivery_story: None,
             routing_summary: None,
             goal_plan_summary: None,

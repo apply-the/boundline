@@ -14,6 +14,7 @@ use crate::domain::goal_plan::{GoalPlan, GoalPlanFlowMode};
 use crate::domain::governance::{
     AutopilotDecisionRecord, GovernedStagePacket, GovernedStageRecord, PacketReuseBinding,
 };
+use crate::domain::negotiation::NegotiatedDeliveryPacket;
 use crate::domain::task::{Task, TaskPersistenceError, TaskStatus, TerminalReason};
 use crate::domain::task_context::{
     LATEST_GOVERNANCE_DECISION_KEY, LATEST_GOVERNANCE_PACKET_KEY,
@@ -62,6 +63,8 @@ pub struct ActiveSessionRecord {
     pub goal: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authored_brief: Option<AuthoredBriefBundle>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub negotiation_packet: Option<NegotiatedDeliveryPacket>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub active_flow: Option<SessionFlowState>,
     pub active_task: Option<Task>,
@@ -300,6 +303,12 @@ pub struct SessionStatusView {
     pub workspace_ref: String,
     pub goal: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub negotiation_goal_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub negotiation_resolution: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub negotiation_acceptance_boundary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cluster_delivery_story: Option<ClusterDeliveryStory>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authored_input_summary: Option<String>,
@@ -435,6 +444,37 @@ impl SessionStatusView {
             return Err(SessionValidationError::StatusViewGoalMismatch {
                 expected: record.goal.clone(),
                 actual: self.goal.clone(),
+            });
+        }
+
+        let expected_negotiation_goal_summary =
+            record.negotiation_packet.as_ref().map(|packet| packet.goal_summary.clone());
+        if self.negotiation_goal_summary != expected_negotiation_goal_summary {
+            return Err(SessionValidationError::StatusViewNegotiationGoalSummaryMismatch {
+                expected: expected_negotiation_goal_summary,
+                actual: self.negotiation_goal_summary.clone(),
+            });
+        }
+
+        let expected_negotiation_resolution = record
+            .negotiation_packet
+            .as_ref()
+            .map(|packet| packet.resolution_state.as_str().to_string());
+        if self.negotiation_resolution != expected_negotiation_resolution {
+            return Err(SessionValidationError::StatusViewNegotiationResolutionMismatch {
+                expected: expected_negotiation_resolution,
+                actual: self.negotiation_resolution.clone(),
+            });
+        }
+
+        let expected_negotiation_acceptance_boundary = record
+            .negotiation_packet
+            .as_ref()
+            .map(|packet| packet.acceptance_boundary.success_headline.clone());
+        if self.negotiation_acceptance_boundary != expected_negotiation_acceptance_boundary {
+            return Err(SessionValidationError::StatusViewNegotiationAcceptanceBoundaryMismatch {
+                expected: expected_negotiation_acceptance_boundary,
+                actual: self.negotiation_acceptance_boundary.clone(),
             });
         }
 
@@ -988,6 +1028,17 @@ pub enum SessionValidationError {
     StatusViewStatusMismatch { expected: SessionStatus, actual: SessionStatus },
     #[error("status view goal mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewGoalMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view negotiation goal summary mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewNegotiationGoalSummaryMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view negotiation resolution mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewNegotiationResolutionMismatch { expected: Option<String>, actual: Option<String> },
+    #[error(
+        "status view negotiation acceptance boundary mismatch: expected {expected:?}, got {actual:?}"
+    )]
+    StatusViewNegotiationAcceptanceBoundaryMismatch {
+        expected: Option<String>,
+        actual: Option<String>,
+    },
     #[error("status view flow mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewFlowMismatch { expected: Option<String>, actual: Option<String> },
     #[error("status view flow state mismatch: expected {expected:?}, got {actual:?}")]
@@ -1399,6 +1450,7 @@ mod tests {
             workspace_ref: workspace_ref.to_string(),
             goal: Some("Deliver a session-backed CLI".to_string()),
             authored_brief: None,
+            negotiation_packet: None,
             active_flow: Some(
                 crate::domain::flow::built_in_flow("bug-fix").unwrap().initial_state(),
             ),
@@ -1420,6 +1472,9 @@ mod tests {
             session_id: record.session_id.clone(),
             workspace_ref: record.workspace_ref.clone(),
             goal: record.goal.clone(),
+            negotiation_goal_summary: None,
+            negotiation_resolution: None,
+            negotiation_acceptance_boundary: None,
             cluster_delivery_story: None,
             authored_input_summary: None,
             authored_input_sources: None,

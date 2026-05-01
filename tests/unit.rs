@@ -112,6 +112,9 @@ mod flow_inference;
 #[path = "unit/goal_planner.rs"]
 mod goal_planner;
 
+#[path = "unit/negotiation_models.rs"]
+mod negotiation_models;
+
 #[path = "unit/runtime_routing.rs"]
 mod runtime_routing;
 

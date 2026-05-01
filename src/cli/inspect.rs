@@ -123,6 +123,9 @@ pub fn summarize_trace(
     let mut requested_governance_risk: Option<String> = None;
     let mut requested_governance_zone: Option<String> = None;
     let mut requested_governance_owner: Option<String> = None;
+    let mut negotiation_goal_summary: Option<String> = None;
+    let mut negotiation_resolution: Option<String> = None;
+    let mut negotiation_acceptance_boundary: Option<String> = None;
     let mut cluster_delivery_story: Option<ClusterDeliveryStory> = None;
     let mut routing_summary: Option<String> = None;
     let mut goal_plan_summary: Option<String> = None;
@@ -233,6 +236,27 @@ pub fn summarize_trace(
                         .payload
                         .get("input")
                         .and_then(|input| input.get("requested_governance_owner"))
+                        .and_then(|value| value.as_str().map(str::to_string));
+                }
+                if negotiation_goal_summary.is_none() {
+                    negotiation_goal_summary = event
+                        .payload
+                        .get("input")
+                        .and_then(|input| input.get("negotiation_goal_summary"))
+                        .and_then(|value| value.as_str().map(str::to_string));
+                }
+                if negotiation_resolution.is_none() {
+                    negotiation_resolution = event
+                        .payload
+                        .get("input")
+                        .and_then(|input| input.get("negotiation_resolution"))
+                        .and_then(|value| value.as_str().map(str::to_string));
+                }
+                if negotiation_acceptance_boundary.is_none() {
+                    negotiation_acceptance_boundary = event
+                        .payload
+                        .get("input")
+                        .and_then(|input| input.get("negotiation_acceptance_boundary"))
                         .and_then(|value| value.as_str().map(str::to_string));
                 }
             }
@@ -416,6 +440,24 @@ pub fn summarize_trace(
                         .unwrap_or(&trace.goal);
                     goal_plan_summary = Some(format!("{task_count} bounded task(s) for {goal}"));
                 }
+                if negotiation_goal_summary.is_none() {
+                    negotiation_goal_summary = event
+                        .payload
+                        .get("negotiation_goal_summary")
+                        .and_then(|value| value.as_str().map(str::to_string));
+                }
+                if negotiation_resolution.is_none() {
+                    negotiation_resolution = event
+                        .payload
+                        .get("negotiation_resolution")
+                        .and_then(|value| value.as_str().map(str::to_string));
+                }
+                if negotiation_acceptance_boundary.is_none() {
+                    negotiation_acceptance_boundary = event
+                        .payload
+                        .get("negotiation_acceptance_boundary")
+                        .and_then(|value| value.as_str().map(str::to_string));
+                }
             }
             TraceEventType::FlowInferred => {
                 if let Some(flow_name) =
@@ -484,6 +526,9 @@ pub fn summarize_trace(
     Ok(TraceSummaryView {
         trace_ref: trace_ref.as_ref().to_string_lossy().into_owned(),
         goal: trace.goal.clone(),
+        negotiation_goal_summary,
+        negotiation_resolution,
+        negotiation_acceptance_boundary,
         cluster_delivery_story,
         routing_summary,
         goal_plan_summary,
@@ -1085,6 +1130,7 @@ mod tests {
             workspace_ref: workspace.to_string_lossy().into_owned(),
             goal: None,
             authored_brief: None,
+            negotiation_packet: None,
             active_flow: None,
             active_task: None,
             goal_plan: None,

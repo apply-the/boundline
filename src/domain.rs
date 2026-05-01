@@ -8,6 +8,7 @@ pub mod flow_policy;
 pub mod goal_plan;
 pub mod governance;
 pub mod limits;
+pub mod negotiation;
 pub mod plan;
 pub mod review;
 pub mod session;

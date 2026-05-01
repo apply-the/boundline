@@ -31,7 +31,10 @@ The shipped CLI binary is `synod`.
 If you enable Synod governance through Canon, the current Synod adapter is
 validated against Canon `0.25.0`.
 
-In `0.25.0`, governed `bug-fix:investigate` and later verify-stage Canon
+In `0.26.0`, `capture` persists one negotiated delivery packet before
+planning, `plan` blocks on non-credible negotiation states, and `run`,
+`status`, `next`, and `inspect` surface the same acceptance-boundary story.
+Governed `bug-fix:investigate` and later verify-stage Canon
 `security-assessment` can remain on the same native session route, and the
 optional `synod workflow` surface projects the same approval, blocked, and
 packet-lineage story without introducing a second operator workflow. The same
@@ -191,6 +194,12 @@ synod capture --workspace <workspace> \
   --brief docs/context.md
 ```
 
+The current release persists `negotiation_goal_summary`,
+`negotiation_resolution`, and `negotiation_acceptance_boundary` during
+capture. If negotiation is still `pending_clarification`, `conflicting`, or
+otherwise blocked, `synod plan` stops early and the CLI keeps the follow-up
+story explicit instead of silently inventing a plan.
+
 `synod flow` is optional. Use it when you want to pin the run to one of the
 built-in flows: `bug-fix`, `change`, or `delivery`. This is separate from the
 init template: `init` bootstraps an optional compatibility profile, while `flow`
@@ -209,6 +218,11 @@ Or continue the same bounded cluster-owned session:
 synod plan --cluster <primary-workspace>
 synod run --cluster <primary-workspace>
 ```
+
+`synod plan` now succeeds only when the negotiated delivery packet is
+credible. The resulting `GoalPlan`, terminal `run` output, and later
+`status`, `next`, and `inspect` views keep the same negotiation summary and
+acceptance-boundary wording on both native and explicit compatibility routes.
 
 ### 4a. Optional Named Workflow Layer
 
@@ -252,6 +266,7 @@ synod inspect --cluster <primary-workspace>
 These commands tell you:
 
 - which route is active and why
+- which `negotiation_goal_summary`, `negotiation_resolution`, and `negotiation_acceptance_boundary` currently bound the work
 - which `route_owner` currently controls the follow-up story
 - which clustered workspace remains authoritative when the run spans a registered cluster
 - whether the authoritative follow-up state comes from the active session or the latest compatibility trace
@@ -276,7 +291,7 @@ contract; it does not replace the normal session-native path.
 
 If that manifest defines `adaptive`, failed validation can reprioritize the next
 bounded adaptive attempt from the latest validation record while keeping the
-route explicit as compatibility execution. In `0.25.0`, the same path can also
+route explicit as compatibility execution. In `0.26.0`, the same path can also
 choose bounded ordering-boundary, result-status, and numeric-literal repairs,
 and it reports explicit exhaustion instead of continuing blindly when the
 validation evidence is absent or insufficient.
@@ -286,9 +301,11 @@ After a direct compatibility run, `synod status --workspace <workspace>` and
 `synod inspect --workspace <workspace>` even when there is no resumable active
 session. Look for `continuity_authority: compatibility_trace` and the CLI-
 reported inspect command instead of assuming you must restart from `synod
-start`. In `0.25.0`, the same outputs also surface `route_owner: compatibility`
+start`. In `0.26.0`, the same outputs also surface `route_owner: compatibility`
 and any relevant `route_config_projection` so the inspect-only route stays
-explicit even when summary wording otherwise matches the native path.
+explicit even when summary wording otherwise matches the native path. They also
+preserve the negotiated delivery summary so compatibility follow-up does not
+lose the active acceptance boundary.
 
 ## The Core Commands
 
@@ -299,14 +316,14 @@ explicit even when summary wording otherwise matches the native path.
 | `synod cluster init|status|inspect` | Register a bounded multi-workspace cluster and inspect member state |
 | `synod doctor` | Validate the workspace and any configured compatibility manifest before running |
 | `synod start` | Initialize or reset the active workspace session |
-| `synod capture` | Store the delivery goal in session state |
+| `synod capture` | Store the delivery goal plus negotiated packet in session state |
 | `synod flow` | Select `bug-fix`, `change`, or `delivery` |
-| `synod plan` | Build the next bounded task from the active session |
+| `synod plan` | Build the next bounded task from the active session when the negotiated packet is credible |
 | `synod step` | Execute one step of the current task |
 | `synod run` | Execute the current task until completion or operator intervention, preferring session-native routing when a `GoalPlan` exists |
-| `synod status` | Show the current session snapshot |
-| `synod next` | Show the CLI-reported next action |
-| `synod inspect` | Summarize the latest trace or a specific trace |
+| `synod status` | Show the current session snapshot, including negotiated follow-up cues |
+| `synod next` | Show the CLI-reported next action from the active negotiated boundary |
+| `synod inspect` | Summarize the latest trace or a specific trace, including negotiated delivery cues |
 | `synod workflow list|run|status|resume|inspect` | Discover and reuse the same session-native route through a named workflow entrypoint |
 
 ## Choosing the Right Manifest Shape

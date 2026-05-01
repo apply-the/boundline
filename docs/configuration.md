@@ -1,26 +1,27 @@
-# Configuration in Synod 0.25.0
+# Configuration in Synod 0.26.0
 
-Synod `0.25.0` keeps a user-friendly setup and routing configuration surface
+Synod `0.26.0` keeps a user-friendly setup and routing configuration surface
 for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
-The `0.25.0` release keeps configuration behavior stable while preserving the
+The `0.26.0` release keeps configuration behavior stable while preserving the
 same governed routing defaults across earlier `bug-fix:investigate` work,
 later verify-stage `security-assessment`, workflow-aware projection of the
 same bounded governance state, continuity-aware read-side follow-up, the
-broader bounded adaptive repair slice, and the clustered multi-workspace
-delivery path. Adaptive repair still lives in the explicit compatibility
-execution manifest; there is no separate routing knob for mutation-family
-selection, credibility ranking, or explicit adaptive exhaustion. Session-native
-commands can now target `--cluster <primary-workspace>` while the main CLI
-read-side surfaces project material routing facts through
-`route_config_projection`, keep the active `route_owner` explicit, and surface
-cluster authority when one bounded delivery story spans multiple repositories.
+broader bounded adaptive repair slice, the clustered multi-workspace delivery
+path, and the new negotiated delivery projection. Negotiation still does not
+introduce a separate config file or routing key: capture derives acceptance
+boundaries from direct goals, authored briefs, and governance intent, while
+`run`, `status`, `next`, and `inspect` simply project the resulting packet.
+Adaptive repair still lives in the explicit compatibility execution manifest;
+there is no separate routing knob for mutation-family selection, credibility
+ranking, explicit adaptive exhaustion, or negotiation-state overrides.
 
 ## What changed
 
 - `synod init` bootstraps an optional compatibility workspace profile and local config under `.synod/`
 - `synod config` manages runtime/model routing defaults for planning, verification, review, and other bounded slots
 - `synod cluster` registers bounded multi-workspace membership and aggregated inspection
+- negotiated delivery modeling stays session-owned and trace-projected; there is no new negotiation-specific key in `config.toml` or `.synod/execution.json`
 - session-native commands can use `--cluster <primary-workspace>` to keep one authoritative primary-owned session while traversing cluster members sequentially
 - continuity between explicit compatibility traces and read-side commands is projected by the CLI surfaces, not by a new config key
 - adaptive validation-guided repair remains configured in `.synod/execution.json`, not in `config.toml`

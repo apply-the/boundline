@@ -78,6 +78,9 @@ where
                 "plan_id": plan.plan_id,
                 "goal": plan.goal_text,
                 "task_count": plan.tasks.len(),
+                "negotiation_goal_summary": plan.negotiation_goal_summary,
+                "negotiation_resolution": plan.negotiation_resolution,
+                "negotiation_acceptance_boundary": plan.negotiation_acceptance_boundary,
             }),
         );
 
