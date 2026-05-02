@@ -29,9 +29,10 @@ state through the same CLI instead of introducing a separate runtime surface.
 The shipped CLI binary is `synod`.
 
 If you enable Synod governance through Canon, the current Synod adapter is
-validated against Canon `0.25.0`.
+validated against Canon `0.36.0` on the machine-facing `canon governance`
+`--json` `v1` adapter surface.
 
-In `0.31.0`, direct `run --goal` can bootstrap the native session path even
+In `0.32.0`, direct `run --goal` can bootstrap the native session path even
 without `.synod/execution.json`, while `run --compatibility --goal ...` keeps
 the manifest-backed route as an explicit opt-in. `capture` persists one
 negotiated delivery packet before planning, `plan` blocks on non-credible
@@ -46,8 +47,9 @@ surface `follow_through_guidance`, `follow_through_evidence_source`,
 session or trace evidence can explain one next bounded action or stop.
 Governed `bug-fix:investigate` and later verify-stage Canon
 `security-assessment` can remain on the same native session route, and the
-optional `synod workflow` surface projects the same approval, blocked, and
-packet-lineage story without introducing a second operator workflow. The same
+optional `synod workflow` surface now acts as a first-class primary entrypoint
+that projects the same approval, blocked, and packet-lineage story without
+introducing a second operator workflow. The same
 bug-fix or change route now stops explicitly if it reaches completion without a
 material diff and passed validation evidence. Successful governed delivery
 surfaces `latest_changed_files` and `latest_validation_status` on the same
@@ -317,7 +319,7 @@ synod run --workspace <workspace> --compatibility --goal "Fix the failing add te
 
 If that manifest defines `adaptive`, failed validation can reprioritize the next
 bounded adaptive attempt from the latest validation record while keeping the
-route explicit as compatibility execution. In `0.31.0`, the same path can also
+route explicit as compatibility execution. In `0.32.0`, the same path can also
 choose bounded ordering-boundary, result-status, and numeric-literal repairs,
 and it reports explicit exhaustion instead of continuing blindly when the
 validation evidence is absent or insufficient.

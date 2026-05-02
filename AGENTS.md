@@ -49,6 +49,8 @@ Auto-generated from all feature plans. Last updated: 2026-05-02
 - Workspace-local `.synod/session.json`, persisted execution traces under `<workspace>/.synod/traces/`, optional `.synod/execution.json` for explicit compatibility execution, optional `.synod/workflows.toml`, optional cluster state under `.synod/cluster.toml`, and repository-managed assistant assets under `assistant/` (030-native-direct-run)
 - Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for this slice (031-canon-delivery-loop)
 - Workspace-local `.synod/session.json`, persisted execution traces under `<workspace>/.synod/traces/`, optional `.synod/execution.json`, optional `.synod/workflows.toml`, optional cluster state under `.synod/cluster.toml`, optional `.canon/` governed artifacts, and updated repository docs plus assistant assets (031-canon-delivery-loop)
+- Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for this slice (032-workflow-surface-closure)
+- Workspace-local `.synod/workflows.toml`, `.synod/config.toml`, `.synod/session.json`, persisted traces under `<workspace>/.synod/traces/`, optional `.synod/execution.json` for explicit compatibility follow-up, optional `.canon/` artifacts, and repository-managed assistant assets under `assistant/` (032-workflow-surface-closure)
 
 - Rust 1.95.0, edition 2024 + Rust standard library plus `serde`, `serde_json`, `thiserror`, `tracing`, and `uuid` for structured state, trace serialization, error handling, instrumentation, and stable identifiers (001-delivery-orchestrator-core)
 
@@ -77,9 +79,9 @@ Crate versioning follows Semantic Versioning.
 Before 1.0.0, breaking changes MAY occur in minor versions.
 
 ## Recent Changes
+- 032-workflow-surface-closure: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for this slice
 - 031-canon-delivery-loop: Added credible delivery-completion gating so bounded `bug-fix` and `change` work only succeeds with material diff and passed validation evidence
 - 031-canon-delivery-loop: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for this slice
-- 031-canon-delivery-loop: Added workspace-local `.synod/session.json`, persisted execution traces, optional `.synod/execution.json`, optional `.canon/` governed artifacts, and updated repository docs plus assistant assets
 
 
 <!-- MANUAL ADDITIONS START -->

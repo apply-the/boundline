@@ -69,6 +69,45 @@ fn assistant_readme_documents_clustered_session_guidance() {
 }
 
 #[test]
+fn assistant_readme_documents_workflow_first_guidance() {
+    let content = read_asset("assistant/README.md");
+
+    for snippet in [
+        "/synod-workflow-list",
+        "/synod-workflow-run",
+        "/synod-workflow-status",
+        "/synod-workflow-resume",
+        "/synod-workflow-inspect",
+        "cargo run --bin synod -- workflow list --workspace <workspace>",
+        "cargo run --bin synod -- workflow run <name> --workspace <workspace>",
+        "cargo run --bin synod -- workflow status --workspace <workspace>",
+        "cargo run --bin synod -- workflow resume --workspace <workspace>",
+        "cargo run --bin synod -- workflow inspect --workspace <workspace>",
+        "workflows and direct runs are primary surfaces",
+        "compatibility remains explicit and subordinate",
+    ] {
+        assert!(content.contains(snippet), "assistant/README.md missing {snippet}");
+    }
+}
+
+#[test]
+fn gemini_guidance_uses_workflow_first_vocabulary() {
+    let content = read_asset("assistant/gemini/README.md");
+
+    for snippet in [
+        "cargo run --bin synod -- workflow list --workspace <workspace>",
+        "cargo run --bin synod -- workflow run <name> --workspace <workspace>",
+        "cargo run --bin synod -- workflow status --workspace <workspace>",
+        "cargo run --bin synod -- workflow resume --workspace <workspace>",
+        "cargo run --bin synod -- workflow inspect --workspace <workspace>",
+        "primary Synod workflow surface",
+        "compatibility remains an explicit subordinate route",
+    ] {
+        assert!(content.contains(snippet), "assistant/gemini/README.md missing {snippet}");
+    }
+}
+
+#[test]
 fn inspect_assets_document_session_trace_reuse_and_start_recovery() {
     let assets = [
         "assistant/claude/commands/synod-inspect.md",

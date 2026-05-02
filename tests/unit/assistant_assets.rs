@@ -2,6 +2,16 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
+const CORE_COMMANDS: &[&str] = &[
+    "synod-start",
+    "synod-plan",
+    "synod-step",
+    "synod-run",
+    "synod-status",
+    "synod-next",
+    "synod-inspect",
+];
+
 const REQUIRED_COMMANDS: &[&str] = &[
     "synod-start",
     "synod-plan",
@@ -10,6 +20,11 @@ const REQUIRED_COMMANDS: &[&str] = &[
     "synod-status",
     "synod-next",
     "synod-inspect",
+    "synod-workflow-list",
+    "synod-workflow-run",
+    "synod-workflow-status",
+    "synod-workflow-resume",
+    "synod-workflow-inspect",
 ];
 
 #[test]
@@ -32,7 +47,7 @@ fn test_asset_filenames_and_surfaces() {
         REQUIRED_COMMANDS.iter().map(|command| (*command).to_string()).collect();
     assert_eq!(
         claude_commands, expected,
-        "assistant command surface should expose the full seven-command pack"
+        "assistant command surface should expose the full workflow-aware command pack"
     );
 }
 
@@ -106,6 +121,9 @@ fn test_documented_flows_match_the_assistant_asset_surface() {
             assistant_readme.contains(&format!("/{command}")),
             "assistant/README.md missing /{command}"
         );
+    }
+
+    for command in CORE_COMMANDS {
         assert!(quickstart.contains(&format!("/{command}")), "quickstart.md missing /{command}");
     }
 

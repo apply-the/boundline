@@ -7,6 +7,7 @@ Synod is a bounded delivery orchestrator. Contributions should keep that bias:
 - prefer small, inspectable changes over broad refactors
 - preserve explicit session state, traces, and CLI guidance
 - preserve the session-native `start -> capture -> plan -> run -> status -> next -> inspect` story as the default operator path
+- treat workflow assistant surfaces and direct native commands as the same primary Synod product story, with compatibility remaining explicit and subordinate
 - keep direct `run --goal` native-first and require explicit `--compatibility` for manifest-backed execution
 - keep bounded `bug-fix` and `change` completion credible: do not treat the end of a plan as success unless material change evidence and passed validation are both present, or the CLI reports an explicit stop instead
 - keep negotiated delivery packets, acceptance boundaries, and blocking constraints explicit from capture through follow-up surfaces

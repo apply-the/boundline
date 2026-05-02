@@ -4,7 +4,10 @@ This directory contains Markdown-based commands to run `synod` from various AI a
 
 The primary delivery surface is session-native: `start -> capture -> plan -> run -> status -> next -> inspect` against `<workspace>/.synod/session.json` and `<workspace>/.synod/traces/`.
 
-In `0.31.0`, direct `run --goal` still bootstraps that native session path by
+In `0.32.0`, workflows and direct runs are primary surfaces of the same Synod
+product story, while compatibility remains explicit and subordinate.
+
+In `0.32.0`, direct `run --goal` still bootstraps that native session path by
 default, while `run --compatibility --goal ...` remains the explicit
 execution-profile route. `capture` persists `negotiation_goal_summary`,
 `negotiation_resolution`, and `negotiation_acceptance_boundary` before
@@ -133,12 +136,12 @@ evidence that the user previously chose `run --compatibility`; do not infer that
 plain `run --goal` should continue to use the compatibility route.
 
 ### Named Workflow Layer (Workflow Slice)
-- There is no separate assistant pack yet for `synod workflow`. Use the raw CLI subcommands directly when a workspace provides `.synod/workflows.toml`.
+- Use `/synod-workflow-list`, `/synod-workflow-run`, `/synod-workflow-status`, `/synod-workflow-resume`, and `/synod-workflow-inspect` as the assistant-native entrypoints when a workspace provides `.synod/workflows.toml`.
 - `cargo run --bin synod -- workflow list --workspace <workspace>` should summarize the available workflow names, any shipped summary or `recommended_when` guidance, the declared phase chain, and the exact `workflow run` command to start each one.
-- `cargo run --bin synod -- workflow run <name> --workspace <workspace> [--goal "<goal>"]` should summarize `workflow`, `workflow_phase`, `routing`, `execution_condition`, and `next_command`, including actionable paused or blocked states when bounded `review` or `govern` follow-through cannot complete yet.
-- `cargo run --bin synod -- workflow status --workspace <workspace>` should report the same session story as `status`, with workflow identity and active phase added.
+- `cargo run --bin synod -- workflow run <name> --workspace <workspace> [--goal "<goal>"]` should summarize `workflow`, `workflow_phase`, `routing`, `route_owner`, `route_config_projection`, `execution_condition`, `execution_path`, and `next_command`, including actionable paused or blocked states when bounded `review` or `govern` follow-through cannot complete yet.
+- `cargo run --bin synod -- workflow status --workspace <workspace>` should report the same session story as `status`, with workflow identity, active phase, route projection, and any workflow-owned next action added.
 - `cargo run --bin synod -- workflow resume --workspace <workspace>` should be preferred over inventing a phase-specific follow-up when the CLI reports it as `next_command`, especially for bounded `review` or `govern` follow-through.
-- `cargo run --bin synod -- workflow inspect --workspace <workspace>` should combine workflow projection with trace inspection when a trace exists.
+- `cargo run --bin synod -- workflow inspect --workspace <workspace>` should combine workflow projection with trace inspection when a trace exists and should preserve the same primary-versus-subordinate product story.
 
 ### Inspecting Prior Runs (User Story 3)
 - `/synod-inspect`: Executes `cargo run --bin synod -- inspect --trace <trace>` for an explicit trace or `cargo run --bin synod -- inspect --workspace <workspace>` for the workspace-selected trace. Workspace-based inspect may reuse the active session's `latest_trace_ref` before falling back to the latest workspace trace.

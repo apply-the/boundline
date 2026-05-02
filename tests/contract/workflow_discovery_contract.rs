@@ -29,6 +29,7 @@ fn workflow_list_contract_exposes_available_workflows_and_invocation_guidance() 
         text.contains("invoke_with: synod workflow run governed-delivery --workspace "),
         "{text}"
     );
+    assert!(text.contains("primary Synod workflow surface"), "{text}");
 }
 
 #[test]

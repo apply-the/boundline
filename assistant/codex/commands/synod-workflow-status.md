@@ -1,0 +1,27 @@
+# Command: /synod-workflow-status
+
+Shared guidance: `assistant/README.md`
+
+## Intent
+Summarize the active named workflow without leaving the primary Synod product
+surface.
+
+## Required Context
+- `workspace_ref`
+
+## Shell-Enabled Path
+If the workspace is known, run `cargo run --bin synod -- workflow status --workspace <workspace>` exactly once.
+
+## Chat-Only Path
+If shell execution is unavailable, provide this exact copyable command:
+
+`cargo run --bin synod -- workflow status --workspace <workspace>`
+
+Then wait for pasted output.
+
+## Output Interpretation
+Summarize `workflow`, `workflow_phase`, `workflow_next_action`, `routing`, `route_owner`, `route_config_projection`, `execution_condition`, `execution_path`, `continuity_authority`, any `compatibility_follow_up`, any governance wait-or-block guidance, and the CLI-reported `next_command`. Preserve `effective_routing` and `assistant_bindings` when surfaced.
+
+## Next-Step Routing
+Prefer the CLI-reported `next_command`; if the workflow remains active, route to `/synod-workflow-resume`, and if the workflow is terminal or inspect-only, route to `/synod-workflow-inspect`.
+Allowed follow-up commands: `/synod-workflow-resume`, `/synod-workflow-inspect`, `/synod-workflow-run`, `/synod-status`, `/synod-inspect`.
