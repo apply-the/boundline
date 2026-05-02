@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 use clap::Parser;
 use serde_json::{Value, json};
 use synod::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
+use synod::cli::diagnostics::{diagnose_native_direct_run_workspace, diagnose_workspace};
 use synod::cli::inspect::{TraceSummaryError, summarize_trace};
+use synod::cli::run::{RunCommandError, execute_native_direct_run};
 use synod::cli::session::{
     SessionCommandError, execute_capture, execute_flow, execute_next, execute_plan, execute_start,
     execute_status, execute_step, render_error,
@@ -324,6 +326,7 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
             workspace: Some(workspace.clone()),
             cluster: None,
             goal: Some("ship it".to_string()),
+            compatibility: false,
             brief: Vec::new(),
             governance: None,
             risk: None,
@@ -389,6 +392,7 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
         workspace: None,
         cluster: None,
         goal: Some("ship".to_string()),
+        compatibility: false,
         brief: Vec::new(),
         governance: None,
         risk: None,
@@ -404,6 +408,7 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
         workspace: Some(workspace.clone()),
         cluster: None,
         goal: Some(" ".to_string()),
+        compatibility: false,
         brief: Vec::new(),
         governance: None,
         risk: None,
@@ -584,6 +589,115 @@ fn flow_and_execution_validation_cover_remaining_error_paths() {
         invalid_stage_index.validate().unwrap_err(),
         FlowValidationError::InvalidStageIndex { .. }
     ));
+}
+
+#[test]
+fn native_direct_run_diagnostics_do_not_require_execution_profile() {
+    let workspace = temp_workspace("synod-native-direct-run-diagnostics");
+    fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
+
+    let native_report = diagnose_native_direct_run_workspace(&workspace);
+    assert!(native_report.ready, "{native_report:?}");
+    assert!(native_report.checks.iter().any(|check| check.name == "workspace_execution_profile"
+        && check.message == "execution profile is optional for native direct run"));
+
+    let compatibility_report = diagnose_workspace(&workspace);
+    assert!(!compatibility_report.ready, "{compatibility_report:?}");
+    assert!(
+        compatibility_report
+            .missing_prerequisites
+            .contains(&"workspace_execution_profile".to_string())
+    );
+}
+
+#[test]
+fn native_direct_run_diagnostics_ignore_invalid_profile_when_optional() {
+    let workspace = temp_workspace("synod-native-direct-run-invalid-profile");
+    fs::create_dir_all(workspace.join(".synod")).unwrap();
+    fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
+    fs::write(workspace.join(".synod/execution.json"), "{not valid json").unwrap();
+
+    let native_report = diagnose_native_direct_run_workspace(&workspace);
+    assert!(native_report.ready, "{native_report:?}");
+    assert!(native_report.checks.iter().any(|check| {
+        check.name == "workspace_execution_profile"
+            && check
+                .message
+                .contains("execution profile is optional for native direct run; current profile state is ignored")
+    }));
+
+    let compatibility_report = diagnose_workspace(&workspace);
+    assert!(!compatibility_report.ready, "{compatibility_report:?}");
+    assert!(compatibility_report.checks.iter().any(|check| {
+        check.name == "workspace_execution_profile"
+            && check.message.contains("workspace execution profile is unavailable")
+    }));
+}
+
+#[test]
+fn native_direct_run_reuses_existing_initialized_session() {
+    let workspace =
+        write_execution_workspace("synod-native-direct-run-initialized", vec![success_attempt()]);
+    FileSessionStore::for_workspace(&workspace)
+        .persist(&build_started_session(&workspace))
+        .unwrap();
+
+    let report = execute_native_direct_run(
+        &workspace,
+        Some("Fix the failing add test"),
+        &[],
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+
+    assert_eq!(report.exit_status, CommandExitStatus::Succeeded);
+    assert!(report.terminal_output.contains("routing: native (goal_plan)"));
+    assert!(report.trace_location.is_some());
+}
+
+#[test]
+fn native_direct_run_surfaces_clarification_without_planning() {
+    let workspace = temp_workspace("synod-native-direct-run-clarification");
+
+    let report = execute_native_direct_run(
+        &workspace,
+        Some("Improve the platform docs and fix whatever tests are broken"),
+        &[],
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+
+    assert_eq!(report.exit_status, CommandExitStatus::NonSuccess);
+    assert!(report.terminal_output.contains(
+        "clarification_headline: clarification required: narrow the request to one bounded outcome"
+    ));
+    assert!(report.trace_location.is_none());
+}
+
+#[test]
+fn native_direct_run_rejects_meaningful_active_session_state() {
+    let workspace = temp_workspace("synod-native-direct-run-conflict");
+    let session_store = FileSessionStore::for_workspace(&workspace);
+    session_store.persist(&build_goal_captured_session(&workspace)).unwrap();
+
+    let error = execute_native_direct_run(
+        &workspace,
+        Some("Ship the checkout change"),
+        &[],
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, RunCommandError::ActiveSessionConflict));
 }
 
 #[test]

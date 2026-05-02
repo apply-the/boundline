@@ -3,7 +3,7 @@ use std::path::Path;
 use synod::FileConfigStore;
 use synod::adapters::session_store::{FileSessionStore, SessionStore};
 use synod::cli::inspect::execute_inspect;
-use synod::cli::run::execute_custom_run;
+use synod::cli::run::{execute_custom_run, execute_native_direct_run};
 use synod::cli::session::{
     execute_capture, execute_next, execute_plan, execute_run, execute_start, execute_status,
 };
@@ -34,6 +34,33 @@ fn confirmed_goal_plan_takes_precedence_over_execution_profile_for_session_run()
     assert!(run.terminal_output.contains("decision "), "{}", run.terminal_output);
     assert!(run.terminal_output.contains("routing: native (goal_plan)"), "{}", run.terminal_output);
     assert!(!run.terminal_output.contains("routing: compatibility"), "{}", run.terminal_output);
+}
+
+#[test]
+fn native_direct_run_stays_native_even_when_execution_profile_exists() {
+    let workspace = temp_runtime_refoundation_compat_workspace("runtime-routing-contract-direct");
+
+    let report = execute_native_direct_run(
+        &workspace,
+        Some("Fix the failing add test"),
+        &[],
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+
+    assert!(
+        report.terminal_output.contains("routing: native (goal_plan)"),
+        "{}",
+        report.terminal_output
+    );
+    assert!(
+        !report.terminal_output.contains("routing: compatibility"),
+        "{}",
+        report.terminal_output
+    );
 }
 
 #[test]

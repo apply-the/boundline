@@ -53,6 +53,7 @@ fn inspect_surfaces_validation_guided_adaptive_recovery_on_compatibility_route()
         "run",
         "--goal",
         "Recover after validation points to helper.rs",
+        "--compatibility",
         "--workspace",
         workspace.to_string_lossy().as_ref(),
     ]);

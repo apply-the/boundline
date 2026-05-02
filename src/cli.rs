@@ -139,6 +139,8 @@ pub enum DeveloperCommand {
         cluster: Option<PathBuf>,
         #[arg(long)]
         goal: Option<String>,
+        #[arg(long)]
+        compatibility: bool,
         /// One or more Markdown brief files (.md or .markdown) inside the workspace.
         #[arg(long = "brief")]
         brief: Vec<PathBuf>,
@@ -414,6 +416,7 @@ impl DeveloperCommandSession {
                 workspace,
                 cluster,
                 goal,
+                compatibility,
                 brief,
                 governance: _,
                 risk: _,
@@ -421,7 +424,7 @@ impl DeveloperCommandSession {
                 owner: _,
             } => Self {
                 command_name: CommandName::Run,
-                workspace_ref: if goal.is_some() || !brief.is_empty() {
+                workspace_ref: if *compatibility || goal.is_some() || !brief.is_empty() {
                     workspace.as_ref()
                 } else {
                     workspace.as_ref().or(cluster.as_ref())
@@ -670,13 +673,15 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
             workspace,
             cluster,
             goal,
+            compatibility,
             brief,
             governance,
             risk,
             zone,
             owner,
         } => {
-            let custom = goal.is_some()
+            let custom = *compatibility
+                || goal.is_some()
                 || !brief.is_empty()
                 || governance.is_some()
                 || risk.is_some()
@@ -692,7 +697,11 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                         trace_location: None,
                     };
                 };
-                let report = diagnostics::diagnose_workspace(workspace);
+                let report = if *compatibility {
+                    diagnostics::diagnose_workspace(workspace)
+                } else {
+                    diagnostics::diagnose_native_direct_run_workspace(workspace)
+                };
                 if !report.ready {
                     return DispatchOutcome {
                         exit_status: CommandExitStatus::InvalidInvocation,
@@ -701,15 +710,29 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                     };
                 }
 
-                match run::execute_custom_run(
-                    workspace,
-                    goal.as_deref(),
-                    brief,
-                    *governance,
-                    risk.as_deref(),
-                    zone.as_deref(),
-                    owner.as_deref(),
-                ) {
+                let result = if *compatibility {
+                    run::execute_custom_run(
+                        workspace,
+                        goal.as_deref(),
+                        brief,
+                        *governance,
+                        risk.as_deref(),
+                        zone.as_deref(),
+                        owner.as_deref(),
+                    )
+                } else {
+                    run::execute_native_direct_run(
+                        workspace,
+                        goal.as_deref(),
+                        brief,
+                        *governance,
+                        risk.as_deref(),
+                        zone.as_deref(),
+                        owner.as_deref(),
+                    )
+                };
+
+                match result {
                     Ok(report) => DispatchOutcome {
                         exit_status: report.exit_status,
                         output: report.terminal_output,
@@ -1189,6 +1212,7 @@ fn red_to_green_addition() {
             workspace: Some(custom_workspace.clone()),
             cluster: None,
             goal: Some("Fix the failing add test".to_string()),
+            compatibility: false,
             brief: Vec::new(),
             governance: None,
             risk: None,
@@ -1230,6 +1254,7 @@ fn red_to_green_addition() {
             workspace: Some(session_workspace.clone()),
             cluster: None,
             goal: None,
+            compatibility: false,
             brief: Vec::new(),
             governance: None,
             risk: None,
@@ -1264,6 +1289,7 @@ fn red_to_green_addition() {
             workspace: Some(invalid_workspace),
             cluster: None,
             goal: Some("Fix the failing add test".to_string()),
+            compatibility: false,
             brief: Vec::new(),
             governance: None,
             risk: None,

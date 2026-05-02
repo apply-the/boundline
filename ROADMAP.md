@@ -6,14 +6,15 @@ Canon is downstream from Synod in this roadmap: Synod thinks, decides, orchestra
 
 Evolve Synod into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.28.0
+## Current Status: v0.30.0
 
 Synod now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
 continuity between session-native and compatibility follow-up, stronger
 route-summary plus config projection, bounded multi-workspace clustered
 delivery, negotiated delivery modeling, inspectable routing plus assistant
-decoupling, and guided decision follow-through in place:
+decoupling, guided decision follow-through, and evidence-aligned next-command
+selection in place:
 
 - session-native orchestration remains the primary operator path
 - `capture` now derives one negotiated delivery packet from direct goals, authored briefs, and governance context before planning begins
@@ -29,28 +30,84 @@ decoupling, and guided decision follow-through in place:
 - native execution now rejects implementation or verification routes that are outside declared `assistant_runtimes` capabilities instead of silently accepting a hard-wired backend
 - `status`, `next`, and `inspect` now surface guided next-action and stop-condition output derived from persisted session or authoritative trace evidence instead of generic lifecycle wording alone
 - explicit compatibility follow-up now keeps continuity authority explicit while still projecting one evidence-backed next bounded action
+- surfaced `next_command` now stays aligned with the same authoritative follow-through, workflow resume, or explicit stop condition instead of drifting back to a generic fallback
 - session-native commands still accept `--cluster <primary-workspace>` so one authoritative primary-owned session can plan and deliver a bounded change across registered member repositories
 - clustered `run`, `status`, `next`, and `inspect` still surface authoritative workspace, clustered execution condition, participating workspaces, and any blocking member without implying distributed orchestration ownership
 
-## Next Priority: TBD After Guided Follow-Through Slice
+## Final Sequence After 0.30.0
 
-Now that `0.28.0` makes backend ownership, assistant bindings, persisted route
-snapshots, and guided follow-through explicit without diluting session
-ownership, the next slice can return to broader follow-up priorities instead of
-hidden backend selection or ambiguous continuity.
+The roadmap is no longer an open-ended backlog. The remaining work collapses
+into the final closing features that finish the product.
 
-Candidate focus:
+The governing rule is simple: if Canon cannot participate in real code-delivery
+flows, the separation between Synod and Canon is not worth the complexity.
+Synod must remain the product and execution owner; Canon must become a bounded,
+useful governed runtime inside the same delivery path instead of a parallel
+tool story.
 
-- deepen follow-through where the current bounded runtime already has one clear authority
-- prefer slices that reuse persisted session and trace evidence before adding new control planes
-- preserve bounded orchestration ownership inside Synod instead of moving it into config or provider control planes
-- avoid background daemons, distributed orchestration, or hidden fan-out control loops
+### Feature 031 - Governed Delivery With Canon Inside The Loop
 
-### Priority rationale
+**Outcome**: Canon becomes useful during real software delivery, not only as a
+documentation or approval sidecar.
 
-- negotiation is now operator-visible at capture, plan, run, status, next, and inspect, so the next leverage point is backend clarity rather than more hidden planning depth
-- existing session, trace, and config surfaces should be reused before adding a broader control plane
-- route, continuity, governance, and cluster ownership are explicit enough that backend selection can stay inspectable instead of becoming implicit runtime magic
+**This feature closes**:
+
+- integrate Canon into the same bounded delivery loop at the stages where
+  governance materially improves software work: requirement shaping, change
+  framing, review, approval, and verification evidence
+- make Synod call Canon from the live delivery flow and continue from Canon
+  outputs without splitting the operator experience into two products
+- keep Synod authoritative for orchestration, retries, routing, next-step
+  choice, and workspace execution while Canon owns governed artifacts,
+  structured evidence, approval state, provenance, and policy gates
+- ship at least one complete governed development flow that proves the model in
+  practice: goal -> change framing -> implementation -> review -> verification
+  -> completion
+
+**Done means**:
+
+- a user doing real code work can feel Canon improving delivery quality inside
+  Synod rather than being forced into a separate documentation system
+- governed and non-governed paths share the same session, trace, follow-through,
+  and `next_command` story
+
+### Feature 032 - Product Unification And Surface Closure
+
+**Outcome**: the system closes as one coherent product instead of a collection
+of partially overlapping runtimes and assistant surfaces.
+
+**This feature closes**:
+
+- unify assistant surfaces, routing slots, workflow entry points, and model
+  bindings so Copilot, Codex, Claude, Gemini, and future backends map onto the
+  same Synod-owned product story instead of provider-specific command packs
+- finish the backend abstraction work needed to keep model/provider choice
+  inspectable without reopening hidden provider control planes
+- remove remaining product ambiguity between session-native execution,
+  workflow-driven execution, and explicit compatibility usage by making one path
+  primary and the others clearly subordinate
+- close docs, operator guidance, release narrative, and inspection output around
+  the final product identity: users use Synod; Canon is visible but secondary
+
+**Done means**:
+
+- Synod presents one coherent UX and one coherent execution model across CLI,
+  assistants, workflows, routing, and governance
+- the remaining platform work fits inside maintenance and refinement rather than
+  another major architectural reset
+
+### Delivered in 0.29.0
+
+- keep surfaced `next_command` aligned with authoritative follow-through, workflow-owned resume commands, and explicit stop conditions on the existing CLI surfaces
+- preserve prerequisite and compatibility authority boundaries instead of implying resumable native execution when the next step is `status`, `inspect`, or `workflow resume`
+- update README, configuration, getting-started, assistant guidance, roadmap, contributor docs, and changelog for the release
+
+### Delivered in 0.30.0
+
+- make direct `run --goal` bootstrap the native session path by default instead of routing implicitly through the compatibility runtime
+- preserve declarative execution profiles as an explicit subordinate route via `run --compatibility --goal ...`
+- block direct native run from silently overwriting meaningful active session state
+- update README, configuration, getting-started, assistant guidance, roadmap, contributor docs, and changelog for the release
 
 ### Delivered in 0.28.0
 
@@ -139,34 +196,15 @@ routing_summary = true
 execution_condition = true
 ```
 
-### Secondary follow-up directions
+### Sequencing rule
 
-The remaining roadmap after `0.28.0` is best read as an ordered sequence rather
-than an unordered backlog.
+These three features are ordered and intentionally absorb all remaining major
+scope:
 
-### Proposed sequence after 0.28.0
-
-#### Post-0.28 - Follow-On Priorities
-
-- keep choosing slices that deepen bounded execution without reopening hidden backend control planes
-- reuse the explicit routing, assistant-binding, and continuity story before introducing broader provider-gateway scope
-- preserve the rule that backend or provider work remains operator-visible rather than assistant-owned
-
-### Decision rule for sequencing
-
-When choosing between roadmap items, prefer the slice that most improves:
-
-- explicit operator understanding of what Synod will do next
-- bounded orchestration ownership inside Synod
-- reuse of existing traces, summaries, and session state before introducing a new surface or broader search space
-
-To be challenged:
-- add a provider-agnostic model gateway inside Synod, with first-class provider auth flows and capability discovery
-- decouple assistant command packs from model backends so Claude/Codex/Copilot surfaces map to routing slots instead of hard-wired providers
-
-These are intentionally below the main roadmap because they widen platform scope,
-increase integration cost, and risk distracting from the still-unfinished core of
-bounded orchestration continuity and delivery execution.
+1. Synod must deliver real code changes before more platform abstraction work.
+2. Canon must prove value inside that real delivery loop, not beside it.
+3. Backend abstraction, assistant decoupling, and UX closure happen only after
+  the real execution and governed-delivery story are stable.
 
 ## Architecture: User Through Execution
 

@@ -15,6 +15,7 @@ fn trace_summary_preserves_step_order_and_terminal_reason() {
         "run",
         "--goal",
         "Fix the failing add test",
+        "--compatibility",
         "--workspace",
         workspace.to_string_lossy().as_ref(),
     ]);
@@ -41,6 +42,7 @@ fn trace_summary_handles_fixture_terminal_failures_without_fake_recovery_events(
         "run",
         "--goal",
         "Attempt the fixture patch on a broken workspace",
+        "--compatibility",
         "--workspace",
         workspace.to_string_lossy().as_ref(),
     ]);
@@ -67,6 +69,7 @@ fn trace_summary_carries_authored_input_summary_and_source_order() {
         "Use docs/referenced.md with the explicit brief",
         "--brief",
         "docs/explicit.md",
+        "--compatibility",
         "--workspace",
         workspace.to_string_lossy().as_ref(),
     ]);
@@ -97,6 +100,7 @@ fn trace_summary_uses_shared_route_and_execution_condition_vocabulary_for_compat
         "run",
         "--goal",
         "Fix the failing add test",
+        "--compatibility",
         "--workspace",
         workspace.to_string_lossy().as_ref(),
     ]);
@@ -125,6 +129,7 @@ fn trace_summary_surfaces_broader_adaptive_family_evidence() {
         "run",
         "--goal",
         "Fix the inclusive threshold boundary",
+        "--compatibility",
         "--workspace",
         workspace.to_string_lossy().as_ref(),
     ]);
@@ -170,6 +175,7 @@ fn trace_summary_projects_route_owner_and_effective_routing_snapshot() {
         "run",
         "--goal",
         "Fix the failing add test",
+        "--compatibility",
         "--workspace",
         workspace.to_string_lossy().as_ref(),
     ]);

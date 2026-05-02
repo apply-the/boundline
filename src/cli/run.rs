@@ -4,26 +4,79 @@ use serde_json::json;
 use thiserror::Error;
 use uuid::Uuid;
 
+use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
 use crate::adapters::trace_store::{FileTraceStore, TraceStore};
 use crate::cli::CommandExitStatus;
 use crate::cli::output;
+use crate::cli::session::{self, SessionCommandError};
 use crate::domain::brief::{
     BriefIngestionError, normalize_governance_intent, normalize_inputs_with_governance,
 };
 use crate::domain::governance::GovernanceRuntimeKind;
 use crate::domain::limits::TerminalCondition;
-use crate::domain::session::{RoutingMode, RoutingOutcome, RoutingSource};
+use crate::domain::session::{
+    ActiveSessionRecord, RoutingMode, RoutingOutcome, RoutingSource, SessionStatus,
+};
 use crate::domain::task::{TaskRunResponse, TaskStatus, TerminalReason};
 use crate::domain::task_context::TaskContext;
 use crate::domain::trace::{ExecutionTrace, TraceEventType};
 use crate::fixture::{FixtureRuntimeError, build_fixture_runtime, build_task_request};
 use crate::orchestrator::engine::{Orchestrator, OrchestratorError};
+use crate::orchestrator::flow_inference::infer_flow;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunCommandReport {
     pub exit_status: CommandExitStatus,
     pub terminal_output: String,
     pub trace_location: Option<String>,
+}
+
+pub fn execute_native_direct_run(
+    workspace: &Path,
+    goal: Option<&str>,
+    briefs: &[PathBuf],
+    governance: Option<GovernanceRuntimeKind>,
+    risk: Option<&str>,
+    zone: Option<&str>,
+    owner: Option<&str>,
+) -> Result<RunCommandReport, RunCommandError> {
+    ensure_native_direct_run_can_bootstrap(workspace)?;
+
+    session::execute_start(Some(workspace)).map_err(RunCommandError::SessionCommand)?;
+    session::execute_capture(Some(workspace), goal, briefs, governance, risk, zone, owner)
+        .map_err(RunCommandError::SessionCommand)?;
+
+    let session_store = FileSessionStore::for_workspace(workspace);
+    let record = session_store
+        .load()
+        .map_err(RunCommandError::SessionStore)?
+        .ok_or(SessionCommandError::MissingActiveSession)
+        .map_err(RunCommandError::SessionCommand)?;
+
+    if native_direct_run_requires_clarification(&record) {
+        let report =
+            session::execute_status(Some(workspace)).map_err(RunCommandError::SessionCommand)?;
+        return Ok(RunCommandReport {
+            exit_status: CommandExitStatus::NonSuccess,
+            terminal_output: report.terminal_output,
+            trace_location: record.latest_trace_ref.clone(),
+        });
+    }
+
+    let inferred_flow = record.goal.as_deref().and_then(infer_flow).map(|flow| flow.flow_name);
+    session::execute_plan(Some(workspace), inferred_flow.as_deref(), inferred_flow.is_none())
+        .map_err(RunCommandError::SessionCommand)?;
+    let report = session::execute_run(Some(workspace)).map_err(RunCommandError::SessionCommand)?;
+    let trace_location = session_store
+        .load()
+        .map_err(RunCommandError::SessionStore)?
+        .and_then(|record| record.latest_trace_ref);
+
+    Ok(RunCommandReport {
+        exit_status: report.exit_status,
+        terminal_output: report.terminal_output,
+        trace_location,
+    })
 }
 
 pub fn execute_custom_run(
@@ -142,6 +195,14 @@ pub fn execute_custom_run(
 pub enum RunCommandError {
     #[error("failed to ingest authored brief: {0}")]
     BriefIngestion(#[from] BriefIngestionError),
+    #[error(
+        "active session already contains meaningful work; continue it or reset the workspace session before using direct native run"
+    )]
+    ActiveSessionConflict,
+    #[error("session store operation failed: {0}")]
+    SessionStore(#[from] SessionStoreError),
+    #[error("session command failed: {0}")]
+    SessionCommand(#[from] SessionCommandError),
     #[error("failed to prepare the fixture-backed vertical slice: {0}")]
     FixtureRuntime(#[from] FixtureRuntimeError),
     #[error("failed to persist the clarification trace: {0}")]
@@ -159,4 +220,38 @@ fn compatibility_terminal_output(body: String) -> String {
     });
 
     format!("{routing}\nexecution_path: fixture_compatibility\n{body}")
+}
+
+fn ensure_native_direct_run_can_bootstrap(workspace: &Path) -> Result<(), RunCommandError> {
+    let Some(record) =
+        FileSessionStore::for_workspace(workspace).load().map_err(RunCommandError::SessionStore)?
+    else {
+        return Ok(());
+    };
+
+    if active_session_has_meaningful_state(&record) {
+        return Err(RunCommandError::ActiveSessionConflict);
+    }
+
+    Ok(())
+}
+
+fn active_session_has_meaningful_state(record: &ActiveSessionRecord) -> bool {
+    record.goal.as_deref().map(str::trim).is_some_and(|goal| !goal.is_empty())
+        || record.authored_brief.is_some()
+        || record.negotiation_packet.is_some()
+        || record.active_flow.is_some()
+        || record.active_task.is_some()
+        || record.goal_plan.is_some()
+        || !record.decisions.is_empty()
+        || record.latest_trace_ref.is_some()
+        || !matches!(record.latest_status, SessionStatus::Initialized)
+}
+
+fn native_direct_run_requires_clarification(record: &ActiveSessionRecord) -> bool {
+    record.authored_brief.as_ref().and_then(|bundle| bundle.clarification.as_ref()).is_some()
+        || record.negotiation_packet.as_ref().is_some_and(|packet| {
+            packet.resolution_state
+                != crate::domain::negotiation::NegotiationResolutionState::Credible
+        })
 }

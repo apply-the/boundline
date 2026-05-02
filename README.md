@@ -13,9 +13,12 @@ through the decision loop, and inspect the resulting session state and traces.
 `synod init` remains optional bootstrap, declarative execution profiles remain
 available as an explicit compatibility path, and `synod workflow` adds an
 optional thin named-workflow layer over the same session-owned runtime. In
-`0.28.0`, `capture` persists one negotiated delivery packet before planning,
-`plan` stops early when that negotiation is not yet credible, and `config
-show`, `run`, `status`, `next`, and `inspect` project negotiated-delivery
+`0.30.0`, direct `run --goal` now bootstraps the native session path by
+default, confirms an inferred flow when possible or chooses no-flow planning
+when needed, and leaves the same persisted session story behind for `status`,
+`next`, and `inspect`. `run --compatibility --goal ...` keeps the declarative
+execution-profile route available as an explicit subordinate path. `capture`,
+`plan`, `run`, `status`, `next`, and `inspect` also project negotiated-delivery
 fields plus effective routing, assistant bindings, and persisted route
 snapshots across the same session and trace story. `status`, `next`, and
 `inspect` now also project `follow_through_guidance`,
@@ -293,17 +296,28 @@ workflow progress in the active session and reports the same `routing`,
 Use `workflow list` first when the workspace offers multiple named workflows or
 when an assistant needs discovery guidance instead of reading the raw registry.
 
-### 3. Use the direct compatibility workflow when you do not need a session
+### 3. Use direct run natively, or opt into compatibility explicitly
 
-If you want the declarative execution-profile path instead of the session-native path, run directly with an explicit workspace and goal:
+If you want one command to capture, plan, and run on the primary session-owned
+route, call `run` directly with a workspace and goal:
 
 ```bash
 synod run --workspace <workspace> --goal "Fix the failing add test"
 ```
 
-This path uses the workspace execution profile and remains useful for compatibility and test-oriented workflows.
+This native-first path does not require `.synod/execution.json`. It bootstraps a
+safe session, reuses negotiated delivery capture, confirms an inferred flow when
+possible, and leaves the same persisted native follow-up story behind for
+`status`, `next`, and `inspect`.
 
-In `0.28.0`, the direct compatibility path also carries the negotiated delivery
+If you intentionally want the execution-profile path instead, opt in
+explicitly:
+
+```bash
+synod run --workspace <workspace> --compatibility --goal "Fix the failing add test"
+```
+
+In `0.30.0`, the explicit compatibility path still carries the negotiated delivery
 summary into `run` and `inspect` so `negotiation_goal_summary`,
 `negotiation_resolution`, and `negotiation_acceptance_boundary` stay visible
 even when the authoritative follow-up state comes from an explicit
@@ -358,7 +372,8 @@ Depending on the manifest, that output can also include:
 - capture a goal with `synod capture`
 - optionally select `bug-fix`, `change`, or `delivery` with `synod flow`, or confirm it during `synod plan`
 - run `synod plan` and `synod run` for the native session path
-- use direct `synod run --workspace <workspace> --goal ...` only when you intentionally want execution-profile compatibility behavior
+- use direct `synod run --workspace <workspace> --goal ...` when you want Synod to bootstrap the native session path in one command
+- add `--compatibility` to direct `run --goal` only when you intentionally want execution-profile behavior
 - inspect the result with `synod status`, `synod next`, and `synod inspect`
 
 ## Documentation
@@ -451,6 +466,10 @@ and backed by both `<workspace>/.synod/session.json` and
 profile at `<workspace>/.synod/execution.json` only for the explicit compatibility path, and `synod config` manages
 global and workspace routing defaults.
 
+Direct `synod run --workspace <workspace> --goal ...` now bootstraps the native
+session route by default. Add `--compatibility` only when the manifest-backed
+execution path is the deliberate choice.
+
 The primary init + session flow is:
 
 1. `synod init --workspace <workspace>`
@@ -492,7 +511,7 @@ the current release, see [`docs/adaptive-execution.md`](docs/adaptive-execution.
 For the concrete review configuration and voting rules still available in
 `0.17.0`, see [`docs/review-voting.md`](docs/review-voting.md).
 
-In `0.28.0`, governed stages can also project `latest_governance_runtime`,
+In `0.30.0`, governed stages can also project `latest_governance_runtime`,
 `latest_governance_mode`, `latest_governance_run_ref`, packet provenance,
 autopilot candidates, approval waits, packet rejection outcomes, and bounded
 `bug-fix:investigate` to `verify` lineage through `run`, `status`, `next`,

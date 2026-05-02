@@ -19,9 +19,44 @@ recorded workspace version.
 
 Delivered specs:
 
-- None recorded after `0.28.0`
+- None recorded after `0.30.0`
 
 Highlights:
+
+## [0.30.0] - 2026-05-02
+
+Delivered specs:
+
+- `030` - Native Direct Run
+
+Highlights:
+
+- Make direct `synod run --workspace <workspace> --goal ...` bootstrap the
+  native session route by default, including negotiated capture, executable
+  planning, decision-loop execution, and persisted follow-up through `status`,
+  `next`, and `inspect`.
+- Preserve declarative execution profiles as an explicit subordinate route via
+  `synod run --compatibility --workspace <workspace> --goal ...`, and block
+  native direct run from silently overwriting meaningful active session state.
+- Update README, configuration, getting-started, assistant guidance, roadmap,
+  contributor docs, and changelog for the release.
+
+## [0.29.0] - 2026-05-02
+
+Delivered specs:
+
+- `029` - Next Command Continuity
+
+Highlights:
+
+- Keep surfaced `next_command` aligned with authoritative follow-through,
+  workflow-owned resume commands, and explicit stop conditions on the existing
+  CLI surfaces.
+- Preserve prerequisite and compatibility authority boundaries instead of
+  implying resumable native execution when the next step is `status`,
+  `inspect`, or `workflow resume`.
+- Update README, configuration, getting-started, assistant guidance, roadmap,
+  contributor docs, and changelog for the release.
 
 ## [0.28.0] - 2026-05-01
 
