@@ -46,6 +46,7 @@ fn run_uses_the_non_success_exit_code_when_execution_stops_before_success() {
         "run",
         "--goal",
         "Attempt the fixture patch on a broken workspace",
+        "--compatibility",
         "--workspace",
         workspace.to_string_lossy().as_ref(),
     ]);

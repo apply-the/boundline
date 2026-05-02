@@ -1937,6 +1937,7 @@ mod tests {
                     workspace: None,
                     cluster: None,
                     goal: None,
+                    compatibility: false,
                     brief: Vec::new(),
                     governance: None,
                     risk: None,

@@ -31,13 +31,16 @@ The shipped CLI binary is `synod`.
 If you enable Synod governance through Canon, the current Synod adapter is
 validated against Canon `0.25.0`.
 
-In `0.28.0`, `capture` persists one negotiated delivery packet before
-planning, `plan` blocks on non-credible negotiation states, and `run`,
-`status`, `next`, and `inspect` surface the same acceptance-boundary story
-plus effective routing and assistant-binding cues. Native and compatibility
-traces now keep the route snapshot used during execution, and native execution
-fails explicitly when a requested route runtime is outside declared
-`assistant_runtimes` capabilities. `status`, `next`, and `inspect` now also
+In `0.30.0`, direct `run --goal` can bootstrap the native session path even
+without `.synod/execution.json`, while `run --compatibility --goal ...` keeps
+the manifest-backed route as an explicit opt-in. `capture` persists one
+negotiated delivery packet before planning, `plan` blocks on non-credible
+negotiation states, and `run`, `status`, `next`, and `inspect` surface the
+same acceptance-boundary story plus effective routing and assistant-binding
+cues. Native and compatibility traces now keep the route snapshot used during
+execution, and native execution fails explicitly when a requested route runtime
+is outside declared `assistant_runtimes` capabilities. `status`, `next`, and
+`inspect` now also
 surface `follow_through_guidance`, `follow_through_evidence_source`,
 `follow_through_next_action`, and `follow_through_stop_reason` when existing
 session or trace evidence can explain one next bounded action or stop.
@@ -290,19 +293,27 @@ These commands tell you:
 
 ## Direct Run Without the Full Session Flow
 
-Use the direct workflow only when you intentionally want the explicit
-compatibility path instead of the session-native operator loop:
+Use direct run when you want one command to bootstrap the native session path
+without spelling out `start`, `capture`, and `plan` yourself:
 
 ```bash
 synod run --workspace <workspace> --goal "Fix the failing add test"
 ```
 
-Direct run still uses the workspace execution manifest as the bounded execution
-contract; it does not replace the normal session-native path.
+Direct run is now native-first. It does not require the workspace execution
+manifest, it still captures negotiated delivery state, and it leaves the same
+native follow-up story behind for `status`, `next`, and `inspect`.
+
+If you intentionally want manifest-backed compatibility behavior instead, opt
+in explicitly:
+
+```bash
+synod run --workspace <workspace> --compatibility --goal "Fix the failing add test"
+```
 
 If that manifest defines `adaptive`, failed validation can reprioritize the next
 bounded adaptive attempt from the latest validation record while keeping the
-route explicit as compatibility execution. In `0.28.0`, the same path can also
+route explicit as compatibility execution. In `0.30.0`, the same path can also
 choose bounded ordering-boundary, result-status, and numeric-literal repairs,
 and it reports explicit exhaustion instead of continuing blindly when the
 validation evidence is absent or insufficient.
@@ -333,7 +344,7 @@ evidence to make the next bounded follow-up explicit.
 | `synod flow` | Select `bug-fix`, `change`, or `delivery` |
 | `synod plan` | Build the next bounded task from the active session when the negotiated packet is credible |
 | `synod step` | Execute one step of the current task |
-| `synod run` | Execute the current task until completion or operator intervention, preferring session-native routing when a `GoalPlan` exists |
+| `synod run` | Execute the current task until completion or operator intervention, or bootstrap the native route directly from `--goal`; add `--compatibility` for manifest-backed execution |
 | `synod status` | Show the current session snapshot, including negotiated follow-up cues |
 | `synod next` | Show the CLI-reported next action from the active negotiated boundary |
 | `synod inspect` | Summarize the latest trace or a specific trace, including negotiated delivery cues |

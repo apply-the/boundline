@@ -31,6 +31,17 @@ pub struct DiagnosticsReport {
 }
 
 pub fn diagnose_workspace(workspace_ref: impl AsRef<Path>) -> DiagnosticsReport {
+    diagnose_workspace_with_profile_requirement(workspace_ref, true)
+}
+
+pub fn diagnose_native_direct_run_workspace(workspace_ref: impl AsRef<Path>) -> DiagnosticsReport {
+    diagnose_workspace_with_profile_requirement(workspace_ref, false)
+}
+
+fn diagnose_workspace_with_profile_requirement(
+    workspace_ref: impl AsRef<Path>,
+    require_execution_profile: bool,
+) -> DiagnosticsReport {
     let workspace = workspace_ref.as_ref();
     let workspace_ref = workspace.to_string_lossy().into_owned();
     let mut checks = Vec::new();
@@ -119,18 +130,32 @@ pub fn diagnose_workspace(workspace_ref: impl AsRef<Path>) -> DiagnosticsReport 
                 workspace.join(".synod/execution.json").display(),
             ),
         },
+        Err(FixtureRuntimeError::MissingExecutionProfile(_)) if require_execution_profile => {
+            DiagnosticsCheck {
+                name: "workspace_execution_profile".to_string(),
+                status: DiagnosticsStatus::Failed,
+                message: format!(
+                    "run `synod init --workspace {}` to create the workspace profile",
+                    workspace.display()
+                ),
+            }
+        }
         Err(FixtureRuntimeError::MissingExecutionProfile(_)) => DiagnosticsCheck {
             name: "workspace_execution_profile".to_string(),
-            status: DiagnosticsStatus::Failed,
-            message: format!(
-                "run `synod init --workspace {}` to create the workspace profile",
-                workspace.display()
-            ),
+            status: DiagnosticsStatus::Passed,
+            message: "execution profile is optional for native direct run".to_string(),
         },
-        Err(error) => DiagnosticsCheck {
+        Err(error) if require_execution_profile => DiagnosticsCheck {
             name: "workspace_execution_profile".to_string(),
             status: DiagnosticsStatus::Failed,
             message: format!("workspace execution profile is unavailable: {error}"),
+        },
+        Err(error) => DiagnosticsCheck {
+            name: "workspace_execution_profile".to_string(),
+            status: DiagnosticsStatus::Passed,
+            message: format!(
+                "execution profile is optional for native direct run; current profile state is ignored: {error}"
+            ),
         },
     });
 

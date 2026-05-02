@@ -9,6 +9,8 @@ Shared guidance: `assistant/README.md`
 ## Intent
 Inspect a specific or session-resolved Synod trace and summarize the outcome.
 
+If the resolved workspace trace reports compatibility ownership, keep that explicit: it now means the prior direct run opted into `--compatibility`, not that plain `run --goal` defaults there.
+
 ## Required Context
 - `trace_ref` or `workspace_ref`
 - Preserve any confirmed `latest_trace_ref` from prior turns

@@ -49,6 +49,7 @@ fn inspect_surface_reports_authored_input_provenance_for_direct_run() {
         "docs/explicit.md",
         "--brief",
         "docs/explicit.md",
+        "--compatibility",
     ]);
     assert_eq!(run.status.code(), Some(0), "{}", terminal_text(&run));
     let trace_path = extract_trace_path(&terminal_text(&run)).expect("trace path");
@@ -72,6 +73,7 @@ fn inspect_surface_reports_clarification_for_direct_run_blocked_before_planning(
         workspace.to_string_lossy().as_ref(),
         "--goal",
         "Improve the platform docs and fix whatever tests are broken",
+        "--compatibility",
     ]);
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(1), "{run_text}");

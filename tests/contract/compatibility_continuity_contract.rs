@@ -1,4 +1,4 @@
-use synod::cli::run::execute_custom_run;
+use synod::cli::run::{RunCommandError, execute_custom_run, execute_native_direct_run};
 use synod::cli::session::{
     execute_capture, execute_next, execute_plan, execute_start, execute_status,
 };
@@ -75,4 +75,36 @@ fn next_contract_without_active_session_uses_latest_compatibility_trace_as_autho
         "{}",
         next.terminal_output
     );
+}
+
+#[test]
+fn native_direct_run_contract_refuses_to_replace_meaningful_active_session_state() {
+    let workspace = temp_runtime_refoundation_compat_workspace(
+        "compatibility-continuity-contract-active-session",
+    );
+
+    execute_start(Some(&workspace)).unwrap();
+    execute_capture(
+        Some(&workspace),
+        Some("fix the failing add test"),
+        &[],
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+
+    let error = execute_native_direct_run(
+        &workspace,
+        Some("Ship the checkout change"),
+        &[],
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, RunCommandError::ActiveSessionConflict));
 }

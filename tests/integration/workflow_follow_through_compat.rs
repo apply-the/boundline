@@ -41,7 +41,7 @@ fn explicit_compatibility_run_remains_available_with_discovery_enabled_workflows
 
     let run = run_synod_in(
         &workspace,
-        &["run", "--workspace", ".", "--goal", "Fix the failing add test"],
+        &["run", "--workspace", ".", "--goal", "Fix the failing add test", "--compatibility"],
     );
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(0), "{run_text}");

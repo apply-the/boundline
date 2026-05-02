@@ -11,6 +11,7 @@ fn custom_run_executes_an_adaptive_profile_without_authored_attempts() {
         "run",
         "--goal",
         "Fix the failing add test",
+        "--compatibility",
         "--workspace",
         workspace.to_string_lossy().as_ref(),
     ]);
@@ -33,6 +34,7 @@ fn custom_run_replans_an_adaptive_candidate_after_failed_validation() {
         "run",
         "--goal",
         "Recover after the first adaptive validation fails",
+        "--compatibility",
         "--workspace",
         workspace.to_string_lossy().as_ref(),
     ]);
@@ -52,6 +54,7 @@ fn custom_run_uses_validation_guidance_to_shift_the_adaptive_target() {
         "run",
         "--goal",
         "Recover after validation points to helper.rs",
+        "--compatibility",
         "--workspace",
         workspace.to_string_lossy().as_ref(),
     ]);
@@ -77,6 +80,7 @@ fn custom_run_can_repair_an_ordering_boundary_with_a_broader_family() {
         "run",
         "--goal",
         "Fix the inclusive threshold boundary",
+        "--compatibility",
         "--workspace",
         workspace.to_string_lossy().as_ref(),
     ]);

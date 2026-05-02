@@ -4,12 +4,18 @@ This directory contains Markdown-based commands to run `synod` from various AI a
 
 The primary delivery surface is session-native: `start -> capture -> plan -> run -> status -> next -> inspect` against `<workspace>/.synod/session.json` and `<workspace>/.synod/traces/`.
 
-In `0.28.0`, `capture` persists `negotiation_goal_summary`,
+In `0.30.0`, direct `run --goal` now bootstraps that native session path by
+default, while `run --compatibility --goal ...` remains the explicit
+execution-profile route. `capture` persists `negotiation_goal_summary`,
 `negotiation_resolution`, and `negotiation_acceptance_boundary` before
 planning. Assistants should preserve those fields across `plan`, `run`,
 `status`, `next`, and `inspect` instead of paraphrasing them away.
 
 `synod init` still scaffolds `<workspace>/.synod/execution.json` plus local routing config, but that manifest is now an explicit compatibility/bootstrap surface rather than the default product story.
+
+When a user asks for direct `run --goal`, assistants should prefer the native
+route by default. Add `--compatibility` only when the user explicitly wants the
+manifest-backed compatibility path.
 
 When an explicit compatibility run leaves no resumable session, assistants
 should treat `continuity_authority: compatibility_trace` as an inspect-only
@@ -114,6 +120,10 @@ If the user explicitly selects a built-in flow, assistants should run `cargo run
 - `/synod-run`: Executes `cargo run --bin synod -- run --workspace <workspace>` and summarizes `routing`, `route_owner`, `route_config_projection` when present, `execution_condition`, `execution_path`, `flow_state`, `negotiation_goal_summary`, `negotiation_resolution`, `negotiation_acceptance_boundary`, `terminal_status`, `terminal_reason`, `changed_files`, validation summaries, `trace`, `next_command`, and any flow/stage lifecycle events. When adaptive execution is active, also summarize `workspace_slice`, `candidate_family`, `selection_headline`, `selection_reason`, `rejected_candidates`, explicit adaptive exhaustion when present, and `attempt_lineage`. When review is configured, also summarize `review_trigger`, reviewer findings, `review_vote`, and `review_outcome`. When governance is active, also summarize `latest_governance_stage`, `latest_governance_runtime`, `latest_governance_mode`, `latest_governance_run_ref`, packet provenance including `latest_governance_packet_ref` and any binding reason, approval state, any packet rejection or blocked rationale, and `governance_next_action` when present.
 - `/synod-status`: Executes `cargo run --bin synod -- status --workspace <workspace>` and summarizes the active session state or latest compatibility follow-up for the current workspace, including `routing`, `route_owner`, `route_config_projection` when present, `execution_condition`, `continuity_authority`, `compatibility_follow_up`, `compatibility_trace_ref`, `compatibility_follow_up_command`, `execution_path`, `flow_state`, `latest_decision_status`, `latest_decision_target`, `active_flow`, `current_stage`, `stage_progress`, `authored_input_summary`, `authored_input_sources`, `authored_input_deduplicated_sources`, `negotiation_goal_summary`, `negotiation_resolution`, `negotiation_acceptance_boundary`, `latest_changed_files`, `latest_workspace_slice`, `latest_selection_headline`, `latest_candidate_family`, `latest_selection_reason`, `latest_rejected_candidates`, `latest_attempt_lineage`, `latest_validation_status`, `latest_exhaustion_reason`, `follow_through_guidance`, `follow_through_evidence_source`, `follow_through_next_action`, `follow_through_stop_reason`, and the latest review fields when available. When governance is active, surface `latest_governance_stage`, `latest_governance_state`, `latest_governance_mode`, `latest_governance_run_ref`, `latest_governance_packet_ref`, any packet binding reason, autopilot candidates, and `governance_next_action` so the operator knows whether to wait for approval or resolve a blocker instead of continuing execution.
 - `/synod-next`: Executes `cargo run --bin synod -- next --workspace <workspace>` and summarizes `routing`, `route_owner`, `route_config_projection` when present, `execution_condition`, `continuity_authority`, `compatibility_follow_up`, `compatibility_trace_ref`, `latest_status`, `negotiation_goal_summary`, `negotiation_resolution`, `negotiation_acceptance_boundary`, `explanation`, `follow_through_guidance`, `follow_through_evidence_source`, `follow_through_next_action`, `follow_through_stop_reason`, and the CLI-reported `next_command`, plus flow-stage context, the latest adaptive slice, `candidate_family`, selection reason, exhaustion reason when present, validation state, and the latest review outcome when present.
+
+When `status`, `next`, or `inspect` surface compatibility follow-up, treat it as
+evidence that the user previously chose `run --compatibility`; do not infer that
+plain `run --goal` should continue to use the compatibility route.
 
 ### Named Workflow Layer (Workflow Slice)
 - There is no separate assistant pack yet for `synod workflow`. Use the raw CLI subcommands directly when a workspace provides `.synod/workflows.toml`.

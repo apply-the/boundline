@@ -10,6 +10,7 @@ fn custom_run_executes_the_fixture_vertical_slice_and_persists_a_trace() {
         "run",
         "--goal",
         "Fix the failing add test",
+        "--compatibility",
         "--workspace",
         workspace.to_string_lossy().as_ref(),
     ]);
@@ -33,6 +34,7 @@ fn custom_run_reports_non_success_and_keeps_the_trace_for_inspection() {
         "run",
         "--goal",
         "Attempt the fixture patch on a broken workspace",
+        "--compatibility",
         "--workspace",
         workspace.to_string_lossy().as_ref(),
     ]);
@@ -52,6 +54,7 @@ fn custom_run_replans_to_a_later_execution_attempt_after_failed_validation() {
         "run",
         "--goal",
         "Recover after the first validation fails",
+        "--compatibility",
         "--workspace",
         workspace.to_string_lossy().as_ref(),
     ]);

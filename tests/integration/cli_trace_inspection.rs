@@ -11,6 +11,7 @@ fn inspect_command_reconstructs_step_order_from_a_successful_fixture_trace() {
         "run",
         "--goal",
         "Fix the failing add test",
+        "--compatibility",
         "--workspace",
         workspace.to_string_lossy().as_ref(),
     ]);
@@ -34,6 +35,7 @@ fn inspect_command_highlights_non_success_terminal_reasons() {
         "run",
         "--goal",
         "Attempt the fixture patch on a broken workspace",
+        "--compatibility",
         "--workspace",
         workspace.to_string_lossy().as_ref(),
     ]);
@@ -59,6 +61,7 @@ fn inspect_command_surfaces_authored_input_summary_and_sources() {
         "Use docs/referenced.md alongside the explicit brief",
         "--brief",
         "docs/explicit.md",
+        "--compatibility",
         "--workspace",
         workspace.to_string_lossy().as_ref(),
     ]);

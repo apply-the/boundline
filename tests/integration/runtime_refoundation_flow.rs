@@ -3,6 +3,28 @@ use crate::workspace_fixture::run_synod_in;
 use crate::workspace_fixture::terminal_text;
 
 #[test]
+fn direct_goal_run_bootstraps_native_session_without_a_declarative_profile() {
+    let workspace = temp_runtime_refoundation_workspace("runtime-refoundation-direct-run");
+
+    let run = run_synod_in(
+        &workspace,
+        &["run", "--workspace", ".", "--goal", "fix the failing add test"],
+    );
+    let run_text = terminal_text(&run);
+
+    assert_eq!(run.status.code(), Some(0), "{run_text}");
+    assert!(run_text.contains("routing: native (goal_plan)"), "{run_text}");
+    assert!(run_text.contains("execution_condition: terminal -"), "{run_text}");
+    assert!(run_text.contains("decision "), "{run_text}");
+    assert!(!run_text.contains("routing: compatibility"), "{run_text}");
+
+    let status = run_synod_in(&workspace, &["status", "--workspace", "."]);
+    let status_text = terminal_text(&status);
+    assert_eq!(status.status.code(), Some(0), "{status_text}");
+    assert!(status_text.contains("execution_path: native_goal_plan"), "{status_text}");
+}
+
+#[test]
 fn session_native_runtime_path_runs_without_a_declarative_profile() {
     let workspace = temp_runtime_refoundation_workspace("runtime-refoundation-flow");
 

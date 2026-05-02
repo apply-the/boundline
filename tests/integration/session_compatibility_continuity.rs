@@ -17,7 +17,7 @@ fn status_surfaces_native_session_and_compatibility_follow_up_without_replacing_
 
     let run = run_synod_in(
         &workspace,
-        &["run", "--workspace", ".", "--goal", "Fix the failing add test"],
+        &["run", "--workspace", ".", "--goal", "Fix the failing add test", "--compatibility"],
     );
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(0), "{run_text}");
@@ -49,7 +49,7 @@ fn next_without_active_session_recommends_workspace_inspect_for_latest_compatibi
 
     let run = run_synod_in(
         &workspace,
-        &["run", "--workspace", ".", "--goal", "Fix the failing add test"],
+        &["run", "--workspace", ".", "--goal", "Fix the failing add test", "--compatibility"],
     );
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(0), "{run_text}");
