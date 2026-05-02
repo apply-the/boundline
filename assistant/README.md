@@ -4,15 +4,20 @@ This directory contains Markdown-based commands to run `synod` from various AI a
 
 The primary delivery surface is session-native: `start -> capture -> plan -> run -> status -> next -> inspect` against `<workspace>/.synod/session.json` and `<workspace>/.synod/traces/`.
 
-In `0.33.0`, workflows and direct runs are primary surfaces of the same Synod
+In `0.34.0`, workflows and direct runs are primary surfaces of the same Synod
 product story, while compatibility remains explicit and subordinate.
 
-In `0.33.0`, direct `run --goal` still bootstraps that native session path by
+In `0.34.0`, direct `run --goal` still bootstraps that native session path by
 default, while `run --compatibility --goal ...` remains the explicit
 execution-profile route. `capture` persists `negotiation_goal_summary`,
 `negotiation_resolution`, and `negotiation_acceptance_boundary` before
 planning. Assistants should preserve those fields across `plan`, `run`,
 `status`, `next`, and `inspect` instead of paraphrasing them away.
+
+In the same release, native execution also keeps explicit selector-driven
+guidance visible on the read-side surfaces. Preserve `latest_selection_headline`,
+`latest_selection_reason`, and inspect `selector:` lines exactly when they
+appear: they explain which bounded action Synod chose next and why.
 
 In the same release, native planning also persists `context_summary`,
 `context_credibility`, `context_primary_inputs`, `context_provenance`, and

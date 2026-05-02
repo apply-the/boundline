@@ -1,5 +1,8 @@
 //! Decision object model for the session-native orchestrator (feature 013).
 
+use std::fmt;
+use std::str::FromStr;
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
@@ -18,6 +21,65 @@ pub enum DecisionType {
     Test,
     Fix,
     Replan,
+}
+
+/// The explicit next-action selector chosen for a decision iteration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ActionSelector {
+    #[default]
+    Read,
+    Search,
+    Modify,
+    Test,
+    Ask,
+    Replan,
+}
+
+impl DecisionType {
+    pub const fn default_selector(self) -> ActionSelector {
+        match self {
+            Self::Analyze => ActionSelector::Read,
+            Self::Code | Self::Fix => ActionSelector::Modify,
+            Self::Test => ActionSelector::Test,
+            Self::Replan => ActionSelector::Replan,
+        }
+    }
+}
+
+impl ActionSelector {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Read => "read",
+            Self::Search => "search",
+            Self::Modify => "modify",
+            Self::Test => "test",
+            Self::Ask => "ask",
+            Self::Replan => "replan",
+        }
+    }
+}
+
+impl fmt::Display for ActionSelector {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+impl FromStr for ActionSelector {
+    type Err = ActionSelectorParseError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "read" => Ok(Self::Read),
+            "search" => Ok(Self::Search),
+            "modify" => Ok(Self::Modify),
+            "test" => Ok(Self::Test),
+            "ask" => Ok(Self::Ask),
+            "replan" => Ok(Self::Replan),
+            _ => Err(ActionSelectorParseError(value.to_string())),
+        }
+    }
 }
 
 /// Lifecycle status of a decision.
@@ -80,6 +142,8 @@ impl EvidenceRef {
 pub struct Decision {
     pub id: String,
     pub decision_type: DecisionType,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selector: Option<ActionSelector>,
     pub target: String,
     pub rationale: String,
     pub expected_outcome: String,
@@ -105,6 +169,7 @@ impl Decision {
         Self {
             id: Uuid::new_v4().to_string(),
             decision_type,
+            selector: Some(decision_type.default_selector()),
             target: target.into(),
             rationale: rationale.into(),
             expected_outcome: expected_outcome.into(),
@@ -130,6 +195,15 @@ impl Decision {
             return Err(DecisionError::MissingExpectedOutcome);
         }
         Ok(())
+    }
+
+    pub fn selector_kind(&self) -> ActionSelector {
+        self.selector.unwrap_or_else(|| self.decision_type.default_selector())
+    }
+
+    pub fn with_selector(mut self, selector: ActionSelector) -> Self {
+        self.selector = Some(selector);
+        self
     }
 
     /// Transition from Pending to Dispatched.
@@ -204,3 +278,7 @@ pub enum DecisionError {
     #[error("invalid decision status transition from {from:?} to {to:?}")]
     InvalidTransition { from: DecisionStatus, to: DecisionStatus },
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[error("unknown action selector `{0}`")]
+pub struct ActionSelectorParseError(String);

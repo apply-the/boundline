@@ -187,9 +187,9 @@ fn bug_fix_recovery_decision_is_recorded_after_initial_fix_failure() {
         .iter()
         .filter(|event| event.event_type == TraceEventType::DecisionFailed)
         .count();
-    assert!(
-        failed_decisions >= 2,
-        "expected at least two failed decisions, got {failed_decisions}"
+    assert_eq!(
+        failed_decisions, 1,
+        "expected one failed fix decision before explicit recovery stop"
     );
 
     let recovery_decision =
@@ -199,13 +199,17 @@ fn bug_fix_recovery_decision_is_recorded_after_initial_fix_failure() {
             .find(|event| {
                 event.event_type == TraceEventType::DecisionCreated
                     && event.payload.get("rationale").and_then(|value| value.as_str()).is_some_and(
-                        |rationale| rationale.starts_with("Recover from failed decision"),
+                        |rationale| rationale.starts_with("Replan after failed decision"),
                     )
             })
             .expect("recovery decision should be recorded");
     assert_eq!(
         recovery_decision.payload.get("decision_type").and_then(|value| value.as_str()),
         Some("fix")
+    );
+    assert_eq!(
+        recovery_decision.payload.get("selector").and_then(|value| value.as_str()),
+        Some("replan")
     );
 }
 

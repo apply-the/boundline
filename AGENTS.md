@@ -53,6 +53,7 @@ Auto-generated from all feature plans. Last updated: 2026-05-02
 - Workspace-local `.synod/workflows.toml`, `.synod/config.toml`, `.synod/session.json`, persisted traces under `<workspace>/.synod/traces/`, optional `.synod/execution.json` for explicit compatibility follow-up, optional `.canon/` artifacts, and repository-managed assistant assets under `assistant/` (032-workflow-surface-closure)
 - Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, collections, and process APIs; no new runtime dependencies planned for this slice (033-context-assembly-foundation)
 - Workspace-local `.synod/session.json`, `.synod/config.toml`, `.synod/workflows.toml`, persisted traces under `<workspace>/.synod/traces/`, optional `.synod/execution.json`, optional `.canon/` artifacts, and updated repository docs plus assistant assets (033-context-assembly-foundation)
+- Workspace-local `.synod/session.json`, `.synod/config.toml`, optional `.synod/workflows.toml`, persisted traces under `<workspace>/.synod/traces/`, optional `.synod/execution.json`, optional `.canon/` artifacts, and repository-managed docs plus assistant assets (034-decision-driven-orchestrator)
 
 - Rust 1.95.0, edition 2024 + Rust standard library plus `serde`, `serde_json`, `thiserror`, `tracing`, and `uuid` for structured state, trace serialization, error handling, instrumentation, and stable identifiers (001-delivery-orchestrator-core)
 
@@ -81,11 +82,10 @@ Crate versioning follows Semantic Versioning.
 Before 1.0.0, breaking changes MAY occur in minor versions.
 
 ## Recent Changes
+- 034-decision-driven-orchestrator: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for this slice
 - 033-context-assembly-foundation: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, collections, and process APIs; no new runtime dependencies planned for this slice
 - 032-workflow-surface-closure: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for this slice
-- 031-canon-delivery-loop: Added credible delivery-completion gating so bounded `bug-fix` and `change` work only succeeds with material diff and passed validation evidence
 
 
 <!-- MANUAL ADDITIONS START -->
-- 0.33.0 release focus: planning now assembles a bounded context pack and projects context credibility plus provenance through `plan`, `run`, `status`, `next`, and `inspect`.
 <!-- MANUAL ADDITIONS END -->

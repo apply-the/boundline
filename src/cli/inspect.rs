@@ -680,12 +680,23 @@ fn decision_timeline_lines(
 
     match event_type {
         TraceEventType::DecisionCreated => {
+            let selector = payload.get("selector").and_then(|value| value.as_str());
             let decision_type =
                 payload.get("decision_type").and_then(|value| value.as_str()).unwrap_or("unknown");
             let target =
                 payload.get("target").and_then(|value| value.as_str()).unwrap_or("unknown");
-            let mut lines =
-                vec![format!("decision: {decision_id} {decision_type} -> {target} [{status}]")];
+            let mut lines = vec![match selector {
+                Some(selector) => {
+                    format!(
+                        "decision: {decision_id} {selector} ({decision_type}) -> {target} [{status}]"
+                    )
+                }
+                None => format!("decision: {decision_id} {decision_type} -> {target} [{status}]"),
+            }];
+
+            if let Some(selector) = selector {
+                lines.push(format!("selector: {selector}"));
+            }
 
             if let Some(rationale) = payload.get("rationale").and_then(|value| value.as_str()) {
                 lines.push(format!("rationale: {rationale}"));
@@ -694,6 +705,7 @@ fn decision_timeline_lines(
                 payload.get("expected_outcome").and_then(|value| value.as_str())
             {
                 lines.push(format!("expected_outcome: {expected_outcome}"));
+                lines.push(format!("verification_intent: {expected_outcome}"));
             }
             if let Some(inputs) = payload.get("evidence_inputs").and_then(|value| value.as_array())
             {

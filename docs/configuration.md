@@ -1,9 +1,9 @@
-# Configuration in Synod 0.33.0
+# Configuration in Synod 0.34.0
 
-Synod `0.33.0` keeps a user-friendly setup and routing configuration surface
+Synod `0.34.0` keeps a user-friendly setup and routing configuration surface
 for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
-The `0.33.0` release keeps configuration behavior stable while preserving the
+The `0.34.0` release keeps configuration behavior stable while preserving the
 same governed routing defaults across earlier `bug-fix:investigate` work,
 later verify-stage `security-assessment`, workflow-aware projection of the
 same bounded governance state, continuity-aware read-side follow-up, the
@@ -17,6 +17,10 @@ configuration-driven: planning derives one bounded context pack from workspace
 signals and persisted session evidence, while `run`, `status`, `next`, and
 `inspect` simply project the resulting context summary, credibility, primary
 inputs, provenance, and any staleness reason.
+Decision-driven selector choice is also runtime-owned rather than
+configuration-driven: the native loop can choose `read`, `search`, `modify`,
+`test`, `ask`, or `replan` from current evidence without introducing a new
+config key or route slot.
 Direct `run --goal` now boots the native session path without requiring a
 workspace execution profile, while `run --compatibility --goal ...` remains the
 manifest-backed opt-in.

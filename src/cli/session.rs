@@ -15,6 +15,7 @@ use crate::cli::CommandExitStatus;
 use crate::cli::inspect::summarize_trace;
 use crate::cli::output;
 use crate::domain::cluster::ClusterSessionProjection;
+use crate::domain::decision::ActionSelector;
 use crate::domain::governance::GovernanceRuntimeKind;
 use crate::domain::negotiation::NegotiatedDeliveryPacket;
 use crate::domain::session::{
@@ -613,6 +614,8 @@ pub(crate) fn build_status_view_with_follow_up(
 ) -> SessionStatusView {
     let governance_intent =
         record.authored_brief.as_ref().and_then(|bundle| bundle.governance_intent.as_ref());
+    let latest_decision = record.decisions.last();
+    let latest_decision_selector = latest_decision.map(|decision| decision.selector_kind());
 
     SessionStatusView {
         session_id: record.session_id.clone(),
@@ -706,11 +709,9 @@ pub(crate) fn build_status_view_with_follow_up(
         latest_status: record.latest_status,
         execution_path: execution_path_text(record),
         latest_trace_ref: record.latest_trace_ref.clone(),
-        latest_decision_status: record
-            .decisions
-            .last()
+        latest_decision_status: latest_decision
             .map(|decision| decision_status_text(decision.status).to_string()),
-        latest_decision_target: record.decisions.last().map(|decision| decision.target.clone()),
+        latest_decision_target: latest_decision.map(|decision| decision.target.clone()),
         latest_changed_files: record.active_task.as_ref().and_then(|task| {
             task.context.state.get("latest_changed_files").and_then(|value| {
                 value.as_array().map(|items| {
@@ -725,20 +726,39 @@ pub(crate) fn build_status_view_with_follow_up(
             .active_task
             .as_ref()
             .and_then(task_state_workspace_slice_summary),
-        latest_selection_headline: record.active_task.as_ref().and_then(|task| {
-            task.context
-                .state
-                .get("latest_selection_headline")
-                .and_then(|value| value.as_str().map(str::to_string))
-        }),
+        latest_selection_headline: record
+            .active_task
+            .as_ref()
+            .and_then(|task| {
+                task.context
+                    .state
+                    .get("latest_selection_headline")
+                    .and_then(|value| value.as_str().map(str::to_string))
+            })
+            .or_else(|| {
+                latest_decision.map(|decision| {
+                    let evidence_suffix = decision_evidence_basis(decision)
+                        .map(|basis| format!(" based on {basis}"))
+                        .unwrap_or_default();
+                    format!(
+                        "selector {} -> {} (verify: {}){}",
+                        decision.selector_kind().as_str(),
+                        decision.target,
+                        decision.expected_outcome,
+                        evidence_suffix,
+                    )
+                })
+            }),
         latest_candidate_family: record
             .active_task
             .as_ref()
-            .and_then(|task| task_state_string(task, "latest_candidate_family")),
+            .and_then(|task| task_state_string(task, "latest_candidate_family"))
+            .or_else(|| latest_decision_selector.map(|selector| selector.as_str().to_string())),
         latest_selection_reason: record
             .active_task
             .as_ref()
-            .and_then(|task| task_state_string(task, "latest_selection_reason")),
+            .and_then(|task| task_state_string(task, "latest_selection_reason"))
+            .or_else(|| latest_decision.map(|decision| decision.rationale.clone())),
         latest_rejected_candidates: record
             .active_task
             .as_ref()
@@ -747,12 +767,27 @@ pub(crate) fn build_status_view_with_follow_up(
             .active_task
             .as_ref()
             .and_then(task_state_attempt_lineage_summary),
-        latest_validation_status: record.active_task.as_ref().and_then(|task| {
-            task.context
-                .state
-                .get("latest_validation_status")
-                .and_then(|value| value.as_str().map(str::to_string))
-        }),
+        latest_validation_status: record
+            .active_task
+            .as_ref()
+            .and_then(|task| {
+                task.context
+                    .state
+                    .get("latest_validation_status")
+                    .and_then(|value| value.as_str().map(str::to_string))
+            })
+            .or_else(|| {
+                latest_decision.and_then(|decision| {
+                    match (decision.selector_kind(), decision.tool_result.as_ref()) {
+                        (ActionSelector::Test, Some(tool_result)) => Some(if tool_result.success {
+                            "passed".to_string()
+                        } else {
+                            "failed".to_string()
+                        }),
+                        _ => None,
+                    }
+                })
+            }),
         latest_exhaustion_reason: record
             .active_task
             .as_ref()
@@ -997,6 +1032,23 @@ fn planning_summary(record: &ActiveSessionRecord) -> String {
     )
 }
 
+fn decision_evidence_basis(decision: &crate::domain::decision::Decision) -> Option<String> {
+    let inputs = decision
+        .evidence_inputs
+        .iter()
+        .map(|evidence| {
+            let kind = match evidence.kind {
+                crate::domain::decision::EvidenceKind::Trace => "trace",
+                crate::domain::decision::EvidenceKind::File => "file",
+                crate::domain::decision::EvidenceKind::Canon => "canon",
+                crate::domain::decision::EvidenceKind::ToolOutput => "tool_output",
+            };
+            format!("{kind}:{}", evidence.reference)
+        })
+        .collect::<Vec<_>>();
+    (!inputs.is_empty()).then_some(inputs.join(", "))
+}
+
 #[derive(Debug, Error)]
 pub enum SessionCommandError {
     #[error("failed to resolve the current workspace: {0}")]
@@ -1129,15 +1181,16 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        CommandExitStatus, SessionCommandError, execute_capture, execute_flow, execute_next,
-        execute_plan, execute_run, execute_start, execute_start_with_target, execute_status,
-        exit_status_for_session, exit_status_for_task, latest_workspace_compatibility_follow_up,
-        load_active_session, map_runtime_error, map_store_error, render_error,
-        requested_governance_runtime_text, resolve_workspace, review_headline_from_task,
-        suggested_next_command,
+        CommandExitStatus, SessionCommandError, build_status_view_with_follow_up, execute_capture,
+        execute_flow, execute_next, execute_plan, execute_run, execute_start,
+        execute_start_with_target, execute_status, exit_status_for_session, exit_status_for_task,
+        latest_workspace_compatibility_follow_up, load_active_session, map_runtime_error,
+        map_store_error, render_error, requested_governance_runtime_text, resolve_workspace,
+        review_headline_from_task, suggested_next_command,
     };
     use crate::adapters::session_store::SessionStoreError;
     use crate::adapters::trace_store::{FileTraceStore, TraceStore, TraceStoreError};
+    use crate::domain::decision::{Decision, DecisionType, EvidenceRef};
     use crate::domain::goal_plan::{
         ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan,
         InferredFlow, PlannedTask,
@@ -1678,6 +1731,66 @@ fn red_to_green_addition() {
 
         assert_eq!(requested_governance_runtime_text(GovernanceRuntimeKind::Local), "local");
         assert_eq!(requested_governance_runtime_text(GovernanceRuntimeKind::Canon), "canon");
+    }
+
+    #[test]
+    fn status_view_falls_back_to_test_decision_validation_and_evidence_basis() {
+        let workspace = temp_workspace("synod-cli-session-selector-fallback");
+        let mut decision = Decision::new(
+            DecisionType::Test,
+            "test suite",
+            "run bounded validation",
+            "collect validation evidence",
+            vec![
+                EvidenceRef::trace("trace-1"),
+                EvidenceRef::file("src/lib.rs"),
+                EvidenceRef::canon(".canon/policy.json"),
+                EvidenceRef::tool_output("decision-0"),
+            ],
+        );
+        decision.mark_dispatched().unwrap();
+        decision
+            .mark_failed(crate::domain::tool_result::ToolResult::new(
+                "tester",
+                "tester test suite",
+                false,
+                1,
+            ))
+            .unwrap();
+
+        let record = crate::domain::session::ActiveSessionRecord {
+            session_id: "session-selector-fallback".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: Some("Fix the failing add test".to_string()),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: vec![decision],
+            active_flow_policy: None,
+            latest_status: SessionStatus::Failed,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 1,
+            updated_at: 1,
+        };
+
+        let view = build_status_view_with_follow_up(
+            &record,
+            Some("synod inspect".to_string()),
+            "inspect the latest decision",
+            None,
+        );
+
+        assert_eq!(view.latest_validation_status.as_deref(), Some("failed"));
+        let headline = view.latest_selection_headline.as_deref().unwrap();
+        assert!(headline.contains("trace:trace-1"), "{headline}");
+        assert!(headline.contains("file:src/lib.rs"), "{headline}");
+        assert!(headline.contains("canon:.canon/policy.json"), "{headline}");
+        assert!(headline.contains("tool_output:decision-0"), "{headline}");
+        assert_eq!(view.latest_candidate_family.as_deref(), Some("test"));
     }
 
     #[test]

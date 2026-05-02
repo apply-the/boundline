@@ -13,7 +13,7 @@ through the decision loop, and inspect the resulting session state and traces.
 `synod init` remains optional bootstrap, declarative execution profiles remain
 available as an explicit compatibility path, and `synod workflow` adds an
 optional thin named-workflow layer over the same session-owned runtime. In
-`0.33.0`, workflows and direct runs remain the two primary entry styles on
+`0.34.0`, workflows and direct runs remain the two primary entry styles on
 that same Synod-owned runtime, while explicit compatibility follow-up remains a
 subordinate route. Direct `run --goal` remains the native-first entrypoint, but Synod
 now refuses to call bounded `bug-fix` and `change` work complete unless the
@@ -37,7 +37,10 @@ snapshots across the same session and trace story. `status`, `next`, and
 `inspect` now also project `follow_through_guidance`,
 `follow_through_evidence_source`, `follow_through_next_action`, and
 `follow_through_stop_reason` when persisted session or trace evidence can make
-the next bounded action explicit. Native execution now fails
+the next bounded action explicit. In `0.34.0`, the native loop also persists
+explicit selector-driven actions such as `read`, `search`, `modify`, `test`,
+`ask`, and `replan`, and the read-side surfaces now keep the latest selector,
+rationale, evidence basis, and verification intent visible. Native execution now fails
 explicitly when the active implementation or verification route requires an
 assistant runtime outside declared `assistant_runtimes`. The same
 session-native surfaces can also run against `--cluster <primary-workspace>`
@@ -334,7 +337,7 @@ explicitly:
 synod run --workspace <workspace> --compatibility --goal "Fix the failing add test"
 ```
 
-In `0.33.0`, the explicit compatibility path still carries the negotiated delivery
+In `0.34.0`, the explicit compatibility path still carries the negotiated delivery
 summary into `run` and `inspect` so `negotiation_goal_summary`,
 `negotiation_resolution`, and `negotiation_acceptance_boundary` stay visible
 even when the authoritative follow-up state comes from an explicit
@@ -528,7 +531,7 @@ the current release, see [`docs/adaptive-execution.md`](docs/adaptive-execution.
 For the concrete review configuration and voting rules still available in
 `0.17.0`, see [`docs/review-voting.md`](docs/review-voting.md).
 
-In `0.33.0`, native planning and follow-through can also project
+In `0.34.0`, native planning and follow-through can also project
 `context_summary`, `context_credibility`, `context_primary_inputs`,
 `context_provenance`, and `context_staleness_reason` through `run`, `status`,
 `next`, `inspect`, and the workflow-aware surfaces. Governed stages still
@@ -550,12 +553,12 @@ blocking member explicitly on the same read-side surfaces.
 ## Assistant Command Packs
 
 The repository also ships assistant-native command packs for Copilot, Codex,
-and Claude under `assistant/`. In `0.33.0`, those packs continue to include
+and Claude under `assistant/`. In `0.34.0`, those packs continue to include
 first-class workflow discovery and continuation commands, and now preserve the
-same context-pack summary and credibility vocabulary surfaced by native
-planning, status, next-step, and inspect output. Gemini CLI guidance uses the
-same workflow-first vocabulary. They wrap the existing local CLI instead of
-introducing a second runtime surface.
+same selector-driven guidance plus context-pack summary and credibility
+vocabulary surfaced by native planning, status, next-step, and inspect output.
+Gemini CLI guidance uses the same workflow-first vocabulary. They wrap the
+existing local CLI instead of introducing a second runtime surface.
 
 - Shared installation and workflow guidance lives in `assistant/README.md`.
 - Claude and Codex use slash-style Markdown command files.

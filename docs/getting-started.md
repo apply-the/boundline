@@ -32,7 +32,7 @@ If you enable Synod governance through Canon, the current Synod adapter is
 validated against Canon `0.36.0` on the machine-facing `canon governance`
 `--json` `v1` adapter surface.
 
-In `0.33.0`, direct `run --goal` can bootstrap the native session path even
+In `0.34.0`, direct `run --goal` can bootstrap the native session path even
 without `.synod/execution.json`, while `run --compatibility --goal ...` keeps
 the manifest-backed route as an explicit opt-in. `capture` persists one
 negotiated delivery packet before planning, `plan` blocks on non-credible
@@ -45,7 +45,10 @@ when a requested route runtime is outside declared `assistant_runtimes`
 capabilities. `status`, `next`, and `inspect` now also
 surface `follow_through_guidance`, `follow_through_evidence_source`,
 `follow_through_next_action`, and `follow_through_stop_reason` when existing
-session or trace evidence can explain one next bounded action or stop.
+session or trace evidence can explain one next bounded action or stop. The same
+read-side surfaces now keep the latest explicit selector, rationale, evidence
+basis, and verification intent visible when the native decision loop chooses
+between `read`, `search`, `modify`, `test`, `ask`, and `replan`.
 Governed `bug-fix:investigate` and later verify-stage Canon
 `security-assessment` can remain on the same native session route, and the
 optional `synod workflow` surface now acts as a first-class primary entrypoint
@@ -320,7 +323,7 @@ synod run --workspace <workspace> --compatibility --goal "Fix the failing add te
 
 If that manifest defines `adaptive`, failed validation can reprioritize the next
 bounded adaptive attempt from the latest validation record while keeping the
-route explicit as compatibility execution. In `0.33.0`, the same path can also
+route explicit as compatibility execution. In `0.34.0`, the same path can also
 choose bounded ordering-boundary, result-status, and numeric-literal repairs,
 and it reports explicit exhaustion instead of continuing blindly when the
 validation evidence is absent or insufficient.
