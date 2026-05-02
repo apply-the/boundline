@@ -31,13 +31,16 @@ The shipped CLI binary is `synod`.
 If you enable Synod governance through Canon, the current Synod adapter is
 validated against Canon `0.25.0`.
 
-In `0.27.0`, `capture` persists one negotiated delivery packet before
+In `0.28.0`, `capture` persists one negotiated delivery packet before
 planning, `plan` blocks on non-credible negotiation states, and `run`,
 `status`, `next`, and `inspect` surface the same acceptance-boundary story
 plus effective routing and assistant-binding cues. Native and compatibility
 traces now keep the route snapshot used during execution, and native execution
 fails explicitly when a requested route runtime is outside declared
-`assistant_runtimes` capabilities.
+`assistant_runtimes` capabilities. `status`, `next`, and `inspect` now also
+surface `follow_through_guidance`, `follow_through_evidence_source`,
+`follow_through_next_action`, and `follow_through_stop_reason` when existing
+session or trace evidence can explain one next bounded action or stop.
 Governed `bug-fix:investigate` and later verify-stage Canon
 `security-assessment` can remain on the same native session route, and the
 optional `synod workflow` surface projects the same approval, blocked, and
@@ -299,7 +302,7 @@ contract; it does not replace the normal session-native path.
 
 If that manifest defines `adaptive`, failed validation can reprioritize the next
 bounded adaptive attempt from the latest validation record while keeping the
-route explicit as compatibility execution. In `0.27.0`, the same path can also
+route explicit as compatibility execution. In `0.28.0`, the same path can also
 choose bounded ordering-boundary, result-status, and numeric-literal repairs,
 and it reports explicit exhaustion instead of continuing blindly when the
 validation evidence is absent or insufficient.
@@ -309,12 +312,13 @@ After a direct compatibility run, `synod status --workspace <workspace>` and
 `synod inspect --workspace <workspace>` even when there is no resumable active
 session. Look for `continuity_authority: compatibility_trace` and the CLI-
 reported inspect command instead of assuming you must restart from `synod
-start`. In `0.27.0`, the same outputs also surface `route_owner: compatibility`
+start`. In `0.28.0`, the same outputs also surface `route_owner: compatibility`
 and any relevant `route_config_projection`, including persisted
 `effective_routing` and `assistant_bindings`, so the inspect-only route stays
 explicit even when summary wording otherwise matches the native path. They also
 preserve the negotiated delivery summary so compatibility follow-up does not
-lose the active acceptance boundary.
+lose the active acceptance boundary, and they now reuse authoritative trace
+evidence to make the next bounded follow-up explicit.
 
 ## The Core Commands
 

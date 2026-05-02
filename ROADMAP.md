@@ -6,14 +6,14 @@ Canon is downstream from Synod in this roadmap: Synod thinks, decides, orchestra
 
 Evolve Synod into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.27.0
+## Current Status: v0.28.0
 
 Synod now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
 continuity between session-native and compatibility follow-up, stronger
 route-summary plus config projection, bounded multi-workspace clustered
-delivery, negotiated delivery modeling, and inspectable routing plus assistant
-decoupling in place:
+delivery, negotiated delivery modeling, inspectable routing plus assistant
+decoupling, and guided decision follow-through in place:
 
 - session-native orchestration remains the primary operator path
 - `capture` now derives one negotiated delivery packet from direct goals, authored briefs, and governance context before planning begins
@@ -27,14 +27,17 @@ decoupling in place:
 - `run`, `status`, `next`, `inspect`, and compatibility follow-up still surface explicit `route_owner` plus material `route_config_projection` cues when workflow metadata, governance intent, or workspace-local routing defaults explain the current follow-up story
 - `config show`, `run`, `status`, `next`, and `inspect` now surface effective slot routing, assistant bindings, and persisted route snapshots instead of forcing operators to reconstruct backend ownership from current config files
 - native execution now rejects implementation or verification routes that are outside declared `assistant_runtimes` capabilities instead of silently accepting a hard-wired backend
+- `status`, `next`, and `inspect` now surface guided next-action and stop-condition output derived from persisted session or authoritative trace evidence instead of generic lifecycle wording alone
+- explicit compatibility follow-up now keeps continuity authority explicit while still projecting one evidence-backed next bounded action
 - session-native commands still accept `--cluster <primary-workspace>` so one authoritative primary-owned session can plan and deliver a bounded change across registered member repositories
 - clustered `run`, `status`, `next`, and `inspect` still surface authoritative workspace, clustered execution condition, participating workspaces, and any blocking member without implying distributed orchestration ownership
 
-## Next Priority: TBD After Backend Clarity Slice
+## Next Priority: TBD After Guided Follow-Through Slice
 
-Now that `0.27.0` makes backend ownership, assistant bindings, and persisted
-route snapshots explicit without diluting session ownership, the next slice can
-return to broader follow-up priorities instead of hidden backend selection.
+Now that `0.28.0` makes backend ownership, assistant bindings, persisted route
+snapshots, and guided follow-through explicit without diluting session
+ownership, the next slice can return to broader follow-up priorities instead of
+hidden backend selection or ambiguous continuity.
 
 Candidate focus:
 
@@ -48,6 +51,12 @@ Candidate focus:
 - negotiation is now operator-visible at capture, plan, run, status, next, and inspect, so the next leverage point is backend clarity rather than more hidden planning depth
 - existing session, trace, and config surfaces should be reused before adding a broader control plane
 - route, continuity, governance, and cluster ownership are explicit enough that backend selection can stay inspectable instead of becoming implicit runtime magic
+
+### Delivered in 0.28.0
+
+- make `status`, `next`, and `inspect` project `follow_through_guidance`, `follow_through_evidence_source`, `follow_through_next_action`, and `follow_through_stop_reason` when persisted session or trace evidence supports one bounded follow-up story
+- keep explicit compatibility continuity authoritative while still surfacing one evidence-backed next bounded action
+- update README, configuration, getting-started, assistant guidance, roadmap, contributor docs, and changelog for the release
 
 ### Delivered in 0.27.0
 
@@ -132,12 +141,12 @@ execution_condition = true
 
 ### Secondary follow-up directions
 
-The remaining roadmap after `0.27.0` is best read as an ordered sequence rather
+The remaining roadmap after `0.28.0` is best read as an ordered sequence rather
 than an unordered backlog.
 
-### Proposed sequence after 0.27.0
+### Proposed sequence after 0.28.0
 
-#### Post-0.27 - Follow-On Priorities
+#### Post-0.28 - Follow-On Priorities
 
 - keep choosing slices that deepen bounded execution without reopening hidden backend control planes
 - reuse the explicit routing, assistant-binding, and continuity story before introducing broader provider-gateway scope

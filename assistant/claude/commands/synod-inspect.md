@@ -24,7 +24,7 @@ or
 Wait for pasted output before continuing. If workspace-based inspect reports a session error, route to `/synod-start`. If trace reading fails, ask for a corrected trace reference or workspace and provide the replacement inspect command.
 
 ## Output Interpretation
-Summarize `inspection_target`, `trace`, `routing_summary`, `route_owner`, `route_config_projection`, `execution_condition`, `goal_plan_summary`, `decision_timeline`, `failure_evidence`, `terminal_status`, `terminal_reason`, `authored_input_summary`, `authored_input_sources`, `authored_input_deduplicated_sources` when present, governance runtime, mode, run-ref, packet provenance, `governance_next_action` when present, `corrected_command` on failures, and the CLI-reported `next_command`. Preserve `effective_routing` and `assistant_bindings` when the route projection includes the persisted execution snapshot.
+Summarize `inspection_target`, `trace`, `routing_summary`, `route_owner`, `route_config_projection`, `execution_condition`, `goal_plan_summary`, `decision_timeline`, `failure_evidence`, `follow_through_guidance`, `follow_through_evidence_source`, `follow_through_next_action`, `follow_through_stop_reason`, `terminal_status`, `terminal_reason`, `authored_input_summary`, `authored_input_sources`, `authored_input_deduplicated_sources` when present, governance runtime, mode, run-ref, packet provenance, `governance_next_action` when present, `corrected_command` on failures, and the CLI-reported `next_command`. Preserve `effective_routing` and `assistant_bindings` when the route projection includes the persisted execution snapshot.
 
 ## Next-Step Routing
 If workspace-based inspect reports a session error, route to `/synod-start`. Otherwise prefer the CLI-reported `next_command`.

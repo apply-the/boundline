@@ -1,9 +1,9 @@
-# Configuration in Synod 0.27.0
+# Configuration in Synod 0.28.0
 
-Synod `0.27.0` keeps a user-friendly setup and routing configuration surface
+Synod `0.28.0` keeps a user-friendly setup and routing configuration surface
 for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
-The `0.27.0` release keeps configuration behavior stable while preserving the
+The `0.28.0` release keeps configuration behavior stable while preserving the
 same governed routing defaults across earlier `bug-fix:investigate` work,
 later verify-stage `security-assessment`, workflow-aware projection of the
 same bounded governance state, continuity-aware read-side follow-up, the
@@ -34,6 +34,9 @@ ranking, explicit adaptive exhaustion, or negotiation-state overrides.
 - `run`, `status`, `next`, and `inspect` now surface effective routing plus
 	assistant bindings, and native or compatibility traces persist the route
 	snapshot used during execution
+- `status`, `next`, and `inspect` now also surface guided follow-through fields
+	when persisted session or trace evidence can explain one concrete next
+	bounded action or explicit stop condition
 - when `assistant_runtimes` is non-empty, native execution now fails explicitly
 	if the active implementation or verification route requires a missing
 	assistant family instead of silently falling back

@@ -13,6 +13,7 @@ use crate::domain::cluster::{
 use crate::domain::configuration::{
     ModelRoute, RoutingConfig, RoutingOverrides, resolve_effective_routing,
 };
+use crate::domain::follow_through::FollowThroughProjection;
 use crate::domain::goal_plan::GoalPlanFlowState;
 use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::session::RoutingOutcome;
@@ -604,6 +605,11 @@ pub fn render_trace_summary(
         lines.push(format!("governance_next_action: {governance_next_action}"));
     }
 
+    let follow_through = FollowThroughProjection::from_trace_summary(summary, Some(next_command));
+    if !follow_through.is_empty() {
+        lines.extend(follow_through.projection_lines());
+    }
+
     lines.extend(summary.review_timeline.iter().cloned());
 
     lines.push(format!("terminal_status: {}", task_status_text(summary.terminal_status)));
@@ -930,6 +936,11 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
         lines.push(format!("governance_next_action: {governance_next_action}"));
     }
 
+    let follow_through = FollowThroughProjection::from_session_view(view);
+    if !follow_through.is_empty() {
+        lines.extend(follow_through.projection_lines());
+    }
+
     if let Some(next_command) = view.next_command.as_ref().or(view.workflow_next_action.as_ref()) {
         lines.push(format!("next_command: {next_command}"));
     }
@@ -953,6 +964,10 @@ pub fn render_compatibility_follow_up_status(
         "execution_condition",
         "next_command",
     ));
+    let follow_through = FollowThroughProjection::from_compatibility_follow_up(follow_up);
+    if !follow_through.is_empty() {
+        lines.extend(follow_through.projection_lines());
+    }
     lines.push(format!("explanation: {}", explanation.into()));
     lines.join("\n")
 }

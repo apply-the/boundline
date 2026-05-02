@@ -19,9 +19,26 @@ recorded workspace version.
 
 Delivered specs:
 
-- None recorded after `0.27.0`
+- None recorded after `0.28.0`
 
 Highlights:
+
+## [0.28.0] - 2026-05-01
+
+Delivered specs:
+
+- `028` - Decision Continuity And Guided Follow-Through
+
+Highlights:
+
+- Make `status`, `next`, and `inspect` surface one explicit guided follow-through
+  story via `follow_through_guidance`, `follow_through_evidence_source`,
+  `follow_through_next_action`, and `follow_through_stop_reason` when the bounded
+  task has enough persisted session or trace evidence to explain what should happen next.
+- Reuse authoritative trace evidence on explicit compatibility follow-up without
+  blurring native versus compatibility continuity ownership.
+- Update README, configuration, getting-started, assistant guidance, roadmap,
+  contributor docs, and changelog for the release.
 
 ## [0.27.0] - 2026-05-01
 

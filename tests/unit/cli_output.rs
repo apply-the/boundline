@@ -1356,6 +1356,85 @@ fn render_session_status_projects_workspace_routing_defaults() {
 }
 
 #[test]
+fn render_session_status_surfaces_follow_through_guidance() {
+    let rendered = render_session_status(&SessionStatusView {
+        session_id: "session-follow-through".to_string(),
+        workspace_ref: "/tmp/workspace".to_string(),
+        goal: Some("Fix the failing add test".to_string()),
+        negotiation_goal_summary: None,
+        negotiation_resolution: None,
+        negotiation_acceptance_boundary: None,
+        cluster_delivery_story: None,
+        authored_input_summary: None,
+        authored_input_sources: None,
+        authored_input_deduplicated_sources: None,
+        clarification_headline: None,
+        clarification_prompt: None,
+        clarification_missing_fields: None,
+        requested_governance_runtime: None,
+        requested_governance_risk: None,
+        requested_governance_zone: None,
+        requested_governance_owner: None,
+        active_flow: None,
+        flow_state: None,
+        active_workflow: None,
+        workflow_phase: None,
+        workflow_next_action: None,
+        continuity_authority: None,
+        compatibility_follow_up: None,
+        current_stage_id: None,
+        current_stage_index: None,
+        total_stages: None,
+        plan_revision: None,
+        current_step_id: Some("verify-fix-add".to_string()),
+        current_step_index: Some(2),
+        latest_status: SessionStatus::Running,
+        execution_path: Some("native_goal_plan".to_string()),
+        latest_trace_ref: Some("/tmp/workspace/.synod/traces/trace.json".to_string()),
+        latest_decision_status: Some("failed".to_string()),
+        latest_decision_target: Some("verify-fix-add".to_string()),
+        latest_changed_files: None,
+        latest_workspace_slice: None,
+        latest_selection_headline: Some(
+            "selected src/lib.rs for the next bounded retry".to_string(),
+        ),
+        latest_candidate_family: Some("ordering_boundary_flip".to_string()),
+        latest_selection_reason: Some("validation evidence still points to src/lib.rs".to_string()),
+        latest_rejected_candidates: None,
+        latest_attempt_lineage: None,
+        latest_validation_status: Some("failed".to_string()),
+        latest_exhaustion_reason: None,
+        latest_review_trigger: None,
+        latest_review_vote: None,
+        latest_review_outcome: None,
+        latest_review_headline: None,
+        latest_governance_stage: None,
+        latest_governance_runtime: None,
+        latest_governance_mode: None,
+        latest_governance_run_ref: None,
+        latest_governance_state: None,
+        latest_governance_blocked_reason: None,
+        latest_governance_packet_ref: None,
+        latest_governance_packet_source_stage: None,
+        latest_governance_packet_binding_reason: None,
+        latest_governance_approval: None,
+        latest_governance_decision: None,
+        latest_governance_candidates: None,
+        governance_next_action: None,
+        next_command: Some("synod step".to_string()),
+        explanation: "next recommended command for the active session is `synod step`".to_string(),
+    });
+
+    assert!(
+        rendered
+            .contains("follow_through_guidance: selected src/lib.rs for the next bounded retry"),
+        "{rendered}"
+    );
+    assert!(rendered.contains("follow_through_evidence_source: session:recovery"), "{rendered}");
+    assert!(rendered.contains("follow_through_next_action: synod step"), "{rendered}");
+}
+
+#[test]
 fn render_trace_summary_projects_workspace_routing_defaults() {
     let workspace =
         std::env::temp_dir().join(format!("synod-route-config-trace-{}", Uuid::new_v4()));
@@ -1474,6 +1553,59 @@ fn render_trace_summary_prefers_persisted_routing_snapshot_over_current_workspac
         "{rendered}"
     );
     assert!(!rendered.contains("reviewer-now"), "{rendered}");
+}
+
+#[test]
+fn render_trace_summary_surfaces_follow_through_guidance() {
+    let summary = TraceSummaryView {
+        trace_ref: "/tmp/trace.json".to_string(),
+        goal: "Fix the failing add test".to_string(),
+        negotiation_goal_summary: None,
+        negotiation_resolution: None,
+        negotiation_acceptance_boundary: None,
+        cluster_delivery_story: None,
+        routing_summary: Some(
+            "routing: compatibility (execution_profile) - trace came from the explicit compatibility runtime"
+                .to_string(),
+        ),
+        routing_projection: RoutingDecisionProjection::default(),
+        goal_plan_summary: None,
+        authored_input_summary: None,
+        authored_input_sources: Vec::new(),
+        authored_input_deduplicated_sources: Vec::new(),
+        clarification_headline: None,
+        clarification_prompt: None,
+        clarification_missing_fields: Vec::new(),
+        requested_governance_runtime: None,
+        requested_governance_risk: None,
+        requested_governance_zone: None,
+        requested_governance_owner: None,
+        decision_timeline: vec![
+            "decision verify-fix-add failed [1 attempt(s)] - validation failed after 1 attempt(s)"
+                .to_string(),
+        ],
+        failure_evidence: vec!["validation_status: failed".to_string()],
+        adaptive_evidence: Vec::new(),
+        executed_steps: Vec::new(),
+        recovery_events: Vec::new(),
+        governance_timeline: Vec::new(),
+        governance_next_action: None,
+        review_timeline: Vec::new(),
+        terminal_status: TaskStatus::Failed,
+        terminal_reason: TerminalReason::new(TerminalCondition::UnrecoverableError, "validation failed", None),
+        duration: None,
+    };
+
+    let rendered = render_trace_summary(&summary, "explicit-trace", "/synod-next");
+
+    assert!(
+        rendered.contains(
+            "follow_through_guidance: decision verify-fix-add failed [1 attempt(s)] - validation failed after 1 attempt(s)"
+        ),
+        "{rendered}"
+    );
+    assert!(rendered.contains("follow_through_evidence_source: trace:decision"), "{rendered}");
+    assert!(rendered.contains("follow_through_next_action: /synod-next"), "{rendered}");
 }
 
 #[test]
