@@ -19,9 +19,29 @@ recorded workspace version.
 
 Delivered specs:
 
-- None recorded after `0.32.0`
+- None recorded after `0.33.0`
 
 Highlights:
+
+## [0.33.0] - 2026-05-02
+
+Delivered specs:
+
+- `033` - Context Assembly Foundation
+
+Highlights:
+
+- Assemble one bounded context pack before native planning from workspace
+  signals, authored briefs, negotiated delivery state, recent traces, and
+  reusable Canon artifacts instead of relying on ambient workspace state.
+- Surface `context_summary`, `context_credibility`, primary inputs,
+  provenance, and any explicit staleness reason through `plan`, `run`,
+  `status`, `next`, and `inspect`, including persisted native
+  `GoalPlanCreated` trace payloads.
+- Stop planning explicitly when bounded context is insufficient instead of
+  silently producing a coarse plan, and update README, getting-started,
+  configuration, contributor docs, assistant guidance, roadmap, and changelog
+  for the release.
 
 ## [0.32.0] - 2026-05-02
 

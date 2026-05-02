@@ -317,6 +317,16 @@ pub struct SessionStatusView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authored_input_deduplicated_sources: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_credibility: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_primary_inputs: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_provenance: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_staleness_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clarification_headline: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clarification_prompt: Option<String>,
@@ -417,6 +427,81 @@ pub struct SessionStatusView {
     pub explanation: String,
 }
 
+impl Default for SessionStatusView {
+    fn default() -> Self {
+        Self {
+            session_id: String::new(),
+            workspace_ref: String::new(),
+            goal: None,
+            negotiation_goal_summary: None,
+            negotiation_resolution: None,
+            negotiation_acceptance_boundary: None,
+            cluster_delivery_story: None,
+            authored_input_summary: None,
+            authored_input_sources: None,
+            authored_input_deduplicated_sources: None,
+            context_summary: None,
+            context_credibility: None,
+            context_primary_inputs: None,
+            context_provenance: None,
+            context_staleness_reason: None,
+            clarification_headline: None,
+            clarification_prompt: None,
+            clarification_missing_fields: None,
+            requested_governance_runtime: None,
+            requested_governance_risk: None,
+            requested_governance_zone: None,
+            requested_governance_owner: None,
+            active_flow: None,
+            flow_state: None,
+            active_workflow: None,
+            workflow_phase: None,
+            workflow_next_action: None,
+            continuity_authority: None,
+            compatibility_follow_up: None,
+            current_stage_id: None,
+            current_stage_index: None,
+            total_stages: None,
+            plan_revision: None,
+            current_step_id: None,
+            current_step_index: None,
+            latest_status: SessionStatus::Initialized,
+            execution_path: None,
+            latest_trace_ref: None,
+            latest_decision_status: None,
+            latest_decision_target: None,
+            latest_changed_files: None,
+            latest_workspace_slice: None,
+            latest_selection_headline: None,
+            latest_candidate_family: None,
+            latest_selection_reason: None,
+            latest_rejected_candidates: None,
+            latest_attempt_lineage: None,
+            latest_validation_status: None,
+            latest_exhaustion_reason: None,
+            latest_review_trigger: None,
+            latest_review_vote: None,
+            latest_review_outcome: None,
+            latest_review_headline: None,
+            latest_governance_stage: None,
+            latest_governance_runtime: None,
+            latest_governance_mode: None,
+            latest_governance_run_ref: None,
+            latest_governance_state: None,
+            latest_governance_blocked_reason: None,
+            latest_governance_packet_ref: None,
+            latest_governance_packet_source_stage: None,
+            latest_governance_packet_binding_reason: None,
+            latest_governance_approval: None,
+            latest_governance_decision: None,
+            latest_governance_candidates: None,
+            governance_next_action: None,
+            next_command: None,
+            explanation: String::new(),
+        }
+    }
+}
+
 impl SessionStatusView {
     pub fn validate(&self, record: &ActiveSessionRecord) -> Result<(), SessionValidationError> {
         if self.session_id != record.session_id {
@@ -475,6 +560,58 @@ impl SessionStatusView {
             return Err(SessionValidationError::StatusViewNegotiationAcceptanceBoundaryMismatch {
                 expected: expected_negotiation_acceptance_boundary,
                 actual: self.negotiation_acceptance_boundary.clone(),
+            });
+        }
+
+        let expected_context_summary =
+            record.goal_plan.as_ref().and_then(|goal_plan| goal_plan.context_summary());
+        if self.context_summary != expected_context_summary {
+            return Err(SessionValidationError::StatusViewContextSummaryMismatch {
+                expected: expected_context_summary,
+                actual: self.context_summary.clone(),
+            });
+        }
+
+        let expected_context_credibility =
+            record.goal_plan.as_ref().and_then(|goal_plan| goal_plan.context_credibility());
+        if self.context_credibility != expected_context_credibility {
+            return Err(SessionValidationError::StatusViewContextCredibilityMismatch {
+                expected: expected_context_credibility,
+                actual: self.context_credibility.clone(),
+            });
+        }
+
+        let expected_context_primary_inputs = record.goal_plan.as_ref().and_then(|goal_plan| {
+            let inputs = goal_plan.context_primary_inputs();
+            (!inputs.is_empty()).then_some(inputs)
+        });
+        if self.context_primary_inputs != expected_context_primary_inputs {
+            return Err(SessionValidationError::StatusViewContextPrimaryInputsMismatch {
+                expected: expected_context_primary_inputs,
+                actual: self.context_primary_inputs.clone(),
+            });
+        }
+
+        let expected_context_provenance = record.goal_plan.as_ref().and_then(|goal_plan| {
+            let lines = goal_plan.context_provenance_lines();
+            (!lines.is_empty()).then_some(lines)
+        });
+        if self.context_provenance != expected_context_provenance {
+            return Err(SessionValidationError::StatusViewContextProvenanceMismatch {
+                expected: expected_context_provenance,
+                actual: self.context_provenance.clone(),
+            });
+        }
+
+        let expected_context_staleness_reason = record
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| goal_plan.context_pack.as_ref())
+            .and_then(|pack| pack.staleness_reason.clone());
+        if self.context_staleness_reason != expected_context_staleness_reason {
+            return Err(SessionValidationError::StatusViewContextStalenessReasonMismatch {
+                expected: expected_context_staleness_reason,
+                actual: self.context_staleness_reason.clone(),
             });
         }
 
@@ -1039,6 +1176,22 @@ pub enum SessionValidationError {
         expected: Option<String>,
         actual: Option<String>,
     },
+    #[error("status view context summary mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewContextSummaryMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view context credibility mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewContextCredibilityMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view context primary inputs mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewContextPrimaryInputsMismatch {
+        expected: Option<Vec<String>>,
+        actual: Option<Vec<String>>,
+    },
+    #[error("status view context provenance mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewContextProvenanceMismatch {
+        expected: Option<Vec<String>>,
+        actual: Option<Vec<String>>,
+    },
+    #[error("status view context staleness reason mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewContextStalenessReasonMismatch { expected: Option<String>, actual: Option<String> },
     #[error("status view flow mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewFlowMismatch { expected: Option<String>, actual: Option<String> },
     #[error("status view flow state mismatch: expected {expected:?}, got {actual:?}")]
@@ -1426,10 +1579,16 @@ mod tests {
         task_state_string, task_state_strings, task_state_workspace_slice_summary,
         trace_within_workspace,
     };
+    use crate::domain::goal_plan::{
+        ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan,
+        InferredFlow, PlannedTask,
+    };
     use crate::domain::limits::RunLimits;
+    use crate::domain::negotiation::NegotiatedDeliveryPacket;
     use crate::domain::plan::Plan;
     use crate::domain::step::Step;
     use crate::domain::task::{Task, TaskPersistenceError, TaskRunRequest};
+    use crate::domain::workflow::{WorkflowLifecycleState, WorkflowPhase, WorkflowProgressState};
 
     fn build_task(workspace_ref: &str) -> Task {
         let request = TaskRunRequest {
@@ -1479,6 +1638,27 @@ mod tests {
             authored_input_summary: None,
             authored_input_sources: None,
             authored_input_deduplicated_sources: None,
+            context_summary: record
+                .goal_plan
+                .as_ref()
+                .and_then(|goal_plan| goal_plan.context_summary()),
+            context_credibility: record
+                .goal_plan
+                .as_ref()
+                .and_then(|goal_plan| goal_plan.context_credibility()),
+            context_primary_inputs: record.goal_plan.as_ref().and_then(|goal_plan| {
+                let inputs = goal_plan.context_primary_inputs();
+                (!inputs.is_empty()).then_some(inputs)
+            }),
+            context_provenance: record.goal_plan.as_ref().and_then(|goal_plan| {
+                let lines = goal_plan.context_provenance_lines();
+                (!lines.is_empty()).then_some(lines)
+            }),
+            context_staleness_reason: record
+                .goal_plan
+                .as_ref()
+                .and_then(|goal_plan| goal_plan.context_pack.as_ref())
+                .and_then(|pack| pack.staleness_reason.clone()),
             clarification_headline: None,
             clarification_prompt: None,
             clarification_missing_fields: None,
@@ -1674,6 +1854,41 @@ mod tests {
         view.latest_governance_candidates = super::task_state_governance_candidate_actions(task);
         view.governance_next_action = super::task_state_governance_next_action(task);
         view
+    }
+
+    fn build_context_goal_plan() -> GoalPlan {
+        let mut goal_plan = GoalPlan::new(
+            "Deliver a session-backed CLI",
+            vec![PlannedTask {
+                task_id: "planned-task-1".to_string(),
+                description: "Implement the session runtime".to_string(),
+                target: "src/lib.rs".to_string(),
+                expected_outcome: Some("session runtime works".to_string()),
+                decision_type_hint: None,
+            }],
+        )
+        .unwrap()
+        .with_context_pack(ContextPack {
+            pack_id: "cp-session".to_string(),
+            summary: "bounded context from src/lib.rs".to_string(),
+            credibility: ContextPackCredibility::Stale,
+            inputs: vec![ContextInput {
+                kind: ContextInputKind::WorkspaceFile,
+                reference: "src/lib.rs".to_string(),
+                rationale: "contains the runtime entry point".to_string(),
+                source: "workspace_scan".to_string(),
+                primary: true,
+            }],
+            selected_targets: vec!["src/lib.rs".to_string()],
+            staleness_reason: Some("trace snapshot is stale".to_string()),
+        })
+        .with_flow(InferredFlow {
+            flow_name: "bug-fix".to_string(),
+            confidence_reason: "goal contains fix evidence".to_string(),
+            confirmed: false,
+        });
+        goal_plan.confirm().unwrap();
+        goal_plan
     }
 
     #[test]
@@ -1964,6 +2179,202 @@ mod tests {
         let error = SessionValidationError::from(TaskPersistenceError::MissingGoal);
         assert!(
             matches!(error, SessionValidationError::InvalidTask(message) if message.contains("task goal must not be empty"))
+        );
+    }
+
+    #[test]
+    fn active_session_validation_covers_goal_plan_and_workflow_branches() {
+        let workspace = "/tmp/synod-session-domain-goal-plan";
+
+        let mut missing_goal = build_record(workspace);
+        missing_goal.goal = None;
+        assert!(matches!(
+            missing_goal.validate().unwrap_err(),
+            SessionValidationError::MissingGoal(SessionStatus::Planned)
+        ));
+
+        let mut planned_without_task = build_record(workspace);
+        planned_without_task.active_task = None;
+        planned_without_task.goal_plan = Some(build_context_goal_plan());
+        planned_without_task.latest_status = SessionStatus::Planned;
+        planned_without_task.validate().unwrap();
+
+        let mut invalid_workflow = build_record(workspace);
+        invalid_workflow.workflow_progress = Some(WorkflowProgressState {
+            workflow_name: " ".to_string(),
+            lifecycle_state: WorkflowLifecycleState::Active,
+            current_phase: Some(WorkflowPhase::Run),
+            completed_phases: Vec::new(),
+            blocked_reason: None,
+            next_action: Some("synod step".to_string()),
+            routing_summary: None,
+        });
+        assert!(matches!(
+            invalid_workflow.validate().unwrap_err(),
+            SessionValidationError::InvalidWorkflowProgress(_)
+        ));
+
+        assert_eq!(super::ContinuityAuthority::NativeSession.as_str(), "native_session");
+        assert_eq!(super::ContinuityAuthority::CompatibilityTrace.as_str(), "compatibility_trace");
+        assert_eq!(super::CompatibilityFollowUpMode::InspectOnly.as_str(), "inspect_only");
+        assert_eq!(super::CompatibilityFollowUpMode::Superseded.as_str(), "superseded");
+    }
+
+    #[test]
+    fn status_view_rejects_negotiation_and_context_projection_mismatches() {
+        let workspace = "/tmp/synod-session-domain-context";
+        let mut record = build_record(workspace);
+        record.negotiation_packet = Some(NegotiatedDeliveryPacket::from_goal(
+            &record.session_id,
+            &record.workspace_ref,
+            record.goal.as_deref().unwrap(),
+        ));
+        record.goal_plan = Some(build_context_goal_plan());
+
+        let mut view = build_view(&record);
+        let packet = record.negotiation_packet.as_ref().unwrap();
+        view.negotiation_goal_summary = Some(packet.goal_summary.clone());
+        view.negotiation_resolution = Some(packet.resolution_state.as_str().to_string());
+        view.negotiation_acceptance_boundary =
+            Some(packet.acceptance_boundary.success_headline.clone());
+        view.validate(&record).unwrap();
+
+        macro_rules! assert_view_error {
+            ($candidate:expr, $pattern:pat) => {{
+                let error = $candidate.validate(&record).unwrap_err();
+                assert!(matches!(error, $pattern), "unexpected error: {error:?}");
+            }};
+        }
+
+        let mut wrong_negotiation_goal_summary = view.clone();
+        wrong_negotiation_goal_summary.negotiation_goal_summary = Some("other goal".to_string());
+        assert_view_error!(
+            wrong_negotiation_goal_summary,
+            SessionValidationError::StatusViewNegotiationGoalSummaryMismatch { .. }
+        );
+
+        let mut wrong_negotiation_resolution = view.clone();
+        wrong_negotiation_resolution.negotiation_resolution = Some("blocked".to_string());
+        assert_view_error!(
+            wrong_negotiation_resolution,
+            SessionValidationError::StatusViewNegotiationResolutionMismatch { .. }
+        );
+
+        let mut wrong_negotiation_boundary = view.clone();
+        wrong_negotiation_boundary.negotiation_acceptance_boundary =
+            Some("different boundary".to_string());
+        assert_view_error!(
+            wrong_negotiation_boundary,
+            SessionValidationError::StatusViewNegotiationAcceptanceBoundaryMismatch { .. }
+        );
+
+        let mut wrong_context_summary = view.clone();
+        wrong_context_summary.context_summary = Some("other context".to_string());
+        assert_view_error!(
+            wrong_context_summary,
+            SessionValidationError::StatusViewContextSummaryMismatch { .. }
+        );
+
+        let mut wrong_context_credibility = view.clone();
+        wrong_context_credibility.context_credibility = Some("credible".to_string());
+        assert_view_error!(
+            wrong_context_credibility,
+            SessionValidationError::StatusViewContextCredibilityMismatch { .. }
+        );
+
+        let mut wrong_context_inputs = view.clone();
+        wrong_context_inputs.context_primary_inputs = Some(vec!["README.md".to_string()]);
+        assert_view_error!(
+            wrong_context_inputs,
+            SessionValidationError::StatusViewContextPrimaryInputsMismatch { .. }
+        );
+
+        let mut wrong_context_provenance = view.clone();
+        wrong_context_provenance.context_provenance =
+            Some(vec!["workspace_file: README.md (wrong)".to_string()]);
+        assert_view_error!(
+            wrong_context_provenance,
+            SessionValidationError::StatusViewContextProvenanceMismatch { .. }
+        );
+
+        let mut wrong_context_staleness = view;
+        wrong_context_staleness.context_staleness_reason = Some("different reason".to_string());
+        assert_view_error!(
+            wrong_context_staleness,
+            SessionValidationError::StatusViewContextStalenessReasonMismatch { .. }
+        );
+    }
+
+    #[test]
+    fn status_view_rejects_flow_workflow_and_participant_projection_mismatches() {
+        let workspace = "/tmp/synod-session-domain-workflow";
+        let mut record = build_record(workspace);
+        record.goal_plan = Some(build_context_goal_plan());
+        record.workflow_progress = Some(WorkflowProgressState {
+            workflow_name: "developer-ux".to_string(),
+            lifecycle_state: WorkflowLifecycleState::Active,
+            current_phase: Some(WorkflowPhase::Review),
+            completed_phases: vec![WorkflowPhase::Capture, WorkflowPhase::Plan],
+            blocked_reason: None,
+            next_action: Some("synod review".to_string()),
+            routing_summary: Some("routing: native (goal_plan)".to_string()),
+        });
+
+        let view = build_view(&record);
+
+        macro_rules! assert_view_error {
+            ($candidate:expr, $pattern:pat) => {{
+                let error = $candidate.validate(&record).unwrap_err();
+                assert!(matches!(error, $pattern), "unexpected error: {error:?}");
+            }};
+        }
+
+        let mut wrong_active_flow = view.clone();
+        wrong_active_flow.active_flow = Some("delivery".to_string());
+        assert_view_error!(
+            wrong_active_flow,
+            SessionValidationError::StatusViewFlowMismatch { .. }
+        );
+
+        let mut wrong_flow_state = view.clone();
+        wrong_flow_state.flow_state = Some("confirmed (delivery)".to_string());
+        assert_view_error!(
+            wrong_flow_state,
+            SessionValidationError::StatusViewFlowStateMismatch { .. }
+        );
+
+        let mut wrong_workflow = view.clone();
+        wrong_workflow.active_workflow = Some("release".to_string());
+        assert_view_error!(
+            wrong_workflow,
+            SessionValidationError::StatusViewWorkflowMismatch { .. }
+        );
+
+        let mut wrong_workflow_phase = view.clone();
+        wrong_workflow_phase.workflow_phase = Some("govern".to_string());
+        assert_view_error!(
+            wrong_workflow_phase,
+            SessionValidationError::StatusViewWorkflowPhaseMismatch { .. }
+        );
+
+        let mut wrong_workflow_next_action = view;
+        wrong_workflow_next_action.workflow_next_action = Some("synod inspect".to_string());
+        assert_view_error!(
+            wrong_workflow_next_action,
+            SessionValidationError::StatusViewWorkflowNextActionMismatch { .. }
+        );
+
+        let mut participant_task = build_task(workspace);
+        participant_task.context.state.insert(
+            "latest_review_participants".to_string(),
+            json!([
+                {"reviewer_id": "safety", "status": "pending"},
+                {"reviewer_id": "maintainability"}
+            ]),
+        );
+        assert_eq!(
+            task_state_review_headline(&participant_task),
+            Some("participants: safety pending, maintainability unknown".to_string())
         );
     }
 }

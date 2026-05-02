@@ -81,6 +81,14 @@ where
                 "negotiation_goal_summary": plan.negotiation_goal_summary,
                 "negotiation_resolution": plan.negotiation_resolution,
                 "negotiation_acceptance_boundary": plan.negotiation_acceptance_boundary,
+                "context_summary": plan.context_summary(),
+                "context_credibility": plan.context_credibility(),
+                "context_primary_inputs": plan.context_primary_inputs(),
+                "context_provenance": plan.context_provenance_lines(),
+                "context_staleness_reason": plan
+                    .context_pack
+                    .as_ref()
+                    .and_then(|pack| pack.staleness_reason.clone()),
             }),
         );
 

@@ -11,6 +11,7 @@ Synod is a bounded delivery orchestrator. Contributions should keep that bias:
 - keep direct `run --goal` native-first and require explicit `--compatibility` for manifest-backed execution
 - keep bounded `bug-fix` and `change` completion credible: do not treat the end of a plan as success unless material change evidence and passed validation are both present, or the CLI reports an explicit stop instead
 - keep negotiated delivery packets, acceptance boundaries, and blocking constraints explicit from capture through follow-up surfaces
+- keep bounded context packs, credibility, and provenance explicit from planning through `run`, `status`, `next`, and `inspect`
 - keep clustered delivery sequential-first with one authoritative primary workspace session owner
 - keep continuity explicit when a workspace moves from session-native state to compatibility-trace follow-up
 - treat `synod workflow` as a thin bounded layer over the same session-owned runtime, not as a generic workflow engine
@@ -120,6 +121,11 @@ If you change how `status`, `next`, or `inspect` choose the authoritative follow
 If you change how `run`, `status`, `next`, or `inspect` align route-summary wording, keep the docs explicit about `route_owner`, any material `route_config_projection`, persisted `effective_routing`, `assistant_bindings`, `follow_through_guidance`, `follow_through_evidence_source`, and the rule that summary convergence must not hide the real owning route, continuity authority, or any explicit unsupported-binding failure.
 
 If you change negotiated capture, plan gating, or acceptance-boundary projection, keep the docs explicit about `negotiation_goal_summary`, `negotiation_resolution`, `negotiation_acceptance_boundary`, and whether the follow-up story comes from the native goal-plan route or an explicit compatibility trace.
+
+If you change context assembly or plan gating, keep the docs explicit about
+`context_summary`, `context_credibility`, `context_primary_inputs`,
+`context_provenance`, `context_staleness_reason`, and whether planning can
+continue or must stop explicitly.
 
 If you change clustered delivery behavior, keep the docs explicit about the
 primary workspace remaining authoritative, member-local trace persistence,

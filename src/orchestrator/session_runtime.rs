@@ -44,7 +44,9 @@ use crate::fixture::{
 };
 use crate::orchestrator::decision_loop::{DecisionLoop, LoopTerminal};
 use crate::orchestrator::flow_inference::infer_flow;
-use crate::orchestrator::goal_planner::{GoalPlannerError, build_goal_plan};
+use crate::orchestrator::goal_planner::{
+    GoalPlannerError, PlanningContextSources, build_goal_plan_with_sources,
+};
 use crate::orchestrator::governance::{
     GovernanceStepDecision, bounded_governance_context, build_autopilot_decision,
     governance_input_documents, governance_stage_key, governance_state_patch,
@@ -256,8 +258,39 @@ impl SessionRuntime {
                 .map_err(|error| SessionRuntimeError::InvalidFlowState(error.to_string()))?;
         }
 
-        let mut goal_plan = build_goal_plan(&goal, &self.workspace_ref)
-            .map_err(SessionRuntimeError::GoalPlanner)?;
+        let planning_context = Self::planning_context_sources(session);
+        let mut goal_plan =
+            match build_goal_plan_with_sources(&goal, &self.workspace_ref, &planning_context) {
+                Ok(goal_plan) => goal_plan,
+                Err(GoalPlannerError::InsufficientContext { summary, goal_plan }) => {
+                    let mut goal_plan = *goal_plan;
+                    if let Some(packet) = session.negotiation_packet.as_ref() {
+                        goal_plan = goal_plan.with_negotiation_projection(
+                            packet.goal_summary.clone(),
+                            packet.resolution_state.as_str(),
+                            packet.acceptance_boundary.success_headline.clone(),
+                        );
+                    }
+                    self.apply_planning_flow_selection(
+                        session,
+                        &mut goal_plan,
+                        requested_flow,
+                        no_flow,
+                    )?;
+                    session.active_task = None;
+                    session.goal_plan = Some(goal_plan);
+                    session.decisions.clear();
+                    session.latest_status = SessionStatus::GoalCaptured;
+                    session.latest_terminal_reason = None;
+                    session.updated_at = current_timestamp_millis();
+
+                    return Err(SessionRuntimeError::ClarificationRequired {
+                        headline: "bounded context required before planning".to_string(),
+                        prompt: summary,
+                    });
+                }
+                Err(error) => return Err(SessionRuntimeError::GoalPlanner(error)),
+            };
         if let Some(packet) = session.negotiation_packet.as_ref() {
             goal_plan = goal_plan.with_negotiation_projection(
                 packet.goal_summary.clone(),
@@ -279,6 +312,33 @@ impl SessionRuntime {
         session.updated_at = current_timestamp_millis();
 
         Ok(())
+    }
+
+    fn planning_context_sources(session: &ActiveSessionRecord) -> PlanningContextSources {
+        PlanningContextSources {
+            authored_input_summary: session
+                .authored_brief
+                .as_ref()
+                .map(|bundle| bundle.summary_text()),
+            authored_input_sources: session
+                .authored_brief
+                .as_ref()
+                .map(|bundle| bundle.ordered_source_labels())
+                .unwrap_or_default(),
+            negotiation_goal_summary: session
+                .negotiation_packet
+                .as_ref()
+                .map(|packet| packet.goal_summary.clone()),
+            negotiation_resolution: session
+                .negotiation_packet
+                .as_ref()
+                .map(|packet| packet.resolution_state.as_str().to_string()),
+            negotiation_acceptance_boundary: session
+                .negotiation_packet
+                .as_ref()
+                .map(|packet| packet.acceptance_boundary.success_headline.clone()),
+            latest_trace_ref: session.latest_trace_ref.clone(),
+        }
     }
 
     fn apply_planning_flow_selection(
@@ -4039,6 +4099,12 @@ mod tests {
     #[test]
     fn plan_task_persists_goal_plan_and_inferred_flow_without_creating_fixture_task() {
         let workspace = temp_workspace("synod-runtime-native-plan");
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::write(
+            workspace.join("src/lib.rs"),
+            "pub fn add(left: i32, right: i32) -> i32 { left - right }\n",
+        )
+        .unwrap();
         let runtime = SessionRuntime::for_workspace(&workspace);
         let mut session = ActiveSessionRecord {
             session_id: "session-runtime".to_string(),
@@ -4079,6 +4145,12 @@ mod tests {
     #[test]
     fn plan_task_confirms_explicit_flow_during_native_planning() {
         let workspace = temp_workspace("synod-runtime-native-plan-explicit-flow");
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::write(
+            workspace.join("src/lib.rs"),
+            "pub fn workspace_summary() -> String { \"summary output\".to_string() }\n",
+        )
+        .unwrap();
         let runtime = SessionRuntime::for_workspace(&workspace);
         let mut session = ActiveSessionRecord {
             session_id: "session-runtime".to_string(),

@@ -6,7 +6,7 @@ Canon is downstream from Synod in this roadmap: Synod thinks, decides, orchestra
 
 Evolve Synod into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.32.0
+## Current Status: v0.33.0
 
 Synod now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -14,12 +14,15 @@ continuity between session-native and compatibility follow-up, stronger
 route-summary plus config projection, bounded multi-workspace clustered
 delivery, negotiated delivery modeling, inspectable routing plus assistant
 decoupling, guided decision follow-through, evidence-aligned next-command
-selection, credible governed delivery completion, and final product-surface
-closure in place:
+selection, credible governed delivery completion, final product-surface
+closure, and explicit bounded context assembly in place:
 
 - session-native orchestration remains the primary operator path
 - `capture` now derives one negotiated delivery packet from direct goals, authored briefs, and governance context before planning begins
 - `plan` now stops early when `negotiation_resolution` is not yet credible instead of silently inventing a bounded change
+- `plan` now also assembles one explicit bounded context pack from relevant workspace files, authored input, recent traces, negotiated delivery state, and reusable Canon artifacts before confirming a goal plan
+- planning now stops explicitly when that context pack is insufficient or stale instead of relying on ambient workspace state
+- `run`, `status`, `next`, and `inspect` now project `context_summary`, `context_credibility`, primary inputs, provenance, and any staleness reason from the active goal plan or authoritative native trace
 - `run`, `status`, `next`, and `inspect` now project `negotiation_goal_summary`, `negotiation_resolution`, and `negotiation_acceptance_boundary` across native goal-plan traces and explicit compatibility traces
 - `workflow list`, `workflow run`, `workflow status`, `workflow resume`, and `workflow inspect` still project named workflow state onto the same session, route, trace, and `execution_condition` surfaces
 - Claude, Codex, and Copilot now ship first-class workflow assistant surfaces, while Gemini CLI guidance uses the same workflow-first vocabulary
@@ -39,11 +42,12 @@ closure in place:
 - session-native commands still accept `--cluster <primary-workspace>` so one authoritative primary-owned session can plan and deliver a bounded change across registered member repositories
 - clustered `run`, `status`, `next`, and `inspect` still surface authoritative workspace, clustered execution condition, participating workspaces, and any blocking member without implying distributed orchestration ownership
 
-## Roadmap Closure In 0.32.0
+## Roadmap Closure In 0.33.0
 
-The roadmap is no longer an open-ended backlog. `0.32.0` closes the remaining
-product-surface ambiguity so Synod now presents one coherent execution model
-across CLI, assistants, workflows, routing, and governance.
+The roadmap is no longer an open-ended backlog. `0.33.0` keeps the product
+surface closed and makes planning input explicit, so Synod now presents one
+coherent execution model across CLI, assistants, workflows, routing,
+governance, and bounded context assembly.
 
 The governing rule remains simple: Synod is the product and execution owner.
 Canon stays a bounded, useful governed runtime inside that same delivery path
@@ -51,7 +55,7 @@ rather than drifting back into a parallel tool story.
 
 ### Ongoing Compatibility Watch
 
-Canon will continue to release versions after `0.32.0`, so Synod keeps one
+Canon will continue to release versions after `0.33.0`, so Synod keeps one
 explicit maintenance track for compatibility drift on the machine-facing
 governance adapter rather than reopening broad product-scope work:
 
@@ -65,30 +69,16 @@ governance adapter rather than reopening broad product-scope work:
   contract, introduces a new adapter schema version, or adds governed behavior
   that Synod needs for its explicitly modeled bounded stages
 
-### Next Macrofeature Line (033+)
+### Next Macrofeature Line (034+)
 
-`0.32.0` closed the product-surface ambiguity. The next roadmap line should not
-decompose back into microfeatures. Future numbered specs must stay at the
+`0.33.0` delivered explicit context assembly. The remaining roadmap line should
+not decompose back into microfeatures. Future numbered specs must stay at the
 macrofeature level and each one must change Synod's operating model, not just a
 single CLI surface.
 
 Compatibility maintenance for newer Canon releases stays inside the watch above
 unless it becomes contract-breaking. It does not consume the next spec number
 by itself.
-
-#### Spec 033: Context Assembly Foundation
-
-- introduce a first-class `ContextBuilder` that assembles one bounded context
-  pack from workspace signals, authored briefs, negotiated delivery state,
-  recent traces, and reusable Canon artifacts
-- replace broad or implicit planning input with selective file, symbol, and
-  evidence retrieval that is explicit, inspectable, and reusable across the
-  loop
-- surface context-pack provenance and narrowing summaries through `plan`,
-  `run`, `status`, `next`, and `inspect`
-
-**Exit criteria**: every planned task and bounded action can point to an
-explicit context pack instead of relying on ambient workspace state.
 
 #### Spec 034: Decision-Driven Orchestrator
 
@@ -127,9 +117,23 @@ evidence while keeping the resulting execution path bounded and reviewable.
 **Exit criteria**: Canon materially changes planning and decision selection when
 relevant, and Synod can carry forward compact structured memory across loops.
 
-No new numbered roadmap specs should be introduced before `033` through `036`
+No new numbered roadmap specs should be introduced before `034` through `036`
 are either delivered, explicitly dropped, or replaced at the macrofeature
 level.
+
+### Delivered in 0.33.0
+
+- assemble one bounded context pack before native planning from workspace
+  signals, authored briefs, negotiated delivery state, recent traces, and
+  reusable Canon artifacts instead of relying on ambient workspace state
+- project `context_summary`, `context_credibility`, primary inputs,
+  provenance, and any staleness reason through `plan`, `run`, `status`,
+  `next`, and `inspect` on the primary Synod path
+- stop planning explicitly when a credible bounded context cannot be built,
+  keeping the recovery action and blocked state visible on the same session and
+  trace surfaces
+- update README, getting-started, configuration, assistant guidance, roadmap,
+  contributor docs, and changelog for the release
 
 ### Delivered in 0.32.0
 

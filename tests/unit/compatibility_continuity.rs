@@ -121,6 +121,7 @@ fn render_session_status_surfaces_compatibility_follow_up_without_replacing_nati
         governance_next_action: None,
         next_command: Some("synod run".to_string()),
         explanation: "native session remains authoritative".to_string(),
+        ..Default::default()
     });
 
     assert!(rendered.contains("routing: native (goal_plan)"), "{rendered}");

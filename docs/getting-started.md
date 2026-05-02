@@ -32,16 +32,17 @@ If you enable Synod governance through Canon, the current Synod adapter is
 validated against Canon `0.36.0` on the machine-facing `canon governance`
 `--json` `v1` adapter surface.
 
-In `0.32.0`, direct `run --goal` can bootstrap the native session path even
+In `0.33.0`, direct `run --goal` can bootstrap the native session path even
 without `.synod/execution.json`, while `run --compatibility --goal ...` keeps
 the manifest-backed route as an explicit opt-in. `capture` persists one
 negotiated delivery packet before planning, `plan` blocks on non-credible
-negotiation states, and `run`, `status`, `next`, and `inspect` surface the
-same acceptance-boundary story plus effective routing and assistant-binding
-cues. Native and compatibility traces now keep the route snapshot used during
-execution, and native execution fails explicitly when a requested route runtime
-is outside declared `assistant_runtimes` capabilities. `status`, `next`, and
-`inspect` now also
+negotiation states and non-credible bounded context, and `run`, `status`,
+`next`, and `inspect` surface the same acceptance-boundary story plus
+`context_summary`, `context_credibility`, primary inputs, provenance, effective
+routing, and assistant-binding cues. Native and compatibility traces now keep
+the route snapshot used during execution, and native execution fails explicitly
+when a requested route runtime is outside declared `assistant_runtimes`
+capabilities. `status`, `next`, and `inspect` now also
 surface `follow_through_guidance`, `follow_through_evidence_source`,
 `follow_through_next_action`, and `follow_through_stop_reason` when existing
 session or trace evidence can explain one next bounded action or stop.
@@ -319,7 +320,7 @@ synod run --workspace <workspace> --compatibility --goal "Fix the failing add te
 
 If that manifest defines `adaptive`, failed validation can reprioritize the next
 bounded adaptive attempt from the latest validation record while keeping the
-route explicit as compatibility execution. In `0.32.0`, the same path can also
+route explicit as compatibility execution. In `0.33.0`, the same path can also
 choose bounded ordering-boundary, result-status, and numeric-literal repairs,
 and it reports explicit exhaustion instead of continuing blindly when the
 validation evidence is absent or insufficient.
@@ -348,12 +349,12 @@ evidence to make the next bounded follow-up explicit.
 | `synod start` | Initialize or reset the active workspace session |
 | `synod capture` | Store the delivery goal plus negotiated packet in session state |
 | `synod flow` | Select `bug-fix`, `change`, or `delivery` |
-| `synod plan` | Build the next bounded task from the active session when the negotiated packet is credible |
+| `synod plan` | Build the next bounded task from the active session when the negotiated packet is credible and the assembled context pack is bounded enough to support planning |
 | `synod step` | Execute one step of the current task |
 | `synod run` | Execute the current task until completion or operator intervention, or bootstrap the native route directly from `--goal`; add `--compatibility` for manifest-backed execution |
-| `synod status` | Show the current session snapshot, including negotiated follow-up cues |
-| `synod next` | Show the CLI-reported next action from the active negotiated boundary |
-| `synod inspect` | Summarize the latest trace or a specific trace, including negotiated delivery cues |
+| `synod status` | Show the current session snapshot, including negotiated follow-up cues and context-pack credibility |
+| `synod next` | Show the CLI-reported next action from the active negotiated boundary and current context state |
+| `synod inspect` | Summarize the latest trace or a specific trace, including negotiated delivery and context-pack cues |
 | `synod workflow list|run|status|resume|inspect` | Discover and reuse the same session-native route through a named workflow entrypoint |
 
 ## Choosing the Right Manifest Shape

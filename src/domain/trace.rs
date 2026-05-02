@@ -5,6 +5,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::domain::cluster::ClusterDeliveryStory;
+use crate::domain::limits::TerminalCondition;
 use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::step::{StepKind, StepStatus};
 use crate::domain::task::{TaskStatus, TerminalReason};
@@ -126,6 +127,16 @@ pub struct TraceSummaryView {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub authored_input_deduplicated_sources: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_credibility: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub context_primary_inputs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub context_provenance: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_staleness_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clarification_headline: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clarification_prompt: Option<String>,
@@ -157,6 +168,48 @@ pub struct TraceSummaryView {
     pub terminal_reason: TerminalReason,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duration: Option<u64>,
+}
+
+impl Default for TraceSummaryView {
+    fn default() -> Self {
+        Self {
+            trace_ref: String::new(),
+            goal: String::new(),
+            negotiation_goal_summary: None,
+            negotiation_resolution: None,
+            negotiation_acceptance_boundary: None,
+            cluster_delivery_story: None,
+            routing_summary: None,
+            routing_projection: RoutingDecisionProjection::default(),
+            goal_plan_summary: None,
+            authored_input_summary: None,
+            authored_input_sources: Vec::new(),
+            authored_input_deduplicated_sources: Vec::new(),
+            context_summary: None,
+            context_credibility: None,
+            context_primary_inputs: Vec::new(),
+            context_provenance: Vec::new(),
+            context_staleness_reason: None,
+            clarification_headline: None,
+            clarification_prompt: None,
+            clarification_missing_fields: Vec::new(),
+            requested_governance_runtime: None,
+            requested_governance_risk: None,
+            requested_governance_zone: None,
+            requested_governance_owner: None,
+            decision_timeline: Vec::new(),
+            failure_evidence: Vec::new(),
+            adaptive_evidence: Vec::new(),
+            executed_steps: Vec::new(),
+            recovery_events: Vec::new(),
+            governance_timeline: Vec::new(),
+            governance_next_action: None,
+            review_timeline: Vec::new(),
+            terminal_status: TaskStatus::Planned,
+            terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "", None),
+            duration: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -224,5 +277,46 @@ impl ExecutionTrace {
 
     pub fn duration_millis(&self) -> Option<u64> {
         self.ended_at.map(|ended_at| ended_at.saturating_sub(self.started_at))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{TraceEventType, TraceSummaryView};
+    use crate::domain::limits::TerminalCondition;
+    use crate::domain::task::TaskStatus;
+
+    #[test]
+    fn trace_event_type_helpers_cover_decision_loop_and_routing_keys() {
+        let routed_events = [
+            (TraceEventType::GoalPlanCreated, "goal_plan_created"),
+            (TraceEventType::FlowInferred, "flow_inferred"),
+            (TraceEventType::DecisionCreated, "decision_created"),
+            (TraceEventType::DecisionDispatched, "decision_dispatched"),
+            (TraceEventType::DecisionVerified, "decision_verified"),
+            (TraceEventType::DecisionFailed, "decision_failed"),
+            (TraceEventType::DecisionRecovered, "decision_recovered"),
+        ];
+
+        for (event_type, key) in routed_events {
+            assert!(event_type.is_decision_loop_event());
+            assert_eq!(event_type.routing_projection_key(), Some(key));
+        }
+
+        assert!(!TraceEventType::TaskStarted.is_decision_loop_event());
+        assert_eq!(TraceEventType::TaskStarted.routing_projection_key(), None);
+        assert!(!TraceEventType::GovernanceBlocked.is_decision_loop_event());
+        assert_eq!(TraceEventType::GovernanceBlocked.routing_projection_key(), None);
+    }
+
+    #[test]
+    fn trace_summary_view_default_uses_goal_satisfied_terminal_reason() {
+        let summary = TraceSummaryView::default();
+
+        assert_eq!(summary.terminal_status, TaskStatus::Planned);
+        assert_eq!(summary.terminal_reason.condition, TerminalCondition::GoalSatisfied);
+        assert!(summary.terminal_reason.message.is_empty());
+        assert!(summary.context_primary_inputs.is_empty());
+        assert!(summary.context_provenance.is_empty());
     }
 }

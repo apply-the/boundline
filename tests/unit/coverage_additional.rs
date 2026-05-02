@@ -178,6 +178,7 @@ fn build_status_view(record: &ActiveSessionRecord) -> SessionStatusView {
         governance_next_action: None,
         next_command: Some("synod step".to_string()),
         explanation: "session state is internally consistent".to_string(),
+        ..Default::default()
     }
 }
 

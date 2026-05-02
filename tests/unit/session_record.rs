@@ -148,6 +148,7 @@ fn session_record_round_trips_and_status_values_serialize() {
         governance_next_action: None,
         next_command: Some("synod step".to_string()),
         explanation: "the active plan is ready for explicit execution".to_string(),
+        ..Default::default()
     };
     view.validate(&record).unwrap();
 }
@@ -408,9 +409,12 @@ fn goal_captured_status_view_can_project_clarification_fields_from_authored_brie
         governance_next_action: None,
         next_command: Some("synod capture --goal <narrower goal>".to_string()),
         explanation: "clarification is required before planning can continue".to_string(),
+        ..Default::default()
     };
 
     view.validate(&record).unwrap();
+
+    record.validate().unwrap();
 }
 
 #[test]

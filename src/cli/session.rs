@@ -220,7 +220,12 @@ pub fn execute_plan_with_target(
         return Err(SessionCommandError::MissingCapturedGoal);
     }
 
-    runtime.plan_task(&mut record, requested_flow, no_flow).map_err(map_runtime_error)?;
+    if let Err(error) = runtime.plan_task(&mut record, requested_flow, no_flow) {
+        if matches!(&error, SessionRuntimeError::ClarificationRequired { .. }) {
+            runtime.persist_session(&record).map_err(map_runtime_error)?;
+        }
+        return Err(map_runtime_error(error));
+    }
     runtime.persist_session(&record).map_err(map_runtime_error)?;
 
     Ok(SessionCommandReport {
@@ -638,6 +643,27 @@ pub(crate) fn build_status_view_with_follow_up(
             let labels = bundle.deduplicated_source_labels();
             (!labels.is_empty()).then_some(labels)
         }),
+        context_summary: record
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| goal_plan.context_summary()),
+        context_credibility: record
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| goal_plan.context_credibility()),
+        context_primary_inputs: record.goal_plan.as_ref().and_then(|goal_plan| {
+            let inputs = goal_plan.context_primary_inputs();
+            (!inputs.is_empty()).then_some(inputs)
+        }),
+        context_provenance: record.goal_plan.as_ref().and_then(|goal_plan| {
+            let lines = goal_plan.context_provenance_lines();
+            (!lines.is_empty()).then_some(lines)
+        }),
+        context_staleness_reason: record
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| goal_plan.context_pack.as_ref())
+            .and_then(|pack| pack.staleness_reason.clone()),
         clarification_headline: record
             .authored_brief
             .as_ref()
@@ -898,6 +924,12 @@ fn suggested_next_command(record: &ActiveSessionRecord) -> Option<String> {
         return Some("synod capture --goal <narrower goal>".to_string());
     }
 
+    if record.goal_plan.as_ref().and_then(|goal_plan| goal_plan.context_pack.as_ref()).is_some_and(
+        |pack| pack.credibility != crate::domain::goal_plan::ContextPackCredibility::Credible,
+    ) {
+        return Some("synod capture --goal <narrower goal>".to_string());
+    }
+
     if let Some(task) = record.active_task.as_ref()
         && let Some(governance_state) = task_state_governance_state_text(task)
     {
@@ -1099,13 +1131,22 @@ mod tests {
     use super::{
         CommandExitStatus, SessionCommandError, execute_capture, execute_flow, execute_next,
         execute_plan, execute_run, execute_start, execute_start_with_target, execute_status,
-        exit_status_for_session, exit_status_for_task, load_active_session, map_runtime_error,
-        map_store_error, render_error, resolve_workspace, suggested_next_command,
+        exit_status_for_session, exit_status_for_task, latest_workspace_compatibility_follow_up,
+        load_active_session, map_runtime_error, map_store_error, render_error,
+        requested_governance_runtime_text, resolve_workspace, review_headline_from_task,
+        suggested_next_command,
     };
     use crate::adapters::session_store::SessionStoreError;
-    use crate::adapters::trace_store::TraceStoreError;
+    use crate::adapters::trace_store::{FileTraceStore, TraceStore, TraceStoreError};
+    use crate::domain::goal_plan::{
+        ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan,
+        InferredFlow, PlannedTask,
+    };
+    use crate::domain::governance::GovernanceRuntimeKind;
+    use crate::domain::limits::TerminalCondition;
     use crate::domain::session::SessionStatus;
-    use crate::domain::task::{Task, TaskStatus};
+    use crate::domain::task::{Task, TaskStatus, TerminalReason};
+    use crate::domain::trace::ExecutionTrace;
     use crate::fixture::{build_fixture_plan_for_goal, build_task_request};
     use crate::orchestrator::session_runtime::{SessionRuntime, SessionRuntimeError};
 
@@ -1579,5 +1620,165 @@ fn red_to_green_addition() {
 
         let rendered = render_error("run", &error);
         assert!(rendered.contains("synod plan --flow bug-fix"), "{rendered}");
+    }
+
+    #[test]
+    fn compatibility_follow_up_and_review_headline_helpers_cover_remaining_session_cli_branches() {
+        let workspace = temp_workspace("synod-cli-session-compat-follow-up");
+        fs::create_dir_all(workspace.join(".synod")).unwrap();
+
+        let mut trace = ExecutionTrace::new("task-compat", "session-compat", "Compat trace");
+        trace.terminal_status = Some(TaskStatus::Failed);
+        trace.terminal_reason = Some(TerminalReason::new(
+            TerminalCondition::UnrecoverableError,
+            "compatibility run failed",
+            None,
+        ));
+        trace.ended_at = Some(trace.started_at + 1);
+        let trace_path = FileTraceStore::for_workspace(&workspace).persist(&trace).unwrap();
+
+        let follow_up =
+            latest_workspace_compatibility_follow_up(&workspace, None).unwrap().unwrap();
+        assert_eq!(follow_up.trace_ref, trace_path.to_string_lossy());
+        assert!(follow_up.routing_summary.starts_with("routing: compatibility"));
+        assert_eq!(
+            follow_up.next_command,
+            format!("synod inspect --workspace {}", workspace.display())
+        );
+        assert!(
+            latest_workspace_compatibility_follow_up(&workspace, Some(&follow_up.trace_ref))
+                .unwrap()
+                .is_none()
+        );
+
+        let execution_workspace = write_execution_workspace("synod-cli-session-review-headline");
+        let request = build_task_request(
+            &execution_workspace,
+            "Fix the failing add test".to_string(),
+            "session-review".to_string(),
+            None,
+            None,
+        )
+        .unwrap();
+        let plan =
+            build_fixture_plan_for_goal(&execution_workspace, None, "Fix the failing add test")
+                .unwrap();
+        let mut task = Task::new("task-review", &request, plan).unwrap();
+        task.context.state.insert(
+            "latest_review_participants".to_string(),
+            json!([
+                {"reviewer_id": "safety", "status": "pending"},
+                {"reviewer_id": "maintainability"}
+            ]),
+        );
+        assert_eq!(
+            review_headline_from_task(&task),
+            Some("participants: safety pending, maintainability unknown".to_string())
+        );
+
+        assert_eq!(requested_governance_runtime_text(GovernanceRuntimeKind::Local), "local");
+        assert_eq!(requested_governance_runtime_text(GovernanceRuntimeKind::Canon), "canon");
+    }
+
+    #[test]
+    fn suggested_next_command_and_error_helpers_cover_context_and_flow_follow_up() {
+        let goal_plan_with_context = GoalPlan::new(
+            "Fix the failing add test",
+            vec![PlannedTask {
+                task_id: "planned-task-1".to_string(),
+                description: "Fix arithmetic".to_string(),
+                target: "src/lib.rs".to_string(),
+                expected_outcome: Some("tests pass".to_string()),
+                decision_type_hint: None,
+            }],
+        )
+        .unwrap()
+        .with_context_pack(ContextPack {
+            pack_id: "cp-1".to_string(),
+            summary: "bounded context from src/lib.rs".to_string(),
+            credibility: ContextPackCredibility::Insufficient,
+            inputs: vec![ContextInput {
+                kind: ContextInputKind::WorkspaceFile,
+                reference: "src/lib.rs".to_string(),
+                rationale: "closest source file".to_string(),
+                source: "workspace_scan".to_string(),
+                primary: true,
+            }],
+            selected_targets: vec!["src/lib.rs".to_string()],
+            staleness_reason: None,
+        });
+
+        let base_record = crate::domain::session::ActiveSessionRecord {
+            session_id: "session-next".to_string(),
+            workspace_ref: "/tmp/workspace".to_string(),
+            goal: Some("Fix the failing add test".to_string()),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: Some(goal_plan_with_context.clone()),
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::GoalCaptured,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 1,
+            updated_at: 1,
+        };
+        assert_eq!(
+            suggested_next_command(&base_record),
+            Some("synod capture --goal <narrower goal>".to_string())
+        );
+
+        let mut pending_flow_plan = GoalPlan::new(
+            "Fix the failing add test",
+            vec![PlannedTask {
+                task_id: "planned-task-2".to_string(),
+                description: "Fix arithmetic".to_string(),
+                target: "src/lib.rs".to_string(),
+                expected_outcome: Some("tests pass".to_string()),
+                decision_type_hint: None,
+            }],
+        )
+        .unwrap();
+        pending_flow_plan.flow = Some(InferredFlow {
+            flow_name: "bug-fix".to_string(),
+            confidence_reason: "goal contains fix".to_string(),
+            confirmed: false,
+        });
+        pending_flow_plan.confirm().unwrap();
+
+        let mut pending_flow_record = base_record.clone();
+        pending_flow_record.goal_plan = Some(pending_flow_plan);
+        pending_flow_record.latest_status = SessionStatus::Planned;
+        assert_eq!(
+            suggested_next_command(&pending_flow_record),
+            Some("synod plan --flow bug-fix".to_string())
+        );
+
+        let mut ready_run_record = pending_flow_record.clone();
+        ready_run_record.goal_plan.as_mut().unwrap().flow.as_mut().unwrap().confirmed = true;
+        assert_eq!(suggested_next_command(&ready_run_record), Some("synod run".to_string()));
+
+        let clarification_error = SessionCommandError::ClarificationRequired {
+            headline: "bounded context required before planning".to_string(),
+            prompt: "pick one bounded outcome".to_string(),
+        };
+        let clarification_text = render_error("plan", &clarification_error);
+        assert!(
+            clarification_text.contains("synod capture --goal <narrower goal>"),
+            "{clarification_text}"
+        );
+
+        let cluster_error = SessionCommandError::MissingClusterConfig {
+            workspace: PathBuf::from("/tmp/workspace"),
+            command_name: "status",
+        };
+        let cluster_text = render_error("status", &cluster_error);
+        assert!(
+            cluster_text.contains("synod cluster init --workspace <primary>"),
+            "{cluster_text}"
+        );
     }
 }

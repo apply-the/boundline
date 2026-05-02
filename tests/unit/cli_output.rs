@@ -4,6 +4,7 @@ use serde_json::Map;
 use serde_json::json;
 use synod::FileConfigStore;
 use synod::FileTraceStore;
+use synod::adapters::session_store::SessionStoreError;
 use synod::adapters::trace_store::TraceStore;
 use synod::cli::diagnostics::{DiagnosticsCheck, DiagnosticsReport, DiagnosticsStatus};
 use synod::cli::inspect::{
@@ -14,6 +15,9 @@ use synod::cli::output::{
     CommandExitCode, command_name, next_command_after_inspect, next_command_after_run,
     render_diagnostics, render_goal_plan_flow_state, render_inspect_failure, render_route_outcome,
     render_run_trace, render_session_status, render_trace_summary, validation_error_message,
+};
+use synod::cli::session::{
+    SessionCommandError, execute_next, execute_status, render_error as render_session_error,
 };
 use synod::cli::{
     CliValidationError, CommandExitStatus, CommandName, DeveloperCommand, DeveloperCommandSession,
@@ -282,6 +286,7 @@ fn trace_summary_renderer_mentions_steps_recovery_and_terminal_reason() {
             None,
         ),
         duration: Some(42),
+        ..Default::default()
     };
 
     let rendered = render_trace_summary(
@@ -515,6 +520,41 @@ fn render_run_trace_surfaces_task_started_negotiation_projection() {
 }
 
 #[test]
+fn render_run_trace_surfaces_context_projection() {
+    let mut trace = ExecutionTrace::new("task-context", "session", "Context goal");
+    trace.terminal_status = Some(TaskStatus::Succeeded);
+    trace.terminal_reason =
+        Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None));
+    trace.events.push(TraceEvent {
+        event_id: "e1".to_string(),
+        event_type: TraceEventType::GoalPlanCreated,
+        step_id: None,
+        plan_revision: 0,
+        payload: json!({
+            "plan_id": "plan-context",
+            "goal": "Context goal",
+            "task_count": 1,
+            "context_summary": "bounded context from 2 primary input(s)",
+            "context_credibility": "credible",
+            "context_primary_inputs": ["src/context_router.rs", "src/lib.rs"],
+            "context_provenance": [
+                "workspace_file: src/context_router.rs (selected as a bounded workspace target for the current goal)",
+                "recent_trace: .synod/traces/last.json (reuses the latest persisted trace as bounded historical evidence)"
+            ]
+        }),
+        recorded_at: 0,
+    });
+
+    let response = minimal_response(TaskStatus::Succeeded, "done");
+    let rendered = render_run_trace("run", Some(&trace), &response, "/synod-status");
+
+    assert!(rendered.contains("context_summary: bounded context from 2 primary input(s)"));
+    assert!(rendered.contains("context_credibility: credible"));
+    assert!(rendered.contains("context_primary_inputs: src/context_router.rs, src/lib.rs"));
+    assert!(rendered.contains("context_provenance: workspace_file: src/context_router.rs"));
+}
+
+#[test]
 fn render_run_trace_surfaces_security_assessment_packet_provenance() {
     let mut trace = ExecutionTrace::new("task-governance", "session", "Governed goal");
     trace.terminal_status = Some(TaskStatus::Succeeded);
@@ -647,6 +687,46 @@ fn execute_inspect_surfaces_goal_plan_negotiation_projection() {
         ),
         "{output}"
     );
+}
+
+#[test]
+fn execute_inspect_surfaces_context_projection() {
+    use std::fs;
+
+    let dir = std::env::temp_dir().join(format!("synod-unit-inspect-context-{}", Uuid::new_v4()));
+    fs::create_dir_all(&dir).unwrap();
+
+    let mut trace = minimal_trace("task-context-inspect");
+    trace.goal = "Goal with context".to_string();
+    trace.events.push(TraceEvent {
+        event_id: "e1".to_string(),
+        event_type: TraceEventType::GoalPlanCreated,
+        step_id: None,
+        plan_revision: 0,
+        payload: json!({
+            "plan_id": "plan-context",
+            "goal": "Goal with context",
+            "task_count": 1,
+            "context_summary": "bounded context from 1 primary input(s)",
+            "context_credibility": "credible",
+            "context_primary_inputs": ["src/context_router.rs"],
+            "context_provenance": [
+                "workspace_file: src/context_router.rs (selected as a bounded workspace target for the current goal)"
+            ]
+        }),
+        recorded_at: 0,
+    });
+
+    let store = FileTraceStore::new(&dir);
+    let trace_path = store.persist(&trace).unwrap();
+
+    let report = execute_inspect(Some(&trace_path), None).unwrap();
+    let output = &report.terminal_output;
+
+    assert!(output.contains("context_summary: bounded context from 1 primary input(s)"));
+    assert!(output.contains("context_credibility: credible"));
+    assert!(output.contains("context_primary_inputs: src/context_router.rs"));
+    assert!(output.contains("context_provenance: workspace_file: src/context_router.rs"));
 }
 
 #[test]
@@ -839,6 +919,7 @@ fn render_session_status_includes_goal_trace_and_next_command() {
         governance_next_action: None,
         next_command: Some("synod next".to_string()),
         explanation: "the active session can keep executing from the current step".to_string(),
+        ..Default::default()
     };
 
     let rendered = render_session_status(&view);
@@ -925,6 +1006,7 @@ fn render_session_status_surfaces_security_assessment_projection() {
         governance_next_action: None,
         next_command: Some("synod inspect".to_string()),
         explanation: "governance completed for the current verification stage".to_string(),
+        ..Default::default()
     };
 
     let rendered = render_session_status(&view);
@@ -942,6 +1024,33 @@ fn render_session_status_surfaces_security_assessment_projection() {
         rendered.contains("latest_governance_packet_binding_reason: upstream_stage_context"),
         "{rendered}"
     );
+}
+
+#[test]
+fn render_session_status_surfaces_context_projection() {
+    let view = SessionStatusView {
+        session_id: "session-context-status".to_string(),
+        workspace_ref: "/tmp/session-context".to_string(),
+        goal: Some("Plan with bounded context".to_string()),
+        latest_status: SessionStatus::Planned,
+        context_summary: Some("bounded context from 1 primary input(s)".to_string()),
+        context_credibility: Some("credible".to_string()),
+        context_primary_inputs: Some(vec!["src/context_router.rs".to_string()]),
+        context_provenance: Some(vec![
+            "workspace_file: src/context_router.rs (selected as a bounded workspace target for the current goal)"
+                .to_string(),
+        ]),
+        next_command: Some("synod run".to_string()),
+        explanation: "session is ready to execute the bounded plan".to_string(),
+        ..Default::default()
+    };
+
+    let rendered = render_session_status(&view);
+
+    assert!(rendered.contains("context_summary: bounded context from 1 primary input(s)"));
+    assert!(rendered.contains("context_credibility: credible"));
+    assert!(rendered.contains("context_primary_inputs: src/context_router.rs"));
+    assert!(rendered.contains("context_provenance: workspace_file: src/context_router.rs"));
 }
 
 #[test]
@@ -1012,6 +1121,7 @@ fn render_session_status_surfaces_workflow_phase_and_pause_reason() {
         governance_next_action: None,
         next_command: None,
         explanation: "workflow is paused until a goal is captured".to_string(),
+        ..Default::default()
     };
 
     let rendered = render_session_status(&view);
@@ -1114,6 +1224,197 @@ fn summarize_trace_errors_when_step_kind_payload_is_missing() {
 }
 
 #[test]
+fn summarize_trace_uses_goal_plan_projection_and_decision_evidence_fallbacks() {
+    use synod::domain::trace::TraceEvent;
+
+    let mut trace = ExecutionTrace::new("task-goal-plan", "session", "Decision summary test");
+    trace.terminal_status = Some(TaskStatus::Failed);
+    trace.terminal_reason =
+        Some(TerminalReason::new(TerminalCondition::UnrecoverableError, "decision failed", None));
+    trace.events.push(TraceEvent {
+        event_id: "goal-plan".to_string(),
+        event_type: TraceEventType::GoalPlanCreated,
+        step_id: None,
+        plan_revision: 0,
+        payload: json!({
+            "task_count": 2,
+            "goal": "Decision summary test",
+            "negotiation_goal_summary": "ship the bounded context slice",
+            "negotiation_resolution": "credible",
+            "negotiation_acceptance_boundary": "deliver the bounded outcome",
+            "context_summary": "bounded context from src/lib.rs",
+            "context_credibility": "stale",
+            "context_primary_inputs": ["src/lib.rs"],
+            "context_provenance": ["workspace_file: src/lib.rs (failing test target)"],
+            "context_staleness_reason": "trace snapshot is stale"
+        }),
+        recorded_at: 0,
+    });
+    trace.events.push(TraceEvent {
+        event_id: "decision-created".to_string(),
+        event_type: TraceEventType::DecisionCreated,
+        step_id: Some("decision-1".to_string()),
+        plan_revision: 0,
+        payload: json!({
+            "decision_type": "fix",
+            "target": "src/lib.rs",
+            "status": "created",
+            "rationale": "failing tests point to arithmetic logic",
+            "expected_outcome": "tests pass",
+            "evidence_inputs": [{"kind": "workspace_file", "reference": "src/lib.rs"}]
+        }),
+        recorded_at: 1,
+    });
+    trace.events.push(TraceEvent {
+        event_id: "decision-failed".to_string(),
+        event_type: TraceEventType::DecisionFailed,
+        step_id: Some("decision-1".to_string()),
+        plan_revision: 0,
+        payload: json!({
+            "status": "failed",
+            "target": "src/lib.rs",
+            "action_result": {"stdout": "test failed"}
+        }),
+        recorded_at: 2,
+    });
+    trace.events.push(TraceEvent {
+        event_id: "decision-recovered".to_string(),
+        event_type: TraceEventType::DecisionRecovered,
+        step_id: Some("decision-1".to_string()),
+        plan_revision: 0,
+        payload: json!({
+            "status": "recovered",
+            "recovery_decision_id": "decision-2"
+        }),
+        recorded_at: 3,
+    });
+
+    let summary = summarize_trace(PathBuf::from("/tmp/trace.json"), &trace).unwrap();
+
+    assert_eq!(
+        summary.goal_plan_summary.as_deref(),
+        Some("2 bounded task(s) for Decision summary test")
+    );
+    assert_eq!(summary.negotiation_goal_summary.as_deref(), Some("ship the bounded context slice"));
+    assert_eq!(summary.negotiation_resolution.as_deref(), Some("credible"));
+    assert_eq!(summary.context_summary.as_deref(), Some("bounded context from src/lib.rs"));
+    assert_eq!(summary.context_credibility.as_deref(), Some("stale"));
+    assert_eq!(summary.context_primary_inputs, vec!["src/lib.rs".to_string()]);
+    assert_eq!(
+        summary.context_provenance,
+        vec!["workspace_file: src/lib.rs (failing test target)".to_string()]
+    );
+    assert_eq!(summary.context_staleness_reason.as_deref(), Some("trace snapshot is stale"));
+    assert!(
+        summary
+            .decision_timeline
+            .iter()
+            .any(|line| { line == "decision: decision-1 fix -> src/lib.rs [created]" })
+    );
+    assert!(
+        summary
+            .decision_timeline
+            .iter()
+            .any(|line| { line == "rationale: failing tests point to arithmetic logic" })
+    );
+    assert!(
+        summary.decision_timeline.iter().any(|line| { line == "expected_outcome: tests pass" })
+    );
+    assert!(
+        summary
+            .decision_timeline
+            .iter()
+            .any(|line| { line == "evidence_inputs: workspace_file:src/lib.rs" })
+    );
+    assert!(
+        summary
+            .decision_timeline
+            .iter()
+            .any(|line| { line == "decision_status: decision-1 recovered via decision-2" })
+    );
+    assert_eq!(summary.failure_evidence, vec!["decision-1 src/lib.rs: test failed".to_string()]);
+}
+
+#[test]
+fn compatibility_trace_without_active_session_surfaces_status_and_next_follow_up() {
+    let workspace =
+        std::env::temp_dir().join(format!("synod-unit-compat-status-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&workspace).unwrap();
+
+    let mut trace = minimal_trace("task-compat-status");
+    trace.terminal_status = Some(TaskStatus::Failed);
+    trace.terminal_reason = Some(TerminalReason::new(
+        TerminalCondition::UnrecoverableError,
+        "compatibility run failed",
+        None,
+    ));
+    FileTraceStore::for_workspace(&workspace).persist(&trace).unwrap();
+
+    let status = execute_status(Some(&workspace)).unwrap();
+    assert!(
+        status.terminal_output.contains("continuity_authority: compatibility_trace"),
+        "{}",
+        status.terminal_output
+    );
+    assert!(
+        status.terminal_output.contains("compatibility_follow_up: inspect_only"),
+        "{}",
+        status.terminal_output
+    );
+
+    let next = execute_next(Some(&workspace)).unwrap();
+    assert!(
+        next.terminal_output.contains("compatibility_follow_up: inspect_only"),
+        "{}",
+        next.terminal_output
+    );
+    assert!(
+        next.terminal_output.contains("next_command: synod inspect --workspace"),
+        "{}",
+        next.terminal_output
+    );
+}
+
+#[test]
+fn session_error_renderer_covers_trace_summary_and_cluster_config_guidance() {
+    let trace_summary = render_session_error(
+        "status",
+        &SessionCommandError::TraceSummary("invalid compatibility trace".to_string()),
+    );
+    assert!(trace_summary.contains("status: session error"), "{trace_summary}");
+    assert!(trace_summary.contains("reason: failed to summarize the latest compatibility trace: invalid compatibility trace"), "{trace_summary}");
+    assert!(!trace_summary.contains("next_command:"), "{trace_summary}");
+
+    let cluster_config = render_session_error(
+        "run",
+        &SessionCommandError::MissingClusterConfig {
+            workspace: PathBuf::from("/tmp/cluster-owner"),
+            command_name: "run",
+        },
+    );
+    assert!(cluster_config.contains("run: session error"), "{cluster_config}");
+    assert!(
+        cluster_config
+            .contains("reason: `run` requires a valid cluster config in /tmp/cluster-owner"),
+        "{cluster_config}"
+    );
+    assert!(cluster_config.contains("next_command: synod cluster init --workspace <primary> --cluster-id <id> --member <workspace> --member <workspace>"), "{cluster_config}");
+
+    let session_store = render_session_error(
+        "plan",
+        &SessionCommandError::SessionStore(SessionStoreError::InvalidRecord(
+            "workflow state mismatch".to_string(),
+        )),
+    );
+    assert!(session_store.contains("plan: session error"), "{session_store}");
+    assert!(
+        session_store.contains("reason: invalid session record: workflow state mismatch"),
+        "{session_store}"
+    );
+    assert!(!session_store.contains("next_command:"), "{session_store}");
+}
+
+#[test]
 fn unimplemented_message_formats_the_command_name() {
     use synod::cli::output::unimplemented_message;
 
@@ -1193,6 +1494,7 @@ fn render_trace_summary_handles_all_terminal_status_variants() {
                 None,
             ),
             duration: None,
+            ..Default::default()
         };
         let rendered = render_trace_summary(&summary, "explicit-trace", "/synod-next");
         assert!(
@@ -1238,6 +1540,7 @@ fn render_trace_summary_surfaces_route_owner_and_config_projection() {
         terminal_status: TaskStatus::Succeeded,
         terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None),
         duration: None,
+        ..Default::default()
     };
 
     let rendered = render_trace_summary(&summary, "explicit-trace", "/synod-next");
@@ -1337,6 +1640,7 @@ fn render_session_status_projects_workspace_routing_defaults() {
         governance_next_action: None,
         next_command: Some("synod capture --goal <goal>".to_string()),
         explanation: "session is waiting for a goal".to_string(),
+        ..Default::default()
     });
 
     assert!(
@@ -1427,6 +1731,7 @@ fn render_session_status_surfaces_follow_through_guidance() {
         governance_next_action: None,
         next_command: Some("synod step".to_string()),
         explanation: "next recommended command for the active session is `synod step`".to_string(),
+        ..Default::default()
     });
 
     assert!(
@@ -1490,6 +1795,7 @@ fn render_trace_summary_projects_workspace_routing_defaults() {
         terminal_status: TaskStatus::Succeeded,
         terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None),
         duration: None,
+        ..Default::default()
     };
 
     let rendered = render_trace_summary(&summary, "explicit-trace", "/synod-next");
@@ -1598,6 +1904,7 @@ fn render_trace_summary_surfaces_follow_through_guidance() {
         terminal_status: TaskStatus::Failed,
         terminal_reason: TerminalReason::new(TerminalCondition::UnrecoverableError, "validation failed", None),
         duration: None,
+        ..Default::default()
     };
 
     let rendered = render_trace_summary(&summary, "explicit-trace", "/synod-next");
@@ -1655,6 +1962,7 @@ fn render_trace_summary_covers_replan_recovery_label_and_decision_step_kind() {
         terminal_status: TaskStatus::Succeeded,
         terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None),
         duration: None,
+        ..Default::default()
     };
 
     let rendered = render_trace_summary(&summary, "latest-workspace-trace", "/synod-next");
@@ -1763,6 +2071,7 @@ fn render_trace_summary_covers_pending_running_and_skipped_step_statuses() {
             terminal_status: TaskStatus::Succeeded,
             terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None),
             duration: None,
+            ..Default::default()
         };
         let rendered = render_trace_summary(&summary, "explicit-trace", "/synod-next");
         assert!(
@@ -1838,6 +2147,7 @@ fn render_session_status_surfaces_cluster_delivery_story() {
         governance_next_action: None,
         next_command: Some("synod inspect --cluster /tmp/primary".to_string()),
         explanation: "secondary workspace could not continue the bounded handoff".to_string(),
+        ..Default::default()
     });
 
     assert!(rendered.contains("cluster_id: cluster-1"), "{rendered}");
@@ -1899,6 +2209,7 @@ fn render_trace_summary_surfaces_cluster_delivery_story() {
                 None,
             ),
             duration: None,
+            ..Default::default()
         },
         "explicit-trace",
         "/synod-next",

@@ -1,11 +1,15 @@
+use std::path::PathBuf;
+
 use crate::workspace_fixture::{
     extract_trace_path, run_synod, temp_adaptive_ordering_boundary_workspace,
     temp_broken_fixture_workspace, temp_fixture_workspace, terminal_text, write_markdown_brief,
 };
 use synod::FileConfigStore;
+use synod::adapters::session_store::{FileSessionStore, SessionStore};
 use synod::adapters::trace_store::{FileTraceStore, TraceStore};
 use synod::cli::inspect::summarize_trace;
 use synod::cli::output::{render_trace_summary, trace_execution_condition_text};
+use synod::cli::session::{execute_capture, execute_plan, execute_run, execute_start};
 use synod::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
 
 #[test]
@@ -207,4 +211,51 @@ fn trace_summary_projects_route_owner_and_effective_routing_snapshot() {
     );
     assert!(rendered.contains("follow_through_evidence_source: trace:lifecycle"), "{rendered}");
     assert!(rendered.contains("follow_through_next_action: /synod-next"), "{rendered}");
+}
+
+#[test]
+fn trace_summary_surfaces_context_pack_for_native_runs() {
+    let workspace = temp_fixture_workspace("synod-trace-summary-context-pack");
+    std::fs::write(
+        workspace.join("Cargo.toml"),
+        "[package]\nname = \"trace_summary_context_pack\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(workspace.join("src")).unwrap();
+    std::fs::create_dir_all(workspace.join("tests")).unwrap();
+    std::fs::write(
+        workspace.join("src/context_router.rs"),
+        "pub fn build_context_router() -> &'static str { \"ok\" }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        workspace.join("src/lib.rs"),
+        "pub mod context_router;\npub fn add(left: i32, right: i32) -> i32 { left + right }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        workspace.join("tests/basic.rs"),
+        "#[test]\nfn it_works() { assert_eq!(trace_summary_context_pack::add(2, 2), 4); }\n",
+    )
+    .unwrap();
+
+    execute_start(Some(&workspace)).unwrap();
+    execute_capture(Some(&workspace), Some("build a context router"), &[], None, None, None, None)
+        .unwrap();
+    execute_plan(Some(&workspace), None, false).unwrap();
+    execute_run(Some(&workspace)).unwrap();
+
+    let record = FileSessionStore::for_workspace(&workspace).load().unwrap().unwrap();
+    let trace_path = PathBuf::from(record.latest_trace_ref.unwrap());
+    let store = FileTraceStore::for_workspace(&workspace);
+    let trace = store.load(&trace_path).unwrap();
+    let summary = summarize_trace(&trace_path, &trace).unwrap();
+    let rendered = render_trace_summary(&summary, "latest-workspace-trace", "/synod-next");
+
+    assert_eq!(summary.context_credibility.as_deref(), Some("credible"));
+    assert!(!summary.context_primary_inputs.is_empty());
+    assert!(!summary.context_provenance.is_empty());
+    assert!(rendered.contains("context_summary:"), "{rendered}");
+    assert!(rendered.contains("context_credibility: credible"), "{rendered}");
+    assert!(rendered.contains("context_primary_inputs:"), "{rendered}");
 }
