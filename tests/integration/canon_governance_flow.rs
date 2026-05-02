@@ -41,6 +41,8 @@ fn canon_governance_workspace_projects_governed_stage_lineage_on_native_goal_pla
     assert_eq!(status.status.code(), Some(0), "{status_text}");
     assert!(status_text.contains("latest_status: succeeded"), "{status_text}");
     assert!(status_text.contains("execution_path: native_goal_plan"), "{status_text}");
+    assert!(status_text.contains("latest_changed_files: src/lib.rs"), "{status_text}");
+    assert!(status_text.contains("latest_validation_status: passed"), "{status_text}");
     assert!(status_text.contains("latest_governance_stage: bug-fix:implement"), "{status_text}");
     assert!(status_text.contains("latest_governance_runtime: canon"), "{status_text}");
     assert!(status_text.contains("latest_governance_mode: implementation"), "{status_text}");

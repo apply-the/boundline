@@ -1,9 +1,9 @@
-# Configuration in Synod 0.30.0
+# Configuration in Synod 0.31.0
 
-Synod `0.30.0` keeps a user-friendly setup and routing configuration surface
+Synod `0.31.0` keeps a user-friendly setup and routing configuration surface
 for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
-The `0.30.0` release keeps configuration behavior stable while preserving the
+The `0.31.0` release keeps configuration behavior stable while preserving the
 same governed routing defaults across earlier `bug-fix:investigate` work,
 later verify-stage `security-assessment`, workflow-aware projection of the
 same bounded governance state, continuity-aware read-side follow-up, the
@@ -15,6 +15,10 @@ boundaries from direct goals, authored briefs, and governance intent, while
 Direct `run --goal` now boots the native session path without requiring a
 workspace execution profile, while `run --compatibility --goal ...` remains the
 manifest-backed opt-in.
+Bug-fix and change completion credibility is now stricter on that same runtime
+surface, but it does not introduce a new routing slot, governance flag, or
+configuration file key: Synod simply requires a material diff plus passed
+validation evidence before those bounded paths can finish successfully.
 Adaptive repair still lives in the explicit compatibility execution manifest;
 there is no separate routing knob for mutation-family selection, credibility
 ranking, explicit adaptive exhaustion, or negotiation-state overrides.
@@ -23,6 +27,7 @@ ranking, explicit adaptive exhaustion, or negotiation-state overrides.
 
 - `synod init` bootstraps an optional compatibility workspace profile and local config under `.synod/`
 - direct `synod run --goal` is native-first; add `--compatibility` only when the manifest-backed route is intentional
+- bounded `bug-fix` and `change` completion now requires both material change evidence and passed validation on the native and governed session path
 - `synod config` manages runtime/model routing defaults for planning, verification, review, and other bounded slots
 - `synod cluster` registers bounded multi-workspace membership and aggregated inspection
 - negotiated delivery modeling stays session-owned and trace-projected; there is no new negotiation-specific key in `config.toml` or `.synod/execution.json`

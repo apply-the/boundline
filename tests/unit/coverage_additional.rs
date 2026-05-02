@@ -35,6 +35,7 @@ use synod::domain::task::{
 };
 use synod::domain::task_context::TaskContextError;
 use synod::domain::trace::{ExecutionTrace, TraceEventType};
+use synod::fixture::{build_fixture_plan_for_goal, build_task_request};
 use synod::orchestrator::session_runtime::{SessionRuntime, SessionRuntimeError};
 use uuid::Uuid;
 
@@ -1112,12 +1113,32 @@ fn session_runtime_surfaces_terminal_failures_for_broken_execution_profiles() {
     let workspace = write_execution_workspace("synod-runtime-failure", vec![failing_attempt()]);
     let runtime = SessionRuntime::for_workspace(&workspace);
     let mut session = build_goal_captured_session(&workspace);
-    runtime.plan_task(&mut session, Some("bug-fix"), false).unwrap();
+    runtime.select_flow(&mut session, "bug-fix").unwrap();
+    let request = build_task_request(
+        &workspace,
+        session.goal.clone().unwrap(),
+        session.session_id.clone(),
+        None,
+        None,
+    )
+    .unwrap();
+    let plan = build_fixture_plan_for_goal(
+        &workspace,
+        session.active_flow.as_ref(),
+        session.goal.as_deref().unwrap(),
+    )
+    .unwrap();
+    session.active_task = Some(Task::new("task-runtime-failure", &request, plan).unwrap());
+    session.latest_status = SessionStatus::Planned;
     let response = runtime.run_to_terminal(&mut session).unwrap();
 
-    assert_eq!(response.terminal_status, TaskStatus::Succeeded);
-    assert_eq!(session.latest_status, SessionStatus::Succeeded);
+    assert_eq!(response.terminal_status, TaskStatus::Failed);
+    assert_eq!(session.latest_status, SessionStatus::Failed);
     assert!(session.latest_terminal_reason.is_some());
+    assert_eq!(
+        session.latest_terminal_reason.as_ref().unwrap().condition,
+        TerminalCondition::UnrecoverableError
+    );
 }
 
 #[test]

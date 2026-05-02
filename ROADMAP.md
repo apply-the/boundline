@@ -6,15 +6,15 @@ Canon is downstream from Synod in this roadmap: Synod thinks, decides, orchestra
 
 Evolve Synod into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.30.0
+## Current Status: v0.31.0
 
 Synod now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
 continuity between session-native and compatibility follow-up, stronger
 route-summary plus config projection, bounded multi-workspace clustered
 delivery, negotiated delivery modeling, inspectable routing plus assistant
-decoupling, guided decision follow-through, and evidence-aligned next-command
-selection in place:
+decoupling, guided decision follow-through, evidence-aligned next-command
+selection, and credible governed delivery completion in place:
 
 - session-native orchestration remains the primary operator path
 - `capture` now derives one negotiated delivery packet from direct goals, authored briefs, and governance context before planning begins
@@ -23,6 +23,8 @@ selection in place:
 - `workflow list`, `workflow run`, `workflow status`, `workflow resume`, and `workflow inspect` still project named workflow state onto the same session, route, trace, and `execution_condition` surfaces
 - direct session-native commands and explicit compatibility routing remain available when no named workflow is invoked
 - Canon remains a bounded stage-boundary governance runtime with governed `bug-fix:investigate` plus later verify-stage `security-assessment` reuse on the same operator surface
+- bounded `bug-fix` and `change` delivery no longer succeed merely because the plan ran out of steps; they now require a material diff and passed validation evidence or stop explicitly as failed
+- successful governed delivery now keeps `latest_changed_files`, `latest_validation_status`, and governed packet lineage visible on the same follow-through surfaces
 - adaptive compatibility execution still stays inside manifest-declared `read_targets` while surfacing candidate credibility, rejection, and exhaustion reasons explicitly
 - `status` and `next` still surface `continuity_authority`, compatibility follow-up mode, and inspect-only guidance when the latest authoritative follow-up state comes from an explicit compatibility trace instead of an active session
 - `run`, `status`, `next`, `inspect`, and compatibility follow-up still surface explicit `route_owner` plus material `route_config_projection` cues when workflow metadata, governance intent, or workspace-local routing defaults explain the current follow-up story
@@ -34,42 +36,14 @@ selection in place:
 - session-native commands still accept `--cluster <primary-workspace>` so one authoritative primary-owned session can plan and deliver a bounded change across registered member repositories
 - clustered `run`, `status`, `next`, and `inspect` still surface authoritative workspace, clustered execution condition, participating workspaces, and any blocking member without implying distributed orchestration ownership
 
-## Final Sequence After 0.30.0
+## Final Sequence After 0.31.0
 
 The roadmap is no longer an open-ended backlog. The remaining work collapses
-into the final closing features that finish the product.
+into the final closing feature that finishes the product.
 
-The governing rule is simple: if Canon cannot participate in real code-delivery
-flows, the separation between Synod and Canon is not worth the complexity.
-Synod must remain the product and execution owner; Canon must become a bounded,
-useful governed runtime inside the same delivery path instead of a parallel
-tool story.
-
-### Feature 031 - Governed Delivery With Canon Inside The Loop
-
-**Outcome**: Canon becomes useful during real software delivery, not only as a
-documentation or approval sidecar.
-
-**This feature closes**:
-
-- integrate Canon into the same bounded delivery loop at the stages where
-  governance materially improves software work: requirement shaping, change
-  framing, review, approval, and verification evidence
-- make Synod call Canon from the live delivery flow and continue from Canon
-  outputs without splitting the operator experience into two products
-- keep Synod authoritative for orchestration, retries, routing, next-step
-  choice, and workspace execution while Canon owns governed artifacts,
-  structured evidence, approval state, provenance, and policy gates
-- ship at least one complete governed development flow that proves the model in
-  practice: goal -> change framing -> implementation -> review -> verification
-  -> completion
-
-**Done means**:
-
-- a user doing real code work can feel Canon improving delivery quality inside
-  Synod rather than being forced into a separate documentation system
-- governed and non-governed paths share the same session, trace, follow-through,
-  and `next_command` story
+The governing rule is simple: Synod remains the product and execution owner.
+Canon must stay a bounded, useful governed runtime inside that same delivery
+path rather than drifting back into a parallel tool story.
 
 ### Feature 032 - Product Unification And Surface Closure
 
@@ -95,6 +69,19 @@ of partially overlapping runtimes and assistant surfaces.
   assistants, workflows, routing, and governance
 - the remaining platform work fits inside maintenance and refinement rather than
   another major architectural reset
+
+### Delivered in 0.31.0
+
+- keep Canon inside the same bounded delivery loop for governed `bug-fix` and
+  `change` work instead of treating governance as a separate sidecar product
+- make delivery completion credible by requiring a material diff and passed
+  validation evidence before bounded `bug-fix` or `change` work can end in
+  success
+- keep governed and non-governed follow-through on the same `run`, `status`,
+  `next`, and `inspect` surfaces, including governed packet lineage plus
+  `latest_changed_files` and `latest_validation_status`
+- update README, getting-started, configuration, assistant guidance, roadmap,
+  contributor docs, and changelog for the release
 
 ### Delivered in 0.29.0
 

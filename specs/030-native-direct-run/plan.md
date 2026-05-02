@@ -1,24 +1,13 @@
-# Implementation Plan: Native Direct Run
+# Implementation Plan: [FEATURE]
 
-**Branch**: `030-native-direct-run` | **Date**: 2026-05-02 | **Spec**: [/Users/rt/workspace/synod/specs/030-native-direct-run/spec.md](/Users/rt/workspace/synod/specs/030-native-direct-run/spec.md)
-**Input**: Feature specification from `/specs/030-native-direct-run/spec.md`
+**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
+**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
 
-**Note**: This plan narrows Feature 030 to the highest-leverage product gap
-still visible in the current CLI: direct `run --goal` still defaults to the
-explicit compatibility path. The slice makes direct run native-first, keeps
-compatibility deliberate and explicit, protects meaningful active session state,
-and closes as `0.30.0` with tests, docs, coverage, clippy, and formatting.
+**Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
 
 ## Summary
 
-Make direct `synod run --workspace <workspace> --goal <goal>` bootstrap and
-execute the existing native goal-plan route by default instead of the explicit
-compatibility path. The slice stays inside the current CLI, session, trace,
-and decision-loop surfaces: it introduces an explicit compatibility opt-in for
-operators who still want the execution-profile route, avoids silent session
-overwrite, removes execution-profile diagnostics as a prerequisite for native
-direct run, and ships as `0.30.0` with release closeout and touched-Rust
-coverage above 95%.
+[Extract from feature spec: primary requirement + technical approach from research]
 
 ## Technical Context
 
@@ -28,33 +17,33 @@ coverage above 95%.
   the iteration process.
 -->
 
-**Language/Version**: Rust 1.95.0, edition 2024  
-**Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem and process APIs; no new runtime dependencies planned for this slice  
-**Storage**: Workspace-local `.synod/session.json`, persisted execution traces under `<workspace>/.synod/traces/`, optional `.synod/execution.json` for explicit compatibility execution, optional `.synod/workflows.toml`, optional cluster state under `.synod/cluster.toml`, and repository-managed assistant assets under `assistant/`  
-**Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, focused unit/contract/integration tests for direct run routing and session safety, `cargo test --no-run --all-targets`, and `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info` with touched-file coverage review  
-**Target Platform**: macOS/Linux developer workstations and Linux CI
-**Project Type**: Single Rust CLI/library crate with file-backed session and trace state plus repository-managed assistant command packs  
-**Execution Model**: Sequential session-native orchestration with bounded decision-loop execution; direct run becomes a native bootstrap entry while explicit compatibility remains opt-in and subordinate  
-**Observability Surface**: Persisted session status, execution traces, CLI `run`, `status`, `next`, and `inspect` output, route ownership, `execution_path`, negotiation projection, decision history, compatibility follow-up, and assistant command-pack guidance  
-**Performance Goals**: Operators should reach a persisted native run outcome from one direct `run --goal` command in under 2 minutes of operator time; maintainers should validate the release story in under 20 minutes  
-**Constraints**: No new background workers, no distributed orchestration, no hidden fallback from native to compatibility, no Canon dependency for the feature to function, no UI work, and no broadened autonomous coding engine  
-**Scale/Scope**: One workspace at a time for the direct native bootstrap path, representative success and non-success Rust workspaces, and bounded updates to existing CLI, session runtime, diagnostics, tests, docs, and assistant surfaces
+**Language/Version**: [e.g., Rust 1.95.0, Python 3.11 or NEEDS CLARIFICATION]  
+**Primary Dependencies**: [core libraries and runtime dependencies or NEEDS CLARIFICATION]  
+**Storage**: [e.g., in-memory state, files, database, or N/A]  
+**Testing**: [e.g., cargo test, pytest, contract tests or NEEDS CLARIFICATION]  
+**Target Platform**: [e.g., macOS/Linux developer workstations, Linux CI or NEEDS CLARIFICATION]
+**Project Type**: [e.g., single library crate, CLI, service, or NEEDS CLARIFICATION]  
+**Execution Model**: [e.g., sequential task loop with bounded retries or NEEDS CLARIFICATION]  
+**Observability Surface**: [e.g., persisted execution trace, structured logs, CLI summary, and when governance changes, visible mode/approval/packet-provenance output or NEEDS CLARIFICATION]  
+**Performance Goals**: [delivery-facing targets or NEEDS CLARIFICATION]  
+**Constraints**: [explicit limits, non-goals, and external boundaries or NEEDS CLARIFICATION]  
+**Scale/Scope**: [expected task volume, step count, or user reach or NEEDS CLARIFICATION]
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **PASS** Delivery identity: The slice improves bounded engineering-task delivery by letting the primary `run --goal` surface enter the real native delivery path instead of a subordinate compatibility route. See Summary, Technical Context, and [/Users/rt/workspace/synod/specs/030-native-direct-run/spec.md](/Users/rt/workspace/synod/specs/030-native-direct-run/spec.md).
-- **PASS** Delivery-first scope: The plan prioritizes execution entry, routing ownership, and session safety ahead of docs or release polish. See Summary and Technical Context.
-- **PASS** Primary workflow: Session-native remains the main operator path; explicit compatibility execution stays available only as a deliberate subordinate route. See Summary, Technical Context, research, and quickstart.
-- **PASS** Bounded execution: The slice reuses the current sequential session runtime and native decision loop, keeps explicit terminal states, and does not introduce background work or unbounded retry behavior. See Technical Context, research, and quickstart.
-- **PASS** Stateful execution: Direct run bootstrap persists session state, negotiation projection, goal-plan state, decisions, and traces so later commands can continue from the same authoritative record. See Summary, Technical Context, research, and data model.
-- **PASS** Mutable planning: The slice reuses the existing native planning and replanning model; it only changes how direct run creates an executable plan and avoids pending flow-confirmation dead ends. See Summary, research, and data model.
-- **PASS** Sequential-first design: One step remains active at a time through the current native decision loop or explicit compatibility path. See Technical Context and research.
-- **PASS** Tool-agent symmetry: Native direct run continues to dispatch explicit analyze/code/test actions through registered adapters and tools. See Technical Context, research, and quickstart.
-- **PASS** Observability and explicit intelligence: Route choice, execution path, session safety failures, clarification stops, decisions, and trace continuity remain visible on current CLI and trace surfaces. See Technical Context, research, contracts, and quickstart.
-- **PASS** Non-goals and external separation: The slice avoids Canon-owned control flow, provider-gateway expansion, councils, long-term memory, distributed orchestration, UI work, and deployment changes. See Constraints, research, and spec.
-- **PASS** Minimal slice: The smallest independently valuable capability is one native-first direct-run entry that preserves explicit compatibility as opt-in and keeps the rest of the current runtime model intact. See Summary and research.
+- Delivery identity: Explain how this feature directly improves bounded engineering task delivery.
+- Delivery-first scope: Confirm execution, orchestration, decomposition, or validation work is prioritized ahead of optimization or polish.
+- Primary workflow: State whether the main operator path is session-native (`start -> capture -> plan -> run -> status -> next -> inspect`) and identify any explicit compatibility path that remains available.
+- Bounded execution: Identify explicit start conditions, terminal conditions, and max step or retry limits.
+- Stateful execution: Describe shared task context, read and write points, and justify any stateless segment.
+- Mutable planning: Describe initial planning plus replanning, step insertion, or replacement behavior.
+- Sequential-first design: Confirm one-step-at-a-time execution or justify why the constitution allows an exception.
+- Tool-agent symmetry: Show how reasoning and action remain explicit in the execution model.
+- Observability and explicit intelligence: List trace surfaces, visible decisions, failure signals, and any heuristic behavior that must be exposed.
+- Non-goals and external separation: Confirm the plan does not depend on Canon behavior beyond bounded governance/evidence boundaries or reintroduce deferred scope such as councils or voting outside an explicitly reprioritized, bounded review slice, provider abstraction complexity beyond the approved slice, long-term memory, UI/UX, or deployment pipelines.
+- Minimal slice: Explain the smallest independently valuable capability delivered by this plan.
 
 Mark each line as PASS or FAIL in the completed plan and reference the section that satisfies it.
 
@@ -63,15 +52,12 @@ Mark each line as PASS or FAIL in the completed plan and reference the section t
 ### Documentation (this feature)
 
 ```text
-specs/030-native-direct-run/
+specs/[###-feature]/
 ├── plan.md
 ├── research.md
 ├── data-model.md
 ├── quickstart.md
 ├── contracts/
-│   ├── native-direct-run-bootstrap-contract.md
-│   ├── explicit-compatibility-opt-in-contract.md
-│   └── active-session-protection-contract.md
 └── tasks.md
 ```
 
@@ -85,48 +71,27 @@ specs/030-native-direct-run/
 
 ```text
 src/
-├── cli/
-│   ├── diagnostics.rs
-│   ├── run.rs
-│   └── session.rs
 ├── domain/
-│   ├── session.rs
-│   └── trace.rs
 ├── orchestrator/
-│   └── session_runtime.rs
-└── fixture.rs
+├── agents/
+├── tools/
+└── tracing/
 
 tests/
-├── contract/
-├── integration/
 └── unit/
-
-assistant/
-├── claude/commands/
-├── codex/commands/
-└── copilot/prompts/
-
-docs/
-├── configuration.md
-└── getting-started.md
-
-README.md
-CHANGELOG.md
-CONTRIBUTING.md
-ROADMAP.md
-Cargo.toml
-Cargo.lock
-AGENTS.md
+├── integration/
+└── contract/
 ```
 
-**Structure Decision**: Keep the slice inside the existing CLI routing,
-session runtime, diagnostics, and assistant-doc surfaces. No new top-level
-runtime or persistence model is required because the feature changes how direct
-run enters the already existing native execution path rather than introducing a
-new orchestration surface.
+**Structure Decision**: [Document the selected structure and reference the real
+directories captured above. If new top-level directories are introduced, explain why
+the constitution allows that additional complexity.]
 
 ## Complexity Tracking
 
 > **Fill ONLY if Constitution Check has violations that must be justified**
 
-No constitution violations are expected for this slice.
+| Violation | Why Needed | Simpler Alternative Rejected Because |
+|-----------|------------|-------------------------------------|
+| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
+| [e.g., background worker] | [specific delivery need] | [why sequential execution is insufficient] |

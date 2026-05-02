@@ -603,8 +603,16 @@ impl SessionRuntime {
         if let Some(routing_projection) = Self::workspace_routing_projection(&self.workspace_ref) {
             Self::persist_routing_projection(&mut trace, &routing_projection);
         }
-        let (condition, message, details) = native_terminal_outcome(&terminal);
-        let terminal_reason = build_terminal_reason(condition, message, details);
+        let terminal_reason = if matches!(terminal, LoopTerminal::Success) {
+            native_delivery_completion_failure_reason(&goal_plan, &decisions).unwrap_or_else(|| {
+                let (condition, message, details) = native_terminal_outcome(&terminal);
+                build_terminal_reason(condition, message, details)
+            })
+        } else {
+            let (condition, message, details) = native_terminal_outcome(&terminal);
+            build_terminal_reason(condition, message, details)
+        };
+        let condition = terminal_reason.condition;
         let terminal_status = task_status_for_condition(condition);
 
         trace.finalize(terminal_status, terminal_reason.clone());
@@ -755,6 +763,107 @@ impl SessionRuntime {
             plan_revision: task.plan.revision,
             trace_location,
         }))
+    }
+
+    fn delivery_completion_failure_reason(
+        &self,
+        session: &ActiveSessionRecord,
+        task: &Task,
+        completed_step_id: &str,
+    ) -> Result<Option<TerminalReason>, SessionRuntimeError> {
+        let Some(active_flow) = session.active_flow.as_ref() else {
+            return Ok(None);
+        };
+
+        if !matches!(active_flow.flow_name.as_str(), "bug-fix" | "change") {
+            return Ok(None);
+        }
+
+        if let Some(governed_stage) = task
+            .context
+            .latest_governance_stage()
+            .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?
+        {
+            match governed_stage.lifecycle_state {
+                GovernanceLifecycleState::AwaitingApproval => {
+                    return Ok(Some(build_terminal_reason(
+                        TerminalCondition::TaskNotCredible,
+                        format!(
+                            "delivery is still awaiting governed approval for {}",
+                            governed_stage.stage_key
+                        ),
+                        Some(json!({
+                            "step_id": completed_step_id,
+                            "flow_name": active_flow.flow_name.as_str(),
+                            "stage_key": governed_stage.stage_key,
+                            "governance_state": governed_stage.lifecycle_state,
+                            "approval_state": governed_stage.approval_state,
+                        })),
+                    )));
+                }
+                GovernanceLifecycleState::Blocked | GovernanceLifecycleState::Failed => {
+                    return Ok(Some(build_terminal_reason(
+                        TerminalCondition::TaskNotCredible,
+                        governed_stage.blocked_reason.clone().unwrap_or_else(|| {
+                            format!(
+                                "governance blocked delivery completion for {}",
+                                governed_stage.stage_key
+                            )
+                        }),
+                        Some(json!({
+                            "step_id": completed_step_id,
+                            "flow_name": active_flow.flow_name.as_str(),
+                            "stage_key": governed_stage.stage_key,
+                            "governance_state": governed_stage.lifecycle_state,
+                            "approval_state": governed_stage.approval_state,
+                        })),
+                    )));
+                }
+                _ => {}
+            }
+        }
+
+        let has_changed_files = task
+            .context
+            .state
+            .get("latest_changed_files")
+            .and_then(Value::as_array)
+            .is_some_and(|items| {
+                items.iter().filter_map(Value::as_str).map(str::trim).any(|path| !path.is_empty())
+            });
+        if !has_changed_files {
+            return Ok(Some(build_terminal_reason(
+                TerminalCondition::TaskNotCredible,
+                format!(
+                    "delivery did not produce a material workspace diff before step {} completed",
+                    completed_step_id
+                ),
+                Some(json!({
+                    "step_id": completed_step_id,
+                    "flow_name": active_flow.flow_name.as_str(),
+                    "latest_changed_files": task.context.state.get("latest_changed_files").cloned(),
+                })),
+            )));
+        }
+
+        let validation_status =
+            task.context.state.get("latest_validation_status").and_then(Value::as_str);
+        if validation_status != Some("passed") {
+            return Ok(Some(build_terminal_reason(
+                TerminalCondition::TaskNotCredible,
+                format!(
+                    "delivery did not produce credible validation evidence before step {} completed",
+                    completed_step_id
+                ),
+                Some(json!({
+                    "step_id": completed_step_id,
+                    "flow_name": active_flow.flow_name.as_str(),
+                    "latest_validation_status": validation_status,
+                })),
+            )));
+        }
+
+        Ok(None)
     }
 
     pub fn refresh_governance_state(
@@ -990,13 +1099,22 @@ impl SessionRuntime {
                     task.plan.revision,
                 );
 
-                let goal_satisfied = task
+                let explicit_goal_satisfied = task
                     .context
                     .state
                     .get("goal_satisfied")
                     .and_then(Value::as_bool)
-                    .unwrap_or(false)
-                    || task.plan.current_step_index + 1 >= task.plan.steps.len();
+                    .unwrap_or(false);
+                let reached_end_of_plan = task.plan.current_step_index + 1 >= task.plan.steps.len();
+
+                if (explicit_goal_satisfied || reached_end_of_plan)
+                    && let Some(reason) =
+                        self.delivery_completion_failure_reason(session, task, &step_snapshot.id)?
+                {
+                    return self.finalize_task(session, task, trace, reason).map(Some);
+                }
+
+                let goal_satisfied = explicit_goal_satisfied || reached_end_of_plan;
 
                 if goal_satisfied {
                     task.plan.advance();
@@ -2527,6 +2645,65 @@ pub enum SessionRuntimeError {
     UnsupportedAssistantBinding { slot: String, runtime: String, available: String },
 }
 
+fn native_delivery_completion_failure_reason(
+    goal_plan: &crate::domain::goal_plan::GoalPlan,
+    decisions: &[crate::domain::decision::Decision],
+) -> Option<TerminalReason> {
+    let flow_name = goal_plan.flow.as_ref()?.flow_name.as_str();
+    if !matches!(flow_name, "bug-fix" | "change") {
+        return None;
+    }
+
+    let has_material_diff = decisions.iter().any(|decision| {
+        decision.status == crate::domain::decision::DecisionStatus::Verified
+            && decision
+                .tool_result
+                .as_ref()
+                .and_then(|tool_result| tool_result.diff.as_deref())
+                .is_some_and(|diff| !diff.trim().is_empty())
+    });
+    if !has_material_diff {
+        return Some(build_terminal_reason(
+            TerminalCondition::TaskNotCredible,
+            "delivery did not produce a material workspace diff through the native decision loop"
+                .to_string(),
+            Some(json!({
+                "flow_name": flow_name,
+                "verified_decisions": decisions
+                    .iter()
+                    .filter(|decision| {
+                        decision.status == crate::domain::decision::DecisionStatus::Verified
+                    })
+                    .count(),
+            })),
+        ));
+    }
+
+    let has_passed_validation = decisions.iter().any(|decision| {
+        decision.status == crate::domain::decision::DecisionStatus::Verified
+            && decision.decision_type == crate::domain::decision::DecisionType::Test
+            && decision.tool_result.as_ref().is_some_and(|tool_result| tool_result.success)
+    });
+    if !has_passed_validation {
+        return Some(build_terminal_reason(
+            TerminalCondition::TaskNotCredible,
+            "delivery did not produce credible validation evidence through the native decision loop"
+                .to_string(),
+            Some(json!({
+                "flow_name": flow_name,
+                "verified_decisions": decisions
+                    .iter()
+                    .filter(|decision| {
+                        decision.status == crate::domain::decision::DecisionStatus::Verified
+                    })
+                    .count(),
+            })),
+        ));
+    }
+
+    None
+}
+
 fn native_terminal_outcome(terminal: &LoopTerminal) -> (TerminalCondition, String, Option<Value>) {
     match terminal {
         LoopTerminal::Success => (
@@ -2761,7 +2938,7 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
     use std::path::{Path, PathBuf};
 
-    use serde_json::{Map, json};
+    use serde_json::{Map, Value, json};
     use uuid::Uuid;
 
     use super::{SessionRuntime, session_status_for_task_status};
@@ -2769,21 +2946,27 @@ mod tests {
     use crate::domain::cluster::{
         ClusterSessionProjection, ClusteredExecutionKind, WorkspaceParticipationKind,
     };
+    use crate::domain::decision::{Decision, DecisionType};
     use crate::domain::execution::{
         ExecutionAttemptDefinition, ExecutionCommand, ExecutionFailureMode, WorkspaceChange,
         WorkspaceExecutionProfile,
     };
     use crate::domain::flow::{attach_stage_metadata, built_in_flow};
+    use crate::domain::goal_plan::{GoalPlan, InferredFlow, PlannedTask};
     use crate::domain::governance::{
-        CanonMode, CanonRuntimeConfig, GovernanceLifecycleState, GovernanceProfile,
-        GovernanceRuntimeKind, PacketReadiness, StageGovernancePolicy, SystemContextBinding,
+        ApprovalState, CanonMode, CanonRuntimeConfig, GovernanceLifecycleState, GovernanceProfile,
+        GovernanceRuntimeKind, GovernedStageRecord, PacketReadiness, StageGovernancePolicy,
+        SystemContextBinding,
     };
     use crate::domain::limits::{RunLimits, TerminalCondition};
     use crate::domain::plan::Plan;
     use crate::domain::session::{ActiveSessionRecord, SessionStatus};
-    use crate::domain::step::{ExecutionStatus, Recoverability, Step, StepStatus};
+    use crate::domain::step::{
+        ExecutionStatus, Recoverability, Step, StepExecutionRequest, StepKind, StepStatus,
+    };
     use crate::domain::task::{Task, TaskRunRequest, TaskStatus, TerminalReason};
     use crate::domain::task_context::TaskContext;
+    use crate::domain::tool_result::ToolResult;
     use crate::domain::trace::{ExecutionTrace, TraceEventType};
     use crate::fixture::{FixtureRuntime, build_fixture_plan_for_goal, build_task_request};
     use crate::orchestrator::planner::StaticPlanner;
@@ -2876,6 +3059,16 @@ mod tests {
         Task::new("task-runtime", &build_request(workspace_ref), plan).unwrap()
     }
 
+    fn goal_satisfied_task(workspace_ref: &str, state_patch: Value) -> Task {
+        decision_task(
+            workspace_ref,
+            json!({
+                "output": {"summary": "goal satisfied"},
+                "state_patch": state_patch,
+            }),
+        )
+    }
+
     fn build_session(workspace: &Path, task: Task) -> ActiveSessionRecord {
         ActiveSessionRecord {
             session_id: "session-runtime".to_string(),
@@ -2951,6 +3144,497 @@ mod tests {
 
     fn context() -> TaskContext {
         TaskContext::new("session-runtime", "/tmp/workspace", RunLimits::default(), Map::new())
+    }
+
+    fn step_request(target: Option<&str>) -> StepExecutionRequest {
+        let input = target.map(|target| json!({ "target": target })).unwrap_or_else(|| json!({}));
+        StepExecutionRequest {
+            step_id: "step-request".to_string(),
+            step_kind: StepKind::Tool,
+            target_name: "test-target".to_string(),
+            input,
+            task_snapshot: context(),
+            attempt_number: 1,
+        }
+    }
+
+    fn build_confirmed_bug_fix_goal_plan() -> GoalPlan {
+        let mut plan = GoalPlan::new(
+            "Fix the failing add function",
+            vec![PlannedTask {
+                task_id: "task-1".to_string(),
+                description: "Fix the failing add function".to_string(),
+                target: "src/lib.rs".to_string(),
+                expected_outcome: Some("issue resolved".to_string()),
+                decision_type_hint: Some(DecisionType::Fix),
+            }],
+        )
+        .unwrap()
+        .with_flow(InferredFlow {
+            flow_name: "bug-fix".to_string(),
+            confidence_reason: "operator confirmed flow during planning".to_string(),
+            confirmed: true,
+        });
+        plan.confirm().unwrap();
+        plan
+    }
+
+    fn verified_decision(
+        decision_type: DecisionType,
+        target: &str,
+        tool_result: ToolResult,
+    ) -> Decision {
+        let mut decision = Decision::new(
+            decision_type,
+            target,
+            format!("execute {target}"),
+            "complete the planned action",
+            Vec::new(),
+        );
+        decision.mark_dispatched().unwrap();
+        decision.mark_verified(tool_result).unwrap();
+        decision
+    }
+
+    #[test]
+    fn execute_next_step_rejects_bug_fix_completion_without_material_diff_or_validation() {
+        let workspace = temp_workspace("synod-runtime-delivery-gate");
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let fixture_runtime = manual_runtime();
+
+        let mut missing_diff_session = build_session(
+            &workspace,
+            goal_satisfied_task(
+                workspace.to_string_lossy().as_ref(),
+                json!({
+                    "goal_satisfied": true,
+                    "latest_validation_status": "passed",
+                }),
+            ),
+        );
+        missing_diff_session.active_flow = Some(built_in_flow("bug-fix").unwrap().initial_state());
+
+        let missing_diff = runtime
+            .execute_single_step(&mut missing_diff_session, &fixture_runtime)
+            .unwrap()
+            .expect("missing diff should terminally fail");
+        assert_eq!(missing_diff.terminal_status, TaskStatus::Failed);
+        assert_eq!(missing_diff.terminal_reason.condition, TerminalCondition::TaskNotCredible);
+        assert!(
+            missing_diff.terminal_reason.message.contains("material workspace diff"),
+            "{}",
+            missing_diff.terminal_reason.message
+        );
+
+        let mut missing_validation_session = build_session(
+            &workspace,
+            goal_satisfied_task(
+                workspace.to_string_lossy().as_ref(),
+                json!({
+                    "goal_satisfied": true,
+                    "latest_changed_files": ["src/lib.rs"],
+                }),
+            ),
+        );
+        missing_validation_session.active_flow =
+            Some(built_in_flow("bug-fix").unwrap().initial_state());
+
+        let missing_validation = runtime
+            .execute_single_step(&mut missing_validation_session, &fixture_runtime)
+            .unwrap()
+            .expect("missing validation should terminally fail");
+        assert_eq!(missing_validation.terminal_status, TaskStatus::Failed);
+        assert_eq!(
+            missing_validation.terminal_reason.condition,
+            TerminalCondition::TaskNotCredible
+        );
+        assert!(
+            missing_validation.terminal_reason.message.contains("credible validation evidence"),
+            "{}",
+            missing_validation.terminal_reason.message
+        );
+    }
+
+    #[test]
+    fn native_goal_plan_success_requires_diff_and_validation_evidence() {
+        let goal_plan = build_confirmed_bug_fix_goal_plan();
+
+        let validation_only = verified_decision(
+            DecisionType::Test,
+            "test suite",
+            ToolResult::new("tester", "tester test suite", true, 1).with_exit_code(0),
+        );
+        let missing_diff = super::native_delivery_completion_failure_reason(
+            &goal_plan,
+            std::slice::from_ref(&validation_only),
+        )
+        .expect("missing diff should block native success");
+        assert_eq!(missing_diff.condition, TerminalCondition::TaskNotCredible);
+        assert!(missing_diff.message.contains("material workspace diff"));
+
+        let code_change = verified_decision(
+            DecisionType::Fix,
+            "src/lib.rs",
+            ToolResult::new("coder", "coder src/lib.rs", true, 1)
+                .with_diff("- left - right\n+ left + right"),
+        );
+        let missing_validation = super::native_delivery_completion_failure_reason(
+            &goal_plan,
+            std::slice::from_ref(&code_change),
+        )
+        .expect("missing validation should block native success");
+        assert_eq!(missing_validation.condition, TerminalCondition::TaskNotCredible);
+        assert!(missing_validation.message.contains("credible validation evidence"));
+
+        assert!(
+            super::native_delivery_completion_failure_reason(
+                &goal_plan,
+                &[code_change, validation_only],
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn delivery_completion_failure_reason_covers_governance_gate_states() {
+        let workspace = temp_workspace("synod-runtime-governance-gate");
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let mut session = build_session(
+            &workspace,
+            goal_satisfied_task(
+                workspace.to_string_lossy().as_ref(),
+                json!({
+                    "goal_satisfied": true,
+                    "latest_changed_files": ["src/lib.rs"],
+                    "latest_validation_status": "passed",
+                }),
+            ),
+        );
+        session.active_flow = Some(built_in_flow("bug-fix").unwrap().initial_state());
+
+        let awaiting_record = GovernedStageRecord {
+            stage_key: "bug-fix:verify".to_string(),
+            runtime: GovernanceRuntimeKind::Canon,
+            lifecycle_state: GovernanceLifecycleState::AwaitingApproval,
+            required: true,
+            autopilot_enabled: true,
+            approval_state: ApprovalState::Requested,
+            canon_run_ref: Some("canon-run-awaiting".to_string()),
+            governance_attempt_id: "attempt-awaiting".to_string(),
+            previous_governance_attempt_id: None,
+            packet_ref: Some(".canon/runs/canon-run-awaiting".to_string()),
+            decision_ref: None,
+            blocked_reason: None,
+        };
+        session
+            .active_task
+            .as_mut()
+            .unwrap()
+            .context
+            .set_latest_governance_stage(&awaiting_record)
+            .unwrap();
+
+        let awaiting_reason = runtime
+            .delivery_completion_failure_reason(
+                &session,
+                session.active_task.as_ref().unwrap(),
+                "verify",
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(awaiting_reason.condition, TerminalCondition::TaskNotCredible);
+        assert!(awaiting_reason.message.contains("awaiting governed approval"));
+
+        let blocked_record = GovernedStageRecord {
+            lifecycle_state: GovernanceLifecycleState::Blocked,
+            approval_state: ApprovalState::Rejected,
+            blocked_reason: Some("governance blocked delivery completion".to_string()),
+            ..awaiting_record
+        };
+        session
+            .active_task
+            .as_mut()
+            .unwrap()
+            .context
+            .set_latest_governance_stage(&blocked_record)
+            .unwrap();
+
+        let blocked_reason = runtime
+            .delivery_completion_failure_reason(
+                &session,
+                session.active_task.as_ref().unwrap(),
+                "verify",
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(blocked_reason.condition, TerminalCondition::TaskNotCredible);
+        assert!(blocked_reason.message.contains("governance blocked delivery completion"));
+    }
+
+    #[test]
+    fn prepare_cluster_run_materializes_cluster_task_and_is_idempotent() {
+        let primary = write_cluster_delivery_workspace("synod-runtime-cluster-prepare-primary");
+        let secondary = write_cluster_delivery_workspace("synod-runtime-cluster-prepare-secondary");
+        let runtime = SessionRuntime::for_workspace(&primary);
+        let mut session = ActiveSessionRecord {
+            session_id: "session-runtime-cluster-prepare".to_string(),
+            workspace_ref: primary.to_string_lossy().into_owned(),
+            goal: Some("fix the broken add function".to_string()),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: Some(built_in_flow("bug-fix").unwrap().initial_state()),
+            active_task: None,
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::GoalCaptured,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 10,
+            updated_at: 10,
+        };
+        let projection = ClusterSessionProjection {
+            cluster_id: "cluster-prepare".to_string(),
+            primary_workspace_ref: primary.to_string_lossy().into_owned(),
+            member_workspace_refs: vec![
+                primary.to_string_lossy().into_owned(),
+                secondary.to_string_lossy().into_owned(),
+            ],
+            started_from_command: "run".to_string(),
+            updated_at: 20,
+        };
+
+        runtime.prepare_cluster_run(&mut session, &projection).unwrap();
+        assert_eq!(session.latest_status, SessionStatus::Planned);
+        let task = session.active_task.as_ref().unwrap();
+        assert!(task.context.cluster_session_projection().unwrap().is_some());
+        assert!(task.context.cluster_delivery_story().unwrap().is_some());
+
+        runtime.prepare_cluster_run(&mut session, &projection).unwrap();
+        assert!(
+            session
+                .active_task
+                .as_ref()
+                .unwrap()
+                .context
+                .cluster_session_projection()
+                .unwrap()
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn native_helper_functions_cover_analysis_change_and_validation_paths() {
+        let workspace = temp_workspace("synod-runtime-native-helpers");
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::create_dir_all(workspace.join("tests")).unwrap();
+        fs::write(
+            workspace.join("Cargo.toml"),
+            "[package]\nname = \"native_helpers\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        )
+        .unwrap();
+        fs::write(
+            workspace.join("src/lib.rs"),
+            "pub fn add(left: i32, right: i32) -> i32 { left - right }\n",
+        )
+        .unwrap();
+        fs::write(
+            workspace.join("tests/red_to_green.rs"),
+            "#[test]\nfn red_to_green_addition() {\n    assert_eq!(native_helpers::add(2, 2), 4);\n}\n",
+        )
+        .unwrap();
+
+        let analyzed_dir = super::native_analyze_workspace(&workspace, step_request(Some("src")));
+        assert_eq!(analyzed_dir.status, ExecutionStatus::Succeeded);
+        assert_eq!(analyzed_dir.output.as_ref().unwrap()["entry_count"], json!(1));
+
+        let missing_target = super::native_analyze_workspace(&workspace, step_request(None));
+        assert_eq!(missing_target.status, ExecutionStatus::Failed);
+        assert_eq!(missing_target.recoverability, Recoverability::ReplanRequired);
+
+        let validation_failure = super::native_run_validation(&workspace, step_request(Some(".")));
+        assert_eq!(validation_failure.status, ExecutionStatus::Failed);
+        assert_eq!(
+            validation_failure.state_patch.as_ref().unwrap()["latest_validation_status"],
+            json!("failed")
+        );
+
+        let applied =
+            super::native_apply_workspace_change(&workspace, step_request(Some("src/lib.rs")));
+        assert_eq!(applied.status, ExecutionStatus::Succeeded);
+        assert_eq!(
+            applied.state_patch.as_ref().unwrap()["latest_changed_files"],
+            json!(["src/lib.rs"])
+        );
+
+        let validation_success = super::native_run_validation(&workspace, step_request(Some(".")));
+        assert_eq!(validation_success.status, ExecutionStatus::Succeeded);
+        assert_eq!(
+            validation_success.state_patch.as_ref().unwrap()["latest_validation_status"],
+            json!("passed")
+        );
+
+        let unavailable =
+            super::native_apply_workspace_change(&workspace, step_request(Some("src/lib.rs")));
+        assert_eq!(unavailable.status, ExecutionStatus::Failed);
+        assert_eq!(unavailable.error.as_ref().unwrap().code, "native_change_unavailable");
+    }
+
+    #[test]
+    fn native_helper_functions_cover_terminal_and_error_variants() {
+        let (condition, message, details) =
+            super::native_terminal_outcome(&super::LoopTerminal::Failure("broken".to_string()));
+        assert_eq!(condition, TerminalCondition::UnrecoverableError);
+        assert_eq!(message, "broken");
+        assert!(details.is_none());
+
+        let (condition, message, details) =
+            super::native_terminal_outcome(&super::LoopTerminal::Exhausted {
+                steps_taken: 2,
+                max_steps: 5,
+            });
+        assert_eq!(condition, TerminalCondition::StepLimitExceeded);
+        assert_eq!(message, "native decision loop exhausted its step budget");
+        assert_eq!(details.unwrap()["steps_taken"], json!(2));
+
+        let (condition, message, details) = super::native_terminal_outcome(
+            &super::LoopTerminal::NoActionableState("stalled".to_string()),
+        );
+        assert_eq!(condition, TerminalCondition::NoCredibleNextStep);
+        assert_eq!(message, "stalled");
+        assert!(details.is_none());
+
+        let workspace = temp_workspace("synod-runtime-native-helper-errors");
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::write(
+            workspace.join("src/lib.rs"),
+            "pub fn add(left: i32, right: i32) -> i32 { left - right }\n",
+        )
+        .unwrap();
+
+        let (target, path) =
+            super::request_target_path(&workspace, &step_request(Some(" src/lib.rs "))).unwrap();
+        assert_eq!(target, "src/lib.rs");
+        assert_eq!(path, workspace.join("src/lib.rs"));
+
+        let missing_target =
+            super::request_target_path(&workspace, &step_request(None)).unwrap_err();
+        assert_eq!(missing_target.code, "missing_target");
+
+        let analyzed_file =
+            super::native_analyze_workspace(&workspace, step_request(Some(" src/lib.rs ")));
+        assert_eq!(analyzed_file.status, ExecutionStatus::Succeeded);
+        assert_eq!(analyzed_file.output.as_ref().unwrap()["target"], json!("src/lib.rs"));
+
+        let analyze_missing =
+            super::native_analyze_workspace(&workspace, step_request(Some("src/missing.rs")));
+        assert_eq!(analyze_missing.status, ExecutionStatus::Failed);
+        assert_eq!(analyze_missing.error.as_ref().unwrap().code, "file_read_failed");
+
+        let unreadable_dir = workspace.join("private");
+        fs::create_dir_all(&unreadable_dir).unwrap();
+        let mut dir_permissions = fs::metadata(&unreadable_dir).unwrap().permissions();
+        dir_permissions.set_mode(0o000);
+        fs::set_permissions(&unreadable_dir, dir_permissions).unwrap();
+        let analyze_unreadable =
+            super::native_analyze_workspace(&workspace, step_request(Some("private")));
+        assert_eq!(analyze_unreadable.status, ExecutionStatus::Failed);
+        assert_eq!(analyze_unreadable.error.as_ref().unwrap().code, "directory_read_failed");
+        let mut dir_permissions = fs::metadata(&unreadable_dir).unwrap().permissions();
+        dir_permissions.set_mode(0o755);
+        fs::set_permissions(&unreadable_dir, dir_permissions).unwrap();
+
+        let apply_missing_target =
+            super::native_apply_workspace_change(&workspace, step_request(None));
+        assert_eq!(apply_missing_target.status, ExecutionStatus::Failed);
+        assert_eq!(apply_missing_target.error.as_ref().unwrap().code, "missing_target");
+
+        let apply_missing_file =
+            super::native_apply_workspace_change(&workspace, step_request(Some("src/missing.rs")));
+        assert_eq!(apply_missing_file.status, ExecutionStatus::Failed);
+        assert_eq!(apply_missing_file.error.as_ref().unwrap().code, "file_read_failed");
+
+        let division_workspace = temp_workspace("synod-runtime-native-division-fix");
+        fs::create_dir_all(division_workspace.join("src")).unwrap();
+        fs::write(
+            division_workspace.join("src/lib.rs"),
+            "pub fn add(left: i32, right: i32) -> i32 { left / right }\n",
+        )
+        .unwrap();
+        let division_fix = super::native_apply_workspace_change(
+            &division_workspace,
+            step_request(Some("src/lib.rs")),
+        );
+        assert_eq!(division_fix.status, ExecutionStatus::Succeeded);
+        assert!(
+            division_fix.output.as_ref().unwrap()["stdout"]
+                .as_str()
+                .unwrap()
+                .contains("replaced unsafe arithmetic")
+        );
+        assert_eq!(
+            division_fix.state_patch.as_ref().unwrap()["latest_changed_files"],
+            json!(["src/lib.rs"])
+        );
+
+        let readonly_workspace = temp_workspace("synod-runtime-native-readonly-fix");
+        fs::create_dir_all(readonly_workspace.join("src")).unwrap();
+        let readonly_file = readonly_workspace.join("src/lib.rs");
+        fs::write(&readonly_file, "pub fn add(left: i32, right: i32) -> i32 { left - right }\n")
+            .unwrap();
+        let mut file_permissions = fs::metadata(&readonly_file).unwrap().permissions();
+        file_permissions.set_mode(0o444);
+        fs::set_permissions(&readonly_file, file_permissions).unwrap();
+        let apply_readonly = super::native_apply_workspace_change(
+            &readonly_workspace,
+            step_request(Some("src/lib.rs")),
+        );
+        assert_eq!(apply_readonly.status, ExecutionStatus::Failed);
+        assert_eq!(apply_readonly.error.as_ref().unwrap().code, "file_write_failed");
+        let mut file_permissions = fs::metadata(&readonly_file).unwrap().permissions();
+        file_permissions.set_mode(0o644);
+        fs::set_permissions(&readonly_file, file_permissions).unwrap();
+
+        let replan = super::native_replan_step(step_request(None));
+        assert_eq!(replan.status, ExecutionStatus::Succeeded);
+        assert_eq!(replan.output.as_ref().unwrap()["target"], json!("current-task"));
+    }
+
+    #[test]
+    fn terminal_and_status_helpers_cover_remaining_mappings() {
+        let workspace = temp_workspace("synod-runtime-terminal-mappings");
+        let task = goal_satisfied_task(
+            workspace.to_string_lossy().as_ref(),
+            json!({"goal_satisfied": true}),
+        );
+
+        assert_eq!(
+            super::participation_kind_for_success(&task),
+            WorkspaceParticipationKind::ReadOnly
+        );
+        assert_eq!(
+            super::participation_kind_for_terminal(&task, TaskStatus::Running),
+            WorkspaceParticipationKind::Entry
+        );
+        assert_eq!(
+            super::execution_kind_for_status(TaskStatus::Exhausted),
+            ClusteredExecutionKind::Exhausted
+        );
+        assert_eq!(
+            super::execution_kind_for_status(TaskStatus::Running),
+            ClusteredExecutionKind::Paused
+        );
+        assert_eq!(super::task_status_text(TaskStatus::Planned), "planned");
+        assert_eq!(super::task_status_text(TaskStatus::Running), "running");
+        assert_eq!(super::task_status_text(TaskStatus::Exhausted), "exhausted");
+        assert_eq!(super::task_status_text(TaskStatus::Aborted), "aborted");
+        assert_eq!(
+            super::terminal_headline("workspace", TaskStatus::Aborted),
+            "workspace finished with aborted"
+        );
+        assert_eq!(session_status_for_task_status(TaskStatus::Planned), SessionStatus::Planned);
+        assert_eq!(session_status_for_task_status(TaskStatus::Running), SessionStatus::Running);
     }
 
     #[test]
@@ -3428,6 +4112,7 @@ mod tests {
     fn run_to_terminal_uses_native_goal_plan_route_when_present() {
         let workspace = temp_workspace("synod-runtime-native-run");
         fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::create_dir_all(workspace.join("tests")).unwrap();
         fs::write(
             workspace.join("Cargo.toml"),
             "[package]\nname = \"native-run\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
@@ -3436,6 +4121,11 @@ mod tests {
         fs::write(
             workspace.join("src/lib.rs"),
             "pub fn add(left: i32, right: i32) -> i32 { left - right }\n",
+        )
+        .unwrap();
+        fs::write(
+            workspace.join("tests/red_to_green.rs"),
+            "#[test]\nfn red_to_green_addition() {\n    assert_eq!(native_run::add(2, 2), 4);\n}\n",
         )
         .unwrap();
 

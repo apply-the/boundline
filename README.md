@@ -13,11 +13,18 @@ through the decision loop, and inspect the resulting session state and traces.
 `synod init` remains optional bootstrap, declarative execution profiles remain
 available as an explicit compatibility path, and `synod workflow` adds an
 optional thin named-workflow layer over the same session-owned runtime. In
-`0.30.0`, direct `run --goal` now bootstraps the native session path by
-default, confirms an inferred flow when possible or chooses no-flow planning
-when needed, and leaves the same persisted session story behind for `status`,
-`next`, and `inspect`. `run --compatibility --goal ...` keeps the declarative
-execution-profile route available as an explicit subordinate path. `capture`,
+`0.31.0`, direct `run --goal` remains the native-first entrypoint, but Synod
+now refuses to call bounded `bug-fix` and `change` work complete unless the
+session records both a material workspace diff and passed validation evidence.
+Governed verify-stage Canon work stays on that same operator path, and
+successful governed delivery now leaves `latest_changed_files`,
+`latest_validation_status`, and governed packet lineage visible on the same
+session follow-through story. Direct `run --goal` still bootstraps the native
+session path by default, confirms an inferred flow when possible or chooses
+no-flow planning when needed, and leaves the same persisted session story
+behind for `status`, `next`, and `inspect`. `run --compatibility --goal ...`
+keeps the declarative execution-profile route available as an explicit
+subordinate path. `capture`,
 `plan`, `run`, `status`, `next`, and `inspect` also project negotiated-delivery
 fields plus effective routing, assistant bindings, and persisted route
 snapshots across the same session and trace story. `status`, `next`, and
@@ -317,7 +324,7 @@ explicitly:
 synod run --workspace <workspace> --compatibility --goal "Fix the failing add test"
 ```
 
-In `0.30.0`, the explicit compatibility path still carries the negotiated delivery
+In `0.31.0`, the explicit compatibility path still carries the negotiated delivery
 summary into `run` and `inspect` so `negotiation_goal_summary`,
 `negotiation_resolution`, and `negotiation_acceptance_boundary` stay visible
 even when the authoritative follow-up state comes from an explicit
@@ -511,15 +518,17 @@ the current release, see [`docs/adaptive-execution.md`](docs/adaptive-execution.
 For the concrete review configuration and voting rules still available in
 `0.17.0`, see [`docs/review-voting.md`](docs/review-voting.md).
 
-In `0.30.0`, governed stages can also project `latest_governance_runtime`,
+In `0.31.0`, governed stages can also project `latest_governance_runtime`,
 `latest_governance_mode`, `latest_governance_run_ref`, packet provenance,
-autopilot candidates, approval waits, packet rejection outcomes, and bounded
-`bug-fix:investigate` to `verify` lineage through `run`, `status`, `next`,
-`inspect`, and the workflow-aware surfaces. Explicit compatibility follow-up
-can now also surface `continuity_authority`, `compatibility_follow_up`,
-broader adaptive candidate credibility, negotiation summary, `follow_through_*`
-guidance, and inspect-only guidance through those same read-side commands
-without implying that the route
+autopilot candidates, approval waits, packet rejection outcomes, bounded
+`bug-fix:investigate` to `verify` lineage, `latest_changed_files`, and
+`latest_validation_status` through `run`, `status`, `next`, `inspect`, and the
+workflow-aware surfaces. The same bounded delivery path now stops explicitly
+when a `bug-fix` or `change` run reaches completion without credible change and
+validation evidence. Explicit compatibility follow-up can still surface
+`continuity_authority`, `compatibility_follow_up`, broader adaptive candidate
+credibility, negotiation summary, `follow_through_*` guidance, and inspect-only
+guidance through those same read-side commands without implying that the route
 silently became session-native. Clustered session-native delivery also keeps
 the primary workspace authoritative while surfacing `cluster_route_owner`,
 `cluster_authoritative_workspace`, `cluster_execution_condition`, and any
