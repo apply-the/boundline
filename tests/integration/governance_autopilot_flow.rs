@@ -151,6 +151,9 @@ fn governance_autopilot_flow_routes_verify_stage_through_security_assessment() {
     let status_text = terminal_text(&status);
     assert_eq!(status.status.code(), Some(0), "{status_text}");
     assert!(status_text.contains("execution_path: native_goal_plan"), "{status_text}");
+    assert!(status_text.contains("latest_status: succeeded"), "{status_text}");
+    assert!(status_text.contains("latest_changed_files: src/lib.rs"), "{status_text}");
+    assert!(status_text.contains("latest_validation_status: passed"), "{status_text}");
     assert!(status_text.contains("latest_governance_stage: bug-fix:verify"), "{status_text}");
     assert!(status_text.contains("latest_governance_runtime: canon"), "{status_text}");
     assert!(status_text.contains("latest_governance_mode: security-assessment"), "{status_text}");
@@ -194,6 +197,9 @@ fn governance_autopilot_flow_routes_change_verify_stage_through_security_assessm
     let status_text = terminal_text(&status);
     assert_eq!(status.status.code(), Some(0), "{status_text}");
     assert!(status_text.contains("execution_path: native_goal_plan"), "{status_text}");
+    assert!(status_text.contains("latest_status: succeeded"), "{status_text}");
+    assert!(status_text.contains("latest_changed_files: src/lib.rs"), "{status_text}");
+    assert!(status_text.contains("latest_validation_status: passed"), "{status_text}");
     assert!(status_text.contains("latest_governance_stage: change:verify"), "{status_text}");
     assert!(status_text.contains("latest_governance_runtime: canon"), "{status_text}");
     assert!(status_text.contains("latest_governance_mode: security-assessment"), "{status_text}");

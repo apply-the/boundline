@@ -39,6 +39,8 @@ fn assistant_readme_documents_session_native_continuity_rules() {
         "When CLI output includes `next_command`, prefer that route instead of inventing a follow-up.",
         "When `status` or `next` reports `continuity_authority: compatibility_trace` or `compatibility_follow_up: inspect_only`, route to `/synod-inspect` instead of `/synod-start`.",
         "governance_next_action",
+        "latest_changed_files",
+        "latest_validation_status",
     ] {
         assert!(content.contains(snippet), "assistant/README.md missing {snippet}");
     }
@@ -79,6 +81,8 @@ fn inspect_assets_document_session_trace_reuse_and_start_recovery() {
         for snippet in [
             "latest_trace_ref",
             "route_config_projection",
+            "changed_files",
+            "validation",
             "/synod-start",
             "prior direct run opted into `--compatibility`",
             "authored_input_summary",
@@ -165,6 +169,8 @@ fn assistant_command_packs_expose_session_native_backend_mappings() {
                 "continuity_authority",
                 "compatibility_follow_up",
                 "governance_next_action",
+                "latest_changed_files",
+                "latest_validation_status",
             ][..],
         ),
         (
@@ -175,6 +181,8 @@ fn assistant_command_packs_expose_session_native_backend_mappings() {
                 "continuity_authority",
                 "compatibility_follow_up",
                 "governance_next_action",
+                "latest_changed_files",
+                "latest_validation_status",
             ][..],
         ),
         (
@@ -185,6 +193,8 @@ fn assistant_command_packs_expose_session_native_backend_mappings() {
                 "continuity_authority",
                 "compatibility_follow_up",
                 "governance_next_action",
+                "latest_changed_files",
+                "latest_validation_status",
             ][..],
         ),
         (

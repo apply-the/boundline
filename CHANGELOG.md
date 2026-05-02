@@ -19,9 +19,27 @@ recorded workspace version.
 
 Delivered specs:
 
-- None recorded after `0.30.0`
+- None recorded after `0.31.0`
 
 Highlights:
+
+## [0.31.0] - 2026-05-02
+
+Delivered specs:
+
+- `031` - Canon Delivery Loop
+
+Highlights:
+
+- Keep Canon inside the same bounded delivery loop for governed `bug-fix` and
+  `change` work so verify-stage `security-assessment` packet lineage, approval
+  state, and governed follow-through stay on the same `run`, `status`, `next`,
+  and `inspect` surface.
+- Fail delivery completion explicitly when a bounded `bug-fix` or `change`
+  path reaches the end of the plan without both a material workspace diff and
+  passed validation evidence.
+- Update README, getting-started, configuration, contributor docs, assistant
+  guidance, roadmap, and changelog for the release.
 
 ## [0.30.0] - 2026-05-02
 

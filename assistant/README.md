@@ -4,7 +4,7 @@ This directory contains Markdown-based commands to run `synod` from various AI a
 
 The primary delivery surface is session-native: `start -> capture -> plan -> run -> status -> next -> inspect` against `<workspace>/.synod/session.json` and `<workspace>/.synod/traces/`.
 
-In `0.30.0`, direct `run --goal` now bootstraps that native session path by
+In `0.31.0`, direct `run --goal` still bootstraps that native session path by
 default, while `run --compatibility --goal ...` remains the explicit
 execution-profile route. `capture` persists `negotiation_goal_summary`,
 `negotiation_resolution`, and `negotiation_acceptance_boundary` before
@@ -47,6 +47,13 @@ When those same commands report negotiated delivery fields, assistants should
 keep the active acceptance boundary explicit and treat
 `pending_clarification`, `conflicting`, or `blocked` negotiation states as
 real stop conditions rather than as hints to proceed anyway.
+
+When bounded `bug-fix` or `change` work reaches a terminal state, assistants
+should treat missing `latest_changed_files` or a non-`passed`
+`latest_validation_status` as a real failed-delivery outcome rather than as a
+successful completion. When governed delivery succeeds, preserve
+`latest_changed_files`, `latest_validation_status`, and any governed packet
+lineage fields exactly.
 
 When a bounded delivery story spans a registered cluster, assistants should use
 `--cluster <primary-workspace>` for the session-native commands instead of
