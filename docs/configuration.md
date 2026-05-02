@@ -1,9 +1,9 @@
-# Configuration in Synod 0.31.0
+# Configuration in Synod 0.32.0
 
-Synod `0.31.0` keeps a user-friendly setup and routing configuration surface
+Synod `0.32.0` keeps a user-friendly setup and routing configuration surface
 for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
-The `0.31.0` release keeps configuration behavior stable while preserving the
+The `0.32.0` release keeps configuration behavior stable while preserving the
 same governed routing defaults across earlier `bug-fix:investigate` work,
 later verify-stage `security-assessment`, workflow-aware projection of the
 same bounded governance state, continuity-aware read-side follow-up, the
@@ -15,6 +15,9 @@ boundaries from direct goals, authored briefs, and governance intent, while
 Direct `run --goal` now boots the native session path without requiring a
 workspace execution profile, while `run --compatibility --goal ...` remains the
 manifest-backed opt-in.
+Workflow discovery and follow-through now use the same primary product story as
+direct native execution; compatibility remains explicit and subordinate rather
+than a hidden default.
 Bug-fix and change completion credibility is now stricter on that same runtime
 surface, but it does not introduce a new routing slot, governance flag, or
 configuration file key: Synod simply requires a material diff plus passed

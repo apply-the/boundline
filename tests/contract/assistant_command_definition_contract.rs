@@ -279,6 +279,150 @@ fn test_inspect_definition_sections_and_trace_read_failure_expectations() {
     }
 }
 
+#[test]
+fn test_workflow_definition_sections_and_backend_mappings() {
+    let assets = [
+        (
+            asset_path("assistant/claude/commands/synod-workflow-list.md"),
+            &[
+                "cargo run --bin synod -- workflow list --workspace <workspace>",
+                "workflow registry status",
+                "/synod-workflow-run",
+            ][..],
+        ),
+        (
+            asset_path("assistant/codex/commands/synod-workflow-list.md"),
+            &[
+                "cargo run --bin synod -- workflow list --workspace <workspace>",
+                "workflow registry status",
+                "/synod-workflow-run",
+            ][..],
+        ),
+        (
+            asset_path("assistant/copilot/prompts/synod-workflow-list.prompt.md"),
+            &[
+                "cargo run --bin synod -- workflow list --workspace <workspace>",
+                "workflow registry status",
+                "/synod-workflow-run",
+            ][..],
+        ),
+        (
+            asset_path("assistant/claude/commands/synod-workflow-run.md"),
+            &[
+                "cargo run --bin synod -- workflow run <name> --workspace <workspace>",
+                "workflow_phase",
+                "route_config_projection",
+                "next_command",
+            ][..],
+        ),
+        (
+            asset_path("assistant/codex/commands/synod-workflow-run.md"),
+            &[
+                "cargo run --bin synod -- workflow run <name> --workspace <workspace>",
+                "workflow_phase",
+                "route_config_projection",
+                "next_command",
+            ][..],
+        ),
+        (
+            asset_path("assistant/copilot/prompts/synod-workflow-run.prompt.md"),
+            &[
+                "cargo run --bin synod -- workflow run <name> --workspace <workspace>",
+                "workflow_phase",
+                "route_config_projection",
+                "next_command",
+            ][..],
+        ),
+        (
+            asset_path("assistant/claude/commands/synod-workflow-status.md"),
+            &[
+                "cargo run --bin synod -- workflow status --workspace <workspace>",
+                "workflow_phase",
+                "route_config_projection",
+                "next_command",
+            ][..],
+        ),
+        (
+            asset_path("assistant/codex/commands/synod-workflow-status.md"),
+            &[
+                "cargo run --bin synod -- workflow status --workspace <workspace>",
+                "workflow_phase",
+                "route_config_projection",
+                "next_command",
+            ][..],
+        ),
+        (
+            asset_path("assistant/copilot/prompts/synod-workflow-status.prompt.md"),
+            &[
+                "cargo run --bin synod -- workflow status --workspace <workspace>",
+                "workflow_phase",
+                "route_config_projection",
+                "next_command",
+            ][..],
+        ),
+        (
+            asset_path("assistant/claude/commands/synod-workflow-resume.md"),
+            &[
+                "cargo run --bin synod -- workflow resume --workspace <workspace>",
+                "workflow_phase",
+                "route_config_projection",
+                "next_command",
+            ][..],
+        ),
+        (
+            asset_path("assistant/codex/commands/synod-workflow-resume.md"),
+            &[
+                "cargo run --bin synod -- workflow resume --workspace <workspace>",
+                "workflow_phase",
+                "route_config_projection",
+                "next_command",
+            ][..],
+        ),
+        (
+            asset_path("assistant/copilot/prompts/synod-workflow-resume.prompt.md"),
+            &[
+                "cargo run --bin synod -- workflow resume --workspace <workspace>",
+                "workflow_phase",
+                "route_config_projection",
+                "next_command",
+            ][..],
+        ),
+        (
+            asset_path("assistant/claude/commands/synod-workflow-inspect.md"),
+            &[
+                "cargo run --bin synod -- workflow inspect --workspace <workspace>",
+                "workflow_phase",
+                "route_config_projection",
+                "next_command",
+            ][..],
+        ),
+        (
+            asset_path("assistant/codex/commands/synod-workflow-inspect.md"),
+            &[
+                "cargo run --bin synod -- workflow inspect --workspace <workspace>",
+                "workflow_phase",
+                "route_config_projection",
+                "next_command",
+            ][..],
+        ),
+        (
+            asset_path("assistant/copilot/prompts/synod-workflow-inspect.prompt.md"),
+            &[
+                "cargo run --bin synod -- workflow inspect --workspace <workspace>",
+                "workflow_phase",
+                "route_config_projection",
+                "next_command",
+            ][..],
+        ),
+    ];
+
+    for (path, snippets) in assets {
+        let content = read_asset(&path);
+        assert_required_sections(&path, &content);
+        assert_required_snippets(&path, &content, snippets);
+    }
+}
+
 fn assert_forbidden_snippets(path: &Path, content: &str, snippets: &[&str]) {
     for snippet in snippets {
         assert!(

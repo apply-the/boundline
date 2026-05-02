@@ -23,6 +23,8 @@ fn workflow_run_surfaces_named_workflow_and_native_route() {
     assert_eq!(output.status.code(), Some(0), "{text}");
     assert!(text.contains("workflow: default"), "{text}");
     assert!(text.contains("workflow_phase: inspect"), "{text}");
+    assert!(text.contains("route_owner: workflow"), "{text}");
+    assert!(text.contains("route_config_projection:"), "{text}");
     assert!(
         text.contains("routing: native (goal_plan) - goal plan is ready for native execution"),
         "{text}"
@@ -44,6 +46,7 @@ fn workflow_run_rejects_invalid_definitions_before_execution_starts() {
     assert_eq!(output.status.code(), Some(1), "{text}");
     assert!(text.contains("workflow: invalid-flow"), "{text}");
     assert!(text.contains("workflow_phase: blocked"), "{text}");
+    assert!(text.contains("route_owner: workflow"), "{text}");
     assert!(
 		text.contains(
 			"routing: blocked (session_state) - workflow definition is not valid for session-native execution"

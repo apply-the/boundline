@@ -571,7 +571,7 @@ fn render_workflow_discovery_report(
     }
 
     lines.push(format!(
-        "explanation: discovered {} workflow definition(s) in workspace {}",
+        "explanation: discovered {} workflow definition(s) in workspace {} for the primary Synod workflow surface",
         entries.len(),
         workspace.display()
     ));
@@ -689,6 +689,7 @@ fn blocked_runtime_report(
         terminal_output: [
             format!("workflow: {workflow_name}"),
             "workflow_phase: blocked".to_string(),
+            "route_owner: workflow".to_string(),
             output::render_route_outcome(&routing),
             format!("execution_condition: blocked - {reason}"),
             format!("next_command: {next_command}"),
@@ -945,4 +946,873 @@ fn workflow_status_command(workspace: &Path) -> String {
 
 fn workflow_inspect_command(workspace: &Path) -> String {
     format!("synod workflow inspect --workspace {}", workspace.display())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    use serde_json::json;
+    use uuid::Uuid;
+
+    use super::{
+        WorkflowCommandError, advance_workflow, blocked_runtime_report, capture_command,
+        condition_is_met, default_next_command, execute_inspect, execute_list, execute_resume,
+        execute_run, execute_status, govern_phase_completed, governance_state_in,
+        initialize_session, latest_governance_blocked_reason, latest_governance_state,
+        latest_review_outcome, latest_review_trigger, load_active_workflow_session,
+        load_workflow_definition, next_pending_phase, push_completed_phase,
+        refresh_routing_summary, render_workflow_registry_error_report, render_workflow_report,
+        resolve_workspace, should_resume_governed_execution, should_skip_phase, terminal_lifecycle,
+        terminal_reason, update_workflow_progress, workflow_exit_status, workflow_inspect_command,
+        workflow_next_command, workflow_resume_command, workflow_status_command,
+        workflow_terminal_failure,
+    };
+    use crate::cli::CommandExitStatus;
+    use crate::domain::brief::{
+        AuthoredBriefBundle, AuthoredBriefResolutionState, GovernanceIntent,
+    };
+    use crate::domain::goal_plan::{GoalPlan, PlannedTask};
+    use crate::domain::governance::{
+        ApprovalState, GovernanceLifecycleState, GovernanceRuntimeKind, GovernedStageRecord,
+    };
+    use crate::domain::limits::{RunLimits, TerminalCondition};
+    use crate::domain::plan::Plan;
+    use crate::domain::session::{ActiveSessionRecord, SessionStatus};
+    use crate::domain::step::Step;
+    use crate::domain::task::{
+        ClarificationReasonKind, ClarificationRecord, ClarificationStatus, Task, TaskRunRequest,
+        TerminalReason,
+    };
+    use crate::domain::task_context::LATEST_GOVERNANCE_STAGE_KEY;
+    use crate::domain::workflow::{
+        ConditionalWorkflowPhase, WorkflowConditionKind, WorkflowDefinition,
+        WorkflowDefinitionError, WorkflowGoalSource, WorkflowLifecycleState, WorkflowPhase,
+        WorkflowProgressState,
+    };
+    use crate::orchestrator::session_runtime::SessionRuntime;
+
+    struct TestWorkspace {
+        path: PathBuf,
+    }
+
+    impl TestWorkspace {
+        fn new() -> Self {
+            let path =
+                std::env::temp_dir().join(format!("synod-workflow-tests-{}", Uuid::new_v4()));
+            fs::create_dir_all(&path).unwrap();
+            Self { path }
+        }
+
+        fn path(&self) -> &Path {
+            &self.path
+        }
+
+        fn write_registry(&self, contents: &str) {
+            fs::create_dir_all(self.path.join(".synod")).unwrap();
+            fs::write(self.path.join(".synod/workflows.toml"), contents).unwrap();
+        }
+    }
+
+    impl Drop for TestWorkspace {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+
+    fn build_task(workspace_ref: &str) -> Task {
+        let request = TaskRunRequest {
+            goal: "Deliver workflow coverage".to_string(),
+            input: json!({"ticket": "WF-1"}),
+            session_id: "session-1".to_string(),
+            workspace_ref: workspace_ref.to_string(),
+            limits: RunLimits::default(),
+            initial_context: None,
+        };
+        let plan = Plan::new(vec![Step::decision("analyze", json!({})).unwrap()]).unwrap();
+        Task::new("task-1", &request, plan).unwrap()
+    }
+
+    fn build_goal_plan() -> GoalPlan {
+        GoalPlan::new(
+            "Deliver workflow coverage",
+            vec![PlannedTask {
+                task_id: "planned-1".to_string(),
+                description: "Validate workflow reporting".to_string(),
+                target: "src/cli/workflow.rs".to_string(),
+                expected_outcome: None,
+                decision_type_hint: None,
+            }],
+        )
+        .unwrap()
+    }
+
+    fn build_record(workspace: &Path) -> ActiveSessionRecord {
+        let mut record = initialize_session(workspace);
+        record.goal = Some("Deliver workflow coverage".to_string());
+        record.active_task = Some(build_task(&workspace.display().to_string()));
+        record.latest_status = SessionStatus::Planned;
+        record.goal_plan = Some(build_goal_plan());
+        record
+    }
+
+    fn sample_workflow() -> WorkflowDefinition {
+        WorkflowDefinition {
+            workflow_name: "default".to_string(),
+            goal_source: WorkflowGoalSource::Session,
+            entry_phase: WorkflowPhase::Capture,
+            phases: vec![
+                WorkflowPhase::Capture,
+                WorkflowPhase::Clarify,
+                WorkflowPhase::Plan,
+                WorkflowPhase::Run,
+                WorkflowPhase::Review,
+                WorkflowPhase::Govern,
+                WorkflowPhase::Inspect,
+            ],
+            allow_review: true,
+            allow_governance: true,
+            conditional_phases: vec![
+                ConditionalWorkflowPhase {
+                    phase: WorkflowPhase::Clarify,
+                    condition_kind: WorkflowConditionKind::MissingAuthoredInput,
+                    enabled: true,
+                },
+                ConditionalWorkflowPhase {
+                    phase: WorkflowPhase::Review,
+                    condition_kind: WorkflowConditionKind::ReviewTriggered,
+                    enabled: true,
+                },
+                ConditionalWorkflowPhase {
+                    phase: WorkflowPhase::Govern,
+                    condition_kind: WorkflowConditionKind::GovernanceRequired,
+                    enabled: true,
+                },
+            ],
+            output_preferences: Default::default(),
+            summary: Some("Default workflow".to_string()),
+            recommended_when: Some("bounded delivery needs follow-through".to_string()),
+        }
+    }
+
+    fn workflow_with_phases(phases: Vec<WorkflowPhase>) -> WorkflowDefinition {
+        let mut workflow = sample_workflow();
+        workflow.entry_phase = *phases.first().unwrap();
+        workflow.allow_review = phases.contains(&WorkflowPhase::Review);
+        workflow.allow_governance = phases.contains(&WorkflowPhase::Govern);
+        workflow.conditional_phases.retain(|phase| phases.contains(&phase.phase));
+        workflow.phases = phases;
+        workflow
+    }
+
+    fn clarification_bundle() -> AuthoredBriefBundle {
+        AuthoredBriefBundle {
+            bundle_id: "bundle-1".to_string(),
+            primary_goal_text: Some("Deliver workflow coverage".to_string()),
+            sources: Vec::new(),
+            deduplicated_sources: Vec::new(),
+            governance_intent: None,
+            resolution_state: AuthoredBriefResolutionState::ClarificationRequired,
+            clarification: Some(ClarificationRecord {
+                clarification_id: "clarification-1".to_string(),
+                reason_kind: ClarificationReasonKind::MissingContext,
+                prompt: "Need more context".to_string(),
+                missing_fields: vec!["scope".to_string()],
+                blocking_sources: Vec::new(),
+                turn_index: 1,
+                status: ClarificationStatus::Open,
+            }),
+            derived_task_draft: None,
+            captured_at: 1,
+        }
+    }
+
+    fn governance_bundle() -> AuthoredBriefBundle {
+        AuthoredBriefBundle {
+            governance_intent: Some(GovernanceIntent {
+                requested: true,
+                runtime_preference: Some(GovernanceRuntimeKind::Local),
+                risk: Some("medium".to_string()),
+                zone: Some("delivery".to_string()),
+                owner: Some("synod".to_string()),
+            }),
+            resolution_state: AuthoredBriefResolutionState::Ready,
+            clarification: None,
+            ..clarification_bundle()
+        }
+    }
+
+    fn governed_stage_record(
+        lifecycle_state: GovernanceLifecycleState,
+        blocked_reason: Option<&str>,
+    ) -> GovernedStageRecord {
+        GovernedStageRecord {
+            stage_key: "bug-fix:verify".to_string(),
+            runtime: GovernanceRuntimeKind::Local,
+            lifecycle_state,
+            required: true,
+            autopilot_enabled: false,
+            approval_state: ApprovalState::Requested,
+            canon_run_ref: None,
+            governance_attempt_id: "govern-1".to_string(),
+            previous_governance_attempt_id: None,
+            packet_ref: None,
+            decision_ref: None,
+            blocked_reason: blocked_reason.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn execute_list_reports_registry_states_and_workflow_surface() {
+        let workspace = TestWorkspace::new();
+
+        let missing_report = execute_list(Some(workspace.path())).unwrap();
+        assert_eq!(missing_report.exit_status, CommandExitStatus::NonSuccess);
+        assert!(missing_report.terminal_output.contains("workflow registry status: missing"));
+        assert!(missing_report.terminal_output.contains("named workflow discovery is unavailable"));
+
+        workspace.write_registry(
+            r#"[workflow.default]
+goal_source = "session"
+entry = "capture"
+phases = ["capture", "plan", "run", "inspect"]
+summary = "Default workflow"
+recommended_when = "bounded delivery needs follow-through"
+"#,
+        );
+
+        let ready_report = execute_list(Some(workspace.path())).unwrap();
+        assert_eq!(ready_report.exit_status, CommandExitStatus::Succeeded);
+        assert!(ready_report.terminal_output.contains("workflow registry status: ready"));
+        assert!(ready_report.terminal_output.contains("workflow: default"));
+        assert!(ready_report.terminal_output.contains("primary Synod workflow surface"));
+    }
+
+    #[test]
+    fn load_active_workflow_session_requires_named_workflow_state() {
+        let workspace = TestWorkspace::new();
+        let runtime = SessionRuntime::for_workspace(workspace.path());
+
+        assert!(matches!(
+            load_active_workflow_session(&runtime),
+            Err(WorkflowCommandError::MissingActiveWorkflowSession)
+        ));
+
+        let mut record = initialize_session(workspace.path());
+        runtime.persist_session(&record).unwrap();
+        assert!(matches!(
+            load_active_workflow_session(&runtime),
+            Err(WorkflowCommandError::MissingActiveWorkflow)
+        ));
+
+        record.workflow_progress = Some(WorkflowProgressState {
+            workflow_name: "default".to_string(),
+            lifecycle_state: WorkflowLifecycleState::Active,
+            current_phase: Some(WorkflowPhase::Run),
+            completed_phases: vec![WorkflowPhase::Capture, WorkflowPhase::Plan],
+            blocked_reason: None,
+            next_action: Some(workflow_resume_command(workspace.path())),
+            routing_summary: None,
+        });
+        runtime.persist_session(&record).unwrap();
+
+        let loaded = load_active_workflow_session(&runtime).unwrap();
+        assert_eq!(loaded.active_workflow_name().as_deref(), Some("default"));
+    }
+
+    #[test]
+    fn workflow_next_command_covers_paused_terminal_and_default_paths() {
+        let workspace = TestWorkspace::new();
+        let mut record = initialize_session(workspace.path());
+        record.workflow_progress = Some(WorkflowProgressState {
+            workflow_name: "default".to_string(),
+            lifecycle_state: WorkflowLifecycleState::Paused,
+            current_phase: Some(WorkflowPhase::Capture),
+            completed_phases: Vec::new(),
+            blocked_reason: Some("need goal".to_string()),
+            next_action: None,
+            routing_summary: None,
+        });
+
+        assert_eq!(
+            workflow_next_command(workspace.path(), &record).as_deref(),
+            Some(capture_command(workspace.path()).as_str())
+        );
+
+        record.goal = Some("Deliver workflow coverage".to_string());
+        assert_eq!(
+            workflow_next_command(workspace.path(), &record).as_deref(),
+            Some(workflow_resume_command(workspace.path()).as_str())
+        );
+
+        record.authored_brief = Some(clarification_bundle());
+        record.workflow_progress.as_mut().unwrap().current_phase = Some(WorkflowPhase::Clarify);
+        assert_eq!(
+            workflow_next_command(workspace.path(), &record).as_deref(),
+            Some(capture_command(workspace.path()).as_str())
+        );
+
+        record.workflow_progress.as_mut().unwrap().current_phase = Some(WorkflowPhase::Run);
+        record.workflow_progress.as_mut().unwrap().next_action = Some("custom next".to_string());
+        assert_eq!(
+            workflow_next_command(workspace.path(), &record).as_deref(),
+            Some("custom next")
+        );
+
+        record.workflow_progress = None;
+        record.latest_status = SessionStatus::Succeeded;
+        assert_eq!(
+            default_next_command(workspace.path(), &record).as_deref(),
+            Some(workflow_inspect_command(workspace.path()).as_str())
+        );
+
+        record.latest_status = SessionStatus::Initialized;
+        record.workflow_progress = Some(WorkflowProgressState {
+            workflow_name: "default".to_string(),
+            lifecycle_state: WorkflowLifecycleState::Active,
+            current_phase: Some(WorkflowPhase::Run),
+            completed_phases: vec![WorkflowPhase::Capture, WorkflowPhase::Plan],
+            blocked_reason: None,
+            next_action: None,
+            routing_summary: None,
+        });
+        assert_eq!(
+            default_next_command(workspace.path(), &record).as_deref(),
+            Some(workflow_resume_command(workspace.path()).as_str())
+        );
+
+        record.workflow_progress = None;
+        assert_eq!(default_next_command(workspace.path(), &record), None);
+    }
+
+    #[test]
+    fn workflow_reports_cover_runtime_registry_and_status_rendering() {
+        let workspace = TestWorkspace::new();
+        let workflow = sample_workflow();
+        let mut record = build_record(workspace.path());
+        update_workflow_progress(
+            &mut record,
+            &workflow,
+            WorkflowLifecycleState::Active,
+            Some(WorkflowPhase::Run),
+            vec![WorkflowPhase::Capture, WorkflowPhase::Plan],
+            None,
+            Some(workflow_resume_command(workspace.path())),
+        );
+
+        let report = render_workflow_report(
+            workspace.path(),
+            &record,
+            "workflow `default` is executing through the session-native route".to_string(),
+        );
+        assert_eq!(report.exit_status, CommandExitStatus::Succeeded);
+        assert!(report.terminal_output.contains("route_owner: workflow"));
+        assert!(report.terminal_output.contains("workflow_phase: run"));
+
+        let blocked = blocked_runtime_report(
+            "default",
+            workspace.path(),
+            "workflow definition is invalid".to_string(),
+            workflow_status_command(workspace.path()),
+        );
+        assert_eq!(blocked.exit_status, CommandExitStatus::NonSuccess);
+        assert!(blocked.terminal_output.contains("route_owner: workflow"));
+        assert!(
+            blocked
+                .terminal_output
+                .contains("execution_condition: blocked - workflow definition is invalid")
+        );
+
+        let missing_error = WorkflowDefinitionError::ReadWorkflowDefinitions(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "missing",
+        ));
+        let missing_report =
+            render_workflow_registry_error_report(workspace.path(), &missing_error);
+        assert!(missing_report.terminal_output.contains("workflow registry status: missing"));
+
+        let invalid_report = render_workflow_registry_error_report(
+            workspace.path(),
+            &WorkflowDefinitionError::MissingWorkflowDefinitions,
+        );
+        assert!(invalid_report.terminal_output.contains("workflow registry status: invalid"));
+    }
+
+    #[test]
+    fn workflow_execute_commands_cover_missing_definition_and_active_conflict_paths() {
+        let workspace = TestWorkspace::new();
+        workspace.write_registry(
+            r#"[workflow.default]
+goal_source = "session"
+entry = "capture"
+phases = ["capture", "plan", "run", "inspect"]
+summary = "Default workflow"
+"#,
+        );
+
+        let missing_run = execute_run(Some(workspace.path()), "missing", Some("goal")).unwrap();
+        assert_eq!(missing_run.exit_status, CommandExitStatus::NonSuccess);
+        assert!(
+            missing_run
+                .terminal_output
+                .contains("workflow `missing` is not defined in .synod/workflows.toml")
+        );
+
+        let runtime = SessionRuntime::for_workspace(workspace.path());
+        let mut conflicting_record = initialize_session(workspace.path());
+        conflicting_record.workflow_progress = Some(WorkflowProgressState {
+            workflow_name: "other".to_string(),
+            lifecycle_state: WorkflowLifecycleState::Active,
+            current_phase: Some(WorkflowPhase::Run),
+            completed_phases: vec![WorkflowPhase::Capture, WorkflowPhase::Plan],
+            blocked_reason: None,
+            next_action: Some(workflow_resume_command(workspace.path())),
+            routing_summary: None,
+        });
+        runtime.persist_session(&conflicting_record).unwrap();
+
+        let conflicting_run = execute_run(Some(workspace.path()), "default", Some("goal")).unwrap();
+        assert_eq!(conflicting_run.exit_status, CommandExitStatus::NonSuccess);
+        assert!(conflicting_run.terminal_output.contains(
+            "active workflow `other` must be completed or cleared before `default` can start"
+        ));
+
+        let missing_registry_workspace = TestWorkspace::new();
+        let missing_runtime = SessionRuntime::for_workspace(missing_registry_workspace.path());
+        let mut named_record = initialize_session(missing_registry_workspace.path());
+        named_record.workflow_progress = Some(WorkflowProgressState {
+            workflow_name: "default".to_string(),
+            lifecycle_state: WorkflowLifecycleState::Active,
+            current_phase: Some(WorkflowPhase::Run),
+            completed_phases: vec![WorkflowPhase::Capture, WorkflowPhase::Plan],
+            blocked_reason: None,
+            next_action: Some(workflow_resume_command(missing_registry_workspace.path())),
+            routing_summary: None,
+        });
+        missing_runtime.persist_session(&named_record).unwrap();
+
+        let status_report = execute_status(Some(missing_registry_workspace.path())).unwrap();
+        assert!(
+            status_report.terminal_output.contains("workflow `default` did not start in workspace")
+        );
+
+        let resume_report = execute_resume(Some(missing_registry_workspace.path())).unwrap();
+        assert!(
+            resume_report.terminal_output.contains("workflow `default` did not start in workspace")
+        );
+
+        let inspect_report = execute_inspect(Some(missing_registry_workspace.path())).unwrap();
+        assert!(
+            inspect_report
+                .terminal_output
+                .contains("workflow `default` did not start in workspace")
+        );
+
+        let inspect_workspace = TestWorkspace::new();
+        inspect_workspace.write_registry(
+            r#"[workflow.default]
+goal_source = "session"
+entry = "inspect"
+phases = ["inspect"]
+summary = "Inspect workflow"
+"#,
+        );
+        let inspect_runtime = SessionRuntime::for_workspace(inspect_workspace.path());
+        let mut inspect_record = initialize_session(inspect_workspace.path());
+        inspect_record.workflow_progress = Some(WorkflowProgressState {
+            workflow_name: "default".to_string(),
+            lifecycle_state: WorkflowLifecycleState::Completed,
+            current_phase: Some(WorkflowPhase::Inspect),
+            completed_phases: vec![WorkflowPhase::Inspect],
+            blocked_reason: None,
+            next_action: Some(workflow_inspect_command(inspect_workspace.path())),
+            routing_summary: None,
+        });
+        inspect_runtime.persist_session(&inspect_record).unwrap();
+
+        let inspect_without_trace = execute_inspect(Some(inspect_workspace.path())).unwrap();
+        assert_eq!(inspect_without_trace.exit_status, CommandExitStatus::Succeeded);
+        assert!(
+            inspect_without_trace
+                .terminal_output
+                .contains("inspection summary for workflow `default`")
+        );
+    }
+
+    #[test]
+    fn workflow_state_helpers_cover_conditions_reviews_governance_and_terminals() {
+        let workspace = TestWorkspace::new();
+        let workflow = sample_workflow();
+        let mut record = build_record(workspace.path());
+
+        record.authored_brief = Some(clarification_bundle());
+        assert!(condition_is_met(&record, WorkflowConditionKind::MissingAuthoredInput));
+        assert!(!should_skip_phase(&workflow, WorkflowPhase::Plan, &record));
+        assert!(!should_skip_phase(&workflow, WorkflowPhase::Clarify, &record));
+
+        let task = record.active_task.as_mut().unwrap();
+        task.context.state.insert("latest_review_trigger".to_string(), json!("review_requested"));
+        task.context.state.insert("latest_review_outcome".to_string(), json!("approved"));
+        assert_eq!(latest_review_trigger(&record), Some("review_requested"));
+        assert_eq!(latest_review_outcome(&record), Some("approved"));
+        assert!(condition_is_met(&record, WorkflowConditionKind::ReviewTriggered));
+
+        record.authored_brief = Some(governance_bundle());
+        assert!(condition_is_met(&record, WorkflowConditionKind::GovernanceRequired));
+        assert_eq!(
+            next_pending_phase(&workflow, &[WorkflowPhase::Capture, WorkflowPhase::Clarify]),
+            Some(WorkflowPhase::Plan)
+        );
+
+        let stage = governed_stage_record(
+            GovernanceLifecycleState::Blocked,
+            Some("approval is still pending"),
+        );
+        record
+            .active_task
+            .as_mut()
+            .unwrap()
+            .context
+            .state
+            .insert(LATEST_GOVERNANCE_STAGE_KEY.to_string(), serde_json::to_value(stage).unwrap());
+        assert_eq!(latest_governance_state(&record).as_deref(), Some("blocked"));
+        assert_eq!(
+            latest_governance_blocked_reason(&record).as_deref(),
+            Some("approval is still pending")
+        );
+        assert!(governance_state_in(&record, &["blocked"]));
+        assert!(!should_resume_governed_execution(&record));
+
+        let running_stage = governed_stage_record(GovernanceLifecycleState::Running, None);
+        record.latest_status = SessionStatus::Running;
+        record.active_task.as_mut().unwrap().context.state.insert(
+            LATEST_GOVERNANCE_STAGE_KEY.to_string(),
+            serde_json::to_value(running_stage).unwrap(),
+        );
+        assert!(should_resume_governed_execution(&record));
+
+        let ready_stage = governed_stage_record(GovernanceLifecycleState::GovernedReady, None);
+        record.latest_status = SessionStatus::Succeeded;
+        record.active_task.as_mut().unwrap().context.state.insert(
+            LATEST_GOVERNANCE_STAGE_KEY.to_string(),
+            serde_json::to_value(ready_stage).unwrap(),
+        );
+        assert!(govern_phase_completed(&record));
+
+        record.latest_status = SessionStatus::Failed;
+        record.latest_terminal_reason = Some(TerminalReason::new(
+            TerminalCondition::UnrecoverableError,
+            "validation failed",
+            None,
+        ));
+        assert_eq!(workflow_terminal_failure(&record).as_deref(), Some("validation failed"));
+
+        record.latest_status = SessionStatus::Invalid;
+        record.latest_terminal_reason = None;
+        assert_eq!(
+            workflow_terminal_failure(&record).as_deref(),
+            Some("the underlying session ended with a non-success outcome")
+        );
+    }
+
+    #[test]
+    fn workflow_advance_covers_clarify_review_and_govern_blocked_paths() {
+        let workspace = TestWorkspace::new();
+        let runtime = SessionRuntime::for_workspace(workspace.path());
+
+        let mut clarify_record = build_record(workspace.path());
+        clarify_record.authored_brief = Some(clarification_bundle());
+        clarify_record.goal_plan = Some(build_goal_plan());
+        let clarify_workflow = workflow_with_phases(vec![WorkflowPhase::Clarify]);
+        let clarify_message =
+            advance_workflow(&runtime, &mut clarify_record, &clarify_workflow, None).unwrap();
+        assert!(clarify_message.contains("paused at the clarification phase"));
+        assert_eq!(
+            clarify_record.workflow_progress.as_ref().and_then(|progress| progress.current_phase),
+            Some(WorkflowPhase::Clarify)
+        );
+
+        let review_workflow = workflow_with_phases(vec![WorkflowPhase::Review]);
+        let mut review_paused_record = build_record(workspace.path());
+        review_paused_record
+            .active_task
+            .as_mut()
+            .unwrap()
+            .context
+            .state
+            .insert("latest_review_trigger".to_string(), json!("review_requested"));
+        let review_paused_message =
+            advance_workflow(&runtime, &mut review_paused_record, &review_workflow, None).unwrap();
+        assert!(review_paused_message.contains("review outcome is still pending"));
+        assert_eq!(
+            review_paused_record
+                .workflow_progress
+                .as_ref()
+                .map(|progress| progress.lifecycle_state),
+            Some(WorkflowLifecycleState::Paused)
+        );
+
+        let mut review_failed_record = build_record(workspace.path());
+        review_failed_record
+            .active_task
+            .as_mut()
+            .unwrap()
+            .context
+            .state
+            .insert("latest_review_trigger".to_string(), json!("review_requested"));
+        review_failed_record.latest_status = SessionStatus::Failed;
+        review_failed_record.latest_terminal_reason =
+            Some(TerminalReason::new(TerminalCondition::UnrecoverableError, "review failed", None));
+        let review_failed_message =
+            advance_workflow(&runtime, &mut review_failed_record, &review_workflow, None).unwrap();
+        assert!(review_failed_message.contains("review failed"));
+        assert_eq!(
+            review_failed_record
+                .workflow_progress
+                .as_ref()
+                .map(|progress| progress.lifecycle_state),
+            Some(WorkflowLifecycleState::Failed)
+        );
+
+        let govern_workflow = workflow_with_phases(vec![WorkflowPhase::Govern]);
+        let mut govern_blocked_record = build_record(workspace.path());
+        govern_blocked_record.active_task.as_mut().unwrap().context.state.insert(
+            LATEST_GOVERNANCE_STAGE_KEY.to_string(),
+            serde_json::to_value(governed_stage_record(
+                GovernanceLifecycleState::Blocked,
+                Some("approval is still pending"),
+            ))
+            .unwrap(),
+        );
+        let govern_blocked_message =
+            advance_workflow(&runtime, &mut govern_blocked_record, &govern_workflow, None).unwrap();
+        assert!(govern_blocked_message.contains("approval is still pending"));
+        assert_eq!(
+            govern_blocked_record
+                .workflow_progress
+                .as_ref()
+                .map(|progress| progress.lifecycle_state),
+            Some(WorkflowLifecycleState::Blocked)
+        );
+
+        let mut govern_failed_record = build_record(workspace.path());
+        govern_failed_record.active_task.as_mut().unwrap().context.state.insert(
+            LATEST_GOVERNANCE_STAGE_KEY.to_string(),
+            serde_json::to_value(governed_stage_record(
+                GovernanceLifecycleState::Failed,
+                Some("governance failed before workflow progression could continue"),
+            ))
+            .unwrap(),
+        );
+        let govern_failed_message =
+            advance_workflow(&runtime, &mut govern_failed_record, &govern_workflow, None).unwrap();
+        assert!(
+            govern_failed_message
+                .contains("governance failed before workflow progression could continue")
+        );
+    }
+
+    #[test]
+    fn workflow_advance_covers_terminal_run_and_final_summary_paths() {
+        let workspace = TestWorkspace::new();
+        let runtime = SessionRuntime::for_workspace(workspace.path());
+
+        let run_workflow = workflow_with_phases(vec![WorkflowPhase::Run]);
+        let mut completed_record = initialize_session(workspace.path());
+        completed_record.latest_status = SessionStatus::Succeeded;
+        completed_record.latest_terminal_reason =
+            Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None));
+        let completed_message =
+            advance_workflow(&runtime, &mut completed_record, &run_workflow, None).unwrap();
+        assert!(
+            completed_message.contains("ran workflow `default` through the session-native route")
+        );
+        assert_eq!(
+            completed_record.workflow_progress.as_ref().map(|progress| progress.lifecycle_state),
+            Some(WorkflowLifecycleState::Completed)
+        );
+
+        let mut failed_record = initialize_session(workspace.path());
+        failed_record.latest_status = SessionStatus::Failed;
+        failed_record.latest_terminal_reason =
+            Some(TerminalReason::new(TerminalCondition::UnrecoverableError, "failed", None));
+        let failed_message =
+            advance_workflow(&runtime, &mut failed_record, &run_workflow, None).unwrap();
+        assert!(failed_message.contains("terminal non-success session outcome"));
+        assert_eq!(
+            failed_record.workflow_progress.as_ref().map(|progress| progress.lifecycle_state),
+            Some(WorkflowLifecycleState::Failed)
+        );
+
+        let final_workflow =
+            workflow_with_phases(vec![WorkflowPhase::Capture, WorkflowPhase::Plan]);
+        let mut final_record = initialize_session(workspace.path());
+        final_record.goal = Some("Deliver workflow coverage".to_string());
+        final_record.goal_plan = Some(build_goal_plan());
+        let final_message =
+            advance_workflow(&runtime, &mut final_record, &final_workflow, None).unwrap();
+        assert!(final_message.contains("updated the active session state"));
+        assert_eq!(
+            final_record.workflow_progress.as_ref().and_then(|progress| progress.current_phase),
+            Some(WorkflowPhase::Plan)
+        );
+    }
+
+    #[test]
+    fn workflow_helpers_cover_remaining_fallback_paths() {
+        let workspace = TestWorkspace::new();
+        workspace.write_registry(
+            r#"[workflow.default]
+goal_source = "session"
+entry = "capture"
+phases = ["capture", "plan", "run", "inspect"]
+summary = "Default workflow"
+"#,
+        );
+
+        let resolved = resolve_workspace(None).unwrap();
+        assert!(resolved.is_absolute());
+
+        let missing_path = workspace.path().join("missing-workspace");
+        assert!(matches!(
+            resolve_workspace(Some(&missing_path)),
+            Err(WorkflowCommandError::WorkspaceResolution(_))
+        ));
+
+        let missing_definition = load_workflow_definition(workspace.path(), "missing").unwrap_err();
+        assert!(matches!(missing_definition, WorkflowDefinitionError::MissingNamedWorkflow { .. }));
+
+        let mut record = initialize_session(workspace.path());
+        record.workflow_progress = Some(WorkflowProgressState {
+            workflow_name: "default".to_string(),
+            lifecycle_state: WorkflowLifecycleState::Active,
+            current_phase: Some(WorkflowPhase::Run),
+            completed_phases: vec![WorkflowPhase::Capture, WorkflowPhase::Plan],
+            blocked_reason: None,
+            next_action: None,
+            routing_summary: None,
+        });
+        assert_eq!(
+            workflow_next_command(workspace.path(), &record).as_deref(),
+            Some(workflow_resume_command(workspace.path()).as_str())
+        );
+
+        let mut plain_record = initialize_session(workspace.path());
+        refresh_routing_summary(&mut plain_record);
+        assert_eq!(workflow_exit_status(&plain_record), CommandExitStatus::Succeeded);
+
+        let runtime = SessionRuntime::for_workspace(workspace.path());
+
+        let mut clarify_ready_record = build_record(workspace.path());
+        clarify_ready_record.authored_brief = None;
+        let mut clarify_ready_workflow = workflow_with_phases(vec![WorkflowPhase::Clarify]);
+        clarify_ready_workflow.conditional_phases.clear();
+        let clarify_ready_message =
+            advance_workflow(&runtime, &mut clarify_ready_record, &clarify_ready_workflow, None)
+                .unwrap();
+        assert!(clarify_ready_message.contains("updated the active session state"));
+
+        let mut review_blocked_record = build_record(workspace.path());
+        let mut review_blocked_workflow = workflow_with_phases(vec![WorkflowPhase::Review]);
+        review_blocked_workflow.conditional_phases.clear();
+        let review_blocked_message =
+            advance_workflow(&runtime, &mut review_blocked_record, &review_blocked_workflow, None)
+                .unwrap();
+        assert!(review_blocked_message.contains("requires review evidence"));
+
+        let govern_workflow = workflow_with_phases(vec![WorkflowPhase::Govern]);
+
+        let mut govern_blocked_default_record = build_record(workspace.path());
+        govern_blocked_default_record.active_task.as_mut().unwrap().context.state.insert(
+            LATEST_GOVERNANCE_STAGE_KEY.to_string(),
+            serde_json::to_value(governed_stage_record(GovernanceLifecycleState::Blocked, None))
+                .unwrap(),
+        );
+        let govern_blocked_default_message =
+            advance_workflow(&runtime, &mut govern_blocked_default_record, &govern_workflow, None)
+                .unwrap();
+        assert!(
+            govern_blocked_default_message.contains(
+                "governance cannot continue until the required approval state is resolved"
+            )
+        );
+
+        let mut govern_failed_default_record = build_record(workspace.path());
+        govern_failed_default_record.active_task.as_mut().unwrap().context.state.insert(
+            LATEST_GOVERNANCE_STAGE_KEY.to_string(),
+            serde_json::to_value(governed_stage_record(GovernanceLifecycleState::Failed, None))
+                .unwrap(),
+        );
+        let govern_failed_default_message =
+            advance_workflow(&runtime, &mut govern_failed_default_record, &govern_workflow, None)
+                .unwrap();
+        assert!(
+            govern_failed_default_message
+                .contains("governance failed before workflow progression could continue")
+        );
+    }
+
+    #[test]
+    fn workflow_progress_and_status_helpers_cover_updates_and_commands() {
+        let workspace = TestWorkspace::new();
+        let workflow = sample_workflow();
+        let mut record = build_record(workspace.path());
+
+        update_workflow_progress(
+            &mut record,
+            &workflow,
+            WorkflowLifecycleState::Paused,
+            Some(WorkflowPhase::Clarify),
+            vec![WorkflowPhase::Capture],
+            Some("need clarification".to_string()),
+            Some(capture_command(workspace.path())),
+        );
+        refresh_routing_summary(&mut record);
+
+        let progress = record.workflow_progress.as_ref().unwrap();
+        assert_eq!(progress.current_phase, Some(WorkflowPhase::Clarify));
+        assert_eq!(progress.blocked_reason.as_deref(), Some("need clarification"));
+        assert!(progress.routing_summary.is_some());
+        assert_eq!(
+            record
+                .goal_plan
+                .as_ref()
+                .and_then(|goal_plan| goal_plan.workflow_progress.as_ref())
+                .and_then(|goal_plan_progress| goal_plan_progress.blocked_reason.as_deref()),
+            Some("need clarification")
+        );
+
+        let mut completed = vec![WorkflowPhase::Capture];
+        push_completed_phase(&mut completed, WorkflowPhase::Capture);
+        push_completed_phase(&mut completed, WorkflowPhase::Plan);
+        assert_eq!(completed, vec![WorkflowPhase::Capture, WorkflowPhase::Plan]);
+
+        assert_eq!(workflow_exit_status(&record), CommandExitStatus::Succeeded);
+        record.workflow_progress.as_mut().unwrap().lifecycle_state =
+            WorkflowLifecycleState::Blocked;
+        assert_eq!(workflow_exit_status(&record), CommandExitStatus::NonSuccess);
+
+        record.workflow_progress.as_mut().unwrap().lifecycle_state = WorkflowLifecycleState::Active;
+        record.latest_status = SessionStatus::Aborted;
+        assert_eq!(workflow_exit_status(&record), CommandExitStatus::NonSuccess);
+
+        assert_eq!(terminal_lifecycle(SessionStatus::Succeeded), WorkflowLifecycleState::Completed);
+        assert_eq!(terminal_lifecycle(SessionStatus::Failed), WorkflowLifecycleState::Failed);
+        assert_eq!(terminal_lifecycle(SessionStatus::Invalid), WorkflowLifecycleState::Failed);
+        assert_eq!(terminal_lifecycle(SessionStatus::Running), WorkflowLifecycleState::Active);
+
+        record.latest_terminal_reason =
+            Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None));
+        assert_eq!(terminal_reason(&record).as_deref(), Some("done"));
+
+        assert!(capture_command(workspace.path()).contains("synod capture --workspace"));
+        assert!(workflow_resume_command(workspace.path()).contains("synod workflow resume"));
+        assert!(workflow_status_command(workspace.path()).contains("synod workflow status"));
+        assert!(workflow_inspect_command(workspace.path()).contains("synod workflow inspect"));
+
+        let initialized = initialize_session(workspace.path());
+        assert_eq!(initialized.latest_status, SessionStatus::Initialized);
+        assert_eq!(initialized.goal, None);
+    }
 }

@@ -19,9 +19,28 @@ recorded workspace version.
 
 Delivered specs:
 
-- None recorded after `0.31.0`
+- None recorded after `0.32.0`
 
 Highlights:
+
+## [0.32.0] - 2026-05-02
+
+Delivered specs:
+
+- `032` - Product Unification And Surface Closure
+
+Highlights:
+
+- Promote workflow discovery and continuation to first-class assistant surfaces
+  for Claude, Codex, and Copilot while aligning Gemini CLI guidance to the same
+  workflow-first Synod vocabulary.
+- Keep workflow follow-through on the same primary Synod product surface as
+  direct native execution, with explicit `route_owner`,
+  `route_config_projection`, and bounded next-command guidance.
+- Keep explicit compatibility follow-up visibly subordinate instead of letting
+  it read like a second primary product path.
+- Update README, getting-started, configuration, contributor docs, assistant
+  guidance, roadmap, and changelog for the release.
 
 ## [0.31.0] - 2026-05-02
 

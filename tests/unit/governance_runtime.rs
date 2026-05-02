@@ -189,6 +189,31 @@ fn canon_cli_runtime_parses_start_response_into_a_reusable_packet() {
 }
 
 #[test]
+fn canon_cli_runtime_tolerates_additive_v1_fields_from_canon_036() {
+    let workspace = temp_workspace("synod-canon-additive-v1");
+    write_workspace_file(
+        &workspace,
+        ".canon/runs/canon-run-036/discovery.md",
+        "# Discovery\n\nCaptured governed evidence for the compatibility check.\n",
+    );
+    let script = write_canon_stub(
+        "synod-canon-additive-v1-command",
+        "{\"adapter_schema_version\":\"v1\",\"status\":\"governed_ready\",\"run_ref\":\"canon-run-036\",\"packet_ref\":\".canon/runs/canon-run-036\",\"expected_document_refs\":[\".canon/runs/canon-run-036/discovery.md\"],\"document_refs\":[\".canon/runs/canon-run-036/discovery.md\"],\"approval_state\":\"not_needed\",\"packet_readiness\":\"reusable\",\"missing_sections\":[],\"headline\":\"discovery packet ready\",\"message\":\"Canon completed the governed stage\",\"reason_code\":\"governed_ready\"}",
+    );
+    let runtime = CanonCliRuntime::new(script.to_string_lossy().into_owned())
+        .with_working_directory(&workspace);
+
+    let response = runtime.execute(&canon_request(&workspace)).unwrap();
+    let packet = response.packet.expect("packet should be present");
+
+    assert_eq!(response.status, GovernanceLifecycleState::GovernedReady);
+    assert_eq!(response.run_ref.as_deref(), Some("canon-run-036"));
+    assert_eq!(response.approval_state, ApprovalState::NotNeeded);
+    assert_eq!(packet.packet_ref, ".canon/runs/canon-run-036");
+    assert_eq!(packet.readiness, PacketReadiness::Reusable);
+}
+
+#[test]
 fn canon_cli_runtime_preserves_refresh_lineage_and_pending_state() {
     let workspace = temp_workspace("synod-canon-refresh");
     let script = write_canon_stub(

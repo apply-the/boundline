@@ -922,7 +922,11 @@ fn success_headline(payload: &serde_json::Value, attempts: usize) -> String {
         }
     }
 
-    if let Some(validation) = payload.get("output").and_then(|output| output.get("validation")) {
+    if let Some(validation) = payload
+        .get("output")
+        .and_then(|output| output.get("validation"))
+        .or_else(|| payload.get("evidence").and_then(|evidence| evidence.get("validation_record")))
+    {
         let command =
             validation.get("command").and_then(|value| value.as_str()).unwrap_or("validation");
         let succeeded =
@@ -1236,6 +1240,22 @@ mod tests {
             2,
         );
         assert_eq!(success, "validation passed after 2 attempt(s) via cargo test --quiet");
+
+        let success_from_evidence = success_headline(
+            &json!({
+                "evidence": {
+                    "validation_record": {
+                        "command": "cargo test --quiet",
+                        "succeeded": true
+                    }
+                }
+            }),
+            2,
+        );
+        assert_eq!(
+            success_from_evidence,
+            "validation passed after 2 attempt(s) via cargo test --quiet"
+        );
     }
 
     #[test]

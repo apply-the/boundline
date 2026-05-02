@@ -6,7 +6,7 @@ Canon is downstream from Synod in this roadmap: Synod thinks, decides, orchestra
 
 Evolve Synod into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.31.0
+## Current Status: v0.32.0
 
 Synod now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -14,13 +14,16 @@ continuity between session-native and compatibility follow-up, stronger
 route-summary plus config projection, bounded multi-workspace clustered
 delivery, negotiated delivery modeling, inspectable routing plus assistant
 decoupling, guided decision follow-through, evidence-aligned next-command
-selection, and credible governed delivery completion in place:
+selection, credible governed delivery completion, and final product-surface
+closure in place:
 
 - session-native orchestration remains the primary operator path
 - `capture` now derives one negotiated delivery packet from direct goals, authored briefs, and governance context before planning begins
 - `plan` now stops early when `negotiation_resolution` is not yet credible instead of silently inventing a bounded change
 - `run`, `status`, `next`, and `inspect` now project `negotiation_goal_summary`, `negotiation_resolution`, and `negotiation_acceptance_boundary` across native goal-plan traces and explicit compatibility traces
 - `workflow list`, `workflow run`, `workflow status`, `workflow resume`, and `workflow inspect` still project named workflow state onto the same session, route, trace, and `execution_condition` surfaces
+- Claude, Codex, and Copilot now ship first-class workflow assistant surfaces, while Gemini CLI guidance uses the same workflow-first vocabulary
+- workflows and direct native runs now read as the two primary Synod product entry styles, while explicit compatibility follow-up remains visibly subordinate
 - direct session-native commands and explicit compatibility routing remain available when no named workflow is invoked
 - Canon remains a bounded stage-boundary governance runtime with governed `bug-fix:investigate` plus later verify-stage `security-assessment` reuse on the same operator surface
 - bounded `bug-fix` and `change` delivery no longer succeed merely because the plan ran out of steps; they now require a material diff and passed validation evidence or stop explicitly as failed
@@ -36,39 +39,45 @@ selection, and credible governed delivery completion in place:
 - session-native commands still accept `--cluster <primary-workspace>` so one authoritative primary-owned session can plan and deliver a bounded change across registered member repositories
 - clustered `run`, `status`, `next`, and `inspect` still surface authoritative workspace, clustered execution condition, participating workspaces, and any blocking member without implying distributed orchestration ownership
 
-## Final Sequence After 0.31.0
+## Roadmap Closure In 0.32.0
 
-The roadmap is no longer an open-ended backlog. The remaining work collapses
-into the final closing feature that finishes the product.
+The roadmap is no longer an open-ended backlog. `0.32.0` closes the remaining
+product-surface ambiguity so Synod now presents one coherent execution model
+across CLI, assistants, workflows, routing, and governance.
 
-The governing rule is simple: Synod remains the product and execution owner.
-Canon must stay a bounded, useful governed runtime inside that same delivery
-path rather than drifting back into a parallel tool story.
+The governing rule remains simple: Synod is the product and execution owner.
+Canon stays a bounded, useful governed runtime inside that same delivery path
+rather than drifting back into a parallel tool story.
 
-### Feature 032 - Product Unification And Surface Closure
+### Ongoing Compatibility Watch
 
-**Outcome**: the system closes as one coherent product instead of a collection
-of partially overlapping runtimes and assistant surfaces.
+Canon will continue to release versions after `0.32.0`, so Synod keeps one
+explicit maintenance track for compatibility drift on the machine-facing
+governance adapter rather than reopening broad product-scope work:
 
-**This feature closes**:
+- revalidate the documented Canon compatibility target against the latest
+  released `canon governance start|refresh|capabilities --json` `v1` surface
+  whenever Canon ships a materially new stable release
+- preserve additive-field tolerance and capability-aware checks so intermediate
+  Canon releases do not force unnecessary Synod churn when the `v1` adapter
+  contract remains stable
+- schedule a new roadmap/spec slice only when Canon changes the required wire
+  contract, introduces a new adapter schema version, or adds governed behavior
+  that Synod needs for its explicitly modeled bounded stages
+
+### Delivered in 0.32.0
 
 - unify assistant surfaces, routing slots, workflow entry points, and model
-  bindings so Copilot, Codex, Claude, Gemini, and future backends map onto the
-  same Synod-owned product story instead of provider-specific command packs
-- finish the backend abstraction work needed to keep model/provider choice
-  inspectable without reopening hidden provider control planes
-- remove remaining product ambiguity between session-native execution,
-  workflow-driven execution, and explicit compatibility usage by making one path
-  primary and the others clearly subordinate
-- close docs, operator guidance, release narrative, and inspection output around
-  the final product identity: users use Synod; Canon is visible but secondary
-
-**Done means**:
-
-- Synod presents one coherent UX and one coherent execution model across CLI,
-  assistants, workflows, routing, and governance
-- the remaining platform work fits inside maintenance and refinement rather than
-  another major architectural reset
+  bindings so Copilot, Codex, Claude, and Gemini guidance map onto the same
+  Synod-owned product story instead of provider-specific command drift
+- keep workflow discovery and follow-through on the same primary Synod path as
+  direct native execution while preserving `route_owner`, `route_config_projection`,
+  and bounded next-command cues
+- keep explicit compatibility usage visibly subordinate instead of letting it
+  read like a second primary product path
+- close README, getting-started, configuration, assistant guidance, roadmap,
+  contributor guidance, and changelog around the final product identity: users
+  use Synod; Canon is visible but secondary
 
 ### Delivered in 0.31.0
 

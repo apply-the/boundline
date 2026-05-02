@@ -13,7 +13,9 @@ through the decision loop, and inspect the resulting session state and traces.
 `synod init` remains optional bootstrap, declarative execution profiles remain
 available as an explicit compatibility path, and `synod workflow` adds an
 optional thin named-workflow layer over the same session-owned runtime. In
-`0.31.0`, direct `run --goal` remains the native-first entrypoint, but Synod
+`0.32.0`, workflows and direct runs are now the two primary entry styles on
+that same Synod-owned runtime, while explicit compatibility follow-up remains a
+subordinate route. Direct `run --goal` remains the native-first entrypoint, but Synod
 now refuses to call bounded `bug-fix` and `change` work complete unless the
 session records both a material workspace diff and passed validation evidence.
 Governed verify-stage Canon work stays on that same operator path, and
@@ -118,7 +120,8 @@ you explicitly enable governed routes.
 
 When Synod governance is configured to use
 [Canon](https://github.com/apply-the/canon), the current adapter is validated
-against Canon `0.25.0`.
+against Canon `0.36.0` on the machine-facing `canon governance start|refresh`
+`--json` `v1` adapter surface.
 
 This compatibility note refers to the Canon CLI version only. Earlier or later
 Canon versions may work, but they are not part of the documented compatibility
@@ -127,7 +130,10 @@ surface yet.
 Current Canon support in Synod remains intentionally bounded: Canon governs
 stage-level policy, approvals, artifacts, and evidence, while Synod keeps
 orchestration ownership and can reuse governed `bug-fix:investigate` plus later
-verify-stage `security-assessment` on the same operator surface.
+verify-stage `security-assessment` on the same operator surface. Synod does not
+yet claim full Canon mode parity with every `0.36.0` governed mode; the current
+integration remains scoped to the subset of Canon modes and governed stages that
+Synod models explicitly.
 
 For contributor setup and validation expectations, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -324,7 +330,7 @@ explicitly:
 synod run --workspace <workspace> --compatibility --goal "Fix the failing add test"
 ```
 
-In `0.31.0`, the explicit compatibility path still carries the negotiated delivery
+In `0.32.0`, the explicit compatibility path still carries the negotiated delivery
 summary into `run` and `inspect` so `negotiation_goal_summary`,
 `negotiation_resolution`, and `negotiation_acceptance_boundary` stay visible
 even when the authoritative follow-up state comes from an explicit
@@ -518,7 +524,7 @@ the current release, see [`docs/adaptive-execution.md`](docs/adaptive-execution.
 For the concrete review configuration and voting rules still available in
 `0.17.0`, see [`docs/review-voting.md`](docs/review-voting.md).
 
-In `0.31.0`, governed stages can also project `latest_governance_runtime`,
+In `0.32.0`, governed stages can also project `latest_governance_runtime`,
 `latest_governance_mode`, `latest_governance_run_ref`, packet provenance,
 autopilot candidates, approval waits, packet rejection outcomes, bounded
 `bug-fix:investigate` to `verify` lineage, `latest_changed_files`, and
@@ -536,8 +542,11 @@ blocking member explicitly on the same read-side surfaces.
 
 ## Assistant Command Packs
 
-The repository also ships assistant-native command packs for Copilot, Codex, and Claude under `assistant/`.
-They wrap the existing local CLI instead of introducing a second runtime surface.
+The repository also ships assistant-native command packs for Copilot, Codex,
+and Claude under `assistant/`. In `0.32.0`, those packs now include first-class
+workflow discovery and continuation commands, while Gemini CLI guidance uses
+the same workflow-first vocabulary. They wrap the existing local CLI instead of
+introducing a second runtime surface.
 
 - Shared installation and workflow guidance lives in `assistant/README.md`.
 - Claude and Codex use slash-style Markdown command files.
