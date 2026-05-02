@@ -1,6 +1,8 @@
 use synod::domain::decision::{DecisionType, EvidenceRef};
 use synod::domain::goal_plan::{
-    GoalPlan, GoalPlanError, GoalPlanStatus, InferredFlow, PlannedTask, WorkspaceSignals,
+    ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan, GoalPlanError,
+    GoalPlanFlowMode, GoalPlanFlowState, GoalPlanStatus, InferredFlow, PlannedTask,
+    WorkspaceSignals,
 };
 
 fn sample_task(id: &str) -> PlannedTask {
@@ -166,4 +168,159 @@ fn workspace_signals_default_is_empty() {
     assert!(!signals.has_config);
     assert!(!signals.has_canon);
     assert!(!signals.has_tests);
+}
+
+#[test]
+fn with_context_pack_sets_summary_and_primary_inputs() {
+    let context_pack = ContextPack {
+        pack_id: "cp-1".to_string(),
+        summary: "bounded planning context".to_string(),
+        credibility: ContextPackCredibility::Credible,
+        inputs: vec![ContextInput {
+            kind: ContextInputKind::WorkspaceFile,
+            reference: "src/lib.rs".to_string(),
+            rationale: "matches the goal keywords".to_string(),
+            source: "workspace_scan".to_string(),
+            primary: true,
+        }],
+        selected_targets: vec!["src/lib.rs".to_string()],
+        staleness_reason: None,
+    };
+
+    let plan =
+        GoalPlan::new("Goal", vec![sample_task("t1")]).unwrap().with_context_pack(context_pack);
+
+    assert_eq!(plan.context_summary().as_deref(), Some("bounded planning context"));
+    assert_eq!(plan.context_credibility().as_deref(), Some("credible"));
+    assert_eq!(plan.context_primary_inputs(), vec!["src/lib.rs".to_string()]);
+    assert_eq!(
+        plan.context_provenance_lines(),
+        vec!["workspace_file: src/lib.rs (matches the goal keywords)".to_string()]
+    );
+}
+
+#[test]
+fn goal_plan_validation_rejects_credible_context_without_primary_inputs() {
+    let err = GoalPlan::new("Goal", vec![sample_task("t1")])
+        .unwrap()
+        .with_context_pack(ContextPack {
+            pack_id: "cp-2".to_string(),
+            summary: "missing primaries".to_string(),
+            credibility: ContextPackCredibility::Credible,
+            inputs: Vec::new(),
+            selected_targets: Vec::new(),
+            staleness_reason: None,
+        })
+        .validate()
+        .unwrap_err();
+
+    assert!(matches!(err, GoalPlanError::MissingCredibleContextPrimaryInput));
+}
+
+#[test]
+fn goal_plan_validation_rejects_stale_context_without_reason() {
+    let err = GoalPlan::new("Goal", vec![sample_task("t1")])
+        .unwrap()
+        .with_context_pack(ContextPack {
+            pack_id: "cp-3".to_string(),
+            summary: "stale context".to_string(),
+            credibility: ContextPackCredibility::Stale,
+            inputs: vec![ContextInput {
+                kind: ContextInputKind::RecentTrace,
+                reference: ".synod/traces/old.json".to_string(),
+                rationale: "was the last authoritative trace".to_string(),
+                source: "latest_trace".to_string(),
+                primary: false,
+            }],
+            selected_targets: Vec::new(),
+            staleness_reason: None,
+        })
+        .validate()
+        .unwrap_err();
+
+    assert!(matches!(err, GoalPlanError::MissingContextStalenessReason));
+}
+
+#[test]
+fn context_input_and_flow_state_helpers_cover_remaining_goal_plan_branches() {
+    assert_eq!(ContextPackCredibility::Stale.as_str(), "stale");
+    assert_eq!(ContextInputKind::AuthoredBrief.as_str(), "authored_brief");
+    assert_eq!(ContextInputKind::Negotiation.as_str(), "negotiation");
+    assert_eq!(ContextInputKind::CanonArtifact.as_str(), "canon_artifact");
+
+    let missing_reference = ContextInput {
+        kind: ContextInputKind::WorkspaceFile,
+        reference: " ".to_string(),
+        rationale: "matches the requested goal".to_string(),
+        source: "workspace_scan".to_string(),
+        primary: true,
+    }
+    .validate()
+    .unwrap_err();
+    assert!(matches!(missing_reference, GoalPlanError::MissingContextInputReference));
+
+    let missing_rationale = ContextInput {
+        kind: ContextInputKind::WorkspaceFile,
+        reference: "src/lib.rs".to_string(),
+        rationale: " ".to_string(),
+        source: "workspace_scan".to_string(),
+        primary: true,
+    }
+    .validate()
+    .unwrap_err();
+    assert!(matches!(
+        missing_rationale,
+        GoalPlanError::MissingContextInputRationale { reference } if reference == "src/lib.rs"
+    ));
+
+    let missing_source = ContextInput {
+        kind: ContextInputKind::SymbolHint,
+        reference: "src/lib.rs::add".to_string(),
+        rationale: "matches the failing test evidence".to_string(),
+        source: " ".to_string(),
+        primary: false,
+    }
+    .validate()
+    .unwrap_err();
+    assert!(matches!(
+        missing_source,
+        GoalPlanError::MissingContextInputSource { reference } if reference == "src/lib.rs::add"
+    ));
+
+    let input = ContextInput {
+        kind: ContextInputKind::SymbolHint,
+        reference: "src/lib.rs::add".to_string(),
+        rationale: "matches the failing test evidence".to_string(),
+        source: "workspace_scan".to_string(),
+        primary: false,
+    };
+    assert_eq!(
+        input.provenance_line(),
+        "symbol_hint: src/lib.rs::add (matches the failing test evidence)"
+    );
+
+    let context_pack = ContextPack {
+        pack_id: "cp-4".to_string(),
+        summary: "selected bounded targets".to_string(),
+        credibility: ContextPackCredibility::Credible,
+        inputs: vec![input],
+        selected_targets: vec!["src/lib.rs".to_string()],
+        staleness_reason: None,
+    };
+    assert!(context_pack.validate().is_ok());
+    assert_eq!(context_pack.primary_references(), vec!["src/lib.rs".to_string()]);
+
+    let proposed = GoalPlanFlowState {
+        mode: GoalPlanFlowMode::Proposed,
+        flow_name: Some("bug-fix".to_string()),
+        confidence_reason: None,
+    };
+    assert_eq!(proposed.summary_text(), "proposed (bug-fix)");
+
+    let absent = GoalPlanFlowState {
+        mode: GoalPlanFlowMode::Absent,
+        flow_name: None,
+        confidence_reason: None,
+    };
+    assert_eq!(absent.summary_text(), "absent");
 }

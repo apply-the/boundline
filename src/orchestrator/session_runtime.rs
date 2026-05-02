@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use crate::adapters::agent::FnAgentAdapter;
 use crate::adapters::governance_runtime::{
@@ -18,6 +19,7 @@ use crate::domain::cluster::{
     ClusteredExecutionKind, WorkspaceParticipationKind, WorkspaceParticipationRecord,
 };
 use crate::domain::configuration::{RoutingOverrides, resolve_effective_routing};
+use crate::domain::decision::ActionSelector;
 use crate::domain::flow::{FlowStepMetadata, built_in_flow, supported_flow_names_csv};
 use crate::domain::flow_policy::FlowPolicy;
 use crate::domain::goal_plan::InferredFlow;
@@ -44,7 +46,9 @@ use crate::fixture::{
 };
 use crate::orchestrator::decision_loop::{DecisionLoop, LoopTerminal};
 use crate::orchestrator::flow_inference::infer_flow;
-use crate::orchestrator::goal_planner::{GoalPlannerError, build_goal_plan};
+use crate::orchestrator::goal_planner::{
+    GoalPlannerError, PlanningContextSources, build_goal_plan_with_sources,
+};
 use crate::orchestrator::governance::{
     GovernanceStepDecision, bounded_governance_context, build_autopilot_decision,
     governance_input_documents, governance_stage_key, governance_state_patch,
@@ -256,8 +260,39 @@ impl SessionRuntime {
                 .map_err(|error| SessionRuntimeError::InvalidFlowState(error.to_string()))?;
         }
 
-        let mut goal_plan = build_goal_plan(&goal, &self.workspace_ref)
-            .map_err(SessionRuntimeError::GoalPlanner)?;
+        let planning_context = Self::planning_context_sources(session);
+        let mut goal_plan =
+            match build_goal_plan_with_sources(&goal, &self.workspace_ref, &planning_context) {
+                Ok(goal_plan) => goal_plan,
+                Err(GoalPlannerError::InsufficientContext { summary, goal_plan }) => {
+                    let mut goal_plan = *goal_plan;
+                    if let Some(packet) = session.negotiation_packet.as_ref() {
+                        goal_plan = goal_plan.with_negotiation_projection(
+                            packet.goal_summary.clone(),
+                            packet.resolution_state.as_str(),
+                            packet.acceptance_boundary.success_headline.clone(),
+                        );
+                    }
+                    self.apply_planning_flow_selection(
+                        session,
+                        &mut goal_plan,
+                        requested_flow,
+                        no_flow,
+                    )?;
+                    session.active_task = None;
+                    session.goal_plan = Some(goal_plan);
+                    session.decisions.clear();
+                    session.latest_status = SessionStatus::GoalCaptured;
+                    session.latest_terminal_reason = None;
+                    session.updated_at = current_timestamp_millis();
+
+                    return Err(SessionRuntimeError::ClarificationRequired {
+                        headline: "bounded context required before planning".to_string(),
+                        prompt: summary,
+                    });
+                }
+                Err(error) => return Err(SessionRuntimeError::GoalPlanner(error)),
+            };
         if let Some(packet) = session.negotiation_packet.as_ref() {
             goal_plan = goal_plan.with_negotiation_projection(
                 packet.goal_summary.clone(),
@@ -279,6 +314,33 @@ impl SessionRuntime {
         session.updated_at = current_timestamp_millis();
 
         Ok(())
+    }
+
+    fn planning_context_sources(session: &ActiveSessionRecord) -> PlanningContextSources {
+        PlanningContextSources {
+            authored_input_summary: session
+                .authored_brief
+                .as_ref()
+                .map(|bundle| bundle.summary_text()),
+            authored_input_sources: session
+                .authored_brief
+                .as_ref()
+                .map(|bundle| bundle.ordered_source_labels())
+                .unwrap_or_default(),
+            negotiation_goal_summary: session
+                .negotiation_packet
+                .as_ref()
+                .map(|packet| packet.goal_summary.clone()),
+            negotiation_resolution: session
+                .negotiation_packet
+                .as_ref()
+                .map(|packet| packet.resolution_state.as_str().to_string()),
+            negotiation_acceptance_boundary: session
+                .negotiation_packet
+                .as_ref()
+                .map(|packet| packet.acceptance_boundary.success_headline.clone()),
+            latest_trace_ref: session.latest_trace_ref.clone(),
+        }
     }
 
     fn apply_planning_flow_selection(
@@ -519,6 +581,10 @@ impl SessionRuntime {
 
         tools
             .register("replanner", FnToolAdapter::new(native_replan_step))
+            .map_err(|error| SessionRuntimeError::DecisionLoop(error.to_string()))?;
+
+        tools
+            .register("asker", FnToolAdapter::new(native_request_clarification))
             .map_err(|error| SessionRuntimeError::DecisionLoop(error.to_string()))?;
 
         Ok((agents, tools))
@@ -2732,6 +2798,47 @@ fn native_analyze_workspace(
     workspace_ref: &Path,
     request: StepExecutionRequest,
 ) -> StepExecutionResult {
+    let selector = request
+        .input
+        .get("selector")
+        .and_then(Value::as_str)
+        .and_then(|value| ActionSelector::from_str(value).ok())
+        .unwrap_or(ActionSelector::Read);
+
+    if selector == ActionSelector::Search {
+        let target = request
+            .input
+            .get("target")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|target| !target.is_empty())
+            .unwrap_or("workspace");
+        let matches = collect_workspace_files(workspace_ref, workspace_ref, &mut Vec::new());
+
+        return if matches.is_empty() {
+            StepExecutionResult::failure(
+                ErrorInfo::new(
+                    "workspace_search_failed",
+                    format!("failed to find credible workspace evidence for {target}"),
+                ),
+                Recoverability::ReplanRequired,
+            )
+        } else {
+            StepExecutionResult::success_with_patch(
+                json!({
+                    "target": target,
+                    "stdout": matches.join("\n"),
+                    "matches": matches,
+                }),
+                Map::from_iter([(
+                    "latest_selection_headline".to_string(),
+                    json!(format!("searched workspace for {target}")),
+                )]),
+            )
+            .with_evidence(json!({"kind": "workspace_search", "target": target}))
+        };
+    }
+
     let (target, path) = match request_target_path(workspace_ref, &request) {
         Ok(target) => target,
         Err(error) => return StepExecutionResult::failure(error, Recoverability::ReplanRequired),
@@ -2903,6 +3010,66 @@ fn native_replan_step(request: StepExecutionRequest) -> StepExecutionResult {
             json!(format!("recorded recovery decision for {target}")),
         )]),
     )
+}
+
+fn native_request_clarification(request: StepExecutionRequest) -> StepExecutionResult {
+    let target = request.input.get("target").and_then(Value::as_str).unwrap_or("current-task");
+    let prompt = request
+        .input
+        .get("expected_outcome")
+        .and_then(Value::as_str)
+        .unwrap_or("clarify the next bounded action before continuing");
+
+    StepExecutionResult::success_with_patch(
+        json!({
+            "target": target,
+            "stdout": prompt,
+            "prompt": prompt,
+        }),
+        Map::from_iter([(
+            "latest_selection_headline".to_string(),
+            json!(format!("clarification required for {target}")),
+        )]),
+    )
+    .with_evidence(json!({"kind": "clarification", "target": target, "prompt": prompt}))
+}
+
+fn collect_workspace_files(root: &Path, current: &Path, files: &mut Vec<String>) -> Vec<String> {
+    if files.len() >= 16 {
+        return files.clone();
+    }
+
+    let Ok(entries) = std::fs::read_dir(current) else {
+        return files.clone();
+    };
+
+    for entry in entries.flatten() {
+        if files.len() >= 16 {
+            break;
+        }
+
+        let path = entry.path();
+        let name = entry.file_name();
+        if name.to_string_lossy().starts_with('.') {
+            continue;
+        }
+
+        if path.is_dir() {
+            if name == "target" {
+                continue;
+            }
+            let _ = collect_workspace_files(root, &path, files);
+            continue;
+        }
+
+        if path.is_file()
+            && let Ok(relative) = path.strip_prefix(root)
+        {
+            files.push(relative.to_string_lossy().replace('\\', "/"));
+        }
+    }
+
+    files.clone()
 }
 
 fn request_target_path(
@@ -3148,6 +3315,17 @@ mod tests {
 
     fn step_request(target: Option<&str>) -> StepExecutionRequest {
         let input = target.map(|target| json!({ "target": target })).unwrap_or_else(|| json!({}));
+        StepExecutionRequest {
+            step_id: "step-request".to_string(),
+            step_kind: StepKind::Tool,
+            target_name: "test-target".to_string(),
+            input,
+            task_snapshot: context(),
+            attempt_number: 1,
+        }
+    }
+
+    fn step_request_with_input(input: Value) -> StepExecutionRequest {
         StepExecutionRequest {
             step_id: "step-request".to_string(),
             step_kind: StepKind::Tool,
@@ -3602,6 +3780,108 @@ mod tests {
     }
 
     #[test]
+    fn native_helper_functions_cover_search_clarification_collection_and_command_errors() {
+        let workspace = temp_workspace("synod-runtime-search-helpers");
+        fs::create_dir_all(workspace.join("src/nested")).unwrap();
+        fs::create_dir_all(workspace.join("target/ignored")).unwrap();
+        fs::create_dir_all(workspace.join(".hidden")).unwrap();
+        fs::write(workspace.join("src/lib.rs"), "pub fn add() {}\n").unwrap();
+        for index in 0..20 {
+            fs::write(
+                workspace.join("src/nested").join(format!("file-{index}.rs")),
+                format!("pub fn helper_{index}() {{}}\n"),
+            )
+            .unwrap();
+        }
+        fs::write(workspace.join("target/ignored/lib.rs"), "ignored\n").unwrap();
+        fs::write(workspace.join(".hidden/secret.rs"), "hidden\n").unwrap();
+
+        let searched = super::native_analyze_workspace(
+            &workspace,
+            step_request_with_input(json!({
+                "selector": "search",
+                "target": " src/lib.rs ",
+            })),
+        );
+        assert_eq!(searched.status, ExecutionStatus::Succeeded);
+        assert_eq!(searched.output.as_ref().unwrap()["target"], json!("src/lib.rs"));
+        assert!(
+            searched.output.as_ref().unwrap()["matches"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|item| item.as_str() == Some("src/lib.rs"))
+        );
+        assert_eq!(
+            searched.state_patch.as_ref().unwrap()["latest_selection_headline"],
+            json!("searched workspace for src/lib.rs")
+        );
+        assert_eq!(searched.evidence.as_ref().unwrap()["kind"], json!("workspace_search"));
+
+        let empty_workspace = temp_workspace("synod-runtime-search-empty");
+        let search_failure = super::native_analyze_workspace(
+            &empty_workspace,
+            step_request_with_input(json!({"selector": "search"})),
+        );
+        assert_eq!(search_failure.status, ExecutionStatus::Failed);
+        assert_eq!(search_failure.error.as_ref().unwrap().code, "workspace_search_failed");
+        assert!(
+            search_failure.error.as_ref().unwrap().message.contains("workspace"),
+            "{}",
+            search_failure.error.as_ref().unwrap().message
+        );
+
+        let clarification = super::native_request_clarification(step_request_with_input(json!({
+            "target": "src/lib.rs",
+            "expected_outcome": "clarify the failing acceptance test",
+        })));
+        assert_eq!(clarification.status, ExecutionStatus::Succeeded);
+        assert_eq!(
+            clarification.output.as_ref().unwrap()["prompt"],
+            json!("clarify the failing acceptance test")
+        );
+        assert_eq!(
+            clarification.state_patch.as_ref().unwrap()["latest_selection_headline"],
+            json!("clarification required for src/lib.rs")
+        );
+        assert_eq!(clarification.evidence.as_ref().unwrap()["kind"], json!("clarification"));
+
+        let default_clarification = super::native_request_clarification(step_request(None));
+        assert_eq!(default_clarification.output.as_ref().unwrap()["target"], json!("current-task"));
+        assert_eq!(
+            default_clarification.output.as_ref().unwrap()["prompt"],
+            json!("clarify the next bounded action before continuing")
+        );
+
+        let mut collected = Vec::new();
+        let matches = super::collect_workspace_files(&workspace, &workspace, &mut collected);
+        assert!(matches.len() <= 16, "{}", matches.len());
+        assert!(matches.iter().any(|item| item == "src/lib.rs"), "{matches:?}");
+        assert!(matches.iter().any(|item| item.starts_with("src/nested/")), "{matches:?}");
+        assert!(matches.iter().all(|item| !item.starts_with("target/")), "{matches:?}");
+        assert!(matches.iter().all(|item| !item.starts_with(".hidden/")), "{matches:?}");
+
+        let mut preseeded = vec!["already-present".to_string(); 16];
+        let preseeded_matches =
+            super::collect_workspace_files(&workspace, &workspace, &mut preseeded);
+        assert_eq!(preseeded_matches.len(), 16);
+        assert!(preseeded_matches.iter().all(|item| item == "already-present"));
+
+        let missing_matches = super::collect_workspace_files(
+            &workspace,
+            &workspace.join("missing-dir"),
+            &mut Vec::new(),
+        );
+        assert!(missing_matches.is_empty());
+
+        let validation_error =
+            super::native_run_validation(&workspace.join("missing-dir"), step_request(None));
+        assert_eq!(validation_error.status, ExecutionStatus::Failed);
+        assert_eq!(validation_error.error.as_ref().unwrap().code, "validation_command_failed");
+        assert_eq!(validation_error.recoverability, Recoverability::Terminal);
+    }
+
+    #[test]
     fn terminal_and_status_helpers_cover_remaining_mappings() {
         let workspace = temp_workspace("synod-runtime-terminal-mappings");
         let task = goal_satisfied_task(
@@ -4039,6 +4319,12 @@ mod tests {
     #[test]
     fn plan_task_persists_goal_plan_and_inferred_flow_without_creating_fixture_task() {
         let workspace = temp_workspace("synod-runtime-native-plan");
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::write(
+            workspace.join("src/lib.rs"),
+            "pub fn add(left: i32, right: i32) -> i32 { left - right }\n",
+        )
+        .unwrap();
         let runtime = SessionRuntime::for_workspace(&workspace);
         let mut session = ActiveSessionRecord {
             session_id: "session-runtime".to_string(),
@@ -4079,6 +4365,12 @@ mod tests {
     #[test]
     fn plan_task_confirms_explicit_flow_during_native_planning() {
         let workspace = temp_workspace("synod-runtime-native-plan-explicit-flow");
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::write(
+            workspace.join("src/lib.rs"),
+            "pub fn workspace_summary() -> String { \"summary output\".to_string() }\n",
+        )
+        .unwrap();
         let runtime = SessionRuntime::for_workspace(&workspace);
         let mut session = ActiveSessionRecord {
             session_id: "session-runtime".to_string(),

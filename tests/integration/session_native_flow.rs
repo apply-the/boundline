@@ -8,12 +8,14 @@ use synod::adapters::agent::FnAgentAdapter;
 use synod::adapters::session_store::{FileSessionStore, SessionStore};
 use synod::adapters::tool::FnToolAdapter;
 use synod::adapters::trace_store::FileTraceStore;
+use synod::cli::inspect::execute_inspect;
 use synod::cli::session::{
     execute_capture, execute_plan, execute_run, execute_start, execute_status,
 };
-use synod::domain::decision::DecisionType;
+use synod::domain::decision::{ActionSelector, DecisionType};
 use synod::domain::flow_policy::FlowPolicy;
 use synod::domain::goal_plan::{GoalPlan, PlannedTask};
+use synod::domain::session::SessionStatus;
 use synod::domain::step::{ErrorInfo, Recoverability, StepExecutionResult};
 use synod::domain::trace::TraceEventType;
 use synod::orchestrator::decision_loop::{DecisionLoop, LoopTerminal};
@@ -28,6 +30,46 @@ fn temp_workspace(prefix: &str) -> PathBuf {
     ws
 }
 
+fn collect_workspace_files(
+    root: &std::path::Path,
+    current: &std::path::Path,
+    files: &mut Vec<String>,
+) {
+    if files.len() >= 16 {
+        return;
+    }
+
+    let Ok(entries) = fs::read_dir(current) else {
+        return;
+    };
+
+    for entry in entries.flatten() {
+        if files.len() >= 16 {
+            break;
+        }
+
+        let path = entry.path();
+        let name = entry.file_name();
+        if name.to_string_lossy().starts_with('.') {
+            continue;
+        }
+
+        if path.is_dir() {
+            if name == "target" {
+                continue;
+            }
+            collect_workspace_files(root, &path, files);
+            continue;
+        }
+
+        if path.is_file()
+            && let Ok(relative) = path.strip_prefix(root)
+        {
+            files.push(relative.to_string_lossy().replace('\\', "/"));
+        }
+    }
+}
+
 fn build_loop(workspace: &std::path::Path, max_steps: usize) -> DecisionLoop<FileTraceStore> {
     let mut agents = AgentRegistry::new();
     let analyzer_workspace = workspace.to_path_buf();
@@ -35,8 +77,33 @@ fn build_loop(workspace: &std::path::Path, max_steps: usize) -> DecisionLoop<Fil
         .register(
             "analyzer",
             FnAgentAdapter::new(move |request| {
+                let selector = request
+                    .input
+                    .get("selector")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("read");
                 let target =
                     request.input.get("target").and_then(|value| value.as_str()).unwrap_or("");
+                if selector == "search" {
+                    let mut files = Vec::new();
+                    collect_workspace_files(&analyzer_workspace, &analyzer_workspace, &mut files);
+                    return if files.is_empty() {
+                        StepExecutionResult::failure(
+                            ErrorInfo::new(
+                                "workspace_search_failed",
+                                format!("failed to find credible workspace evidence for {target}"),
+                            ),
+                            Recoverability::ReplanRequired,
+                        )
+                    } else {
+                        StepExecutionResult::success(json!({
+                            "stdout": files.join("\n"),
+                            "target": target,
+                            "matches": files,
+                        }))
+                    };
+                }
+
                 match fs::read_to_string(analyzer_workspace.join(target)) {
                     Ok(contents) => {
                         StepExecutionResult::success(json!({"stdout": contents, "target": target}))
@@ -97,6 +164,19 @@ fn build_loop(workspace: &std::path::Path, max_steps: usize) -> DecisionLoop<Fil
             "replanner",
             FnToolAdapter::new(move |_request| {
                 StepExecutionResult::success(json!({"stdout": "replanned"}))
+            }),
+        )
+        .unwrap();
+    tools
+        .register(
+            "asker",
+            FnToolAdapter::new(move |request| {
+                let prompt = request
+                    .input
+                    .get("expected_outcome")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("clarify the next bounded action before continuing");
+                StepExecutionResult::success(json!({"stdout": prompt, "prompt": prompt}))
             }),
         )
         .unwrap();
@@ -202,10 +282,12 @@ fn decision_loop_recovery_on_failure() {
     .unwrap();
 
     let dl = build_loop(&ws, 5);
-    let (terminal, _decisions, trace) =
+    let (terminal, decisions, trace) =
         dl.run(&plan, None, &ws.to_string_lossy(), "session-recover").unwrap();
 
-    assert!(matches!(terminal, LoopTerminal::Exhausted { .. }));
+    assert!(matches!(terminal, LoopTerminal::NoActionableState(_)));
+    assert_eq!(decisions[0].selector_kind(), ActionSelector::Search);
+    assert_eq!(decisions[1].selector_kind(), ActionSelector::Ask);
 
     let event_types: Vec<_> = trace.events.iter().map(|e| e.event_type).collect();
     assert!(event_types.contains(&TraceEventType::DecisionFailed));
@@ -315,6 +397,87 @@ fn cli_plan_persists_goal_plan_and_proposed_flow_before_confirmation() {
     let flow = record.goal_plan.as_ref().unwrap().flow.as_ref().unwrap();
     assert_eq!(flow.flow_name, "bug-fix");
     assert!(!flow.confirmed);
+}
+
+#[test]
+fn cli_plan_blocks_when_context_pack_is_not_credible() {
+    let ws = temp_workspace("snf-cli-plan-blocked-context");
+
+    execute_start(Some(&ws)).unwrap();
+    let mut record = FileSessionStore::for_workspace(&ws).load().unwrap().unwrap();
+    record.goal = Some("investigate a thing".to_string());
+    record.latest_status = SessionStatus::GoalCaptured;
+    FileSessionStore::for_workspace(&ws).persist(&record).unwrap();
+
+    let error = execute_plan(Some(&ws), None, false).unwrap_err();
+    let error_text = error.to_string();
+    assert!(error_text.contains("bounded context required before planning"), "{error_text}");
+
+    let status = execute_status(Some(&ws)).unwrap();
+    assert!(status.terminal_output.contains("context_credibility: insufficient"));
+    assert!(status.terminal_output.contains("context_summary: no credible bounded context"));
+    assert!(
+        status.terminal_output.contains("next_command: synod capture --goal <narrower goal>"),
+        "{}",
+        status.terminal_output
+    );
+}
+
+#[test]
+fn session_native_cli_surfaces_context_projection_on_status_run_and_inspect() {
+    let ws = temp_workspace("snf-cli-context-projection");
+
+    fs::write(
+        ws.join("Cargo.toml"),
+        "[package]\nname = \"snf_cli_context_projection\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    )
+    .unwrap();
+    fs::create_dir_all(ws.join("src")).unwrap();
+    fs::create_dir_all(ws.join("tests")).unwrap();
+    fs::write(
+        ws.join("src/context_router.rs"),
+        "pub fn build_context_router() -> &'static str { \"ok\" }\n",
+    )
+    .unwrap();
+    fs::write(
+        ws.join("src/lib.rs"),
+        "pub mod context_router;\npub fn add(left: i32, right: i32) -> i32 { left + right }\n",
+    )
+    .unwrap();
+    fs::write(
+        ws.join("tests/basic.rs"),
+        "#[test]\nfn it_works() { assert_eq!(snf_cli_context_projection::add(2, 2), 4); }\n",
+    )
+    .unwrap();
+
+    execute_start(Some(&ws)).unwrap();
+    execute_capture(Some(&ws), Some("build a context router"), &[], None, None, None, None)
+        .unwrap();
+    execute_plan(Some(&ws), None, false).unwrap();
+
+    let status = execute_status(Some(&ws)).unwrap();
+    assert!(status.terminal_output.contains("context_summary:"), "{}", status.terminal_output);
+    assert!(
+        status.terminal_output.contains("context_credibility: credible"),
+        "{}",
+        status.terminal_output
+    );
+    assert!(
+        status.terminal_output.contains("context_primary_inputs:"),
+        "{}",
+        status.terminal_output
+    );
+
+    let run = execute_run(Some(&ws)).unwrap();
+    assert!(run.terminal_output.contains("context_summary:"), "{}", run.terminal_output);
+
+    let inspect = execute_inspect(None, Some(&ws)).unwrap();
+    assert!(inspect.terminal_output.contains("context_summary:"), "{}", inspect.terminal_output);
+    assert!(
+        inspect.terminal_output.contains("context_credibility: credible"),
+        "{}",
+        inspect.terminal_output
+    );
 }
 
 #[test]

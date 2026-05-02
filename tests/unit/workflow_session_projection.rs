@@ -120,6 +120,7 @@ fn build_view(record: &ActiveSessionRecord) -> SessionStatusView {
         governance_next_action: None,
         next_command: Some("synod workflow resume default".to_string()),
         explanation: "workflow projection is consistent".to_string(),
+        ..Default::default()
     }
 }
 

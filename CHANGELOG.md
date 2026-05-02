@@ -19,9 +19,47 @@ recorded workspace version.
 
 Delivered specs:
 
-- None recorded after `0.32.0`
+- None recorded after `0.34.0`
 
 Highlights:
+
+## [0.34.0] - 2026-05-02
+
+Delivered specs:
+
+- `034` - Decision-Driven Orchestrator
+
+Highlights:
+
+- Make the native `observe -> decide -> act -> verify` loop authoritative by
+  selecting one explicit bounded selector per iteration from decision state
+  instead of replaying a mostly static task order.
+- Persist and surface selector-driven follow-through on `run`, `status`,
+  `next`, and `inspect`, including explicit `read`, `search`, `modify`,
+  `test`, `ask`, and `replan` vocabulary, rationale, evidence basis, and
+  bounded stop reasoning.
+- Update README, getting-started, configuration, assistant guidance, roadmap,
+  contributor docs, and changelog for the release.
+
+## [0.33.0] - 2026-05-02
+
+Delivered specs:
+
+- `033` - Context Assembly Foundation
+
+Highlights:
+
+- Assemble one bounded context pack before native planning from workspace
+  signals, authored briefs, negotiated delivery state, recent traces, and
+  reusable Canon artifacts instead of relying on ambient workspace state.
+- Surface `context_summary`, `context_credibility`, primary inputs,
+  provenance, and any explicit staleness reason through `plan`, `run`,
+  `status`, `next`, and `inspect`, including persisted native
+  `GoalPlanCreated` trace payloads.
+- Stop planning explicitly when bounded context is insufficient instead of
+  silently producing a coarse plan, and update README, getting-started,
+  configuration, contributor docs, assistant guidance, roadmap, and changelog
+  for the release.
 
 ## [0.32.0] - 2026-05-02
 

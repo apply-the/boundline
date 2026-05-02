@@ -4,8 +4,10 @@ use std::path::PathBuf;
 use uuid::Uuid;
 
 use synod::domain::decision::DecisionType;
+use synod::domain::goal_plan::ContextPackCredibility;
 use synod::orchestrator::goal_planner::{
-    build_goal_plan, collect_workspace_signals, derive_tasks, scan_canon_artifacts,
+    GoalPlannerError, PlanningContextSources, build_context_pack, build_goal_plan,
+    build_goal_plan_with_sources, collect_workspace_signals, derive_tasks, scan_canon_artifacts,
 };
 
 fn temp_workspace(prefix: &str) -> PathBuf {
@@ -58,6 +60,27 @@ fn collect_workspace_signals_counts_files() {
 
     let signals = collect_workspace_signals(&ws);
     assert!(signals.file_count >= 3);
+}
+
+#[test]
+fn collect_workspace_signals_detects_python_and_go_projects_and_skips_hidden_dirs() {
+    let python_ws = temp_workspace("gp-python");
+    std::fs::write(python_ws.join("pyproject.toml"), "[project]\nname='test'\n").unwrap();
+    std::fs::write(python_ws.join("README.md"), "workspace\n").unwrap();
+    std::fs::create_dir_all(python_ws.join(".git")).unwrap();
+    std::fs::create_dir_all(python_ws.join("target")).unwrap();
+    std::fs::write(python_ws.join(".git/ignored.txt"), "ignored\n").unwrap();
+    std::fs::write(python_ws.join("target/generated.txt"), "generated\n").unwrap();
+
+    let python_signals = collect_workspace_signals(&python_ws);
+    assert_eq!(python_signals.language.as_deref(), Some("python"));
+    assert_eq!(python_signals.file_count, 2);
+
+    let go_ws = temp_workspace("gp-go");
+    std::fs::write(go_ws.join("go.mod"), "module example.com/test\n").unwrap();
+
+    let go_signals = collect_workspace_signals(&go_ws);
+    assert_eq!(go_signals.language.as_deref(), Some("go"));
 }
 
 #[test]
@@ -133,6 +156,8 @@ fn build_goal_plan_produces_valid_plan() {
     assert_eq!(plan.goal_text, "implement a feature");
     assert!(!plan.tasks.is_empty());
     assert!(plan.workspace_signals.language.is_some());
+    assert!(plan.context_pack.is_some());
+    assert_eq!(plan.context_credibility().as_deref(), Some("credible"));
     assert!(plan.validate().is_ok());
 }
 
@@ -151,4 +176,87 @@ fn build_goal_plan_includes_canon_evidence() {
 
     let plan = build_goal_plan("add a feature", &ws).unwrap();
     assert!(!plan.source_evidence.is_empty());
+    assert!(
+        plan.context_primary_inputs()
+            .iter()
+            .any(|item| item.contains(".canon") || item.contains("rules.md"))
+    );
+}
+
+#[test]
+fn build_goal_plan_prefers_source_target_over_test_file_for_fix_goals() {
+    let ws = temp_workspace("gp-fix-target");
+    std::fs::write(
+        ws.join("Cargo.toml"),
+        "[package]\nname = \"gp_fix_target\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(ws.join("src")).unwrap();
+    std::fs::create_dir_all(ws.join("tests")).unwrap();
+    std::fs::write(
+        ws.join("src/lib.rs"),
+        "pub fn add(left: i32, right: i32) -> i32 { left - right }",
+    )
+    .unwrap();
+    std::fs::write(
+        ws.join("tests/addition.rs"),
+        "#[test]\nfn red_to_green_addition() { assert_eq!(gp_fix_target::add(2, 2), 4); }",
+    )
+    .unwrap();
+
+    let plan = build_goal_plan("fix the failing add test", &ws).unwrap();
+
+    assert_eq!(plan.tasks[0].target, "src/lib.rs");
+}
+
+#[test]
+fn build_context_pack_uses_authored_sources_and_workspace_files() {
+    let ws = temp_workspace("gp-context");
+    std::fs::create_dir_all(ws.join("src")).unwrap();
+    std::fs::write(
+        ws.join("src/context_router.rs"),
+        "pub fn build_context_router() {}\npub struct ContextSummary;",
+    )
+    .unwrap();
+
+    let pack = build_context_pack(
+        "build a context router",
+        &ws,
+        &PlanningContextSources {
+            authored_input_summary: Some("Need a bounded context router".to_string()),
+            authored_input_sources: vec!["brief.md".to_string()],
+            negotiation_goal_summary: Some("ship the context router slice".to_string()),
+            negotiation_resolution: Some("credible".to_string()),
+            negotiation_acceptance_boundary: None,
+            latest_trace_ref: Some(".synod/traces/last.json".to_string()),
+        },
+    );
+
+    assert_eq!(pack.credibility, ContextPackCredibility::Credible);
+    assert!(pack.selected_targets.iter().any(|item| item == "src/context_router.rs"));
+    assert!(pack.inputs.iter().any(|item| item.reference == "Need a bounded context router"));
+    assert!(pack.inputs.iter().any(|item| item.reference == ".synod/traces/last.json"));
+}
+
+#[test]
+fn build_goal_plan_with_sources_fails_when_context_is_insufficient() {
+    let ws = temp_workspace("gp-insufficient");
+
+    let err = build_goal_plan_with_sources(
+        "investigate a thing",
+        &ws,
+        &PlanningContextSources::default(),
+    )
+    .unwrap_err();
+
+    match err {
+        GoalPlannerError::InsufficientContext { summary, goal_plan } => {
+            assert!(summary.contains("no credible bounded context"));
+            assert_eq!(
+                goal_plan.context_pack.as_ref().map(|pack| pack.credibility),
+                Some(ContextPackCredibility::Insufficient)
+            );
+        }
+        other => panic!("unexpected error: {other}"),
+    }
 }

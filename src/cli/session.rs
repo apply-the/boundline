@@ -15,6 +15,7 @@ use crate::cli::CommandExitStatus;
 use crate::cli::inspect::summarize_trace;
 use crate::cli::output;
 use crate::domain::cluster::ClusterSessionProjection;
+use crate::domain::decision::ActionSelector;
 use crate::domain::governance::GovernanceRuntimeKind;
 use crate::domain::negotiation::NegotiatedDeliveryPacket;
 use crate::domain::session::{
@@ -220,7 +221,12 @@ pub fn execute_plan_with_target(
         return Err(SessionCommandError::MissingCapturedGoal);
     }
 
-    runtime.plan_task(&mut record, requested_flow, no_flow).map_err(map_runtime_error)?;
+    if let Err(error) = runtime.plan_task(&mut record, requested_flow, no_flow) {
+        if matches!(&error, SessionRuntimeError::ClarificationRequired { .. }) {
+            runtime.persist_session(&record).map_err(map_runtime_error)?;
+        }
+        return Err(map_runtime_error(error));
+    }
     runtime.persist_session(&record).map_err(map_runtime_error)?;
 
     Ok(SessionCommandReport {
@@ -608,6 +614,8 @@ pub(crate) fn build_status_view_with_follow_up(
 ) -> SessionStatusView {
     let governance_intent =
         record.authored_brief.as_ref().and_then(|bundle| bundle.governance_intent.as_ref());
+    let latest_decision = record.decisions.last();
+    let latest_decision_selector = latest_decision.map(|decision| decision.selector_kind());
 
     SessionStatusView {
         session_id: record.session_id.clone(),
@@ -638,6 +646,27 @@ pub(crate) fn build_status_view_with_follow_up(
             let labels = bundle.deduplicated_source_labels();
             (!labels.is_empty()).then_some(labels)
         }),
+        context_summary: record
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| goal_plan.context_summary()),
+        context_credibility: record
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| goal_plan.context_credibility()),
+        context_primary_inputs: record.goal_plan.as_ref().and_then(|goal_plan| {
+            let inputs = goal_plan.context_primary_inputs();
+            (!inputs.is_empty()).then_some(inputs)
+        }),
+        context_provenance: record.goal_plan.as_ref().and_then(|goal_plan| {
+            let lines = goal_plan.context_provenance_lines();
+            (!lines.is_empty()).then_some(lines)
+        }),
+        context_staleness_reason: record
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| goal_plan.context_pack.as_ref())
+            .and_then(|pack| pack.staleness_reason.clone()),
         clarification_headline: record
             .authored_brief
             .as_ref()
@@ -680,11 +709,9 @@ pub(crate) fn build_status_view_with_follow_up(
         latest_status: record.latest_status,
         execution_path: execution_path_text(record),
         latest_trace_ref: record.latest_trace_ref.clone(),
-        latest_decision_status: record
-            .decisions
-            .last()
+        latest_decision_status: latest_decision
             .map(|decision| decision_status_text(decision.status).to_string()),
-        latest_decision_target: record.decisions.last().map(|decision| decision.target.clone()),
+        latest_decision_target: latest_decision.map(|decision| decision.target.clone()),
         latest_changed_files: record.active_task.as_ref().and_then(|task| {
             task.context.state.get("latest_changed_files").and_then(|value| {
                 value.as_array().map(|items| {
@@ -699,20 +726,39 @@ pub(crate) fn build_status_view_with_follow_up(
             .active_task
             .as_ref()
             .and_then(task_state_workspace_slice_summary),
-        latest_selection_headline: record.active_task.as_ref().and_then(|task| {
-            task.context
-                .state
-                .get("latest_selection_headline")
-                .and_then(|value| value.as_str().map(str::to_string))
-        }),
+        latest_selection_headline: record
+            .active_task
+            .as_ref()
+            .and_then(|task| {
+                task.context
+                    .state
+                    .get("latest_selection_headline")
+                    .and_then(|value| value.as_str().map(str::to_string))
+            })
+            .or_else(|| {
+                latest_decision.map(|decision| {
+                    let evidence_suffix = decision_evidence_basis(decision)
+                        .map(|basis| format!(" based on {basis}"))
+                        .unwrap_or_default();
+                    format!(
+                        "selector {} -> {} (verify: {}){}",
+                        decision.selector_kind().as_str(),
+                        decision.target,
+                        decision.expected_outcome,
+                        evidence_suffix,
+                    )
+                })
+            }),
         latest_candidate_family: record
             .active_task
             .as_ref()
-            .and_then(|task| task_state_string(task, "latest_candidate_family")),
+            .and_then(|task| task_state_string(task, "latest_candidate_family"))
+            .or_else(|| latest_decision_selector.map(|selector| selector.as_str().to_string())),
         latest_selection_reason: record
             .active_task
             .as_ref()
-            .and_then(|task| task_state_string(task, "latest_selection_reason")),
+            .and_then(|task| task_state_string(task, "latest_selection_reason"))
+            .or_else(|| latest_decision.map(|decision| decision.rationale.clone())),
         latest_rejected_candidates: record
             .active_task
             .as_ref()
@@ -721,12 +767,27 @@ pub(crate) fn build_status_view_with_follow_up(
             .active_task
             .as_ref()
             .and_then(task_state_attempt_lineage_summary),
-        latest_validation_status: record.active_task.as_ref().and_then(|task| {
-            task.context
-                .state
-                .get("latest_validation_status")
-                .and_then(|value| value.as_str().map(str::to_string))
-        }),
+        latest_validation_status: record
+            .active_task
+            .as_ref()
+            .and_then(|task| {
+                task.context
+                    .state
+                    .get("latest_validation_status")
+                    .and_then(|value| value.as_str().map(str::to_string))
+            })
+            .or_else(|| {
+                latest_decision.and_then(|decision| {
+                    match (decision.selector_kind(), decision.tool_result.as_ref()) {
+                        (ActionSelector::Test, Some(tool_result)) => Some(if tool_result.success {
+                            "passed".to_string()
+                        } else {
+                            "failed".to_string()
+                        }),
+                        _ => None,
+                    }
+                })
+            }),
         latest_exhaustion_reason: record
             .active_task
             .as_ref()
@@ -898,6 +959,12 @@ fn suggested_next_command(record: &ActiveSessionRecord) -> Option<String> {
         return Some("synod capture --goal <narrower goal>".to_string());
     }
 
+    if record.goal_plan.as_ref().and_then(|goal_plan| goal_plan.context_pack.as_ref()).is_some_and(
+        |pack| pack.credibility != crate::domain::goal_plan::ContextPackCredibility::Credible,
+    ) {
+        return Some("synod capture --goal <narrower goal>".to_string());
+    }
+
     if let Some(task) = record.active_task.as_ref()
         && let Some(governance_state) = task_state_governance_state_text(task)
     {
@@ -963,6 +1030,23 @@ fn planning_summary(record: &ActiveSessionRecord) -> String {
     format!(
         "planned the active goal into {task_count} bounded goal-plan task(s) without flow constraints"
     )
+}
+
+fn decision_evidence_basis(decision: &crate::domain::decision::Decision) -> Option<String> {
+    let inputs = decision
+        .evidence_inputs
+        .iter()
+        .map(|evidence| {
+            let kind = match evidence.kind {
+                crate::domain::decision::EvidenceKind::Trace => "trace",
+                crate::domain::decision::EvidenceKind::File => "file",
+                crate::domain::decision::EvidenceKind::Canon => "canon",
+                crate::domain::decision::EvidenceKind::ToolOutput => "tool_output",
+            };
+            format!("{kind}:{}", evidence.reference)
+        })
+        .collect::<Vec<_>>();
+    (!inputs.is_empty()).then_some(inputs.join(", "))
 }
 
 #[derive(Debug, Error)]
@@ -1097,15 +1181,25 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        CommandExitStatus, SessionCommandError, execute_capture, execute_flow, execute_next,
-        execute_plan, execute_run, execute_start, execute_start_with_target, execute_status,
-        exit_status_for_session, exit_status_for_task, load_active_session, map_runtime_error,
-        map_store_error, render_error, resolve_workspace, suggested_next_command,
+        CommandExitStatus, SessionCommandError, build_status_view_with_follow_up, execute_capture,
+        execute_flow, execute_next, execute_plan, execute_run, execute_start,
+        execute_start_with_target, execute_status, exit_status_for_session, exit_status_for_task,
+        latest_workspace_compatibility_follow_up, load_active_session, map_runtime_error,
+        map_store_error, render_error, requested_governance_runtime_text, resolve_workspace,
+        review_headline_from_task, suggested_next_command,
     };
     use crate::adapters::session_store::SessionStoreError;
-    use crate::adapters::trace_store::TraceStoreError;
+    use crate::adapters::trace_store::{FileTraceStore, TraceStore, TraceStoreError};
+    use crate::domain::decision::{Decision, DecisionType, EvidenceRef};
+    use crate::domain::goal_plan::{
+        ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan,
+        InferredFlow, PlannedTask,
+    };
+    use crate::domain::governance::GovernanceRuntimeKind;
+    use crate::domain::limits::TerminalCondition;
     use crate::domain::session::SessionStatus;
-    use crate::domain::task::{Task, TaskStatus};
+    use crate::domain::task::{Task, TaskStatus, TerminalReason};
+    use crate::domain::trace::ExecutionTrace;
     use crate::fixture::{build_fixture_plan_for_goal, build_task_request};
     use crate::orchestrator::session_runtime::{SessionRuntime, SessionRuntimeError};
 
@@ -1579,5 +1673,225 @@ fn red_to_green_addition() {
 
         let rendered = render_error("run", &error);
         assert!(rendered.contains("synod plan --flow bug-fix"), "{rendered}");
+    }
+
+    #[test]
+    fn compatibility_follow_up_and_review_headline_helpers_cover_remaining_session_cli_branches() {
+        let workspace = temp_workspace("synod-cli-session-compat-follow-up");
+        fs::create_dir_all(workspace.join(".synod")).unwrap();
+
+        let mut trace = ExecutionTrace::new("task-compat", "session-compat", "Compat trace");
+        trace.terminal_status = Some(TaskStatus::Failed);
+        trace.terminal_reason = Some(TerminalReason::new(
+            TerminalCondition::UnrecoverableError,
+            "compatibility run failed",
+            None,
+        ));
+        trace.ended_at = Some(trace.started_at + 1);
+        let trace_path = FileTraceStore::for_workspace(&workspace).persist(&trace).unwrap();
+
+        let follow_up =
+            latest_workspace_compatibility_follow_up(&workspace, None).unwrap().unwrap();
+        assert_eq!(follow_up.trace_ref, trace_path.to_string_lossy());
+        assert!(follow_up.routing_summary.starts_with("routing: compatibility"));
+        assert_eq!(
+            follow_up.next_command,
+            format!("synod inspect --workspace {}", workspace.display())
+        );
+        assert!(
+            latest_workspace_compatibility_follow_up(&workspace, Some(&follow_up.trace_ref))
+                .unwrap()
+                .is_none()
+        );
+
+        let execution_workspace = write_execution_workspace("synod-cli-session-review-headline");
+        let request = build_task_request(
+            &execution_workspace,
+            "Fix the failing add test".to_string(),
+            "session-review".to_string(),
+            None,
+            None,
+        )
+        .unwrap();
+        let plan =
+            build_fixture_plan_for_goal(&execution_workspace, None, "Fix the failing add test")
+                .unwrap();
+        let mut task = Task::new("task-review", &request, plan).unwrap();
+        task.context.state.insert(
+            "latest_review_participants".to_string(),
+            json!([
+                {"reviewer_id": "safety", "status": "pending"},
+                {"reviewer_id": "maintainability"}
+            ]),
+        );
+        assert_eq!(
+            review_headline_from_task(&task),
+            Some("participants: safety pending, maintainability unknown".to_string())
+        );
+
+        assert_eq!(requested_governance_runtime_text(GovernanceRuntimeKind::Local), "local");
+        assert_eq!(requested_governance_runtime_text(GovernanceRuntimeKind::Canon), "canon");
+    }
+
+    #[test]
+    fn status_view_falls_back_to_test_decision_validation_and_evidence_basis() {
+        let workspace = temp_workspace("synod-cli-session-selector-fallback");
+        let mut decision = Decision::new(
+            DecisionType::Test,
+            "test suite",
+            "run bounded validation",
+            "collect validation evidence",
+            vec![
+                EvidenceRef::trace("trace-1"),
+                EvidenceRef::file("src/lib.rs"),
+                EvidenceRef::canon(".canon/policy.json"),
+                EvidenceRef::tool_output("decision-0"),
+            ],
+        );
+        decision.mark_dispatched().unwrap();
+        decision
+            .mark_failed(crate::domain::tool_result::ToolResult::new(
+                "tester",
+                "tester test suite",
+                false,
+                1,
+            ))
+            .unwrap();
+
+        let record = crate::domain::session::ActiveSessionRecord {
+            session_id: "session-selector-fallback".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: Some("Fix the failing add test".to_string()),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: vec![decision],
+            active_flow_policy: None,
+            latest_status: SessionStatus::Failed,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 1,
+            updated_at: 1,
+        };
+
+        let view = build_status_view_with_follow_up(
+            &record,
+            Some("synod inspect".to_string()),
+            "inspect the latest decision",
+            None,
+        );
+
+        assert_eq!(view.latest_validation_status.as_deref(), Some("failed"));
+        let headline = view.latest_selection_headline.as_deref().unwrap();
+        assert!(headline.contains("trace:trace-1"), "{headline}");
+        assert!(headline.contains("file:src/lib.rs"), "{headline}");
+        assert!(headline.contains("canon:.canon/policy.json"), "{headline}");
+        assert!(headline.contains("tool_output:decision-0"), "{headline}");
+        assert_eq!(view.latest_candidate_family.as_deref(), Some("test"));
+    }
+
+    #[test]
+    fn suggested_next_command_and_error_helpers_cover_context_and_flow_follow_up() {
+        let goal_plan_with_context = GoalPlan::new(
+            "Fix the failing add test",
+            vec![PlannedTask {
+                task_id: "planned-task-1".to_string(),
+                description: "Fix arithmetic".to_string(),
+                target: "src/lib.rs".to_string(),
+                expected_outcome: Some("tests pass".to_string()),
+                decision_type_hint: None,
+            }],
+        )
+        .unwrap()
+        .with_context_pack(ContextPack {
+            pack_id: "cp-1".to_string(),
+            summary: "bounded context from src/lib.rs".to_string(),
+            credibility: ContextPackCredibility::Insufficient,
+            inputs: vec![ContextInput {
+                kind: ContextInputKind::WorkspaceFile,
+                reference: "src/lib.rs".to_string(),
+                rationale: "closest source file".to_string(),
+                source: "workspace_scan".to_string(),
+                primary: true,
+            }],
+            selected_targets: vec!["src/lib.rs".to_string()],
+            staleness_reason: None,
+        });
+
+        let base_record = crate::domain::session::ActiveSessionRecord {
+            session_id: "session-next".to_string(),
+            workspace_ref: "/tmp/workspace".to_string(),
+            goal: Some("Fix the failing add test".to_string()),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: Some(goal_plan_with_context.clone()),
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::GoalCaptured,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 1,
+            updated_at: 1,
+        };
+        assert_eq!(
+            suggested_next_command(&base_record),
+            Some("synod capture --goal <narrower goal>".to_string())
+        );
+
+        let mut pending_flow_plan = GoalPlan::new(
+            "Fix the failing add test",
+            vec![PlannedTask {
+                task_id: "planned-task-2".to_string(),
+                description: "Fix arithmetic".to_string(),
+                target: "src/lib.rs".to_string(),
+                expected_outcome: Some("tests pass".to_string()),
+                decision_type_hint: None,
+            }],
+        )
+        .unwrap();
+        pending_flow_plan.flow = Some(InferredFlow {
+            flow_name: "bug-fix".to_string(),
+            confidence_reason: "goal contains fix".to_string(),
+            confirmed: false,
+        });
+        pending_flow_plan.confirm().unwrap();
+
+        let mut pending_flow_record = base_record.clone();
+        pending_flow_record.goal_plan = Some(pending_flow_plan);
+        pending_flow_record.latest_status = SessionStatus::Planned;
+        assert_eq!(
+            suggested_next_command(&pending_flow_record),
+            Some("synod plan --flow bug-fix".to_string())
+        );
+
+        let mut ready_run_record = pending_flow_record.clone();
+        ready_run_record.goal_plan.as_mut().unwrap().flow.as_mut().unwrap().confirmed = true;
+        assert_eq!(suggested_next_command(&ready_run_record), Some("synod run".to_string()));
+
+        let clarification_error = SessionCommandError::ClarificationRequired {
+            headline: "bounded context required before planning".to_string(),
+            prompt: "pick one bounded outcome".to_string(),
+        };
+        let clarification_text = render_error("plan", &clarification_error);
+        assert!(
+            clarification_text.contains("synod capture --goal <narrower goal>"),
+            "{clarification_text}"
+        );
+
+        let cluster_error = SessionCommandError::MissingClusterConfig {
+            workspace: PathBuf::from("/tmp/workspace"),
+            command_name: "status",
+        };
+        let cluster_text = render_error("status", &cluster_error);
+        assert!(
+            cluster_text.contains("synod cluster init --workspace <primary>"),
+            "{cluster_text}"
+        );
     }
 }

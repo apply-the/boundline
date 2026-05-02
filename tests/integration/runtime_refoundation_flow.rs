@@ -78,6 +78,7 @@ fn inspect_surfaces_route_goal_plan_and_decision_timeline_for_native_run() {
     assert!(inspect_text.contains("execution_condition: terminal -"), "{inspect_text}");
     assert!(inspect_text.contains("goal_plan_summary:"), "{inspect_text}");
     assert!(inspect_text.contains("decision_timeline:"), "{inspect_text}");
+    assert!(inspect_text.contains("selector:"), "{inspect_text}");
     assert!(
         inspect_text.contains("rationale: Fix: fix the failing add test")
             || inspect_text.contains("rationale: Analyze workspace for: fix the failing add test"),
@@ -111,6 +112,8 @@ fn status_after_native_run_surfaces_latest_persisted_decision_state() {
     assert!(status_text.contains("execution_path: native_goal_plan"), "{status_text}");
     assert!(status_text.contains("latest_decision_status: verified"), "{status_text}");
     assert!(status_text.contains("latest_decision_target:"), "{status_text}");
+    assert!(status_text.contains("latest_selection_headline: selector "), "{status_text}");
+    assert!(status_text.contains("latest_selection_reason:"), "{status_text}");
     assert!(status_text.contains("next_command: synod inspect"), "{status_text}");
 }
 

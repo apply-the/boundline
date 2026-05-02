@@ -55,6 +55,24 @@ impl FollowThroughProjection {
             };
         }
 
+        if view.context_credibility.as_deref().is_some_and(|credibility| credibility != "credible")
+        {
+            return Self {
+                guidance: Some(view.context_summary.clone().unwrap_or_else(|| {
+                    "bounded planning context is not credible enough to continue".to_string()
+                })),
+                evidence_source: Some("session:context_pack".to_string()),
+                next_action: view
+                    .next_command
+                    .clone()
+                    .or_else(|| Some("synod capture --goal <narrower goal>".to_string())),
+                stop_reason: view
+                    .context_staleness_reason
+                    .clone()
+                    .or_else(|| view.context_credibility.clone()),
+            };
+        }
+
         if let Some(governance_next_action) = &view.governance_next_action {
             return Self {
                 guidance: Some(format!(
@@ -125,6 +143,24 @@ impl FollowThroughProjection {
     }
 
     pub fn from_trace_summary(summary: &TraceSummaryView, next_command: Option<&str>) -> Self {
+        if summary
+            .context_credibility
+            .as_deref()
+            .is_some_and(|credibility| credibility != "credible")
+        {
+            return Self {
+                guidance: Some(summary.context_summary.clone().unwrap_or_else(|| {
+                    "authoritative trace recorded a non-credible bounded context".to_string()
+                })),
+                evidence_source: Some("trace:context_pack".to_string()),
+                next_action: next_command.map(str::to_string),
+                stop_reason: summary
+                    .context_staleness_reason
+                    .clone()
+                    .or_else(|| summary.context_credibility.clone()),
+            };
+        }
+
         if let Some(governance_next_action) = &summary.governance_next_action {
             return Self {
                 guidance: Some(format!(
@@ -186,7 +222,13 @@ impl FollowThroughProjection {
 #[cfg(test)]
 mod tests {
     use super::FollowThroughProjection;
-    use crate::domain::session::{SessionStatus, SessionStatusView};
+    use crate::domain::limits::TerminalCondition;
+    use crate::domain::session::{
+        CompatibilityFollowUpMode, CompatibilityFollowUpView, ContinuityAuthority, SessionStatus,
+        SessionStatusView,
+    };
+    use crate::domain::task::{TaskStatus, TerminalReason};
+    use crate::domain::trace::TraceSummaryView;
 
     #[test]
     fn derives_recovery_guidance_from_session_view() {
@@ -201,6 +243,11 @@ mod tests {
             authored_input_summary: None,
             authored_input_sources: None,
             authored_input_deduplicated_sources: None,
+            context_summary: None,
+            context_credibility: None,
+            context_primary_inputs: None,
+            context_provenance: None,
+            context_staleness_reason: None,
             clarification_headline: None,
             clarification_prompt: None,
             clarification_missing_fields: None,
@@ -264,5 +311,228 @@ mod tests {
         );
         assert_eq!(projection.evidence_source, Some("session:recovery".to_string()));
         assert_eq!(projection.next_action, Some("synod step".to_string()));
+    }
+
+    #[test]
+    fn follow_through_projection_reports_empty_state_and_projection_lines() {
+        let empty = FollowThroughProjection::default();
+        assert!(empty.is_empty());
+        assert!(empty.projection_lines().is_empty());
+
+        let projection = FollowThroughProjection {
+            guidance: Some("inspect the authoritative trace".to_string()),
+            evidence_source: Some("trace:context_pack".to_string()),
+            next_action: Some("synod inspect".to_string()),
+            stop_reason: Some("stale".to_string()),
+        };
+
+        assert!(!projection.is_empty());
+        assert_eq!(
+            projection.projection_lines(),
+            vec![
+                "follow_through_guidance: inspect the authoritative trace".to_string(),
+                "follow_through_evidence_source: trace:context_pack".to_string(),
+                "follow_through_next_action: synod inspect".to_string(),
+                "follow_through_stop_reason: stale".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn follow_through_projection_prefers_compatibility_and_context_follow_up() {
+        let compatibility_projection = FollowThroughProjection::from_session_view(
+            &SessionStatusView {
+                continuity_authority: Some(ContinuityAuthority::CompatibilityTrace),
+                compatibility_follow_up: Some(CompatibilityFollowUpView {
+                    follow_up_mode: CompatibilityFollowUpMode::InspectOnly,
+                    trace_ref: "/tmp/workspace/.synod/traces/compat.json".to_string(),
+                    routing_summary: "routing: compatibility (execution_profile)".to_string(),
+                    execution_condition:
+                        "execution_condition: blocked - inspect the authoritative trace".to_string(),
+                    terminal_status: TaskStatus::Failed,
+                    terminal_reason: "compatibility run failed".to_string(),
+                    next_command: "synod inspect --workspace /tmp/workspace".to_string(),
+                }),
+                ..SessionStatusView::default()
+            },
+        );
+
+        assert_eq!(
+            compatibility_projection.guidance,
+            Some(
+                "compatibility follow-up remains inspect_only and should be inspected through the authoritative trace"
+                    .to_string(),
+            )
+        );
+        assert_eq!(
+            compatibility_projection.evidence_source,
+            Some("trace:compatibility_follow_up".to_string())
+        );
+
+        let context_projection = FollowThroughProjection::from_session_view(&SessionStatusView {
+            context_summary: None,
+            context_credibility: Some("stale".to_string()),
+            context_staleness_reason: Some("trace snapshot is stale".to_string()),
+            next_command: None,
+            ..SessionStatusView::default()
+        });
+
+        assert_eq!(
+            context_projection.guidance,
+            Some("bounded planning context is not credible enough to continue".to_string())
+        );
+        assert_eq!(context_projection.evidence_source, Some("session:context_pack".to_string()));
+        assert_eq!(
+            context_projection.next_action,
+            Some("synod capture --goal <narrower goal>".to_string())
+        );
+        assert_eq!(context_projection.stop_reason, Some("trace snapshot is stale".to_string()));
+    }
+
+    #[test]
+    fn follow_through_projection_covers_session_trace_and_lifecycle_branches() {
+        let governance_projection =
+            FollowThroughProjection::from_session_view(&SessionStatusView {
+                governance_next_action: Some(
+                    "wait for approval and rerun synod status".to_string(),
+                ),
+                next_command: Some("synod status".to_string()),
+                ..SessionStatusView::default()
+            });
+        assert_eq!(governance_projection.evidence_source, Some("session:governance".to_string()));
+
+        let exhaustion_projection =
+            FollowThroughProjection::from_session_view(&SessionStatusView {
+                latest_exhaustion_reason: Some("retry limits exhausted".to_string()),
+                next_command: Some("synod inspect".to_string()),
+                ..SessionStatusView::default()
+            });
+        assert_eq!(exhaustion_projection.stop_reason, Some("retry limits exhausted".to_string()));
+
+        let selection_projection = FollowThroughProjection::from_session_view(&SessionStatusView {
+            latest_selection_reason: Some(
+                "selected src/lib.rs based on failing test evidence".to_string(),
+            ),
+            next_command: Some("synod step".to_string()),
+            ..SessionStatusView::default()
+        });
+        assert_eq!(
+            selection_projection.guidance,
+            Some(
+                "recovery evidence currently favors this follow-up: selected src/lib.rs based on failing test evidence"
+                    .to_string(),
+            )
+        );
+
+        let decision_projection = FollowThroughProjection::from_session_view(&SessionStatusView {
+            latest_decision_status: Some("failed".to_string()),
+            latest_decision_target: Some("src/lib.rs".to_string()),
+            next_command: Some("synod step".to_string()),
+            ..SessionStatusView::default()
+        });
+        assert_eq!(
+            decision_projection.guidance,
+            Some(
+                "latest decision failed for src/lib.rs is guiding the bounded follow-up"
+                    .to_string(),
+            )
+        );
+
+        let lifecycle_projection = FollowThroughProjection::from_session_view(&SessionStatusView {
+            next_command: Some("synod step".to_string()),
+            ..SessionStatusView::default()
+        });
+        assert_eq!(lifecycle_projection.evidence_source, Some("session:lifecycle".to_string()));
+    }
+
+    #[test]
+    fn follow_through_projection_covers_trace_summary_branches() {
+        let context_projection = FollowThroughProjection::from_trace_summary(
+            &TraceSummaryView {
+                context_summary: None,
+                context_credibility: Some("insufficient".to_string()),
+                context_staleness_reason: None,
+                terminal_status: TaskStatus::Failed,
+                terminal_reason: TerminalReason::new(
+                    TerminalCondition::UnrecoverableError,
+                    "trace failed",
+                    None,
+                ),
+                ..TraceSummaryView::default()
+            },
+            Some("synod capture --goal <narrower goal>"),
+        );
+        assert_eq!(
+            context_projection.guidance,
+            Some("authoritative trace recorded a non-credible bounded context".to_string())
+        );
+        assert_eq!(context_projection.stop_reason, Some("insufficient".to_string()));
+
+        let governance_projection = FollowThroughProjection::from_trace_summary(
+            &TraceSummaryView {
+                governance_next_action: Some(
+                    "resolve the governance blocker, then rerun synod step".to_string(),
+                ),
+                ..TraceSummaryView::default()
+            },
+            Some("synod step"),
+        );
+        assert_eq!(governance_projection.evidence_source, Some("trace:governance".to_string()));
+
+        let decision_projection = FollowThroughProjection::from_trace_summary(
+            &TraceSummaryView {
+                decision_timeline: vec!["decision_status: decision-1 verified".to_string()],
+                ..TraceSummaryView::default()
+            },
+            Some("synod step"),
+        );
+        assert_eq!(
+            decision_projection.guidance,
+            Some("decision_status: decision-1 verified".to_string())
+        );
+
+        let failure_projection = FollowThroughProjection::from_trace_summary(
+            &TraceSummaryView {
+                failure_evidence: vec!["decision-1 src/lib.rs: test failed".to_string()],
+                terminal_status: TaskStatus::Failed,
+                terminal_reason: TerminalReason::new(
+                    TerminalCondition::UnrecoverableError,
+                    "trace failed",
+                    None,
+                ),
+                ..TraceSummaryView::default()
+            },
+            Some("synod inspect"),
+        );
+        assert_eq!(failure_projection.stop_reason, Some("trace failed".to_string()));
+
+        let lifecycle_projection = FollowThroughProjection::from_trace_summary(
+            &TraceSummaryView::default(),
+            Some("synod inspect"),
+        );
+        assert_eq!(lifecycle_projection.evidence_source, Some("trace:lifecycle".to_string()));
+    }
+
+    #[test]
+    fn follow_through_projection_builds_from_compatibility_follow_up() {
+        let projection =
+            FollowThroughProjection::from_compatibility_follow_up(&CompatibilityFollowUpView {
+                follow_up_mode: CompatibilityFollowUpMode::Resumable,
+                trace_ref: "/tmp/workspace/.synod/traces/compat.json".to_string(),
+                routing_summary: "routing: compatibility (execution_profile)".to_string(),
+                execution_condition: "execution_condition: waiting - inspect trace".to_string(),
+                terminal_status: TaskStatus::Failed,
+                terminal_reason: "compatibility trace failed".to_string(),
+                next_command: "synod inspect --workspace /tmp/workspace".to_string(),
+            });
+
+        assert_eq!(
+            projection.guidance,
+            Some(
+                "compatibility follow-up remains resumable and should be inspected through the authoritative trace"
+                    .to_string(),
+            )
+        );
+        assert_eq!(projection.evidence_source, Some("trace:compatibility_follow_up".to_string()));
     }
 }

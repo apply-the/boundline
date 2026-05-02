@@ -7,7 +7,7 @@ use serde_json::json;
 use synod::adapters::agent::FnAgentAdapter;
 use synod::adapters::tool::FnToolAdapter;
 use synod::adapters::trace_store::FileTraceStore;
-use synod::domain::decision::{DecisionStatus, DecisionType};
+use synod::domain::decision::{ActionSelector, DecisionStatus, DecisionType};
 use synod::domain::flow_policy::FlowPolicy;
 use synod::domain::goal_plan::{GoalPlan, PlannedTask};
 use synod::domain::step::{ErrorInfo, Recoverability, StepExecutionResult};
@@ -19,6 +19,46 @@ fn temp_workspace(prefix: &str) -> PathBuf {
     let ws = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
     fs::create_dir_all(&ws).unwrap();
     ws
+}
+
+fn collect_workspace_files(
+    root: &std::path::Path,
+    current: &std::path::Path,
+    files: &mut Vec<String>,
+) {
+    if files.len() >= 16 {
+        return;
+    }
+
+    let Ok(entries) = fs::read_dir(current) else {
+        return;
+    };
+
+    for entry in entries.flatten() {
+        if files.len() >= 16 {
+            break;
+        }
+
+        let path = entry.path();
+        let name = entry.file_name();
+        if name.to_string_lossy().starts_with('.') {
+            continue;
+        }
+
+        if path.is_dir() {
+            if name == "target" {
+                continue;
+            }
+            collect_workspace_files(root, &path, files);
+            continue;
+        }
+
+        if path.is_file()
+            && let Ok(relative) = path.strip_prefix(root)
+        {
+            files.push(relative.to_string_lossy().replace('\\', "/"));
+        }
+    }
 }
 
 fn sample_task(id: &str, target: &str, hint: DecisionType) -> PlannedTask {
@@ -38,8 +78,33 @@ fn build_loop(workspace: &std::path::Path, max_steps: usize) -> DecisionLoop<Fil
         .register(
             "analyzer",
             FnAgentAdapter::new(move |request| {
+                let selector = request
+                    .input
+                    .get("selector")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("read");
                 let target =
                     request.input.get("target").and_then(|value| value.as_str()).unwrap_or("");
+                if selector == "search" {
+                    let mut files = Vec::new();
+                    collect_workspace_files(&analyzer_workspace, &analyzer_workspace, &mut files);
+                    return if files.is_empty() {
+                        StepExecutionResult::failure(
+                            ErrorInfo::new(
+                                "workspace_search_failed",
+                                format!("failed to find credible workspace evidence for {target}"),
+                            ),
+                            Recoverability::ReplanRequired,
+                        )
+                    } else {
+                        StepExecutionResult::success(json!({
+                            "stdout": files.join("\n"),
+                            "target": target,
+                            "matches": files,
+                        }))
+                    };
+                }
+
                 match fs::read_to_string(analyzer_workspace.join(target)) {
                     Ok(contents) => {
                         StepExecutionResult::success(json!({"stdout": contents, "target": target}))
@@ -93,6 +158,19 @@ fn build_loop(workspace: &std::path::Path, max_steps: usize) -> DecisionLoop<Fil
             "replanner",
             FnToolAdapter::new(move |_request| {
                 StepExecutionResult::success(json!({"stdout": "replanned"}))
+            }),
+        )
+        .unwrap();
+    tools
+        .register(
+            "asker",
+            FnToolAdapter::new(move |request| {
+                let prompt = request
+                    .input
+                    .get("expected_outcome")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("clarify the next bounded action before continuing");
+                StepExecutionResult::success(json!({"stdout": prompt, "prompt": prompt}))
             }),
         )
         .unwrap();
@@ -194,4 +272,24 @@ fn decision_loop_terminal_state_is_explicit() {
     assert_eq!(terminal, LoopTerminal::Success);
     assert_eq!(decisions.len(), 1);
     assert_eq!(decisions[0].status, DecisionStatus::Verified);
+}
+
+#[test]
+fn decision_loop_escalates_missing_analysis_targets_from_search_to_ask() {
+    let workspace = temp_workspace("dl-contract-selector-recovery");
+
+    let plan = GoalPlan::new(
+        "Analyze a missing file",
+        vec![sample_task("t1", "src/missing.rs", DecisionType::Analyze)],
+    )
+    .unwrap();
+
+    let dl = build_loop(&workspace, 5);
+    let (terminal, decisions, _trace) =
+        dl.run(&plan, None, &workspace.to_string_lossy(), "sess-selector-recovery").unwrap();
+
+    assert!(matches!(terminal, LoopTerminal::NoActionableState(_)));
+    assert_eq!(decisions.len(), 2);
+    assert_eq!(decisions[0].selector_kind(), ActionSelector::Search);
+    assert_eq!(decisions[1].selector_kind(), ActionSelector::Ask);
 }

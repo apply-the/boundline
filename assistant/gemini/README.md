@@ -2,7 +2,7 @@
 
 This folder documents Synod usage from Gemini CLI surfaces.
 
-Gemini remains CLI-first in `0.32.0`, but it follows the same primary Synod
+Gemini remains CLI-first in `0.34.0`, but it follows the same primary Synod
 workflow surface used by the other assistants.
 
 compatibility remains an explicit subordinate route.
@@ -32,4 +32,8 @@ native execution now fails explicitly instead of silently falling back to a
 different assistant family. Treat workflow list, run, status, resume, and
 inspect as the primary Synod workflow surface in this release; compatibility
 remains an explicit subordinate route when the operator intentionally chooses
-it.
+it. When native planning or follow-through surfaces `context_summary`,
+`context_credibility`, `context_primary_inputs`, `context_provenance`, or
+`context_staleness_reason`, preserve those values exactly instead of
+paraphrasing them away. Do the same for selector-driven `latest_selection_headline`,
+`latest_selection_reason`, and inspect `selector:` lines when they appear.

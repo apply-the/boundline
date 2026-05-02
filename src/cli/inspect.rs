@@ -131,6 +131,11 @@ pub fn summarize_trace(
     let mut routing_summary: Option<String> = None;
     let mut routing_projection = RoutingDecisionProjection::default();
     let mut goal_plan_summary: Option<String> = None;
+    let mut context_summary: Option<String> = None;
+    let mut context_credibility: Option<String> = None;
+    let mut context_primary_inputs: Vec<String> = Vec::new();
+    let mut context_provenance: Vec<String> = Vec::new();
+    let mut context_staleness_reason: Option<String> = None;
     let mut decision_timeline: Vec<String> = Vec::new();
     let mut failure_evidence: Vec<String> = Vec::new();
     let mut adaptive_evidence: Vec<String> = Vec::new();
@@ -265,6 +270,55 @@ pub fn summarize_trace(
                         .payload
                         .get("input")
                         .and_then(|input| input.get("negotiation_acceptance_boundary"))
+                        .and_then(|value| value.as_str().map(str::to_string));
+                }
+                if context_summary.is_none() {
+                    context_summary = event
+                        .payload
+                        .get("input")
+                        .and_then(|input| input.get("context_summary"))
+                        .and_then(|value| value.as_str().map(str::to_string));
+                }
+                if context_credibility.is_none() {
+                    context_credibility = event
+                        .payload
+                        .get("input")
+                        .and_then(|input| input.get("context_credibility"))
+                        .and_then(|value| value.as_str().map(str::to_string));
+                }
+                if context_primary_inputs.is_empty() {
+                    context_primary_inputs = event
+                        .payload
+                        .get("input")
+                        .and_then(|input| input.get("context_primary_inputs"))
+                        .and_then(|value| value.as_array())
+                        .map(|items| {
+                            items
+                                .iter()
+                                .filter_map(|item| item.as_str().map(str::to_string))
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default();
+                }
+                if context_provenance.is_empty() {
+                    context_provenance = event
+                        .payload
+                        .get("input")
+                        .and_then(|input| input.get("context_provenance"))
+                        .and_then(|value| value.as_array())
+                        .map(|items| {
+                            items
+                                .iter()
+                                .filter_map(|item| item.as_str().map(str::to_string))
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default();
+                }
+                if context_staleness_reason.is_none() {
+                    context_staleness_reason = event
+                        .payload
+                        .get("input")
+                        .and_then(|input| input.get("context_staleness_reason"))
                         .and_then(|value| value.as_str().map(str::to_string));
                 }
             }
@@ -466,6 +520,50 @@ pub fn summarize_trace(
                         .get("negotiation_acceptance_boundary")
                         .and_then(|value| value.as_str().map(str::to_string));
                 }
+                if context_summary.is_none() {
+                    context_summary = event
+                        .payload
+                        .get("context_summary")
+                        .and_then(|value| value.as_str().map(str::to_string));
+                }
+                if context_credibility.is_none() {
+                    context_credibility = event
+                        .payload
+                        .get("context_credibility")
+                        .and_then(|value| value.as_str().map(str::to_string));
+                }
+                if context_primary_inputs.is_empty() {
+                    context_primary_inputs = event
+                        .payload
+                        .get("context_primary_inputs")
+                        .and_then(|value| value.as_array())
+                        .map(|items| {
+                            items
+                                .iter()
+                                .filter_map(|item| item.as_str().map(str::to_string))
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default();
+                }
+                if context_provenance.is_empty() {
+                    context_provenance = event
+                        .payload
+                        .get("context_provenance")
+                        .and_then(|value| value.as_array())
+                        .map(|items| {
+                            items
+                                .iter()
+                                .filter_map(|item| item.as_str().map(str::to_string))
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default();
+                }
+                if context_staleness_reason.is_none() {
+                    context_staleness_reason = event
+                        .payload
+                        .get("context_staleness_reason")
+                        .and_then(|value| value.as_str().map(str::to_string));
+                }
             }
             TraceEventType::FlowInferred => {
                 if let Some(flow_name) =
@@ -544,6 +642,11 @@ pub fn summarize_trace(
         authored_input_summary,
         authored_input_sources,
         authored_input_deduplicated_sources,
+        context_summary,
+        context_credibility,
+        context_primary_inputs,
+        context_provenance,
+        context_staleness_reason,
         clarification_headline,
         clarification_prompt,
         clarification_missing_fields,
@@ -577,12 +680,23 @@ fn decision_timeline_lines(
 
     match event_type {
         TraceEventType::DecisionCreated => {
+            let selector = payload.get("selector").and_then(|value| value.as_str());
             let decision_type =
                 payload.get("decision_type").and_then(|value| value.as_str()).unwrap_or("unknown");
             let target =
                 payload.get("target").and_then(|value| value.as_str()).unwrap_or("unknown");
-            let mut lines =
-                vec![format!("decision: {decision_id} {decision_type} -> {target} [{status}]")];
+            let mut lines = vec![match selector {
+                Some(selector) => {
+                    format!(
+                        "decision: {decision_id} {selector} ({decision_type}) -> {target} [{status}]"
+                    )
+                }
+                None => format!("decision: {decision_id} {decision_type} -> {target} [{status}]"),
+            }];
+
+            if let Some(selector) = selector {
+                lines.push(format!("selector: {selector}"));
+            }
 
             if let Some(rationale) = payload.get("rationale").and_then(|value| value.as_str()) {
                 lines.push(format!("rationale: {rationale}"));
@@ -591,6 +705,7 @@ fn decision_timeline_lines(
                 payload.get("expected_outcome").and_then(|value| value.as_str())
             {
                 lines.push(format!("expected_outcome: {expected_outcome}"));
+                lines.push(format!("verification_intent: {expected_outcome}"));
             }
             if let Some(inputs) = payload.get("evidence_inputs").and_then(|value| value.as_array())
             {
@@ -1068,15 +1183,16 @@ pub enum TraceSummaryError {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     use serde_json::json;
     use uuid::Uuid;
 
     use super::{
-        InspectCommandError, TraceResolutionTarget, TraceSummaryError, corrected_command,
-        failure_headline, inspection_target_for, render_error, resolve_session_trace_ref,
-        success_headline, summarize_trace,
+        InspectCommandError, TraceResolutionTarget, TraceSummaryError, adaptive_evidence_lines,
+        corrected_command, failure_headline, governance_timeline_line, inspection_target_for,
+        parse_step_kind, render_error, resolve_session_trace_ref, resolve_trace_path,
+        review_timeline_line, success_headline, summarize_trace,
     };
     use crate::adapters::session_store::SessionStoreError;
     use crate::domain::limits::TerminalCondition;
@@ -1345,6 +1461,228 @@ mod tests {
         assert_eq!(
             summary.governance_next_action.as_deref(),
             Some("resolve the governance blocker, then rerun synod step")
+        );
+    }
+
+    #[test]
+    fn summarize_trace_collects_context_and_requested_governance_projection() {
+        let mut trace = terminal_trace();
+        trace.record_event(
+            TraceEventType::TaskStarted,
+            None,
+            0,
+            json!({
+                "input": {
+                    "authored_input_summary": "Need bounded context evidence",
+                    "authored_input_sources": ["brief.md"],
+                    "authored_input_deduplicated_sources": ["brief.md"],
+                    "clarification_headline": "clarification required: narrow the goal",
+                    "clarification_prompt": "pick one bounded outcome",
+                    "clarification_missing_fields": ["bounded_outcome"],
+                    "requested_governance_runtime": "canon",
+                    "requested_governance_risk": "high",
+                    "requested_governance_zone": "payments",
+                    "requested_governance_owner": "platform",
+                    "negotiation_goal_summary": "ship the bounded context slice"
+                }
+            }),
+        );
+        trace.record_event(
+            TraceEventType::GoalPlanCreated,
+            None,
+            0,
+            json!({
+                "task_count": 1,
+                "goal": "Inspect trace",
+                "negotiation_resolution": "credible",
+                "negotiation_acceptance_boundary": "deliver the bounded outcome",
+                "context_summary": "bounded context from src/lib.rs",
+                "context_credibility": "stale",
+                "context_primary_inputs": ["src/lib.rs"],
+                "context_provenance": ["workspace_file: src/lib.rs (failing test target)"],
+                "context_staleness_reason": "trace snapshot is stale"
+            }),
+        );
+
+        let summary = summarize_trace("/tmp/trace.json", &trace).unwrap();
+
+        assert_eq!(
+            summary.authored_input_summary.as_deref(),
+            Some("Need bounded context evidence")
+        );
+        assert_eq!(summary.authored_input_sources, vec!["brief.md".to_string()]);
+        assert_eq!(summary.authored_input_deduplicated_sources, vec!["brief.md".to_string()]);
+        assert_eq!(
+            summary.clarification_headline.as_deref(),
+            Some("clarification required: narrow the goal")
+        );
+        assert_eq!(summary.clarification_prompt.as_deref(), Some("pick one bounded outcome"));
+        assert_eq!(summary.clarification_missing_fields, vec!["bounded_outcome".to_string()]);
+        assert_eq!(summary.requested_governance_runtime.as_deref(), Some("canon"));
+        assert_eq!(summary.requested_governance_risk.as_deref(), Some("high"));
+        assert_eq!(summary.requested_governance_zone.as_deref(), Some("payments"));
+        assert_eq!(summary.requested_governance_owner.as_deref(), Some("platform"));
+        assert_eq!(
+            summary.negotiation_goal_summary.as_deref(),
+            Some("ship the bounded context slice")
+        );
+        assert_eq!(summary.negotiation_resolution.as_deref(), Some("credible"));
+        assert_eq!(
+            summary.negotiation_acceptance_boundary.as_deref(),
+            Some("deliver the bounded outcome")
+        );
+        assert_eq!(summary.context_summary.as_deref(), Some("bounded context from src/lib.rs"));
+        assert_eq!(summary.context_credibility.as_deref(), Some("stale"));
+        assert_eq!(summary.context_primary_inputs, vec!["src/lib.rs".to_string()]);
+        assert_eq!(
+            summary.context_provenance,
+            vec!["workspace_file: src/lib.rs (failing test target)".to_string()]
+        );
+        assert_eq!(summary.context_staleness_reason.as_deref(), Some("trace snapshot is stale"));
+        assert!(
+            summary.routing_summary.as_deref().unwrap().contains("routing: native (goal_plan)"),
+            "{:?}",
+            summary.routing_summary
+        );
+    }
+
+    #[test]
+    fn inspect_helper_functions_cover_resolution_review_governance_and_adaptive_fallbacks() {
+        assert!(matches!(
+            resolve_trace_path(None, None, None).unwrap_err(),
+            InspectCommandError::MissingTraceReference
+        ));
+        assert_eq!(
+            resolve_trace_path(None, Some(Path::new("/tmp/workspace")), Some("/tmp/trace.json"))
+                .unwrap()
+                .0,
+            TraceResolutionTarget::SessionTraceRef
+        );
+        assert!(matches!(
+            parse_step_kind("mystery").unwrap_err(),
+            TraceSummaryError::UnknownStepKind(kind) if kind == "mystery"
+        ));
+
+        assert_eq!(
+            review_timeline_line(
+                TraceEventType::ReviewTriggerIgnored,
+                &json!({"review_trigger": "manual"}),
+            ),
+            Some("review_trigger_ignored: manual".to_string())
+        );
+        assert_eq!(
+            review_timeline_line(
+                TraceEventType::ReviewVoteResolved,
+                &json!({"vote_resolution": {"decision": "accepted"}}),
+            )
+            .unwrap(),
+            "review_vote: {\"decision\":\"accepted\"}"
+        );
+        assert_eq!(
+            review_timeline_line(
+                TraceEventType::ReviewAdjudicated,
+                &json!({
+                    "reviewer_id": "safety",
+                    "finding": {"disposition": "approve", "summary": "No blockers"}
+                }),
+            ),
+            Some("review_adjudication: reviewer safety approve: No blockers".to_string())
+        );
+        assert_eq!(
+            review_timeline_line(
+                TraceEventType::ReviewTerminalRecorded,
+                &json!({"failure_reason": "timed out"}),
+            ),
+            Some("review_reason: timed out".to_string())
+        );
+
+        assert_eq!(
+            governance_timeline_line(
+                TraceEventType::GovernanceDecisionRecorded,
+                &json!({"blocked_reason": "needs approval"}),
+            ),
+            Some("governance_decision_blocked: needs approval".to_string())
+        );
+        assert_eq!(
+            governance_timeline_line(
+                TraceEventType::GovernanceAwaitingApproval,
+                &json!({
+                    "stage_key": "bug-fix:implement",
+                    "approval_state": "requested",
+                    "run_ref": "canon-run-1",
+                    "packet_source_stage": "bug-fix:investigate",
+                    "packet_binding_reason": "upstream_stage_context"
+                }),
+            ),
+            Some(
+                "governance_awaiting_approval: bug-fix:implement (requested) [canon-run-1] from bug-fix:investigate (upstream_stage_context)"
+                    .to_string(),
+            )
+        );
+        assert_eq!(
+            governance_timeline_line(
+                TraceEventType::GovernanceCompleted,
+                &json!({"packet_ref": ".canon/runs/canon-run-1"}),
+            ),
+            Some(
+                "governance_completed: governed packet ready [.canon/runs/canon-run-1]".to_string()
+            )
+        );
+        assert_eq!(
+            governance_timeline_line(TraceEventType::GovernanceBlocked, &json!({})),
+            Some("governance_blocked: blocked".to_string())
+        );
+        assert_eq!(
+            governance_timeline_line(TraceEventType::GovernancePacketRejected, &json!({})),
+            Some("governance_packet_rejected: packet rejected".to_string())
+        );
+
+        assert_eq!(
+            adaptive_evidence_lines(&json!({
+                "output": {
+                    "selection_evidence": {
+                        "candidate_family": "source",
+                        "reason": "goal keywords matched src/lib.rs",
+                        "rejected_candidates": ["tests/red.rs"]
+                    }
+                },
+                "evidence": {
+                    "exhaustion_reason": "limits exhausted"
+                }
+            })),
+            vec![
+                "candidate_family: source".to_string(),
+                "selection_reason: goal keywords matched src/lib.rs".to_string(),
+                "rejected_candidate: tests/red.rs".to_string(),
+                "adaptive_exhaustion: limits exhausted".to_string(),
+            ]
+        );
+
+        assert_eq!(
+            success_headline(
+                &json!({
+                    "output": {
+                        "change_evidence": [{
+                            "path": "src/lib.rs",
+                            "before_excerpt": "left - right",
+                            "after_excerpt": "left + right"
+                        }]
+                    }
+                }),
+                2,
+            ),
+            "updated src/lib.rs from left - right to left + right after 2 attempt(s)"
+        );
+        assert_eq!(
+            failure_headline(
+                &json!({
+                    "evidence": {
+                        "exhaustion_reason": "limits exhausted"
+                    }
+                }),
+                3,
+            ),
+            "adaptive repair exhausted after 3 attempt(s): limits exhausted"
         );
     }
 }
