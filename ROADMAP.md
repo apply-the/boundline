@@ -65,6 +65,72 @@ governance adapter rather than reopening broad product-scope work:
   contract, introduces a new adapter schema version, or adds governed behavior
   that Synod needs for its explicitly modeled bounded stages
 
+### Next Macrofeature Line (033+)
+
+`0.32.0` closed the product-surface ambiguity. The next roadmap line should not
+decompose back into microfeatures. Future numbered specs must stay at the
+macrofeature level and each one must change Synod's operating model, not just a
+single CLI surface.
+
+Compatibility maintenance for newer Canon releases stays inside the watch above
+unless it becomes contract-breaking. It does not consume the next spec number
+by itself.
+
+#### Spec 033: Context Assembly Foundation
+
+- introduce a first-class `ContextBuilder` that assembles one bounded context
+  pack from workspace signals, authored briefs, negotiated delivery state,
+  recent traces, and reusable Canon artifacts
+- replace broad or implicit planning input with selective file, symbol, and
+  evidence retrieval that is explicit, inspectable, and reusable across the
+  loop
+- surface context-pack provenance and narrowing summaries through `plan`,
+  `run`, `status`, `next`, and `inspect`
+
+**Exit criteria**: every planned task and bounded action can point to an
+explicit context pack instead of relying on ambient workspace state.
+
+#### Spec 034: Decision-Driven Orchestrator
+
+- make `observe -> decide -> act -> verify` the controlling runtime loop rather
+  than a trace-friendly layer on top of mostly static planning
+- evolve decisions from typed audit records into explicit next-action selectors
+  such as read, search, modify, test, ask, and replan
+- keep recovery, verification, and stop conditions authoritative from decision
+  state so execution remains bounded and explainable
+
+**Exit criteria**: the next bounded action is selected by decision state backed
+by context evidence, not just by pre-shaped step order.
+
+#### Spec 035: Dynamic Planning And Flow Inference
+
+- replace keyword-first flow inference and stage-static planning with
+  `infer -> propose -> confirm` planning derived from context packs and
+  observed workspace evidence
+- allow bounded replanning to reshape targets, verification strategy, and flow
+  choice without losing operator control or acceptance-boundary visibility
+- preserve workflows as operator-facing guidance and guardrails instead of the
+  sole source of execution shape
+
+**Exit criteria**: Synod can adapt plan shape and flow choice from observed
+evidence while keeping the resulting execution path bounded and reviewable.
+
+#### Spec 036: Canon-Grounded Reasoning And Structured Memory
+
+- treat Canon packets, governed artifacts, and capability signals as live input
+  to context assembly and decision-making, not just as end-of-stage output
+- promote packet reuse, artifact invariants, and governed constraints into the
+  same bounded reasoning path used for planning and verification
+- add durable summarization and context compaction so long-running sessions can
+  carry forward the important evidence without replaying the whole workspace
+
+**Exit criteria**: Canon materially changes planning and decision selection when
+relevant, and Synod can carry forward compact structured memory across loops.
+
+No new numbered roadmap specs should be introduced before `033` through `036`
+are either delivered, explicitly dropped, or replaced at the macrofeature
+level.
+
 ### Delivered in 0.32.0
 
 - unify assistant surfaces, routing slots, workflow entry points, and model
