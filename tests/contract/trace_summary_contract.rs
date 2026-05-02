@@ -193,4 +193,12 @@ fn trace_summary_projects_route_owner_and_effective_routing_snapshot() {
         ),
         "{rendered}"
     );
+    assert!(
+        rendered.contains(
+            "follow_through_guidance: authoritative trace state currently points to `/synod-next` as the next bounded action"
+        ),
+        "{rendered}"
+    );
+    assert!(rendered.contains("follow_through_evidence_source: trace:lifecycle"), "{rendered}");
+    assert!(rendered.contains("follow_through_next_action: /synod-next"), "{rendered}");
 }

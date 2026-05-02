@@ -5,6 +5,7 @@ pub mod decision;
 pub mod execution;
 pub mod flow;
 pub mod flow_policy;
+pub mod follow_through;
 pub mod goal_plan;
 pub mod governance;
 pub mod limits;

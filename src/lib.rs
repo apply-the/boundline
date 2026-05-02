@@ -36,6 +36,7 @@ pub use domain::execution::{
     ExecutionFailureMode, ValidationRecord, WorkspaceChange, WorkspaceExecutionProfile,
 };
 pub use domain::flow::{SessionFlowState, built_in_flow, supported_flow_names};
+pub use domain::follow_through::FollowThroughProjection;
 pub use domain::governance::{
     ApprovalState, AutopilotAction, AutopilotDecisionRecord, CanonMode, CanonRuntimeConfig,
     GovernanceLifecycleState, GovernanceProfile, GovernanceProfileError, GovernanceRuntimeKind,

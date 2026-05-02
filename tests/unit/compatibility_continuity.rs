@@ -41,6 +41,16 @@ fn render_compatibility_follow_up_status_surfaces_authority_and_inspect_command(
         rendered.contains("next_command: synod inspect --workspace /tmp/workspace"),
         "{rendered}"
     );
+    assert!(
+        rendered.contains(
+            "follow_through_guidance: compatibility follow-up remains inspect_only and should be inspected through the authoritative trace"
+        ),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains("follow_through_evidence_source: trace:compatibility_follow_up"),
+        "{rendered}"
+    );
 }
 
 #[test]

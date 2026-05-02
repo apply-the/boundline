@@ -29,6 +29,10 @@ fn assistant_readme_documents_session_native_continuity_rules() {
         "effective_routing",
         "assistant_bindings",
         "assistant_runtimes",
+        "follow_through_guidance",
+        "follow_through_evidence_source",
+        "follow_through_next_action",
+        "follow_through_stop_reason",
         "Workspace-based inspect may reuse the active session's `latest_trace_ref` before falling back to the latest workspace trace.",
         "When CLI output includes `next_command`, prefer that route instead of inventing a follow-up.",
         "When `status` or `next` reports `continuity_authority: compatibility_trace` or `compatibility_follow_up: inspect_only`, route to `/synod-inspect` instead of `/synod-start`.",
@@ -78,6 +82,8 @@ fn inspect_assets_document_session_trace_reuse_and_start_recovery() {
             "authored_input_sources",
             "authored_input_deduplicated_sources",
             "governance_next_action",
+            "follow_through_guidance",
+            "follow_through_evidence_source",
             "corrected_command",
         ] {
             assert!(content.contains(snippet), "{path} missing {snippet}");

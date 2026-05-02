@@ -114,7 +114,7 @@ explicit compatibility path in this release.
 
 If you change how `status`, `next`, or `inspect` choose the authoritative follow-up state, keep the docs explicit about `continuity_authority`, inspect-only compatibility follow-up, and when `synod start` is or is not actually required.
 
-If you change how `run`, `status`, `next`, or `inspect` align route-summary wording, keep the docs explicit about `route_owner`, any material `route_config_projection`, persisted `effective_routing`, `assistant_bindings`, and the rule that summary convergence must not hide the real owning route or any explicit unsupported-binding failure.
+If you change how `run`, `status`, `next`, or `inspect` align route-summary wording, keep the docs explicit about `route_owner`, any material `route_config_projection`, persisted `effective_routing`, `assistant_bindings`, `follow_through_guidance`, `follow_through_evidence_source`, and the rule that summary convergence must not hide the real owning route, continuity authority, or any explicit unsupported-binding failure.
 
 If you change negotiated capture, plan gating, or acceptance-boundary projection, keep the docs explicit about `negotiation_goal_summary`, `negotiation_resolution`, `negotiation_acceptance_boundary`, and whether the follow-up story comes from the native goal-plan route or an explicit compatibility trace.
 
