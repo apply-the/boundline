@@ -144,6 +144,35 @@ pub fn render_goal_plan_flow_state(flow_state: &GoalPlanFlowState) -> String {
     format!("flow_state: {}", flow_state.summary_text())
 }
 
+fn push_context_projection_lines(
+    lines: &mut Vec<String>,
+    context_summary: Option<&str>,
+    context_credibility: Option<&str>,
+    context_primary_inputs: &[String],
+    context_provenance: &[String],
+    context_staleness_reason: Option<&str>,
+) {
+    if let Some(context_summary) = context_summary {
+        lines.push(format!("context_summary: {context_summary}"));
+    }
+
+    if let Some(context_credibility) = context_credibility {
+        lines.push(format!("context_credibility: {context_credibility}"));
+    }
+
+    if !context_primary_inputs.is_empty() {
+        lines.push(format!("context_primary_inputs: {}", context_primary_inputs.join(", ")));
+    }
+
+    if !context_provenance.is_empty() {
+        lines.push(format!("context_provenance: {}", context_provenance.join(" | ")));
+    }
+
+    if let Some(context_staleness_reason) = context_staleness_reason {
+        lines.push(format!("context_staleness_reason: {context_staleness_reason}"));
+    }
+}
+
 pub fn render_diagnostics(report: &DiagnosticsReport) -> String {
     let readiness = if report.ready { "ready" } else { "not ready" };
     let mut lines = vec![
@@ -178,6 +207,11 @@ pub fn render_run_trace(
     let mut lines = vec![format!("{command_name}: {}", response.terminal_reason.message)];
 
     if let Some(trace) = trace {
+        let mut context_summary: Option<String> = None;
+        let mut context_credibility: Option<String> = None;
+        let mut context_primary_inputs: Vec<String> = Vec::new();
+        let mut context_provenance: Vec<String> = Vec::new();
+        let mut context_staleness_reason: Option<String> = None;
         lines.insert(0, format!("goal: {}", trace.goal));
         lines.insert(1, format!("route_owner: {}", run_trace_route_owner(trace)));
         if let Some(route_config_projection) = render_route_config_projection(
@@ -223,6 +257,45 @@ pub fn render_run_trace(
                     "negotiation_acceptance_boundary: {negotiation_acceptance_boundary}"
                 ));
             }
+            context_summary = input
+                .get("context_summary")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .or(context_summary);
+            context_credibility = input
+                .get("context_credibility")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .or(context_credibility);
+            if context_primary_inputs.is_empty() {
+                context_primary_inputs = input
+                    .get("context_primary_inputs")
+                    .and_then(Value::as_array)
+                    .map(|items| {
+                        items
+                            .iter()
+                            .filter_map(|item| item.as_str().map(str::to_string))
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+            }
+            if context_provenance.is_empty() {
+                context_provenance = input
+                    .get("context_provenance")
+                    .and_then(Value::as_array)
+                    .map(|items| {
+                        items
+                            .iter()
+                            .filter_map(|item| item.as_str().map(str::to_string))
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+            }
+            context_staleness_reason = input
+                .get("context_staleness_reason")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .or(context_staleness_reason);
         }
 
         if let Some(goal_plan_created) =
@@ -247,7 +320,60 @@ pub fn render_run_trace(
                     "negotiation_acceptance_boundary: {negotiation_acceptance_boundary}"
                 ));
             }
+            context_summary = goal_plan_created
+                .payload
+                .get("context_summary")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .or(context_summary);
+            context_credibility = goal_plan_created
+                .payload
+                .get("context_credibility")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .or(context_credibility);
+            if context_primary_inputs.is_empty() {
+                context_primary_inputs = goal_plan_created
+                    .payload
+                    .get("context_primary_inputs")
+                    .and_then(Value::as_array)
+                    .map(|items| {
+                        items
+                            .iter()
+                            .filter_map(|item| item.as_str().map(str::to_string))
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+            }
+            if context_provenance.is_empty() {
+                context_provenance = goal_plan_created
+                    .payload
+                    .get("context_provenance")
+                    .and_then(Value::as_array)
+                    .map(|items| {
+                        items
+                            .iter()
+                            .filter_map(|item| item.as_str().map(str::to_string))
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+            }
+            context_staleness_reason = goal_plan_created
+                .payload
+                .get("context_staleness_reason")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .or(context_staleness_reason);
         }
+
+        push_context_projection_lines(
+            &mut lines,
+            context_summary.as_deref(),
+            context_credibility.as_deref(),
+            &context_primary_inputs,
+            &context_provenance,
+            context_staleness_reason.as_deref(),
+        );
 
         for event in &trace.events {
             match event.event_type {
@@ -528,6 +654,15 @@ pub fn render_trace_summary(
         ));
     }
 
+    push_context_projection_lines(
+        &mut lines,
+        summary.context_summary.as_deref(),
+        summary.context_credibility.as_deref(),
+        &summary.context_primary_inputs,
+        &summary.context_provenance,
+        summary.context_staleness_reason.as_deref(),
+    );
+
     if let Some(clarification_headline) = &summary.clarification_headline {
         lines.push(format!("clarification_headline: {clarification_headline}"));
     }
@@ -723,6 +858,15 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
             authored_input_deduplicated_sources.join(", ")
         ));
     }
+
+    push_context_projection_lines(
+        &mut lines,
+        view.context_summary.as_deref(),
+        view.context_credibility.as_deref(),
+        view.context_primary_inputs.as_deref().unwrap_or(&[]),
+        view.context_provenance.as_deref().unwrap_or(&[]),
+        view.context_staleness_reason.as_deref(),
+    );
 
     if let Some(clarification_headline) = &view.clarification_headline {
         lines.push(format!("clarification_headline: {clarification_headline}"));
@@ -1884,8 +2028,12 @@ fn cluster_member_state_text(state: ClusterMemberState) -> &'static str {
 mod tests {
     use serde_json::json;
 
-    use super::{command_name, render_run_trace, render_session_status, render_trace_summary};
-    use crate::cli::DeveloperCommand;
+    use super::{
+        command_name, governance_event_line, render_run_execution_condition, render_run_trace,
+        render_session_status, render_trace_summary, review_event_line, reviewer_event_line,
+        session_execution_condition_parts, trace_execution_condition_parts,
+    };
+    use crate::cli::{ClusterSubcommand, ConfigSubcommand, DeveloperCommand};
     use crate::domain::limits::{RunLimits, TerminalCondition};
     use crate::domain::routing_decision::RoutingDecisionProjection;
     use crate::domain::session::{SessionStatus, SessionStatusView};
@@ -1959,6 +2107,27 @@ mod tests {
             (DeveloperCommand::Inspect { trace: None, workspace: None, cluster: None }, "inspect"),
             (DeveloperCommand::Status { workspace: None, cluster: None }, "status"),
             (DeveloperCommand::Next { workspace: None, cluster: None }, "next"),
+            (
+                DeveloperCommand::Init {
+                    workspace: "/tmp/workspace".into(),
+                    template: None,
+                    assistant: Vec::new(),
+                    force: false,
+                },
+                "init",
+            ),
+            (
+                DeveloperCommand::Config {
+                    command: ConfigSubcommand::Show { workspace: None, cluster: None, scope: None },
+                },
+                "config",
+            ),
+            (
+                DeveloperCommand::Cluster {
+                    command: ClusterSubcommand::Status { workspace: "/tmp/workspace".into() },
+                },
+                "cluster",
+            ),
         ];
 
         for (command, expected) in commands {
@@ -2011,6 +2180,11 @@ mod tests {
             authored_input_summary: None,
             authored_input_sources: Vec::new(),
             authored_input_deduplicated_sources: Vec::new(),
+            context_summary: None,
+            context_credibility: None,
+            context_primary_inputs: Vec::new(),
+            context_provenance: Vec::new(),
+            context_staleness_reason: None,
             clarification_headline: None,
             clarification_prompt: None,
             clarification_missing_fields: Vec::new(),
@@ -2077,6 +2251,11 @@ mod tests {
             authored_input_summary: None,
             authored_input_sources: None,
             authored_input_deduplicated_sources: None,
+            context_summary: None,
+            context_credibility: None,
+            context_primary_inputs: None,
+            context_provenance: None,
+            context_staleness_reason: None,
             clarification_headline: None,
             clarification_prompt: None,
             clarification_missing_fields: None,
@@ -2214,6 +2393,11 @@ mod tests {
             authored_input_summary: None,
             authored_input_sources: None,
             authored_input_deduplicated_sources: None,
+            context_summary: None,
+            context_credibility: None,
+            context_primary_inputs: None,
+            context_provenance: None,
+            context_staleness_reason: None,
             clarification_headline: None,
             clarification_prompt: None,
             clarification_missing_fields: None,
@@ -2323,6 +2507,11 @@ mod tests {
             authored_input_summary: None,
             authored_input_sources: Vec::new(),
             authored_input_deduplicated_sources: Vec::new(),
+            context_summary: None,
+            context_credibility: None,
+            context_primary_inputs: Vec::new(),
+            context_provenance: Vec::new(),
+            context_staleness_reason: None,
             clarification_headline: None,
             clarification_prompt: None,
             clarification_missing_fields: Vec::new(),
@@ -2361,5 +2550,332 @@ mod tests {
         );
         assert!(text.contains("review_trigger: pr_ready"), "{text}");
         assert!(text.contains("review_outcome: accepted"), "{text}");
+    }
+
+    #[test]
+    fn render_run_trace_prefers_task_started_context_and_covers_retry_fallbacks() {
+        let mut trace = ExecutionTrace::new("task-context", "session-context", "Render context");
+        trace.record_event(
+            TraceEventType::TaskStarted,
+            None,
+            0,
+            json!({
+                "input": {
+                    "context_summary": "bounded context from src/lib.rs",
+                    "context_credibility": "stale",
+                    "context_primary_inputs": ["src/lib.rs"],
+                    "context_provenance": ["workspace_file: src/lib.rs (failing test target)"],
+                    "context_staleness_reason": "trace snapshot is stale"
+                }
+            }),
+        );
+        trace.record_event(TraceEventType::RetryScheduled, None, 0, json!({}));
+        trace.record_event(TraceEventType::Replanned, None, 0, json!({}));
+        trace.record_event(
+            TraceEventType::GoalPlanCreated,
+            None,
+            0,
+            json!({"goal": "Render context"}),
+        );
+        trace.record_event(TraceEventType::FlowInferred, None, 0, json!({"flow_name": "bug-fix"}));
+
+        let response = TaskRunResponse {
+            task_id: "task-context".to_string(),
+            terminal_status: TaskStatus::Running,
+            terminal_reason: TerminalReason::new(
+                TerminalCondition::NoCredibleNextStep,
+                "waiting for approval",
+                None,
+            ),
+            final_context: TaskContext::new(
+                "session-context",
+                "/tmp/workspace",
+                RunLimits::default(),
+                serde_json::Map::new(),
+            ),
+            plan_revision: 0,
+            trace_location: "/tmp/workspace/.synod/traces/task-context.json".to_string(),
+        };
+
+        let text = render_run_trace("run", Some(&trace), &response, "/synod-next");
+
+        assert!(text.contains("context_summary: bounded context from src/lib.rs"), "{text}");
+        assert!(text.contains("context_credibility: stale"), "{text}");
+        assert!(text.contains("context_primary_inputs: src/lib.rs"), "{text}");
+        assert!(
+            text.contains("context_provenance: workspace_file: src/lib.rs (failing test target)"),
+            "{text}"
+        );
+        assert!(text.contains("context_staleness_reason: trace snapshot is stale"), "{text}");
+        assert!(text.contains("retry for unknown-step: retry scheduled"), "{text}");
+        assert!(text.contains("replan after unknown-step: replan scheduled"), "{text}");
+        assert!(text.contains("goal plan created: Render context"), "{text}");
+        assert!(text.contains("flow inferred: bug-fix"), "{text}");
+        assert!(text.contains("execution_condition: waiting - waiting for approval"), "{text}");
+    }
+
+    #[test]
+    fn render_trace_summary_covers_retry_and_replan_labels() {
+        let summary = TraceSummaryView {
+            trace_ref: "/tmp/workspace/.synod/traces/task-output.json".to_string(),
+            goal: "Render retry labels".to_string(),
+            recovery_events: vec![
+                TraceRecoveryEvent {
+                    event_type: TraceEventType::RetryScheduled,
+                    trigger: "verify failed".to_string(),
+                    related_step_id: Some("verify".to_string()),
+                },
+                TraceRecoveryEvent {
+                    event_type: TraceEventType::Replanned,
+                    trigger: "replan scheduled".to_string(),
+                    related_step_id: Some("verify".to_string()),
+                },
+            ],
+            terminal_status: TaskStatus::Failed,
+            terminal_reason: TerminalReason::new(
+                TerminalCondition::UnrecoverableError,
+                "trace failed",
+                None,
+            ),
+            ..TraceSummaryView::default()
+        };
+
+        let text = render_trace_summary(&summary, "latest-workspace-trace", "/synod-next");
+
+        assert!(text.contains("retry: verify failed"), "{text}");
+        assert!(text.contains("replan: replan scheduled"), "{text}");
+    }
+
+    #[test]
+    fn render_session_status_covers_recovery_metadata_and_exhaustion_reason() {
+        let view = SessionStatusView {
+            session_id: "session-exhausted".to_string(),
+            workspace_ref: "/tmp/workspace".to_string(),
+            latest_status: SessionStatus::Exhausted,
+            latest_changed_files: Some(vec!["src/lib.rs".to_string()]),
+            latest_workspace_slice: Some("src/lib.rs".to_string()),
+            latest_selection_headline: Some("selected src/lib.rs".to_string()),
+            latest_candidate_family: Some("source".to_string()),
+            latest_selection_reason: Some("failing test evidence".to_string()),
+            latest_rejected_candidates: Some(vec!["tests/red.rs".to_string()]),
+            latest_attempt_lineage: Some("attempt-2 retried_from attempt-1".to_string()),
+            latest_validation_status: Some("failed".to_string()),
+            latest_exhaustion_reason: Some("limits exhausted".to_string()),
+            next_command: Some("synod inspect".to_string()),
+            explanation: "session exhausted after bounded retries".to_string(),
+            ..SessionStatusView::default()
+        };
+
+        let text = render_session_status(&view);
+
+        assert!(text.contains("latest_changed_files: src/lib.rs"), "{text}");
+        assert!(text.contains("latest_workspace_slice: src/lib.rs"), "{text}");
+        assert!(text.contains("latest_selection_headline: selected src/lib.rs"), "{text}");
+        assert!(text.contains("latest_candidate_family: source"), "{text}");
+        assert!(text.contains("latest_selection_reason: failing test evidence"), "{text}");
+        assert!(text.contains("latest_rejected_candidates: tests/red.rs"), "{text}");
+        assert!(
+            text.contains("latest_attempt_lineage: attempt-2 retried_from attempt-1"),
+            "{text}"
+        );
+        assert!(text.contains("latest_validation_status: failed"), "{text}");
+        assert!(text.contains("latest_exhaustion_reason: limits exhausted"), "{text}");
+        assert!(text.contains("execution_condition: terminal - limits exhausted"), "{text}");
+    }
+
+    #[test]
+    fn output_helper_functions_cover_review_governance_and_execution_conditions() {
+        assert_eq!(
+            review_event_line(
+                TraceEventType::ReviewTriggerIgnored,
+                &json!({"review_trigger": "manual"}),
+            ),
+            Some("review_trigger_ignored: manual".to_string())
+        );
+        assert_eq!(
+            review_event_line(
+                TraceEventType::ReviewVoteResolved,
+                &json!({"vote_resolution": {"decision": "accepted"}}),
+            )
+            .unwrap(),
+            "review_vote: {\"decision\":\"accepted\"}"
+        );
+        assert_eq!(
+            review_event_line(
+                TraceEventType::ReviewAdjudicated,
+                &json!({
+                    "reviewer_id": "safety",
+                    "finding": {"disposition": "approve", "summary": "No blockers"}
+                }),
+            ),
+            Some("review_adjudication: reviewer safety approve: No blockers".to_string())
+        );
+        assert_eq!(
+            review_event_line(
+                TraceEventType::ReviewTerminalRecorded,
+                &json!({"failure_reason": "timed out"}),
+            ),
+            Some("review_reason: timed out".to_string())
+        );
+        assert_eq!(
+            reviewer_event_line(&json!({"reviewer_id": "safety", "failure_reason": "timed out"})),
+            Some("reviewer safety failed: timed out".to_string())
+        );
+
+        assert_eq!(
+            governance_event_line(
+                TraceEventType::GovernanceDecisionRecorded,
+                &json!({"blocked_reason": "needs approval"}),
+            ),
+            Some("governance_decision_blocked: needs approval".to_string())
+        );
+        assert_eq!(
+            governance_event_line(
+                TraceEventType::GovernanceAwaitingApproval,
+                &json!({
+                    "stage_key": "bug-fix:implement",
+                    "approval_state": "requested",
+                    "run_ref": "canon-run-1",
+                    "packet_source_stage": "bug-fix:investigate",
+                    "packet_binding_reason": "upstream_stage_context"
+                }),
+            ),
+            Some(
+                "governance_awaiting_approval: bug-fix:implement (requested) [canon-run-1] from bug-fix:investigate (upstream_stage_context)"
+                    .to_string(),
+            )
+        );
+        assert_eq!(
+            governance_event_line(
+                TraceEventType::GovernanceCompleted,
+                &json!({"packet_ref": ".canon/runs/canon-run-1"}),
+            ),
+            Some(
+                "governance_completed: governed packet ready [.canon/runs/canon-run-1]".to_string()
+            )
+        );
+        assert_eq!(
+            governance_event_line(TraceEventType::GovernanceBlocked, &json!({})),
+            Some("governance_blocked: blocked".to_string())
+        );
+        assert_eq!(
+            governance_event_line(TraceEventType::GovernancePacketRejected, &json!({})),
+            Some("governance_packet_rejected: packet rejected".to_string())
+        );
+
+        let review_terminal = session_execution_condition_parts(&SessionStatusView {
+            workflow_phase: Some("review".to_string()),
+            latest_status: SessionStatus::Failed,
+            ..SessionStatusView::default()
+        });
+        assert_eq!(review_terminal.0, "terminal");
+
+        let govern_blocked = session_execution_condition_parts(&SessionStatusView {
+            workflow_phase: Some("govern".to_string()),
+            latest_status: SessionStatus::Running,
+            ..SessionStatusView::default()
+        });
+        assert_eq!(govern_blocked.0, "blocked");
+
+        let govern_waiting = session_execution_condition_parts(&SessionStatusView {
+            workflow_phase: Some("govern".to_string()),
+            latest_governance_state: Some("completed".to_string()),
+            latest_status: SessionStatus::Running,
+            ..SessionStatusView::default()
+        });
+        assert_eq!(govern_waiting.0, "waiting");
+
+        let flow_confirmation = session_execution_condition_parts(&SessionStatusView {
+            execution_path: Some("native_goal_plan_pending_flow_confirmation".to_string()),
+            ..SessionStatusView::default()
+        });
+        assert_eq!(flow_confirmation.0, "blocked");
+
+        let planned_step = session_execution_condition_parts(&SessionStatusView {
+            latest_status: SessionStatus::Planned,
+            current_step_id: Some("step-1".to_string()),
+            ..SessionStatusView::default()
+        });
+        assert_eq!(planned_step.0, "waiting");
+        assert!(planned_step.1.contains("bounded task is ready"));
+
+        let waiting_trace = trace_execution_condition_parts(&TraceSummaryView {
+            governance_timeline: vec![
+                "governance_awaiting_approval: bug-fix:implement".to_string(),
+            ],
+            terminal_status: TaskStatus::Running,
+            terminal_reason: TerminalReason::new(
+                TerminalCondition::NoCredibleNextStep,
+                "still running",
+                None,
+            ),
+            ..TraceSummaryView::default()
+        });
+        assert_eq!(waiting_trace.0, "waiting");
+
+        let blocked_trace = trace_execution_condition_parts(&TraceSummaryView {
+            governance_timeline: vec!["governance_packet_rejected: blocked".to_string()],
+            terminal_status: TaskStatus::Failed,
+            terminal_reason: TerminalReason::new(
+                TerminalCondition::UnrecoverableError,
+                "trace failed",
+                None,
+            ),
+            ..TraceSummaryView::default()
+        });
+        assert_eq!(blocked_trace.0, "blocked");
+
+        let exhausted_trace = trace_execution_condition_parts(&TraceSummaryView {
+            adaptive_evidence: vec!["adaptive_exhaustion: limits exhausted".to_string()],
+            terminal_status: TaskStatus::Exhausted,
+            terminal_reason: TerminalReason::new(
+                TerminalCondition::RetryBudgetExhausted,
+                "trace exhausted",
+                None,
+            ),
+            ..TraceSummaryView::default()
+        });
+        assert_eq!(exhausted_trace.0, "terminal");
+        assert_eq!(exhausted_trace.1, "limits exhausted");
+
+        let waiting_run = render_run_execution_condition(&TaskRunResponse {
+            task_id: "task-run".to_string(),
+            terminal_status: TaskStatus::Running,
+            terminal_reason: TerminalReason::new(
+                TerminalCondition::NoCredibleNextStep,
+                "waiting for approval",
+                None,
+            ),
+            final_context: TaskContext::new(
+                "session-run",
+                "/tmp/workspace",
+                RunLimits::default(),
+                serde_json::Map::new(),
+            ),
+            plan_revision: 0,
+            trace_location: "/tmp/workspace/.synod/traces/task-run.json".to_string(),
+        });
+        assert!(waiting_run.contains("execution_condition: waiting - waiting for approval"));
+
+        let running_run = render_run_execution_condition(&TaskRunResponse {
+            task_id: "task-run".to_string(),
+            terminal_status: TaskStatus::Running,
+            terminal_reason: TerminalReason::new(
+                TerminalCondition::NoCredibleNextStep,
+                "bounded execution is in progress",
+                None,
+            ),
+            final_context: TaskContext::new(
+                "session-run",
+                "/tmp/workspace",
+                RunLimits::default(),
+                serde_json::Map::new(),
+            ),
+            plan_revision: 0,
+            trace_location: "/tmp/workspace/.synod/traces/task-run.json".to_string(),
+        });
+        assert!(
+            running_run.contains("execution_condition: running - bounded execution is in progress")
+        );
     }
 }

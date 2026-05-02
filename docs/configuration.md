@@ -1,9 +1,9 @@
-# Configuration in Synod 0.32.0
+# Configuration in Synod 0.33.0
 
-Synod `0.32.0` keeps a user-friendly setup and routing configuration surface
+Synod `0.33.0` keeps a user-friendly setup and routing configuration surface
 for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
-The `0.32.0` release keeps configuration behavior stable while preserving the
+The `0.33.0` release keeps configuration behavior stable while preserving the
 same governed routing defaults across earlier `bug-fix:investigate` work,
 later verify-stage `security-assessment`, workflow-aware projection of the
 same bounded governance state, continuity-aware read-side follow-up, the
@@ -12,6 +12,11 @@ path, and the new negotiated delivery projection. Negotiation still does not
 introduce a separate config file or routing key: capture derives acceptance
 boundaries from direct goals, authored briefs, and governance intent, while
 `run`, `status`, `next`, and `inspect` simply project the resulting packet.
+Context assembly also stays runtime-owned and inspectable rather than
+configuration-driven: planning derives one bounded context pack from workspace
+signals and persisted session evidence, while `run`, `status`, `next`, and
+`inspect` simply project the resulting context summary, credibility, primary
+inputs, provenance, and any staleness reason.
 Direct `run --goal` now boots the native session path without requiring a
 workspace execution profile, while `run --compatibility --goal ...` remains the
 manifest-backed opt-in.
@@ -34,6 +39,7 @@ ranking, explicit adaptive exhaustion, or negotiation-state overrides.
 - `synod config` manages runtime/model routing defaults for planning, verification, review, and other bounded slots
 - `synod cluster` registers bounded multi-workspace membership and aggregated inspection
 - negotiated delivery modeling stays session-owned and trace-projected; there is no new negotiation-specific key in `config.toml` or `.synod/execution.json`
+- context-pack assembly and credibility projection stay session-owned and trace-projected; there is no new context-specific key in `config.toml` or `.synod/execution.json`
 - session-native commands can use `--cluster <primary-workspace>` to keep one authoritative primary-owned session while traversing cluster members sequentially
 - continuity between explicit compatibility traces and read-side commands is projected by the CLI surfaces, not by a new config key
 - adaptive validation-guided repair remains configured in `.synod/execution.json`, not in `config.toml`

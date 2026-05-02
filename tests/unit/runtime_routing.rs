@@ -1,13 +1,23 @@
 use serde_json::json;
 
+use synod::domain::brief::{
+    AuthoredBriefBundle, AuthoredBriefResolutionState, InputSourceKind, InputSourceReference,
+};
 use synod::domain::flow_policy::FlowPolicy;
 use synod::domain::goal_plan::{GoalPlan, GoalPlanFlowMode, InferredFlow, PlannedTask};
 use synod::domain::limits::RunLimits;
+use synod::domain::negotiation::{
+    NegotiatedDeliveryPacket, NegotiationConstraint, NegotiationConstraintKind,
+    NegotiationConstraintSource, NegotiationConstraintState, NegotiationResolutionState,
+};
 use synod::domain::plan::Plan;
 use synod::domain::session::{ActiveSessionRecord, RoutingMode, RoutingSource, SessionStatus};
 use synod::domain::step::Step;
-use synod::domain::task::{Task, TaskRunRequest};
-use synod::orchestrator::session_runtime::SessionRuntime;
+use synod::domain::task::{
+    ClarificationReasonKind, ClarificationRecord, ClarificationStatus, Task, TaskRunRequest,
+};
+use synod::normalize_brief_inputs;
+use synod::orchestrator::session_runtime::{SessionRuntime, SessionRuntimeError};
 
 fn build_task(workspace_ref: &str) -> Task {
     let request = TaskRunRequest {
@@ -139,4 +149,184 @@ fn session_runtime_resolve_routing_outcome_uses_compatibility_when_only_task_exi
     assert_eq!(outcome.mode, RoutingMode::Compatibility);
     assert_eq!(outcome.source, RoutingSource::ExecutionProfile);
     assert!(outcome.reason.contains("compatibility"));
+}
+
+#[test]
+fn plan_task_blocks_when_context_pack_is_not_credible() {
+    let workspace = std::env::temp_dir().join("synod-runtime-routing-blocked-context");
+    std::fs::create_dir_all(&workspace).unwrap();
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut record = ActiveSessionRecord {
+        session_id: "session-blocked-context".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: Some("investigate a thing".to_string()),
+        authored_brief: None,
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: None,
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::GoalCaptured,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 20,
+    };
+
+    let err = runtime.plan_task(&mut record, None, false).unwrap_err();
+
+    assert!(matches!(err, SessionRuntimeError::ClarificationRequired { .. }));
+    assert_eq!(record.latest_status, SessionStatus::GoalCaptured);
+    let goal_plan = record.goal_plan.as_ref().unwrap();
+    assert_eq!(goal_plan.status, synod::domain::goal_plan::GoalPlanStatus::Draft);
+    assert_eq!(goal_plan.context_credibility().as_deref(), Some("insufficient"));
+    assert!(
+        goal_plan.context_summary().as_deref().unwrap().contains("no credible bounded context")
+    );
+    record.validate().unwrap();
+}
+
+#[test]
+fn plan_task_uses_authored_brief_as_credible_context_on_empty_workspace() {
+    let workspace = std::env::temp_dir().join("synod-runtime-routing-authored-context");
+    std::fs::create_dir_all(&workspace).unwrap();
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let brief =
+        normalize_brief_inputs(&workspace, Some("Document the runtime routing contract"), &[])
+            .unwrap();
+    let mut record = ActiveSessionRecord {
+        session_id: "session-authored-context".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: Some(brief.render_goal_text()),
+        authored_brief: Some(brief.clone()),
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: None,
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::GoalCaptured,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 20,
+    };
+
+    runtime.plan_task(&mut record, None, false).unwrap();
+
+    let goal_plan = record.goal_plan.as_ref().unwrap();
+    assert_eq!(goal_plan.context_credibility().as_deref(), Some("credible"));
+    assert!(goal_plan.context_primary_inputs().contains(&brief.summary_text()));
+    assert!(
+        goal_plan.context_provenance_lines().iter().any(|line| line.contains("authored_brief"))
+    );
+    assert_eq!(record.latest_status, SessionStatus::Planned);
+}
+
+#[test]
+fn plan_task_blocks_on_negotiation_and_authored_brief_clarifications() {
+    let workspace = std::env::temp_dir().join("synod-runtime-routing-clarifications");
+    std::fs::create_dir_all(&workspace).unwrap();
+    let runtime = SessionRuntime::for_workspace(&workspace);
+
+    let mut packet = NegotiatedDeliveryPacket::from_goal(
+        "session-negotiation-context",
+        &workspace.to_string_lossy(),
+        "ship a big thing",
+    );
+    packet.resolution_state = NegotiationResolutionState::PendingClarification;
+    packet.clarification_headline = Some("clarification required: narrow the request".to_string());
+    packet.constraints.push(NegotiationConstraint {
+        constraint_id: "constraint-1".to_string(),
+        kind: NegotiationConstraintKind::Scope,
+        summary: "choose one bounded outcome".to_string(),
+        source: NegotiationConstraintSource::Goal,
+        state: NegotiationConstraintState::Conflicting,
+        blocks_planning: true,
+    });
+
+    let mut negotiation_record = ActiveSessionRecord {
+        session_id: "session-negotiation-context".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: Some("ship a big thing".to_string()),
+        authored_brief: None,
+        negotiation_packet: Some(packet),
+        active_flow: None,
+        active_task: None,
+        goal_plan: None,
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::GoalCaptured,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 20,
+    };
+
+    let negotiation_error = runtime.plan_task(&mut negotiation_record, None, false).unwrap_err();
+    assert!(matches!(
+        negotiation_error,
+        SessionRuntimeError::ClarificationRequired { headline, prompt }
+            if headline == "clarification required: narrow the request"
+                && prompt == "choose one bounded outcome"
+    ));
+
+    let brief = AuthoredBriefBundle {
+        bundle_id: "bundle-1".to_string(),
+        primary_goal_text: Some("ship everything".to_string()),
+        sources: vec![InputSourceReference {
+            source_id: "source-1".to_string(),
+            kind: InputSourceKind::DirectText,
+            display_name: "goal".to_string(),
+            workspace_path: None,
+            precedence: 0,
+            content: "ship everything".to_string(),
+        }],
+        deduplicated_sources: Vec::new(),
+        governance_intent: None,
+        resolution_state: AuthoredBriefResolutionState::ClarificationRequired,
+        clarification: Some(ClarificationRecord {
+            clarification_id: "clar-1".to_string(),
+            reason_kind: ClarificationReasonKind::UnboundedRequest,
+            prompt: "narrow the request to one bounded outcome".to_string(),
+            missing_fields: vec!["bounded_outcome".to_string()],
+            blocking_sources: Vec::new(),
+            turn_index: 0,
+            status: ClarificationStatus::Open,
+        }),
+        derived_task_draft: None,
+        captured_at: 1,
+    };
+
+    let mut authored_brief_record = ActiveSessionRecord {
+        session_id: "session-authored-clarification".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: Some(brief.render_goal_text()),
+        authored_brief: Some(brief),
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: None,
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::GoalCaptured,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 20,
+    };
+
+    let authored_brief_error =
+        runtime.plan_task(&mut authored_brief_record, None, false).unwrap_err();
+    assert!(matches!(
+        authored_brief_error,
+        SessionRuntimeError::ClarificationRequired { headline, prompt }
+            if headline.contains("clarification required")
+                && prompt == "narrow the request to one bounded outcome"
+    ));
 }

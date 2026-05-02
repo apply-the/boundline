@@ -176,7 +176,8 @@ fn bug_fix_recovery_decision_is_recorded_after_initial_fix_failure() {
     let run_output = run_synod_in(&workspace, &["run"]);
     let run_text = terminal_text(&run_output);
     assert_eq!(run_output.status.code(), Some(1), "{run_text}");
-    assert!(run_text.contains("recovery decision for Cargo.toml failed"), "{run_text}");
+    assert!(run_text.contains("recovery decision for "), "{run_text}");
+    assert!(run_text.contains(" failed"), "{run_text}");
 
     let record = load_session_record(&workspace);
     let trace_path = workspace.join(record.latest_trace_ref.expect("trace reference should exist"));

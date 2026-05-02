@@ -28,6 +28,137 @@ pub struct WorkspaceSignals {
     pub has_tests: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContextPackCredibility {
+    Credible,
+    Insufficient,
+    Stale,
+}
+
+impl ContextPackCredibility {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Credible => "credible",
+            Self::Insufficient => "insufficient",
+            Self::Stale => "stale",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContextInputKind {
+    WorkspaceFile,
+    SymbolHint,
+    AuthoredBrief,
+    Negotiation,
+    RecentTrace,
+    CanonArtifact,
+}
+
+impl ContextInputKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::WorkspaceFile => "workspace_file",
+            Self::SymbolHint => "symbol_hint",
+            Self::AuthoredBrief => "authored_brief",
+            Self::Negotiation => "negotiation",
+            Self::RecentTrace => "recent_trace",
+            Self::CanonArtifact => "canon_artifact",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContextInput {
+    pub kind: ContextInputKind,
+    pub reference: String,
+    pub rationale: String,
+    pub source: String,
+    #[serde(default)]
+    pub primary: bool,
+}
+
+impl ContextInput {
+    pub fn validate(&self) -> Result<(), GoalPlanError> {
+        if self.reference.trim().is_empty() {
+            return Err(GoalPlanError::MissingContextInputReference);
+        }
+        if self.rationale.trim().is_empty() {
+            return Err(GoalPlanError::MissingContextInputRationale {
+                reference: self.reference.clone(),
+            });
+        }
+        if self.source.trim().is_empty() {
+            return Err(GoalPlanError::MissingContextInputSource {
+                reference: self.reference.clone(),
+            });
+        }
+        Ok(())
+    }
+
+    pub fn provenance_line(&self) -> String {
+        format!("{}: {} ({})", self.kind.as_str(), self.reference, self.rationale)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContextPack {
+    pub pack_id: String,
+    pub summary: String,
+    pub credibility: ContextPackCredibility,
+    #[serde(default)]
+    pub inputs: Vec<ContextInput>,
+    #[serde(default)]
+    pub selected_targets: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub staleness_reason: Option<String>,
+}
+
+impl ContextPack {
+    pub fn validate(&self) -> Result<(), GoalPlanError> {
+        if self.pack_id.trim().is_empty() {
+            return Err(GoalPlanError::MissingContextPackId);
+        }
+        if self.summary.trim().is_empty() {
+            return Err(GoalPlanError::MissingContextPackSummary);
+        }
+        for input in &self.inputs {
+            input.validate()?;
+        }
+        if self.credibility == ContextPackCredibility::Credible
+            && self.primary_inputs().is_empty()
+            && self.selected_targets.is_empty()
+        {
+            return Err(GoalPlanError::MissingCredibleContextPrimaryInput);
+        }
+        if self.credibility == ContextPackCredibility::Stale
+            && self.staleness_reason.as_deref().map(str::trim).unwrap_or_default().is_empty()
+        {
+            return Err(GoalPlanError::MissingContextStalenessReason);
+        }
+        Ok(())
+    }
+
+    pub fn primary_inputs(&self) -> Vec<&ContextInput> {
+        self.inputs.iter().filter(|input| input.primary).collect()
+    }
+
+    pub fn primary_references(&self) -> Vec<String> {
+        let primary = self
+            .primary_inputs()
+            .into_iter()
+            .map(|input| input.reference.clone())
+            .collect::<Vec<_>>();
+        if primary.is_empty() { self.selected_targets.clone() } else { primary }
+    }
+
+    pub fn provenance_lines(&self) -> Vec<String> {
+        self.inputs.iter().map(ContextInput::provenance_line).collect()
+    }
+}
+
 /// An inferred flow proposal attached to a goal plan.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InferredFlow {
@@ -117,6 +248,8 @@ pub struct GoalPlan {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub negotiation_acceptance_boundary: Option<String>,
     pub tasks: Vec<PlannedTask>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_pack: Option<ContextPack>,
     #[serde(default)]
     pub source_evidence: Vec<EvidenceRef>,
     #[serde(default)]
@@ -143,6 +276,7 @@ impl GoalPlan {
             negotiation_resolution: None,
             negotiation_acceptance_boundary: None,
             tasks,
+            context_pack: None,
             source_evidence: Vec::new(),
             workspace_signals: WorkspaceSignals::default(),
             flow: None,
@@ -164,6 +298,9 @@ impl GoalPlan {
         }
         for task in &self.tasks {
             task.validate()?;
+        }
+        if let Some(context_pack) = &self.context_pack {
+            context_pack.validate()?;
         }
         if let Some(workflow_progress) = &self.workflow_progress {
             workflow_progress
@@ -208,6 +345,11 @@ impl GoalPlan {
 
     pub fn with_evidence(mut self, evidence: Vec<EvidenceRef>) -> Self {
         self.source_evidence = evidence;
+        self
+    }
+
+    pub fn with_context_pack(mut self, context_pack: ContextPack) -> Self {
+        self.context_pack = Some(context_pack);
         self
     }
 
@@ -267,6 +409,22 @@ impl GoalPlan {
     pub fn workflow_next_action(&self) -> Option<String> {
         self.workflow_progress.as_ref().and_then(WorkflowProgressState::next_action_text)
     }
+
+    pub fn context_summary(&self) -> Option<String> {
+        self.context_pack.as_ref().map(|pack| pack.summary.clone())
+    }
+
+    pub fn context_credibility(&self) -> Option<String> {
+        self.context_pack.as_ref().map(|pack| pack.credibility.as_str().to_string())
+    }
+
+    pub fn context_primary_inputs(&self) -> Vec<String> {
+        self.context_pack.as_ref().map(ContextPack::primary_references).unwrap_or_default()
+    }
+
+    pub fn context_provenance_lines(&self) -> Vec<String> {
+        self.context_pack.as_ref().map(ContextPack::provenance_lines).unwrap_or_default()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -281,6 +439,20 @@ pub enum GoalPlanError {
     MissingTaskDescription { task_id: String },
     #[error("task `{task_id}` target must not be empty")]
     MissingTaskTarget { task_id: String },
+    #[error("context pack id must not be empty")]
+    MissingContextPackId,
+    #[error("context pack summary must not be empty")]
+    MissingContextPackSummary,
+    #[error("credible context pack must have at least one primary input or selected target")]
+    MissingCredibleContextPrimaryInput,
+    #[error("stale context pack must explain why it is stale")]
+    MissingContextStalenessReason,
+    #[error("context input reference must not be empty")]
+    MissingContextInputReference,
+    #[error("context input `{reference}` rationale must not be empty")]
+    MissingContextInputRationale { reference: String },
+    #[error("context input `{reference}` source must not be empty")]
+    MissingContextInputSource { reference: String },
     #[error("goal plan workflow progress is invalid: {0}")]
     InvalidWorkflowProgress(String),
     #[error("invalid goal plan status transition from {from:?} to {to:?}")]

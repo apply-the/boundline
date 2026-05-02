@@ -8,12 +8,14 @@ use synod::adapters::agent::FnAgentAdapter;
 use synod::adapters::session_store::{FileSessionStore, SessionStore};
 use synod::adapters::tool::FnToolAdapter;
 use synod::adapters::trace_store::FileTraceStore;
+use synod::cli::inspect::execute_inspect;
 use synod::cli::session::{
     execute_capture, execute_plan, execute_run, execute_start, execute_status,
 };
 use synod::domain::decision::DecisionType;
 use synod::domain::flow_policy::FlowPolicy;
 use synod::domain::goal_plan::{GoalPlan, PlannedTask};
+use synod::domain::session::SessionStatus;
 use synod::domain::step::{ErrorInfo, Recoverability, StepExecutionResult};
 use synod::domain::trace::TraceEventType;
 use synod::orchestrator::decision_loop::{DecisionLoop, LoopTerminal};
@@ -315,6 +317,87 @@ fn cli_plan_persists_goal_plan_and_proposed_flow_before_confirmation() {
     let flow = record.goal_plan.as_ref().unwrap().flow.as_ref().unwrap();
     assert_eq!(flow.flow_name, "bug-fix");
     assert!(!flow.confirmed);
+}
+
+#[test]
+fn cli_plan_blocks_when_context_pack_is_not_credible() {
+    let ws = temp_workspace("snf-cli-plan-blocked-context");
+
+    execute_start(Some(&ws)).unwrap();
+    let mut record = FileSessionStore::for_workspace(&ws).load().unwrap().unwrap();
+    record.goal = Some("investigate a thing".to_string());
+    record.latest_status = SessionStatus::GoalCaptured;
+    FileSessionStore::for_workspace(&ws).persist(&record).unwrap();
+
+    let error = execute_plan(Some(&ws), None, false).unwrap_err();
+    let error_text = error.to_string();
+    assert!(error_text.contains("bounded context required before planning"), "{error_text}");
+
+    let status = execute_status(Some(&ws)).unwrap();
+    assert!(status.terminal_output.contains("context_credibility: insufficient"));
+    assert!(status.terminal_output.contains("context_summary: no credible bounded context"));
+    assert!(
+        status.terminal_output.contains("next_command: synod capture --goal <narrower goal>"),
+        "{}",
+        status.terminal_output
+    );
+}
+
+#[test]
+fn session_native_cli_surfaces_context_projection_on_status_run_and_inspect() {
+    let ws = temp_workspace("snf-cli-context-projection");
+
+    fs::write(
+        ws.join("Cargo.toml"),
+        "[package]\nname = \"snf_cli_context_projection\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    )
+    .unwrap();
+    fs::create_dir_all(ws.join("src")).unwrap();
+    fs::create_dir_all(ws.join("tests")).unwrap();
+    fs::write(
+        ws.join("src/context_router.rs"),
+        "pub fn build_context_router() -> &'static str { \"ok\" }\n",
+    )
+    .unwrap();
+    fs::write(
+        ws.join("src/lib.rs"),
+        "pub mod context_router;\npub fn add(left: i32, right: i32) -> i32 { left + right }\n",
+    )
+    .unwrap();
+    fs::write(
+        ws.join("tests/basic.rs"),
+        "#[test]\nfn it_works() { assert_eq!(snf_cli_context_projection::add(2, 2), 4); }\n",
+    )
+    .unwrap();
+
+    execute_start(Some(&ws)).unwrap();
+    execute_capture(Some(&ws), Some("build a context router"), &[], None, None, None, None)
+        .unwrap();
+    execute_plan(Some(&ws), None, false).unwrap();
+
+    let status = execute_status(Some(&ws)).unwrap();
+    assert!(status.terminal_output.contains("context_summary:"), "{}", status.terminal_output);
+    assert!(
+        status.terminal_output.contains("context_credibility: credible"),
+        "{}",
+        status.terminal_output
+    );
+    assert!(
+        status.terminal_output.contains("context_primary_inputs:"),
+        "{}",
+        status.terminal_output
+    );
+
+    let run = execute_run(Some(&ws)).unwrap();
+    assert!(run.terminal_output.contains("context_summary:"), "{}", run.terminal_output);
+
+    let inspect = execute_inspect(None, Some(&ws)).unwrap();
+    assert!(inspect.terminal_output.contains("context_summary:"), "{}", inspect.terminal_output);
+    assert!(
+        inspect.terminal_output.contains("context_credibility: credible"),
+        "{}",
+        inspect.terminal_output
+    );
 }
 
 #[test]
