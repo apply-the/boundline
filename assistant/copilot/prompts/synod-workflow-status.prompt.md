@@ -24,7 +24,7 @@ If shell execution is unavailable, provide this exact copyable command:
 Then wait for pasted output.
 
 ## Output Interpretation
-Summarize `workflow`, `workflow_phase`, `workflow_next_action`, `routing`, `route_owner`, `route_config_projection`, `execution_condition`, `execution_path`, `continuity_authority`, any `compatibility_follow_up`, any governance wait-or-block guidance, and the CLI-reported `next_command`. Preserve `effective_routing` and `assistant_bindings` when surfaced.
+Summarize `workflow`, `workflow_phase`, `workflow_next_action`, `routing`, `route_owner`, `route_config_projection`, `execution_condition`, `execution_path`, `continuity_authority`, any `compatibility_follow_up`, any `delegation_mode`, `delegation_packet_id`, `delegation_packet_kind`, `delegation_packet_state`, `delegation_target_owner`, `delegation_headline`, `delegation_evidence_summary`, any governance wait-or-block guidance, and the CLI-reported `next_command`. Preserve `effective_routing`, `assistant_bindings`, `runtime_capabilities`, and `slot_effort_policies` when surfaced.
 
 ## Next-Step Routing
 Prefer the CLI-reported `next_command`; if the workflow remains active, route to `/synod-workflow-resume`, and if the workflow is terminal or inspect-only, route to `/synod-workflow-inspect`.

@@ -141,6 +141,7 @@ pub fn summarize_trace(
     let mut failure_evidence: Vec<String> = Vec::new();
     let mut adaptive_evidence: Vec<String> = Vec::new();
     let mut latest_governance_state: Option<String> = None;
+    let mut delegation: Option<crate::domain::session::DelegationStatusView> = None;
     let mut saw_native_routing_signal = false;
     let mut step_indexes: HashMap<String, usize> = HashMap::new();
     let mut executed_steps: Vec<TraceStepSummary> = Vec::new();
@@ -153,6 +154,14 @@ pub fn summarize_trace(
             && let Some(projection) = RoutingDecisionProjection::from_event_payload(&event.payload)
         {
             routing_projection = projection;
+        }
+
+        if delegation.is_none() {
+            delegation = event
+                .payload
+                .get("delegation")
+                .cloned()
+                .and_then(|value| serde_json::from_value(value).ok());
         }
 
         if event.event_type.is_decision_loop_event() {
@@ -757,6 +766,7 @@ pub fn summarize_trace(
         governance_timeline,
         governance_next_action: governance_next_action
             .or_else(|| governance_next_action_for_state(latest_governance_state.as_deref())),
+        delegation,
         review_timeline,
         terminal_status,
         terminal_reason,
@@ -1343,6 +1353,35 @@ mod tests {
             summarize_trace("/tmp/trace.json", &missing_step_kind).unwrap_err(),
             TraceSummaryError::MissingStepKind(step_id) if step_id == "verify"
         ));
+    }
+
+    #[test]
+    fn summarize_trace_surfaces_delegation_projection_from_payload() {
+        let mut trace = terminal_trace();
+        trace.record_event(
+            TraceEventType::GoalPlanCreated,
+            None,
+            1,
+            json!({
+                "delegation": {
+                    "mode": "handoff_required",
+                    "packet_id": "packet-1",
+                    "packet_kind": "handoff",
+                    "packet_state": "active",
+                    "target_owner": "codex",
+                    "headline": "handoff required: implementation route cannot continue",
+                    "evidence_summary": "claude lacks continuation support for implementation"
+                }
+            }),
+        );
+
+        let summary = summarize_trace("/tmp/trace.json", &trace).unwrap();
+        let delegation = summary.delegation.unwrap();
+
+        assert_eq!(delegation.mode.as_str(), "handoff_required");
+        assert_eq!(delegation.packet_id.as_deref(), Some("packet-1"));
+        assert_eq!(delegation.target_owner.as_deref(), Some("codex"));
+        assert!(delegation.headline.contains("handoff required"));
     }
 
     #[test]

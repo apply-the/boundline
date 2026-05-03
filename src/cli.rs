@@ -3,7 +3,8 @@ use std::{fmt, path::PathBuf};
 use clap::{Parser, Subcommand};
 
 use crate::domain::configuration::{
-    ConfigShowScope, ConfigWriteScope, InitTemplate, RouteSlot, RuntimeKind,
+    CapabilityState, ConfigShowScope, ConfigWriteScope, EffortFallbackPolicy, EffortLevel,
+    InitTemplate, RouteSlot, RuntimeKind,
 };
 use crate::domain::governance::GovernanceRuntimeKind;
 use crate::domain::trace::current_timestamp_millis;
@@ -279,6 +280,28 @@ pub enum ConfigSubcommand {
         #[arg(long)]
         model: String,
     },
+    SetCapability {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long)]
+        cluster: Option<PathBuf>,
+        #[arg(long)]
+        scope: ConfigWriteScope,
+        #[arg(long)]
+        runtime: RuntimeKind,
+        #[arg(long)]
+        continuation: CapabilityState,
+        #[arg(long)]
+        resume: CapabilityState,
+        #[arg(long)]
+        validation: CapabilityState,
+        #[arg(long = "handoff-target")]
+        handoff_target: CapabilityState,
+        #[arg(long = "escalation-context")]
+        escalation_context: CapabilityState,
+        #[arg(long)]
+        notes: Option<String>,
+    },
     Unset {
         #[arg(long)]
         workspace: Option<PathBuf>,
@@ -292,6 +315,42 @@ pub enum ConfigSubcommand {
         reviewer: Option<String>,
         #[arg(long)]
         adjudicator: bool,
+    },
+    UnsetCapability {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long)]
+        cluster: Option<PathBuf>,
+        #[arg(long)]
+        scope: ConfigWriteScope,
+        #[arg(long)]
+        runtime: RuntimeKind,
+    },
+    SetEffort {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long)]
+        cluster: Option<PathBuf>,
+        #[arg(long)]
+        scope: ConfigWriteScope,
+        #[arg(long)]
+        slot: RouteSlot,
+        #[arg(long)]
+        level: EffortLevel,
+        #[arg(long)]
+        fallback: EffortFallbackPolicy,
+        #[arg(long)]
+        rationale: Option<String>,
+    },
+    UnsetEffort {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long)]
+        cluster: Option<PathBuf>,
+        #[arg(long)]
+        scope: ConfigWriteScope,
+        #[arg(long)]
+        slot: RouteSlot,
     },
 }
 
@@ -518,7 +577,11 @@ impl DeveloperCommandSession {
                 workspace_ref: match command {
                     ConfigSubcommand::Show { workspace, cluster, .. }
                     | ConfigSubcommand::Set { workspace, cluster, .. }
-                    | ConfigSubcommand::Unset { workspace, cluster, .. } => workspace
+                    | ConfigSubcommand::SetCapability { workspace, cluster, .. }
+                    | ConfigSubcommand::Unset { workspace, cluster, .. }
+                    | ConfigSubcommand::UnsetCapability { workspace, cluster, .. }
+                    | ConfigSubcommand::SetEffort { workspace, cluster, .. }
+                    | ConfigSubcommand::UnsetEffort { workspace, cluster, .. } => workspace
                         .as_ref()
                         .or(cluster.as_ref())
                         .map(|path| path.to_string_lossy().into_owned()),
@@ -1021,6 +1084,29 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                     runtime: *runtime,
                     model,
                 }),
+                ConfigSubcommand::SetCapability {
+                    workspace,
+                    cluster,
+                    scope,
+                    runtime,
+                    continuation,
+                    resume,
+                    validation,
+                    handoff_target,
+                    escalation_context,
+                    notes,
+                } => config::execute_set_capability(config::SetCapabilityRequest {
+                    workspace: workspace.as_deref(),
+                    cluster: cluster.as_deref(),
+                    scope: *scope,
+                    runtime: *runtime,
+                    continuation: *continuation,
+                    resume: *resume,
+                    validation: *validation,
+                    handoff_target: *handoff_target,
+                    escalation_context: *escalation_context,
+                    notes: notes.as_deref(),
+                }),
                 ConfigSubcommand::Unset {
                     workspace,
                     cluster,
@@ -1036,6 +1122,39 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                     reviewer.as_deref(),
                     *adjudicator,
                 ),
+                ConfigSubcommand::UnsetCapability { workspace, cluster, scope, runtime } => {
+                    config::execute_unset_capability(
+                        workspace.as_deref(),
+                        cluster.as_deref(),
+                        *scope,
+                        *runtime,
+                    )
+                }
+                ConfigSubcommand::SetEffort {
+                    workspace,
+                    cluster,
+                    scope,
+                    slot,
+                    level,
+                    fallback,
+                    rationale,
+                } => config::execute_set_effort(config::SetEffortRequest {
+                    workspace: workspace.as_deref(),
+                    cluster: cluster.as_deref(),
+                    scope: *scope,
+                    slot: *slot,
+                    level: *level,
+                    fallback: *fallback,
+                    rationale: rationale.as_deref(),
+                }),
+                ConfigSubcommand::UnsetEffort { workspace, cluster, scope, slot } => {
+                    config::execute_unset_effort(
+                        workspace.as_deref(),
+                        cluster.as_deref(),
+                        *scope,
+                        *slot,
+                    )
+                }
             };
 
             match result {
@@ -1106,7 +1225,10 @@ mod tests {
         ClusterSubcommand, CommandExitStatus, CommandName, ConfigSubcommand, DeveloperCommand,
         WorkflowSubcommand, dispatch,
     };
-    use crate::domain::configuration::{ConfigShowScope, ConfigWriteScope, RouteSlot, RuntimeKind};
+    use crate::domain::configuration::{
+        CapabilityState, ConfigShowScope, ConfigWriteScope, EffortFallbackPolicy, EffortLevel,
+        RouteSlot, RuntimeKind,
+    };
 
     const FIXTURE_CARGO_TOML: &str = r#"[package]
 name = "dispatch_fixture"
@@ -1473,6 +1595,47 @@ fn red_to_green_addition() {
                     slot: Some(RouteSlot::Planning),
                     reviewer: None,
                     adjudicator: false,
+                },
+            },
+            DeveloperCommand::Config {
+                command: ConfigSubcommand::SetCapability {
+                    workspace: Some(config_workspace.clone()),
+                    cluster: None,
+                    scope: ConfigWriteScope::Workspace,
+                    runtime: RuntimeKind::Codex,
+                    continuation: CapabilityState::Supported,
+                    resume: CapabilityState::Supported,
+                    validation: CapabilityState::Supported,
+                    handoff_target: CapabilityState::Supported,
+                    escalation_context: CapabilityState::Supported,
+                    notes: Some("supports the default route".to_string()),
+                },
+            },
+            DeveloperCommand::Config {
+                command: ConfigSubcommand::UnsetCapability {
+                    workspace: Some(config_workspace.clone()),
+                    cluster: None,
+                    scope: ConfigWriteScope::Workspace,
+                    runtime: RuntimeKind::Codex,
+                },
+            },
+            DeveloperCommand::Config {
+                command: ConfigSubcommand::SetEffort {
+                    workspace: Some(config_workspace.clone()),
+                    cluster: None,
+                    scope: ConfigWriteScope::Workspace,
+                    slot: RouteSlot::Planning,
+                    level: EffortLevel::High,
+                    fallback: EffortFallbackPolicy::AllowLower,
+                    rationale: Some("planning should stay thorough".to_string()),
+                },
+            },
+            DeveloperCommand::Config {
+                command: ConfigSubcommand::UnsetEffort {
+                    workspace: Some(config_workspace.clone()),
+                    cluster: None,
+                    scope: ConfigWriteScope::Workspace,
+                    slot: RouteSlot::Planning,
                 },
             },
         ] {

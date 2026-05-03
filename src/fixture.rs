@@ -13,7 +13,10 @@ use crate::adapters::cluster_store::FileClusterStore;
 use crate::adapters::config_store::FileConfigStore;
 use crate::adapters::tool::FnToolAdapter;
 use crate::domain::brief::AuthoredBriefBundle;
-use crate::domain::configuration::{RoutingOverrides, resolve_effective_routing};
+use crate::domain::configuration::{
+    RoutingOverrides, resolve_effective_routing, resolve_effective_runtime_capabilities,
+    resolve_effective_slot_effort_policies,
+};
 use crate::domain::execution::{
     AdaptiveChangeKind, AttemptLineage, AttemptTransitionKind, ChangeEvidence, ChangeStatus,
     ExecutionAttemptDefinition, ExecutionCommand, ExecutionFailureMode, ExecutionProfileError,
@@ -325,7 +328,21 @@ fn workspace_routing_projection(workspace: &Path) -> Option<RoutingDecisionProje
         cluster_routing.as_ref(),
         global_routing.as_ref(),
     );
-    let projection = RoutingDecisionProjection::from_effective_routing(&effective);
+    let effective_capabilities = resolve_effective_runtime_capabilities(
+        workspace_routing.as_ref(),
+        cluster_routing.as_ref(),
+        global_routing.as_ref(),
+    );
+    let effective_effort = resolve_effective_slot_effort_policies(
+        workspace_routing.as_ref(),
+        cluster_routing.as_ref(),
+        global_routing.as_ref(),
+    );
+    let projection = RoutingDecisionProjection::from_effective_state(
+        &effective,
+        &effective_capabilities,
+        &effective_effort,
+    );
     (!projection.is_empty()).then_some(projection)
 }
 

@@ -6,7 +6,7 @@ use synod::cli::session::{
 use crate::runtime_refoundation::temp_runtime_refoundation_compat_workspace;
 
 #[test]
-fn status_contract_preserves_native_session_and_surfaces_compatibility_follow_up() {
+fn status_contract_preserves_native_snapshot_and_surfaces_compatibility_follow_up() {
     let workspace =
         temp_runtime_refoundation_compat_workspace("compatibility-continuity-contract-mixed-route");
 
@@ -33,7 +33,7 @@ fn status_contract_preserves_native_session_and_surfaces_compatibility_follow_up
         status.terminal_output
     );
     assert!(
-        status.terminal_output.contains("continuity_authority: native_session"),
+        status.terminal_output.contains("continuity_authority: compatibility_trace"),
         "{}",
         status.terminal_output
     );

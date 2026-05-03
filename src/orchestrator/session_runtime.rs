@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -9,6 +10,7 @@ use crate::adapters::governance_runtime::{
 use crate::adapters::tool::FnToolAdapter;
 use serde_json::{Map, Value, json};
 use thiserror::Error;
+use uuid::Uuid;
 
 use crate::adapters::cluster_store::FileClusterStore;
 use crate::adapters::config_store::FileConfigStore;
@@ -18,7 +20,12 @@ use crate::domain::cluster::{
     ClusterDeliveryStory, ClusterRouteOwner, ClusterSessionProjection, ClusteredExecutionCondition,
     ClusteredExecutionKind, WorkspaceParticipationKind, WorkspaceParticipationRecord,
 };
-use crate::domain::configuration::{RoutingOverrides, resolve_effective_routing};
+use crate::domain::configuration::{
+    EffectiveRouting, RouteSlot, RoutingOverrides, RuntimeKind, SourcedRoute,
+    SourcedRuntimeCapabilityProfile, SourcedSlotEffortPolicy, ValueSource,
+    resolve_effective_routing, resolve_effective_runtime_capabilities,
+    resolve_effective_slot_effort_policies,
+};
 use crate::domain::decision::ActionSelector;
 use crate::domain::flow::{FlowStepMetadata, built_in_flow, supported_flow_names_csv};
 use crate::domain::flow_policy::FlowPolicy;
@@ -31,7 +38,10 @@ use crate::domain::limits::{RunLimits, TerminalCondition};
 use crate::domain::negotiation::NegotiatedDeliveryPacket;
 use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::session::{
-    ActiveSessionRecord, RoutingMode, RoutingOutcome, SessionStatus, routing_outcome,
+    ActiveSessionRecord, ContinuityAuthority, DelegationContinuityMode, DelegationContinuityState,
+    DelegationPacket, DelegationPacketKind, DelegationPacketState, RoutingMode, RoutingOutcome,
+    SessionStatus, StuckEvidenceMarker, StuckRecoveryAction, delegation_status_view,
+    routing_outcome,
 };
 use crate::domain::step::{
     ErrorInfo, ExecutionStatus, Recoverability, Step, StepAttempt, StepExecutionRequest,
@@ -69,6 +79,24 @@ pub struct SessionRuntime {
     workspace_ref: PathBuf,
     session_store: FileSessionStore,
     trace_store: FileTraceStore,
+}
+
+const DELEGATION_STUCK_THRESHOLD: usize = 3;
+
+#[derive(Debug, Clone)]
+struct NativeRoutingSnapshot {
+    effective: EffectiveRouting,
+    runtime_capabilities: BTreeMap<RuntimeKind, SourcedRuntimeCapabilityProfile>,
+    slot_effort_policies: BTreeMap<RouteSlot, SourcedSlotEffortPolicy>,
+    available_runtimes: Vec<RuntimeKind>,
+}
+
+#[derive(Debug, Clone)]
+struct BlockedNativeBinding {
+    reason: String,
+    handoff_target: Option<RuntimeKind>,
+    capability_summary: String,
+    evidence_refs: Vec<String>,
 }
 
 impl SessionRuntime {
@@ -291,6 +319,16 @@ impl SessionRuntime {
                     requested_flow,
                     no_flow,
                 )?;
+                if let Some(previous_goal_plan) = session.goal_plan.as_ref()
+                    && let Some(continuity) = previous_goal_plan.delegation_continuity().cloned()
+                {
+                    goal_plan = goal_plan
+                        .with_delegation_state(
+                            previous_goal_plan.delegation_packet_history().to_vec(),
+                            continuity,
+                        )
+                        .map_err(|error| SessionRuntimeError::InvalidGoalPlan(error.to_string()))?;
+                }
                 session.active_task = None;
                 session.goal_plan = Some(goal_plan);
                 session.decisions.clear();
@@ -313,6 +351,16 @@ impl SessionRuntime {
             );
         }
         self.apply_planning_flow_selection(session, &mut goal_plan, requested_flow, no_flow)?;
+        if let Some(previous_goal_plan) = session.goal_plan.as_ref()
+            && let Some(continuity) = previous_goal_plan.delegation_continuity().cloned()
+        {
+            goal_plan = goal_plan
+                .with_delegation_state(
+                    previous_goal_plan.delegation_packet_history().to_vec(),
+                    continuity,
+                )
+                .map_err(|error| SessionRuntimeError::InvalidGoalPlan(error.to_string()))?;
+        }
         if let Some(previous_goal_plan) = session.goal_plan.as_ref() {
             let changed_fields = material_goal_plan_changes(previous_goal_plan, &goal_plan);
             if changed_fields.is_empty() {
@@ -335,14 +383,30 @@ impl SessionRuntime {
 
             let revision = previous_goal_plan.next_revision();
             let base_rationale = goal_plan.planning_rationale.clone().unwrap_or_default();
+            let changed_summary = changed_fields.join(", ");
+            let resolved_packet_id =
+                goal_plan.active_delegation_packet().map(|packet| packet.packet_id.clone());
+            if resolved_packet_id.is_some() {
+                goal_plan
+                    .resolve_active_delegation(
+                        format!("delegation resolved by replan revision {revision}"),
+                        format!("replan revision {revision} changed {changed_summary}"),
+                        "synod run",
+                    )
+                    .map_err(|error| SessionRuntimeError::InvalidGoalPlan(error.to_string()))?;
+            }
             goal_plan.proposal_revision = revision;
-            goal_plan.planning_rationale = Some(format!(
-                "replan revision {} supersedes revision {} because {}; {}",
-                revision,
-                previous_goal_plan.proposal_revision,
-                changed_fields.join(", "),
-                base_rationale
-            ));
+            let mut rationale_parts = vec![format!(
+                "replan revision {} supersedes revision {} because {}",
+                revision, previous_goal_plan.proposal_revision, changed_summary
+            )];
+            if let Some(packet_id) = resolved_packet_id {
+                rationale_parts.push(format!("resolved delegation packet {packet_id}"));
+            }
+            if !base_rationale.is_empty() {
+                rationale_parts.push(base_rationale);
+            }
+            goal_plan.planning_rationale = Some(rationale_parts.join("; "));
         }
         if should_confirm_plan {
             goal_plan
@@ -679,38 +743,21 @@ impl SessionRuntime {
     }
 
     fn validate_native_assistant_bindings(&self) -> Result<(), SessionRuntimeError> {
-        let local_config =
-            FileConfigStore::for_workspace(&self.workspace_ref).load_local().ok().flatten();
-        let available_runtimes = local_config
-            .as_ref()
-            .map(|config| config.routing.assistant_runtimes.clone())
-            .unwrap_or_default();
+        let snapshot = self.native_routing_snapshot();
+        let available_runtimes = snapshot.available_runtimes;
 
         if available_runtimes.is_empty() {
             return Ok(());
         }
 
-        let cluster_routing = FileClusterStore::for_workspace(&self.workspace_ref)
-            .load()
-            .ok()
-            .flatten()
-            .map(|config| config.routing);
-        let global_routing = FileConfigStore::global_routing().ok().flatten();
-        let effective = resolve_effective_routing(
-            &RoutingOverrides::default(),
-            local_config.as_ref().map(|config| &config.routing),
-            cluster_routing.as_ref(),
-            global_routing.as_ref(),
-        );
-
         Self::ensure_runtime_available(
             "implementation",
-            effective.implementation.route.runtime,
+            snapshot.effective.implementation.route.runtime,
             &available_runtimes,
         )?;
         Self::ensure_runtime_available(
             "verification",
-            effective.verification.route.runtime,
+            snapshot.effective.verification.route.runtime,
             &available_runtimes,
         )?;
 
@@ -742,6 +789,10 @@ impl SessionRuntime {
         &self,
         session: &mut ActiveSessionRecord,
     ) -> Result<TaskRunResponse, SessionRuntimeError> {
+        if let Some(response) = self.blocked_native_goal_plan_response(session)? {
+            return Ok(response);
+        }
+
         let goal_plan = session.goal_plan.clone().ok_or(SessionRuntimeError::MissingActiveTask)?;
         let flow_policy = self.native_flow_policy(session)?;
         let (agents, tools) = self.native_adapter_registries()?;
@@ -798,6 +849,392 @@ impl SessionRuntime {
         })
     }
 
+    fn blocked_native_goal_plan_response(
+        &self,
+        session: &mut ActiveSessionRecord,
+    ) -> Result<Option<TaskRunResponse>, SessionRuntimeError> {
+        let snapshot = self.native_routing_snapshot();
+        let Some(blocked) = Self::blocked_native_binding(&snapshot) else {
+            return Ok(None);
+        };
+
+        let routing_projection = RoutingDecisionProjection::from_effective_state(
+            &snapshot.effective,
+            &snapshot.runtime_capabilities,
+            &snapshot.slot_effort_policies,
+        );
+        let (goal_text, plan_revision, terminal_reason, latest_status) = {
+            let goal_plan =
+                session.goal_plan.as_mut().ok_or(SessionRuntimeError::MissingGoalPlan)?;
+            let kind = blocked
+                .handoff_target
+                .map(|_| DelegationPacketKind::Handoff)
+                .unwrap_or(DelegationPacketKind::Escalation);
+            let target_owner = blocked
+                .handoff_target
+                .map(|runtime| runtime.as_str().to_string())
+                .unwrap_or_else(|| "operator".to_string());
+            let repeated_attempts = goal_plan
+                .delegation_packet_history()
+                .iter()
+                .rev()
+                .take_while(|packet| {
+                    packet.continuity_reason == blocked.reason
+                        && packet.target_owner == target_owner
+                })
+                .count()
+                + 1;
+            let is_stuck = repeated_attempts >= DELEGATION_STUCK_THRESHOLD;
+            let next_command = if kind == DelegationPacketKind::Handoff && !is_stuck {
+                "synod status"
+            } else {
+                "synod inspect"
+            };
+            let packet = DelegationPacket {
+                packet_id: format!("delegation-{}", Uuid::new_v4()),
+                kind,
+                state: if is_stuck {
+                    DelegationPacketState::Stuck
+                } else {
+                    DelegationPacketState::Active
+                },
+                created_at: current_timestamp_millis(),
+                resolved_at: None,
+                source_route_owner: "native".to_string(),
+                target_owner: target_owner.clone(),
+                continuity_reason: blocked.reason.clone(),
+                recommended_next_action: next_command.to_string(),
+                evidence_refs: blocked.evidence_refs.clone(),
+                capability_summary: Some(blocked.capability_summary.clone()),
+                stuck_marker: is_stuck.then_some(StuckEvidenceMarker {
+                    repeated_attempts,
+                    same_reason_count: repeated_attempts,
+                    unchanged_workspace_signal: true,
+                    stale_route_policy: false,
+                    recommended_recovery: if kind == DelegationPacketKind::Handoff {
+                        StuckRecoveryAction::UpdateConfig
+                    } else {
+                        StuckRecoveryAction::Replan
+                    },
+                }),
+                superseded_by_packet_id: None,
+            };
+            let continuity = DelegationContinuityState {
+                active_packet_id: Some(packet.packet_id.clone()),
+                mode: if is_stuck {
+                    DelegationContinuityMode::Stuck
+                } else if kind == DelegationPacketKind::Handoff {
+                    DelegationContinuityMode::HandoffRequired
+                } else {
+                    DelegationContinuityMode::EscalationRequired
+                },
+                authority_source: ContinuityAuthority::NativeSession,
+                next_command: next_command.to_string(),
+                headline: if is_stuck {
+                    format!("stuck delegated continuity: {}", blocked.reason)
+                } else {
+                    packet.headline()
+                },
+                evidence_summary: packet.evidence_summary(),
+            };
+
+            goal_plan
+                .record_delegation_packet(packet.clone(), continuity.clone())
+                .map_err(|error| SessionRuntimeError::InvalidGoalPlan(error.to_string()))?;
+
+            let terminal_reason = build_terminal_reason(
+                TerminalCondition::TaskNotCredible,
+                continuity.headline.clone(),
+                Some(json!({
+                    "delegation_mode": continuity.mode.as_str(),
+                    "delegation_next_command": continuity.next_command,
+                    "delegation_packet": packet,
+                    "routing_projection": routing_projection,
+                })),
+            );
+            let latest_status = if kind == DelegationPacketKind::Handoff && !is_stuck {
+                SessionStatus::Planned
+            } else {
+                SessionStatus::Failed
+            };
+
+            (
+                goal_plan.goal_text.clone(),
+                goal_plan.proposal_revision,
+                terminal_reason,
+                latest_status,
+            )
+        };
+        let delegation = delegation_status_view(session);
+        let mut trace =
+            ExecutionTrace::new(session.session_id.clone(), session.session_id.clone(), goal_text);
+        trace.record_event(
+            TraceEventType::GoalPlanCreated,
+            None,
+            plan_revision,
+            json!({
+                "routing_projection": routing_projection,
+                "delegation": delegation,
+            }),
+        );
+        trace.record_event(
+            TraceEventType::TerminalRecorded,
+            None,
+            plan_revision,
+            json!({
+                "terminal_status": TaskStatus::Failed,
+                "terminal_reason": terminal_reason,
+                "delegation": delegation_status_view(session),
+            }),
+        );
+        trace.finalize(TaskStatus::Failed, terminal_reason.clone());
+        let trace_path =
+            self.trace_store.persist(&trace).map_err(SessionRuntimeError::TraceStore)?;
+        let trace_location = trace_path.to_string_lossy().into_owned();
+        trace.set_trace_location(trace_location.clone());
+        self.trace_store.persist(&trace).map_err(SessionRuntimeError::TraceStore)?;
+
+        session.active_task = None;
+        session.latest_status = latest_status;
+        session.latest_terminal_reason = Some(terminal_reason.clone());
+        session.latest_trace_ref = Some(trace_location.clone());
+        session.updated_at = current_timestamp_millis();
+
+        Ok(Some(TaskRunResponse {
+            task_id: session.session_id.clone(),
+            terminal_status: TaskStatus::Failed,
+            terminal_reason,
+            final_context: TaskContext::new(
+                session.session_id.clone(),
+                session.workspace_ref.clone(),
+                RunLimits::default(),
+                Map::new(),
+            ),
+            plan_revision,
+            trace_location,
+        }))
+    }
+
+    fn native_routing_snapshot(&self) -> NativeRoutingSnapshot {
+        let local_config =
+            FileConfigStore::for_workspace(&self.workspace_ref).load_local().ok().flatten();
+        let workspace_routing = local_config.as_ref().map(|config| &config.routing);
+        let cluster_routing = FileClusterStore::for_workspace(&self.workspace_ref)
+            .load()
+            .ok()
+            .flatten()
+            .map(|config| config.routing);
+        let global_routing = FileConfigStore::global_routing().ok().flatten();
+        let effective = resolve_effective_routing(
+            &RoutingOverrides::default(),
+            workspace_routing,
+            cluster_routing.as_ref(),
+            global_routing.as_ref(),
+        );
+
+        NativeRoutingSnapshot {
+            effective,
+            runtime_capabilities: resolve_effective_runtime_capabilities(
+                workspace_routing,
+                cluster_routing.as_ref(),
+                global_routing.as_ref(),
+            ),
+            slot_effort_policies: resolve_effective_slot_effort_policies(
+                workspace_routing,
+                cluster_routing.as_ref(),
+                global_routing.as_ref(),
+            ),
+            available_runtimes: local_config
+                .as_ref()
+                .map(|config| config.routing.assistant_runtimes.clone())
+                .unwrap_or_default(),
+        }
+    }
+
+    fn blocked_native_binding(snapshot: &NativeRoutingSnapshot) -> Option<BlockedNativeBinding> {
+        if snapshot.available_runtimes.is_empty() {
+            return None;
+        }
+
+        for (slot, route) in [
+            (RouteSlot::Implementation, snapshot.effective.implementation.clone()),
+            (RouteSlot::Verification, snapshot.effective.verification.clone()),
+        ] {
+            let blocked_profile = snapshot.runtime_capabilities.get(&route.route.runtime);
+            let Some(reason) = Self::native_slot_block_reason(
+                slot,
+                &route,
+                &snapshot.available_runtimes,
+                blocked_profile,
+            ) else {
+                continue;
+            };
+
+            let handoff_target = snapshot.available_runtimes.iter().copied().find(|candidate| {
+                *candidate != route.route.runtime
+                    && Self::candidate_supports_slot(
+                        *candidate,
+                        slot,
+                        &snapshot.runtime_capabilities,
+                    )
+            });
+
+            let capability_summary = Self::native_slot_capability_summary(
+                slot,
+                &route,
+                blocked_profile,
+                snapshot.slot_effort_policies.get(&slot),
+            );
+            let mut evidence_refs = vec![
+                format!("slot={}", Self::route_slot_label(slot)),
+                format!("route={}/{}", route.route.runtime.as_str(), route.route.model),
+                format!(
+                    "available_assistants={}",
+                    snapshot
+                        .available_runtimes
+                        .iter()
+                        .map(|runtime| runtime.as_str())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                ),
+            ];
+            if let Some(handoff_target) = handoff_target {
+                evidence_refs.push(format!("handoff_target={}", handoff_target.as_str()));
+            }
+            if let Some(policy) = snapshot.slot_effort_policies.get(&slot) {
+                evidence_refs.push(format!("effort_policy={}", policy.policy.summary_text()));
+            }
+
+            return Some(BlockedNativeBinding {
+                reason,
+                handoff_target,
+                capability_summary,
+                evidence_refs,
+            });
+        }
+
+        None
+    }
+
+    fn native_slot_block_reason(
+        slot: RouteSlot,
+        route: &SourcedRoute,
+        available_runtimes: &[RuntimeKind],
+        blocked_profile: Option<&SourcedRuntimeCapabilityProfile>,
+    ) -> Option<String> {
+        if !available_runtimes.contains(&route.route.runtime) {
+            return Some(format!(
+                "{} route requires {}, but available assistant runtimes are: {}",
+                Self::route_slot_label(slot),
+                route.route.runtime.as_str(),
+                available_runtimes
+                    .iter()
+                    .map(|runtime| runtime.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+
+        match slot {
+            RouteSlot::Implementation => blocked_profile
+                .filter(|profile| !profile.profile.continuation.is_supported())
+                .map(|_| {
+                    format!(
+                        "{} route {}/{} is declared continuation=unsupported",
+                        Self::route_slot_label(slot),
+                        route.route.runtime.as_str(),
+                        route.route.model,
+                    )
+                }),
+            RouteSlot::Verification => blocked_profile
+                .filter(|profile| !profile.profile.validation.is_supported())
+                .map(|_| {
+                    format!(
+                        "{} route {}/{} is declared validation=unsupported",
+                        Self::route_slot_label(slot),
+                        route.route.runtime.as_str(),
+                        route.route.model,
+                    )
+                }),
+            _ => None,
+        }
+    }
+
+    fn candidate_supports_slot(
+        candidate: RuntimeKind,
+        slot: RouteSlot,
+        runtime_capabilities: &BTreeMap<RuntimeKind, SourcedRuntimeCapabilityProfile>,
+    ) -> bool {
+        let Some(profile) = runtime_capabilities.get(&candidate) else {
+            return false;
+        };
+        if !profile.profile.handoff_target.is_supported() {
+            return false;
+        }
+
+        match slot {
+            RouteSlot::Implementation => profile.profile.continuation.is_supported(),
+            RouteSlot::Verification => profile.profile.validation.is_supported(),
+            _ => profile.profile.continuation.is_supported(),
+        }
+    }
+
+    fn native_slot_capability_summary(
+        slot: RouteSlot,
+        route: &SourcedRoute,
+        blocked_profile: Option<&SourcedRuntimeCapabilityProfile>,
+        effort_policy: Option<&SourcedSlotEffortPolicy>,
+    ) -> String {
+        let capability_summary = blocked_profile
+            .map(|profile| {
+                format!(
+                    "runtime_capability[{}] {} => {}",
+                    Self::value_source_text(profile.source),
+                    route.route.runtime.as_str(),
+                    profile.profile.summary_text()
+                )
+            })
+            .unwrap_or_else(|| {
+                format!(
+                    "runtime_capability {} => no explicit capability profile",
+                    route.route.runtime.as_str()
+                )
+            });
+
+        let effort_summary = effort_policy.map(|policy| {
+            format!(
+                "slot_effort[{}] {} => {}",
+                Self::value_source_text(policy.source),
+                Self::route_slot_label(slot),
+                policy.policy.summary_text()
+            )
+        });
+
+        match effort_summary {
+            Some(effort_summary) => format!("{capability_summary}; {effort_summary}"),
+            None => capability_summary,
+        }
+    }
+
+    fn route_slot_label(slot: RouteSlot) -> &'static str {
+        match slot {
+            RouteSlot::Planning => "planning",
+            RouteSlot::Implementation => "implementation",
+            RouteSlot::Verification => "verification",
+            RouteSlot::Review => "review",
+        }
+    }
+
+    fn value_source_text(source: ValueSource) -> &'static str {
+        match source {
+            ValueSource::Cli => "cli",
+            ValueSource::Workspace => "workspace",
+            ValueSource::Cluster => "cluster",
+            ValueSource::Global => "global",
+            ValueSource::BuiltIn => "built-in",
+        }
+    }
+
     fn workspace_routing_projection(workspace: &Path) -> Option<RoutingDecisionProjection> {
         let workspace_routing =
             FileConfigStore::for_workspace(workspace).local_routing().ok().flatten();
@@ -813,7 +1250,21 @@ impl SessionRuntime {
             cluster_routing.as_ref(),
             global_routing.as_ref(),
         );
-        let projection = RoutingDecisionProjection::from_effective_routing(&effective);
+        let effective_capabilities = resolve_effective_runtime_capabilities(
+            workspace_routing.as_ref(),
+            cluster_routing.as_ref(),
+            global_routing.as_ref(),
+        );
+        let effective_effort = resolve_effective_slot_effort_policies(
+            workspace_routing.as_ref(),
+            cluster_routing.as_ref(),
+            global_routing.as_ref(),
+        );
+        let projection = RoutingDecisionProjection::from_effective_state(
+            &effective,
+            &effective_capabilities,
+            &effective_effort,
+        );
         (!projection.is_empty()).then_some(projection)
     }
 
@@ -2900,6 +3351,10 @@ fn material_goal_plan_changes(
         changed_fields.push("verification strategy");
     }
 
+    if previous_goal_plan.routing_policy_summary != next_goal_plan.routing_policy_summary {
+        changed_fields.push("routing policy");
+    }
+
     let previous_targets = previous_goal_plan
         .tasks
         .iter()
@@ -3256,9 +3711,14 @@ mod tests {
     use uuid::Uuid;
 
     use super::{SessionRuntime, session_status_for_task_status};
+    use crate::adapters::config_store::FileConfigStore;
     use crate::adapters::trace_store::{FileTraceStore, TraceStore};
     use crate::domain::cluster::{
         ClusterSessionProjection, ClusteredExecutionKind, WorkspaceParticipationKind,
+    };
+    use crate::domain::configuration::{
+        CapabilityState, ConfigFile, EffortFallbackPolicy, EffortLevel, ModelRoute, RouteSlot,
+        RoutingConfig, RuntimeCapabilityProfile, RuntimeKind, SlotEffortPolicy,
     };
     use crate::domain::decision::{Decision, DecisionType};
     use crate::domain::execution::{
@@ -3274,7 +3734,9 @@ mod tests {
     };
     use crate::domain::limits::{RunLimits, TerminalCondition};
     use crate::domain::plan::Plan;
-    use crate::domain::session::{ActiveSessionRecord, SessionStatus};
+    use crate::domain::session::{
+        ActiveSessionRecord, DelegationContinuityMode, DelegationPacketKind, SessionStatus,
+    };
     use crate::domain::step::{
         ExecutionStatus, Recoverability, Step, StepExecutionRequest, StepKind, StepStatus,
     };
@@ -4610,6 +5072,235 @@ mod tests {
     }
 
     #[test]
+    fn run_to_terminal_persists_handoff_packet_when_native_route_cannot_continue() {
+        let workspace = temp_workspace("synod-runtime-native-delegation");
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::create_dir_all(workspace.join("tests")).unwrap();
+        fs::write(
+            workspace.join("Cargo.toml"),
+            "[package]\nname = \"native-delegation\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        )
+        .unwrap();
+        fs::write(
+            workspace.join("src/lib.rs"),
+            "pub fn add(left: i32, right: i32) -> i32 { left - right }\n",
+        )
+        .unwrap();
+
+        let mut config = ConfigFile {
+            version: 1,
+            routing: RoutingConfig {
+                implementation: Some(ModelRoute {
+                    runtime: RuntimeKind::Claude,
+                    model: "sonnet-4".to_string(),
+                }),
+                assistant_runtimes: vec![RuntimeKind::Codex],
+                ..RoutingConfig::default()
+            },
+        };
+        config.routing.runtime_capabilities.insert(
+            RuntimeKind::Claude,
+            RuntimeCapabilityProfile {
+                continuation: CapabilityState::Unsupported,
+                resume: CapabilityState::Unsupported,
+                validation: CapabilityState::Unsupported,
+                handoff_target: CapabilityState::Unsupported,
+                escalation_context: CapabilityState::Supported,
+                notes: Some("requires a handoff for bounded continuation".to_string()),
+            },
+        );
+        config.routing.runtime_capabilities.insert(
+            RuntimeKind::Codex,
+            RuntimeCapabilityProfile {
+                continuation: CapabilityState::Supported,
+                resume: CapabilityState::Supported,
+                validation: CapabilityState::Supported,
+                handoff_target: CapabilityState::Supported,
+                escalation_context: CapabilityState::Supported,
+                notes: None,
+            },
+        );
+        FileConfigStore::for_workspace(&workspace).save_local(&config).unwrap();
+
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let mut session = ActiveSessionRecord {
+            session_id: "session-runtime".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: None,
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Initialized,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 10,
+            updated_at: 10,
+        };
+
+        runtime.capture_goal(&mut session, "fix the broken add function").unwrap();
+        runtime.plan_task(&mut session, Some("bug-fix"), false).unwrap();
+
+        let response = runtime.run_to_terminal(&mut session).unwrap();
+
+        assert_eq!(response.terminal_status, TaskStatus::Failed);
+        assert_eq!(session.latest_status, SessionStatus::Planned);
+        assert!(session.latest_trace_ref.is_some());
+
+        let goal_plan = session.goal_plan.as_ref().unwrap();
+        let continuity = goal_plan.delegation_continuity().unwrap();
+        assert_eq!(continuity.mode, DelegationContinuityMode::HandoffRequired);
+        assert_eq!(continuity.next_command, "synod status");
+
+        let packet = goal_plan.active_delegation_packet().unwrap();
+        assert_eq!(packet.kind, DelegationPacketKind::Handoff);
+        assert_eq!(packet.target_owner, "codex");
+        assert!(packet.continuity_reason.contains("implementation route"));
+
+        let trace = runtime
+            .trace_store()
+            .load(Path::new(session.latest_trace_ref.as_ref().unwrap()))
+            .unwrap();
+        assert!(
+            trace.events.iter().any(|event| event.event_type == TraceEventType::TerminalRecorded),
+            "{:?}",
+            trace.events
+        );
+    }
+
+    #[test]
+    fn plan_task_resolves_active_delegation_when_routing_policy_changes() {
+        let workspace = temp_workspace("synod-runtime-delegation-replan");
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::create_dir_all(workspace.join("tests")).unwrap();
+        fs::write(
+            workspace.join("Cargo.toml"),
+            "[package]\nname = \"native-delegation-replan\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        )
+        .unwrap();
+        fs::write(
+            workspace.join("src/lib.rs"),
+            "pub fn add(left: i32, right: i32) -> i32 { left - right }\n",
+        )
+        .unwrap();
+
+        let mut config = ConfigFile {
+            version: 1,
+            routing: RoutingConfig {
+                implementation: Some(ModelRoute {
+                    runtime: RuntimeKind::Claude,
+                    model: "sonnet-4".to_string(),
+                }),
+                assistant_runtimes: vec![RuntimeKind::Codex],
+                ..RoutingConfig::default()
+            },
+        };
+        config.routing.runtime_capabilities.insert(
+            RuntimeKind::Claude,
+            RuntimeCapabilityProfile {
+                continuation: CapabilityState::Unsupported,
+                resume: CapabilityState::Unsupported,
+                validation: CapabilityState::Unsupported,
+                handoff_target: CapabilityState::Unsupported,
+                escalation_context: CapabilityState::Supported,
+                notes: Some("requires a handoff for bounded continuation".to_string()),
+            },
+        );
+        config.routing.runtime_capabilities.insert(
+            RuntimeKind::Codex,
+            RuntimeCapabilityProfile {
+                continuation: CapabilityState::Supported,
+                resume: CapabilityState::Supported,
+                validation: CapabilityState::Supported,
+                handoff_target: CapabilityState::Supported,
+                escalation_context: CapabilityState::Supported,
+                notes: None,
+            },
+        );
+        FileConfigStore::for_workspace(&workspace).save_local(&config).unwrap();
+
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let mut session = ActiveSessionRecord {
+            session_id: "session-runtime".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: None,
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Initialized,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 10,
+            updated_at: 10,
+        };
+
+        runtime.capture_goal(&mut session, "fix the broken add function").unwrap();
+        runtime.plan_task(&mut session, Some("bug-fix"), false).unwrap();
+        runtime.run_to_terminal(&mut session).unwrap();
+
+        let packet_id = session
+            .goal_plan
+            .as_ref()
+            .unwrap()
+            .active_delegation_packet()
+            .unwrap()
+            .packet_id
+            .clone();
+
+        config.routing.runtime_capabilities.insert(
+            RuntimeKind::Claude,
+            RuntimeCapabilityProfile {
+                continuation: CapabilityState::Supported,
+                resume: CapabilityState::Supported,
+                validation: CapabilityState::Supported,
+                handoff_target: CapabilityState::Supported,
+                escalation_context: CapabilityState::Supported,
+                notes: Some("route can continue directly after the declaration update".to_string()),
+            },
+        );
+        FileConfigStore::for_workspace(&workspace).save_local(&config).unwrap();
+
+        runtime.plan_task(&mut session, Some("bug-fix"), false).unwrap();
+
+        let goal_plan = session.goal_plan.as_ref().unwrap();
+        let continuity = goal_plan.delegation_continuity().unwrap();
+        assert_eq!(continuity.mode, DelegationContinuityMode::Resolved);
+        assert!(continuity.active_packet_id.is_none());
+        assert_eq!(continuity.next_command, "synod run");
+        assert!(continuity.evidence_summary.contains("routing policy"));
+        assert!(
+            goal_plan
+                .planning_rationale
+                .as_deref()
+                .unwrap_or_default()
+                .contains("resolved delegation packet")
+        );
+        assert!(
+            goal_plan
+                .routing_policy_summary
+                .as_deref()
+                .unwrap_or_default()
+                .contains("implementation route=claude/sonnet-4")
+        );
+
+        let resolved_packet = goal_plan
+            .delegation_packet_history()
+            .iter()
+            .find(|packet| packet.packet_id == packet_id)
+            .unwrap();
+        assert_eq!(resolved_packet.state, crate::domain::session::DelegationPacketState::Resolved);
+    }
+
+    #[test]
     fn run_to_terminal_hands_off_clustered_success_between_member_workspaces() {
         let primary = write_cluster_delivery_workspace("synod-runtime-cluster-primary");
         let secondary = write_cluster_delivery_workspace("synod-runtime-cluster-secondary");
@@ -4827,5 +5518,186 @@ mod tests {
                 .iter()
                 .any(|event| { event.event_type == TraceEventType::GovernanceCompleted })
         );
+    }
+
+    #[test]
+    fn native_routing_snapshot_and_blocked_binding_surface_handoff_details() {
+        let workspace = temp_workspace("synod-runtime-native-routing-snapshot");
+        let mut config = ConfigFile {
+            version: 1,
+            routing: RoutingConfig {
+                implementation: Some(ModelRoute {
+                    runtime: RuntimeKind::Claude,
+                    model: "sonnet-4".to_string(),
+                }),
+                assistant_runtimes: vec![RuntimeKind::Claude, RuntimeKind::Codex],
+                ..RoutingConfig::default()
+            },
+        };
+        config.routing.runtime_capabilities.insert(
+            RuntimeKind::Claude,
+            RuntimeCapabilityProfile {
+                continuation: CapabilityState::Unsupported,
+                resume: CapabilityState::Supported,
+                validation: CapabilityState::Supported,
+                handoff_target: CapabilityState::Unsupported,
+                escalation_context: CapabilityState::Supported,
+                notes: Some("needs delegated implementation".to_string()),
+            },
+        );
+        config.routing.runtime_capabilities.insert(
+            RuntimeKind::Codex,
+            RuntimeCapabilityProfile {
+                continuation: CapabilityState::Supported,
+                resume: CapabilityState::Supported,
+                validation: CapabilityState::Supported,
+                handoff_target: CapabilityState::Supported,
+                escalation_context: CapabilityState::Supported,
+                notes: Some("can accept implementation handoff".to_string()),
+            },
+        );
+        config.routing.slot_effort_policies.insert(
+            RouteSlot::Implementation,
+            SlotEffortPolicy {
+                level: EffortLevel::High,
+                fallback: EffortFallbackPolicy::Preserve,
+                rationale: Some("keep implementation strict".to_string()),
+            },
+        );
+        FileConfigStore::for_workspace(&workspace).save_local(&config).unwrap();
+
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let snapshot = runtime.native_routing_snapshot();
+        assert_eq!(snapshot.available_runtimes, vec![RuntimeKind::Claude, RuntimeKind::Codex]);
+
+        let blocked = SessionRuntime::blocked_native_binding(&snapshot).unwrap();
+        assert!(
+            blocked.reason.contains(
+                "implementation route claude/sonnet-4 is declared continuation=unsupported"
+            )
+        );
+        assert_eq!(blocked.handoff_target, Some(RuntimeKind::Codex));
+        assert!(
+            blocked
+                .capability_summary
+                .contains("runtime_capability[workspace] claude => continuation=unsupported")
+        );
+        assert!(blocked.capability_summary.contains(
+            "slot_effort[workspace] implementation => level=high, fallback=preserve, rationale=keep implementation strict"
+        ));
+        assert!(blocked.evidence_refs.contains(&"slot=implementation".to_string()));
+        assert!(blocked.evidence_refs.contains(&"route=claude/sonnet-4".to_string()));
+        assert!(blocked.evidence_refs.contains(&"handoff_target=codex".to_string()));
+        assert!(
+            blocked.evidence_refs.iter().any(|entry| entry == "available_assistants=claude,codex")
+        );
+        assert!(
+            blocked.evidence_refs.iter().any(|entry| entry.starts_with("effort_policy=level=high"))
+        );
+
+        assert!(SessionRuntime::candidate_supports_slot(
+            RuntimeKind::Codex,
+            RouteSlot::Implementation,
+            &snapshot.runtime_capabilities,
+        ));
+        assert!(!SessionRuntime::candidate_supports_slot(
+            RuntimeKind::Claude,
+            RouteSlot::Implementation,
+            &snapshot.runtime_capabilities,
+        ));
+        assert_eq!(SessionRuntime::route_slot_label(RouteSlot::Verification), "verification");
+        assert_eq!(
+            SessionRuntime::value_source_text(
+                snapshot.runtime_capabilities.get(&RuntimeKind::Claude).unwrap().source,
+            ),
+            "workspace"
+        );
+        assert_eq!(
+            SessionRuntime::native_slot_block_reason(
+                RouteSlot::Review,
+                &snapshot.effective.review,
+                &snapshot.available_runtimes,
+                snapshot.runtime_capabilities.get(&snapshot.effective.review.route.runtime),
+            ),
+            None
+        );
+        let no_profile_summary = SessionRuntime::native_slot_capability_summary(
+            RouteSlot::Review,
+            &snapshot.effective.review,
+            None,
+            None,
+        );
+        assert!(no_profile_summary.contains("no explicit capability profile"));
+    }
+
+    #[test]
+    fn native_binding_helpers_cover_verification_and_availability_paths() {
+        SessionRuntime::ensure_runtime_available(
+            "implementation",
+            RuntimeKind::Codex,
+            &[RuntimeKind::Codex],
+        )
+        .unwrap();
+        let unavailable_error = SessionRuntime::ensure_runtime_available(
+            "implementation",
+            RuntimeKind::Claude,
+            &[RuntimeKind::Codex],
+        )
+        .unwrap_err();
+        assert!(
+            unavailable_error
+                .to_string()
+                .contains("assistant binding for implementation requires claude")
+        );
+
+        let workspace = temp_workspace("synod-runtime-native-routing-verification");
+        let mut config = ConfigFile {
+            version: 1,
+            routing: RoutingConfig {
+                implementation: Some(ModelRoute {
+                    runtime: RuntimeKind::Copilot,
+                    model: "gpt-5.4".to_string(),
+                }),
+                verification: Some(ModelRoute {
+                    runtime: RuntimeKind::Copilot,
+                    model: "gpt-5.4".to_string(),
+                }),
+                assistant_runtimes: vec![RuntimeKind::Copilot],
+                ..RoutingConfig::default()
+            },
+        };
+        config.routing.runtime_capabilities.insert(
+            RuntimeKind::Copilot,
+            RuntimeCapabilityProfile {
+                continuation: CapabilityState::Supported,
+                resume: CapabilityState::Supported,
+                validation: CapabilityState::Unsupported,
+                handoff_target: CapabilityState::Unsupported,
+                escalation_context: CapabilityState::Supported,
+                notes: Some("validation needs escalation".to_string()),
+            },
+        );
+        FileConfigStore::for_workspace(&workspace).save_local(&config).unwrap();
+
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let snapshot = runtime.native_routing_snapshot();
+        let blocked = SessionRuntime::blocked_native_binding(&snapshot).unwrap();
+        assert!(
+            blocked
+                .reason
+                .contains("verification route copilot/gpt-5.4 is declared validation=unsupported")
+        );
+        assert_eq!(blocked.handoff_target, None);
+        assert!(
+            blocked
+                .capability_summary
+                .contains("runtime_capability[workspace] copilot => continuation=supported")
+        );
+
+        let empty_workspace = temp_workspace("synod-runtime-native-routing-empty");
+        let empty_runtime = SessionRuntime::for_workspace(&empty_workspace);
+        empty_runtime.validate_native_assistant_bindings().unwrap();
+        let empty_snapshot = empty_runtime.native_routing_snapshot();
+        assert!(SessionRuntime::blocked_native_binding(&empty_snapshot).is_none());
     }
 }

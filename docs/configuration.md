@@ -1,9 +1,9 @@
-# Configuration in Synod 0.36.0
+# Configuration in Synod 0.37.0
 
-Synod `0.36.0` keeps a user-friendly setup and routing configuration surface
+Synod `0.37.0` keeps a user-friendly setup and routing configuration surface
 for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
-The `0.36.0` release keeps configuration behavior stable while preserving the
+The `0.37.0` release keeps configuration behavior stable while preserving the
 same governed routing defaults across earlier `bug-fix:investigate` work,
 later verify-stage `security-assessment`, workflow-aware projection of the
 same bounded governance state, continuity-aware read-side follow-up, the
@@ -27,6 +27,10 @@ Decision-driven selector choice is also runtime-owned rather than
 configuration-driven: the native loop can choose `read`, `search`, `modify`,
 `test`, `ask`, or `replan` from current evidence without introducing a new
 config key or route slot.
+Runtime capability profiles and slot effort policies are the new explicit
+exception: operators can now declare what each assistant family credibly
+supports and how much effort each routed slot should prefer, while the runtime
+continues to own the resulting delegation or stop semantics.
 Direct `run --goal` now boots the native session path without requiring a
 workspace execution profile, while `run --compatibility --goal ...` remains the
 manifest-backed opt-in.
@@ -47,7 +51,7 @@ ranking, explicit adaptive exhaustion, or negotiation-state overrides.
 - direct `synod run --goal` is native-first; add `--compatibility` only when the manifest-backed route is intentional
 - default `synod plan` now creates one evidence-driven proposal and `synod plan --confirm` confirms it; planning lifecycle state is session-owned rather than config-owned
 - bounded `bug-fix` and `change` completion now requires both material change evidence and passed validation on the native and governed session path
-- `synod config` manages runtime/model routing defaults for planning, verification, review, and other bounded slots
+- `synod config` manages runtime/model routing defaults, runtime capability profiles, and slot effort policy for planning, implementation, verification, review, and other bounded slots
 - `synod cluster` registers bounded multi-workspace membership and aggregated inspection
 - negotiated delivery modeling stays session-owned and trace-projected; there is no new negotiation-specific key in `config.toml` or `.synod/execution.json`
 - context-pack assembly and credibility projection stay session-owned and trace-projected; there is no new context-specific key in `config.toml` or `.synod/execution.json`
@@ -59,16 +63,17 @@ ranking, explicit adaptive exhaustion, or negotiation-state overrides.
 - routing values can be global, cluster-scoped, workspace-local, or command-specific
 - review councils and adjudication can use distinct routing defaults
 - `config show --scope effective` now exposes the resolved slot route, source,
-	and assistant binding for each bounded slot
+	assistant binding, declared runtime capability summary, and declared effort
+	policy for each bounded slot
 - `run`, `status`, `next`, and `inspect` now surface effective routing plus
 	assistant bindings, and native or compatibility traces persist the route
 	snapshot used during execution
 - `status`, `next`, and `inspect` now also surface guided follow-through fields
 	when persisted session or trace evidence can explain one concrete next
 	bounded action or explicit stop condition
-- when `assistant_runtimes` is non-empty, native execution now fails explicitly
-	if the active implementation or verification route requires a missing
-	assistant family instead of silently falling back
+- when `assistant_runtimes` is non-empty or a declared runtime capability marks
+	continuation or validation unsupported, native execution now stops at an
+	explicit delegation boundary instead of silently falling back
 
 ## Config locations
 
@@ -129,6 +134,7 @@ When follow-up commands already know which route owns the current work,
 Synod reuses that information and projects only the routing/config facts that
 materially explain the current state. In practice, `route_config_projection`
 may include persisted `effective_routing`, `assistant_bindings`,
+`runtime_capabilities`, `slot_effort_policies`,
 workspace-local routing defaults, workflow cues, or requested governance
 intent; it intentionally does not dump every possible config value.
 
@@ -221,6 +227,18 @@ synod config set --workspace <workspace> --scope workspace --reviewer safety --r
 synod config set --workspace <workspace> --scope workspace --adjudicator --runtime codex --model gpt-5-codex
 ```
 
+### Set runtime capability profiles
+
+```bash
+synod config set-capability --workspace <workspace> --scope workspace --runtime claude --continuation unsupported --resume unsupported --validation supported --handoff-target unsupported --escalation-context supported --notes "requires a handoff for bounded continuation"
+```
+
+### Set slot effort policy
+
+```bash
+synod config set-effort --workspace <workspace> --scope workspace --slot implementation --level high --fallback preserve --rationale "keep implementation on the highest-effort bounded path"
+```
+
 ### Unset values
 
 ```bash
@@ -241,4 +259,5 @@ Initial runtime support for routing and assistant setup:
 Gemini is currently treated as an explicit Gemini CLI fallback in this slice.
 If a workspace declares `assistant_runtimes` and the active implementation or
 verification route chooses a runtime outside that capability list, native
-execution stops with an explicit assistant-binding error.
+execution stops with an explicit delegation packet instead of an opaque
+assistant-binding error.

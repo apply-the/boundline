@@ -56,6 +56,7 @@ Auto-generated from all feature plans. Last updated: 2026-05-03
 - Workspace-local `.synod/session.json`, `.synod/config.toml`, optional `.synod/workflows.toml`, persisted traces under `<workspace>/.synod/traces/`, optional `.synod/execution.json`, optional `.canon/` artifacts, and repository-managed docs plus assistant assets (034-decision-driven-orchestrator)
 - Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for the first slice (035-dynamic-planning-flow)
 - Workspace-local `.synod/session.json`, `.synod/config.toml`, optional `.synod/workflows.toml`, persisted traces under `<workspace>/.synod/traces/`, optional `.synod/execution.json`, task-context state embedded in session tasks, optional `.canon/` governed artifacts, and repository-managed docs plus assistant assets (036-canon-grounded-memory)
+- Workspace-local `.synod/session.json`, `.synod/config.toml`, optional `.synod/workflows.toml`, persisted traces under `<workspace>/.synod/traces/`, optional `.synod/execution.json`, task-context state embedded in session tasks, and repository-managed docs plus assistant assets (037-bounded-delegation)
 
 - Rust 1.95.0, edition 2024 + Rust standard library plus `serde`, `serde_json`, `thiserror`, `tracing`, and `uuid` for structured state, trace serialization, error handling, instrumentation, and stable identifiers (001-delivery-orchestrator-core)
 
@@ -84,9 +85,9 @@ Crate versioning follows Semantic Versioning.
 Before 1.0.0, breaking changes MAY occur in minor versions.
 
 ## Recent Changes
+- 037-bounded-delegation: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for this slice
 - 036-canon-grounded-memory: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for the first slice
 - 035-dynamic-planning-flow: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for the first slice
-- 034-decision-driven-orchestrator: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for this slice
 
 
 <!-- MANUAL ADDITIONS START -->

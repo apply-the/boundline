@@ -14,6 +14,7 @@ Synod is a bounded delivery orchestrator. Contributions should keep that bias:
 - keep bounded context packs, credibility, and provenance explicit from planning through `run`, `status`, `next`, and `inspect`
 - keep Canon capability snapshots, compact Canon-grounded memory, and governed next-action cues explicit whenever governed evidence is reused across planning or follow-up surfaces
 - keep evidence-driven plan proposal state, confirmation boundaries, revision lineage, rationale, and verification strategy explicit from `plan` through `run`, `status`, `next`, and `inspect`
+- keep runtime capability profiles, slot effort policies, and any resulting delegation packets explicit from `config show` and `plan` through `run`, `status`, `next`, and `inspect`
 - keep clustered delivery sequential-first with one authoritative primary workspace session owner
 - keep continuity explicit when a workspace moves from session-native state to compatibility-trace follow-up
 - treat `synod workflow` as a thin bounded layer over the same session-owned runtime, not as a generic workflow engine
@@ -122,7 +123,7 @@ explicit compatibility path in this release.
 
 If you change how `status`, `next`, or `inspect` choose the authoritative follow-up state, keep the docs explicit about `continuity_authority`, inspect-only compatibility follow-up, and when `synod start` is or is not actually required.
 
-If you change how `run`, `status`, `next`, or `inspect` align route-summary wording, keep the docs explicit about `route_owner`, any material `route_config_projection`, persisted `effective_routing`, `assistant_bindings`, `follow_through_guidance`, `follow_through_evidence_source`, and the rule that summary convergence must not hide the real owning route, continuity authority, or any explicit unsupported-binding failure.
+If you change how `run`, `status`, `next`, or `inspect` align route-summary wording, keep the docs explicit about `route_owner`, any material `route_config_projection`, persisted `effective_routing`, `assistant_bindings`, `runtime_capabilities`, `slot_effort_policies`, `follow_through_guidance`, `follow_through_evidence_source`, and the rule that summary convergence must not hide the real owning route, continuity authority, or any explicit delegation boundary.
 
 If you change selector-driven decision execution, keep the docs explicit about selector kind, selector rationale, evidence basis, verification intent, and explicit ask, replan, or stop outcomes on `run`, `status`, `next`, and `inspect`.
 
