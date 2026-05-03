@@ -21,6 +21,7 @@ use crate::domain::task_context::{
     LATEST_GOVERNANCE_DECISION_KEY, LATEST_GOVERNANCE_PACKET_KEY,
     LATEST_GOVERNANCE_PACKET_REUSE_KEY, LATEST_GOVERNANCE_STAGE_KEY,
 };
+use crate::domain::trace::current_timestamp_millis;
 use crate::domain::workflow::WorkflowProgressState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -271,6 +272,313 @@ impl ContinuityAuthority {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum DelegationPacketKind {
+    Handoff,
+    Escalation,
+}
+
+impl DelegationPacketKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Handoff => "handoff",
+            Self::Escalation => "escalation",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DelegationPacketState {
+    Active,
+    Resolved,
+    Superseded,
+    Stuck,
+    Exhausted,
+}
+
+impl DelegationPacketState {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Active => "active",
+            Self::Resolved => "resolved",
+            Self::Superseded => "superseded",
+            Self::Stuck => "stuck",
+            Self::Exhausted => "exhausted",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DelegationContinuityMode {
+    None,
+    HandoffRequired,
+    EscalationRequired,
+    Resolved,
+    Stuck,
+    Exhausted,
+    InspectOnly,
+}
+
+impl DelegationContinuityMode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::HandoffRequired => "handoff_required",
+            Self::EscalationRequired => "escalation_required",
+            Self::Resolved => "resolved",
+            Self::Stuck => "stuck",
+            Self::Exhausted => "exhausted",
+            Self::InspectOnly => "inspect_only",
+        }
+    }
+
+    pub const fn requires_active_packet(self) -> bool {
+        matches!(self, Self::HandoffRequired | Self::EscalationRequired | Self::Stuck)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StuckRecoveryAction {
+    Replan,
+    ResolvePacket,
+    UpdateConfig,
+    RerunValidation,
+    Escalate,
+}
+
+impl StuckRecoveryAction {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Replan => "replan",
+            Self::ResolvePacket => "resolve_packet",
+            Self::UpdateConfig => "update_config",
+            Self::RerunValidation => "rerun_validation",
+            Self::Escalate => "escalate",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StuckEvidenceMarker {
+    #[serde(default)]
+    pub repeated_attempts: usize,
+    #[serde(default)]
+    pub same_reason_count: usize,
+    #[serde(default)]
+    pub unchanged_workspace_signal: bool,
+    #[serde(default)]
+    pub stale_route_policy: bool,
+    pub recommended_recovery: StuckRecoveryAction,
+}
+
+impl StuckEvidenceMarker {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.repeated_attempts == 0
+            && self.same_reason_count == 0
+            && !self.unchanged_workspace_signal
+            && !self.stale_route_policy
+        {
+            return Err(
+                "stuck evidence marker must preserve at least one repeated or unchanged signal"
+                    .to_string(),
+            );
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DelegationPacket {
+    pub packet_id: String,
+    pub kind: DelegationPacketKind,
+    pub state: DelegationPacketState,
+    pub created_at: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved_at: Option<u64>,
+    pub source_route_owner: String,
+    pub target_owner: String,
+    #[serde(default)]
+    pub continuity_reason: String,
+    pub recommended_next_action: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evidence_refs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capability_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stuck_marker: Option<StuckEvidenceMarker>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub superseded_by_packet_id: Option<String>,
+}
+
+impl DelegationPacket {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.packet_id.trim().is_empty() {
+            return Err("delegation packet_id must not be empty".to_string());
+        }
+        if self.source_route_owner.trim().is_empty() {
+            return Err("delegation source_route_owner must not be empty".to_string());
+        }
+        if self.target_owner.trim().is_empty() {
+            return Err("delegation target_owner must not be empty".to_string());
+        }
+        if self.recommended_next_action.trim().is_empty() {
+            return Err("delegation recommended_next_action must not be empty".to_string());
+        }
+        if self.continuity_reason.trim().is_empty() && self.evidence_refs.is_empty() {
+            return Err(
+                "delegation packet must include decisive evidence or an explicit continuity reason"
+                    .to_string(),
+            );
+        }
+        if self.state == DelegationPacketState::Active && self.resolved_at.is_some() {
+            return Err("active delegation packets cannot carry resolved_at".to_string());
+        }
+        if self.state == DelegationPacketState::Stuck && self.stuck_marker.is_none() {
+            return Err("stuck delegation packets must carry a stuck marker".to_string());
+        }
+        if let Some(marker) = &self.stuck_marker {
+            marker.validate()?;
+        }
+        if self.state == DelegationPacketState::Superseded {
+            if self.superseded_by_packet_id.as_deref().map(str::trim).unwrap_or_default().is_empty()
+            {
+                return Err(
+                    "superseded delegation packets must name the successor packet".to_string()
+                );
+            }
+        } else if self.superseded_by_packet_id.is_some() {
+            return Err(
+                "only superseded delegation packets may carry superseded_by_packet_id".to_string()
+            );
+        }
+
+        Ok(())
+    }
+
+    pub fn headline(&self) -> String {
+        let subject = if self.continuity_reason.trim().is_empty() {
+            self.evidence_refs
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "bounded continuity requires inspection".to_string())
+        } else {
+            self.continuity_reason.clone()
+        };
+
+        format!("{} required: {subject}", self.kind.as_str())
+    }
+
+    pub fn evidence_summary(&self) -> String {
+        if !self.evidence_refs.is_empty() {
+            return self.evidence_refs.join(", ");
+        }
+        if let Some(summary) = self.capability_summary.as_ref() {
+            return summary.clone();
+        }
+        self.continuity_reason.clone()
+    }
+
+    pub fn mark_resolved(&mut self) {
+        self.state = DelegationPacketState::Resolved;
+        self.resolved_at = Some(current_timestamp_millis());
+        self.superseded_by_packet_id = None;
+    }
+
+    pub fn mark_superseded(&mut self, successor_packet_id: impl Into<String>) {
+        self.state = DelegationPacketState::Superseded;
+        self.superseded_by_packet_id = Some(successor_packet_id.into());
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DelegationContinuityState {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_packet_id: Option<String>,
+    pub mode: DelegationContinuityMode,
+    pub authority_source: ContinuityAuthority,
+    pub next_command: String,
+    pub headline: String,
+    pub evidence_summary: String,
+}
+
+impl DelegationContinuityState {
+    pub fn validate(&self, packet_history: &[DelegationPacket]) -> Result<(), String> {
+        if self.next_command.trim().is_empty() {
+            return Err("delegation next_command must not be empty".to_string());
+        }
+        if self.headline.trim().is_empty() {
+            return Err("delegation headline must not be empty".to_string());
+        }
+        if self.evidence_summary.trim().is_empty() {
+            return Err("delegation evidence_summary must not be empty".to_string());
+        }
+
+        if self.mode.requires_active_packet() {
+            let active_packet_id = self
+                .active_packet_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| {
+                    format!("delegation mode {} requires an active_packet_id", self.mode.as_str())
+                })?;
+            let active_packet = packet_history
+                .iter()
+                .find(|packet| packet.packet_id == active_packet_id)
+                .ok_or_else(|| {
+                    format!(
+                        "delegation active_packet_id `{active_packet_id}` is missing from history"
+                    )
+                })?;
+
+            match self.mode {
+                DelegationContinuityMode::HandoffRequired
+                    if active_packet.kind != DelegationPacketKind::Handoff =>
+                {
+                    return Err(
+                        "handoff-required continuity must point to a handoff packet".to_string()
+                    );
+                }
+                DelegationContinuityMode::EscalationRequired
+                    if active_packet.kind != DelegationPacketKind::Escalation =>
+                {
+                    return Err(
+                        "escalation-required continuity must point to an escalation packet"
+                            .to_string(),
+                    );
+                }
+                DelegationContinuityMode::Stuck
+                    if active_packet.state != DelegationPacketState::Stuck =>
+                {
+                    return Err(
+                        "stuck continuity must point to a stuck delegation packet".to_string()
+                    );
+                }
+                _ => {}
+            }
+        } else if self.active_packet_id.is_some() {
+            return Err(format!(
+                "delegation mode {} must not keep an active_packet_id",
+                self.mode.as_str()
+            ));
+        }
+
+        if self.authority_source == ContinuityAuthority::NoFollowUpState
+            && self.mode != DelegationContinuityMode::None
+        {
+            return Err("no_follow_up_state authority may only be used with delegation mode none"
+                .to_string());
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum CompatibilityFollowUpMode {
     InspectOnly,
     Resumable,
@@ -296,6 +604,78 @@ pub struct CompatibilityFollowUpView {
     pub terminal_status: TaskStatus,
     pub terminal_reason: String,
     pub next_command: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DelegationStatusView {
+    pub mode: DelegationContinuityMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub packet_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub packet_kind: Option<DelegationPacketKind>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub packet_state: Option<DelegationPacketState>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_owner: Option<String>,
+    pub headline: String,
+    pub evidence_summary: String,
+}
+
+impl DelegationStatusView {
+    pub fn from_continuity(
+        continuity: &DelegationContinuityState,
+        packet_history: &[DelegationPacket],
+    ) -> Result<Self, String> {
+        continuity.validate(packet_history)?;
+        let packet = continuity
+            .active_packet_id
+            .as_ref()
+            .and_then(|packet_id| {
+                packet_history.iter().find(|packet| packet.packet_id == *packet_id)
+            })
+            .or_else(|| packet_history.last());
+
+        Ok(Self {
+            mode: continuity.mode,
+            packet_id: packet.map(|packet| packet.packet_id.clone()),
+            packet_kind: packet.map(|packet| packet.kind),
+            packet_state: packet.map(|packet| packet.state),
+            target_owner: packet.map(|packet| packet.target_owner.clone()),
+            headline: continuity.headline.clone(),
+            evidence_summary: continuity.evidence_summary.clone(),
+        })
+    }
+}
+
+pub fn delegation_status_view(record: &ActiveSessionRecord) -> Option<DelegationStatusView> {
+    if let Some(goal_plan) = record.goal_plan.as_ref()
+        && let Some(continuity) = goal_plan.delegation_continuity().cloned()
+    {
+        return DelegationStatusView::from_continuity(
+            &continuity,
+            goal_plan.delegation_packet_history(),
+        )
+        .ok();
+    }
+
+    let task = record.active_task.as_ref()?;
+    let continuity = task.context.delegation_continuity_state().ok().flatten()?;
+    let packet_history = task.context.delegation_packet_history().ok()?;
+    DelegationStatusView::from_continuity(&continuity, &packet_history).ok()
+}
+
+pub fn delegation_next_command(record: &ActiveSessionRecord) -> Option<String> {
+    if let Some(goal_plan) = record.goal_plan.as_ref()
+        && let Some(continuity) = goal_plan.delegation_continuity()
+    {
+        return Some(continuity.next_command.clone());
+    }
+
+    record
+        .active_task
+        .as_ref()
+        .and_then(|task| task.context.delegation_continuity_state().ok().flatten())
+        .map(|continuity| continuity.next_command)
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -361,6 +741,8 @@ pub struct SessionStatusView {
     pub workflow_next_action: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub continuity_authority: Option<ContinuityAuthority>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delegation: Option<DelegationStatusView>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compatibility_follow_up: Option<CompatibilityFollowUpView>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -471,6 +853,7 @@ impl Default for SessionStatusView {
             workflow_phase: None,
             workflow_next_action: None,
             continuity_authority: None,
+            delegation: None,
             compatibility_follow_up: None,
             current_stage_id: None,
             current_stage_index: None,
@@ -696,6 +1079,14 @@ impl SessionStatusView {
             return Err(SessionValidationError::StatusViewStageMismatch {
                 expected: expected_stage_id,
                 actual: self.current_stage_id.clone(),
+            });
+        }
+
+        let expected_delegation = delegation_status_view(record);
+        if self.delegation != expected_delegation {
+            return Err(SessionValidationError::StatusViewDelegationMismatch {
+                expected: expected_delegation.map(Box::new),
+                actual: self.delegation.clone().map(Box::new),
             });
         }
 
@@ -1104,6 +1495,23 @@ impl RoutingOutcome {
 }
 
 pub fn routing_outcome(record: &ActiveSessionRecord) -> RoutingOutcome {
+    if let Some(delegation) = delegation_status_view(record) {
+        match delegation.mode {
+            DelegationContinuityMode::HandoffRequired
+            | DelegationContinuityMode::EscalationRequired
+            | DelegationContinuityMode::Stuck
+            | DelegationContinuityMode::InspectOnly
+            | DelegationContinuityMode::Exhausted => {
+                return RoutingOutcome {
+                    mode: RoutingMode::Blocked,
+                    source: RoutingSource::SessionState,
+                    reason: delegation.headline,
+                };
+            }
+            DelegationContinuityMode::Resolved | DelegationContinuityMode::None => {}
+        }
+    }
+
     if let Some(goal_plan) = record.goal_plan.as_ref() {
         if goal_plan.requires_confirmation() {
             return RoutingOutcome {
@@ -1236,6 +1644,11 @@ pub enum SessionValidationError {
     StatusViewWorkflowPhaseMismatch { expected: Option<String>, actual: Option<String> },
     #[error("status view workflow next action mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewWorkflowNextActionMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view delegation mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewDelegationMismatch {
+        expected: Option<Box<DelegationStatusView>>,
+        actual: Option<Box<DelegationStatusView>>,
+    },
     #[error("status view stage mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewStageMismatch { expected: Option<String>, actual: Option<String> },
     #[error("status view stage index mismatch: expected {expected:?}, got {actual:?}")]
@@ -1672,10 +2085,11 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        ActiveSessionRecord, SessionStatus, SessionStatusView, SessionValidationError,
-        execution_path_text, task_state_attempt_lineage_summary, task_state_review_headline,
-        task_state_string, task_state_strings, task_state_workspace_slice_summary,
-        trace_within_workspace,
+        ActiveSessionRecord, CompatibilityFollowUpMode, DelegationStatusView, RoutingMode,
+        RoutingSource, SessionStatus, SessionStatusView, SessionValidationError,
+        delegation_next_command, execution_path_text, routing_outcome,
+        task_state_attempt_lineage_summary, task_state_review_headline, task_state_string,
+        task_state_strings, task_state_workspace_slice_summary, trace_within_workspace,
     };
     use crate::domain::goal_plan::{
         ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan,
@@ -1684,6 +2098,11 @@ mod tests {
     use crate::domain::limits::RunLimits;
     use crate::domain::negotiation::NegotiatedDeliveryPacket;
     use crate::domain::plan::Plan;
+    use crate::domain::session::{
+        ContinuityAuthority, DelegationContinuityMode, DelegationContinuityState, DelegationPacket,
+        DelegationPacketKind, DelegationPacketState, StuckEvidenceMarker, StuckRecoveryAction,
+        delegation_status_view,
+    };
     use crate::domain::step::Step;
     use crate::domain::task::{Task, TaskPersistenceError, TaskRunRequest};
     use crate::domain::workflow::{WorkflowLifecycleState, WorkflowPhase, WorkflowProgressState};
@@ -1789,6 +2208,7 @@ mod tests {
             workflow_phase: record.active_workflow_phase_text(),
             workflow_next_action: record.active_workflow_next_action(),
             continuity_authority: None,
+            delegation: delegation_status_view(record),
             compatibility_follow_up: None,
             current_stage_id: record.active_flow.as_ref().map(|flow| flow.current_stage_id.clone()),
             current_stage_index: record.active_flow.as_ref().map(|flow| flow.current_stage_index),
@@ -2057,6 +2477,43 @@ mod tests {
             Some("same_stage_rerun".to_string())
         );
         assert_eq!(super::governance_packet_provenance_text(None, None), None);
+    }
+
+    #[test]
+    fn delegation_packet_validation_rejects_invalid_supersession_and_empty_evidence() {
+        let packet = DelegationPacket {
+            packet_id: "packet-1".to_string(),
+            kind: DelegationPacketKind::Handoff,
+            state: DelegationPacketState::Superseded,
+            created_at: 10,
+            resolved_at: None,
+            source_route_owner: "native".to_string(),
+            target_owner: "codex".to_string(),
+            continuity_reason: String::new(),
+            recommended_next_action: "synod status".to_string(),
+            evidence_refs: Vec::new(),
+            capability_summary: None,
+            stuck_marker: None,
+            superseded_by_packet_id: None,
+        };
+
+        let error = packet.validate().unwrap_err();
+        assert!(error.contains("decisive evidence") || error.contains("successor packet"));
+    }
+
+    #[test]
+    fn delegation_continuity_validation_requires_active_packet_for_handoff() {
+        let continuity = DelegationContinuityState {
+            active_packet_id: None,
+            mode: DelegationContinuityMode::HandoffRequired,
+            authority_source: ContinuityAuthority::NativeSession,
+            next_command: "synod status".to_string(),
+            headline: "handoff required: implementation route cannot continue".to_string(),
+            evidence_summary: "routing policy requires a handoff".to_string(),
+        };
+
+        let error = continuity.validate(&[]).unwrap_err();
+        assert!(error.contains("requires an active_packet_id"));
     }
 
     #[test]
@@ -2491,5 +2948,303 @@ mod tests {
             task_state_review_headline(&participant_task),
             Some("participants: safety pending, maintainability unknown".to_string())
         );
+    }
+
+    #[test]
+    fn delegation_helpers_cover_headline_evidence_mutation_and_stuck_signals() {
+        assert_eq!(StuckRecoveryAction::Replan.as_str(), "replan");
+        assert_eq!(StuckRecoveryAction::ResolvePacket.as_str(), "resolve_packet");
+        assert_eq!(StuckRecoveryAction::UpdateConfig.as_str(), "update_config");
+        assert_eq!(StuckRecoveryAction::RerunValidation.as_str(), "rerun_validation");
+        assert_eq!(StuckRecoveryAction::Escalate.as_str(), "escalate");
+
+        let invalid_marker = StuckEvidenceMarker {
+            repeated_attempts: 0,
+            same_reason_count: 0,
+            unchanged_workspace_signal: false,
+            stale_route_policy: false,
+            recommended_recovery: StuckRecoveryAction::Replan,
+        };
+        assert!(
+            invalid_marker
+                .validate()
+                .unwrap_err()
+                .contains("at least one repeated or unchanged signal")
+        );
+
+        let mut packet = DelegationPacket {
+            packet_id: "packet-1".to_string(),
+            kind: DelegationPacketKind::Handoff,
+            state: DelegationPacketState::Active,
+            created_at: 10,
+            resolved_at: None,
+            source_route_owner: "native".to_string(),
+            target_owner: "codex".to_string(),
+            continuity_reason: String::new(),
+            recommended_next_action: "synod status".to_string(),
+            evidence_refs: vec!["trace:delegation:packet-1".to_string()],
+            capability_summary: Some("continuation=unsupported".to_string()),
+            stuck_marker: None,
+            superseded_by_packet_id: None,
+        };
+        assert_eq!(packet.headline(), "handoff required: trace:delegation:packet-1".to_string());
+        assert_eq!(packet.evidence_summary(), "trace:delegation:packet-1".to_string());
+
+        packet.mark_superseded("packet-2");
+        assert_eq!(packet.state, DelegationPacketState::Superseded);
+        assert_eq!(packet.superseded_by_packet_id.as_deref(), Some("packet-2"));
+
+        packet.mark_resolved();
+        assert_eq!(packet.state, DelegationPacketState::Resolved);
+        assert!(packet.resolved_at.is_some());
+        assert!(packet.superseded_by_packet_id.is_none());
+
+        let capability_packet = DelegationPacket {
+            packet_id: "packet-3".to_string(),
+            kind: DelegationPacketKind::Escalation,
+            state: DelegationPacketState::Exhausted,
+            created_at: 10,
+            resolved_at: Some(20),
+            source_route_owner: "native".to_string(),
+            target_owner: "operator".to_string(),
+            continuity_reason: "verification route cannot validate directly".to_string(),
+            recommended_next_action: "synod inspect".to_string(),
+            evidence_refs: Vec::new(),
+            capability_summary: Some("validation=unsupported".to_string()),
+            stuck_marker: None,
+            superseded_by_packet_id: None,
+        };
+        assert_eq!(
+            capability_packet.headline(),
+            "escalation required: verification route cannot validate directly".to_string()
+        );
+        assert_eq!(capability_packet.evidence_summary(), "validation=unsupported".to_string());
+    }
+
+    #[test]
+    fn delegation_status_and_next_command_fall_back_to_task_context_and_validate_modes() {
+        let workspace = "/tmp/synod-session-domain-delegation-context";
+        let mut record = build_record(workspace);
+        record.goal_plan = None;
+
+        let packet = DelegationPacket {
+            packet_id: "packet-stuck".to_string(),
+            kind: DelegationPacketKind::Escalation,
+            state: DelegationPacketState::Stuck,
+            created_at: 10,
+            resolved_at: None,
+            source_route_owner: "native".to_string(),
+            target_owner: "operator".to_string(),
+            continuity_reason: "verification route cannot continue".to_string(),
+            recommended_next_action: "synod inspect".to_string(),
+            evidence_refs: vec!["trace:delegation:packet-stuck".to_string()],
+            capability_summary: Some("validation=unsupported".to_string()),
+            stuck_marker: Some(StuckEvidenceMarker {
+                repeated_attempts: 3,
+                same_reason_count: 3,
+                unchanged_workspace_signal: true,
+                stale_route_policy: false,
+                recommended_recovery: StuckRecoveryAction::RerunValidation,
+            }),
+            superseded_by_packet_id: None,
+        };
+        let continuity = DelegationContinuityState {
+            active_packet_id: Some(packet.packet_id.clone()),
+            mode: DelegationContinuityMode::Stuck,
+            authority_source: ContinuityAuthority::NativeSession,
+            next_command: "synod inspect".to_string(),
+            headline: "stuck delegated continuity: verification route cannot continue".to_string(),
+            evidence_summary: "trace:delegation:packet-stuck".to_string(),
+        };
+        record
+            .active_task
+            .as_mut()
+            .unwrap()
+            .context
+            .set_delegation_packet_history(std::slice::from_ref(&packet))
+            .unwrap();
+        record
+            .active_task
+            .as_mut()
+            .unwrap()
+            .context
+            .set_delegation_continuity_state(&continuity)
+            .unwrap();
+
+        let status = delegation_status_view(&record).unwrap();
+        assert_eq!(status.mode, DelegationContinuityMode::Stuck);
+        assert_eq!(status.packet_id.as_deref(), Some("packet-stuck"));
+        assert_eq!(status.packet_kind, Some(DelegationPacketKind::Escalation));
+        assert_eq!(status.packet_state, Some(DelegationPacketState::Stuck));
+        assert_eq!(status.target_owner.as_deref(), Some("operator"));
+        assert_eq!(delegation_next_command(&record), Some("synod inspect".to_string()));
+
+        let resolved = DelegationContinuityState {
+            active_packet_id: None,
+            mode: DelegationContinuityMode::Resolved,
+            authority_source: ContinuityAuthority::NativeSession,
+            next_command: "synod run".to_string(),
+            headline: "delegation resolved after routing update".to_string(),
+            evidence_summary: "routing policy now supports direct continuation".to_string(),
+        };
+        let resolved_view =
+            DelegationStatusView::from_continuity(&resolved, std::slice::from_ref(&packet))
+                .unwrap();
+        assert_eq!(resolved_view.packet_id.as_deref(), Some("packet-stuck"));
+
+        let invalid_active_packet = DelegationContinuityState {
+            active_packet_id: Some(packet.packet_id.clone()),
+            mode: DelegationContinuityMode::Resolved,
+            authority_source: ContinuityAuthority::NativeSession,
+            next_command: "synod run".to_string(),
+            headline: "delegation resolved".to_string(),
+            evidence_summary: "routing policy changed".to_string(),
+        };
+        assert!(
+            invalid_active_packet
+                .validate(std::slice::from_ref(&packet))
+                .unwrap_err()
+                .contains("must not keep an active_packet_id")
+        );
+
+        let invalid_authority = DelegationContinuityState {
+            active_packet_id: None,
+            mode: DelegationContinuityMode::Resolved,
+            authority_source: ContinuityAuthority::NoFollowUpState,
+            next_command: "synod run".to_string(),
+            headline: "delegation resolved".to_string(),
+            evidence_summary: "routing policy changed".to_string(),
+        };
+        assert!(
+            invalid_authority
+                .validate(&[])
+                .unwrap_err()
+                .contains("may only be used with delegation mode none")
+        );
+
+        assert!(DelegationContinuityMode::EscalationRequired.requires_active_packet());
+        assert!(!DelegationContinuityMode::InspectOnly.requires_active_packet());
+        assert_eq!(CompatibilityFollowUpMode::Resumable.as_str(), "resumable");
+    }
+
+    #[test]
+    fn routing_outcome_covers_delegation_goal_plan_compatibility_goal_capture_and_empty_session() {
+        let workspace = "/tmp/synod-session-domain-routing";
+
+        let packet = DelegationPacket {
+            packet_id: "packet-routing".to_string(),
+            kind: DelegationPacketKind::Handoff,
+            state: DelegationPacketState::Active,
+            created_at: 10,
+            resolved_at: None,
+            source_route_owner: "native".to_string(),
+            target_owner: "codex".to_string(),
+            continuity_reason: "implementation route requires handoff".to_string(),
+            recommended_next_action: "synod status".to_string(),
+            evidence_refs: vec!["trace:delegation:packet-routing".to_string()],
+            capability_summary: Some("continuation=unsupported".to_string()),
+            stuck_marker: None,
+            superseded_by_packet_id: None,
+        };
+        let continuity = DelegationContinuityState {
+            active_packet_id: Some(packet.packet_id.clone()),
+            mode: DelegationContinuityMode::HandoffRequired,
+            authority_source: ContinuityAuthority::NativeSession,
+            next_command: "synod status".to_string(),
+            headline: packet.headline(),
+            evidence_summary: packet.evidence_summary(),
+        };
+
+        let delegated_goal_plan = GoalPlan::new(
+            "Deliver a session-backed CLI",
+            vec![PlannedTask {
+                task_id: "planned-task-routing".to_string(),
+                description: "Implement the session runtime".to_string(),
+                target: "src/lib.rs".to_string(),
+                expected_outcome: Some("session runtime works".to_string()),
+                decision_type_hint: None,
+            }],
+        )
+        .unwrap()
+        .with_delegation_state(vec![packet], continuity)
+        .unwrap();
+        let mut delegated_record = build_record(workspace);
+        delegated_record.active_task = None;
+        delegated_record.goal_plan = Some(delegated_goal_plan);
+
+        let delegated_outcome = routing_outcome(&delegated_record);
+        assert_eq!(delegated_outcome.mode, RoutingMode::Blocked);
+        assert_eq!(delegated_outcome.source, RoutingSource::SessionState);
+        assert!(delegated_outcome.reason.contains("handoff required"));
+        assert_eq!(execution_path_text(&delegated_record), None);
+
+        let mut pending_record = build_record(workspace);
+        pending_record.active_task = None;
+        pending_record.goal_plan = Some(
+            GoalPlan::new(
+                "Deliver a session-backed CLI",
+                vec![PlannedTask {
+                    task_id: "planned-task-pending".to_string(),
+                    description: "Confirm the plan".to_string(),
+                    target: "src/lib.rs".to_string(),
+                    expected_outcome: Some("plan confirmed".to_string()),
+                    decision_type_hint: None,
+                }],
+            )
+            .unwrap(),
+        );
+        let pending_outcome = routing_outcome(&pending_record);
+        assert_eq!(pending_outcome.mode, RoutingMode::Blocked);
+        assert_eq!(pending_outcome.source, RoutingSource::GoalPlan);
+        assert_eq!(
+            execution_path_text(&pending_record),
+            Some("native_goal_plan_pending_plan_confirmation".to_string())
+        );
+
+        let mut native_record = build_record(workspace);
+        native_record.active_task = None;
+        native_record.goal_plan = Some(build_context_goal_plan());
+        let native_outcome = routing_outcome(&native_record);
+        assert_eq!(native_outcome.mode, RoutingMode::Native);
+        assert_eq!(native_outcome.source, RoutingSource::GoalPlan);
+        assert_eq!(execution_path_text(&native_record), Some("native_goal_plan".to_string()));
+
+        let compatibility_record = build_record(workspace);
+        let compatibility_outcome = routing_outcome(&compatibility_record);
+        assert_eq!(compatibility_outcome.mode, RoutingMode::Compatibility);
+        assert_eq!(compatibility_outcome.source, RoutingSource::ExecutionProfile);
+        assert_eq!(
+            execution_path_text(&compatibility_record),
+            Some("fixture_compatibility".to_string())
+        );
+
+        let mut goal_capture_record = build_record(workspace);
+        goal_capture_record.active_task = None;
+        goal_capture_record.goal_plan = None;
+        let goal_capture_outcome = routing_outcome(&goal_capture_record);
+        assert_eq!(goal_capture_outcome.mode, RoutingMode::Blocked);
+        assert_eq!(goal_capture_outcome.source, RoutingSource::GoalCapture);
+        assert_eq!(
+            execution_path_text(&goal_capture_record),
+            Some("native_session_pending_plan".to_string())
+        );
+
+        let mut empty_record = build_record(workspace);
+        empty_record.goal = None;
+        empty_record.active_task = None;
+        empty_record.goal_plan = None;
+        let empty_outcome = routing_outcome(&empty_record);
+        assert_eq!(empty_outcome.mode, RoutingMode::Blocked);
+        assert_eq!(empty_outcome.source, RoutingSource::SessionState);
+        assert!(empty_outcome.reason.contains("no goal plan"));
+        assert_eq!(execution_path_text(&empty_record), None);
+
+        assert_eq!(RoutingMode::Native.as_str(), "native");
+        assert_eq!(RoutingMode::Compatibility.as_str(), "compatibility");
+        assert_eq!(RoutingMode::Blocked.as_str(), "blocked");
+        assert_eq!(RoutingSource::GoalPlan.as_str(), "goal_plan");
+        assert_eq!(RoutingSource::ExecutionProfile.as_str(), "execution_profile");
+        assert_eq!(RoutingSource::GoalCapture.as_str(), "goal_capture");
+        assert_eq!(RoutingSource::SessionState.as_str(), "session_state");
     }
 }

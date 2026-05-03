@@ -4,7 +4,7 @@ use crate::runtime_refoundation::temp_runtime_refoundation_compat_workspace;
 use crate::workspace_fixture::{run_synod_in, terminal_text};
 
 #[test]
-fn status_surfaces_native_session_and_compatibility_follow_up_without_replacing_session_state() {
+fn status_surfaces_native_snapshot_and_compatibility_follow_up_without_replacing_session_state() {
     let workspace =
         temp_runtime_refoundation_compat_workspace("session-compatibility-continuity-mixed-route");
 
@@ -26,7 +26,7 @@ fn status_surfaces_native_session_and_compatibility_follow_up_without_replacing_
     let status_text = terminal_text(&status);
     assert_eq!(status.status.code(), Some(0), "{status_text}");
     assert!(status_text.contains("routing: native (goal_plan)"), "{status_text}");
-    assert!(status_text.contains("continuity_authority: native_session"), "{status_text}");
+    assert!(status_text.contains("continuity_authority: compatibility_trace"), "{status_text}");
     assert!(status_text.contains("compatibility_follow_up: inspect_only"), "{status_text}");
     assert!(
         status_text.contains("compatibility_routing: compatibility (execution_profile)"),

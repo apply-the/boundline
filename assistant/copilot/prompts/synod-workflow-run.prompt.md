@@ -26,7 +26,7 @@ Ask only for the missing `workspace_ref` or `workflow_name`, then provide this e
 Wait for pasted output before continuing.
 
 ## Output Interpretation
-Summarize `workflow`, `workflow_phase`, `routing`, `route_owner`, `route_config_projection`, `execution_condition`, `execution_path`, any `follow_through_guidance`, any governance wait-or-block guidance, and the CLI-reported `next_command`. Preserve `effective_routing` and `assistant_bindings` when they appear inside `route_config_projection`. If the CLI reports an assistant-binding failure, treat it as a real stop condition.
+Summarize `workflow`, `workflow_phase`, `routing`, `route_owner`, `route_config_projection`, `execution_condition`, `execution_path`, any `delegation_mode`, `delegation_packet_id`, `delegation_packet_kind`, `delegation_packet_state`, `delegation_target_owner`, `delegation_headline`, `delegation_evidence_summary`, any `follow_through_guidance`, any governance wait-or-block guidance, and the CLI-reported `next_command`. Preserve `effective_routing`, `assistant_bindings`, `runtime_capabilities`, and `slot_effort_policies` when they appear inside `route_config_projection`. If the CLI reports delegated continuity, treat it as a real stop condition.
 
 ## Next-Step Routing
 Prefer the CLI-reported `next_command`; when the workflow remains active, route to `/synod-workflow-resume`, and when the next bounded action is inspection, route to `/synod-workflow-inspect`.

@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use uuid::Uuid;
 
 use serde_json::json;
+use synod::FileConfigStore;
 use synod::adapters::agent::FnAgentAdapter;
 use synod::adapters::session_store::{FileSessionStore, SessionStore};
 use synod::adapters::tool::FnToolAdapter;
@@ -11,6 +12,10 @@ use synod::adapters::trace_store::FileTraceStore;
 use synod::cli::inspect::execute_inspect;
 use synod::cli::session::{
     execute_capture, execute_plan, execute_run, execute_start, execute_status,
+};
+use synod::domain::configuration::{
+    CapabilityState, ConfigFile, EffortFallbackPolicy, EffortLevel, ModelRoute, RouteSlot,
+    RoutingConfig, RuntimeCapabilityProfile, RuntimeKind, SlotEffortPolicy,
 };
 use synod::domain::decision::{ActionSelector, DecisionType};
 use synod::domain::flow_policy::FlowPolicy;
@@ -23,6 +28,8 @@ use synod::orchestrator::flow_inference::infer_flow;
 use synod::orchestrator::goal_planner::build_goal_plan;
 use synod::registry::agent_registry::AgentRegistry;
 use synod::registry::tool_registry::ToolRegistry;
+
+use crate::workspace_fixture::temp_fixture_workspace;
 
 fn temp_workspace(prefix: &str) -> PathBuf {
     let ws = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
@@ -229,6 +236,115 @@ fn session_native_full_flow_produces_decisions_and_trace() {
 
     // All decisions should be in a terminal status
     assert!(decisions.iter().all(|d| d.status.is_terminal()));
+}
+
+#[test]
+fn blocked_native_run_surfaces_delegation_across_status_and_inspect() {
+    let ws = temp_fixture_workspace("snf-delegated-native");
+    let mut config = ConfigFile {
+        version: 1,
+        routing: RoutingConfig {
+            implementation: Some(ModelRoute {
+                runtime: RuntimeKind::Claude,
+                model: "sonnet-4".to_string(),
+            }),
+            assistant_runtimes: vec![RuntimeKind::Codex],
+            ..RoutingConfig::default()
+        },
+    };
+    config.routing.slot_effort_policies.insert(
+        RouteSlot::Implementation,
+        SlotEffortPolicy {
+            level: EffortLevel::High,
+            fallback: EffortFallbackPolicy::Preserve,
+            rationale: Some("keep implementation on the highest-effort bounded path".to_string()),
+        },
+    );
+    config.routing.runtime_capabilities.insert(
+        RuntimeKind::Claude,
+        RuntimeCapabilityProfile {
+            continuation: CapabilityState::Unsupported,
+            resume: CapabilityState::Unsupported,
+            validation: CapabilityState::Unsupported,
+            handoff_target: CapabilityState::Unsupported,
+            escalation_context: CapabilityState::Supported,
+            notes: Some("requires a handoff for bounded continuation".to_string()),
+        },
+    );
+    config.routing.runtime_capabilities.insert(
+        RuntimeKind::Codex,
+        RuntimeCapabilityProfile {
+            continuation: CapabilityState::Supported,
+            resume: CapabilityState::Supported,
+            validation: CapabilityState::Supported,
+            handoff_target: CapabilityState::Supported,
+            escalation_context: CapabilityState::Supported,
+            notes: None,
+        },
+    );
+    FileConfigStore::for_workspace(&ws).save_local(&config).unwrap();
+
+    execute_start(Some(&ws)).unwrap();
+    execute_capture(Some(&ws), Some("fix the failing add test"), &[], None, None, None, None)
+        .unwrap();
+    let plan = execute_plan(Some(&ws), Some("bug-fix"), false, false).unwrap();
+    assert!(plan.terminal_output.contains("runtime_capabilities:"), "{}", plan.terminal_output);
+    assert!(plan.terminal_output.contains("slot_effort_policies:"), "{}", plan.terminal_output);
+    assert!(plan.terminal_output.contains("routing policy:"), "{}", plan.terminal_output);
+
+    let run = execute_run(Some(&ws)).unwrap();
+    assert!(
+        run.terminal_output.contains("delegation_mode: handoff_required"),
+        "{}",
+        run.terminal_output
+    );
+    assert!(
+        run.terminal_output.contains("delegation_packet_kind: handoff"),
+        "{}",
+        run.terminal_output
+    );
+    assert!(
+        run.terminal_output.contains("delegation_target_owner: codex"),
+        "{}",
+        run.terminal_output
+    );
+
+    let status = execute_status(Some(&ws)).unwrap();
+    assert!(
+        status.terminal_output.contains("delegation_mode: handoff_required"),
+        "{}",
+        status.terminal_output
+    );
+    assert!(
+        status.terminal_output.contains("next_command: synod status"),
+        "{}",
+        status.terminal_output
+    );
+
+    let inspect = execute_inspect(None, Some(&ws)).unwrap();
+    assert!(
+        inspect.terminal_output.contains("delegation_mode: handoff_required"),
+        "{}",
+        inspect.terminal_output
+    );
+    assert!(
+        inspect.terminal_output.contains("runtime_capabilities:"),
+        "{}",
+        inspect.terminal_output
+    );
+    assert!(
+        inspect.terminal_output.contains("slot_effort_policies:"),
+        "{}",
+        inspect.terminal_output
+    );
+
+    let record = FileSessionStore::for_workspace(&ws).load().unwrap().unwrap();
+    let goal_plan = record.goal_plan.as_ref().expect("delegated goal plan should persist");
+    let continuity =
+        goal_plan.delegation_continuity().expect("delegation continuity should persist");
+    assert_eq!(continuity.mode.as_str(), "handoff_required");
+    assert_eq!(continuity.next_command, "synod status");
+    assert_eq!(record.latest_status, SessionStatus::Planned);
 }
 
 /// Decision loop with flow inference, policy constraints, and stage transitions

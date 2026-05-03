@@ -354,7 +354,8 @@ fn native_inspect_uses_persisted_routing_snapshot_after_config_changes() {
 }
 
 #[test]
-fn native_run_rejects_route_runtimes_missing_from_declared_assistant_capabilities() {
+fn native_run_persists_delegation_when_route_runtime_missing_from_declared_assistant_capabilities()
+{
     let workspace =
         temp_runtime_refoundation_compat_workspace("runtime-routing-contract-unsupported-binding");
 
@@ -384,14 +385,26 @@ fn native_run_rejects_route_runtimes_missing_from_declared_assistant_capabilitie
     .unwrap();
     execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
 
-    let error = execute_run(Some(&workspace)).unwrap_err();
+    let run = execute_run(Some(&workspace)).unwrap();
+    let record = FileSessionStore::for_workspace(&workspace).load().unwrap().unwrap();
+    let goal_plan = record.goal_plan.as_ref().expect("goal plan should persist after blocked run");
+    let continuity =
+        goal_plan.delegation_continuity().expect("delegation continuity should be recorded");
 
     assert!(
-        error.to_string().contains(
-            "assistant binding for implementation requires gemini, but available assistant runtimes are: codex"
+        run.terminal_output.contains(
+            "delegation_headline: escalation required: implementation route requires gemini, but available assistant runtimes are: codex"
         ),
-        "{error}"
+        "{}",
+        run.terminal_output
     );
+    assert!(
+        run.terminal_output.contains("delegation_packet_kind: escalation"),
+        "{}",
+        run.terminal_output
+    );
+    assert_eq!(continuity.mode.as_str(), "escalation_required");
+    assert_eq!(continuity.next_command, "synod inspect");
 }
 
 #[test]

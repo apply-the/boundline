@@ -55,6 +55,28 @@ impl FollowThroughProjection {
             };
         }
 
+        if let Some(delegation) = &view.delegation {
+            let packet_ref = delegation.packet_id.as_deref().unwrap_or("unknown-packet");
+            let stop_reason = match delegation.target_owner.as_deref() {
+                Some(target_owner) => {
+                    format!("{}; target_owner={target_owner}", delegation.evidence_summary)
+                }
+                None => delegation.evidence_summary.clone(),
+            };
+
+            return Self {
+                guidance: Some(match delegation.packet_state {
+                    Some(packet_state) => {
+                        format!("{} [{}]", delegation.headline, packet_state.as_str())
+                    }
+                    None => delegation.headline.clone(),
+                }),
+                evidence_source: Some(format!("session:delegation_packet:{packet_ref}")),
+                next_action: view.next_command.clone(),
+                stop_reason: Some(stop_reason),
+            };
+        }
+
         if view.context_credibility.as_deref().is_some_and(|credibility| credibility != "credible")
         {
             return Self {
@@ -143,6 +165,28 @@ impl FollowThroughProjection {
     }
 
     pub fn from_trace_summary(summary: &TraceSummaryView, next_command: Option<&str>) -> Self {
+        if let Some(delegation) = &summary.delegation {
+            let packet_ref = delegation.packet_id.as_deref().unwrap_or("unknown-packet");
+            let stop_reason = match delegation.target_owner.as_deref() {
+                Some(target_owner) => {
+                    format!("{}; target_owner={target_owner}", delegation.evidence_summary)
+                }
+                None => delegation.evidence_summary.clone(),
+            };
+
+            return Self {
+                guidance: Some(match delegation.packet_state {
+                    Some(packet_state) => {
+                        format!("{} [{}]", delegation.headline, packet_state.as_str())
+                    }
+                    None => delegation.headline.clone(),
+                }),
+                evidence_source: Some(format!("trace:delegation_packet:{packet_ref}")),
+                next_action: next_command.map(str::to_string),
+                stop_reason: Some(stop_reason),
+            };
+        }
+
         if summary
             .context_credibility
             .as_deref()
@@ -265,6 +309,7 @@ mod tests {
             workflow_phase: None,
             workflow_next_action: None,
             continuity_authority: None,
+            delegation: None,
             compatibility_follow_up: None,
             current_stage_id: None,
             current_stage_index: None,

@@ -166,3 +166,123 @@ fn config_show_effective_surfaces_assistant_bindings() {
         "{show_text}"
     );
 }
+
+#[test]
+fn config_show_effective_surfaces_capability_and_effort_projection() {
+    let workspace = empty_workspace("synod-config-capability-effort");
+
+    let init = run_synod_in(
+        &workspace,
+        &[
+            "init",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--template",
+            "change",
+            "--assistant",
+            "copilot",
+        ],
+    );
+    assert_eq!(init.status.code(), Some(0), "{}", terminal_text(&init));
+
+    let set_route = run_synod_in(
+        &workspace,
+        &[
+            "config",
+            "set",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--scope",
+            "workspace",
+            "--slot",
+            "implementation",
+            "--runtime",
+            "claude",
+            "--model",
+            "sonnet-4",
+        ],
+    );
+    assert_eq!(set_route.status.code(), Some(0), "{}", terminal_text(&set_route));
+
+    let set_capability = run_synod_in(
+        &workspace,
+        &[
+            "config",
+            "set-capability",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--scope",
+            "workspace",
+            "--runtime",
+            "claude",
+            "--continuation",
+            "unsupported",
+            "--resume",
+            "unsupported",
+            "--validation",
+            "supported",
+            "--handoff-target",
+            "unsupported",
+            "--escalation-context",
+            "supported",
+            "--notes",
+            "requires a handoff for bounded continuation",
+        ],
+    );
+    assert_eq!(set_capability.status.code(), Some(0), "{}", terminal_text(&set_capability));
+
+    let set_effort = run_synod_in(
+        &workspace,
+        &[
+            "config",
+            "set-effort",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--scope",
+            "workspace",
+            "--slot",
+            "implementation",
+            "--level",
+            "high",
+            "--fallback",
+            "preserve",
+            "--rationale",
+            "keep implementation on the highest-effort bounded path",
+        ],
+    );
+    assert_eq!(set_effort.status.code(), Some(0), "{}", terminal_text(&set_effort));
+
+    let show = run_synod_in(
+        &workspace,
+        &[
+            "config",
+            "show",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--scope",
+            "effective",
+        ],
+    );
+    let show_text = terminal_text(&show);
+    assert_eq!(show.status.code(), Some(0), "{show_text}");
+    assert!(
+        show_text.contains(
+            "effective_routing: planning=codex/gpt-5-codex [built-in], implementation=claude/sonnet-4 [workspace]"
+        ),
+        "{show_text}"
+    );
+    assert!(show_text.contains("runtime_capabilities:"), "{show_text}");
+    assert!(
+        show_text.contains(
+            "- claude: continuation=unsupported, resume=unsupported, validation=supported, handoff_target=unsupported, escalation_context=supported, notes=requires a handoff for bounded continuation [workspace]"
+        ),
+        "{show_text}"
+    );
+    assert!(show_text.contains("slot_effort_policies:"), "{show_text}");
+    assert!(
+        show_text.contains(
+            "- implementation: level=high, fallback=preserve, rationale=keep implementation on the highest-effort bounded path [workspace]"
+        ),
+        "{show_text}"
+    );
+}

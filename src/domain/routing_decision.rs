@@ -1,7 +1,12 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::domain::configuration::{EffectiveRouting, RuntimeKind, SourcedRoute, ValueSource};
+use crate::domain::configuration::{
+    EffectiveRouting, RouteSlot, RuntimeKind, SourcedRoute, SourcedRuntimeCapabilityProfile,
+    SourcedSlotEffortPolicy, ValueSource,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct RoutingDecisionProjection {
@@ -9,12 +14,26 @@ pub struct RoutingDecisionProjection {
     pub effective_routing: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub assistant_bindings: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub runtime_capabilities: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub slot_effort_policies: Vec<String>,
 }
 
 impl RoutingDecisionProjection {
     pub fn from_effective_routing(routing: &EffectiveRouting) -> Self {
+        Self::from_effective_state(routing, &BTreeMap::new(), &BTreeMap::new())
+    }
+
+    pub fn from_effective_state(
+        routing: &EffectiveRouting,
+        runtime_capabilities: &BTreeMap<RuntimeKind, SourcedRuntimeCapabilityProfile>,
+        slot_effort_policies: &BTreeMap<RouteSlot, SourcedSlotEffortPolicy>,
+    ) -> Self {
         let mut effective_routing = Vec::new();
         let mut assistant_bindings = Vec::new();
+        let mut runtime_capabilities_projection = Vec::new();
+        let mut slot_effort_policies_projection = Vec::new();
 
         push_projection_entry(
             "planning",
@@ -56,11 +75,37 @@ impl RoutingDecisionProjection {
             );
         }
 
-        Self { effective_routing, assistant_bindings }
+        for (runtime, profile) in runtime_capabilities {
+            runtime_capabilities_projection.push(format!(
+                "{}={} [{}]",
+                runtime.as_str(),
+                profile.profile.summary_text(),
+                value_source_text(profile.source)
+            ));
+        }
+
+        for (slot, policy) in slot_effort_policies {
+            slot_effort_policies_projection.push(format!(
+                "{}={} [{}]",
+                slot.as_str(),
+                policy.policy.summary_text(),
+                value_source_text(policy.source)
+            ));
+        }
+
+        Self {
+            effective_routing,
+            assistant_bindings,
+            runtime_capabilities: runtime_capabilities_projection,
+            slot_effort_policies: slot_effort_policies_projection,
+        }
     }
 
     pub fn is_empty(&self) -> bool {
-        self.effective_routing.is_empty() && self.assistant_bindings.is_empty()
+        self.effective_routing.is_empty()
+            && self.assistant_bindings.is_empty()
+            && self.runtime_capabilities.is_empty()
+            && self.slot_effort_policies.is_empty()
     }
 
     pub fn projection_lines(&self) -> Vec<String> {
@@ -70,6 +115,12 @@ impl RoutingDecisionProjection {
         }
         if !self.assistant_bindings.is_empty() {
             lines.push(format!("assistant_bindings: {}", self.assistant_bindings.join(", ")));
+        }
+        if !self.runtime_capabilities.is_empty() {
+            lines.push(format!("runtime_capabilities: {}", self.runtime_capabilities.join(", ")));
+        }
+        if !self.slot_effort_policies.is_empty() {
+            lines.push(format!("slot_effort_policies: {}", self.slot_effort_policies.join(", ")));
         }
         lines
     }
@@ -90,8 +141,17 @@ impl RoutingDecisionProjection {
             value.get("effective_routing").map(string_array).unwrap_or_default();
         let assistant_bindings =
             value.get("assistant_bindings").map(string_array).unwrap_or_default();
+        let runtime_capabilities =
+            value.get("runtime_capabilities").map(string_array).unwrap_or_default();
+        let slot_effort_policies =
+            value.get("slot_effort_policies").map(string_array).unwrap_or_default();
 
-        let projection = Self { effective_routing, assistant_bindings };
+        let projection = Self {
+            effective_routing,
+            assistant_bindings,
+            runtime_capabilities,
+            slot_effort_policies,
+        };
         (!projection.is_empty()).then_some(projection)
     }
 }
@@ -139,9 +199,15 @@ fn string_array(value: &Value) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use serde_json::json;
 
-    use crate::domain::configuration::{EffectiveRouting, RuntimeKind, SourcedRoute, ValueSource};
+    use crate::domain::configuration::{
+        CapabilityState, EffectiveRouting, EffortFallbackPolicy, EffortLevel, RouteSlot,
+        RuntimeCapabilityProfile, RuntimeKind, SlotEffortPolicy, SourcedRoute,
+        SourcedRuntimeCapabilityProfile, SourcedSlotEffortPolicy, ValueSource,
+    };
 
     use super::RoutingDecisionProjection;
 
@@ -150,7 +216,9 @@ mod tests {
         let projection = RoutingDecisionProjection::from_task_input(&json!({
             "routing_projection": {
                 "effective_routing": ["planning=codex/gpt-5-codex [workspace]"],
-                "assistant_bindings": ["planning=codex"]
+                "assistant_bindings": ["planning=codex"],
+                "runtime_capabilities": ["codex=continuation=supported [workspace]"],
+                "slot_effort_policies": ["implementation=level=high, fallback=preserve [global]"]
             }
         }))
         .unwrap();
@@ -160,10 +228,18 @@ mod tests {
             vec!["planning=codex/gpt-5-codex [workspace]".to_string()]
         );
         assert_eq!(projection.assistant_bindings, vec!["planning=codex".to_string()]);
+        assert_eq!(
+            projection.runtime_capabilities,
+            vec!["codex=continuation=supported [workspace]".to_string()]
+        );
+        assert_eq!(
+            projection.slot_effort_policies,
+            vec!["implementation=level=high, fallback=preserve [global]".to_string()]
+        );
     }
 
     #[test]
-    fn builds_projection_from_effective_routing() {
+    fn builds_projection_from_effective_state() {
         let routing = EffectiveRouting {
             planning: SourcedRoute {
                 route: crate::domain::configuration::ModelRoute {
@@ -203,7 +279,53 @@ mod tests {
             reviewer_roles: Default::default(),
         };
 
-        let projection = RoutingDecisionProjection::from_effective_routing(&routing);
+        let runtime_capabilities = BTreeMap::from([
+            (
+                RuntimeKind::Claude,
+                SourcedRuntimeCapabilityProfile {
+                    profile: RuntimeCapabilityProfile {
+                        continuation: CapabilityState::Unsupported,
+                        resume: CapabilityState::Unsupported,
+                        validation: CapabilityState::Supported,
+                        handoff_target: CapabilityState::Unsupported,
+                        escalation_context: CapabilityState::Supported,
+                        notes: None,
+                    },
+                    source: ValueSource::Workspace,
+                },
+            ),
+            (
+                RuntimeKind::Codex,
+                SourcedRuntimeCapabilityProfile {
+                    profile: RuntimeCapabilityProfile {
+                        continuation: CapabilityState::Supported,
+                        resume: CapabilityState::Supported,
+                        validation: CapabilityState::Supported,
+                        handoff_target: CapabilityState::Supported,
+                        escalation_context: CapabilityState::Supported,
+                        notes: Some("preferred handoff target".to_string()),
+                    },
+                    source: ValueSource::Global,
+                },
+            ),
+        ]);
+        let slot_effort_policies = BTreeMap::from([(
+            RouteSlot::Implementation,
+            SourcedSlotEffortPolicy {
+                policy: SlotEffortPolicy {
+                    level: EffortLevel::High,
+                    fallback: EffortFallbackPolicy::Preserve,
+                    rationale: Some("keep implementation reviews thorough".to_string()),
+                },
+                source: ValueSource::Cluster,
+            },
+        )]);
+
+        let projection = RoutingDecisionProjection::from_effective_state(
+            &routing,
+            &runtime_capabilities,
+            &slot_effort_policies,
+        );
 
         assert!(
             projection
@@ -216,5 +338,12 @@ mod tests {
                 .contains(&"implementation=gemini/gemini-2.5-pro [built-in]".to_string())
         );
         assert!(projection.assistant_bindings.contains(&"implementation=gemini-cli".to_string()));
+        assert!(projection.runtime_capabilities.iter().any(|line| {
+            line.contains("claude=continuation=unsupported") && line.ends_with("[workspace]")
+        }));
+        assert!(projection.slot_effort_policies.iter().any(|line| {
+            line.contains("implementation=level=high, fallback=preserve")
+                && line.ends_with("[cluster]")
+        }));
     }
 }

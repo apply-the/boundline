@@ -2,7 +2,7 @@
 
 This folder documents Synod usage from Gemini CLI surfaces.
 
-Gemini remains CLI-first in `0.36.0`, but it follows the same primary Synod
+Gemini remains CLI-first in `0.37.0`, but it follows the same primary Synod
 workflow surface used by the other assistants.
 
 compatibility remains an explicit subordinate route.
@@ -29,8 +29,8 @@ cargo run --bin synod -- run --workspace <workspace>
 Use `synod config show|set|unset` for routing changes rather than manual file
 editing. If a workspace declares `assistant_runtimes` and the active
 implementation or verification route selects `gemini` without that capability,
-native execution now fails explicitly instead of silently falling back to a
-different assistant family. Treat workflow list, run, status, resume, and
+native execution now records an explicit delegation packet instead of silently
+falling back to a different assistant family. Treat workflow list, run, status, resume, and
 inspect as the primary Synod workflow surface in this release; compatibility
 remains an explicit subordinate route when the operator intentionally chooses
 it. When native planning or follow-through surfaces `context_summary`,
@@ -38,6 +38,8 @@ it. When native planning or follow-through surfaces `context_summary`,
 `context_staleness_reason`, preserve those values exactly instead of
 paraphrasing them away. Do the same for `goal_plan_state`,
 `goal_plan_revision`, `planning_rationale`, and `verification_strategy`, plus
+`delegation_mode`, packet identity, target owner, headline, and evidence
+summary when delegated continuity becomes authoritative, plus
 selector-driven `latest_selection_headline`,
 `latest_selection_reason`, and inspect `selector:` lines when they appear.
 When Canon-grounded memory is surfaced through those context fields or through

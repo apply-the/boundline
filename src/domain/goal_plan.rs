@@ -6,6 +6,10 @@ use uuid::Uuid;
 
 use crate::domain::decision::{DecisionType, EvidenceRef};
 use crate::domain::governance::CompactedCanonMemory;
+use crate::domain::session::{
+    ContinuityAuthority, DelegationContinuityMode, DelegationContinuityState, DelegationPacket,
+    DelegationPacketState,
+};
 use crate::domain::trace::current_timestamp_millis;
 use crate::domain::workflow::WorkflowProgressState;
 
@@ -260,6 +264,8 @@ pub struct GoalPlan {
     #[serde(default)]
     pub workspace_signals: WorkspaceSignals,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub routing_policy_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub planning_rationale: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub verification_strategy: Option<String>,
@@ -271,6 +277,10 @@ pub struct GoalPlan {
     pub workflow_progress: Option<WorkflowProgressState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compacted_canon_memory: Option<CompactedCanonMemory>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub delegation_packet_history: Vec<DelegationPacket>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delegation_continuity: Option<DelegationContinuityState>,
     #[serde(default = "default_goal_plan_revision")]
     pub proposal_revision: usize,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -302,12 +312,15 @@ impl GoalPlan {
             context_pack: None,
             source_evidence: Vec::new(),
             workspace_signals: WorkspaceSignals::default(),
+            routing_policy_summary: None,
             planning_rationale: None,
             verification_strategy: None,
             flow: None,
             flow_skipped: false,
             workflow_progress: None,
             compacted_canon_memory: None,
+            delegation_packet_history: Vec::new(),
+            delegation_continuity: None,
             proposal_revision: default_goal_plan_revision(),
             superseded_by_revision: None,
             superseded_reason: None,
@@ -336,6 +349,14 @@ impl GoalPlan {
             workflow_progress
                 .validate()
                 .map_err(|error| GoalPlanError::InvalidWorkflowProgress(error.to_string()))?;
+        }
+        for packet in &self.delegation_packet_history {
+            packet.validate().map_err(GoalPlanError::InvalidDelegationPacket)?;
+        }
+        if let Some(continuity) = &self.delegation_continuity {
+            continuity
+                .validate(&self.delegation_packet_history)
+                .map_err(GoalPlanError::InvalidDelegationContinuity)?;
         }
         if self.proposal_revision == 0 {
             return Err(GoalPlanError::MissingProposalRevision);
@@ -402,6 +423,14 @@ impl GoalPlan {
         self
     }
 
+    pub fn with_routing_policy_summary(
+        mut self,
+        routing_policy_summary: impl Into<String>,
+    ) -> Self {
+        self.routing_policy_summary = Some(routing_policy_summary.into());
+        self
+    }
+
     pub fn with_verification_strategy(mut self, verification_strategy: impl Into<String>) -> Self {
         self.verification_strategy = Some(verification_strategy.into());
         self
@@ -438,6 +467,17 @@ impl GoalPlan {
     ) -> Self {
         self.compacted_canon_memory = Some(compacted_canon_memory);
         self
+    }
+
+    pub fn with_delegation_state(
+        mut self,
+        packet_history: Vec<DelegationPacket>,
+        continuity: DelegationContinuityState,
+    ) -> Result<Self, GoalPlanError> {
+        self.delegation_packet_history = packet_history;
+        self.delegation_continuity = Some(continuity);
+        self.validate()?;
+        Ok(self)
     }
 
     pub fn with_negotiation_projection(
@@ -490,6 +530,96 @@ impl GoalPlan {
 
     pub fn workflow_next_action(&self) -> Option<String> {
         self.workflow_progress.as_ref().and_then(WorkflowProgressState::next_action_text)
+    }
+
+    pub fn delegation_continuity(&self) -> Option<&DelegationContinuityState> {
+        self.delegation_continuity.as_ref()
+    }
+
+    pub fn delegation_packet_history(&self) -> &[DelegationPacket] {
+        &self.delegation_packet_history
+    }
+
+    pub fn active_delegation_packet(&self) -> Option<&DelegationPacket> {
+        let active_packet_id = self.delegation_continuity.as_ref()?.active_packet_id.as_deref()?;
+        self.delegation_packet_history.iter().find(|packet| packet.packet_id == active_packet_id)
+    }
+
+    pub fn record_delegation_packet(
+        &mut self,
+        packet: DelegationPacket,
+        continuity: DelegationContinuityState,
+    ) -> Result<(), GoalPlanError> {
+        packet.validate().map_err(GoalPlanError::InvalidDelegationPacket)?;
+
+        let mut history = self.delegation_packet_history.clone();
+        let next_packet_id = packet.packet_id.clone();
+        if let Some(active_packet_id) = self
+            .delegation_continuity
+            .as_ref()
+            .and_then(|state| state.active_packet_id.as_ref())
+            .filter(|active_packet_id| *active_packet_id != &next_packet_id)
+            && let Some(existing_packet) = history
+                .iter_mut()
+                .find(|existing_packet| existing_packet.packet_id == *active_packet_id)
+            && matches!(
+                existing_packet.state,
+                DelegationPacketState::Active | DelegationPacketState::Stuck
+            )
+        {
+            existing_packet.mark_superseded(next_packet_id.clone());
+        }
+
+        if let Some(existing_packet) =
+            history.iter_mut().find(|existing_packet| existing_packet.packet_id == next_packet_id)
+        {
+            *existing_packet = packet;
+        } else {
+            history.push(packet);
+        }
+
+        continuity.validate(&history).map_err(GoalPlanError::InvalidDelegationContinuity)?;
+        self.delegation_packet_history = history;
+        self.delegation_continuity = Some(continuity);
+        Ok(())
+    }
+
+    pub fn resolve_active_delegation(
+        &mut self,
+        headline: impl Into<String>,
+        evidence_summary: impl Into<String>,
+        next_command: impl Into<String>,
+    ) -> Result<(), GoalPlanError> {
+        let Some(active_packet_id) =
+            self.delegation_continuity.as_ref().and_then(|state| state.active_packet_id.clone())
+        else {
+            return Ok(());
+        };
+
+        let packet = self
+            .delegation_packet_history
+            .iter_mut()
+            .find(|packet| packet.packet_id == active_packet_id)
+            .ok_or_else(|| {
+                GoalPlanError::InvalidDelegationContinuity(format!(
+                    "delegation active_packet_id `{active_packet_id}` is missing from history"
+                ))
+            })?;
+        packet.mark_resolved();
+
+        let continuity = DelegationContinuityState {
+            active_packet_id: None,
+            mode: DelegationContinuityMode::Resolved,
+            authority_source: ContinuityAuthority::NativeSession,
+            next_command: next_command.into(),
+            headline: headline.into(),
+            evidence_summary: evidence_summary.into(),
+        };
+        continuity
+            .validate(&self.delegation_packet_history)
+            .map_err(GoalPlanError::InvalidDelegationContinuity)?;
+        self.delegation_continuity = Some(continuity);
+        Ok(())
     }
 
     pub fn context_summary(&self) -> Option<String> {
@@ -586,6 +716,151 @@ pub enum GoalPlanError {
     MissingContextInputSource { reference: String },
     #[error("goal plan workflow progress is invalid: {0}")]
     InvalidWorkflowProgress(String),
+    #[error("invalid delegation packet: {0}")]
+    InvalidDelegationPacket(String),
+    #[error("invalid delegation continuity: {0}")]
+    InvalidDelegationContinuity(String),
     #[error("invalid goal plan status transition from {from:?} to {to:?}")]
     InvalidTransition { from: GoalPlanStatus, to: GoalPlanStatus },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{GoalPlan, PlannedTask};
+    use crate::domain::session::{
+        ContinuityAuthority, DelegationContinuityMode, DelegationContinuityState, DelegationPacket,
+        DelegationPacketKind, DelegationPacketState, StuckEvidenceMarker, StuckRecoveryAction,
+    };
+
+    fn build_plan() -> GoalPlan {
+        GoalPlan::new(
+            "Fix delegated continuity",
+            vec![PlannedTask {
+                task_id: "planned-task-1".to_string(),
+                description: "Repair the blocked bounded flow".to_string(),
+                target: "src/lib.rs".to_string(),
+                expected_outcome: Some("status explains the blocked continuation".to_string()),
+                decision_type_hint: None,
+            }],
+        )
+        .unwrap()
+    }
+
+    fn build_packet(packet_id: &str, kind: DelegationPacketKind) -> DelegationPacket {
+        DelegationPacket {
+            packet_id: packet_id.to_string(),
+            kind,
+            state: DelegationPacketState::Active,
+            created_at: 100,
+            resolved_at: None,
+            source_route_owner: "native".to_string(),
+            target_owner: match kind {
+                DelegationPacketKind::Handoff => "codex".to_string(),
+                DelegationPacketKind::Escalation => "operator".to_string(),
+            },
+            continuity_reason: "declared runtime cannot continue the bounded step".to_string(),
+            recommended_next_action: "synod status".to_string(),
+            evidence_refs: vec!["routing:implementation=claude/sonnet-4".to_string()],
+            capability_summary: Some(
+                "claude lacks continuation support for implementation".to_string(),
+            ),
+            stuck_marker: None,
+            superseded_by_packet_id: None,
+        }
+    }
+
+    #[test]
+    fn recording_delegation_packet_supersedes_previous_active_packet() {
+        let mut plan = build_plan();
+        let first_packet = build_packet("packet-1", DelegationPacketKind::Handoff);
+        let second_packet = build_packet("packet-2", DelegationPacketKind::Escalation);
+
+        plan.record_delegation_packet(
+            first_packet,
+            DelegationContinuityState {
+                active_packet_id: Some("packet-1".to_string()),
+                mode: DelegationContinuityMode::HandoffRequired,
+                authority_source: ContinuityAuthority::NativeSession,
+                next_command: "synod status".to_string(),
+                headline: "handoff required: implementation route cannot continue".to_string(),
+                evidence_summary: "routing policy requires a handoff".to_string(),
+            },
+        )
+        .unwrap();
+
+        plan.record_delegation_packet(
+            second_packet,
+            DelegationContinuityState {
+                active_packet_id: Some("packet-2".to_string()),
+                mode: DelegationContinuityMode::EscalationRequired,
+                authority_source: ContinuityAuthority::NativeSession,
+                next_command: "synod inspect".to_string(),
+                headline: "escalation required: no declared continuation path remains".to_string(),
+                evidence_summary: "all declared routes are blocked by capability policy"
+                    .to_string(),
+            },
+        )
+        .unwrap();
+
+        let first_packet = plan
+            .delegation_packet_history()
+            .iter()
+            .find(|packet| packet.packet_id == "packet-1")
+            .unwrap();
+        assert_eq!(first_packet.state, DelegationPacketState::Superseded);
+        assert_eq!(first_packet.superseded_by_packet_id.as_deref(), Some("packet-2"));
+        assert_eq!(plan.active_delegation_packet().unwrap().packet_id, "packet-2");
+        assert_eq!(
+            plan.delegation_continuity().unwrap().mode,
+            DelegationContinuityMode::EscalationRequired
+        );
+    }
+
+    #[test]
+    fn resolving_delegation_packet_preserves_history_and_clears_active_pointer() {
+        let mut plan = build_plan();
+        let mut packet = build_packet("packet-stuck", DelegationPacketKind::Handoff);
+        packet.state = DelegationPacketState::Stuck;
+        packet.stuck_marker = Some(StuckEvidenceMarker {
+            repeated_attempts: 3,
+            same_reason_count: 3,
+            unchanged_workspace_signal: true,
+            stale_route_policy: false,
+            recommended_recovery: StuckRecoveryAction::Replan,
+        });
+
+        plan.record_delegation_packet(
+            packet,
+            DelegationContinuityState {
+                active_packet_id: Some("packet-stuck".to_string()),
+                mode: DelegationContinuityMode::Stuck,
+                authority_source: ContinuityAuthority::NativeSession,
+                next_command: "synod inspect".to_string(),
+                headline: "stuck delegated continuity requires recovery".to_string(),
+                evidence_summary: "the same blocked continuity reason repeated three times"
+                    .to_string(),
+            },
+        )
+        .unwrap();
+
+        plan.resolve_active_delegation(
+            "delegated continuity resolved after config update",
+            "operator updated the declared runtime policy",
+            "synod run",
+        )
+        .unwrap();
+
+        let resolved_packet = plan
+            .delegation_packet_history()
+            .iter()
+            .find(|packet| packet.packet_id == "packet-stuck")
+            .unwrap();
+        assert_eq!(resolved_packet.state, DelegationPacketState::Resolved);
+        assert!(resolved_packet.resolved_at.is_some());
+
+        let continuity = plan.delegation_continuity().unwrap();
+        assert_eq!(continuity.mode, DelegationContinuityMode::Resolved);
+        assert!(continuity.active_packet_id.is_none());
+        assert_eq!(continuity.next_command, "synod run");
+    }
 }

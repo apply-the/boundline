@@ -48,6 +48,17 @@ pub enum RouteSlot {
     Review,
 }
 
+impl RouteSlot {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Planning => "planning",
+            Self::Implementation => "implementation",
+            Self::Verification => "verification",
+            Self::Review => "review",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub enum ConfigShowScope {
@@ -63,6 +74,153 @@ pub enum ConfigWriteScope {
     Workspace,
     Cluster,
     Global,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "snake_case")]
+pub enum CapabilityState {
+    Supported,
+    Unsupported,
+}
+
+impl CapabilityState {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Supported => "supported",
+            Self::Unsupported => "unsupported",
+        }
+    }
+
+    pub const fn is_supported(self) -> bool {
+        matches!(self, Self::Supported)
+    }
+}
+
+impl fmt::Display for CapabilityState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "snake_case")]
+pub enum EffortLevel {
+    Low,
+    Medium,
+    High,
+    Max,
+}
+
+impl EffortLevel {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::Max => "max",
+        }
+    }
+}
+
+impl fmt::Display for EffortLevel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "snake_case")]
+pub enum EffortFallbackPolicy {
+    Preserve,
+    AllowLower,
+}
+
+impl EffortFallbackPolicy {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Preserve => "preserve",
+            Self::AllowLower => "allow_lower",
+        }
+    }
+}
+
+impl fmt::Display for EffortFallbackPolicy {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RuntimeCapabilityProfile {
+    pub continuation: CapabilityState,
+    pub resume: CapabilityState,
+    pub validation: CapabilityState,
+    pub handoff_target: CapabilityState,
+    pub escalation_context: CapabilityState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+}
+
+impl RuntimeCapabilityProfile {
+    pub fn validate(&self) -> Result<(), ConfigurationError> {
+        if self.notes.as_deref().is_some_and(|value| value.trim().is_empty()) {
+            return Err(ConfigurationError::InvalidRuntimeCapability(
+                "notes cannot be empty when provided".to_string(),
+            ));
+        }
+
+        if self.handoff_target.is_supported() && !self.continuation.is_supported() {
+            return Err(ConfigurationError::InvalidRuntimeCapability(
+                "handoff_target requires continuation support".to_string(),
+            ));
+        }
+
+        Ok(())
+    }
+
+    pub fn summary_text(&self) -> String {
+        let mut parts = vec![
+            format!("continuation={}", self.continuation),
+            format!("resume={}", self.resume),
+            format!("validation={}", self.validation),
+            format!("handoff_target={}", self.handoff_target),
+            format!("escalation_context={}", self.escalation_context),
+        ];
+        if let Some(notes) = self.notes.as_deref().map(str::trim).filter(|value| !value.is_empty())
+        {
+            parts.push(format!("notes={notes}"));
+        }
+        parts.join(", ")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SlotEffortPolicy {
+    pub level: EffortLevel,
+    pub fallback: EffortFallbackPolicy,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rationale: Option<String>,
+}
+
+impl SlotEffortPolicy {
+    pub fn validate(&self) -> Result<(), ConfigurationError> {
+        if self.rationale.as_deref().is_some_and(|value| value.trim().is_empty()) {
+            return Err(ConfigurationError::InvalidSlotEffortPolicy(
+                "rationale cannot be empty when provided".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn summary_text(&self) -> String {
+        let mut summary = format!("level={}, fallback={}", self.level, self.fallback);
+        if let Some(rationale) =
+            self.rationale.as_deref().map(str::trim).filter(|value| !value.is_empty())
+        {
+            summary.push_str(&format!(", rationale={rationale}"));
+        }
+        summary
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -96,6 +254,10 @@ pub struct RoutingConfig {
     pub adjudication: Option<ModelRoute>,
     #[serde(default)]
     pub assistant_runtimes: Vec<RuntimeKind>,
+    #[serde(default)]
+    pub runtime_capabilities: BTreeMap<RuntimeKind, RuntimeCapabilityProfile>,
+    #[serde(default)]
+    pub slot_effort_policies: BTreeMap<RouteSlot, SlotEffortPolicy>,
 }
 
 impl RoutingConfig {
@@ -122,6 +284,14 @@ impl RoutingConfig {
             route.validate()?;
         }
 
+        for profile in self.runtime_capabilities.values() {
+            profile.validate()?;
+        }
+
+        for policy in self.slot_effort_policies.values() {
+            policy.validate()?;
+        }
+
         Ok(())
     }
 
@@ -141,6 +311,26 @@ impl RoutingConfig {
             RouteSlot::Verification => self.verification = None,
             RouteSlot::Review => self.review = None,
         }
+    }
+
+    pub fn set_runtime_capability(
+        &mut self,
+        runtime: RuntimeKind,
+        profile: RuntimeCapabilityProfile,
+    ) {
+        self.runtime_capabilities.insert(runtime, profile);
+    }
+
+    pub fn unset_runtime_capability(&mut self, runtime: RuntimeKind) {
+        self.runtime_capabilities.remove(&runtime);
+    }
+
+    pub fn set_slot_effort_policy(&mut self, slot: RouteSlot, policy: SlotEffortPolicy) {
+        self.slot_effort_policies.insert(slot, policy);
+    }
+
+    pub fn unset_slot_effort_policy(&mut self, slot: RouteSlot) {
+        self.slot_effort_policies.remove(&slot);
     }
 }
 
@@ -185,6 +375,18 @@ pub struct EffectiveRouting {
     pub review: SourcedRoute,
     pub adjudication: SourcedRoute,
     pub reviewer_roles: BTreeMap<String, SourcedRoute>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourcedRuntimeCapabilityProfile {
+    pub profile: RuntimeCapabilityProfile,
+    pub source: ValueSource,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourcedSlotEffortPolicy {
+    pub policy: SlotEffortPolicy,
+    pub source: ValueSource,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -274,6 +476,94 @@ pub fn resolve_effective_routing(
     }
 }
 
+pub fn resolve_effective_runtime_capabilities(
+    workspace: Option<&RoutingConfig>,
+    cluster: Option<&RoutingConfig>,
+    global: Option<&RoutingConfig>,
+) -> BTreeMap<RuntimeKind, SourcedRuntimeCapabilityProfile> {
+    let mut runtime_ids = BTreeMap::<RuntimeKind, ()>::new();
+    for runtime in workspace
+        .into_iter()
+        .flat_map(|cfg| cfg.runtime_capabilities.keys())
+        .chain(cluster.into_iter().flat_map(|cfg| cfg.runtime_capabilities.keys()))
+        .chain(global.into_iter().flat_map(|cfg| cfg.runtime_capabilities.keys()))
+    {
+        runtime_ids.insert(*runtime, ());
+    }
+
+    runtime_ids
+        .into_keys()
+        .filter_map(|runtime| {
+            let sourced = if let Some(profile) =
+                workspace.and_then(|cfg| cfg.runtime_capabilities.get(&runtime))
+            {
+                Some(SourcedRuntimeCapabilityProfile {
+                    profile: profile.clone(),
+                    source: ValueSource::Workspace,
+                })
+            } else if let Some(profile) =
+                cluster.and_then(|cfg| cfg.runtime_capabilities.get(&runtime))
+            {
+                Some(SourcedRuntimeCapabilityProfile {
+                    profile: profile.clone(),
+                    source: ValueSource::Cluster,
+                })
+            } else {
+                global.and_then(|cfg| cfg.runtime_capabilities.get(&runtime)).map(|profile| {
+                    SourcedRuntimeCapabilityProfile {
+                        profile: profile.clone(),
+                        source: ValueSource::Global,
+                    }
+                })
+            };
+
+            sourced.map(|profile| (runtime, profile))
+        })
+        .collect()
+}
+
+pub fn resolve_effective_slot_effort_policies(
+    workspace: Option<&RoutingConfig>,
+    cluster: Option<&RoutingConfig>,
+    global: Option<&RoutingConfig>,
+) -> BTreeMap<RouteSlot, SourcedSlotEffortPolicy> {
+    let mut slots = BTreeMap::<RouteSlot, ()>::new();
+    for slot in workspace
+        .into_iter()
+        .flat_map(|cfg| cfg.slot_effort_policies.keys())
+        .chain(cluster.into_iter().flat_map(|cfg| cfg.slot_effort_policies.keys()))
+        .chain(global.into_iter().flat_map(|cfg| cfg.slot_effort_policies.keys()))
+    {
+        slots.insert(*slot, ());
+    }
+
+    slots
+        .into_keys()
+        .filter_map(|slot| {
+            let sourced = if let Some(policy) =
+                workspace.and_then(|cfg| cfg.slot_effort_policies.get(&slot))
+            {
+                Some(SourcedSlotEffortPolicy {
+                    policy: policy.clone(),
+                    source: ValueSource::Workspace,
+                })
+            } else if let Some(policy) = cluster.and_then(|cfg| cfg.slot_effort_policies.get(&slot))
+            {
+                Some(SourcedSlotEffortPolicy {
+                    policy: policy.clone(),
+                    source: ValueSource::Cluster,
+                })
+            } else {
+                global.and_then(|cfg| cfg.slot_effort_policies.get(&slot)).map(|policy| {
+                    SourcedSlotEffortPolicy { policy: policy.clone(), source: ValueSource::Global }
+                })
+            };
+
+            sourced.map(|policy| (slot, policy))
+        })
+        .collect()
+}
+
 fn resolve_single(
     cli: Option<&ModelRoute>,
     workspace: Option<&ModelRoute>,
@@ -323,13 +613,21 @@ pub enum ConfigurationError {
     MissingModelId,
     #[error("invalid reviewer role: {0}")]
     InvalidReviewerRole(String),
+    #[error("invalid runtime capability profile: {0}")]
+    InvalidRuntimeCapability(String),
+    #[error("invalid slot effort policy: {0}")]
+    InvalidSlotEffortPolicy(String),
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::{
-        ModelRoute, RoutingConfig, RoutingOverrides, RuntimeKind, ValueSource,
-        resolve_effective_routing,
+        CapabilityState, ConfigurationError, EffortFallbackPolicy, EffortLevel, ModelRoute,
+        RouteSlot, RoutingConfig, RoutingOverrides, RuntimeCapabilityProfile, RuntimeKind,
+        SlotEffortPolicy, ValueSource, resolve_effective_routing,
+        resolve_effective_runtime_capabilities, resolve_effective_slot_effort_policies,
     };
 
     #[test]
@@ -376,5 +674,315 @@ mod tests {
         let resolved = resolve_effective_routing(&cli, Some(&workspace), None, Some(&global));
         assert!(resolved.reviewer_roles.is_empty());
         assert_eq!(resolved.review.route.runtime, RuntimeKind::Claude);
+    }
+
+    #[test]
+    fn runtime_capability_profiles_reject_blank_notes() {
+        let config = RoutingConfig {
+            runtime_capabilities: BTreeMap::from([(
+                RuntimeKind::Codex,
+                RuntimeCapabilityProfile {
+                    continuation: CapabilityState::Supported,
+                    resume: CapabilityState::Supported,
+                    validation: CapabilityState::Supported,
+                    handoff_target: CapabilityState::Supported,
+                    escalation_context: CapabilityState::Supported,
+                    notes: Some("   ".to_string()),
+                },
+            )]),
+            ..RoutingConfig::default()
+        };
+
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn resolve_effective_runtime_capabilities_prefers_workspace_over_global() {
+        let workspace = RoutingConfig {
+            runtime_capabilities: BTreeMap::from([(
+                RuntimeKind::Codex,
+                RuntimeCapabilityProfile {
+                    continuation: CapabilityState::Supported,
+                    resume: CapabilityState::Supported,
+                    validation: CapabilityState::Supported,
+                    handoff_target: CapabilityState::Supported,
+                    escalation_context: CapabilityState::Supported,
+                    notes: Some("workspace".to_string()),
+                },
+            )]),
+            ..RoutingConfig::default()
+        };
+        let global = RoutingConfig {
+            runtime_capabilities: BTreeMap::from([(
+                RuntimeKind::Codex,
+                RuntimeCapabilityProfile {
+                    continuation: CapabilityState::Supported,
+                    resume: CapabilityState::Unsupported,
+                    validation: CapabilityState::Unsupported,
+                    handoff_target: CapabilityState::Unsupported,
+                    escalation_context: CapabilityState::Supported,
+                    notes: Some("global".to_string()),
+                },
+            )]),
+            ..RoutingConfig::default()
+        };
+
+        let resolved =
+            resolve_effective_runtime_capabilities(Some(&workspace), None, Some(&global));
+        let profile = resolved.get(&RuntimeKind::Codex).unwrap();
+        assert_eq!(profile.source, ValueSource::Workspace);
+        assert_eq!(profile.profile.notes.as_deref(), Some("workspace"));
+    }
+
+    #[test]
+    fn resolve_effective_slot_effort_policies_prefers_cluster_over_global() {
+        let cluster = RoutingConfig {
+            slot_effort_policies: BTreeMap::from([(
+                RouteSlot::Planning,
+                SlotEffortPolicy {
+                    level: EffortLevel::High,
+                    fallback: EffortFallbackPolicy::Preserve,
+                    rationale: Some("cluster policy".to_string()),
+                },
+            )]),
+            ..RoutingConfig::default()
+        };
+        let global = RoutingConfig {
+            slot_effort_policies: BTreeMap::from([(
+                RouteSlot::Planning,
+                SlotEffortPolicy {
+                    level: EffortLevel::Low,
+                    fallback: EffortFallbackPolicy::AllowLower,
+                    rationale: Some("global policy".to_string()),
+                },
+            )]),
+            ..RoutingConfig::default()
+        };
+
+        let resolved = resolve_effective_slot_effort_policies(None, Some(&cluster), Some(&global));
+        let policy = resolved.get(&RouteSlot::Planning).unwrap();
+        assert_eq!(policy.source, ValueSource::Cluster);
+        assert_eq!(policy.policy.level, EffortLevel::High);
+    }
+
+    #[test]
+    fn enum_helpers_and_summary_text_cover_all_variants() {
+        assert_eq!(RuntimeKind::Claude.as_str(), "claude");
+        assert_eq!(RuntimeKind::Codex.to_string(), "codex");
+        assert_eq!(RuntimeKind::Copilot.as_str(), "copilot");
+        assert_eq!(RuntimeKind::Gemini.to_string(), "gemini");
+
+        assert_eq!(RouteSlot::Planning.as_str(), "planning");
+        assert_eq!(RouteSlot::Implementation.as_str(), "implementation");
+        assert_eq!(RouteSlot::Verification.as_str(), "verification");
+        assert_eq!(RouteSlot::Review.as_str(), "review");
+
+        assert_eq!(CapabilityState::Supported.to_string(), "supported");
+        assert_eq!(CapabilityState::Unsupported.as_str(), "unsupported");
+        assert!(CapabilityState::Supported.is_supported());
+        assert!(!CapabilityState::Unsupported.is_supported());
+
+        assert_eq!(EffortLevel::Low.to_string(), "low");
+        assert_eq!(EffortLevel::Medium.as_str(), "medium");
+        assert_eq!(EffortLevel::High.to_string(), "high");
+        assert_eq!(EffortLevel::Max.as_str(), "max");
+
+        assert_eq!(EffortFallbackPolicy::Preserve.to_string(), "preserve");
+        assert_eq!(EffortFallbackPolicy::AllowLower.as_str(), "allow_lower");
+
+        let profile = RuntimeCapabilityProfile {
+            continuation: CapabilityState::Supported,
+            resume: CapabilityState::Supported,
+            validation: CapabilityState::Supported,
+            handoff_target: CapabilityState::Supported,
+            escalation_context: CapabilityState::Supported,
+            notes: Some("  delegated continuation  ".to_string()),
+        };
+        assert!(profile.summary_text().contains("notes=delegated continuation"));
+
+        let blank_note_profile = RuntimeCapabilityProfile {
+            continuation: CapabilityState::Supported,
+            resume: CapabilityState::Supported,
+            validation: CapabilityState::Supported,
+            handoff_target: CapabilityState::Supported,
+            escalation_context: CapabilityState::Supported,
+            notes: Some("   ".to_string()),
+        };
+        assert!(!blank_note_profile.summary_text().contains("notes="));
+
+        let policy = SlotEffortPolicy {
+            level: EffortLevel::High,
+            fallback: EffortFallbackPolicy::Preserve,
+            rationale: Some("  keep verification strict  ".to_string()),
+        };
+        assert!(policy.summary_text().contains("rationale=keep verification strict"));
+
+        let blank_rationale = SlotEffortPolicy {
+            level: EffortLevel::Low,
+            fallback: EffortFallbackPolicy::AllowLower,
+            rationale: Some("   ".to_string()),
+        };
+        assert_eq!(blank_rationale.summary_text(), "level=low, fallback=allow_lower");
+    }
+
+    #[test]
+    fn routing_validation_and_slot_mutators_cover_invalid_policy_paths() {
+        let invalid_notes = RuntimeCapabilityProfile {
+            continuation: CapabilityState::Supported,
+            resume: CapabilityState::Supported,
+            validation: CapabilityState::Supported,
+            handoff_target: CapabilityState::Supported,
+            escalation_context: CapabilityState::Supported,
+            notes: Some("   ".to_string()),
+        };
+        assert!(matches!(
+            invalid_notes.validate(),
+            Err(ConfigurationError::InvalidRuntimeCapability(message))
+                if message.contains("notes cannot be empty")
+        ));
+
+        let invalid_handoff = RuntimeCapabilityProfile {
+            continuation: CapabilityState::Unsupported,
+            resume: CapabilityState::Supported,
+            validation: CapabilityState::Supported,
+            handoff_target: CapabilityState::Supported,
+            escalation_context: CapabilityState::Supported,
+            notes: None,
+        };
+        assert!(matches!(
+            invalid_handoff.validate(),
+            Err(ConfigurationError::InvalidRuntimeCapability(message))
+                if message.contains("handoff_target requires continuation support")
+        ));
+
+        let invalid_policy = SlotEffortPolicy {
+            level: EffortLevel::Medium,
+            fallback: EffortFallbackPolicy::Preserve,
+            rationale: Some(" ".to_string()),
+        };
+        assert!(matches!(
+            invalid_policy.validate(),
+            Err(ConfigurationError::InvalidSlotEffortPolicy(message))
+                if message.contains("rationale cannot be empty")
+        ));
+
+        let mut routing = RoutingConfig::default();
+        let planning = ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-5-codex".to_string() };
+        let implementation =
+            ModelRoute { runtime: RuntimeKind::Claude, model: "sonnet-4".to_string() };
+        let verification =
+            ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-5.4".to_string() };
+        let review =
+            ModelRoute { runtime: RuntimeKind::Gemini, model: "gemini-2.5-pro".to_string() };
+        routing.set_slot(RouteSlot::Planning, planning.clone());
+        routing.set_slot(RouteSlot::Implementation, implementation.clone());
+        routing.set_slot(RouteSlot::Verification, verification.clone());
+        routing.set_slot(RouteSlot::Review, review.clone());
+        assert_eq!(routing.planning.as_ref(), Some(&planning));
+        assert_eq!(routing.implementation.as_ref(), Some(&implementation));
+        assert_eq!(routing.verification.as_ref(), Some(&verification));
+        assert_eq!(routing.review.as_ref(), Some(&review));
+
+        routing.unset_slot(RouteSlot::Planning);
+        routing.unset_slot(RouteSlot::Implementation);
+        routing.unset_slot(RouteSlot::Verification);
+        routing.unset_slot(RouteSlot::Review);
+        assert!(routing.planning.is_none());
+        assert!(routing.implementation.is_none());
+        assert!(routing.verification.is_none());
+        assert!(routing.review.is_none());
+
+        routing.reviewer_roles.insert(
+            "   ".to_string(),
+            ModelRoute { runtime: RuntimeKind::Claude, model: "sonnet-4".to_string() },
+        );
+        assert!(matches!(
+            routing.validate(),
+            Err(ConfigurationError::InvalidReviewerRole(message))
+                if message.contains("role id cannot be empty")
+        ));
+    }
+
+    #[test]
+    fn effective_resolution_covers_cluster_global_and_built_in_fallbacks() {
+        let cluster = RoutingConfig {
+            planning: Some(ModelRoute {
+                runtime: RuntimeKind::Gemini,
+                model: "gemini-2.5-pro".to_string(),
+            }),
+            reviewer_roles: BTreeMap::from([(
+                "security".to_string(),
+                ModelRoute { runtime: RuntimeKind::Claude, model: "sonnet-4".to_string() },
+            )]),
+            runtime_capabilities: BTreeMap::from([(
+                RuntimeKind::Claude,
+                RuntimeCapabilityProfile {
+                    continuation: CapabilityState::Supported,
+                    resume: CapabilityState::Supported,
+                    validation: CapabilityState::Unsupported,
+                    handoff_target: CapabilityState::Supported,
+                    escalation_context: CapabilityState::Supported,
+                    notes: Some("cluster capability".to_string()),
+                },
+            )]),
+            slot_effort_policies: BTreeMap::from([(
+                RouteSlot::Planning,
+                SlotEffortPolicy {
+                    level: EffortLevel::High,
+                    fallback: EffortFallbackPolicy::Preserve,
+                    rationale: Some("cluster planning depth".to_string()),
+                },
+            )]),
+            ..RoutingConfig::default()
+        };
+        let global = RoutingConfig {
+            verification: Some(ModelRoute {
+                runtime: RuntimeKind::Copilot,
+                model: "gpt-5.4".to_string(),
+            }),
+            runtime_capabilities: BTreeMap::from([(
+                RuntimeKind::Copilot,
+                RuntimeCapabilityProfile {
+                    continuation: CapabilityState::Supported,
+                    resume: CapabilityState::Supported,
+                    validation: CapabilityState::Supported,
+                    handoff_target: CapabilityState::Supported,
+                    escalation_context: CapabilityState::Supported,
+                    notes: Some("global capability".to_string()),
+                },
+            )]),
+            slot_effort_policies: BTreeMap::from([(
+                RouteSlot::Review,
+                SlotEffortPolicy {
+                    level: EffortLevel::Low,
+                    fallback: EffortFallbackPolicy::AllowLower,
+                    rationale: Some("global review baseline".to_string()),
+                },
+            )]),
+            ..RoutingConfig::default()
+        };
+
+        let resolved = resolve_effective_routing(
+            &RoutingOverrides::default(),
+            None,
+            Some(&cluster),
+            Some(&global),
+        );
+        assert_eq!(resolved.planning.source, ValueSource::Cluster);
+        assert_eq!(resolved.planning.route.runtime, RuntimeKind::Gemini);
+        assert_eq!(resolved.verification.source, ValueSource::Global);
+        assert_eq!(resolved.verification.route.runtime, RuntimeKind::Copilot);
+        assert_eq!(resolved.implementation.source, ValueSource::BuiltIn);
+        assert_eq!(resolved.adjudication.source, ValueSource::BuiltIn);
+        assert_eq!(resolved.reviewer_roles.get("security").unwrap().source, ValueSource::Cluster);
+
+        let capabilities =
+            resolve_effective_runtime_capabilities(None, Some(&cluster), Some(&global));
+        assert_eq!(capabilities.get(&RuntimeKind::Claude).unwrap().source, ValueSource::Cluster);
+        assert_eq!(capabilities.get(&RuntimeKind::Copilot).unwrap().source, ValueSource::Global);
+
+        let effort = resolve_effective_slot_effort_policies(None, Some(&cluster), Some(&global));
+        assert_eq!(effort.get(&RouteSlot::Planning).unwrap().source, ValueSource::Cluster);
+        assert_eq!(effort.get(&RouteSlot::Review).unwrap().source, ValueSource::Global);
     }
 }

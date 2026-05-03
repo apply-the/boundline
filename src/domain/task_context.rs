@@ -9,6 +9,7 @@ use crate::domain::governance::{
     GovernedStageRecord, PacketReuseBinding,
 };
 use crate::domain::limits::RunLimits;
+use crate::domain::session::{DelegationContinuityState, DelegationPacket};
 use crate::domain::step::{ErrorInfo, StepResultSummary};
 use crate::domain::task::{ClarificationRecord, DerivedTaskDraft};
 
@@ -20,6 +21,8 @@ pub const LATEST_CANON_CAPABILITY_SNAPSHOT_KEY: &str = "latest_canon_capability_
 pub const LATEST_COMPACTED_CANON_MEMORY_KEY: &str = "latest_compacted_canon_memory";
 pub const LATEST_CLARIFICATION_KEY: &str = "latest_clarification";
 pub const LATEST_DERIVED_TASK_DRAFT_KEY: &str = "derived_task_draft";
+pub const DELEGATION_PACKET_HISTORY_KEY: &str = "delegation_packet_history";
+pub const DELEGATION_CONTINUITY_STATE_KEY: &str = "delegation_continuity_state";
 pub const CLUSTER_SESSION_PROJECTION_KEY: &str = "cluster_session_projection";
 pub const CLUSTER_DELIVERY_STORY_KEY: &str = "cluster_delivery_story";
 
@@ -208,6 +211,32 @@ impl TaskContext {
         self.load_serialized(LATEST_DERIVED_TASK_DRAFT_KEY)
     }
 
+    pub fn set_delegation_packet_history(
+        &mut self,
+        packet_history: &[DelegationPacket],
+    ) -> Result<(), TaskContextError> {
+        self.store_serialized(DELEGATION_PACKET_HISTORY_KEY, packet_history)
+    }
+
+    pub fn delegation_packet_history(&self) -> Result<Vec<DelegationPacket>, TaskContextError> {
+        Ok(self
+            .load_serialized::<Vec<DelegationPacket>>(DELEGATION_PACKET_HISTORY_KEY)?
+            .unwrap_or_default())
+    }
+
+    pub fn set_delegation_continuity_state(
+        &mut self,
+        continuity: &DelegationContinuityState,
+    ) -> Result<(), TaskContextError> {
+        self.store_serialized(DELEGATION_CONTINUITY_STATE_KEY, continuity)
+    }
+
+    pub fn delegation_continuity_state(
+        &self,
+    ) -> Result<Option<DelegationContinuityState>, TaskContextError> {
+        self.load_serialized(DELEGATION_CONTINUITY_STATE_KEY)
+    }
+
     pub fn set_cluster_session_projection(
         &mut self,
         projection: &ClusterSessionProjection,
@@ -238,7 +267,7 @@ impl TaskContext {
         }
     }
 
-    fn store_serialized<T: Serialize>(
+    fn store_serialized<T: Serialize + ?Sized>(
         &mut self,
         key: &str,
         value: &T,
@@ -301,4 +330,56 @@ pub enum TaskContextError {
     StateSerializationFailed { key: String, message: String },
     #[error("task context state deserialization failed for '{key}': {message}")]
     StateDeserializationFailed { key: String, message: String },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TaskContext;
+    use crate::domain::limits::RunLimits;
+    use crate::domain::session::{
+        ContinuityAuthority, DelegationContinuityMode, DelegationContinuityState, DelegationPacket,
+        DelegationPacketKind, DelegationPacketState,
+    };
+    use serde_json::Map;
+
+    #[test]
+    fn round_trips_delegation_history_and_continuity_state() {
+        let mut context = TaskContext::new(
+            "session-1",
+            "/tmp/synod-task-context",
+            RunLimits::default(),
+            Map::new(),
+        );
+        let packet = DelegationPacket {
+            packet_id: "packet-1".to_string(),
+            kind: DelegationPacketKind::Handoff,
+            state: DelegationPacketState::Active,
+            created_at: 42,
+            resolved_at: None,
+            source_route_owner: "native".to_string(),
+            target_owner: "codex".to_string(),
+            continuity_reason: "implementation route cannot continue credibly".to_string(),
+            recommended_next_action: "synod status".to_string(),
+            evidence_refs: vec!["routing:implementation=claude/sonnet-4".to_string()],
+            capability_summary: Some(
+                "claude lacks continuation support for implementation".to_string(),
+            ),
+            stuck_marker: None,
+            superseded_by_packet_id: None,
+        };
+        let continuity = DelegationContinuityState {
+            active_packet_id: Some("packet-1".to_string()),
+            mode: DelegationContinuityMode::HandoffRequired,
+            authority_source: ContinuityAuthority::NativeSession,
+            next_command: "synod status".to_string(),
+            headline: "handoff required: implementation route cannot continue".to_string(),
+            evidence_summary: "routing policy requires a handoff".to_string(),
+        };
+
+        context.set_delegation_packet_history(std::slice::from_ref(&packet)).unwrap();
+        context.set_delegation_continuity_state(&continuity).unwrap();
+
+        assert_eq!(context.delegation_packet_history().unwrap(), vec![packet]);
+        assert_eq!(context.delegation_continuity_state().unwrap(), Some(continuity));
+    }
 }

@@ -12,6 +12,7 @@ use crate::domain::cluster::{
 };
 use crate::domain::configuration::{
     ModelRoute, RoutingConfig, RoutingOverrides, resolve_effective_routing,
+    resolve_effective_runtime_capabilities, resolve_effective_slot_effort_policies,
 };
 use crate::domain::follow_through::FollowThroughProjection;
 use crate::domain::goal_plan::GoalPlanFlowState;
@@ -815,6 +816,24 @@ pub fn render_trace_summary(
         lines.push(format!("governance_next_action: {governance_next_action}"));
     }
 
+    if let Some(delegation) = &summary.delegation {
+        lines.push(format!("delegation_mode: {}", delegation.mode.as_str()));
+        if let Some(packet_id) = &delegation.packet_id {
+            lines.push(format!("delegation_packet_id: {packet_id}"));
+        }
+        if let Some(packet_kind) = delegation.packet_kind {
+            lines.push(format!("delegation_packet_kind: {}", packet_kind.as_str()));
+        }
+        if let Some(packet_state) = delegation.packet_state {
+            lines.push(format!("delegation_packet_state: {}", packet_state.as_str()));
+        }
+        if let Some(target_owner) = &delegation.target_owner {
+            lines.push(format!("delegation_target_owner: {target_owner}"));
+        }
+        lines.push(format!("delegation_headline: {}", delegation.headline));
+        lines.push(format!("delegation_evidence_summary: {}", delegation.evidence_summary));
+    }
+
     let follow_through = FollowThroughProjection::from_trace_summary(summary, Some(next_command));
     if !follow_through.is_empty() {
         lines.extend(follow_through.projection_lines());
@@ -900,6 +919,24 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
 
     if let Some(continuity_authority) = view.continuity_authority {
         lines.push(format!("continuity_authority: {}", continuity_authority.as_str()));
+    }
+
+    if let Some(delegation) = &view.delegation {
+        lines.push(format!("delegation_mode: {}", delegation.mode.as_str()));
+        if let Some(packet_id) = &delegation.packet_id {
+            lines.push(format!("delegation_packet_id: {packet_id}"));
+        }
+        if let Some(packet_kind) = delegation.packet_kind {
+            lines.push(format!("delegation_packet_kind: {}", packet_kind.as_str()));
+        }
+        if let Some(packet_state) = delegation.packet_state {
+            lines.push(format!("delegation_packet_state: {}", packet_state.as_str()));
+        }
+        if let Some(target_owner) = &delegation.target_owner {
+            lines.push(format!("delegation_target_owner: {target_owner}"));
+        }
+        lines.push(format!("delegation_headline: {}", delegation.headline));
+        lines.push(format!("delegation_evidence_summary: {}", delegation.evidence_summary));
     }
 
     if let Some(compatibility_follow_up) = &view.compatibility_follow_up {
@@ -1836,8 +1873,24 @@ fn current_routing_projection(workspace: &Path) -> Vec<String> {
         cluster_routing.as_ref(),
         global_routing.as_ref(),
     );
-    projection
-        .extend(RoutingDecisionProjection::from_effective_routing(&effective).projection_lines());
+    let effective_capabilities = resolve_effective_runtime_capabilities(
+        workspace_routing.as_ref(),
+        cluster_routing.as_ref(),
+        global_routing.as_ref(),
+    );
+    let effective_effort = resolve_effective_slot_effort_policies(
+        workspace_routing.as_ref(),
+        cluster_routing.as_ref(),
+        global_routing.as_ref(),
+    );
+    projection.extend(
+        RoutingDecisionProjection::from_effective_state(
+            &effective,
+            &effective_capabilities,
+            &effective_effort,
+        )
+        .projection_lines(),
+    );
 
     projection
 }
@@ -1898,6 +1951,26 @@ fn session_execution_condition_parts(view: &SessionStatusView) -> (&'static str,
             }
             _ => {}
         }
+    }
+
+    if let Some(delegation) = &view.delegation {
+        return match delegation.mode {
+            crate::domain::session::DelegationContinuityMode::HandoffRequired
+            | crate::domain::session::DelegationContinuityMode::EscalationRequired
+            | crate::domain::session::DelegationContinuityMode::Stuck => {
+                ("blocked", delegation.headline.clone())
+            }
+            crate::domain::session::DelegationContinuityMode::Resolved => {
+                ("waiting", delegation.headline.clone())
+            }
+            crate::domain::session::DelegationContinuityMode::Exhausted
+            | crate::domain::session::DelegationContinuityMode::InspectOnly => {
+                ("inspect_only", delegation.headline.clone())
+            }
+            crate::domain::session::DelegationContinuityMode::None => {
+                ("waiting", delegation.headline.clone())
+            }
+        };
     }
 
     if let Some(workflow_phase) = view.workflow_phase.as_deref() {
@@ -2038,6 +2111,26 @@ fn render_trace_execution_condition(summary: &TraceSummaryView) -> String {
 }
 
 fn trace_execution_condition_parts(summary: &TraceSummaryView) -> (&'static str, String) {
+    if let Some(delegation) = &summary.delegation {
+        return match delegation.mode {
+            crate::domain::session::DelegationContinuityMode::HandoffRequired
+            | crate::domain::session::DelegationContinuityMode::EscalationRequired
+            | crate::domain::session::DelegationContinuityMode::Stuck => {
+                ("blocked", delegation.headline.clone())
+            }
+            crate::domain::session::DelegationContinuityMode::Resolved => {
+                ("waiting", delegation.headline.clone())
+            }
+            crate::domain::session::DelegationContinuityMode::Exhausted
+            | crate::domain::session::DelegationContinuityMode::InspectOnly => {
+                ("inspect_only", delegation.headline.clone())
+            }
+            crate::domain::session::DelegationContinuityMode::None => {
+                ("waiting", delegation.headline.clone())
+            }
+        };
+    }
+
     let governance_waiting =
         summary.governance_timeline.iter().any(|line| line.contains("awaiting_approval"));
     let governance_blocked = summary.governance_timeline.iter().any(|line| {
@@ -2127,7 +2220,7 @@ mod tests {
     use crate::cli::{ClusterSubcommand, ConfigSubcommand, DeveloperCommand};
     use crate::domain::limits::{RunLimits, TerminalCondition};
     use crate::domain::routing_decision::RoutingDecisionProjection;
-    use crate::domain::session::{SessionStatus, SessionStatusView};
+    use crate::domain::session::{ContinuityAuthority, SessionStatus, SessionStatusView};
     use crate::domain::step::{StepKind, StepStatus};
     use crate::domain::task::{TaskRunResponse, TaskStatus, TerminalReason};
     use crate::domain::task_context::TaskContext;
@@ -2313,6 +2406,7 @@ mod tests {
             ],
             governance_timeline: Vec::new(),
             governance_next_action: None,
+            delegation: None,
             review_timeline: Vec::new(),
             terminal_status: TaskStatus::Failed,
             terminal_reason: TerminalReason::new(
@@ -2365,6 +2459,7 @@ mod tests {
             workflow_phase: None,
             workflow_next_action: None,
             continuity_authority: None,
+            delegation: None,
             compatibility_follow_up: None,
             current_stage_id: None,
             current_stage_index: None,
@@ -2411,6 +2506,43 @@ mod tests {
 
         assert!(text.contains("latest_status: invalid"), "{text}");
         assert!(!text.contains("latest_changed_files:"), "{text}");
+    }
+
+    #[test]
+    fn render_session_status_surfaces_delegation_projection() {
+        let view = SessionStatusView {
+            session_id: "session-delegation-status".to_string(),
+            workspace_ref: "/tmp/workspace".to_string(),
+            goal: Some("Repair blocked native continuity".to_string()),
+            latest_status: SessionStatus::Planned,
+            continuity_authority: Some(ContinuityAuthority::NativeSession),
+            delegation: Some(crate::domain::session::DelegationStatusView {
+                mode: crate::domain::session::DelegationContinuityMode::HandoffRequired,
+                packet_id: Some("packet-1".to_string()),
+                packet_kind: Some(crate::domain::session::DelegationPacketKind::Handoff),
+                packet_state: Some(crate::domain::session::DelegationPacketState::Active),
+                target_owner: Some("codex".to_string()),
+                headline: "handoff required: implementation route cannot continue".to_string(),
+                evidence_summary: "claude lacks continuation support for implementation"
+                    .to_string(),
+            }),
+            next_command: Some("synod status".to_string()),
+            explanation: "delegated continuity is now authoritative".to_string(),
+            ..SessionStatusView::default()
+        };
+
+        let text = render_session_status(&view);
+
+        assert!(text.contains("delegation_mode: handoff_required"), "{text}");
+        assert!(text.contains("delegation_packet_id: packet-1"), "{text}");
+        assert!(text.contains("delegation_target_owner: codex"), "{text}");
+        assert!(
+            text.contains(
+                "delegation_evidence_summary: claude lacks continuation support for implementation"
+            ),
+            "{text}"
+        );
+        assert!(text.contains("execution_condition: blocked - handoff required: implementation route cannot continue"), "{text}");
     }
 
     #[test]
@@ -2566,6 +2698,7 @@ mod tests {
             workflow_phase: None,
             workflow_next_action: None,
             continuity_authority: None,
+            delegation: None,
             compatibility_follow_up: None,
             current_stage_id: None,
             current_stage_index: None,
@@ -2684,6 +2817,7 @@ mod tests {
                 "governance_awaiting_approval: bug-fix:implement (requested)".to_string(),
             ],
             governance_next_action: Some("wait for approval and rerun synod status".to_string()),
+            delegation: None,
             review_timeline: vec![
                 "review_trigger: pr_ready".to_string(),
                 "reviewer safety (Safety) approve: No blockers".to_string(),
@@ -2705,6 +2839,42 @@ mod tests {
         );
         assert!(text.contains("review_trigger: pr_ready"), "{text}");
         assert!(text.contains("review_outcome: accepted"), "{text}");
+    }
+
+    #[test]
+    fn render_trace_summary_surfaces_delegation_projection() {
+        let summary = TraceSummaryView {
+            trace_ref: "/tmp/workspace/.synod/traces/task-delegation.json".to_string(),
+            goal: "Render delegation trace summary".to_string(),
+            delegation: Some(crate::domain::session::DelegationStatusView {
+                mode: crate::domain::session::DelegationContinuityMode::EscalationRequired,
+                packet_id: Some("packet-2".to_string()),
+                packet_kind: Some(crate::domain::session::DelegationPacketKind::Escalation),
+                packet_state: Some(crate::domain::session::DelegationPacketState::Active),
+                target_owner: Some("operator".to_string()),
+                headline: "escalation required: no declared continuation path remains".to_string(),
+                evidence_summary: "all declared routes are blocked by capability policy"
+                    .to_string(),
+            }),
+            terminal_status: TaskStatus::Failed,
+            terminal_reason: TerminalReason::new(
+                TerminalCondition::TaskNotCredible,
+                "escalation required: no declared continuation path remains",
+                None,
+            ),
+            ..TraceSummaryView::default()
+        };
+
+        let text = render_trace_summary(&summary, "latest-workspace-trace", "/synod-next");
+
+        assert!(text.contains("delegation_mode: escalation_required"), "{text}");
+        assert!(text.contains("delegation_packet_id: packet-2"), "{text}");
+        assert!(text.contains("delegation_target_owner: operator"), "{text}");
+        assert!(text.contains("execution_condition: blocked - escalation required: no declared continuation path remains"), "{text}");
+        assert!(
+            text.contains("follow_through_evidence_source: trace:delegation_packet:packet-2"),
+            "{text}"
+        );
     }
 
     #[test]
@@ -2945,6 +3115,22 @@ mod tests {
             ..SessionStatusView::default()
         });
         assert_eq!(flow_confirmation.0, "blocked");
+
+        let delegated_blocked = session_execution_condition_parts(&SessionStatusView {
+            delegation: Some(crate::domain::session::DelegationStatusView {
+                mode: crate::domain::session::DelegationContinuityMode::Stuck,
+                packet_id: Some("packet-stuck".to_string()),
+                packet_kind: Some(crate::domain::session::DelegationPacketKind::Handoff),
+                packet_state: Some(crate::domain::session::DelegationPacketState::Stuck),
+                target_owner: Some("operator".to_string()),
+                headline: "stuck delegated continuity requires recovery".to_string(),
+                evidence_summary: "the same blocked continuity reason repeated three times"
+                    .to_string(),
+            }),
+            ..SessionStatusView::default()
+        });
+        assert_eq!(delegated_blocked.0, "blocked");
+        assert!(delegated_blocked.1.contains("stuck delegated continuity"));
 
         let planned_step = session_execution_condition_parts(&SessionStatusView {
             latest_status: SessionStatus::Planned,

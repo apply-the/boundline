@@ -20,7 +20,8 @@ use crate::domain::governance::GovernanceRuntimeKind;
 use crate::domain::negotiation::NegotiatedDeliveryPacket;
 use crate::domain::session::{
     ActiveSessionRecord, CompatibilityFollowUpMode, CompatibilityFollowUpView, ContinuityAuthority,
-    SessionStatus, SessionStatusView, decision_status_text, execution_path_text, routing_outcome,
+    SessionStatus, SessionStatusView, decision_status_text, delegation_next_command,
+    delegation_status_view, execution_path_text, routing_outcome,
     task_state_attempt_lineage_summary, task_state_canon_memory_context_credibility,
     task_state_canon_memory_context_summary, task_state_canon_memory_primary_inputs,
     task_state_canon_memory_provenance, task_state_canon_memory_staleness_reason,
@@ -344,6 +345,17 @@ pub fn execute_run_with_target(
     let response = runtime.run_to_terminal(&mut record).map_err(map_runtime_error)?;
     runtime.persist_session(&record).map_err(map_runtime_error)?;
 
+    if response.terminal_status == TaskStatus::Failed && delegation_status_view(&record).is_some() {
+        return Ok(SessionCommandReport {
+            exit_status: exit_status_for_task(response.terminal_status),
+            terminal_output: output::render_session_status(&build_status_view(
+                &record,
+                suggested_next_command(&record),
+                "run stopped at an explicit delegated continuity boundary and persisted the packet in session-owned state",
+            )),
+        });
+    }
+
     let trace = runtime.trace_store().load(Path::new(&response.trace_location)).ok();
     let next_command =
         suggested_next_command(&record).unwrap_or_else(|| "synod inspect".to_string());
@@ -628,6 +640,7 @@ pub(crate) fn build_status_view_with_follow_up(
         record.authored_brief.as_ref().and_then(|bundle| bundle.governance_intent.as_ref());
     let latest_decision = record.decisions.last();
     let latest_decision_selector = latest_decision.map(|decision| decision.selector_kind());
+    let delegation = delegation_status_view(record);
     let task_context_summary =
         record.active_task.as_ref().and_then(task_state_canon_memory_context_summary);
     let task_context_credibility =
@@ -745,9 +758,13 @@ pub(crate) fn build_status_view_with_follow_up(
         active_workflow: record.active_workflow_name(),
         workflow_phase: record.active_workflow_phase_text(),
         workflow_next_action: record.active_workflow_next_action(),
-        continuity_authority: compatibility_follow_up
+        continuity_authority: delegation
             .as_ref()
-            .map(|_| ContinuityAuthority::NativeSession),
+            .map(|_| ContinuityAuthority::NativeSession)
+            .or_else(|| {
+                compatibility_follow_up.as_ref().map(|_| ContinuityAuthority::CompatibilityTrace)
+            }),
+        delegation,
         compatibility_follow_up,
         current_stage_id: record.active_flow.as_ref().map(|flow| flow.current_stage_id.clone()),
         current_stage_index: record.active_flow.as_ref().map(|flow| flow.current_stage_index),
@@ -1011,6 +1028,10 @@ fn suggested_next_command(record: &ActiveSessionRecord) -> Option<String> {
         return Some("synod capture --goal <narrower goal>".to_string());
     }
 
+    if let Some(next_command) = delegation_next_command(record) {
+        return Some(next_command);
+    }
+
     if record.goal_plan.as_ref().and_then(|goal_plan| goal_plan.context_pack.as_ref()).is_some_and(
         |pack| pack.credibility != crate::domain::goal_plan::ContextPackCredibility::Credible,
     ) {
@@ -1258,8 +1279,13 @@ mod tests {
         map_store_error, render_error, requested_governance_runtime_text, resolve_workspace,
         review_headline_from_task, suggested_next_command,
     };
+    use crate::adapters::config_store::FileConfigStore;
     use crate::adapters::session_store::SessionStoreError;
     use crate::adapters::trace_store::{FileTraceStore, TraceStore, TraceStoreError};
+    use crate::domain::configuration::{
+        CapabilityState, ConfigFile, EffortFallbackPolicy, EffortLevel, ModelRoute, RouteSlot,
+        RoutingConfig, RuntimeCapabilityProfile, RuntimeKind, SlotEffortPolicy,
+    };
     use crate::domain::decision::{Decision, DecisionType, EvidenceRef};
     use crate::domain::goal_plan::{
         ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan,
@@ -1627,6 +1653,97 @@ fn red_to_green_addition() {
             next.terminal_output.contains("next_command: synod inspect"),
             "{}",
             next.terminal_output
+        );
+    }
+
+    #[test]
+    fn execute_run_surfaces_delegation_packet_when_native_route_is_blocked() {
+        let workspace = write_execution_workspace("synod-cli-session-delegation");
+        let mut config = ConfigFile {
+            version: 1,
+            routing: RoutingConfig {
+                implementation: Some(ModelRoute {
+                    runtime: RuntimeKind::Claude,
+                    model: "sonnet-4".to_string(),
+                }),
+                assistant_runtimes: vec![RuntimeKind::Codex],
+                ..RoutingConfig::default()
+            },
+        };
+        config.routing.slot_effort_policies.insert(
+            RouteSlot::Implementation,
+            SlotEffortPolicy {
+                level: EffortLevel::High,
+                fallback: EffortFallbackPolicy::Preserve,
+                rationale: Some(
+                    "keep implementation continuation on the highest-effort path".to_string(),
+                ),
+            },
+        );
+        config.routing.runtime_capabilities.insert(
+            RuntimeKind::Claude,
+            RuntimeCapabilityProfile {
+                continuation: CapabilityState::Unsupported,
+                resume: CapabilityState::Unsupported,
+                validation: CapabilityState::Unsupported,
+                handoff_target: CapabilityState::Unsupported,
+                escalation_context: CapabilityState::Supported,
+                notes: Some("requires a handoff for bounded continuation".to_string()),
+            },
+        );
+        config.routing.runtime_capabilities.insert(
+            RuntimeKind::Codex,
+            RuntimeCapabilityProfile {
+                continuation: CapabilityState::Supported,
+                resume: CapabilityState::Supported,
+                validation: CapabilityState::Supported,
+                handoff_target: CapabilityState::Supported,
+                escalation_context: CapabilityState::Supported,
+                notes: None,
+            },
+        );
+        FileConfigStore::for_workspace(&workspace).save_local(&config).unwrap();
+
+        execute_start(Some(&workspace)).unwrap();
+        execute_capture(
+            Some(&workspace),
+            Some("fix the failing add test"),
+            &[],
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let plan = execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+
+        assert!(plan.terminal_output.contains("runtime_capabilities:"), "{}", plan.terminal_output);
+        assert!(plan.terminal_output.contains("slot_effort_policies:"), "{}", plan.terminal_output);
+        assert!(plan.terminal_output.contains("planning_rationale:"), "{}", plan.terminal_output);
+        assert!(plan.terminal_output.contains("routing policy:"), "{}", plan.terminal_output);
+
+        let run = execute_run(Some(&workspace)).unwrap();
+
+        assert_eq!(run.exit_status, CommandExitStatus::NonSuccess);
+        assert!(
+            run.terminal_output.contains("delegation_mode: handoff_required"),
+            "{}",
+            run.terminal_output
+        );
+        assert!(
+            run.terminal_output.contains("delegation_packet_kind: handoff"),
+            "{}",
+            run.terminal_output
+        );
+        assert!(
+            run.terminal_output.contains("delegation_target_owner: codex"),
+            "{}",
+            run.terminal_output
+        );
+        assert!(
+            run.terminal_output.contains("next_command: synod status"),
+            "{}",
+            run.terminal_output
         );
     }
 

@@ -19,9 +19,21 @@ recorded workspace version.
 
 Delivered specs:
 
-- None recorded after `0.36.0`
+- None recorded after `0.37.0`
 
 Highlights:
+
+## [0.37.0] - 2026-05-03
+
+Delivered specs:
+
+- `037` - Bounded Delegated Execution
+
+Highlights:
+
+- Add explicit runtime capability profiles plus slot-level effort policies, surface them through `config show`, `plan`, `run`, `status`, `next`, and `inspect`, and persist the same route-policy snapshot on native and compatibility traces.
+- Replace opaque blocked native-route failures with explicit handoff, escalation, resolved, and stuck delegation packets that remain authoritative in session-owned continuity state and trace summaries.
+- Resolve stale delegation explicitly during replanning when route declarations or bounded evidence change materially, then update README, getting-started, configuration, assistant guidance, roadmap, contributor docs, and changelog for the `0.37.0` release.
 
 ## [0.36.0] - 2026-05-03
 

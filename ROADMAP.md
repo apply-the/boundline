@@ -6,7 +6,7 @@ Canon is downstream from Synod in this roadmap: Synod thinks, decides, orchestra
 
 Evolve Synod into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.36.0
+## Current Status: v0.37.0
 
 Synod now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -16,8 +16,8 @@ delivery, negotiated delivery modeling, inspectable routing plus assistant
 decoupling, guided decision follow-through, evidence-aligned next-command
 selection, credible governed delivery completion, final product-surface
 closure, explicit bounded context assembly, decision-driven bounded action
-selection, evidence-driven dynamic planning, and Canon-grounded structured
-memory in place:
+selection, evidence-driven dynamic planning, Canon-grounded structured
+memory, and bounded delegated execution in place:
 
 - session-native orchestration remains the primary operator path
 - `capture` now derives one negotiated delivery packet from direct goals, authored briefs, and governance context before planning begins
@@ -45,21 +45,23 @@ memory in place:
 - `status` and `next` still surface `continuity_authority`, compatibility follow-up mode, and inspect-only guidance when the latest authoritative follow-up state comes from an explicit compatibility trace instead of an active session
 - `run`, `status`, `next`, `inspect`, and compatibility follow-up still surface explicit `route_owner` plus material `route_config_projection` cues when workflow metadata, governance intent, or workspace-local routing defaults explain the current follow-up story
 - `config show`, `run`, `status`, `next`, and `inspect` now surface effective slot routing, assistant bindings, and persisted route snapshots instead of forcing operators to reconstruct backend ownership from current config files
-- native execution now rejects implementation or verification routes that are outside declared `assistant_runtimes` capabilities instead of silently accepting a hard-wired backend
+- `config show`, `plan`, `run`, `status`, `next`, and `inspect` now also surface effective runtime capability profiles plus slot effort policies so route-policy decisions stay attributable to the same source as effective routing
+- native execution now turns blocked implementation or verification routes into explicit handoff or escalation packets instead of returning opaque assistant-binding failures
+- repeated blocked native continuity now escalates to explicit stuck state, while replanning can resolve stale delegation packets when the route policy or bounded evidence changes materially
 - `status`, `next`, and `inspect` now surface guided next-action and stop-condition output derived from persisted session or authoritative trace evidence instead of generic lifecycle wording alone
 - explicit compatibility follow-up now keeps continuity authority explicit while still projecting one evidence-backed next bounded action
 - surfaced `next_command` now stays aligned with the same authoritative follow-through, workflow resume, or explicit stop condition instead of drifting back to a generic fallback
 - session-native commands still accept `--cluster <primary-workspace>` so one authoritative primary-owned session can plan and deliver a bounded change across registered member repositories
 - clustered `run`, `status`, `next`, and `inspect` still surface authoritative workspace, clustered execution condition, participating workspaces, and any blocking member without implying distributed orchestration ownership
 
-## Roadmap Closure In 0.36.0
+## Roadmap Closure In 0.37.0
 
-The roadmap is no longer an open-ended backlog. `0.36.0` keeps the product
-surface closed and extends the same execution model with Canon-grounded
-reasoning and durable structured memory, so Synod now presents one coherent
-operator story across CLI, assistants, workflows, routing, governance,
+The roadmap is no longer an open-ended backlog. `0.37.0` keeps the product
+surface closed and extends the same execution model with explicit delegated
+continuity, so Synod now presents one coherent operator story across CLI,
+assistants, workflows, routing, capability and effort policy, governance,
 bounded context assembly, evidence-driven proposal selection, governed memory,
-and the runtime loop itself.
+delegation packets, and the runtime loop itself.
 
 The governing rule remains simple: Synod is the product and execution owner.
 Canon stays a bounded, useful governed runtime inside that same delivery path
@@ -67,7 +69,7 @@ rather than drifting back into a parallel tool story.
 
 ### Ongoing Compatibility Watch
 
-Canon will continue to release versions after `0.36.0`, so Synod keeps one
+Canon will continue to release versions after `0.37.0`, so Synod keeps one
 explicit maintenance track for compatibility drift on the machine-facing
 governance adapter rather than reopening broad product-scope work:
 
@@ -81,21 +83,35 @@ governance adapter rather than reopening broad product-scope work:
   contract, introduces a new adapter schema version, or adds governed behavior
   that Synod needs for its explicitly modeled bounded stages
 
-### Next Macrofeature Line (037+)
+### Next Macrofeature Line (038+)
 
-`0.36.0` delivered Canon-grounded reasoning and structured memory on top of the
-evidence-driven `infer -> propose -> confirm` planning baseline. The next
-roadmap line should not decompose back into microfeatures. Future numbered
-specs must stay at the macrofeature level and each one must change Synod's
-operating model, not just a single CLI surface.
+`0.37.0` delivered bounded delegated execution on top of the evidence-driven
+`infer -> propose -> confirm` planning baseline. The next roadmap line should
+not decompose back into microfeatures. Future numbered specs must stay at the
+macrofeature level and each one must change Synod's operating model, not just
+a single CLI surface.
 
 Compatibility maintenance for newer Canon releases stays inside the watch above
 unless it becomes contract-breaking. It does not consume the next spec number
 by itself.
 
-No numbered `037` macrofeature is active yet. Define the next spec only when it
-materially changes Synod's operating model beyond the delivered `036` Canon-
-grounded memory baseline.
+No numbered `038` macrofeature is active yet. Define the next spec only when it
+materially changes Synod's operating model beyond the delivered `037` bounded
+delegation baseline.
+
+### Delivered in 0.37.0
+
+- add explicit runtime capability profiles plus slot effort policies on top of
+  effective routing, and keep that route-policy story attributable across
+  `config show`, `plan`, `run`, `status`, `next`, and `inspect`
+- replace opaque blocked native-route failures with explicit handoff,
+  escalation, resolved, and stuck delegation packets persisted in the active
+  goal plan and authoritative trace summaries
+- let repeated `plan` resolve stale delegation explicitly when route
+  declarations or bounded evidence change materially, instead of leaving the
+  old packet as the active source of truth
+- update README, getting-started, configuration, assistant guidance, roadmap,
+  contributor docs, and changelog for the release
 
 ### Delivered in 0.36.0
 

@@ -6,6 +6,13 @@ use std::path::Path;
 use thiserror::Error;
 use uuid::Uuid;
 
+use crate::adapters::cluster_store::FileClusterStore;
+use crate::adapters::config_store::FileConfigStore;
+use crate::domain::configuration::{
+    RouteSlot, RoutingOverrides, SourcedRoute, SourcedRuntimeCapabilityProfile,
+    SourcedSlotEffortPolicy, ValueSource, resolve_effective_routing,
+    resolve_effective_runtime_capabilities, resolve_effective_slot_effort_policies,
+};
 use crate::domain::decision::{DecisionType, EvidenceRef};
 use crate::domain::goal_plan::{
     ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan, GoalPlanError,
@@ -521,6 +528,7 @@ fn build_planning_rationale(
     context_pack: &ContextPack,
     flow: Option<&InferredFlow>,
     verification_strategy: &str,
+    routing_policy_summary: Option<&str>,
     compacted_canon_memory: Option<&CompactedCanonMemory>,
 ) -> String {
     let target_summary = if context_pack.selected_targets.is_empty() {
@@ -529,19 +537,111 @@ fn build_planning_rationale(
         context_pack.selected_targets.join(", ")
     };
 
+    let routing_policy_clause = routing_policy_summary
+        .map(|summary| format!("; routing policy: {summary}"))
+        .unwrap_or_default();
     let canon_memory_clause = compacted_canon_memory
         .map(|memory| format!("; canon memory: {}", memory.summary_text()))
         .unwrap_or_default();
 
     match flow {
         Some(flow) => format!(
-            "{}; selected targets: {target_summary}; verification: {verification_strategy}{}",
-            flow.confidence_reason, canon_memory_clause
+            "{}; selected targets: {target_summary}; verification: {verification_strategy}{}{}",
+            flow.confidence_reason, routing_policy_clause, canon_memory_clause
         ),
         None => format!(
-            "bounded context selected targets: {target_summary}; verification: {verification_strategy}{}",
-            canon_memory_clause
+            "bounded context selected targets: {target_summary}; verification: {verification_strategy}{}{}",
+            routing_policy_clause, canon_memory_clause
         ),
+    }
+}
+
+fn build_routing_policy_summary(workspace_ref: &Path) -> Option<String> {
+    let workspace_routing =
+        FileConfigStore::for_workspace(workspace_ref).local_routing().ok().flatten();
+    let cluster_routing = FileClusterStore::for_workspace(workspace_ref)
+        .load()
+        .ok()
+        .flatten()
+        .map(|config| config.routing);
+    let global_routing = FileConfigStore::global_routing().ok().flatten();
+
+    let effective = resolve_effective_routing(
+        &RoutingOverrides::default(),
+        workspace_routing.as_ref(),
+        cluster_routing.as_ref(),
+        global_routing.as_ref(),
+    );
+    let effective_capabilities = resolve_effective_runtime_capabilities(
+        workspace_routing.as_ref(),
+        cluster_routing.as_ref(),
+        global_routing.as_ref(),
+    );
+    let effective_effort = resolve_effective_slot_effort_policies(
+        workspace_routing.as_ref(),
+        cluster_routing.as_ref(),
+        global_routing.as_ref(),
+    );
+
+    let mut clauses = Vec::new();
+    for (slot, route) in [
+        (RouteSlot::Planning, &effective.planning),
+        (RouteSlot::Implementation, &effective.implementation),
+        (RouteSlot::Verification, &effective.verification),
+        (RouteSlot::Review, &effective.review),
+    ] {
+        let capability = effective_capabilities.get(&route.route.runtime);
+        let effort = effective_effort.get(&slot);
+        if capability.is_none() && effort.is_none() {
+            continue;
+        }
+
+        clauses.push(render_routing_policy_clause(slot, route, capability, effort));
+    }
+
+    (!clauses.is_empty()).then(|| clauses.join("; "))
+}
+
+fn render_routing_policy_clause(
+    slot: RouteSlot,
+    route: &SourcedRoute,
+    capability: Option<&SourcedRuntimeCapabilityProfile>,
+    effort: Option<&SourcedSlotEffortPolicy>,
+) -> String {
+    let mut clause = format!(
+        "{} route={}/{} [{}]",
+        slot.as_str(),
+        route.route.runtime.as_str(),
+        route.route.model,
+        value_source_text(route.source)
+    );
+
+    if let Some(capability) = capability {
+        clause.push_str(&format!(
+            ", capability={} [{}]",
+            capability.profile.summary_text(),
+            value_source_text(capability.source)
+        ));
+    }
+
+    if let Some(effort) = effort {
+        clause.push_str(&format!(
+            ", effort={} [{}]",
+            effort.policy.summary_text(),
+            value_source_text(effort.source)
+        ));
+    }
+
+    clause
+}
+
+fn value_source_text(source: ValueSource) -> &'static str {
+    match source {
+        ValueSource::Cli => "cli",
+        ValueSource::Workspace => "workspace",
+        ValueSource::Cluster => "cluster",
+        ValueSource::Global => "global",
+        ValueSource::BuiltIn => "built-in",
     }
 }
 
@@ -752,10 +852,12 @@ pub fn build_goal_plan_with_sources(
         workspace_ref,
         context_sources.compacted_canon_memory.as_ref(),
     );
+    let routing_policy_summary = build_routing_policy_summary(workspace_ref);
     let planning_rationale = build_planning_rationale(
         &context_pack,
         inferred_flow.as_ref(),
         &verification_strategy,
+        routing_policy_summary.as_deref(),
         context_sources.compacted_canon_memory.as_ref(),
     );
     let tasks = derive_tasks_from_context(
@@ -783,6 +885,10 @@ pub fn build_goal_plan_with_sources(
         .with_evidence(source_evidence)
         .with_planning_rationale(planning_rationale)
         .with_verification_strategy(verification_strategy);
+
+    if let Some(routing_policy_summary) = routing_policy_summary {
+        plan = plan.with_routing_policy_summary(routing_policy_summary);
+    }
 
     if let Some(memory) = context_sources.compacted_canon_memory.clone() {
         plan = plan.with_compacted_canon_memory(memory);

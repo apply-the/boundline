@@ -32,7 +32,7 @@ If you enable Synod governance through Canon, the current Synod adapter is
 validated against Canon `0.39.0` on the machine-facing `canon governance`
 `start|refresh|capabilities --json` `v1` adapter surface.
 
-In `0.36.0`, direct `run --goal` can bootstrap the native session path even
+In `0.37.0`, direct `run --goal` can bootstrap the native session path even
 without `.synod/execution.json`, while `run --compatibility --goal ...` keeps
 the manifest-backed route as an explicit opt-in. `capture` persists one
 negotiated delivery packet before planning, `plan` blocks on non-credible
@@ -50,7 +50,12 @@ surface `follow_through_guidance`, `follow_through_evidence_source`,
 session or trace evidence can explain one next bounded action or stop. The same
 read-side surfaces now keep the latest explicit selector, rationale, evidence
 basis, and verification intent visible when the native decision loop chooses
-between `read`, `search`, `modify`, `test`, `ask`, and `replan`.
+between `read`, `search`, `modify`, `test`, `ask`, and `replan`. The same
+release also lets `synod config` declare runtime capability profiles plus slot
+effort policy, and the operator-facing surfaces now preserve those facts
+through `route_config_projection` alongside explicit `delegation_*` fields
+whenever bounded native execution stops at a handoff, escalation, resolved, or
+stuck delegation boundary.
 Canon capability snapshots and compact Canon-grounded memory now also feed
 planning and follow-through directly, so stale governed evidence can block the
 next bounded action while `run`, `status`, `next`, and `inspect` keep the same
@@ -336,10 +341,17 @@ synod run --workspace <workspace> --compatibility --goal "Fix the failing add te
 
 If that manifest defines `adaptive`, failed validation can reprioritize the next
 bounded adaptive attempt from the latest validation record while keeping the
-route explicit as compatibility execution. In `0.36.0`, the same path can also
+route explicit as compatibility execution. In `0.37.0`, the same path can also
 choose bounded ordering-boundary, result-status, and numeric-literal repairs,
 and it reports explicit exhaustion instead of continuing blindly when the
 validation evidence is absent or insufficient.
+
+If a native run cannot continue because the selected implementation or
+verification route is outside declared `assistant_runtimes` or lacks the
+required capability profile, Synod now persists an explicit delegation packet
+instead of returning an opaque route error. Use `synod status`, `synod next`,
+or `synod inspect` to follow that delegation story rather than silently
+switching runtimes.
 
 After a direct compatibility run, `synod status --workspace <workspace>` and
 `synod next --workspace <workspace>` can now point you back to
@@ -348,7 +360,8 @@ session. Look for `continuity_authority: compatibility_trace` and the CLI-
 reported inspect command instead of assuming you must restart from `synod
 start`. In `0.28.0`, the same outputs also surface `route_owner: compatibility`
 and any relevant `route_config_projection`, including persisted
-`effective_routing` and `assistant_bindings`, so the inspect-only route stays
+`effective_routing`, `assistant_bindings`, `runtime_capabilities`, and
+`slot_effort_policies`, so the inspect-only route stays
 explicit even when summary wording otherwise matches the native path. They also
 preserve the negotiated delivery summary so compatibility follow-up does not
 lose the active acceptance boundary, and they now reuse authoritative trace

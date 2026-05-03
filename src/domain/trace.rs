@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::domain::cluster::ClusterDeliveryStory;
 use crate::domain::limits::TerminalCondition;
 use crate::domain::routing_decision::RoutingDecisionProjection;
+use crate::domain::session::DelegationStatusView;
 use crate::domain::step::{StepKind, StepStatus};
 use crate::domain::task::{TaskStatus, TerminalReason};
 
@@ -162,6 +163,8 @@ pub struct TraceSummaryView {
     pub governance_timeline: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub governance_next_action: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delegation: Option<DelegationStatusView>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub review_timeline: Vec<String>,
     pub terminal_status: TaskStatus,
@@ -204,6 +207,7 @@ impl Default for TraceSummaryView {
             recovery_events: Vec::new(),
             governance_timeline: Vec::new(),
             governance_next_action: None,
+            delegation: None,
             review_timeline: Vec::new(),
             terminal_status: TaskStatus::Planned,
             terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "", None),
