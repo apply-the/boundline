@@ -212,6 +212,7 @@ pub fn render_run_trace(
         let mut context_primary_inputs: Vec<String> = Vec::new();
         let mut context_provenance: Vec<String> = Vec::new();
         let mut context_staleness_reason: Option<String> = None;
+        let mut governance_next_action: Option<String> = None;
         lines.insert(0, format!("goal: {}", trace.goal));
         lines.insert(1, format!("route_owner: {}", run_trace_route_owner(trace)));
         if let Some(route_config_projection) = render_route_config_projection(
@@ -366,6 +367,77 @@ pub fn render_run_trace(
                 .or(context_staleness_reason);
         }
 
+        for event in &trace.events {
+            if !matches!(
+                event.event_type,
+                TraceEventType::GovernanceAwaitingApproval
+                    | TraceEventType::GovernanceCompleted
+                    | TraceEventType::GovernanceBlocked
+                    | TraceEventType::GovernancePacketRejected
+            ) {
+                continue;
+            }
+
+            if context_summary.is_none() {
+                context_summary = event
+                    .payload
+                    .get("canon_memory_summary")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .or(context_summary);
+            }
+            if context_credibility.is_none() {
+                context_credibility = event
+                    .payload
+                    .get("canon_memory_credibility")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .or(context_credibility);
+            }
+            if context_primary_inputs.is_empty() {
+                context_primary_inputs = event
+                    .payload
+                    .get("document_refs")
+                    .and_then(Value::as_array)
+                    .map(|items| {
+                        items
+                            .iter()
+                            .filter_map(|item| item.as_str().map(str::to_string))
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+            }
+            if let Some(canon_memory_summary) =
+                event.payload.get("canon_memory_summary").and_then(Value::as_str)
+            {
+                let line = format!("canon_memory: {canon_memory_summary}");
+                if !context_provenance.contains(&line) {
+                    context_provenance.push(line);
+                }
+            }
+            if context_staleness_reason.is_none()
+                && event
+                    .payload
+                    .get("canon_memory_credibility")
+                    .and_then(Value::as_str)
+                    .is_some_and(|credibility| credibility != "credible")
+            {
+                context_staleness_reason = event
+                    .payload
+                    .get("reason")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .or(context_staleness_reason);
+            }
+            if governance_next_action.is_none() {
+                governance_next_action = event
+                    .payload
+                    .get("canon_next_action")
+                    .and_then(Value::as_str)
+                    .map(str::to_string);
+            }
+        }
+
         push_context_projection_lines(
             &mut lines,
             context_summary.as_deref(),
@@ -376,6 +448,9 @@ pub fn render_run_trace(
         );
 
         for event in &trace.events {
+            if let Some(governance_next_action) = governance_next_action.as_ref() {
+                lines.push(format!("governance_next_action: {governance_next_action}"));
+            }
             match event.event_type {
                 TraceEventType::TaskStarted
                 | TraceEventType::TerminalRecorded
@@ -2399,6 +2474,61 @@ mod tests {
             "{text}"
         );
         assert!(text.contains("review_outcome: accepted"), "{text}");
+    }
+
+    #[test]
+    fn render_run_trace_surfaces_canon_memory_projection_from_governance_events() {
+        let mut trace =
+            ExecutionTrace::new("task-canon-output", "session-canon-output", "Render canon");
+        trace.record_event(
+            TraceEventType::GovernanceBlocked,
+            Some("governance-step".to_string()),
+            0,
+            json!({
+                "stage_key": "change:verify",
+                "runtime": "canon",
+                "required": true,
+                "reason": "refresh_required",
+                "document_refs": [".canon/runs/run-8/verification.md"],
+                "canon_memory_summary": "Canon verification packet [stale]",
+                "canon_memory_credibility": "stale",
+                "canon_next_action": "refresh: refresh the governed packet and reassess its credibility"
+            }),
+        );
+
+        let response = TaskRunResponse {
+            task_id: "task-canon-output".to_string(),
+            terminal_status: TaskStatus::Failed,
+            terminal_reason: TerminalReason::new(
+                TerminalCondition::TaskNotCredible,
+                "governed work is blocked pending intervention",
+                None,
+            ),
+            final_context: TaskContext::new(
+                "session-canon-output",
+                "/tmp/workspace",
+                RunLimits::default(),
+                serde_json::Map::new(),
+            ),
+            plan_revision: 0,
+            trace_location: "/tmp/workspace/.synod/traces/task-canon-output.json".to_string(),
+        };
+
+        let text = render_run_trace("run", Some(&trace), &response, "/synod-next");
+
+        assert!(text.contains("context_summary: Canon verification packet [stale]"), "{text}");
+        assert!(text.contains("context_credibility: stale"), "{text}");
+        assert!(
+            text.contains("context_primary_inputs: .canon/runs/run-8/verification.md"),
+            "{text}"
+        );
+        assert!(text.contains("context_staleness_reason: refresh_required"), "{text}");
+        assert!(
+            text.contains(
+                "governance_next_action: refresh: refresh the governed packet and reassess its credibility"
+            ),
+            "{text}"
+        );
     }
 
     #[test]

@@ -1,5 +1,5 @@
 use crate::adapters::governance_runtime::{
-    GovernanceBoundedContext, GovernanceInputDocument, ReusedPacketInput,
+    GovernanceBoundedContext, GovernanceInputDocument, GovernanceRuntimeResponse, ReusedPacketInput,
 };
 use crate::domain::brief::{AuthoredBriefBundle, GovernanceIntent};
 use crate::domain::flow::{FlowStepMetadata, built_in_flow};
@@ -8,14 +8,17 @@ use serde_json::{Map, Value};
 use thiserror::Error;
 
 use crate::domain::governance::{
-    ApprovalState, AutopilotAction, AutopilotDecisionRecord, CanonMode, GovernanceLifecycleState,
-    GovernanceProfile, GovernanceRuntimeKind, GovernedStagePacket, GovernedStageRecord,
-    PacketReadiness, PacketReuseBinding, StageGovernancePolicy, candidate_canon_modes,
-    resolved_canon_mode, supported_canon_modes_for_stage,
+    ApprovalState, AutopilotAction, AutopilotDecisionRecord, CanonEvidenceInspectSummary,
+    CanonMode, CanonPossibleActionSummary, CanonRecommendedActionSummary, CompactedCanonMemory,
+    GovernanceLifecycleState, GovernanceProfile, GovernanceRuntimeKind, GovernedStagePacket,
+    GovernedStageRecord, MemoryCredibilityState, PacketReadiness, PacketReuseBinding,
+    StageGovernancePolicy, candidate_canon_modes, resolved_canon_mode,
+    supported_canon_modes_for_stage,
 };
 use crate::domain::task_context::{
-    LATEST_GOVERNANCE_DECISION_KEY, LATEST_GOVERNANCE_PACKET_KEY,
-    LATEST_GOVERNANCE_PACKET_REUSE_KEY, LATEST_GOVERNANCE_STAGE_KEY, TaskContext, TaskContextError,
+    LATEST_COMPACTED_CANON_MEMORY_KEY, LATEST_GOVERNANCE_DECISION_KEY,
+    LATEST_GOVERNANCE_PACKET_KEY, LATEST_GOVERNANCE_PACKET_REUSE_KEY, LATEST_GOVERNANCE_STAGE_KEY,
+    TaskContext, TaskContextError,
 };
 
 pub fn governance_stage_key(flow_name: &str, stage_id: &str) -> String {
@@ -376,6 +379,7 @@ pub fn governance_state_patch(
     packet: Option<&GovernedStagePacket>,
     packet_reuse: Option<&PacketReuseBinding>,
     decision: Option<&AutopilotDecisionRecord>,
+    compacted_canon_memory: Option<&CompactedCanonMemory>,
 ) -> Result<Map<String, Value>, GovernanceStatePatchError> {
     let mut patch = Map::new();
     patch.insert(
@@ -394,8 +398,189 @@ pub fn governance_state_patch(
         LATEST_GOVERNANCE_DECISION_KEY.to_string(),
         optional_serialized_value(LATEST_GOVERNANCE_DECISION_KEY, decision)?,
     );
+    patch.insert(
+        LATEST_COMPACTED_CANON_MEMORY_KEY.to_string(),
+        optional_serialized_value(LATEST_COMPACTED_CANON_MEMORY_KEY, compacted_canon_memory)?,
+    );
 
     Ok(patch)
+}
+
+pub fn compacted_canon_memory_from_response(
+    stage_key: &str,
+    runtime_kind: GovernanceRuntimeKind,
+    response: &GovernanceRuntimeResponse,
+) -> Option<CompactedCanonMemory> {
+    if runtime_kind != GovernanceRuntimeKind::Canon
+        && response.packet.as_ref().and_then(|packet| packet.canon_mode).is_none()
+    {
+        return None;
+    }
+
+    let artifact_refs = response
+        .packet
+        .as_ref()
+        .map(|packet| {
+            if packet.document_refs.is_empty() {
+                packet.expected_document_refs.clone()
+            } else {
+                packet.document_refs.clone()
+            }
+        })
+        .unwrap_or_default();
+    let credibility = canon_memory_credibility(response.status, response.packet.as_ref());
+    let recommended_next_action = canon_memory_recommended_action(response, credibility);
+    let possible_actions = canon_memory_possible_actions(response, credibility);
+
+    Some(CompactedCanonMemory {
+        headline: response
+            .packet
+            .as_ref()
+            .map(|packet| packet.headline.clone())
+            .unwrap_or_else(|| response.message.clone()),
+        credibility,
+        stage_key: Some(stage_key.to_string()),
+        run_ref: response.run_ref.clone(),
+        packet_ref: response.packet.as_ref().map(|packet| packet.packet_ref.clone()),
+        reason_code: response.reason_code.clone(),
+        artifact_refs: artifact_refs.clone(),
+        mode_summary: None,
+        possible_actions,
+        recommended_next_action,
+        evidence_summary: (!artifact_refs.is_empty()).then_some(CanonEvidenceInspectSummary {
+            execution_posture: None,
+            carried_forward_items: Vec::new(),
+            artifact_provenance_links: artifact_refs,
+            closure_status: None,
+            closure_findings: Vec::new(),
+        }),
+    })
+}
+
+pub fn compacted_canon_memory_for_block(
+    stage_key: &str,
+    runtime_kind: GovernanceRuntimeKind,
+    reason: &str,
+) -> Option<CompactedCanonMemory> {
+    (runtime_kind == GovernanceRuntimeKind::Canon).then(|| CompactedCanonMemory {
+        headline: reason.to_string(),
+        credibility: MemoryCredibilityState::Insufficient,
+        stage_key: Some(stage_key.to_string()),
+        run_ref: None,
+        packet_ref: None,
+        reason_code: Some("blocked_context".to_string()),
+        artifact_refs: Vec::new(),
+        mode_summary: None,
+        possible_actions: vec![CanonPossibleActionSummary {
+            action: "refresh".to_string(),
+            text: "refresh Canon governance context before retrying".to_string(),
+            target: None,
+        }],
+        recommended_next_action: Some(CanonRecommendedActionSummary {
+            action: "refresh".to_string(),
+            rationale: "refresh Canon governance context before retrying".to_string(),
+            target: None,
+        }),
+        evidence_summary: None,
+    })
+}
+
+fn canon_memory_credibility(
+    lifecycle_state: GovernanceLifecycleState,
+    packet: Option<&GovernedStagePacket>,
+) -> MemoryCredibilityState {
+    let packet_readiness = packet.map(|packet| packet.readiness);
+    if matches!(lifecycle_state, GovernanceLifecycleState::Failed)
+        || matches!(packet_readiness, Some(PacketReadiness::Rejected))
+    {
+        return MemoryCredibilityState::Contradicted;
+    }
+    if matches!(lifecycle_state, GovernanceLifecycleState::Blocked)
+        || matches!(packet_readiness, Some(PacketReadiness::Incomplete))
+    {
+        return MemoryCredibilityState::Stale;
+    }
+    if matches!(packet_readiness, Some(PacketReadiness::Reusable))
+        || matches!(lifecycle_state, GovernanceLifecycleState::AwaitingApproval)
+    {
+        return MemoryCredibilityState::Credible;
+    }
+
+    MemoryCredibilityState::Insufficient
+}
+
+fn canon_memory_recommended_action(
+    response: &GovernanceRuntimeResponse,
+    credibility: MemoryCredibilityState,
+) -> Option<CanonRecommendedActionSummary> {
+    match credibility {
+        MemoryCredibilityState::Credible
+            if response.status == GovernanceLifecycleState::AwaitingApproval =>
+        {
+            Some(CanonRecommendedActionSummary {
+                action: "approve".to_string(),
+                rationale: response.message.clone(),
+                target: response.run_ref.clone(),
+            })
+        }
+        MemoryCredibilityState::Credible => Some(CanonRecommendedActionSummary {
+            action: "inspect".to_string(),
+            rationale: response.message.clone(),
+            target: response.packet.as_ref().map(|packet| packet.packet_ref.clone()),
+        }),
+        MemoryCredibilityState::Stale | MemoryCredibilityState::Insufficient => {
+            Some(CanonRecommendedActionSummary {
+                action: "refresh".to_string(),
+                rationale: response.message.clone(),
+                target: response
+                    .run_ref
+                    .clone()
+                    .or_else(|| response.packet.as_ref().map(|packet| packet.packet_ref.clone())),
+            })
+        }
+        MemoryCredibilityState::Contradicted => Some(CanonRecommendedActionSummary {
+            action: "replan".to_string(),
+            rationale: response.message.clone(),
+            target: response
+                .run_ref
+                .clone()
+                .or_else(|| response.packet.as_ref().map(|packet| packet.packet_ref.clone())),
+        }),
+    }
+}
+
+fn canon_memory_possible_actions(
+    response: &GovernanceRuntimeResponse,
+    credibility: MemoryCredibilityState,
+) -> Vec<CanonPossibleActionSummary> {
+    match credibility {
+        MemoryCredibilityState::Credible
+            if response.status == GovernanceLifecycleState::AwaitingApproval =>
+        {
+            vec![CanonPossibleActionSummary {
+                action: "approve".to_string(),
+                text: "record the required approval before continuing".to_string(),
+                target: response.run_ref.clone(),
+            }]
+        }
+        MemoryCredibilityState::Credible => vec![CanonPossibleActionSummary {
+            action: "inspect".to_string(),
+            text: "inspect the current Canon packet before continuing".to_string(),
+            target: response.packet.as_ref().map(|packet| packet.packet_ref.clone()),
+        }],
+        MemoryCredibilityState::Stale | MemoryCredibilityState::Insufficient => {
+            vec![CanonPossibleActionSummary {
+                action: "refresh".to_string(),
+                text: "refresh the governed packet and reassess its credibility".to_string(),
+                target: response.run_ref.clone(),
+            }]
+        }
+        MemoryCredibilityState::Contradicted => vec![CanonPossibleActionSummary {
+            action: "replan".to_string(),
+            text: "replan because the prior Canon-grounded memory is contradicted".to_string(),
+            target: response.run_ref.clone(),
+        }],
+    }
 }
 
 fn optional_serialized_value<T: Serialize>(
@@ -438,4 +623,191 @@ pub enum GovernanceStepDecision<T> {
     Continue,
     Halt,
     Terminal(T),
+}
+
+#[cfg(test)]
+mod tests {
+    use serde::Serialize;
+    use serde_json::Value;
+
+    use super::{
+        GovernanceStateSelectionError, canon_memory_credibility, canon_memory_possible_actions,
+        canon_memory_recommended_action, compacted_canon_memory_for_block,
+        compacted_canon_memory_from_response, optional_serialized_value, serialize_to_value,
+    };
+    use crate::adapters::governance_runtime::GovernanceRuntimeResponse;
+    use crate::domain::governance::{
+        ApprovalState, CanonRecommendedActionSummary, GovernanceLifecycleState,
+        GovernanceRuntimeKind, GovernedStagePacket, MemoryCredibilityState, PacketReadiness,
+    };
+    use crate::domain::task_context::TaskContextError;
+
+    fn response(
+        status: GovernanceLifecycleState,
+        message: &str,
+        packet: Option<GovernedStagePacket>,
+    ) -> GovernanceRuntimeResponse {
+        GovernanceRuntimeResponse {
+            status,
+            approval_state: ApprovalState::NotNeeded,
+            run_ref: Some("canon-run-1".to_string()),
+            packet,
+            reason_code: Some("packet_ready".to_string()),
+            message: message.to_string(),
+        }
+    }
+
+    fn packet(readiness: PacketReadiness) -> GovernedStagePacket {
+        GovernedStagePacket {
+            packet_ref: ".canon/runs/canon-run-1".to_string(),
+            runtime: GovernanceRuntimeKind::Canon,
+            canon_mode: None,
+            expected_document_refs: vec![".canon/runs/canon-run-1/verification.md".to_string()],
+            document_refs: vec![".canon/runs/canon-run-1/verification.md".to_string()],
+            readiness,
+            missing_sections: Vec::new(),
+            headline: "Verification packet ready".to_string(),
+            reason_code: Some("packet_ready".to_string()),
+        }
+    }
+
+    #[test]
+    fn compacted_canon_memory_from_response_surfaces_approval_guidance() {
+        let response = GovernanceRuntimeResponse {
+            status: GovernanceLifecycleState::AwaitingApproval,
+            approval_state: ApprovalState::Requested,
+            run_ref: Some("canon-run-2".to_string()),
+            packet: Some(packet(PacketReadiness::Pending)),
+            reason_code: Some("approval_requested".to_string()),
+            message: "Canon is waiting for approval".to_string(),
+        };
+
+        let memory = compacted_canon_memory_from_response(
+            "change:verify",
+            GovernanceRuntimeKind::Canon,
+            &response,
+        )
+        .expect("Canon responses should compact into memory");
+
+        assert_eq!(memory.credibility, MemoryCredibilityState::Credible);
+        assert_eq!(
+            memory.recommended_next_action,
+            Some(CanonRecommendedActionSummary {
+                action: "approve".to_string(),
+                rationale: "Canon is waiting for approval".to_string(),
+                target: Some("canon-run-2".to_string()),
+            })
+        );
+        assert_eq!(memory.possible_actions[0].action, "approve");
+    }
+
+    #[test]
+    fn compacted_canon_memory_from_response_marks_rejected_packets_as_contradicted() {
+        let response = response(
+            GovernanceLifecycleState::Failed,
+            "Canon rejected the packet",
+            Some(packet(PacketReadiness::Rejected)),
+        );
+
+        let memory = compacted_canon_memory_from_response(
+            "change:verify",
+            GovernanceRuntimeKind::Canon,
+            &response,
+        )
+        .expect("Canon responses should compact into memory");
+
+        assert_eq!(
+            canon_memory_credibility(response.status, response.packet.as_ref()),
+            MemoryCredibilityState::Contradicted
+        );
+        assert_eq!(memory.credibility, MemoryCredibilityState::Contradicted);
+        assert_eq!(memory.recommended_next_action.as_ref().unwrap().action, "replan");
+        assert_eq!(
+            canon_memory_possible_actions(&response, MemoryCredibilityState::Contradicted)[0]
+                .action,
+            "replan"
+        );
+        assert_eq!(
+            canon_memory_recommended_action(&response, MemoryCredibilityState::Stale)
+                .as_ref()
+                .unwrap()
+                .action,
+            "refresh"
+        );
+    }
+
+    #[test]
+    fn compacted_canon_memory_for_block_is_only_created_for_canon_runtime() {
+        assert!(
+            compacted_canon_memory_for_block(
+                "bug-fix:investigate",
+                GovernanceRuntimeKind::Local,
+                "local governance stayed optional"
+            )
+            .is_none()
+        );
+
+        let memory = compacted_canon_memory_for_block(
+            "bug-fix:investigate",
+            GovernanceRuntimeKind::Canon,
+            "canon unavailable",
+        )
+        .expect("Canon block should create compact memory");
+
+        assert_eq!(memory.credibility, MemoryCredibilityState::Insufficient);
+        assert_eq!(memory.reason_code.as_deref(), Some("blocked_context"));
+        assert_eq!(memory.recommended_next_action.as_ref().unwrap().action, "refresh");
+    }
+
+    #[test]
+    fn canon_memory_possible_actions_returns_refresh_for_stale_memory() {
+        let response = response(
+            GovernanceLifecycleState::Blocked,
+            "Canon packet needs to be refreshed",
+            Some(packet(PacketReadiness::Incomplete)),
+        );
+
+        let actions = canon_memory_possible_actions(&response, MemoryCredibilityState::Stale);
+
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0].action, "refresh");
+        assert_eq!(actions[0].target.as_deref(), Some("canon-run-1"));
+    }
+
+    #[test]
+    fn serialization_helpers_cover_null_and_error_paths() {
+        struct FailingValue;
+
+        impl Serialize for FailingValue {
+            fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                Err(serde::ser::Error::custom("forced failure"))
+            }
+        }
+
+        assert_eq!(optional_serialized_value::<f64>("none", None).unwrap(), Value::Null);
+
+        let error = serialize_to_value("bad-number", &FailingValue).unwrap_err();
+        assert!(matches!(
+            error,
+            super::GovernanceStatePatchError::Serialization { ref key, .. }
+                if key == "bad-number"
+        ));
+    }
+
+    #[test]
+    fn governance_state_selection_error_wraps_task_context_error() {
+        let error = GovernanceStateSelectionError::from_task_context(
+            TaskContextError::StateDeserializationFailed {
+                key: "latest_governance_stage".to_string(),
+                message: "broken".to_string(),
+            },
+        );
+
+        assert!(
+            matches!(error, GovernanceStateSelectionError::TaskContext(message) if message.contains("latest_governance_stage"))
+        );
+    }
 }

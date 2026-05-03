@@ -4,7 +4,7 @@ use std::str::FromStr;
 use crate::adapters::agent::FnAgentAdapter;
 use crate::adapters::governance_runtime::{
     CanonCliRuntime, GovernanceRequestKind, GovernanceRuntime, GovernanceRuntimeRequest,
-    LocalGovernanceRuntime,
+    LocalGovernanceRuntime, query_canon_capabilities,
 };
 use crate::adapters::tool::FnToolAdapter;
 use serde_json::{Map, Value, json};
@@ -51,6 +51,7 @@ use crate::orchestrator::goal_planner::{
 };
 use crate::orchestrator::governance::{
     GovernanceStepDecision, bounded_governance_context, build_autopilot_decision,
+    compacted_canon_memory_for_block, compacted_canon_memory_from_response,
     governance_input_documents, governance_stage_key, governance_state_patch,
     overlay_stage_policy_with_intent, requested_governance_intent, runtime_command_available,
     selected_stage_policy,
@@ -262,7 +263,7 @@ impl SessionRuntime {
                 .map_err(|error| SessionRuntimeError::InvalidFlowState(error.to_string()))?;
         }
 
-        let planning_context = Self::planning_context_sources(session);
+        let planning_context = self.planning_context_sources(session);
         let preferred_flow = if no_flow {
             None
         } else {
@@ -374,7 +375,23 @@ impl SessionRuntime {
         Ok(())
     }
 
-    fn planning_context_sources(session: &ActiveSessionRecord) -> PlanningContextSources {
+    fn planning_context_sources(&self, session: &ActiveSessionRecord) -> PlanningContextSources {
+        let canon_capability_snapshot = session
+            .active_task
+            .as_ref()
+            .and_then(|task| task.context.latest_canon_capability_snapshot().ok().flatten())
+            .or_else(|| Self::workspace_canon_capability_snapshot(&self.workspace_ref));
+        let compacted_canon_memory = session
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| goal_plan.compacted_canon_memory.clone())
+            .or_else(|| {
+                session
+                    .active_task
+                    .as_ref()
+                    .and_then(|task| task.context.latest_compacted_canon_memory().ok().flatten())
+            });
+
         PlanningContextSources {
             authored_input_summary: session
                 .authored_brief
@@ -399,7 +416,18 @@ impl SessionRuntime {
                 .map(|packet| packet.acceptance_boundary.success_headline.clone()),
             latest_trace_ref: session.latest_trace_ref.clone(),
             workflow_progress: session.active_workflow_progress().cloned(),
+            canon_capability_snapshot,
+            compacted_canon_memory,
         }
+    }
+
+    fn workspace_canon_capability_snapshot(
+        workspace_ref: &Path,
+    ) -> Option<crate::domain::governance::CanonCapabilitySnapshot> {
+        let profile = load_workspace_execution_profile(workspace_ref).ok()?;
+        let governance = profile.governance.as_ref()?;
+        let canon = governance.canon.as_ref()?;
+        query_canon_capabilities(&canon.command, workspace_ref).ok().flatten()
     }
 
     fn apply_planning_flow_selection(
@@ -1880,11 +1908,14 @@ impl SessionRuntime {
             decision_ref: decision.as_ref().map(|decision| decision.decision_id.clone()),
             blocked_reason: blocked_reason.clone(),
         };
+        let compacted_canon_memory =
+            compacted_canon_memory_from_response(&stage_key, runtime_kind, &response);
         let patch = governance_state_patch(
             &record,
             response.packet.as_ref(),
             packet_reuse.as_ref(),
             decision.as_ref(),
+            compacted_canon_memory.as_ref(),
         )
         .map_err(|error| SessionRuntimeError::GovernancePatch(error.to_string()))?;
         task.context.apply_state_patch(&patch);
@@ -1904,6 +1935,8 @@ impl SessionRuntime {
                     "reason": blocked_reason.as_deref().unwrap_or(&response.message),
                     "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
                     "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
+                    "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
+                    "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
                 }),
             );
         }
@@ -1923,6 +1956,9 @@ impl SessionRuntime {
                         "headline": response.packet.as_ref().map(|packet| packet.headline.clone()).unwrap_or_else(|| response.message.clone()),
                         "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
                         "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
+                        "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
+                        "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
+                        "canon_next_action": compacted_canon_memory.as_ref().and_then(|memory| memory.recommended_next_action.as_ref()).map(|action| format!("{}: {}", action.action, action.rationale)),
                     }),
                 );
                 let trace_location = self.persist_task_trace(task, trace)?;
@@ -1948,6 +1984,9 @@ impl SessionRuntime {
                         "run_ref": response.run_ref,
                         "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
                         "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
+                        "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
+                        "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
+                        "canon_next_action": compacted_canon_memory.as_ref().and_then(|memory| memory.recommended_next_action.as_ref()).map(|action| format!("{}: {}", action.action, action.rationale)),
                     }),
                 );
                 let trace_location = self.persist_task_trace(task, trace)?;
@@ -1971,6 +2010,9 @@ impl SessionRuntime {
                         "packet_ref": response.packet.as_ref().map(|packet| packet.packet_ref.clone()),
                         "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
                         "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
+                        "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
+                        "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
+                        "canon_next_action": compacted_canon_memory.as_ref().and_then(|memory| memory.recommended_next_action.as_ref()).map(|action| format!("{}: {}", action.action, action.rationale)),
                     }),
                 );
                 let trace_location = self.persist_task_trace(task, trace)?;
@@ -2029,8 +2071,16 @@ impl SessionRuntime {
             decision_ref: decision.as_ref().map(|decision| decision.decision_id.clone()),
             blocked_reason: Some(block.reason.clone()),
         };
-        let patch = governance_state_patch(&record, None, None, decision.as_ref())
-            .map_err(|error| SessionRuntimeError::GovernancePatch(error.to_string()))?;
+        let compacted_canon_memory =
+            compacted_canon_memory_for_block(&block.stage_key, block.runtime, &block.reason);
+        let patch = governance_state_patch(
+            &record,
+            None,
+            None,
+            decision.as_ref(),
+            compacted_canon_memory.as_ref(),
+        )
+        .map_err(|error| SessionRuntimeError::GovernancePatch(error.to_string()))?;
         task.context.apply_state_patch(&patch);
         trace.record_event(
             TraceEventType::GovernanceBlocked,
@@ -2041,6 +2091,9 @@ impl SessionRuntime {
                 "runtime": block.runtime,
                 "required": block.required,
                 "reason": block.reason,
+                "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
+                "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
+                "canon_next_action": compacted_canon_memory.as_ref().and_then(|memory| memory.recommended_next_action.as_ref()).map(|action| format!("{}: {}", action.action, action.rationale)),
             }),
         );
         let trace_location = self.persist_task_trace(task, trace)?;

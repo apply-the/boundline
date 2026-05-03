@@ -136,6 +136,7 @@ pub fn summarize_trace(
     let mut context_primary_inputs: Vec<String> = Vec::new();
     let mut context_provenance: Vec<String> = Vec::new();
     let mut context_staleness_reason: Option<String> = None;
+    let mut governance_next_action: Option<String> = None;
     let mut decision_timeline: Vec<String> = Vec::new();
     let mut failure_evidence: Vec<String> = Vec::new();
     let mut adaptive_evidence: Vec<String> = Vec::new();
@@ -467,6 +468,63 @@ pub fn summarize_trace(
                     }
                     _ => {}
                 }
+                if context_summary.is_none() {
+                    context_summary = event
+                        .payload
+                        .get("canon_memory_summary")
+                        .and_then(|value| value.as_str().map(str::to_string));
+                }
+                if context_credibility.is_none() {
+                    context_credibility = event
+                        .payload
+                        .get("canon_memory_credibility")
+                        .and_then(|value| value.as_str().map(str::to_string));
+                }
+                if context_primary_inputs.is_empty() {
+                    context_primary_inputs = event
+                        .payload
+                        .get("document_refs")
+                        .and_then(|value| value.as_array())
+                        .map(|items| {
+                            items
+                                .iter()
+                                .filter_map(|item| item.as_str().map(str::to_string))
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default();
+                }
+                if let Some(canon_memory_summary) =
+                    event.payload.get("canon_memory_summary").and_then(|value| value.as_str())
+                {
+                    let line = format!("canon_memory: {canon_memory_summary}");
+                    if !context_provenance.contains(&line) {
+                        context_provenance.push(line);
+                    }
+                }
+                if context_staleness_reason.is_none()
+                    && event
+                        .payload
+                        .get("canon_memory_credibility")
+                        .and_then(|value| value.as_str())
+                        .is_some_and(|credibility| credibility != "credible")
+                {
+                    context_staleness_reason = event
+                        .payload
+                        .get("reason")
+                        .and_then(|value| value.as_str().map(str::to_string))
+                        .or_else(|| {
+                            event
+                                .payload
+                                .get("canon_memory_summary")
+                                .and_then(|value| value.as_str().map(str::to_string))
+                        });
+                }
+                if governance_next_action.is_none() {
+                    governance_next_action = event
+                        .payload
+                        .get("canon_next_action")
+                        .and_then(|value| value.as_str().map(str::to_string));
+                }
                 if let Some(line) = governance_timeline_line(event.event_type, &event.payload) {
                     governance_timeline.push(line);
                 }
@@ -697,9 +755,8 @@ pub fn summarize_trace(
         executed_steps,
         recovery_events,
         governance_timeline,
-        governance_next_action: governance_next_action_for_state(
-            latest_governance_state.as_deref(),
-        ),
+        governance_next_action: governance_next_action
+            .or_else(|| governance_next_action_for_state(latest_governance_state.as_deref())),
         review_timeline,
         terminal_status,
         terminal_reason,
@@ -1593,6 +1650,45 @@ mod tests {
             summary.routing_summary.as_deref().unwrap().contains("routing: native (goal_plan)"),
             "{:?}",
             summary.routing_summary
+        );
+    }
+
+    #[test]
+    fn summarize_trace_surfaces_canon_memory_from_governance_events() {
+        let mut trace = terminal_trace();
+        trace.record_event(
+            TraceEventType::GovernanceBlocked,
+            Some("step-1".to_string()),
+            0,
+            json!({
+                "stage_key": "change:verify",
+                "runtime": "canon",
+                "required": true,
+                "reason": "refresh_required",
+                "document_refs": [".canon/runs/run-7/verification.md"],
+                "canon_memory_summary": "Canon verification packet [stale]",
+                "canon_memory_credibility": "stale",
+                "canon_next_action": "refresh: refresh the governed packet and reassess its credibility"
+            }),
+        );
+
+        let summary = summarize_trace("/tmp/trace.json", &trace).unwrap();
+
+        assert_eq!(summary.context_summary.as_deref(), Some("Canon verification packet [stale]"));
+        assert_eq!(summary.context_credibility.as_deref(), Some("stale"));
+        assert_eq!(
+            summary.context_primary_inputs,
+            vec![".canon/runs/run-7/verification.md".to_string()]
+        );
+        assert!(
+            summary
+                .context_provenance
+                .contains(&"canon_memory: Canon verification packet [stale]".to_string())
+        );
+        assert_eq!(summary.context_staleness_reason.as_deref(), Some("refresh_required"));
+        assert_eq!(
+            summary.governance_next_action.as_deref(),
+            Some("refresh: refresh the governed packet and reassess its credibility")
         );
     }
 

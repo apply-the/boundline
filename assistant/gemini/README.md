@@ -2,7 +2,7 @@
 
 This folder documents Synod usage from Gemini CLI surfaces.
 
-Gemini remains CLI-first in `0.35.0`, but it follows the same primary Synod
+Gemini remains CLI-first in `0.36.0`, but it follows the same primary Synod
 workflow surface used by the other assistants.
 
 compatibility remains an explicit subordinate route.
@@ -40,3 +40,7 @@ paraphrasing them away. Do the same for `goal_plan_state`,
 `goal_plan_revision`, `planning_rationale`, and `verification_strategy`, plus
 selector-driven `latest_selection_headline`,
 `latest_selection_reason`, and inspect `selector:` lines when they appear.
+When Canon-grounded memory is surfaced through those context fields or through
+`governance_next_action`, preserve the governed artifact refs, credibility, and
+stale-memory wording exactly: those fields can be the authoritative stop
+condition for the next bounded action.

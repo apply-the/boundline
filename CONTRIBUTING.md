@@ -12,6 +12,7 @@ Synod is a bounded delivery orchestrator. Contributions should keep that bias:
 - keep bounded `bug-fix` and `change` completion credible: do not treat the end of a plan as success unless material change evidence and passed validation are both present, or the CLI reports an explicit stop instead
 - keep negotiated delivery packets, acceptance boundaries, and blocking constraints explicit from capture through follow-up surfaces
 - keep bounded context packs, credibility, and provenance explicit from planning through `run`, `status`, `next`, and `inspect`
+- keep Canon capability snapshots, compact Canon-grounded memory, and governed next-action cues explicit whenever governed evidence is reused across planning or follow-up surfaces
 - keep evidence-driven plan proposal state, confirmation boundaries, revision lineage, rationale, and verification strategy explicit from `plan` through `run`, `status`, `next`, and `inspect`
 - keep clustered delivery sequential-first with one authoritative primary workspace session owner
 - keep continuity explicit when a workspace moves from session-native state to compatibility-trace follow-up
@@ -110,6 +111,8 @@ When a change affects routing, planning, or compatibility behavior, keep the doc
 If you change `.synod/workflows.toml` semantics or `synod workflow ...` output, keep the docs explicit about workflow discovery guidance, bounded `review`/`govern` follow-through, and unsupported workflow-engine semantics.
 
 If you change governed-stage behavior, keep the docs explicit about which stage now stops for governance, how packet lineage is reused on later stages, and how waiting or blocked guidance appears on both direct session and workflow-aware surfaces.
+
+If you change Canon-grounded planning or governed follow-through, keep the docs explicit about capability snapshots, compact Canon memory, `context_summary`, `context_credibility`, `context_primary_inputs`, `context_provenance`, `context_staleness_reason`, and `governance_next_action`, including when those fields are projected from persisted task context rather than an active goal plan.
 
 If you change adaptive compatibility behavior, keep the docs explicit about
 bounded mutation-family selection, validation-guided slice reselection,

@@ -22,6 +22,7 @@ use crate::domain::task_context::TaskContext;
 use crate::domain::trace::{ExecutionTrace, TraceEventType, current_timestamp_millis};
 use crate::orchestrator::governance::{
     GovernanceStepDecision, bounded_governance_context, build_autopilot_decision,
+    compacted_canon_memory_for_block, compacted_canon_memory_from_response,
     governance_input_documents, governance_stage_key, governance_state_patch,
     overlay_stage_policy_with_intent, requested_governance_intent, runtime_command_available,
     selected_stage_policy,
@@ -716,11 +717,14 @@ where
             decision_ref: decision.as_ref().map(|decision| decision.decision_id.clone()),
             blocked_reason: blocked_reason.clone(),
         };
+        let compacted_canon_memory =
+            compacted_canon_memory_from_response(&stage_key, runtime_kind, &response);
         let patch = governance_state_patch(
             &record,
             response.packet.as_ref(),
             packet_reuse.as_ref(),
             decision.as_ref(),
+            compacted_canon_memory.as_ref(),
         )
         .map_err(|error| OrchestratorError::GovernancePatch(error.to_string()))?;
         task.context.apply_state_patch(&patch);
@@ -740,6 +744,8 @@ where
                     "reason": blocked_reason.as_deref().unwrap_or(&response.message),
                     "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
                     "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
+                    "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
+                    "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
                 }),
             );
         }
@@ -759,6 +765,9 @@ where
                         "headline": response.packet.as_ref().map(|packet| packet.headline.clone()).unwrap_or_else(|| response.message.clone()),
                         "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
                         "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
+                        "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
+                        "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
+                        "canon_next_action": compacted_canon_memory.as_ref().and_then(|memory| memory.recommended_next_action.as_ref()).map(|action| format!("{}: {}", action.action, action.rationale)),
                     }),
                 );
                 self.persist_trace(trace)?;
@@ -776,6 +785,9 @@ where
                         "run_ref": response.run_ref,
                         "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
                         "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
+                        "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
+                        "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
+                        "canon_next_action": compacted_canon_memory.as_ref().and_then(|memory| memory.recommended_next_action.as_ref()).map(|action| format!("{}: {}", action.action, action.rationale)),
                     }),
                 );
                 let reason = build_terminal_reason(
@@ -803,6 +815,9 @@ where
                         "packet_ref": response.packet.as_ref().map(|packet| packet.packet_ref.clone()),
                         "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
                         "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
+                        "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
+                        "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
+                        "canon_next_action": compacted_canon_memory.as_ref().and_then(|memory| memory.recommended_next_action.as_ref()).map(|action| format!("{}: {}", action.action, action.rationale)),
                     }),
                 );
 
@@ -852,8 +867,16 @@ where
             decision_ref: decision.as_ref().map(|decision| decision.decision_id.clone()),
             blocked_reason: Some(block.reason.clone()),
         };
-        let patch = governance_state_patch(&record, None, None, decision.as_ref())
-            .map_err(|error| OrchestratorError::GovernancePatch(error.to_string()))?;
+        let compacted_canon_memory =
+            compacted_canon_memory_for_block(&block.stage_key, block.runtime, &block.reason);
+        let patch = governance_state_patch(
+            &record,
+            None,
+            None,
+            decision.as_ref(),
+            compacted_canon_memory.as_ref(),
+        )
+        .map_err(|error| OrchestratorError::GovernancePatch(error.to_string()))?;
         task.context.apply_state_patch(&patch);
         trace.record_event(
             TraceEventType::GovernanceBlocked,
@@ -864,6 +887,9 @@ where
                 "runtime": block.runtime,
                 "required": block.required,
                 "reason": block.reason,
+                "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
+                "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
+                "canon_next_action": compacted_canon_memory.as_ref().and_then(|memory| memory.recommended_next_action.as_ref()).map(|action| format!("{}: {}", action.action, action.rationale)),
             }),
         );
 
@@ -1054,7 +1080,9 @@ struct GovernanceBlockContext {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use std::io::Error;
+    use std::os::unix::fs::PermissionsExt;
     use std::path::PathBuf;
     use std::sync::Mutex;
 
@@ -1148,11 +1176,15 @@ mod tests {
     }
 
     fn build_request(limits: RunLimits) -> TaskRunRequest {
+        build_request_for_workspace(limits, "/tmp/synod-engine")
+    }
+
+    fn build_request_for_workspace(limits: RunLimits, workspace_ref: &str) -> TaskRunRequest {
         TaskRunRequest {
             goal: "Exercise engine branches".to_string(),
             input: json!({"ticket": "BUG-12"}),
             session_id: "session-engine".to_string(),
-            workspace_ref: "/tmp/synod-engine".to_string(),
+            workspace_ref: workspace_ref.to_string(),
             limits,
             initial_context: None,
         }
@@ -1174,10 +1206,24 @@ mod tests {
     const MISSING_CANON_COMMAND: &str = "/definitely/missing/canon";
 
     fn build_governance_profile(required: bool) -> GovernanceProfile {
+        build_governance_profile_for_stage(
+            "investigate",
+            required,
+            Some(MISSING_CANON_COMMAND),
+            Some(CanonMode::Discovery),
+        )
+    }
+
+    fn build_governance_profile_for_stage(
+        stage_id: &str,
+        required: bool,
+        command: Option<&str>,
+        canon_mode: Option<CanonMode>,
+    ) -> GovernanceProfile {
         GovernanceProfile {
             default_runtime: GovernanceRuntimeKind::Local,
-            canon: Some(CanonRuntimeConfig {
-                command: MISSING_CANON_COMMAND.to_string(),
+            canon: command.map(|command| CanonRuntimeConfig {
+                command: command.to_string(),
                 default_owner: Some("team-synod".to_string()),
                 default_risk: Some("medium".to_string()),
                 default_zone: Some("core".to_string()),
@@ -1185,12 +1231,12 @@ mod tests {
             }),
             stages: vec![StageGovernancePolicy {
                 flow_name: "bug-fix".to_string(),
-                stage_id: "investigate".to_string(),
+                stage_id: stage_id.to_string(),
                 enabled: true,
                 required,
                 autopilot: false,
                 runtime: Some(GovernanceRuntimeKind::Canon),
-                canon_mode: Some(CanonMode::Discovery),
+                canon_mode,
                 system_context: Some(SystemContextBinding::Existing),
                 risk: Some("medium".to_string()),
                 zone: Some("core".to_string()),
@@ -1200,30 +1246,78 @@ mod tests {
     }
 
     fn build_governed_plan() -> Plan {
+        build_governed_plan_for_stage("investigate")
+    }
+
+    fn build_governed_plan_for_stage(stage_id: &str) -> Plan {
         let flow = built_in_flow("bug-fix").expect("bug-fix flow must exist");
+        let stage_index = flow
+            .stages
+            .iter()
+            .position(|stage| stage.id == stage_id)
+            .expect("stage must exist in bug-fix flow");
         let input = attach_stage_metadata(
             json!({
                 "output": {"governed": true},
                 "state_patch": {"goal_satisfied": true}
             }),
             flow,
-            0,
+            stage_index,
         )
         .expect("stage metadata should attach");
 
-        Plan::new(vec![Step::decision("investigate", input).unwrap()]).unwrap()
+        Plan::new(vec![Step::decision(stage_id, input).unwrap()]).unwrap()
     }
 
     fn build_governed_orchestrator(required: bool) -> Orchestrator<TestPlanner, TestTraceStore> {
-        build_orchestrator(TestPlanner::from_plan(build_governed_plan())).with_governance(
-            vec!["README.md".to_string()],
-            Some(build_governance_profile(required)),
+        build_governed_orchestrator_for_stage(
+            "investigate",
+            required,
+            Some(MISSING_CANON_COMMAND),
+            Some(CanonMode::Discovery),
         )
     }
 
+    fn build_governed_orchestrator_for_stage(
+        stage_id: &str,
+        required: bool,
+        command: Option<&str>,
+        canon_mode: Option<CanonMode>,
+    ) -> Orchestrator<TestPlanner, TestTraceStore> {
+        build_orchestrator(TestPlanner::from_plan(build_governed_plan_for_stage(stage_id)))
+            .with_governance(
+                vec!["README.md".to_string()],
+                Some(build_governance_profile_for_stage(stage_id, required, command, canon_mode)),
+            )
+    }
+
     fn build_governed_task() -> Task {
-        Task::new("task-governed", &build_request(RunLimits::default()), build_governed_plan())
-            .unwrap()
+        build_governed_task_for_stage("investigate", "/tmp/synod-engine")
+    }
+
+    fn build_governed_task_for_stage(stage_id: &str, workspace_ref: &str) -> Task {
+        Task::new(
+            "task-governed",
+            &build_request_for_workspace(RunLimits::default(), workspace_ref),
+            build_governed_plan_for_stage(stage_id),
+        )
+        .unwrap()
+    }
+
+    fn temp_workspace(prefix: &str) -> PathBuf {
+        let workspace = std::env::temp_dir().join(format!("{prefix}-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&workspace).unwrap();
+        workspace
+    }
+
+    fn write_shell_script(prefix: &str, body: &str) -> PathBuf {
+        let workspace = temp_workspace(prefix);
+        let script_path = workspace.join("canon-stub.sh");
+        fs::write(&script_path, body).unwrap();
+        let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions).unwrap();
+        script_path
     }
 
     #[test]
@@ -1477,7 +1571,9 @@ mod tests {
                 readiness: PacketReadiness::Rejected,
                 missing_sections: vec!["substantive_body".to_string()],
                 headline: "rejected packet".to_string(),
+                reason_code: None,
             }),
+            reason_code: None,
             message: "local governance evaluated bug-fix:investigate".to_string(),
         };
 
@@ -1526,6 +1622,7 @@ mod tests {
             approval_state: ApprovalState::Requested,
             run_ref: Some("canon-run-1".to_string()),
             packet: None,
+            reason_code: None,
             message: "waiting for approval".to_string(),
         };
 
@@ -1607,6 +1704,168 @@ mod tests {
             trace.events.iter().any(|event| event.event_type == TraceEventType::GovernanceBlocked)
         );
         assert_eq!(task.status, TaskStatus::Planned);
+    }
+
+    #[test]
+    fn ensure_stage_governance_skips_when_current_stage_is_already_recorded() {
+        let orchestrator = build_governed_orchestrator(false);
+        let mut task = build_governed_task();
+        let mut trace = ExecutionTrace::new("task-governed", "session-engine", "goal");
+
+        task.context
+            .set_latest_governance_stage(&crate::domain::governance::GovernedStageRecord {
+                stage_key: "bug-fix:investigate".to_string(),
+                runtime: GovernanceRuntimeKind::Canon,
+                lifecycle_state: GovernanceLifecycleState::GovernedReady,
+                required: false,
+                autopilot_enabled: false,
+                approval_state: ApprovalState::NotNeeded,
+                canon_run_ref: Some("canon-run-1".to_string()),
+                governance_attempt_id: "attempt-1".to_string(),
+                previous_governance_attempt_id: None,
+                packet_ref: Some(".canon/runs/canon-run-1".to_string()),
+                decision_ref: None,
+                blocked_reason: None,
+            })
+            .unwrap();
+
+        let result = orchestrator.ensure_stage_governance(&mut task, &mut trace).unwrap();
+
+        assert!(matches!(
+            result,
+            crate::orchestrator::governance::GovernanceStepDecision::Continue
+        ));
+        assert!(trace.events.is_empty());
+    }
+
+    #[test]
+    fn ensure_stage_governance_blocks_when_required_canon_config_is_missing() {
+        let orchestrator = build_governed_orchestrator_for_stage(
+            "investigate",
+            true,
+            None,
+            Some(CanonMode::Discovery),
+        );
+        let mut task = build_governed_task();
+        let mut trace = ExecutionTrace::new("task-governed", "session-engine", "goal");
+
+        let result = orchestrator.ensure_stage_governance(&mut task, &mut trace).unwrap();
+
+        assert!(matches!(
+            result,
+            crate::orchestrator::governance::GovernanceStepDecision::Terminal(_)
+        ));
+        assert_eq!(
+            task.context.latest_governance_stage().unwrap().unwrap().blocked_reason.as_deref(),
+            Some("governance stage bug-fix:investigate requires Canon configuration")
+        );
+    }
+
+    #[test]
+    fn ensure_stage_governance_blocks_when_required_canon_mode_is_missing() {
+        let script = write_shell_script(
+            "engine-canon-mode-required",
+            "#!/bin/sh\ncat >/dev/null\nprintf '%s' '{\"status\":\"failed\",\"approval_state\":\"not_needed\",\"message\":\"unused\"}'\n",
+        );
+        let orchestrator = build_governed_orchestrator_for_stage(
+            "verify",
+            true,
+            Some(script.to_string_lossy().as_ref()),
+            None,
+        );
+        let mut task = build_governed_task_for_stage("verify", "/tmp/synod-engine");
+        let mut trace = ExecutionTrace::new("task-governed", "session-engine", "goal");
+
+        let result = orchestrator.ensure_stage_governance(&mut task, &mut trace).unwrap();
+
+        assert!(matches!(
+            result,
+            crate::orchestrator::governance::GovernanceStepDecision::Terminal(_)
+        ));
+        assert_eq!(
+            task.context.latest_governance_stage().unwrap().unwrap().blocked_reason.as_deref(),
+            Some("governance stage bug-fix:verify requires an explicit Canon mode")
+        );
+
+        fs::remove_dir_all(script.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn ensure_stage_governance_executes_available_canon_runtime() {
+        let workspace = temp_workspace("engine-canon-runtime");
+        let document_ref = ".canon/runs/canon-run-1/discovery.md";
+        let document_path = workspace.join(document_ref);
+        fs::create_dir_all(document_path.parent().unwrap()).unwrap();
+        fs::write(&document_path, "# Discovery\n\nCredible governed evidence.\n").unwrap();
+        let script = write_shell_script(
+            "engine-canon-runtime-command",
+            "#!/bin/sh\ncat >/dev/null\nprintf '%s' '{\"status\":\"governed_ready\",\"run_ref\":\"canon-run-1\",\"packet_ref\":\".canon/runs/canon-run-1\",\"expected_document_refs\":[\".canon/runs/canon-run-1/discovery.md\"],\"document_refs\":[\".canon/runs/canon-run-1/discovery.md\"],\"approval_state\":\"not_needed\",\"packet_readiness\":\"reusable\",\"missing_sections\":[],\"headline\":\"discovery packet ready\",\"reason_code\":\"packet_ready\",\"message\":\"Canon completed the governed stage\"}'\n",
+        );
+        let orchestrator = build_governed_orchestrator_for_stage(
+            "investigate",
+            true,
+            Some(script.to_string_lossy().as_ref()),
+            Some(CanonMode::Discovery),
+        );
+        let mut task =
+            build_governed_task_for_stage("investigate", workspace.to_string_lossy().as_ref());
+        let mut trace = ExecutionTrace::new("task-governed", "session-engine", "goal");
+
+        let result = orchestrator.ensure_stage_governance(&mut task, &mut trace).unwrap();
+
+        assert!(matches!(
+            result,
+            crate::orchestrator::governance::GovernanceStepDecision::Continue
+        ));
+        let record = task.context.latest_governance_stage().unwrap().unwrap();
+        assert_eq!(record.runtime, GovernanceRuntimeKind::Canon);
+        assert_eq!(record.lifecycle_state, GovernanceLifecycleState::GovernedReady);
+        assert_eq!(record.canon_run_ref.as_deref(), Some("canon-run-1"));
+        assert!(
+            trace.events.iter().any(|event| event.event_type == TraceEventType::GovernanceStarted)
+        );
+        assert!(
+            trace
+                .events
+                .iter()
+                .any(|event| event.event_type == TraceEventType::GovernanceCompleted)
+        );
+
+        fs::remove_dir_all(workspace).unwrap();
+        fs::remove_dir_all(script.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn handle_governance_block_terminalizes_required_stages() {
+        let orchestrator = build_governed_orchestrator(true);
+        let mut task = build_governed_task();
+        let mut trace = ExecutionTrace::new("task-governed", "session-engine", "goal");
+
+        let result = orchestrator
+            .handle_governance_block(
+                &mut task,
+                &mut trace,
+                GovernanceBlockContext {
+                    step_id: "investigate".to_string(),
+                    stage_key: "bug-fix:investigate".to_string(),
+                    required: true,
+                    autopilot_enabled: false,
+                    runtime: GovernanceRuntimeKind::Canon,
+                    reason: "canon unavailable".to_string(),
+                },
+                None,
+            )
+            .unwrap();
+
+        assert!(matches!(
+            result,
+            crate::orchestrator::governance::GovernanceStepDecision::Terminal(_)
+        ));
+        assert_eq!(task.status, TaskStatus::Failed);
+        assert_eq!(
+            task.terminal_reason.as_ref().unwrap().condition,
+            TerminalCondition::TaskNotCredible
+        );
     }
 
     #[test]

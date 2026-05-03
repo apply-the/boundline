@@ -5,7 +5,8 @@ use thiserror::Error;
 
 use crate::domain::cluster::{ClusterDeliveryStory, ClusterSessionProjection};
 use crate::domain::governance::{
-    AutopilotDecisionRecord, GovernedStagePacket, GovernedStageRecord, PacketReuseBinding,
+    AutopilotDecisionRecord, CanonCapabilitySnapshot, CompactedCanonMemory, GovernedStagePacket,
+    GovernedStageRecord, PacketReuseBinding,
 };
 use crate::domain::limits::RunLimits;
 use crate::domain::step::{ErrorInfo, StepResultSummary};
@@ -15,6 +16,8 @@ pub const LATEST_GOVERNANCE_STAGE_KEY: &str = "latest_governance_stage";
 pub const LATEST_GOVERNANCE_PACKET_KEY: &str = "latest_governance_packet";
 pub const LATEST_GOVERNANCE_PACKET_REUSE_KEY: &str = "latest_governance_packet_reuse";
 pub const LATEST_GOVERNANCE_DECISION_KEY: &str = "latest_governance_decision";
+pub const LATEST_CANON_CAPABILITY_SNAPSHOT_KEY: &str = "latest_canon_capability_snapshot";
+pub const LATEST_COMPACTED_CANON_MEMORY_KEY: &str = "latest_compacted_canon_memory";
 pub const LATEST_CLARIFICATION_KEY: &str = "latest_clarification";
 pub const LATEST_DERIVED_TASK_DRAFT_KEY: &str = "derived_task_draft";
 pub const CLUSTER_SESSION_PROJECTION_KEY: &str = "cluster_session_projection";
@@ -155,6 +158,32 @@ impl TaskContext {
         &self,
     ) -> Result<Option<AutopilotDecisionRecord>, TaskContextError> {
         self.load_serialized(LATEST_GOVERNANCE_DECISION_KEY)
+    }
+
+    pub fn set_latest_canon_capability_snapshot(
+        &mut self,
+        snapshot: &CanonCapabilitySnapshot,
+    ) -> Result<(), TaskContextError> {
+        self.store_serialized(LATEST_CANON_CAPABILITY_SNAPSHOT_KEY, snapshot)
+    }
+
+    pub fn latest_canon_capability_snapshot(
+        &self,
+    ) -> Result<Option<CanonCapabilitySnapshot>, TaskContextError> {
+        self.load_serialized(LATEST_CANON_CAPABILITY_SNAPSHOT_KEY)
+    }
+
+    pub fn set_latest_compacted_canon_memory(
+        &mut self,
+        memory: &CompactedCanonMemory,
+    ) -> Result<(), TaskContextError> {
+        self.store_serialized(LATEST_COMPACTED_CANON_MEMORY_KEY, memory)
+    }
+
+    pub fn latest_compacted_canon_memory(
+        &self,
+    ) -> Result<Option<CompactedCanonMemory>, TaskContextError> {
+        self.load_serialized(LATEST_COMPACTED_CANON_MEMORY_KEY)
     }
 
     pub fn set_latest_clarification(

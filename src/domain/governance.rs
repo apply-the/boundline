@@ -362,6 +362,159 @@ pub enum PacketReadiness {
     Rejected,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CanonCapabilitySnapshot {
+    pub canon_version: String,
+    #[serde(default)]
+    pub supported_schema_versions: Vec<String>,
+    #[serde(default)]
+    pub operations: Vec<String>,
+    #[serde(default)]
+    pub supported_modes: Vec<CanonMode>,
+    #[serde(default)]
+    pub status_values: Vec<String>,
+    #[serde(default)]
+    pub approval_state_values: Vec<String>,
+    #[serde(default)]
+    pub packet_readiness_values: Vec<String>,
+    #[serde(default)]
+    pub compatibility_notes: Vec<String>,
+}
+
+impl CanonCapabilitySnapshot {
+    pub fn summary_text(&self) -> String {
+        let version = self.canon_version.trim();
+        if version.is_empty() {
+            "Canon capabilities available".to_string()
+        } else {
+            format!("Canon {version} capabilities available")
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CanonResultActionSummary {
+    pub label: String,
+    pub target: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CanonModeSummary {
+    pub headline: String,
+    pub artifact_packet_summary: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_posture: Option<String>,
+    pub primary_artifact_title: String,
+    pub primary_artifact_path: String,
+    pub primary_artifact_action: CanonResultActionSummary,
+    pub result_excerpt: String,
+    #[serde(default)]
+    pub action_chip_labels: Vec<String>,
+}
+
+impl CanonModeSummary {
+    pub fn summary_text(&self) -> String {
+        match self.execution_posture.as_deref() {
+            Some(execution_posture) => format!(
+                "{}; {}; execution posture: {execution_posture}",
+                self.headline, self.artifact_packet_summary
+            ),
+            None => format!("{}; {}", self.headline, self.artifact_packet_summary),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CanonPossibleActionSummary {
+    pub action: String,
+    pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CanonRecommendedActionSummary {
+    pub action: String,
+    pub rationale: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CanonEvidenceInspectSummary {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_posture: Option<String>,
+    #[serde(default)]
+    pub carried_forward_items: Vec<String>,
+    #[serde(default)]
+    pub artifact_provenance_links: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub closure_status: Option<String>,
+    #[serde(default)]
+    pub closure_findings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryCredibilityState {
+    Credible,
+    Stale,
+    Contradicted,
+    Insufficient,
+}
+
+impl MemoryCredibilityState {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Credible => "credible",
+            Self::Stale => "stale",
+            Self::Contradicted => "contradicted",
+            Self::Insufficient => "insufficient",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CompactedCanonMemory {
+    pub headline: String,
+    pub credibility: MemoryCredibilityState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stage_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub packet_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason_code: Option<String>,
+    #[serde(default)]
+    pub artifact_refs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode_summary: Option<CanonModeSummary>,
+    #[serde(default)]
+    pub possible_actions: Vec<CanonPossibleActionSummary>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recommended_next_action: Option<CanonRecommendedActionSummary>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_summary: Option<CanonEvidenceInspectSummary>,
+}
+
+impl CompactedCanonMemory {
+    pub fn summary_text(&self) -> String {
+        format!("{} [{}]", self.headline, self.credibility.as_str())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CanonContextSnapshot {
+    pub summary: String,
+    #[serde(default)]
+    pub artifact_refs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capability_snapshot: Option<CanonCapabilitySnapshot>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compact_memory: Option<CompactedCanonMemory>,
+}
+
 pub fn classify_packet_readiness(
     workspace: &Path,
     expected_document_refs: &[String],
@@ -475,6 +628,8 @@ pub struct GovernedStagePacket {
     #[serde(default)]
     pub missing_sections: Vec<String>,
     pub headline: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason_code: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -29,10 +29,10 @@ state through the same CLI instead of introducing a separate runtime surface.
 The shipped CLI binary is `synod`.
 
 If you enable Synod governance through Canon, the current Synod adapter is
-validated against Canon `0.36.0` on the machine-facing `canon governance`
-`--json` `v1` adapter surface.
+validated against Canon `0.39.0` on the machine-facing `canon governance`
+`start|refresh|capabilities --json` `v1` adapter surface.
 
-In `0.35.0`, direct `run --goal` can bootstrap the native session path even
+In `0.36.0`, direct `run --goal` can bootstrap the native session path even
 without `.synod/execution.json`, while `run --compatibility --goal ...` keeps
 the manifest-backed route as an explicit opt-in. `capture` persists one
 negotiated delivery packet before planning, `plan` blocks on non-credible
@@ -51,6 +51,11 @@ session or trace evidence can explain one next bounded action or stop. The same
 read-side surfaces now keep the latest explicit selector, rationale, evidence
 basis, and verification intent visible when the native decision loop chooses
 between `read`, `search`, `modify`, `test`, `ask`, and `replan`.
+Canon capability snapshots and compact Canon-grounded memory now also feed
+planning and follow-through directly, so stale governed evidence can block the
+next bounded action while `run`, `status`, `next`, and `inspect` keep the same
+Canon-grounded summary, provenance, artifact refs, and `governance_next_action`
+visible.
 Governed `bug-fix:investigate` and later verify-stage Canon
 `security-assessment` can remain on the same native session route, and the
 optional `synod workflow` surface now acts as a first-class primary entrypoint
@@ -331,7 +336,7 @@ synod run --workspace <workspace> --compatibility --goal "Fix the failing add te
 
 If that manifest defines `adaptive`, failed validation can reprioritize the next
 bounded adaptive attempt from the latest validation record while keeping the
-route explicit as compatibility execution. In `0.35.0`, the same path can also
+route explicit as compatibility execution. In `0.36.0`, the same path can also
 choose bounded ordering-boundary, result-status, and numeric-literal repairs,
 and it reports explicit exhaustion instead of continuing blindly when the
 validation evidence is absent or insufficient.

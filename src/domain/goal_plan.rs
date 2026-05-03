@@ -5,6 +5,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::domain::decision::{DecisionType, EvidenceRef};
+use crate::domain::governance::CompactedCanonMemory;
 use crate::domain::trace::current_timestamp_millis;
 use crate::domain::workflow::WorkflowProgressState;
 
@@ -55,6 +56,8 @@ pub enum ContextInputKind {
     Negotiation,
     RecentTrace,
     CanonArtifact,
+    CanonCapability,
+    CanonMemory,
 }
 
 impl ContextInputKind {
@@ -66,6 +69,8 @@ impl ContextInputKind {
             Self::Negotiation => "negotiation",
             Self::RecentTrace => "recent_trace",
             Self::CanonArtifact => "canon_artifact",
+            Self::CanonCapability => "canon_capability",
+            Self::CanonMemory => "canon_memory",
         }
     }
 }
@@ -264,6 +269,8 @@ pub struct GoalPlan {
     pub flow_skipped: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow_progress: Option<WorkflowProgressState>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compacted_canon_memory: Option<CompactedCanonMemory>,
     #[serde(default = "default_goal_plan_revision")]
     pub proposal_revision: usize,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -300,6 +307,7 @@ impl GoalPlan {
             flow: None,
             flow_skipped: false,
             workflow_progress: None,
+            compacted_canon_memory: None,
             proposal_revision: default_goal_plan_revision(),
             superseded_by_revision: None,
             superseded_reason: None,
@@ -424,6 +432,14 @@ impl GoalPlan {
         self
     }
 
+    pub fn with_compacted_canon_memory(
+        mut self,
+        compacted_canon_memory: CompactedCanonMemory,
+    ) -> Self {
+        self.compacted_canon_memory = Some(compacted_canon_memory);
+        self
+    }
+
     pub fn with_negotiation_projection(
         mut self,
         goal_summary: impl Into<String>,
@@ -477,7 +493,17 @@ impl GoalPlan {
     }
 
     pub fn context_summary(&self) -> Option<String> {
-        self.context_pack.as_ref().map(|pack| pack.summary.clone())
+        match (
+            self.context_pack.as_ref().map(|pack| pack.summary.clone()),
+            self.compacted_canon_memory.as_ref().map(CompactedCanonMemory::summary_text),
+        ) {
+            (Some(context_summary), Some(canon_summary)) => {
+                Some(format!("{context_summary}; canon memory: {canon_summary}"))
+            }
+            (Some(context_summary), None) => Some(context_summary),
+            (None, Some(canon_summary)) => Some(format!("canon memory: {canon_summary}")),
+            (None, None) => None,
+        }
     }
 
     pub fn context_credibility(&self) -> Option<String> {
@@ -485,11 +511,48 @@ impl GoalPlan {
     }
 
     pub fn context_primary_inputs(&self) -> Vec<String> {
-        self.context_pack.as_ref().map(ContextPack::primary_references).unwrap_or_default()
+        let mut inputs =
+            self.context_pack.as_ref().map(ContextPack::primary_references).unwrap_or_default();
+        if inputs.is_empty()
+            && let Some(memory) = self.compacted_canon_memory.as_ref()
+        {
+            inputs.extend(memory.artifact_refs.iter().take(2).cloned());
+        }
+        inputs
     }
 
     pub fn context_provenance_lines(&self) -> Vec<String> {
-        self.context_pack.as_ref().map(ContextPack::provenance_lines).unwrap_or_default()
+        let mut lines =
+            self.context_pack.as_ref().map(ContextPack::provenance_lines).unwrap_or_default();
+        if let Some(memory) = self.compacted_canon_memory.as_ref() {
+            lines.push(format!(
+                "canon_memory: {} [{}]",
+                memory.headline,
+                memory.credibility.as_str()
+            ));
+            if let Some(packet_ref) = memory.packet_ref.as_ref() {
+                lines.push(format!("canon_memory_packet: {packet_ref}"));
+            }
+            if let Some(reason_code) = memory.reason_code.as_ref() {
+                lines.push(format!("canon_memory_reason: {reason_code}"));
+            }
+            if let Some(mode_summary) = memory.mode_summary.as_ref() {
+                lines.push(format!("canon_memory_mode: {}", mode_summary.summary_text()));
+            }
+            if let Some(evidence_summary) = memory.evidence_summary.as_ref() {
+                for link in &evidence_summary.artifact_provenance_links {
+                    lines.push(format!("canon_provenance: {link}"));
+                }
+            }
+        }
+        lines
+    }
+
+    pub fn canon_memory_staleness_reason(&self) -> Option<String> {
+        self.compacted_canon_memory.as_ref().and_then(|memory| {
+            (memory.credibility != crate::domain::governance::MemoryCredibilityState::Credible)
+                .then(|| memory.reason_code.clone().unwrap_or_else(|| memory.headline.clone()))
+        })
     }
 }
 

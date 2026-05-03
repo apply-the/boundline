@@ -1,9 +1,9 @@
-# Configuration in Synod 0.35.0
+# Configuration in Synod 0.36.0
 
-Synod `0.35.0` keeps a user-friendly setup and routing configuration surface
+Synod `0.36.0` keeps a user-friendly setup and routing configuration surface
 for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
-The `0.35.0` release keeps configuration behavior stable while preserving the
+The `0.36.0` release keeps configuration behavior stable while preserving the
 same governed routing defaults across earlier `bug-fix:investigate` work,
 later verify-stage `security-assessment`, workflow-aware projection of the
 same bounded governance state, continuity-aware read-side follow-up, the
@@ -17,6 +17,9 @@ configuration-driven: planning derives one bounded context pack from workspace
 signals and persisted session evidence, while `run`, `status`, `next`, and
 `inspect` simply project the resulting context summary, credibility, primary
 inputs, provenance, and any staleness reason. The same remains true for the
+Canon-grounded memory slice: capability snapshots, compact Canon memory,
+governed artifact refs, and recommended next actions are runtime-owned
+planning inputs rather than configuration keys. The same remains true for the
 new planning lifecycle: default `plan` proposes one bounded evidence-driven
 goal plan, `plan --confirm` confirms it, and neither step introduces a new
 config key or routing slot.

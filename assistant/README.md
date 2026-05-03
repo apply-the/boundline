@@ -4,10 +4,10 @@ This directory contains Markdown-based commands to run `synod` from various AI a
 
 The primary delivery surface is session-native: `start -> capture -> plan -> run -> status -> next -> inspect` against `<workspace>/.synod/session.json` and `<workspace>/.synod/traces/`.
 
-In `0.35.0`, workflows and direct runs are primary surfaces of the same Synod
+In `0.36.0`, workflows and direct runs are primary surfaces of the same Synod
 product story, while compatibility remains explicit and subordinate.
 
-In `0.35.0`, direct `run --goal` still bootstraps that native session path by
+In `0.36.0`, direct `run --goal` still bootstraps that native session path by
 default, while `run --compatibility --goal ...` remains the explicit
 execution-profile route. `capture` persists `negotiation_goal_summary`,
 `negotiation_resolution`, and `negotiation_acceptance_boundary` before
@@ -25,6 +25,12 @@ In the same release, native planning also persists `context_summary`,
 `context_credibility`, `context_primary_inputs`, `context_provenance`, and
 `context_staleness_reason` when available. Preserve those values exactly: they
 explain why planning is bounded enough to continue or why it stopped.
+
+In the same release, Canon capability snapshots and compact Canon-grounded
+memory can also populate those context fields and `governance_next_action`
+across `plan`, `run`, `status`, `next`, and `inspect`. Preserve that governed
+memory exactly, including artifact-backed provenance and stale-memory wording:
+it can be the authoritative reason Synod stops instead of continuing.
 
 Native planning now also persists `goal_plan_state`, `goal_plan_revision`,
 `planning_rationale`, and `verification_strategy` when available. Preserve
@@ -143,6 +149,11 @@ When `plan`, `run`, `status`, `next`, or `inspect` report `context_summary`,
 `context_staleness_reason`, assistants should preserve those fields exactly and
 surface any explicit non-credible context as a real stop condition.
 
+When those same commands surface Canon-grounded memory through the context or
+governance fields, assistants should preserve `governance_next_action`, packet
+or artifact refs, and stale-memory wording exactly rather than paraphrasing it
+into a generic suggestion.
+
 When those same commands report `goal_plan_state`, `goal_plan_revision`,
 `planning_rationale`, or `verification_strategy`, assistants should preserve
 those fields exactly and treat an unconfirmed proposal as a real stop
@@ -185,6 +196,7 @@ For the current review manifest shape and vote semantics, see [`docs/review-voti
 - Preserve confirmed `workspace_ref`, captured goal, confirmed brief paths, authored input summary, and latest trace reference across assistant turns.
 - Preserve `negotiation_goal_summary`, `negotiation_resolution`, and `negotiation_acceptance_boundary` across assistant turns once capture or planning reports them.
 - Preserve `context_summary`, `context_credibility`, `context_primary_inputs`, `context_provenance`, and `context_staleness_reason` across assistant turns once planning or follow-through reports them.
+- Preserve Canon-grounded `governance_next_action`, governed artifact refs, and any stale-memory wording once `plan`, `run`, `status`, `next`, or `inspect` reports them.
 - Preserve `goal_plan_state`, `goal_plan_revision`, `planning_rationale`, and `verification_strategy` across assistant turns once planning or follow-through reports them.
 - Preserve `continuity_authority`, `compatibility_trace_ref`, and `compatibility_follow_up_command` when the CLI reports them after an explicit compatibility run.
 - Preserve `follow_through_guidance`, `follow_through_evidence_source`, `follow_through_next_action`, and `follow_through_stop_reason` when the CLI reports them on `status`, `next`, or `inspect`.

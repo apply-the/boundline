@@ -12,6 +12,7 @@ use crate::domain::decision::{
 };
 use crate::domain::flow_policy::{FlowPolicy, FlowPolicyError};
 use crate::domain::goal_plan::{GoalPlan, PlannedTask};
+use crate::domain::governance::{CompactedCanonMemory, MemoryCredibilityState};
 use crate::domain::limits::RunLimits;
 use crate::domain::step::{
     ErrorInfo, ExecutionStatus, Recoverability, StepExecutionRequest, StepExecutionResult, StepKind,
@@ -130,8 +131,42 @@ where
                     .context_pack
                     .as_ref()
                     .and_then(|pack| pack.staleness_reason.clone()),
+                "canon_memory_summary": plan
+                    .compacted_canon_memory
+                    .as_ref()
+                    .map(CompactedCanonMemory::summary_text),
+                "canon_memory_credibility": plan.compacted_canon_memory.as_ref().map(|memory| {
+                    memory.credibility.as_str().to_string()
+                }),
+                "canon_memory_reason_code": plan
+                    .compacted_canon_memory
+                    .as_ref()
+                    .and_then(|memory| memory.reason_code.clone()),
+                "canon_memory_artifact_refs": plan
+                    .compacted_canon_memory
+                    .as_ref()
+                    .map(|memory| memory.artifact_refs.clone())
+                    .unwrap_or_default(),
+                "canon_next_action": plan
+                    .compacted_canon_memory
+                    .as_ref()
+                    .and_then(|memory| memory.recommended_next_action.as_ref())
+                    .map(|action| format!("{}: {}", action.action, action.rationale)),
             }),
         );
+
+        if let Some(memory) = plan.compacted_canon_memory.as_ref()
+            && memory.credibility != MemoryCredibilityState::Credible
+        {
+            let reason = canon_memory_terminal_reason(memory);
+            trace.record_event(
+                TraceEventType::TerminalRecorded,
+                None,
+                0,
+                no_actionable_state_payload(ActionSelector::Replan, &reason),
+            );
+            return Ok((LoopTerminal::NoActionableState(reason), Vec::new(), trace));
+        }
 
         let mut decisions: Vec<Decision> = Vec::new();
         let mut completed_task_indices: Vec<usize> = Vec::new();
@@ -184,6 +219,12 @@ where
                     .iter()
                     .cloned()
                     .chain(
+                        plan.compacted_canon_memory
+                            .as_ref()
+                            .into_iter()
+                            .flat_map(canon_memory_evidence_refs),
+                    )
+                    .chain(
                         decisions
                             .iter()
                             .filter(|d| d.tool_result.is_some())
@@ -221,6 +262,7 @@ where
                 planned.target.as_str(),
                 previous_failed_decision.as_ref(),
                 decision_type,
+                plan.compacted_canon_memory.as_ref(),
             );
 
             let (target, rationale, expected_outcome, evidence) = decision_details(
@@ -540,6 +582,7 @@ fn select_action_selector(
     target: &str,
     failed_decision: Option<&Decision>,
     decision_type: DecisionType,
+    compacted_canon_memory: Option<&CompactedCanonMemory>,
 ) -> ActionSelector {
     if let Some(failed_decision) = failed_decision {
         return match failed_decision.selector_kind() {
@@ -550,6 +593,15 @@ fn select_action_selector(
             ActionSelector::Replan => ActionSelector::Ask,
             ActionSelector::Ask => ActionSelector::Ask,
         };
+    }
+
+    if decision_type == DecisionType::Analyze
+        && compacted_canon_memory.is_some_and(|memory| {
+            memory.credibility == MemoryCredibilityState::Credible
+                && !memory.artifact_refs.is_empty()
+        })
+    {
+        return ActionSelector::Search;
     }
 
     if decision_type == DecisionType::Analyze {
@@ -564,6 +616,32 @@ fn select_action_selector(
     }
 
     decision_type.default_selector()
+}
+
+fn canon_memory_terminal_reason(memory: &CompactedCanonMemory) -> String {
+    memory.reason_code.clone().unwrap_or_else(|| {
+        format!("Canon-grounded memory is {}: {}", memory.credibility.as_str(), memory.headline)
+    })
+}
+
+fn canon_memory_evidence_refs(memory: &CompactedCanonMemory) -> Vec<EvidenceRef> {
+    let mut evidence = Vec::new();
+    evidence.push(EvidenceRef::canon(format!("memory: {}", memory.summary_text())));
+    if let Some(packet_ref) = memory.packet_ref.as_ref() {
+        evidence.push(EvidenceRef::canon(packet_ref.clone()));
+    }
+    if let Some(run_ref) = memory.run_ref.as_ref() {
+        evidence.push(EvidenceRef::canon(run_ref.clone()));
+    }
+    for artifact_ref in &memory.artifact_refs {
+        evidence.push(EvidenceRef::canon(artifact_ref.clone()));
+    }
+    if let Some(evidence_summary) = memory.evidence_summary.as_ref() {
+        for link in &evidence_summary.artifact_provenance_links {
+            evidence.push(EvidenceRef::canon(link.clone()));
+        }
+    }
+    evidence
 }
 
 fn decision_event_payload(decision: &Decision) -> Value {
@@ -727,13 +805,19 @@ mod tests {
         recovery_event_payload, select_action_selector, successful_recovery_terminal_reason,
         tool_result_from_step_execution,
     };
+    use crate::adapters::trace_store::FileTraceStore;
     use crate::domain::decision::{ActionSelector, Decision, DecisionType, EvidenceRef};
     use crate::domain::flow_policy::{FlowPolicy, StagePolicy, TransitionCondition};
-    use crate::domain::goal_plan::PlannedTask;
+    use crate::domain::goal_plan::{GoalPlan, PlannedTask};
+    use crate::domain::governance::{
+        CanonRecommendedActionSummary, CompactedCanonMemory, MemoryCredibilityState,
+    };
     use crate::domain::step::{
         ErrorInfo, ExecutionStatus, Recoverability, StepExecutionResult, StepKind,
     };
     use crate::domain::tool_result::ToolResult;
+    use crate::registry::agent_registry::AgentRegistry;
+    use crate::registry::tool_registry::ToolRegistry;
 
     fn temp_workspace(prefix: &str) -> PathBuf {
         let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
@@ -925,6 +1009,7 @@ mod tests {
                 "src/dir",
                 None,
                 DecisionType::Analyze,
+                None,
             ),
             ActionSelector::Search
         );
@@ -935,6 +1020,7 @@ mod tests {
                 "src/missing.rs",
                 None,
                 DecisionType::Analyze,
+                None,
             ),
             ActionSelector::Search
         );
@@ -945,6 +1031,7 @@ mod tests {
                 "test suite",
                 None,
                 DecisionType::Analyze,
+                None,
             ),
             ActionSelector::Search
         );
@@ -955,6 +1042,7 @@ mod tests {
                 "src/lib.rs",
                 None,
                 DecisionType::Analyze,
+                None,
             ),
             ActionSelector::Search
         );
@@ -965,6 +1053,7 @@ mod tests {
                 "src/lib.rs",
                 Some(&failed_decision(ActionSelector::Read, "src/lib.rs")),
                 DecisionType::Analyze,
+                None,
             ),
             ActionSelector::Search
         );
@@ -975,6 +1064,7 @@ mod tests {
                 "src/lib.rs",
                 Some(&failed_decision(ActionSelector::Search, "src/lib.rs")),
                 DecisionType::Analyze,
+                None,
             ),
             ActionSelector::Ask
         );
@@ -985,6 +1075,7 @@ mod tests {
                 "src/lib.rs",
                 Some(&failed_decision(ActionSelector::Modify, "src/lib.rs")),
                 DecisionType::Fix,
+                None,
             ),
             ActionSelector::Replan
         );
@@ -995,6 +1086,7 @@ mod tests {
                 "src/lib.rs",
                 Some(&failed_decision(ActionSelector::Test, "src/lib.rs")),
                 DecisionType::Test,
+                None,
             ),
             ActionSelector::Modify
         );
@@ -1005,6 +1097,7 @@ mod tests {
                 "src/lib.rs",
                 Some(&failed_decision(ActionSelector::Replan, "src/lib.rs")),
                 DecisionType::Replan,
+                None,
             ),
             ActionSelector::Ask
         );
@@ -1015,8 +1108,34 @@ mod tests {
                 "src/lib.rs",
                 Some(&failed_decision(ActionSelector::Ask, "src/lib.rs")),
                 DecisionType::Replan,
+                None,
             ),
             ActionSelector::Ask
+        );
+
+        let canon_memory = CompactedCanonMemory {
+            headline: "Canon verification packet is credible".to_string(),
+            credibility: MemoryCredibilityState::Credible,
+            stage_key: Some("change:verify".to_string()),
+            run_ref: Some("run-1".to_string()),
+            packet_ref: Some(".canon/runs/run-1".to_string()),
+            reason_code: None,
+            artifact_refs: vec![".canon/runs/run-1/verification.md".to_string()],
+            mode_summary: None,
+            possible_actions: Vec::new(),
+            recommended_next_action: None,
+            evidence_summary: None,
+        };
+        assert_eq!(
+            select_action_selector(
+                &workspace,
+                &observation_with_evidence(),
+                "src/lib.rs",
+                None,
+                DecisionType::Analyze,
+                Some(&canon_memory),
+            ),
+            ActionSelector::Search
         );
 
         let mut decision = Decision::new(
@@ -1099,5 +1218,57 @@ mod tests {
         assert_eq!(tool_result.stderr, "tests failed");
         assert!(tool_result.stdout.contains("validation"));
         assert_eq!(tool_result.exit_code, Some(-1));
+    }
+
+    #[test]
+    fn decision_loop_terminalizes_when_canon_memory_is_not_credible() {
+        let workspace = temp_workspace("decision-loop-canon-stop");
+        let plan = GoalPlan::new(
+            "verify governed change",
+            vec![planned_task("src/lib.rs", DecisionType::Analyze, Some("collect evidence"))],
+        )
+        .unwrap()
+        .with_compacted_canon_memory(CompactedCanonMemory {
+            headline: "Canon packet is stale and must be refreshed".to_string(),
+            credibility: MemoryCredibilityState::Stale,
+            stage_key: Some("change:verify".to_string()),
+            run_ref: Some("run-2".to_string()),
+            packet_ref: Some(".canon/runs/run-2".to_string()),
+            reason_code: Some("refresh_required".to_string()),
+            artifact_refs: vec![".canon/runs/run-2/verification.md".to_string()],
+            mode_summary: None,
+            possible_actions: Vec::new(),
+            recommended_next_action: Some(CanonRecommendedActionSummary {
+                action: "refresh".to_string(),
+                rationale: "Refresh the governed packet before continuing".to_string(),
+                target: Some(".canon/runs/run-2".to_string()),
+            }),
+            evidence_summary: None,
+        });
+        let loop_runner = crate::orchestrator::decision_loop::DecisionLoop::new(
+            AgentRegistry::new(),
+            ToolRegistry::new(),
+            FileTraceStore::for_workspace(&workspace),
+            4,
+        );
+
+        let (terminal, decisions, trace) = loop_runner
+            .run(&plan, None, workspace.to_string_lossy().as_ref(), "session-canon-stop")
+            .unwrap();
+
+        assert_eq!(
+            terminal,
+            crate::orchestrator::decision_loop::LoopTerminal::NoActionableState(
+                "refresh_required".to_string()
+            )
+        );
+        assert!(decisions.is_empty());
+        assert!(trace.events.iter().any(|event| {
+            event.event_type == crate::domain::trace::TraceEventType::TerminalRecorded
+                && event.payload.get("reason").and_then(|value| value.as_str())
+                    == Some("refresh_required")
+        }));
+
+        fs::remove_dir_all(workspace).unwrap();
     }
 }
