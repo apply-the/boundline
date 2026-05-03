@@ -121,10 +121,13 @@ pub enum DeveloperCommand {
         workspace: Option<PathBuf>,
         #[arg(long)]
         cluster: Option<PathBuf>,
-        #[arg(long, conflicts_with = "no_flow")]
+        #[arg(long, conflicts_with_all = ["no_flow", "confirm"])]
         flow: Option<String>,
+        #[arg(long, conflicts_with_all = ["flow", "confirm"])]
         #[arg(long = "no-flow")]
         no_flow: bool,
+        #[arg(long, conflicts_with_all = ["flow", "no_flow"])]
+        confirm: bool,
     },
     Step {
         #[arg(long)]
@@ -918,12 +921,13 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                 },
             }
         }
-        DeveloperCommand::Plan { workspace, cluster, flow, no_flow } => {
+        DeveloperCommand::Plan { workspace, cluster, flow, no_flow, confirm } => {
             match session::execute_plan_with_target(
                 workspace.as_deref(),
                 cluster.as_deref(),
                 flow.as_deref(),
                 *no_flow,
+                *confirm,
             ) {
                 Ok(report) => DispatchOutcome {
                     exit_status: report.exit_status,
@@ -1098,7 +1102,11 @@ mod tests {
     use serde_json::json;
     use uuid::Uuid;
 
-    use super::{CommandExitStatus, DeveloperCommand, dispatch};
+    use super::{
+        ClusterSubcommand, CommandExitStatus, CommandName, ConfigSubcommand, DeveloperCommand,
+        WorkflowSubcommand, dispatch,
+    };
+    use crate::domain::configuration::{ConfigShowScope, ConfigWriteScope, RouteSlot, RuntimeKind};
 
     const FIXTURE_CARGO_TOML: &str = r#"[package]
 name = "dispatch_fixture"
@@ -1182,6 +1190,7 @@ fn red_to_green_addition() {
                 cluster: None,
                 flow: None,
                 no_flow: false,
+                confirm: false,
             },
             DeveloperCommand::Step { workspace: Some(workspace.clone()), cluster: None },
             DeveloperCommand::Status { workspace: Some(workspace.clone()), cluster: None },
@@ -1246,6 +1255,7 @@ fn red_to_green_addition() {
             cluster: None,
             flow: Some("bug-fix".to_string()),
             no_flow: false,
+            confirm: false,
         });
         assert_eq!(plan.exit_status, CommandExitStatus::Succeeded);
         assert!(plan.output.contains("execution_path: native_goal_plan"), "{}", plan.output);
@@ -1298,5 +1308,207 @@ fn red_to_green_addition() {
         });
         assert_eq!(invalid.exit_status, CommandExitStatus::InvalidInvocation);
         assert!(invalid.output.contains("doctor:"), "{}", invalid.output);
+    }
+
+    #[test]
+    fn command_names_and_dispatch_cover_remaining_command_variants() {
+        for (name, expected) in [
+            (CommandName::Workflow, "workflow"),
+            (CommandName::Inspect, "inspect"),
+            (CommandName::Init, "init"),
+            (CommandName::Config, "config"),
+            (CommandName::Cluster, "cluster"),
+        ] {
+            assert_eq!(name.as_str(), expected);
+            assert_eq!(name.to_string(), expected);
+        }
+
+        let workspace = temp_workspace("synod-cli-dispatch-coverage");
+        for (command, expected) in [
+            (
+                DeveloperCommand::Workflow {
+                    command: WorkflowSubcommand::List { workspace: Some(workspace.clone()) },
+                },
+                CommandName::Workflow,
+            ),
+            (
+                DeveloperCommand::Inspect {
+                    trace: None,
+                    workspace: Some(workspace.clone()),
+                    cluster: None,
+                },
+                CommandName::Inspect,
+            ),
+            (
+                DeveloperCommand::Status { workspace: Some(workspace.clone()), cluster: None },
+                CommandName::Status,
+            ),
+            (
+                DeveloperCommand::Next { workspace: Some(workspace.clone()), cluster: None },
+                CommandName::Next,
+            ),
+            (
+                DeveloperCommand::Init {
+                    workspace: workspace.clone(),
+                    template: None,
+                    assistant: Vec::new(),
+                    force: false,
+                },
+                CommandName::Init,
+            ),
+            (
+                DeveloperCommand::Config {
+                    command: ConfigSubcommand::Show {
+                        workspace: Some(workspace.clone()),
+                        cluster: None,
+                        scope: Some(ConfigShowScope::Workspace),
+                    },
+                },
+                CommandName::Config,
+            ),
+            (
+                DeveloperCommand::Cluster {
+                    command: ClusterSubcommand::Status { workspace: workspace.clone() },
+                },
+                CommandName::Cluster,
+            ),
+        ] {
+            assert_eq!(command.name(), expected);
+        }
+
+        let missing = workspace.join("missing-workspace");
+        let missing_member = workspace.join("missing-member");
+        let file_workspace = workspace.join("workspace-file");
+        fs::write(&file_workspace, "not a directory").unwrap();
+        let config_workspace = temp_workspace("synod-cli-config-dispatch");
+
+        assert_eq!(
+            dispatch(&DeveloperCommand::Doctor {
+                workspace: temp_workspace("synod-cli-doctor-invalid")
+            })
+            .exit_status,
+            CommandExitStatus::InvalidInvocation
+        );
+        assert_eq!(
+            dispatch(&DeveloperCommand::Run {
+                workspace: None,
+                cluster: None,
+                goal: Some("Fix the failing add test".to_string()),
+                compatibility: false,
+                brief: Vec::new(),
+                governance: None,
+                risk: None,
+                zone: None,
+                owner: None,
+            })
+            .exit_status,
+            CommandExitStatus::InvalidInvocation
+        );
+
+        for command in [
+            DeveloperCommand::Workflow {
+                command: WorkflowSubcommand::List { workspace: Some(missing.clone()) },
+            },
+            DeveloperCommand::Workflow {
+                command: WorkflowSubcommand::Run {
+                    name: "default".to_string(),
+                    workspace: Some(missing.clone()),
+                    goal: None,
+                },
+            },
+            DeveloperCommand::Workflow {
+                command: WorkflowSubcommand::Status { workspace: Some(missing.clone()) },
+            },
+            DeveloperCommand::Workflow {
+                command: WorkflowSubcommand::Resume { workspace: Some(missing.clone()) },
+            },
+            DeveloperCommand::Workflow {
+                command: WorkflowSubcommand::Inspect { workspace: Some(missing.clone()) },
+            },
+        ] {
+            let outcome = dispatch(&command);
+            assert_eq!(outcome.exit_status, CommandExitStatus::NonSuccess);
+            assert!(outcome.output.contains("workflow error:"), "{}", outcome.output);
+        }
+
+        let start =
+            dispatch(&DeveloperCommand::Start { workspace: None, cluster: Some(missing.clone()) });
+        assert_eq!(start.exit_status, CommandExitStatus::NonSuccess);
+        assert!(start.output.contains("session error"), "{}", start.output);
+
+        let init = dispatch(&DeveloperCommand::Init {
+            workspace: file_workspace,
+            template: None,
+            assistant: Vec::new(),
+            force: false,
+        });
+        assert_eq!(init.exit_status, CommandExitStatus::NonSuccess);
+        assert!(init.output.contains("init error:"), "{}", init.output);
+
+        for command in [
+            DeveloperCommand::Config {
+                command: ConfigSubcommand::Show {
+                    workspace: Some(config_workspace.clone()),
+                    cluster: None,
+                    scope: Some(ConfigShowScope::Workspace),
+                },
+            },
+            DeveloperCommand::Config {
+                command: ConfigSubcommand::Set {
+                    workspace: Some(config_workspace.clone()),
+                    cluster: None,
+                    scope: ConfigWriteScope::Workspace,
+                    slot: Some(RouteSlot::Planning),
+                    reviewer: None,
+                    adjudicator: false,
+                    runtime: RuntimeKind::Copilot,
+                    model: "gpt-5.4".to_string(),
+                },
+            },
+            DeveloperCommand::Config {
+                command: ConfigSubcommand::Unset {
+                    workspace: Some(config_workspace.clone()),
+                    cluster: None,
+                    scope: ConfigWriteScope::Workspace,
+                    slot: Some(RouteSlot::Planning),
+                    reviewer: None,
+                    adjudicator: false,
+                },
+            },
+        ] {
+            let outcome = dispatch(&command);
+            assert_eq!(outcome.exit_status, CommandExitStatus::Succeeded);
+            assert!(outcome.output.contains("config:"), "{}", outcome.output);
+        }
+
+        let config_error = dispatch(&DeveloperCommand::Config {
+            command: ConfigSubcommand::Show {
+                workspace: None,
+                cluster: None,
+                scope: Some(ConfigShowScope::Workspace),
+            },
+        });
+        assert_eq!(config_error.exit_status, CommandExitStatus::NonSuccess);
+        assert!(config_error.output.contains("config error:"), "{}", config_error.output);
+
+        for command in [
+            DeveloperCommand::Cluster {
+                command: ClusterSubcommand::Init {
+                    workspace: missing.clone(),
+                    cluster_id: "cluster-coverage".to_string(),
+                    member: vec![missing.clone(), missing_member.clone()],
+                },
+            },
+            DeveloperCommand::Cluster {
+                command: ClusterSubcommand::Status { workspace: missing.clone() },
+            },
+            DeveloperCommand::Cluster {
+                command: ClusterSubcommand::Inspect { workspace: missing.clone() },
+            },
+        ] {
+            let outcome = dispatch(&command);
+            assert_eq!(outcome.exit_status, CommandExitStatus::NonSuccess);
+            assert!(outcome.output.contains("cluster error:"), "{}", outcome.output);
+        }
     }
 }

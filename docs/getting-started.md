@@ -32,12 +32,14 @@ If you enable Synod governance through Canon, the current Synod adapter is
 validated against Canon `0.36.0` on the machine-facing `canon governance`
 `--json` `v1` adapter surface.
 
-In `0.34.0`, direct `run --goal` can bootstrap the native session path even
+In `0.35.0`, direct `run --goal` can bootstrap the native session path even
 without `.synod/execution.json`, while `run --compatibility --goal ...` keeps
 the manifest-backed route as an explicit opt-in. `capture` persists one
 negotiated delivery packet before planning, `plan` blocks on non-credible
-negotiation states and non-credible bounded context, and `run`, `status`,
-`next`, and `inspect` surface the same acceptance-boundary story plus
+negotiation states and non-credible bounded context, and the default `plan`
+now persists one evidence-driven proposal that `plan --confirm` must confirm
+before native execution continues. `run`, `status`, `next`, and `inspect`
+surface the same acceptance-boundary story plus
 `context_summary`, `context_credibility`, primary inputs, provenance, effective
 routing, and assistant-binding cues. Native and compatibility traces now keep
 the route snapshot used during execution, and native execution fails explicitly
@@ -233,6 +235,7 @@ selects the shape of the current session-native run.
 
 ```bash
 synod plan --workspace <workspace>
+synod plan --workspace <workspace> --confirm
 synod run --workspace <workspace>
 ```
 
@@ -240,12 +243,15 @@ Or continue the same bounded cluster-owned session:
 
 ```bash
 synod plan --cluster <primary-workspace>
+synod plan --cluster <primary-workspace> --confirm
 synod run --cluster <primary-workspace>
 ```
 
 `synod plan` now succeeds only when the negotiated delivery packet is
-credible. The resulting `GoalPlan`, terminal `run` output, and later
-`status`, `next`, and `inspect` views keep the same negotiation summary and
+credible. The default command persists one evidence-driven proposal, and
+`synod plan --confirm` confirms that proposal for native execution. The
+resulting `GoalPlan`, terminal `run` output, and later `status`, `next`, and
+`inspect` views keep the same negotiation summary, proposal state, and
 acceptance-boundary wording on both native and explicit compatibility routes.
 
 ### 4a. Optional Named Workflow Layer
@@ -311,8 +317,10 @@ synod run --workspace <workspace> --goal "Fix the failing add test"
 ```
 
 Direct run is now native-first. It does not require the workspace execution
-manifest, it still captures negotiated delivery state, and it leaves the same
-native follow-up story behind for `status`, `next`, and `inspect`.
+manifest, it still captures negotiated delivery state, it creates and confirms
+the same evidence-driven proposal used by the explicit session path, and it
+leaves the same native follow-up story behind for `status`, `next`, and
+`inspect`.
 
 If you intentionally want manifest-backed compatibility behavior instead, opt
 in explicitly:
@@ -323,7 +331,7 @@ synod run --workspace <workspace> --compatibility --goal "Fix the failing add te
 
 If that manifest defines `adaptive`, failed validation can reprioritize the next
 bounded adaptive attempt from the latest validation record while keeping the
-route explicit as compatibility execution. In `0.34.0`, the same path can also
+route explicit as compatibility execution. In `0.35.0`, the same path can also
 choose bounded ordering-boundary, result-status, and numeric-literal repairs,
 and it reports explicit exhaustion instead of continuing blindly when the
 validation evidence is absent or insufficient.
@@ -352,7 +360,7 @@ evidence to make the next bounded follow-up explicit.
 | `synod start` | Initialize or reset the active workspace session |
 | `synod capture` | Store the delivery goal plus negotiated packet in session state |
 | `synod flow` | Select `bug-fix`, `change`, or `delivery` |
-| `synod plan` | Build the next bounded task from the active session when the negotiated packet is credible and the assembled context pack is bounded enough to support planning |
+| `synod plan` | Build one evidence-driven goal-plan proposal from the active session when the negotiated packet is credible and the assembled context pack is bounded enough to support planning |
 | `synod step` | Execute one step of the current task |
 | `synod run` | Execute the current task until completion or operator intervention, or bootstrap the native route directly from `--goal`; add `--compatibility` for manifest-backed execution |
 | `synod status` | Show the current session snapshot, including negotiated follow-up cues and context-pack credibility |

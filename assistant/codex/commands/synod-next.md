@@ -5,7 +5,7 @@ Shared guidance: `assistant/README.md`
 ## Intent
 Ask Synod for the next recommended session command.
 
-Compatibility follow-up means the user previously chose `synod run --compatibility ...`; plain direct `run --goal` is native-first in `0.34.0`.
+Compatibility follow-up means the user previously chose `synod run --compatibility ...`; plain direct `run --goal` is native-first in `0.35.0`.
 
 ## Required Context
 - `workspace_ref`

@@ -26,7 +26,7 @@ fn bounded_goal_plan_handoff_is_persisted_before_native_run() {
         None,
     )
     .unwrap();
-    execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
+    execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
 
     let session = FileSessionStore::for_workspace(&workspace).load().unwrap().unwrap();
     let goal_plan = session.goal_plan.as_ref().expect("goal plan should persist after planning");
@@ -54,7 +54,7 @@ fn native_run_persists_decision_contract_fields_into_trace_output() {
         None,
     )
     .unwrap();
-    execute_plan(Some(&workspace), None, true).unwrap();
+    execute_plan(Some(&workspace), None, true, false).unwrap();
     execute_run(Some(&workspace)).unwrap();
 
     let session = FileSessionStore::for_workspace(&workspace).load().unwrap().unwrap();

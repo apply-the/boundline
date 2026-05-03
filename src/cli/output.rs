@@ -909,6 +909,22 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
         lines.push(format!("flow_state: {flow_state}"));
     }
 
+    if let Some(goal_plan_state) = &view.goal_plan_state {
+        lines.push(format!("goal_plan_state: {goal_plan_state}"));
+    }
+
+    if let Some(goal_plan_revision) = view.goal_plan_revision {
+        lines.push(format!("goal_plan_revision: {goal_plan_revision}"));
+    }
+
+    if let Some(planning_rationale) = &view.planning_rationale {
+        lines.push(format!("planning_rationale: {planning_rationale}"));
+    }
+
+    if let Some(verification_strategy) = &view.verification_strategy {
+        lines.push(format!("verification_strategy: {verification_strategy}"));
+    }
+
     if let Some(active_workflow) = &view.active_workflow {
         lines.push(format!("workflow: {active_workflow}"));
     }
@@ -1412,10 +1428,10 @@ fn routing_outcome_for_status_view(view: &SessionStatusView) -> RoutingOutcome {
             source: RoutingSource::ExecutionProfile,
             reason: "compatibility execution remains active from the persisted task".to_string(),
         },
-        Some("native_goal_plan_pending_flow_confirmation") => RoutingOutcome {
+        Some("native_goal_plan_pending_plan_confirmation") => RoutingOutcome {
             mode: RoutingMode::Blocked,
             source: RoutingSource::GoalPlan,
-            reason: "flow confirmation is still pending before native execution".to_string(),
+            reason: "plan confirmation is still pending before native execution".to_string(),
         },
         Some("native_session_pending_plan") => RoutingOutcome {
             mode: RoutingMode::Blocked,
@@ -1879,10 +1895,10 @@ fn session_execution_condition_parts(view: &SessionStatusView) -> (&'static str,
     }
 
     match view.execution_path.as_deref() {
-        Some("native_goal_plan_pending_flow_confirmation") => {
+        Some("native_goal_plan_pending_plan_confirmation") => {
             return (
                 "blocked",
-                "flow confirmation is still pending before native execution".to_string(),
+                "plan confirmation is still pending before native execution".to_string(),
             );
         }
         Some("native_session_pending_plan") => {
@@ -2076,6 +2092,7 @@ mod tests {
                     cluster: None,
                     flow: None,
                     no_flow: false,
+                    confirm: false,
                 },
                 "plan",
             ),
@@ -2265,6 +2282,10 @@ mod tests {
             requested_governance_owner: None,
             active_flow: None,
             flow_state: None,
+            goal_plan_state: None,
+            goal_plan_revision: None,
+            planning_rationale: None,
+            verification_strategy: None,
             active_workflow: None,
             workflow_phase: None,
             workflow_next_action: None,
@@ -2407,6 +2428,10 @@ mod tests {
             requested_governance_owner: None,
             active_flow: None,
             flow_state: None,
+            goal_plan_state: None,
+            goal_plan_revision: None,
+            planning_rationale: None,
+            verification_strategy: None,
             active_workflow: None,
             workflow_phase: None,
             workflow_next_action: None,
@@ -2786,7 +2811,7 @@ mod tests {
         assert_eq!(govern_waiting.0, "waiting");
 
         let flow_confirmation = session_execution_condition_parts(&SessionStatusView {
-            execution_path: Some("native_goal_plan_pending_flow_confirmation".to_string()),
+            execution_path: Some("native_goal_plan_pending_plan_confirmation".to_string()),
             ..SessionStatusView::default()
         });
         assert_eq!(flow_confirmation.0, "blocked");

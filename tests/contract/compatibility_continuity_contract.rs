@@ -21,7 +21,7 @@ fn status_contract_preserves_native_session_and_surfaces_compatibility_follow_up
         None,
     )
     .unwrap();
-    execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
+    execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
 
     execute_custom_run(&workspace, Some("Fix the failing add test"), &[], None, None, None, None)
         .unwrap();

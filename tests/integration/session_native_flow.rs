@@ -352,24 +352,24 @@ fn cli_plan_persists_goal_plan_and_proposed_flow_before_confirmation() {
     execute_capture(Some(&ws), Some("fix the failing add test"), &[], None, None, None, None)
         .unwrap();
 
-    let planned = execute_plan(Some(&ws), None, false).unwrap();
+    let planned = execute_plan(Some(&ws), None, false, false).unwrap();
     assert!(
         planned
             .terminal_output
-            .contains("proposed `bug-fix` flow is persisted and awaiting confirmation"),
+            .contains("proposed `bug-fix` flow is persisted and awaiting plan confirmation"),
         "{}",
         planned.terminal_output
     );
     assert!(
         planned
             .terminal_output
-            .contains("execution_path: native_goal_plan_pending_flow_confirmation"),
+            .contains("execution_path: native_goal_plan_pending_plan_confirmation"),
         "{}",
         planned.terminal_output
     );
     assert!(
         planned.terminal_output.contains(
-            "execution_condition: blocked - flow confirmation is still pending before native execution"
+            "execution_condition: blocked - plan confirmation is still pending before native execution"
         ),
         "{}",
         planned.terminal_output
@@ -379,13 +379,13 @@ fn cli_plan_persists_goal_plan_and_proposed_flow_before_confirmation() {
     assert!(
         status
             .terminal_output
-            .contains("execution_path: native_goal_plan_pending_flow_confirmation"),
+            .contains("execution_path: native_goal_plan_pending_plan_confirmation"),
         "{}",
         status.terminal_output
     );
     assert!(
         status.terminal_output.contains(
-            "execution_condition: blocked - flow confirmation is still pending before native execution"
+            "execution_condition: blocked - plan confirmation is still pending before native execution"
         ),
         "{}",
         status.terminal_output
@@ -409,7 +409,7 @@ fn cli_plan_blocks_when_context_pack_is_not_credible() {
     record.latest_status = SessionStatus::GoalCaptured;
     FileSessionStore::for_workspace(&ws).persist(&record).unwrap();
 
-    let error = execute_plan(Some(&ws), None, false).unwrap_err();
+    let error = execute_plan(Some(&ws), None, false, false).unwrap_err();
     let error_text = error.to_string();
     assert!(error_text.contains("bounded context required before planning"), "{error_text}");
 
@@ -453,7 +453,8 @@ fn session_native_cli_surfaces_context_projection_on_status_run_and_inspect() {
     execute_start(Some(&ws)).unwrap();
     execute_capture(Some(&ws), Some("build a context router"), &[], None, None, None, None)
         .unwrap();
-    execute_plan(Some(&ws), None, false).unwrap();
+    execute_plan(Some(&ws), None, false, false).unwrap();
+    execute_plan(Some(&ws), None, false, true).unwrap();
 
     let status = execute_status(Some(&ws)).unwrap();
     assert!(status.terminal_output.contains("context_summary:"), "{}", status.terminal_output);
@@ -505,7 +506,7 @@ fn cli_plan_supports_explicit_no_flow_for_native_session() {
     )
     .unwrap();
 
-    let planned = execute_plan(Some(&ws), None, true).unwrap();
+    let planned = execute_plan(Some(&ws), None, true, false).unwrap();
     assert!(
         planned.terminal_output.contains("operator-skipped flow constraints"),
         "{}",
@@ -572,7 +573,7 @@ fn cli_session_native_run_persists_decisions_and_applies_real_changes() {
     execute_start(Some(&ws)).unwrap();
     execute_capture(Some(&ws), Some("fix the failing add test"), &[], None, None, None, None)
         .unwrap();
-    execute_plan(Some(&ws), Some("bug-fix"), false).unwrap();
+    execute_plan(Some(&ws), Some("bug-fix"), false, false).unwrap();
 
     let run = execute_run(Some(&ws)).unwrap();
     assert!(run.terminal_output.contains("terminal_status: succeeded"), "{}", run.terminal_output);

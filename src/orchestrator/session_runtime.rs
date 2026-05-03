@@ -227,6 +227,8 @@ impl SessionRuntime {
         requested_flow: Option<&str>,
         no_flow: bool,
     ) -> Result<(), SessionRuntimeError> {
+        let should_confirm_plan =
+            requested_flow.is_some() || no_flow || session.active_flow.is_some();
         let goal = session.goal.clone().ok_or(SessionRuntimeError::MissingGoal)?;
         if let Some(packet) = session.negotiation_packet.as_ref()
             && packet.resolution_state
@@ -261,38 +263,47 @@ impl SessionRuntime {
         }
 
         let planning_context = Self::planning_context_sources(session);
-        let mut goal_plan =
-            match build_goal_plan_with_sources(&goal, &self.workspace_ref, &planning_context) {
-                Ok(goal_plan) => goal_plan,
-                Err(GoalPlannerError::InsufficientContext { summary, goal_plan }) => {
-                    let mut goal_plan = *goal_plan;
-                    if let Some(packet) = session.negotiation_packet.as_ref() {
-                        goal_plan = goal_plan.with_negotiation_projection(
-                            packet.goal_summary.clone(),
-                            packet.resolution_state.as_str(),
-                            packet.acceptance_boundary.success_headline.clone(),
-                        );
-                    }
-                    self.apply_planning_flow_selection(
-                        session,
-                        &mut goal_plan,
-                        requested_flow,
-                        no_flow,
-                    )?;
-                    session.active_task = None;
-                    session.goal_plan = Some(goal_plan);
-                    session.decisions.clear();
-                    session.latest_status = SessionStatus::GoalCaptured;
-                    session.latest_terminal_reason = None;
-                    session.updated_at = current_timestamp_millis();
-
-                    return Err(SessionRuntimeError::ClarificationRequired {
-                        headline: "bounded context required before planning".to_string(),
-                        prompt: summary,
-                    });
+        let preferred_flow = if no_flow {
+            None
+        } else {
+            requested_flow.or(session.active_flow.as_ref().map(|flow| flow.flow_name.as_str()))
+        };
+        let mut goal_plan = match build_goal_plan_with_sources(
+            &goal,
+            &self.workspace_ref,
+            &planning_context,
+            preferred_flow,
+        ) {
+            Ok(goal_plan) => goal_plan,
+            Err(GoalPlannerError::InsufficientContext { summary, goal_plan }) => {
+                let mut goal_plan = *goal_plan;
+                if let Some(packet) = session.negotiation_packet.as_ref() {
+                    goal_plan = goal_plan.with_negotiation_projection(
+                        packet.goal_summary.clone(),
+                        packet.resolution_state.as_str(),
+                        packet.acceptance_boundary.success_headline.clone(),
+                    );
                 }
-                Err(error) => return Err(SessionRuntimeError::GoalPlanner(error)),
-            };
+                self.apply_planning_flow_selection(
+                    session,
+                    &mut goal_plan,
+                    requested_flow,
+                    no_flow,
+                )?;
+                session.active_task = None;
+                session.goal_plan = Some(goal_plan);
+                session.decisions.clear();
+                session.latest_status = SessionStatus::GoalCaptured;
+                session.latest_terminal_reason = None;
+                session.updated_at = current_timestamp_millis();
+
+                return Err(SessionRuntimeError::ClarificationRequired {
+                    headline: "bounded context required before planning".to_string(),
+                    prompt: summary,
+                });
+            }
+            Err(error) => return Err(SessionRuntimeError::GoalPlanner(error)),
+        };
         if let Some(packet) = session.negotiation_packet.as_ref() {
             goal_plan = goal_plan.with_negotiation_projection(
                 packet.goal_summary.clone(),
@@ -301,9 +312,42 @@ impl SessionRuntime {
             );
         }
         self.apply_planning_flow_selection(session, &mut goal_plan, requested_flow, no_flow)?;
-        goal_plan
-            .confirm()
-            .map_err(|error| SessionRuntimeError::InvalidGoalPlan(error.to_string()))?;
+        if let Some(previous_goal_plan) = session.goal_plan.as_ref() {
+            let changed_fields = material_goal_plan_changes(previous_goal_plan, &goal_plan);
+            if changed_fields.is_empty() {
+                if should_confirm_plan && previous_goal_plan.requires_confirmation() {
+                    let existing_goal_plan =
+                        session.goal_plan.as_mut().ok_or(SessionRuntimeError::MissingGoalPlan)?;
+                    existing_goal_plan
+                        .confirm()
+                        .map_err(|error| SessionRuntimeError::InvalidGoalPlan(error.to_string()))?;
+                }
+
+                session.active_task = None;
+                session.decisions.clear();
+                session.latest_status = SessionStatus::Planned;
+                session.latest_terminal_reason = None;
+                session.latest_trace_ref = None;
+                session.updated_at = current_timestamp_millis();
+                return Ok(());
+            }
+
+            let revision = previous_goal_plan.next_revision();
+            let base_rationale = goal_plan.planning_rationale.clone().unwrap_or_default();
+            goal_plan.proposal_revision = revision;
+            goal_plan.planning_rationale = Some(format!(
+                "replan revision {} supersedes revision {} because {}; {}",
+                revision,
+                previous_goal_plan.proposal_revision,
+                changed_fields.join(", "),
+                base_rationale
+            ));
+        }
+        if should_confirm_plan {
+            goal_plan
+                .confirm()
+                .map_err(|error| SessionRuntimeError::InvalidGoalPlan(error.to_string()))?;
+        }
 
         session.active_task = None;
         session.goal_plan = Some(goal_plan);
@@ -313,6 +357,20 @@ impl SessionRuntime {
         session.latest_trace_ref = None;
         session.updated_at = current_timestamp_millis();
 
+        Ok(())
+    }
+
+    pub fn confirm_goal_plan(
+        &self,
+        session: &mut ActiveSessionRecord,
+    ) -> Result<(), SessionRuntimeError> {
+        let goal_plan = session.goal_plan.as_mut().ok_or(SessionRuntimeError::MissingGoalPlan)?;
+        goal_plan
+            .confirm()
+            .map_err(|error| SessionRuntimeError::InvalidGoalPlan(error.to_string()))?;
+        session.latest_status = SessionStatus::Planned;
+        session.latest_terminal_reason = None;
+        session.updated_at = current_timestamp_millis();
         Ok(())
     }
 
@@ -340,6 +398,7 @@ impl SessionRuntime {
                 .as_ref()
                 .map(|packet| packet.acceptance_boundary.success_headline.clone()),
             latest_trace_ref: session.latest_trace_ref.clone(),
+            workflow_progress: session.active_workflow_progress().cloned(),
         }
     }
 
@@ -381,7 +440,9 @@ impl SessionRuntime {
         session.active_flow = None;
         session.active_flow_policy = None;
         goal_plan.flow_skipped = false;
-        goal_plan.flow = infer_flow(&goal_plan.goal_text);
+        if goal_plan.flow.is_none() {
+            goal_plan.flow = infer_flow(&goal_plan.goal_text);
+        }
         Ok(())
     }
 
@@ -435,11 +496,10 @@ impl SessionRuntime {
 
         if outcome.mode == RoutingMode::Blocked
             && let Some(goal_plan) = session.goal_plan.as_ref()
-            && let Some(flow) = goal_plan.flow.as_ref()
-            && !flow.confirmed
+            && goal_plan.requires_confirmation()
         {
-            return Err(SessionRuntimeError::FlowConfirmationRequired {
-                flow_name: flow.flow_name.clone(),
+            return Err(SessionRuntimeError::PlanConfirmationRequired {
+                flow_name: goal_plan.flow.as_ref().map(|flow| flow.flow_name.clone()),
             });
         }
 
@@ -2667,6 +2727,8 @@ pub enum SessionRuntimeError {
     TraceStore(#[from] TraceStoreError),
     #[error("active session has no captured goal")]
     MissingGoal,
+    #[error("active session has no proposed goal plan")]
+    MissingGoalPlan,
     #[error("{headline}: {prompt}")]
     ClarificationRequired { headline: String, prompt: String },
     #[error("goal planning failed: {0}")]
@@ -2675,10 +2737,8 @@ pub enum SessionRuntimeError {
     InvalidGoalPlan(String),
     #[error("cluster delivery state is invalid: {0}")]
     InvalidClusterState(String),
-    #[error(
-        "native execution cannot continue until the proposed `{flow_name}` flow is confirmed or skipped"
-    )]
-    FlowConfirmationRequired { flow_name: String },
+    #[error("native execution cannot continue until the current proposed plan is confirmed")]
+    PlanConfirmationRequired { flow_name: Option<String> },
     #[error("unknown flow `{requested}`; supported flows: {supported}")]
     UnknownFlow { requested: String, supported: String },
     #[error(
@@ -2768,6 +2828,40 @@ fn native_delivery_completion_failure_reason(
     }
 
     None
+}
+
+fn material_goal_plan_changes(
+    previous_goal_plan: &crate::domain::goal_plan::GoalPlan,
+    next_goal_plan: &crate::domain::goal_plan::GoalPlan,
+) -> Vec<&'static str> {
+    let mut changed_fields = Vec::new();
+
+    let previous_flow = previous_goal_plan.flow.as_ref().map(|flow| flow.flow_name.as_str());
+    let next_flow = next_goal_plan.flow.as_ref().map(|flow| flow.flow_name.as_str());
+    if previous_flow != next_flow || previous_goal_plan.flow_skipped != next_goal_plan.flow_skipped
+    {
+        changed_fields.push("flow");
+    }
+
+    if previous_goal_plan.verification_strategy != next_goal_plan.verification_strategy {
+        changed_fields.push("verification strategy");
+    }
+
+    let previous_targets = previous_goal_plan
+        .tasks
+        .iter()
+        .map(|task| (task.description.as_str(), task.target.as_str(), task.decision_type_hint))
+        .collect::<Vec<_>>();
+    let next_targets = next_goal_plan
+        .tasks
+        .iter()
+        .map(|task| (task.description.as_str(), task.target.as_str(), task.decision_type_hint))
+        .collect::<Vec<_>>();
+    if previous_targets != next_targets {
+        changed_fields.push("tasks");
+    }
+
+    changed_fields
 }
 
 fn native_terminal_outcome(terminal: &LoopTerminal) -> (TerminalCondition, String, Option<Value>) {
@@ -4317,7 +4411,7 @@ mod tests {
     }
 
     #[test]
-    fn plan_task_persists_goal_plan_and_inferred_flow_without_creating_fixture_task() {
+    fn plan_task_persists_proposed_goal_plan_and_inferred_flow_without_creating_fixture_task() {
         let workspace = temp_workspace("synod-runtime-native-plan");
         fs::create_dir_all(workspace.join("src")).unwrap();
         fs::write(
@@ -4355,10 +4449,11 @@ mod tests {
         assert!(session.active_flow_policy.is_none());
 
         let goal_plan = session.goal_plan.as_ref().unwrap();
-        assert_eq!(goal_plan.status, crate::domain::goal_plan::GoalPlanStatus::Confirmed);
+        assert_eq!(goal_plan.status, crate::domain::goal_plan::GoalPlanStatus::Draft);
         assert!(!goal_plan.tasks.is_empty());
         assert_eq!(goal_plan.flow.as_ref().unwrap().flow_name, "bug-fix");
         assert!(!goal_plan.flow.as_ref().unwrap().confirmed);
+        assert!(goal_plan.requires_confirmation());
         session.validate().unwrap();
     }
 

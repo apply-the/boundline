@@ -9,8 +9,10 @@ use uuid::Uuid;
 use crate::domain::decision::{DecisionType, EvidenceRef};
 use crate::domain::goal_plan::{
     ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan, GoalPlanError,
-    PlannedTask, WorkspaceSignals,
+    InferredFlow, PlannedTask, WorkspaceSignals,
 };
+use crate::domain::workflow::WorkflowProgressState;
+use crate::orchestrator::flow_inference::{FlowInferenceContext, infer_flow_from_context};
 
 /// Maximum directory traversal depth for workspace signal collection.
 const MAX_SCAN_DEPTH: usize = 4;
@@ -25,6 +27,7 @@ pub struct PlanningContextSources {
     pub negotiation_resolution: Option<String>,
     pub negotiation_acceptance_boundary: Option<String>,
     pub latest_trace_ref: Option<String>,
+    pub workflow_progress: Option<WorkflowProgressState>,
 }
 
 /// Collect workspace signals from the given workspace root.
@@ -371,6 +374,86 @@ pub fn build_context_pack(
     }
 }
 
+fn select_source_target(context_pack: &ContextPack, workspace_ref: &Path) -> String {
+    context_pack
+        .selected_targets
+        .iter()
+        .find(|target| target.starts_with("src/"))
+        .cloned()
+        .or_else(|| {
+            context_pack
+                .selected_targets
+                .iter()
+                .find(|target| !target.starts_with("tests/") && !target.starts_with("test/"))
+                .cloned()
+        })
+        .unwrap_or_else(|| select_primary_target(workspace_ref))
+}
+
+fn select_test_target(context_pack: &ContextPack) -> Option<String> {
+    context_pack
+        .selected_targets
+        .iter()
+        .find(|target| {
+            target.starts_with("tests/")
+                || target.starts_with("test/")
+                || target.starts_with("spec/")
+                || target.contains("_test")
+        })
+        .cloned()
+}
+
+fn infer_verification_strategy(
+    context_pack: &ContextPack,
+    signals: &WorkspaceSignals,
+    flow: Option<&InferredFlow>,
+    workspace_ref: &Path,
+) -> String {
+    let source_target = select_source_target(context_pack, workspace_ref);
+    if let Some(test_target) = select_test_target(context_pack) {
+        return format!("run targeted verification against {test_target}");
+    }
+
+    if signals.has_tests {
+        return match flow.map(|flow| flow.flow_name.as_str()) {
+            Some("bug-fix") => {
+                format!("run workspace tests covering the bounded fix target {source_target}")
+            }
+            Some("change") => {
+                format!("run workspace tests covering the bounded change target {source_target}")
+            }
+            Some("delivery") => {
+                "run the workspace validation suite before delivery completion".to_string()
+            }
+            _ => "run the workspace test suite for the proposed change".to_string(),
+        };
+    }
+
+    format!("review bounded workspace evidence for {source_target}")
+}
+
+fn build_planning_rationale(
+    context_pack: &ContextPack,
+    flow: Option<&InferredFlow>,
+    verification_strategy: &str,
+) -> String {
+    let target_summary = if context_pack.selected_targets.is_empty() {
+        "no selected targets".to_string()
+    } else {
+        context_pack.selected_targets.join(", ")
+    };
+
+    match flow {
+        Some(flow) => format!(
+            "{}; selected targets: {target_summary}; verification: {verification_strategy}",
+            flow.confidence_reason
+        ),
+        None => format!(
+            "bounded context selected targets: {target_summary}; verification: {verification_strategy}"
+        ),
+    }
+}
+
 fn select_primary_target(workspace_ref: &Path) -> String {
     for candidate in ["src/lib.rs", "src/main.rs", "Cargo.toml", "README.md"] {
         if workspace_ref.join(candidate).is_file() {
@@ -487,53 +570,69 @@ fn derive_tasks_from_context(
     context_pack: &ContextPack,
     workspace_ref: &Path,
     signals: &WorkspaceSignals,
+    inferred_flow: Option<&InferredFlow>,
+    verification_strategy: &str,
 ) -> Vec<PlannedTask> {
-    let mut tasks = derive_tasks(goal_text, workspace_ref, signals);
-    let goal_lower = goal_text.to_lowercase();
-    let primary_target = if goal_lower.contains("fix")
-        || goal_lower.contains("implement")
-        || goal_lower.contains("build")
-        || goal_lower.contains("change")
-        || goal_lower.contains("feature")
-    {
-        context_pack
-            .selected_targets
-            .iter()
-            .find(|target| target.starts_with("src/"))
-            .cloned()
-            .or_else(|| {
-                context_pack
-                    .selected_targets
-                    .iter()
-                    .find(|target| !target.starts_with("tests/"))
-                    .cloned()
-            })
+    let primary_target = select_source_target(context_pack, workspace_ref);
+    let verification_target = if signals.has_tests {
+        select_test_target(context_pack).unwrap_or_else(|| "test suite".to_string())
     } else {
-        None
-    }
-    .or_else(|| {
-        context_pack.selected_targets.iter().find(|target| !target.trim().is_empty()).cloned()
-    })
-    .unwrap_or_else(|| select_primary_target(workspace_ref));
+        primary_target.clone()
+    };
+    let flow_name = inferred_flow.map(|flow| flow.flow_name.as_str());
+    let implementation_decision = match flow_name {
+        Some("bug-fix") => DecisionType::Fix,
+        _ => DecisionType::Code,
+    };
+    let verification_decision =
+        if signals.has_tests { DecisionType::Test } else { DecisionType::Analyze };
 
-    for task in &mut tasks {
-        if task.target == "test suite" {
-            continue;
-        }
-        task.target = primary_target.clone();
-        if let Some(expected_outcome) = &task.expected_outcome {
-            task.expected_outcome =
-                Some(format!("{expected_outcome}; context: {}", context_pack.summary));
-        }
-    }
+    let analyze_description = match flow_name {
+        Some("bug-fix") => format!("Investigate bounded failure evidence for {goal_text}"),
+        Some("delivery") => format!("Assess delivery surface for {goal_text}"),
+        _ => format!("Analyze bounded implementation surface for {goal_text}"),
+    };
+    let implementation_description = match flow_name {
+        Some("bug-fix") => format!("Repair bounded implementation for {goal_text}"),
+        Some("delivery") => format!("Complete bounded delivery changes for {goal_text}"),
+        _ => format!("Implement bounded change for {goal_text}"),
+    };
 
-    tasks
+    vec![
+        PlannedTask {
+            task_id: Uuid::new_v4().to_string(),
+            description: analyze_description,
+            target: primary_target.clone(),
+            expected_outcome: Some(format!(
+                "bounded understanding recorded from context: {}",
+                context_pack.summary
+            )),
+            decision_type_hint: Some(DecisionType::Analyze),
+        },
+        PlannedTask {
+            task_id: Uuid::new_v4().to_string(),
+            description: implementation_description,
+            target: primary_target,
+            expected_outcome: Some(
+                "bounded change applied to the selected implementation surface".to_string(),
+            ),
+            decision_type_hint: Some(implementation_decision),
+        },
+        PlannedTask {
+            task_id: Uuid::new_v4().to_string(),
+            description: format!("Verify changes using {verification_strategy}"),
+            target: verification_target,
+            expected_outcome: Some("credible bounded verification evidence recorded".to_string()),
+            decision_type_hint: Some(verification_decision),
+        },
+    ]
 }
 
 pub fn build_goal_plan_with_sources(
     goal_text: &str,
     workspace_ref: &Path,
     context_sources: &PlanningContextSources,
+    preferred_flow: Option<&str>,
 ) -> Result<GoalPlan, GoalPlannerError> {
     if goal_text.trim().is_empty() {
         return Err(GoalPlannerError::MissingGoal);
@@ -541,14 +640,48 @@ pub fn build_goal_plan_with_sources(
 
     let signals = collect_workspace_signals(workspace_ref);
     let context_pack = build_context_pack(goal_text, workspace_ref, context_sources);
-    let tasks = derive_tasks_from_context(goal_text, &context_pack, workspace_ref, &signals);
+    let inferred_flow = preferred_flow
+        .map(|flow_name| InferredFlow {
+            flow_name: flow_name.to_string(),
+            confidence_reason: format!("operator selected `{flow_name}` before planning"),
+            confirmed: false,
+        })
+        .or_else(|| {
+            infer_flow_from_context(&FlowInferenceContext {
+                goal_text,
+                context_pack: Some(&context_pack),
+                workspace_signals: &signals,
+                workflow_progress: context_sources.workflow_progress.as_ref(),
+            })
+        });
+    let verification_strategy =
+        infer_verification_strategy(&context_pack, &signals, inferred_flow.as_ref(), workspace_ref);
+    let planning_rationale =
+        build_planning_rationale(&context_pack, inferred_flow.as_ref(), &verification_strategy);
+    let tasks = derive_tasks_from_context(
+        goal_text,
+        &context_pack,
+        workspace_ref,
+        &signals,
+        inferred_flow.as_ref(),
+        &verification_strategy,
+    );
     let canon_evidence = scan_canon_artifacts(workspace_ref);
 
-    let plan = GoalPlan::new(goal_text, tasks)
+    let mut plan = GoalPlan::new(goal_text, tasks)
         .map_err(GoalPlannerError::PlanCreation)?
         .with_context_pack(context_pack)
         .with_signals(signals)
-        .with_evidence(canon_evidence);
+        .with_evidence(canon_evidence)
+        .with_planning_rationale(planning_rationale)
+        .with_verification_strategy(verification_strategy);
+
+    if let Some(flow) = inferred_flow {
+        plan = plan.with_flow(flow);
+    }
+    if let Some(workflow_progress) = context_sources.workflow_progress.clone() {
+        plan = plan.with_workflow_progress(workflow_progress);
+    }
 
     if plan.context_pack.as_ref().map(|pack| pack.credibility)
         != Some(ContextPackCredibility::Credible)
@@ -567,7 +700,7 @@ pub fn build_goal_plan(
     goal_text: &str,
     workspace_ref: &Path,
 ) -> Result<GoalPlan, GoalPlannerError> {
-    build_goal_plan_with_sources(goal_text, workspace_ref, &PlanningContextSources::default())
+    build_goal_plan_with_sources(goal_text, workspace_ref, &PlanningContextSources::default(), None)
 }
 
 #[derive(Debug, Error)]

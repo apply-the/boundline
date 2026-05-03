@@ -193,7 +193,7 @@ fn route_and_flow_render_helpers_expose_foundational_runtime_cues() {
     let route = RoutingOutcome {
         mode: RoutingMode::Blocked,
         source: RoutingSource::GoalPlan,
-        reason: "flow confirmation is still pending".to_string(),
+        reason: "plan confirmation is still pending".to_string(),
     };
     let flow_state = GoalPlanFlowState {
         mode: GoalPlanFlowMode::Proposed,
@@ -203,7 +203,7 @@ fn route_and_flow_render_helpers_expose_foundational_runtime_cues() {
 
     assert_eq!(
         render_route_outcome(&route),
-        "routing: blocked (goal_plan) - flow confirmation is still pending"
+        "routing: blocked (goal_plan) - plan confirmation is still pending"
     );
     assert_eq!(
         render_goal_plan_flow_state(&flow_state),
@@ -211,7 +211,7 @@ fn route_and_flow_render_helpers_expose_foundational_runtime_cues() {
     );
 
     let summary = render_inspection_routing_summary(&route, Some(&flow_state));
-    assert_eq!(summary[0], "routing: blocked (goal_plan) - flow confirmation is still pending");
+    assert_eq!(summary[0], "routing: blocked (goal_plan) - plan confirmation is still pending");
     assert_eq!(summary[1], "flow_state: proposed (bug-fix) - goal contains keyword 'fix'");
 }
 

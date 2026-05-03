@@ -229,6 +229,7 @@ fn build_context_pack_uses_authored_sources_and_workspace_files() {
             negotiation_resolution: Some("credible".to_string()),
             negotiation_acceptance_boundary: None,
             latest_trace_ref: Some(".synod/traces/last.json".to_string()),
+            workflow_progress: None,
         },
     );
 
@@ -246,6 +247,7 @@ fn build_goal_plan_with_sources_fails_when_context_is_insufficient() {
         "investigate a thing",
         &ws,
         &PlanningContextSources::default(),
+        None,
     )
     .unwrap_err();
 
@@ -259,4 +261,73 @@ fn build_goal_plan_with_sources_fails_when_context_is_insufficient() {
         }
         other => panic!("unexpected error: {other}"),
     }
+}
+
+#[test]
+fn build_goal_plan_inferrs_bug_fix_from_source_and_test_evidence_without_bug_keywords() {
+    let ws = temp_workspace("gp-evidence-bug-fix");
+    std::fs::write(
+        ws.join("Cargo.toml"),
+        "[package]\nname = \"gp_evidence_bug_fix\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(ws.join("src")).unwrap();
+    std::fs::create_dir_all(ws.join("tests")).unwrap();
+    std::fs::write(
+        ws.join("src/lib.rs"),
+        "pub fn add(left: i32, right: i32) -> i32 { left - right }",
+    )
+    .unwrap();
+    std::fs::write(
+        ws.join("tests/red_to_green.rs"),
+        "#[test]\nfn red_to_green_addition() { assert_eq!(gp_evidence_bug_fix::add(2, 2), 4); }",
+    )
+    .unwrap();
+
+    let plan = build_goal_plan("investigate arithmetic path", &ws).unwrap();
+
+    assert_eq!(plan.flow.as_ref().map(|flow| flow.flow_name.as_str()), Some("bug-fix"));
+    assert!(
+        plan.flow
+            .as_ref()
+            .unwrap()
+            .confidence_reason
+            .contains("selected targets span existing tests and source files")
+    );
+    assert_eq!(plan.tasks[1].decision_type_hint, Some(DecisionType::Fix));
+    assert!(plan.verification_strategy.as_deref().unwrap().contains("tests/red_to_green.rs"));
+}
+
+#[test]
+fn build_goal_plan_inferrs_change_from_source_focused_evidence_without_bug_keywords() {
+    let ws = temp_workspace("gp-evidence-change");
+    std::fs::write(
+        ws.join("Cargo.toml"),
+        "[package]\nname = \"gp_evidence_change\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(ws.join("src")).unwrap();
+    std::fs::write(
+        ws.join("src/dashboard.rs"),
+        "pub fn render_dashboard() {}\npub struct DashboardState;",
+    )
+    .unwrap();
+
+    let plan = build_goal_plan("shape dashboard surface", &ws).unwrap();
+
+    assert_eq!(plan.flow.as_ref().map(|flow| flow.flow_name.as_str()), Some("change"));
+    assert!(
+        plan.flow
+            .as_ref()
+            .unwrap()
+            .confidence_reason
+            .contains("selected targets focus on implementation files")
+    );
+    assert_eq!(plan.tasks[1].decision_type_hint, Some(DecisionType::Code));
+    assert!(
+        plan.verification_strategy
+            .as_deref()
+            .unwrap()
+            .contains("review bounded workspace evidence")
+    );
 }

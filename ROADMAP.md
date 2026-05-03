@@ -6,7 +6,7 @@ Canon is downstream from Synod in this roadmap: Synod thinks, decides, orchestra
 
 Evolve Synod into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.34.0
+## Current Status: v0.35.0
 
 Synod now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -15,14 +15,17 @@ route-summary plus config projection, bounded multi-workspace clustered
 delivery, negotiated delivery modeling, inspectable routing plus assistant
 decoupling, guided decision follow-through, evidence-aligned next-command
 selection, credible governed delivery completion, final product-surface
-closure, explicit bounded context assembly, and decision-driven bounded action
-selection in place:
+closure, explicit bounded context assembly, decision-driven bounded action
+selection, and evidence-driven dynamic planning in place:
 
 - session-native orchestration remains the primary operator path
 - `capture` now derives one negotiated delivery packet from direct goals, authored briefs, and governance context before planning begins
 - `plan` now stops early when `negotiation_resolution` is not yet credible instead of silently inventing a bounded change
-- `plan` now also assembles one explicit bounded context pack from relevant workspace files, authored input, recent traces, negotiated delivery state, and reusable Canon artifacts before confirming a goal plan
+- `plan` now also assembles one explicit bounded context pack from relevant workspace files, authored input, recent traces, negotiated delivery state, and reusable Canon artifacts before proposing a goal plan
 - planning now stops explicitly when that context pack is insufficient or stale instead of relying on ambient workspace state
+- native planning now infers flow, targets, and verification strategy from scored workspace and session evidence instead of relying primarily on goal keywords
+- default `plan` now persists one proposed goal plan with explicit `goal_plan_state`, `goal_plan_revision`, `planning_rationale`, and `verification_strategy`, and `plan --confirm` now makes that proposal executable on the native route
+- repeated `plan` can now supersede the active proposal revision when evidence changes flow, task targets, or verification strategy materially, while `run`, `status`, `next`, and `inspect` keep the revision lineage and blocking reason explicit
 - `run`, `status`, `next`, and `inspect` now project `context_summary`, `context_credibility`, primary inputs, provenance, and any staleness reason from the active goal plan or authoritative native trace
 - the native runtime now selects explicit bounded next actions such as `read`, `search`, `modify`, `test`, `ask`, and `replan` from persisted decision state and evidence instead of treating decisions as trace-only audit records
 - `status`, `next`, and `inspect` now surface selector-driven guidance, rationale, evidence basis, verification intent, and explicit no-credible-next-step wording from the same persisted decision story
@@ -31,6 +34,7 @@ selection in place:
 - Claude, Codex, and Copilot now ship first-class workflow assistant surfaces, while Gemini CLI guidance uses the same workflow-first vocabulary
 - workflows and direct native runs now read as the two primary Synod product entry styles, while explicit compatibility follow-up remains visibly subordinate
 - direct session-native commands and explicit compatibility routing remain available when no named workflow is invoked
+- direct `run --goal` now bootstraps the same evidence-driven proposal-plus-confirm planning path before execution instead of shortcutting through keyword-only flow selection
 - Canon remains a bounded stage-boundary governance runtime with governed `bug-fix:investigate` plus later verify-stage `security-assessment` reuse on the same operator surface
 - bounded `bug-fix` and `change` delivery no longer succeed merely because the plan ran out of steps; they now require a material diff and passed validation evidence or stop explicitly as failed
 - successful governed delivery now keeps `latest_changed_files`, `latest_validation_status`, and governed packet lineage visible on the same follow-through surfaces
@@ -45,12 +49,13 @@ selection in place:
 - session-native commands still accept `--cluster <primary-workspace>` so one authoritative primary-owned session can plan and deliver a bounded change across registered member repositories
 - clustered `run`, `status`, `next`, and `inspect` still surface authoritative workspace, clustered execution condition, participating workspaces, and any blocking member without implying distributed orchestration ownership
 
-## Roadmap Closure In 0.34.0
+## Roadmap Closure In 0.35.0
 
-The roadmap is no longer an open-ended backlog. `0.34.0` keeps the product
-surface closed and makes bounded decision selection explicit, so Synod now
-presents one coherent execution model across CLI, assistants, workflows,
-routing, governance, bounded context assembly, and the runtime loop itself.
+The roadmap is no longer an open-ended backlog. `0.35.0` keeps the product
+surface closed and makes bounded planning explicit, so Synod now presents one
+coherent execution model across CLI, assistants, workflows, routing,
+governance, bounded context assembly, evidence-driven proposal selection, and
+the runtime loop itself.
 
 The governing rule remains simple: Synod is the product and execution owner.
 Canon stays a bounded, useful governed runtime inside that same delivery path
@@ -58,7 +63,7 @@ rather than drifting back into a parallel tool story.
 
 ### Ongoing Compatibility Watch
 
-Canon will continue to release versions after `0.34.0`, so Synod keeps one
+Canon will continue to release versions after `0.35.0`, so Synod keeps one
 explicit maintenance track for compatibility drift on the machine-facing
 governance adapter rather than reopening broad product-scope work:
 
@@ -72,29 +77,17 @@ governance adapter rather than reopening broad product-scope work:
   contract, introduces a new adapter schema version, or adds governed behavior
   that Synod needs for its explicitly modeled bounded stages
 
-### Next Macrofeature Line (035+)
+### Next Macrofeature Line (036+)
 
-`0.34.0` delivered explicit context assembly plus decision-driven bounded
-action selection. The remaining roadmap line should not decompose back into
-microfeatures. Future numbered specs must stay at the macrofeature level and
-each one must change Synod's operating model, not just a single CLI surface.
+`0.35.0` delivered evidence-driven `infer -> propose -> confirm` planning plus
+bounded proposal supersession. The remaining roadmap line should not decompose
+back into microfeatures. Future numbered specs must stay at the macrofeature
+level and each one must change Synod's operating model, not just a single CLI
+surface.
 
 Compatibility maintenance for newer Canon releases stays inside the watch above
 unless it becomes contract-breaking. It does not consume the next spec number
 by itself.
-
-#### Spec 035: Dynamic Planning And Flow Inference
-
-- replace keyword-first flow inference and stage-static planning with
-  `infer -> propose -> confirm` planning derived from context packs and
-  observed workspace evidence
-- allow bounded replanning to reshape targets, verification strategy, and flow
-  choice without losing operator control or acceptance-boundary visibility
-- preserve workflows as operator-facing guidance and guardrails instead of the
-  sole source of execution shape
-
-**Exit criteria**: Synod can adapt plan shape and flow choice from observed
-evidence while keeping the resulting execution path bounded and reviewable.
 
 #### Spec 036: Canon-Grounded Reasoning And Structured Memory
 
@@ -108,9 +101,21 @@ evidence while keeping the resulting execution path bounded and reviewable.
 **Exit criteria**: Canon materially changes planning and decision selection when
 relevant, and Synod can carry forward compact structured memory across loops.
 
-No new numbered roadmap specs should be introduced before `035` through `036`
-are either delivered, explicitly dropped, or replaced at the macrofeature
-level.
+No new numbered roadmap specs should be introduced before `036` is either
+delivered, explicitly dropped, or replaced at the macrofeature level.
+
+### Delivered in 0.35.0
+
+- replace keyword-first flow inference and stage-static planning with one
+  evidence-driven `infer -> propose -> confirm` planning loop derived from
+  context packs, selected targets, traces, workflow guardrails, and observed
+  workspace evidence
+- require explicit `plan --confirm` before native execution, keep proposed or
+  confirmed plan state inspectable on `plan`, `run`, `status`, `next`, and
+  `inspect`, and let repeated `plan` supersede the active proposal revision
+  when evidence changes materially
+- update README, getting-started, configuration, assistant guidance, roadmap,
+  contributor docs, and changelog for the release
 
 ### Delivered in 0.34.0
 

@@ -61,6 +61,7 @@ fn goal_plan_contract_reports_insufficient_context_for_empty_workspace() {
         "investigate a thing",
         &ws,
         &PlanningContextSources::default(),
+        None,
     )
     .unwrap_err();
 

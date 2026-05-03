@@ -322,6 +322,7 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
             cluster: None,
             flow: None,
             no_flow: false,
+            confirm: false,
         },
         DeveloperCommand::Step { workspace: Some(workspace.clone()), cluster: None },
         DeveloperCommand::Run {
@@ -1002,7 +1003,7 @@ fn inspect_summary_and_session_commands_cover_additional_error_paths() {
     let workspace = temp_workspace("synod-cli-session-errors");
     execute_start(Some(&workspace)).unwrap();
     assert!(matches!(
-        execute_plan(Some(&workspace), None, false).unwrap_err(),
+        execute_plan(Some(&workspace), None, false, false).unwrap_err(),
         SessionCommandError::MissingCapturedGoal
     ));
 
@@ -1020,6 +1021,11 @@ fn inspect_summary_and_session_commands_cover_additional_error_paths() {
         execute_step(Some(&workspace)).unwrap_err(),
         SessionCommandError::MissingPlannedTask
     ));
+    let confirm_without_proposal = execute_plan(Some(&workspace), None, false, true).unwrap_err();
+    assert!(matches!(confirm_without_proposal, SessionCommandError::MissingPlanProposal));
+    let rendered = render_error("plan", &confirm_without_proposal);
+    assert!(rendered.contains("run `synod plan` first"), "{rendered}");
+    assert!(rendered.contains("next_command: synod plan"), "{rendered}");
     assert!(matches!(
         execute_flow(Some(&workspace), "missing-flow").unwrap_err(),
         SessionCommandError::UnknownFlow { .. }

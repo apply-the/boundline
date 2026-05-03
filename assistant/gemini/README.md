@@ -2,7 +2,7 @@
 
 This folder documents Synod usage from Gemini CLI surfaces.
 
-Gemini remains CLI-first in `0.34.0`, but it follows the same primary Synod
+Gemini remains CLI-first in `0.35.0`, but it follows the same primary Synod
 workflow surface used by the other assistants.
 
 compatibility remains an explicit subordinate route.
@@ -22,6 +22,7 @@ cargo run --bin synod -- doctor --workspace <workspace>
 cargo run --bin synod -- start --workspace <workspace>
 cargo run --bin synod -- capture --workspace <workspace> --goal "<goal>"
 cargo run --bin synod -- plan --workspace <workspace>
+cargo run --bin synod -- plan --workspace <workspace> --confirm
 cargo run --bin synod -- run --workspace <workspace>
 ```
 
@@ -35,5 +36,7 @@ remains an explicit subordinate route when the operator intentionally chooses
 it. When native planning or follow-through surfaces `context_summary`,
 `context_credibility`, `context_primary_inputs`, `context_provenance`, or
 `context_staleness_reason`, preserve those values exactly instead of
-paraphrasing them away. Do the same for selector-driven `latest_selection_headline`,
+paraphrasing them away. Do the same for `goal_plan_state`,
+`goal_plan_revision`, `planning_rationale`, and `verification_strategy`, plus
+selector-driven `latest_selection_headline`,
 `latest_selection_reason`, and inspect `selector:` lines when they appear.

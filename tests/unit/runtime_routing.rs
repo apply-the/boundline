@@ -51,7 +51,9 @@ fn build_goal_plan(confirmed: bool) -> GoalPlan {
         confidence_reason: "goal contains keyword 'fix'".to_string(),
         confirmed,
     });
-    goal_plan.confirm().unwrap();
+    if confirmed {
+        goal_plan.confirm().unwrap();
+    }
     goal_plan
 }
 
@@ -91,7 +93,7 @@ fn flow_policy_helpers_report_stage_id_and_progress() {
 }
 
 #[test]
-fn session_runtime_resolve_routing_outcome_blocks_pending_flow_confirmation() {
+fn session_runtime_resolve_routing_outcome_blocks_pending_plan_confirmation() {
     let workspace = std::env::temp_dir().join("synod-runtime-routing-pending");
     std::fs::create_dir_all(&workspace).unwrap();
     let runtime = SessionRuntime::for_workspace(&workspace);
@@ -117,7 +119,7 @@ fn session_runtime_resolve_routing_outcome_blocks_pending_flow_confirmation() {
     let outcome = runtime.resolve_routing_outcome(&record).unwrap();
     assert_eq!(outcome.mode, RoutingMode::Blocked);
     assert_eq!(outcome.source, RoutingSource::GoalPlan);
-    assert!(outcome.reason.contains("flow confirmation"));
+    assert!(outcome.reason.contains("plan confirmation"));
 }
 
 #[test]
@@ -224,6 +226,68 @@ fn plan_task_uses_authored_brief_as_credible_context_on_empty_workspace() {
         goal_plan.context_provenance_lines().iter().any(|line| line.contains("authored_brief"))
     );
     assert_eq!(record.latest_status, SessionStatus::Planned);
+}
+
+#[test]
+fn repeated_plan_task_revises_goal_plan_when_workspace_evidence_changes() {
+    let workspace =
+        std::env::temp_dir().join(format!("synod-runtime-routing-replan-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(workspace.join("src")).unwrap();
+    std::fs::write(
+        workspace.join("Cargo.toml"),
+        "[package]\nname = \"synod_runtime_routing_replan\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        workspace.join("src/lib.rs"),
+        "pub fn render_dashboard() {}\npub struct DashboardState;",
+    )
+    .unwrap();
+
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut record = ActiveSessionRecord {
+        session_id: "session-runtime-replan".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: Some("shape dashboard surface".to_string()),
+        authored_brief: None,
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: None,
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::GoalCaptured,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 20,
+    };
+
+    runtime.plan_task(&mut record, None, false).unwrap();
+    let initial_plan = record.goal_plan.as_ref().unwrap();
+    assert_eq!(initial_plan.proposal_revision, 1);
+    assert_eq!(initial_plan.flow.as_ref().map(|flow| flow.flow_name.as_str()), Some("change"));
+
+    std::fs::create_dir_all(workspace.join("tests")).unwrap();
+    std::fs::write(
+        workspace.join("tests/red_to_green.rs"),
+        "#[test]\nfn dashboard_regression() { assert!(true); }",
+    )
+    .unwrap();
+
+    runtime.plan_task(&mut record, None, false).unwrap();
+
+    let revised_plan = record.goal_plan.as_ref().unwrap();
+    assert_eq!(revised_plan.proposal_revision, 2);
+    assert_eq!(revised_plan.flow.as_ref().map(|flow| flow.flow_name.as_str()), Some("bug-fix"));
+    assert!(
+        revised_plan
+            .planning_rationale
+            .as_deref()
+            .unwrap()
+            .contains("supersedes revision 1 because")
+    );
 }
 
 #[test]

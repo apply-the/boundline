@@ -19,9 +19,21 @@ recorded workspace version.
 
 Delivered specs:
 
-- None recorded after `0.34.0`
+- None recorded after `0.35.0`
 
 Highlights:
+
+## [0.35.0] - 2026-05-02
+
+Delivered specs:
+
+- `035` - Dynamic Planning And Flow Inference
+
+Highlights:
+
+- Replace keyword-first native planning with an evidence-driven `infer -> propose -> confirm` loop that persists `goal_plan_state`, `goal_plan_revision`, `planning_rationale`, and `verification_strategy` across `plan`, `run`, `status`, `next`, and `inspect`.
+- Add explicit `synod plan --confirm`, block native `run` while the current proposal is unconfirmed, and allow bounded replanning by superseding the active proposal revision when workspace evidence changes materially.
+- Align direct native `run --goal` with the same proposal-plus-confirm planning contract, then update README, getting-started, configuration, assistant guidance, roadmap, contributor docs, and changelog for the `0.35.0` release.
 
 ## [0.34.0] - 2026-05-02
 

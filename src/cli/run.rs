@@ -22,7 +22,6 @@ use crate::domain::task_context::TaskContext;
 use crate::domain::trace::{ExecutionTrace, TraceEventType};
 use crate::fixture::{FixtureRuntimeError, build_fixture_runtime, build_task_request};
 use crate::orchestrator::engine::{Orchestrator, OrchestratorError};
-use crate::orchestrator::flow_inference::infer_flow;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunCommandReport {
@@ -63,8 +62,9 @@ pub fn execute_native_direct_run(
         });
     }
 
-    let inferred_flow = record.goal.as_deref().and_then(infer_flow).map(|flow| flow.flow_name);
-    session::execute_plan(Some(workspace), inferred_flow.as_deref(), inferred_flow.is_none())
+    session::execute_plan(Some(workspace), None, false, false)
+        .map_err(RunCommandError::SessionCommand)?;
+    session::execute_plan(Some(workspace), None, false, true)
         .map_err(RunCommandError::SessionCommand)?;
     let report = session::execute_run(Some(workspace)).map_err(RunCommandError::SessionCommand)?;
     let trace_location = session_store

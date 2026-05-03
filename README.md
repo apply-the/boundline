@@ -13,7 +13,7 @@ through the decision loop, and inspect the resulting session state and traces.
 `synod init` remains optional bootstrap, declarative execution profiles remain
 available as an explicit compatibility path, and `synod workflow` adds an
 optional thin named-workflow layer over the same session-owned runtime. In
-`0.34.0`, workflows and direct runs remain the two primary entry styles on
+`0.35.0`, workflows and direct runs remain the two primary entry styles on
 that same Synod-owned runtime, while explicit compatibility follow-up remains a
 subordinate route. Direct `run --goal` remains the native-first entrypoint, but Synod
 now refuses to call bounded `bug-fix` and `change` work complete unless the
@@ -25,9 +25,10 @@ support a bounded plan. Governed verify-stage Canon work stays on that same
 operator path, and successful governed delivery now leaves
 `latest_changed_files`, `latest_validation_status`, and governed packet
 lineage visible on the same session follow-through story. Direct `run --goal`
-still bootstraps the native session path by default, confirms an inferred flow
-when possible or chooses no-flow planning when needed, and leaves the same
-persisted session story behind for `status`, `next`, and `inspect`.
+still bootstraps the native session path by default, creates one evidence-driven
+plan proposal, confirms that proposal automatically for the bootstrap path, and
+leaves the same persisted session story behind for `status`, `next`, and
+`inspect`.
 `run --compatibility --goal ...` keeps the declarative execution-profile route
 available as an explicit subordinate path. `capture`, `plan`, `run`, `status`,
 `next`, and `inspect` also project negotiated-delivery fields,
@@ -37,7 +38,7 @@ snapshots across the same session and trace story. `status`, `next`, and
 `inspect` now also project `follow_through_guidance`,
 `follow_through_evidence_source`, `follow_through_next_action`, and
 `follow_through_stop_reason` when persisted session or trace evidence can make
-the next bounded action explicit. In `0.34.0`, the native loop also persists
+the next bounded action explicit. In `0.35.0`, the native loop also persists
 explicit selector-driven actions such as `read`, `search`, `modify`, `test`,
 `ask`, and `replan`, and the read-side surfaces now keep the latest selector,
 rationale, evidence basis, and verification intent visible. Native execution now fails
@@ -59,7 +60,7 @@ The main surface is the `synod` CLI:
 - `doctor` validates that a workspace is ready to run.
 - `init` optionally bootstraps `.synod` workspace files and assistant runtime setup.
 - `config` shows, sets, and unsets routing defaults plus declared assistant runtime capabilities.
-- `start`, `capture`, `flow`, `plan`, and `step` drive the session workflow, with `capture` deriving one negotiated delivery packet before planning and `plan` assembling one bounded context pack before persisting a `GoalPlan`.
+- `start`, `capture`, `flow`, `plan`, and `step` drive the session workflow, with `capture` deriving one negotiated delivery packet before planning and `plan` assembling one bounded context pack before persisting a proposed or confirmed `GoalPlan`.
 - `run` executes a bounded delivery task end to end, preferring native session planning when a `GoalPlan` exists.
 - `status`, `next`, and `inspect` explain the current session, latest compatibility trace, authoritative follow-up state, explicit `route_owner`, material `route_config_projection`, effective routing, assistant bindings, context-pack summary and credibility, guided follow-through, the active negotiation summary, and cluster authority when a registered cluster owns the run.
 - `workflow list|run|status|resume|inspect` lets a named workflow reuse the same route, session, and trace surfaces without introducing a second runtime.
@@ -177,9 +178,10 @@ The shortest way to think about Synod is:
 2. Optionally run `synod init` once if you want scaffolded defaults.
 3. Optionally tune routing defaults with `synod config`.
 4. Capture a goal or provide Markdown briefs so Synod can persist one negotiated delivery packet.
-5. Run `synod plan` to persist a bounded `GoalPlan` only after the negotiated packet is credible and one bounded context pack is explicit enough to support planning, plus any inferred or explicit flow state.
-6. Run `synod run` to execute through the native decision loop.
-7. Read `status`, `next`, or `inspect` to continue from the active acceptance boundary, context-credibility state, and follow-up state.
+5. Run `synod plan` to persist an evidence-driven bounded `GoalPlan` proposal only after the negotiated packet is credible and one bounded context pack is explicit enough to support planning.
+6. Run `synod plan --confirm` to confirm the current proposal when the CLI reports that execution is waiting on plan confirmation.
+7. Run `synod run` to execute through the native decision loop.
+8. Read `status`, `next`, or `inspect` to continue from the active acceptance boundary, context-credibility state, and follow-up state.
 
 When you want a reusable named entrypoint for the same session-owned route, add
 `.synod/workflows.toml` and use:
@@ -272,6 +274,7 @@ synod flow bug-fix --workspace <workspace>
 # synod plan --workspace <workspace> --flow bug-fix
 # synod plan --workspace <workspace> --no-flow
 synod plan --workspace <workspace>
+synod plan --workspace <workspace> --confirm
 synod run --workspace <workspace>
 synod status --workspace <workspace>
 synod inspect --workspace <workspace>
@@ -284,6 +287,7 @@ through the primary workspace instead of switching ownership to a member:
 synod start --cluster <primary-workspace>
 synod capture --cluster <primary-workspace> --goal "Fix the failing add test"
 synod plan --cluster <primary-workspace>
+synod plan --cluster <primary-workspace> --confirm
 synod run --cluster <primary-workspace>
 synod status --cluster <primary-workspace>
 synod inspect --cluster <primary-workspace>
@@ -295,7 +299,8 @@ What those commands do, in short:
 - `start` initializes the workspace session.
 - `capture` stores human-authored goal and brief input in session state and persists `negotiation_goal_summary`, `negotiation_resolution`, and `negotiation_acceptance_boundary`.
 - `flow` optionally selects `bug-fix`, `change`, or `delivery` ahead of planning.
-- `plan` derives the next bounded `GoalPlan` from captured input plus workspace state only when the negotiated packet is credible, and persists confirmed, proposed, or absent flow state.
+- `plan` derives the next bounded `GoalPlan` from captured input plus workspace state only when the negotiated packet is credible, and persists proposal state, inferred flow state, revision, rationale, and verification strategy.
+- `plan --confirm` confirms the current proposal so native execution can continue.
 - `run` executes through the native session route whenever a `GoalPlan` exists; governed `bug-fix:investigate` and later verify-stage Canon `security-assessment` can stay on that same route, while declarative `.synod/execution.json` execution remains the explicit compatibility path.
 - `status` reports the current session snapshot with explicit `routing`, `execution_condition`, negotiation summary, next-step guidance, and clustered authority or participation cues when the run spans a registered cluster.
 - `inspect` summarizes the latest trace and evidence with the same route, negotiation, and execution-condition story plus trace-specific cluster detail.
@@ -326,9 +331,9 @@ synod run --workspace <workspace> --goal "Fix the failing add test"
 ```
 
 This native-first path does not require `.synod/execution.json`. It bootstraps a
-safe session, reuses negotiated delivery capture, confirms an inferred flow when
-possible, and leaves the same persisted native follow-up story behind for
-`status`, `next`, and `inspect`.
+safe session, reuses negotiated delivery capture, creates one evidence-driven
+proposal, confirms it for the direct-run bootstrap, and leaves the same
+persisted native follow-up story behind for `status`, `next`, and `inspect`.
 
 If you intentionally want the execution-profile path instead, opt in
 explicitly:
@@ -337,7 +342,7 @@ explicitly:
 synod run --workspace <workspace> --compatibility --goal "Fix the failing add test"
 ```
 
-In `0.34.0`, the explicit compatibility path still carries the negotiated delivery
+In `0.35.0`, the explicit compatibility path still carries the negotiated delivery
 summary into `run` and `inspect` so `negotiation_goal_summary`,
 `negotiation_resolution`, and `negotiation_acceptance_boundary` stay visible
 even when the authoritative follow-up state comes from an explicit
@@ -390,8 +395,8 @@ Depending on the manifest, that output can also include:
 - optionally tune defaults with `synod config show|set|unset`
 - run `synod doctor --workspace <workspace>`
 - capture a goal with `synod capture`
-- optionally select `bug-fix`, `change`, or `delivery` with `synod flow`, or confirm it during `synod plan`
-- run `synod plan` and `synod run` for the native session path
+- optionally select `bug-fix`, `change`, or `delivery` with `synod flow`, or let `synod plan` infer the flow from evidence
+- run `synod plan`, confirm the proposal with `synod plan --confirm` when required, then run `synod run` for the native session path
 - use direct `synod run --workspace <workspace> --goal ...` when you want Synod to bootstrap the native session path in one command
 - add `--compatibility` to direct `run --goal` only when you intentionally want execution-profile behavior
 - inspect the result with `synod status`, `synod next`, and `synod inspect`
@@ -531,10 +536,13 @@ the current release, see [`docs/adaptive-execution.md`](docs/adaptive-execution.
 For the concrete review configuration and voting rules still available in
 `0.17.0`, see [`docs/review-voting.md`](docs/review-voting.md).
 
-In `0.34.0`, native planning and follow-through can also project
+In `0.35.0`, native planning and follow-through can also project
 `context_summary`, `context_credibility`, `context_primary_inputs`,
 `context_provenance`, and `context_staleness_reason` through `run`, `status`,
-`next`, `inspect`, and the workflow-aware surfaces. Governed stages still
+`next`, `inspect`, and the workflow-aware surfaces. The same read-side surfaces
+now also project `goal_plan_state`, `goal_plan_revision`,
+`planning_rationale`, and `verification_strategy` while native execution stays
+blocked on an unconfirmed proposal. Governed stages still
 project `latest_governance_runtime`, `latest_governance_mode`,
 `latest_governance_run_ref`, packet provenance, autopilot candidates, approval
 waits, packet rejection outcomes, bounded `bug-fix:investigate` to `verify`
@@ -553,10 +561,11 @@ blocking member explicitly on the same read-side surfaces.
 ## Assistant Command Packs
 
 The repository also ships assistant-native command packs for Copilot, Codex,
-and Claude under `assistant/`. In `0.34.0`, those packs continue to include
+and Claude under `assistant/`. In `0.35.0`, those packs continue to include
 first-class workflow discovery and continuation commands, and now preserve the
-same selector-driven guidance plus context-pack summary and credibility
-vocabulary surfaced by native planning, status, next-step, and inspect output.
+same selector-driven guidance plus context-pack summary, proposal state,
+planning rationale, verification strategy, and credibility vocabulary surfaced
+by native planning, status, next-step, and inspect output.
 Gemini CLI guidance uses the same workflow-first vocabulary. They wrap the
 existing local CLI instead of introducing a second runtime surface.
 

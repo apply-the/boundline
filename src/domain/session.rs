@@ -10,7 +10,7 @@ use crate::domain::cluster::ClusterDeliveryStory;
 use crate::domain::decision::{Decision, DecisionStatus};
 use crate::domain::flow::SessionFlowState;
 use crate::domain::flow_policy::FlowPolicy;
-use crate::domain::goal_plan::{GoalPlan, GoalPlanFlowMode};
+use crate::domain::goal_plan::GoalPlan;
 use crate::domain::governance::{
     AutopilotDecisionRecord, GovernedStagePacket, GovernedStageRecord, PacketReuseBinding,
 };
@@ -345,6 +345,14 @@ pub struct SessionStatusView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub flow_state: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal_plan_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal_plan_revision: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub planning_rationale: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verification_strategy: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub active_workflow: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow_phase: Option<String>,
@@ -454,6 +462,10 @@ impl Default for SessionStatusView {
             requested_governance_owner: None,
             active_flow: None,
             flow_state: None,
+            goal_plan_state: None,
+            goal_plan_revision: None,
+            planning_rationale: None,
+            verification_strategy: None,
             active_workflow: None,
             workflow_phase: None,
             workflow_next_action: None,
@@ -1059,7 +1071,7 @@ impl RoutingOutcome {
                 Some("fixture_compatibility")
             }
             (RoutingMode::Blocked, RoutingSource::GoalPlan) => {
-                Some("native_goal_plan_pending_flow_confirmation")
+                Some("native_goal_plan_pending_plan_confirmation")
             }
             (RoutingMode::Blocked, RoutingSource::GoalCapture) => {
                 Some("native_session_pending_plan")
@@ -1071,11 +1083,11 @@ impl RoutingOutcome {
 
 pub fn routing_outcome(record: &ActiveSessionRecord) -> RoutingOutcome {
     if let Some(goal_plan) = record.goal_plan.as_ref() {
-        if goal_plan.flow_state().mode == GoalPlanFlowMode::Proposed {
+        if goal_plan.requires_confirmation() {
             return RoutingOutcome {
                 mode: RoutingMode::Blocked,
                 source: RoutingSource::GoalPlan,
-                reason: "flow confirmation is still pending before native execution".to_string(),
+                reason: "plan confirmation is still pending before native execution".to_string(),
             };
         }
 
@@ -1671,6 +1683,22 @@ mod tests {
                 .goal_plan
                 .as_ref()
                 .map(|goal_plan| goal_plan.flow_state().summary_text()),
+            goal_plan_state: record
+                .goal_plan
+                .as_ref()
+                .map(|goal_plan| goal_plan.proposal_state_text().to_string()),
+            goal_plan_revision: record
+                .goal_plan
+                .as_ref()
+                .map(|goal_plan| goal_plan.proposal_revision),
+            planning_rationale: record
+                .goal_plan
+                .as_ref()
+                .and_then(|goal_plan| goal_plan.planning_rationale.clone()),
+            verification_strategy: record
+                .goal_plan
+                .as_ref()
+                .and_then(|goal_plan| goal_plan.verification_strategy.clone()),
             active_workflow: record.active_workflow_name(),
             workflow_phase: record.active_workflow_phase_text(),
             workflow_next_action: record.active_workflow_next_action(),
