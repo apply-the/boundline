@@ -34,7 +34,7 @@ Ask only for the missing workspace or authored input, then provide the matching 
 Tell the user to run them one at a time and paste the outputs before continuing.
 
 ## Output Interpretation
-Summarize the captured goal or `authored_input_summary`, `authored_input_sources`, any requested governance intent, the resulting plan state, any proposed, confirmed, skipped, or absent `flow_state`, any `goal_plan_state`, `goal_plan_revision`, `planning_rationale`, `verification_strategy`, any CLI-reported confirm or clarification guidance, and the CLI-reported `next_command`.
+Summarize the captured goal or `authored_input_summary`, `authored_input_sources`, any requested governance intent, the resulting plan state, any proposed, confirmed, skipped, or absent `flow_state`, any `goal_plan_state`, `goal_plan_revision`, `planning_rationale`, `verification_strategy`, any CLI-reported confirm or clarification guidance, and the CLI-reported `next_command`. When planning also reports `context_summary`, `context_credibility`, `context_primary_inputs`, `context_provenance`, or `context_staleness_reason`, preserve those fields exactly. If that context is Canon-grounded, also preserve governed artifact refs and stale-memory wording exactly and treat non-credible context as a real stop condition.
 
 ## Next-Step Routing
 Prefer the CLI-reported `next_command`; when planning is waiting on plan confirmation, follow that CLI route instead of inventing `/synod-run`.

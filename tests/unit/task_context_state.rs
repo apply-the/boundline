@@ -4,16 +4,19 @@ use synod::domain::cluster::{
     ClusteredExecutionKind, WorkspaceParticipationKind, WorkspaceParticipationRecord,
 };
 use synod::domain::governance::{
-    ApprovalState, AutopilotAction, AutopilotDecisionRecord, GovernanceLifecycleState,
-    GovernanceRuntimeKind, GovernedStagePacket, GovernedStageRecord, PacketReadiness,
-    PacketReuseBinding,
+    ApprovalState, AutopilotAction, AutopilotDecisionRecord, CanonCapabilitySnapshot,
+    CompactedCanonMemory, GovernanceLifecycleState, GovernanceRuntimeKind, GovernedStagePacket,
+    GovernedStageRecord, MemoryCredibilityState, PacketReadiness, PacketReuseBinding,
 };
 use synod::domain::limits::RunLimits;
 use synod::domain::step::{ErrorInfo, Recoverability, Step, StepResultSummary};
 use synod::domain::task::{
     ClarificationReasonKind, ClarificationRecord, ClarificationStatus, DerivedTaskDraft,
 };
-use synod::domain::task_context::{LATEST_GOVERNANCE_STAGE_KEY, TaskContext, TaskContextError};
+use synod::domain::task_context::{
+    LATEST_CANON_CAPABILITY_SNAPSHOT_KEY, LATEST_COMPACTED_CANON_MEMORY_KEY,
+    LATEST_GOVERNANCE_STAGE_KEY, TaskContext, TaskContextError,
+};
 
 #[test]
 fn task_context_merges_state_patches_and_repairs_nested_buckets() {
@@ -77,6 +80,7 @@ fn task_context_round_trips_governance_state_records() {
         readiness: PacketReadiness::Reusable,
         missing_sections: Vec::new(),
         headline: "local packet".to_string(),
+        reason_code: None,
     };
     let reuse = PacketReuseBinding {
         upstream_stage_key: "bug-fix:investigate".to_string(),
@@ -123,6 +127,68 @@ fn task_context_reports_invalid_governance_state_payloads() {
         error,
         TaskContextError::StateDeserializationFailed { ref key, .. }
             if key == LATEST_GOVERNANCE_STAGE_KEY
+    ));
+}
+
+#[test]
+fn task_context_round_trips_canon_snapshot_and_compacted_memory() {
+    let mut context =
+        TaskContext::new("session-context", "/tmp/synod-context", RunLimits::default(), Map::new());
+    let snapshot = CanonCapabilitySnapshot {
+        canon_version: "0.39.0".to_string(),
+        supported_schema_versions: vec!["2026-02-01".to_string()],
+        operations: vec!["start".to_string(), "refresh".to_string(), "capabilities".to_string()],
+        supported_modes: Vec::new(),
+        status_values: vec!["governed_ready".to_string()],
+        approval_state_values: vec!["not_needed".to_string()],
+        packet_readiness_values: vec!["reusable".to_string()],
+        compatibility_notes: vec!["stable-json".to_string()],
+    };
+    let memory = CompactedCanonMemory {
+        headline: "Canon verification packet is still credible".to_string(),
+        credibility: MemoryCredibilityState::Credible,
+        stage_key: Some("change:verify".to_string()),
+        run_ref: Some("run-123".to_string()),
+        packet_ref: Some(".canon/runs/run-123".to_string()),
+        reason_code: None,
+        artifact_refs: vec![".canon/runs/run-123/verification.md".to_string()],
+        mode_summary: None,
+        possible_actions: Vec::new(),
+        recommended_next_action: None,
+        evidence_summary: None,
+    };
+
+    context.set_latest_canon_capability_snapshot(&snapshot).unwrap();
+    context.set_latest_compacted_canon_memory(&memory).unwrap();
+
+    assert_eq!(context.latest_canon_capability_snapshot().unwrap(), Some(snapshot));
+    assert_eq!(context.latest_compacted_canon_memory().unwrap(), Some(memory));
+}
+
+#[test]
+fn task_context_reports_invalid_canon_memory_payloads() {
+    let mut initial_state = Map::new();
+    initial_state.insert(LATEST_CANON_CAPABILITY_SNAPSHOT_KEY.to_string(), json!("broken"));
+    initial_state.insert(LATEST_COMPACTED_CANON_MEMORY_KEY.to_string(), json!("broken"));
+    let context = TaskContext::new(
+        "session-context",
+        "/tmp/synod-context",
+        RunLimits::default(),
+        initial_state,
+    );
+
+    let snapshot_error = context.latest_canon_capability_snapshot().unwrap_err();
+    assert!(matches!(
+        snapshot_error,
+        TaskContextError::StateDeserializationFailed { ref key, .. }
+            if key == LATEST_CANON_CAPABILITY_SNAPSHOT_KEY
+    ));
+
+    let memory_error = context.latest_compacted_canon_memory().unwrap_err();
+    assert!(matches!(
+        memory_error,
+        TaskContextError::StateDeserializationFailed { ref key, .. }
+            if key == LATEST_COMPACTED_CANON_MEMORY_KEY
     ));
 }
 

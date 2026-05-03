@@ -12,7 +12,8 @@ use crate::domain::flow::SessionFlowState;
 use crate::domain::flow_policy::FlowPolicy;
 use crate::domain::goal_plan::GoalPlan;
 use crate::domain::governance::{
-    AutopilotDecisionRecord, GovernedStagePacket, GovernedStageRecord, PacketReuseBinding,
+    AutopilotDecisionRecord, CompactedCanonMemory, GovernedStagePacket, GovernedStageRecord,
+    PacketReuseBinding,
 };
 use crate::domain::negotiation::NegotiatedDeliveryPacket;
 use crate::domain::task::{Task, TaskPersistenceError, TaskStatus, TerminalReason};
@@ -576,7 +577,9 @@ impl SessionStatusView {
         }
 
         let expected_context_summary =
-            record.goal_plan.as_ref().and_then(|goal_plan| goal_plan.context_summary());
+            record.goal_plan.as_ref().and_then(|goal_plan| goal_plan.context_summary()).or_else(
+                || record.active_task.as_ref().and_then(task_state_canon_memory_context_summary),
+            );
         if self.context_summary != expected_context_summary {
             return Err(SessionValidationError::StatusViewContextSummaryMismatch {
                 expected: expected_context_summary,
@@ -584,8 +587,13 @@ impl SessionStatusView {
             });
         }
 
-        let expected_context_credibility =
-            record.goal_plan.as_ref().and_then(|goal_plan| goal_plan.context_credibility());
+        let expected_context_credibility = record
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| goal_plan.context_credibility())
+            .or_else(|| {
+                record.active_task.as_ref().and_then(task_state_canon_memory_context_credibility)
+            });
         if self.context_credibility != expected_context_credibility {
             return Err(SessionValidationError::StatusViewContextCredibilityMismatch {
                 expected: expected_context_credibility,
@@ -593,10 +601,16 @@ impl SessionStatusView {
             });
         }
 
-        let expected_context_primary_inputs = record.goal_plan.as_ref().and_then(|goal_plan| {
-            let inputs = goal_plan.context_primary_inputs();
-            (!inputs.is_empty()).then_some(inputs)
-        });
+        let expected_context_primary_inputs = record
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| {
+                let inputs = goal_plan.context_primary_inputs();
+                (!inputs.is_empty()).then_some(inputs)
+            })
+            .or_else(|| {
+                record.active_task.as_ref().and_then(task_state_canon_memory_primary_inputs)
+            });
         if self.context_primary_inputs != expected_context_primary_inputs {
             return Err(SessionValidationError::StatusViewContextPrimaryInputsMismatch {
                 expected: expected_context_primary_inputs,
@@ -604,10 +618,14 @@ impl SessionStatusView {
             });
         }
 
-        let expected_context_provenance = record.goal_plan.as_ref().and_then(|goal_plan| {
-            let lines = goal_plan.context_provenance_lines();
-            (!lines.is_empty()).then_some(lines)
-        });
+        let expected_context_provenance = record
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| {
+                let lines = goal_plan.context_provenance_lines();
+                (!lines.is_empty()).then_some(lines)
+            })
+            .or_else(|| record.active_task.as_ref().and_then(task_state_canon_memory_provenance));
         if self.context_provenance != expected_context_provenance {
             return Err(SessionValidationError::StatusViewContextProvenanceMismatch {
                 expected: expected_context_provenance,
@@ -619,7 +637,11 @@ impl SessionStatusView {
             .goal_plan
             .as_ref()
             .and_then(|goal_plan| goal_plan.context_pack.as_ref())
-            .and_then(|pack| pack.staleness_reason.clone());
+            .and_then(|pack| pack.staleness_reason.clone())
+            .or_else(|| record.goal_plan.as_ref().and_then(GoalPlan::canon_memory_staleness_reason))
+            .or_else(|| {
+                record.active_task.as_ref().and_then(task_state_canon_memory_staleness_reason)
+            });
         if self.context_staleness_reason != expected_context_staleness_reason {
             return Err(SessionValidationError::StatusViewContextStalenessReasonMismatch {
                 expected: expected_context_staleness_reason,
@@ -1448,7 +1470,9 @@ pub(crate) fn task_state_governance_state_text(task: &Task) -> Option<String> {
 }
 
 pub(crate) fn task_state_governance_blocked_reason(task: &Task) -> Option<String> {
-    task_state_governed_stage(task).and_then(|record| record.blocked_reason)
+    task_state_governed_stage(task)
+        .and_then(|record| record.blocked_reason)
+        .or_else(|| task_state_canon_memory_staleness_reason(task))
 }
 
 pub(crate) fn task_state_governance_packet_ref(task: &Task) -> Option<String> {
@@ -1492,13 +1516,24 @@ pub(crate) fn task_state_governance_decision_headline(task: &Task) -> Option<Str
 }
 
 pub(crate) fn task_state_governance_candidate_actions(task: &Task) -> Option<Vec<String>> {
-    task_state_governance_decision(task).map(|decision| {
-        decision
-            .candidate_actions
-            .into_iter()
-            .map(|action| autopilot_action_text(action).to_string())
-            .collect::<Vec<_>>()
-    })
+    task_state_governance_decision(task)
+        .map(|decision| {
+            decision
+                .candidate_actions
+                .into_iter()
+                .map(|action| autopilot_action_text(action).to_string())
+                .collect::<Vec<_>>()
+        })
+        .or_else(|| {
+            task_state_compacted_canon_memory(task).and_then(|memory| {
+                let actions = memory
+                    .possible_actions
+                    .into_iter()
+                    .map(|action| action.action)
+                    .collect::<Vec<_>>();
+                (!actions.is_empty()).then_some(actions)
+            })
+        })
 }
 
 pub(crate) fn governance_next_action_for_state(governance_state: Option<&str>) -> Option<String> {
@@ -1512,8 +1547,59 @@ pub(crate) fn governance_next_action_for_state(governance_state: Option<&str>) -
 }
 
 pub(crate) fn task_state_governance_next_action(task: &Task) -> Option<String> {
+    if let Some(memory) = task_state_compacted_canon_memory(task)
+        && let Some(recommended_next_action) = memory.recommended_next_action
+    {
+        return Some(format!(
+            "{}: {}",
+            recommended_next_action.action, recommended_next_action.rationale
+        ));
+    }
+
     let governance_state = task_state_governance_state_text(task);
     governance_next_action_for_state(governance_state.as_deref())
+}
+
+pub(crate) fn task_state_compacted_canon_memory(task: &Task) -> Option<CompactedCanonMemory> {
+    task.context.latest_compacted_canon_memory().ok().flatten()
+}
+
+pub(crate) fn task_state_canon_memory_context_summary(task: &Task) -> Option<String> {
+    task_state_compacted_canon_memory(task)
+        .map(|memory| format!("canon memory: {}", memory.summary_text()))
+}
+
+pub(crate) fn task_state_canon_memory_context_credibility(task: &Task) -> Option<String> {
+    task_state_compacted_canon_memory(task).map(|memory| memory.credibility.as_str().to_string())
+}
+
+pub(crate) fn task_state_canon_memory_primary_inputs(task: &Task) -> Option<Vec<String>> {
+    task_state_compacted_canon_memory(task)
+        .and_then(|memory| (!memory.artifact_refs.is_empty()).then_some(memory.artifact_refs))
+}
+
+pub(crate) fn task_state_canon_memory_provenance(task: &Task) -> Option<Vec<String>> {
+    task_state_compacted_canon_memory(task).map(|memory| {
+        let mut lines =
+            vec![format!("canon_memory: {} [{}]", memory.headline, memory.credibility.as_str())];
+        if let Some(packet_ref) = memory.packet_ref {
+            lines.push(format!("canon_memory_packet: {packet_ref}"));
+        }
+        if let Some(reason_code) = memory.reason_code {
+            lines.push(format!("canon_memory_reason: {reason_code}"));
+        }
+        for artifact_ref in memory.artifact_refs {
+            lines.push(format!("canon_artifact: {artifact_ref}"));
+        }
+        lines
+    })
+}
+
+pub(crate) fn task_state_canon_memory_staleness_reason(task: &Task) -> Option<String> {
+    task_state_compacted_canon_memory(task).and_then(|memory| {
+        (memory.credibility != crate::domain::governance::MemoryCredibilityState::Credible)
+            .then(|| memory.reason_code.unwrap_or(memory.headline))
+    })
 }
 
 pub(crate) fn task_state_workspace_slice_summary(task: &Task) -> Option<String> {
@@ -1813,6 +1899,7 @@ mod tests {
                 readiness: crate::domain::governance::PacketReadiness::Reusable,
                 missing_sections: Vec::new(),
                 headline: "governed discovery packet".to_string(),
+                reason_code: None,
             })
             .unwrap();
         task.context

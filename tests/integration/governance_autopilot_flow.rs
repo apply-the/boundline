@@ -89,7 +89,7 @@ fn governance_autopilot_flow_selects_mode_and_refreshes_after_approval() {
     assert!(status_text.contains("latest_governance_mode: discovery"), "{status_text}");
     assert!(status_text.contains("latest_governance_state: awaiting_approval"), "{status_text}");
     assert!(
-        status_text.contains("governance_next_action: wait for approval and rerun synod status"),
+        status_text.contains("governance_next_action: approve: Canon is waiting for approval"),
         "{status_text}"
     );
     assert!(status_text.contains("next_command: synod status"), "{status_text}");
@@ -238,7 +238,8 @@ fn governance_autopilot_flow_refreshes_security_assessment_approval_through_stat
     assert!(status_text.contains("latest_governance_mode: security-assessment"), "{status_text}");
     assert!(status_text.contains("latest_governance_state: awaiting_approval"), "{status_text}");
     assert!(
-        status_text.contains("governance_next_action: wait for approval and rerun synod status"),
+        status_text
+            .contains("governance_next_action: approve: Canon is waiting for security approval"),
         "{status_text}"
     );
     assert!(status_text.contains("next_command: synod status"), "{status_text}");

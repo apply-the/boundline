@@ -6,9 +6,9 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::domain::governance::{
-    ApprovalState, CanonMode, GovernanceLifecycleState, GovernanceRuntimeKind, GovernedStagePacket,
-    PacketReadiness, SystemContextBinding, classify_packet_readiness,
-    derived_packet_missing_sections,
+    ApprovalState, CanonCapabilitySnapshot, CanonMode, GovernanceLifecycleState,
+    GovernanceRuntimeKind, GovernedStagePacket, PacketReadiness, SystemContextBinding,
+    classify_packet_readiness, derived_packet_missing_sections,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -76,6 +76,8 @@ pub struct GovernanceRuntimeResponse {
     pub run_ref: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub packet: Option<GovernedStagePacket>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason_code: Option<String>,
     pub message: String,
 }
 
@@ -125,6 +127,7 @@ impl GovernanceRuntime for LocalGovernanceRuntime {
                 approval_state: ApprovalState::NotNeeded,
                 run_ref: None,
                 packet: None,
+                reason_code: None,
                 message: format!(
                     "local governance blocked {} because no bounded stage context was provided",
                     request.stage_key
@@ -169,6 +172,7 @@ impl GovernanceRuntime for LocalGovernanceRuntime {
             readiness,
             missing_sections: Vec::new(),
             headline: format!("local governance packet ready for {}", request.stage_key),
+            reason_code: None,
         };
 
         let status = if packet.readiness == PacketReadiness::Reusable {
@@ -182,6 +186,7 @@ impl GovernanceRuntime for LocalGovernanceRuntime {
             approval_state: ApprovalState::NotNeeded,
             run_ref: None,
             packet: Some(packet),
+            reason_code: None,
             message: format!("local governance evaluated {}", request.stage_key),
         })
     }
@@ -310,6 +315,25 @@ impl GovernanceRuntime for CanonCliRuntime {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+struct CanonCapabilitiesWireResponse {
+    pub canon_version: String,
+    #[serde(default)]
+    pub supported_schema_versions: Vec<String>,
+    #[serde(default)]
+    pub operations: Vec<String>,
+    #[serde(default)]
+    pub supported_modes: Vec<CanonMode>,
+    #[serde(default)]
+    pub status_values: Vec<String>,
+    #[serde(default)]
+    pub approval_state_values: Vec<String>,
+    #[serde(default)]
+    pub packet_readiness_values: Vec<String>,
+    #[serde(default)]
+    pub compatibility_notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 struct CanonCliWireResponse {
     pub status: GovernanceLifecycleState,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -328,6 +352,8 @@ struct CanonCliWireResponse {
     pub missing_sections: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub headline: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason_code: Option<String>,
     pub message: String,
 }
 
@@ -370,6 +396,57 @@ fn validate_canon_request(request: &GovernanceRuntimeRequest) -> Option<Governan
             "Canon blocked {} because required field '{field}' was not provided",
             request.stage_key
         ))
+    })
+}
+
+pub fn query_canon_capabilities(
+    command: &str,
+    workspace_ref: &Path,
+) -> Result<Option<CanonCapabilitySnapshot>, GovernanceRuntimeError> {
+    if command.trim().is_empty() {
+        return Ok(None);
+    }
+
+    let mut process = Command::new(command);
+    process
+        .arg("governance")
+        .arg("capabilities")
+        .arg("--json")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    if workspace_ref.is_dir() {
+        process.current_dir(workspace_ref);
+    }
+
+    let output = match process.output() {
+        Ok(output) => output,
+        Err(_) => return Ok(None),
+    };
+
+    if !output.status.success() {
+        return Ok(None);
+    }
+
+    Ok(parse_canon_capabilities(&output.stdout))
+}
+
+fn parse_canon_capabilities(stdout: &[u8]) -> Option<CanonCapabilitySnapshot> {
+    if stdout.is_empty() {
+        return None;
+    }
+
+    let wire = serde_json::from_slice::<CanonCapabilitiesWireResponse>(stdout).ok()?;
+    Some(CanonCapabilitySnapshot {
+        canon_version: wire.canon_version,
+        supported_schema_versions: wire.supported_schema_versions,
+        operations: wire.operations,
+        supported_modes: wire.supported_modes,
+        status_values: wire.status_values,
+        approval_state_values: wire.approval_state_values,
+        packet_readiness_values: wire.packet_readiness_values,
+        compatibility_notes: wire.compatibility_notes,
     })
 }
 
@@ -418,6 +495,7 @@ fn normalize_canon_response(
             readiness,
             missing_sections,
             headline: wire.headline.clone().unwrap_or_else(|| wire.message.clone()),
+            reason_code: wire.reason_code.clone(),
         }
     });
 
@@ -435,6 +513,7 @@ fn normalize_canon_response(
         approval_state: wire.approval_state,
         run_ref: wire.run_ref,
         packet,
+        reason_code: wire.reason_code,
         message,
     }
 }
@@ -445,6 +524,7 @@ fn blocked_canon_response(message: String) -> GovernanceRuntimeResponse {
         approval_state: ApprovalState::NotNeeded,
         run_ref: None,
         packet: None,
+        reason_code: None,
         message,
     }
 }
@@ -455,6 +535,7 @@ fn failed_canon_response(message: String) -> GovernanceRuntimeResponse {
         approval_state: ApprovalState::NotNeeded,
         run_ref: None,
         packet: None,
+        reason_code: None,
         message,
     }
 }
@@ -469,4 +550,168 @@ pub enum GovernanceRuntimeError {
     Io(std::io::Error),
     #[error("governance runtime returned malformed output: {0}")]
     MalformedOutput(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    use uuid::Uuid;
+
+    use super::{
+        CanonCliWireResponse, GovernanceBoundedContext, GovernanceRequestKind,
+        GovernanceRuntimeRequest, normalize_canon_response, parse_canon_capabilities,
+        parse_canon_response, query_canon_capabilities,
+    };
+    use crate::domain::governance::{
+        ApprovalState, CanonMode, GovernanceLifecycleState, PacketReadiness, SystemContextBinding,
+    };
+
+    fn temp_workspace(prefix: &str) -> std::path::PathBuf {
+        let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+        fs::create_dir_all(&workspace).unwrap();
+        workspace
+    }
+
+    fn write_shell_script(prefix: &str, body: &str) -> std::path::PathBuf {
+        let workspace = temp_workspace(prefix);
+        let script_path = workspace.join("canon-stub.sh");
+        fs::write(&script_path, body).unwrap();
+        let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions).unwrap();
+        script_path
+    }
+
+    fn request(workspace_ref: &str) -> GovernanceRuntimeRequest {
+        GovernanceRuntimeRequest {
+            request_kind: GovernanceRequestKind::Start,
+            governance_attempt_id: "attempt-1".to_string(),
+            stage_key: "change:verify".to_string(),
+            goal: "Verify a governed change".to_string(),
+            workspace_ref: workspace_ref.to_string(),
+            autopilot: false,
+            mode: Some(CanonMode::Verification),
+            system_context: Some(SystemContextBinding::Existing),
+            risk: Some("medium".to_string()),
+            zone: Some("internal".to_string()),
+            owner: Some("synod".to_string()),
+            run_ref: None,
+            packet_ref: None,
+            bounded_context: GovernanceBoundedContext {
+                read_targets: vec!["src/lib.rs".to_string()],
+                stage_brief_ref: None,
+                reused_packets: Vec::new(),
+            },
+            input_documents: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn parse_canon_response_preserves_reason_code_and_packet_metadata() {
+        let workspace = temp_workspace("canon-governance-runtime");
+        let packet_ref = "canon/run-123/verification";
+        let document_ref = format!("{packet_ref}/verification.md");
+        let document_path = workspace.join(&document_ref);
+        fs::create_dir_all(document_path.parent().unwrap()).unwrap();
+        fs::write(&document_path, "# Verification\n\nCredible validation evidence.").unwrap();
+
+        let request = request(workspace.to_string_lossy().as_ref());
+        let stdout = format!(
+            "{{\"status\":\"governed_ready\",\"approval_state\":\"not_needed\",\"message\":\"Canon verified the stage\",\"run_ref\":\"run-123\",\"packet_ref\":\"{packet_ref}\",\"expected_document_refs\":[\"{document_ref}\"],\"document_refs\":[\"{document_ref}\"],\"packet_readiness\":\"reusable\",\"headline\":\"Verification packet ready\",\"reason_code\":\"packet_ready\"}}"
+        );
+
+        let response = parse_canon_response(&request, stdout.as_bytes()).unwrap();
+
+        assert_eq!(response.status, GovernanceLifecycleState::GovernedReady);
+        assert_eq!(response.reason_code.as_deref(), Some("packet_ready"));
+        assert_eq!(response.run_ref.as_deref(), Some("run-123"));
+
+        let packet = response.packet.expect("packet should be present");
+        assert_eq!(packet.readiness, PacketReadiness::Reusable);
+        assert_eq!(packet.reason_code.as_deref(), Some("packet_ready"));
+        assert_eq!(packet.headline, "Verification packet ready");
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn normalize_canon_response_blocks_non_reusable_ready_packet() {
+        let workspace = temp_workspace("canon-governance-runtime-blocked");
+        let request = request(workspace.to_string_lossy().as_ref());
+        let wire = CanonCliWireResponse {
+            status: GovernanceLifecycleState::GovernedReady,
+            run_ref: Some("run-456".to_string()),
+            packet_ref: Some("canon/run-456/verification".to_string()),
+            expected_document_refs: vec!["canon/run-456/verification/verification.md".to_string()],
+            document_refs: Vec::new(),
+            approval_state: ApprovalState::NotNeeded,
+            packet_readiness: PacketReadiness::Incomplete,
+            missing_sections: vec!["summary".to_string()],
+            headline: Some("Verification packet incomplete".to_string()),
+            reason_code: Some("missing_sections".to_string()),
+            message: "Canon produced an incomplete packet".to_string(),
+        };
+
+        let response = normalize_canon_response(&request, wire);
+
+        assert_eq!(response.status, GovernanceLifecycleState::Blocked);
+        assert_eq!(response.reason_code.as_deref(), Some("missing_sections"));
+        assert_eq!(response.message, "Canon produced a non-reusable packet for change:verify");
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn parse_canon_capabilities_reads_supported_surface() {
+        let stdout = br#"{
+            "canon_version": "0.39.0",
+            "supported_schema_versions": ["2026-02-01"],
+            "operations": ["start", "refresh", "capabilities"],
+            "supported_modes": ["discovery", "verification", "pr-review"],
+            "status_values": ["pending_selection", "running", "governed_ready", "awaiting_approval", "blocked", "completed", "failed"],
+            "approval_state_values": ["not_needed", "requested", "granted", "rejected", "expired"],
+            "packet_readiness_values": ["pending", "incomplete", "reusable", "rejected"],
+            "compatibility_notes": ["stable-json", "mode-summary-separate"]
+        }"#;
+
+        let snapshot = parse_canon_capabilities(stdout).unwrap();
+
+        assert_eq!(snapshot.canon_version, "0.39.0");
+        assert_eq!(snapshot.supported_modes.len(), 3);
+        assert!(snapshot.compatibility_notes.contains(&"stable-json".to_string()));
+    }
+
+    #[test]
+    fn query_canon_capabilities_returns_none_for_blank_or_missing_command() {
+        let workspace = temp_workspace("canon-capabilities-empty-command");
+
+        assert_eq!(query_canon_capabilities("", &workspace).unwrap(), None);
+        assert_eq!(
+            query_canon_capabilities("/definitely/missing/canon", &workspace).unwrap(),
+            None
+        );
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn query_canon_capabilities_reads_cli_output() {
+        let workspace = temp_workspace("canon-capabilities-runtime");
+        let script = write_shell_script(
+            "canon-capabilities-command",
+            "#!/bin/sh\nprintf '%s' '{\"canon_version\":\"0.39.0\",\"supported_schema_versions\":[\"2026-02-01\"],\"operations\":[\"start\",\"refresh\",\"capabilities\"],\"supported_modes\":[\"verification\"],\"status_values\":[\"governed_ready\"],\"approval_state_values\":[\"not_needed\"],\"packet_readiness_values\":[\"reusable\"],\"compatibility_notes\":[\"stable-json\"]}'\n",
+        );
+
+        let snapshot = query_canon_capabilities(script.to_string_lossy().as_ref(), &workspace)
+            .unwrap()
+            .expect("snapshot should be parsed");
+
+        assert_eq!(snapshot.canon_version, "0.39.0");
+        assert_eq!(snapshot.operations, vec!["start", "refresh", "capabilities"]);
+
+        fs::remove_dir_all(workspace).unwrap();
+        fs::remove_dir_all(script.parent().unwrap()).unwrap();
+    }
 }

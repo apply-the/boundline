@@ -1,6 +1,12 @@
+use std::path::Path;
+
 use serde_json::json;
 use synod::domain::brief::AuthoredBriefResolutionState;
 use synod::domain::flow::FlowStepMetadata;
+use synod::domain::governance::{
+    CanonCapabilitySnapshot, CanonModeSummary, CanonResultActionSummary, CompactedCanonMemory,
+    MemoryCredibilityState,
+};
 use synod::domain::limits::RunLimits;
 use synod::domain::task_context::TaskContext;
 use synod::domain::task_context::{
@@ -15,10 +21,10 @@ use synod::{
     CanonRuntimeConfig, GovernanceBoundedContext, GovernanceIntent, GovernanceLifecycleState,
     GovernanceProfile, GovernanceRuntimeKind, GovernedStagePacket, GovernedStageRecord,
     InputSourceKind, InputSourceReference, PacketReadiness, PacketReuseBinding,
-    StageGovernancePolicy, SystemContextBinding, bounded_reused_packets, build_autopilot_decision,
-    escalation_target_stage_key, governance_stage_key, governance_state_patch,
-    narrowed_bounded_context, select_packet_reuse_binding, selected_stage_policy,
-    supported_canon_modes_for_stage,
+    StageGovernancePolicy, SystemContextBinding, autopilot_action_text, bounded_reused_packets,
+    build_autopilot_decision, classify_packet_readiness, escalation_target_stage_key,
+    governance_stage_key, governance_state_patch, narrowed_bounded_context,
+    select_packet_reuse_binding, selected_stage_policy, supported_canon_modes_for_stage,
 };
 
 fn sample_record() -> GovernedStageRecord {
@@ -197,6 +203,65 @@ fn governance_input_documents_uses_first_workspace_doc_as_stage_brief() {
 }
 
 #[test]
+fn canon_helper_summaries_render_expected_text() {
+    let snapshot = CanonCapabilitySnapshot {
+        canon_version: "0.39.0".to_string(),
+        supported_schema_versions: vec!["2026-02-01".to_string()],
+        operations: vec!["start".to_string(), "refresh".to_string()],
+        supported_modes: vec![CanonMode::Discovery],
+        status_values: vec!["governed_ready".to_string()],
+        approval_state_values: vec!["not_needed".to_string()],
+        packet_readiness_values: vec!["reusable".to_string()],
+        compatibility_notes: Vec::new(),
+    };
+    let mode_summary = CanonModeSummary {
+        headline: "Verification packet ready".to_string(),
+        artifact_packet_summary: "Primary artifact is ready".to_string(),
+        execution_posture: Some("recommendation-only".to_string()),
+        primary_artifact_title: "Verification".to_string(),
+        primary_artifact_path: ".canon/runs/run-1/verification.md".to_string(),
+        primary_artifact_action: CanonResultActionSummary {
+            label: "inspect".to_string(),
+            target: ".canon/runs/run-1/verification.md".to_string(),
+        },
+        result_excerpt: "No contradiction found".to_string(),
+        action_chip_labels: vec!["inspect".to_string()],
+    };
+    let memory = CompactedCanonMemory {
+        headline: "Canon verification packet is still credible".to_string(),
+        credibility: MemoryCredibilityState::Credible,
+        stage_key: Some("change:verify".to_string()),
+        run_ref: Some("run-1".to_string()),
+        packet_ref: Some(".canon/runs/run-1".to_string()),
+        reason_code: None,
+        artifact_refs: vec![".canon/runs/run-1/verification.md".to_string()],
+        mode_summary: Some(mode_summary.clone()),
+        possible_actions: Vec::new(),
+        recommended_next_action: None,
+        evidence_summary: None,
+    };
+
+    assert_eq!(snapshot.summary_text(), "Canon 0.39.0 capabilities available");
+    assert!(mode_summary.summary_text().contains("execution posture: recommendation-only"));
+    assert!(memory.summary_text().contains("Canon verification packet is still credible"));
+    assert_eq!(MemoryCredibilityState::Stale.as_str(), "stale");
+    assert_eq!(autopilot_action_text(AutopilotAction::AwaitApproval), "await_approval");
+}
+
+#[test]
+fn packet_readiness_defaults_to_incomplete_without_expected_documents() {
+    let readiness = classify_packet_readiness(
+        Path::new("/tmp/unused"),
+        &[],
+        &[],
+        &[],
+        PacketReadiness::Reusable,
+    );
+
+    assert_eq!(readiness, PacketReadiness::Incomplete);
+}
+
+#[test]
 fn governance_state_patch_writes_all_present_entries() {
     let record = sample_record();
     let packet = GovernedStagePacket {
@@ -208,6 +273,7 @@ fn governance_state_patch_writes_all_present_entries() {
         readiness: PacketReadiness::Reusable,
         missing_sections: Vec::new(),
         headline: "local packet".to_string(),
+        reason_code: None,
     };
     let reuse = PacketReuseBinding {
         upstream_stage_key: "bug-fix:investigate".to_string(),
@@ -227,8 +293,8 @@ fn governance_state_patch_writes_all_present_entries() {
         blocked_reason: None,
     };
 
-    let patch =
-        governance_state_patch(&record, Some(&packet), Some(&reuse), Some(&decision)).unwrap();
+    let patch = governance_state_patch(&record, Some(&packet), Some(&reuse), Some(&decision), None)
+        .unwrap();
 
     assert_eq!(patch[LATEST_GOVERNANCE_STAGE_KEY]["stage_key"], "bug-fix:investigate");
     assert_eq!(patch[LATEST_GOVERNANCE_PACKET_KEY]["packet_ref"], packet.packet_ref);
@@ -238,7 +304,7 @@ fn governance_state_patch_writes_all_present_entries() {
 
 #[test]
 fn governance_state_patch_omits_optional_entries_when_absent() {
-    let patch = governance_state_patch(&sample_record(), None, None, None).unwrap();
+    let patch = governance_state_patch(&sample_record(), None, None, None, None).unwrap();
 
     assert!(patch.contains_key(LATEST_GOVERNANCE_STAGE_KEY));
     assert!(patch[LATEST_GOVERNANCE_PACKET_KEY].is_null());
@@ -614,6 +680,7 @@ fn governance_reuse_binding_uses_immediate_upstream_stage_context() {
             readiness: PacketReadiness::Reusable,
             missing_sections: Vec::new(),
             headline: "investigation packet ready".to_string(),
+            reason_code: None,
         })
         .unwrap();
     let metadata = FlowStepMetadata {
@@ -669,6 +736,7 @@ fn governance_reuse_binding_supports_same_stage_rerun() {
             readiness: PacketReadiness::Reusable,
             missing_sections: Vec::new(),
             headline: "implementation packet ready".to_string(),
+            reason_code: None,
         })
         .unwrap();
     let metadata = FlowStepMetadata {

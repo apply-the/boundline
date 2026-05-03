@@ -19,9 +19,21 @@ recorded workspace version.
 
 Delivered specs:
 
-- None recorded after `0.35.0`
+- None recorded after `0.36.0`
 
 Highlights:
+
+## [0.36.0] - 2026-05-03
+
+Delivered specs:
+
+- `036` - Canon-Grounded Memory
+
+Highlights:
+
+- Treat Canon capability snapshots, governed packet summaries, recommended actions, and compact governed memory as live planning and follow-through inputs instead of stage-end audit output alone.
+- Persist compact Canon-grounded memory on the native goal-plan path and the compatibility/governed task-context path, then reuse it on `run`, `status`, `next`, and `inspect` with explicit credibility, provenance, staleness, and `governance_next_action` projection.
+- Revalidate the Canon adapter against Canon `0.39.0`, then update README, getting-started, configuration, assistant guidance, roadmap, contributor docs, and changelog for the `0.36.0` release.
 
 ## [0.35.0] - 2026-05-02
 

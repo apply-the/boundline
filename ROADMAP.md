@@ -6,7 +6,7 @@ Canon is downstream from Synod in this roadmap: Synod thinks, decides, orchestra
 
 Evolve Synod into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.35.0
+## Current Status: v0.36.0
 
 Synod now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -16,7 +16,8 @@ delivery, negotiated delivery modeling, inspectable routing plus assistant
 decoupling, guided decision follow-through, evidence-aligned next-command
 selection, credible governed delivery completion, final product-surface
 closure, explicit bounded context assembly, decision-driven bounded action
-selection, and evidence-driven dynamic planning in place:
+selection, evidence-driven dynamic planning, and Canon-grounded structured
+memory in place:
 
 - session-native orchestration remains the primary operator path
 - `capture` now derives one negotiated delivery packet from direct goals, authored briefs, and governance context before planning begins
@@ -27,8 +28,10 @@ selection, and evidence-driven dynamic planning in place:
 - default `plan` now persists one proposed goal plan with explicit `goal_plan_state`, `goal_plan_revision`, `planning_rationale`, and `verification_strategy`, and `plan --confirm` now makes that proposal executable on the native route
 - repeated `plan` can now supersede the active proposal revision when evidence changes flow, task targets, or verification strategy materially, while `run`, `status`, `next`, and `inspect` keep the revision lineage and blocking reason explicit
 - `run`, `status`, `next`, and `inspect` now project `context_summary`, `context_credibility`, primary inputs, provenance, and any staleness reason from the active goal plan or authoritative native trace
+- Canon capability snapshots plus compact Canon-grounded memory now feed context assembly, target selection, verification strategy inference, and explicit bounded stop conditions when governed evidence is stale or contradicted
 - the native runtime now selects explicit bounded next actions such as `read`, `search`, `modify`, `test`, `ask`, and `replan` from persisted decision state and evidence instead of treating decisions as trace-only audit records
 - `status`, `next`, and `inspect` now surface selector-driven guidance, rationale, evidence basis, verification intent, and explicit no-credible-next-step wording from the same persisted decision story
+- `run`, `status`, `next`, and `inspect` now reuse compact Canon-grounded memory from the active goal plan or authoritative task context so governed provenance, stale-memory reasoning, and `governance_next_action` stay visible even when native plan projection is absent
 - `run`, `status`, `next`, and `inspect` now project `negotiation_goal_summary`, `negotiation_resolution`, and `negotiation_acceptance_boundary` across native goal-plan traces and explicit compatibility traces
 - `workflow list`, `workflow run`, `workflow status`, `workflow resume`, and `workflow inspect` still project named workflow state onto the same session, route, trace, and `execution_condition` surfaces
 - Claude, Codex, and Copilot now ship first-class workflow assistant surfaces, while Gemini CLI guidance uses the same workflow-first vocabulary
@@ -49,13 +52,14 @@ selection, and evidence-driven dynamic planning in place:
 - session-native commands still accept `--cluster <primary-workspace>` so one authoritative primary-owned session can plan and deliver a bounded change across registered member repositories
 - clustered `run`, `status`, `next`, and `inspect` still surface authoritative workspace, clustered execution condition, participating workspaces, and any blocking member without implying distributed orchestration ownership
 
-## Roadmap Closure In 0.35.0
+## Roadmap Closure In 0.36.0
 
-The roadmap is no longer an open-ended backlog. `0.35.0` keeps the product
-surface closed and makes bounded planning explicit, so Synod now presents one
-coherent execution model across CLI, assistants, workflows, routing,
-governance, bounded context assembly, evidence-driven proposal selection, and
-the runtime loop itself.
+The roadmap is no longer an open-ended backlog. `0.36.0` keeps the product
+surface closed and extends the same execution model with Canon-grounded
+reasoning and durable structured memory, so Synod now presents one coherent
+operator story across CLI, assistants, workflows, routing, governance,
+bounded context assembly, evidence-driven proposal selection, governed memory,
+and the runtime loop itself.
 
 The governing rule remains simple: Synod is the product and execution owner.
 Canon stays a bounded, useful governed runtime inside that same delivery path
@@ -63,13 +67,13 @@ rather than drifting back into a parallel tool story.
 
 ### Ongoing Compatibility Watch
 
-Canon will continue to release versions after `0.35.0`, so Synod keeps one
+Canon will continue to release versions after `0.36.0`, so Synod keeps one
 explicit maintenance track for compatibility drift on the machine-facing
 governance adapter rather than reopening broad product-scope work:
 
 - revalidate the documented Canon compatibility target against the latest
-  released `canon governance start|refresh|capabilities --json` `v1` surface
-  whenever Canon ships a materially new stable release
+  released `canon governance start|refresh|capabilities --json` `v1` surface;
+  the current documented target is Canon `0.39.0`
 - preserve additive-field tolerance and capability-aware checks so intermediate
   Canon releases do not force unnecessary Synod churn when the `v1` adapter
   contract remains stable
@@ -77,32 +81,35 @@ governance adapter rather than reopening broad product-scope work:
   contract, introduces a new adapter schema version, or adds governed behavior
   that Synod needs for its explicitly modeled bounded stages
 
-### Next Macrofeature Line (036+)
+### Next Macrofeature Line (037+)
 
-`0.35.0` delivered evidence-driven `infer -> propose -> confirm` planning plus
-bounded proposal supersession. The remaining roadmap line should not decompose
-back into microfeatures. Future numbered specs must stay at the macrofeature
-level and each one must change Synod's operating model, not just a single CLI
-surface.
+`0.36.0` delivered Canon-grounded reasoning and structured memory on top of the
+evidence-driven `infer -> propose -> confirm` planning baseline. The next
+roadmap line should not decompose back into microfeatures. Future numbered
+specs must stay at the macrofeature level and each one must change Synod's
+operating model, not just a single CLI surface.
 
 Compatibility maintenance for newer Canon releases stays inside the watch above
 unless it becomes contract-breaking. It does not consume the next spec number
 by itself.
 
-#### Spec 036: Canon-Grounded Reasoning And Structured Memory
+No numbered `037` macrofeature is active yet. Define the next spec only when it
+materially changes Synod's operating model beyond the delivered `036` Canon-
+grounded memory baseline.
 
-- treat Canon packets, governed artifacts, and capability signals as live input
-  to context assembly and decision-making, not just as end-of-stage output
+### Delivered in 0.36.0
+
+- treat Canon packets, governed artifacts, capability signals, and recommended
+  actions as live input to context assembly and decision-making instead of only
+  end-of-stage output
 - promote packet reuse, artifact invariants, and governed constraints into the
-  same bounded reasoning path used for planning and verification
-- add durable summarization and context compaction so long-running sessions can
-  carry forward the important evidence without replaying the whole workspace
-
-**Exit criteria**: Canon materially changes planning and decision selection when
-relevant, and Synod can carry forward compact structured memory across loops.
-
-No new numbered roadmap specs should be introduced before `036` is either
-delivered, explicitly dropped, or replaced at the macrofeature level.
+  same bounded reasoning path used for planning, decision selection, and
+  verification strategy inference
+- persist compact Canon-grounded memory with explicit credibility, provenance,
+  staleness, and next-action cues so long-running sessions can carry forward
+  the important governed evidence without replaying the whole workspace
+- update README, getting-started, configuration, assistant guidance, roadmap,
+  contributor docs, and changelog for the release
 
 ### Delivered in 0.35.0
 

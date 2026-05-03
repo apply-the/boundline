@@ -21,14 +21,17 @@ use crate::domain::negotiation::NegotiatedDeliveryPacket;
 use crate::domain::session::{
     ActiveSessionRecord, CompatibilityFollowUpMode, CompatibilityFollowUpView, ContinuityAuthority,
     SessionStatus, SessionStatusView, decision_status_text, execution_path_text, routing_outcome,
-    task_state_attempt_lineage_summary, task_state_governance_approval_text,
-    task_state_governance_blocked_reason, task_state_governance_candidate_actions,
-    task_state_governance_canon_run_ref, task_state_governance_decision_headline,
-    task_state_governance_mode_text, task_state_governance_next_action,
-    task_state_governance_packet_binding_reason, task_state_governance_packet_ref,
-    task_state_governance_packet_source_stage, task_state_governance_runtime_text,
-    task_state_governance_stage_key, task_state_governance_state_text, task_state_string,
-    task_state_strings, task_state_workspace_slice_summary,
+    task_state_attempt_lineage_summary, task_state_canon_memory_context_credibility,
+    task_state_canon_memory_context_summary, task_state_canon_memory_primary_inputs,
+    task_state_canon_memory_provenance, task_state_canon_memory_staleness_reason,
+    task_state_governance_approval_text, task_state_governance_blocked_reason,
+    task_state_governance_candidate_actions, task_state_governance_canon_run_ref,
+    task_state_governance_decision_headline, task_state_governance_mode_text,
+    task_state_governance_next_action, task_state_governance_packet_binding_reason,
+    task_state_governance_packet_ref, task_state_governance_packet_source_stage,
+    task_state_governance_runtime_text, task_state_governance_stage_key,
+    task_state_governance_state_text, task_state_string, task_state_strings,
+    task_state_workspace_slice_summary,
 };
 use crate::domain::task::TaskStatus;
 use crate::domain::trace::current_timestamp_millis;
@@ -625,6 +628,16 @@ pub(crate) fn build_status_view_with_follow_up(
         record.authored_brief.as_ref().and_then(|bundle| bundle.governance_intent.as_ref());
     let latest_decision = record.decisions.last();
     let latest_decision_selector = latest_decision.map(|decision| decision.selector_kind());
+    let task_context_summary =
+        record.active_task.as_ref().and_then(task_state_canon_memory_context_summary);
+    let task_context_credibility =
+        record.active_task.as_ref().and_then(task_state_canon_memory_context_credibility);
+    let task_context_primary_inputs =
+        record.active_task.as_ref().and_then(task_state_canon_memory_primary_inputs);
+    let task_context_provenance =
+        record.active_task.as_ref().and_then(task_state_canon_memory_provenance);
+    let task_context_staleness_reason =
+        record.active_task.as_ref().and_then(task_state_canon_memory_staleness_reason);
 
     SessionStatusView {
         session_id: record.session_id.clone(),
@@ -658,24 +671,41 @@ pub(crate) fn build_status_view_with_follow_up(
         context_summary: record
             .goal_plan
             .as_ref()
-            .and_then(|goal_plan| goal_plan.context_summary()),
+            .and_then(|goal_plan| goal_plan.context_summary())
+            .or(task_context_summary),
         context_credibility: record
             .goal_plan
             .as_ref()
-            .and_then(|goal_plan| goal_plan.context_credibility()),
-        context_primary_inputs: record.goal_plan.as_ref().and_then(|goal_plan| {
-            let inputs = goal_plan.context_primary_inputs();
-            (!inputs.is_empty()).then_some(inputs)
-        }),
-        context_provenance: record.goal_plan.as_ref().and_then(|goal_plan| {
-            let lines = goal_plan.context_provenance_lines();
-            (!lines.is_empty()).then_some(lines)
-        }),
+            .and_then(|goal_plan| goal_plan.context_credibility())
+            .or(task_context_credibility),
+        context_primary_inputs: record
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| {
+                let inputs = goal_plan.context_primary_inputs();
+                (!inputs.is_empty()).then_some(inputs)
+            })
+            .or(task_context_primary_inputs),
+        context_provenance: record
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| {
+                let lines = goal_plan.context_provenance_lines();
+                (!lines.is_empty()).then_some(lines)
+            })
+            .or(task_context_provenance),
         context_staleness_reason: record
             .goal_plan
             .as_ref()
             .and_then(|goal_plan| goal_plan.context_pack.as_ref())
-            .and_then(|pack| pack.staleness_reason.clone()),
+            .and_then(|pack| pack.staleness_reason.clone())
+            .or_else(|| {
+                record
+                    .goal_plan
+                    .as_ref()
+                    .and_then(|goal_plan| goal_plan.canon_memory_staleness_reason())
+            })
+            .or(task_context_staleness_reason),
         clarification_headline: record
             .authored_brief
             .as_ref()
@@ -1235,7 +1265,9 @@ mod tests {
         ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan,
         InferredFlow, PlannedTask,
     };
-    use crate::domain::governance::GovernanceRuntimeKind;
+    use crate::domain::governance::{
+        CompactedCanonMemory, GovernanceRuntimeKind, MemoryCredibilityState,
+    };
     use crate::domain::limits::TerminalCondition;
     use crate::domain::session::SessionStatus;
     use crate::domain::task::{Task, TaskStatus, TerminalReason};
@@ -1837,6 +1869,84 @@ fn red_to_green_addition() {
         assert!(headline.contains("canon:.canon/policy.json"), "{headline}");
         assert!(headline.contains("tool_output:decision-0"), "{headline}");
         assert_eq!(view.latest_candidate_family.as_deref(), Some("test"));
+    }
+
+    #[test]
+    fn status_view_projects_task_level_canon_memory_when_goal_plan_is_absent() {
+        let workspace = write_execution_workspace("synod-cli-session-canon-memory");
+        let request = build_task_request(
+            &workspace,
+            "Fix the failing add test",
+            "session-canon-memory",
+            None,
+            None,
+        )
+        .unwrap();
+        let plan =
+            build_fixture_plan_for_goal(&workspace, None, "Fix the failing add test").unwrap();
+        let mut task = Task::new("task-canon-memory", &request, plan).unwrap();
+        task.context
+            .set_latest_compacted_canon_memory(&CompactedCanonMemory {
+                headline: "Canon verification packet".to_string(),
+                credibility: MemoryCredibilityState::Stale,
+                stage_key: Some("change:verify".to_string()),
+                run_ref: Some("run-9".to_string()),
+                packet_ref: Some(".canon/runs/run-9".to_string()),
+                reason_code: Some("refresh_required".to_string()),
+                artifact_refs: vec![".canon/runs/run-9/verification.md".to_string()],
+                mode_summary: None,
+                possible_actions: Vec::new(),
+                recommended_next_action: Some(
+                    crate::domain::governance::CanonRecommendedActionSummary {
+                        action: "refresh".to_string(),
+                        rationale: "refresh the governed packet and reassess its credibility"
+                            .to_string(),
+                        target: Some("run-9".to_string()),
+                    },
+                ),
+                evidence_summary: None,
+            })
+            .unwrap();
+        let record = crate::domain::session::ActiveSessionRecord {
+            session_id: "session-canon-memory".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: Some("Fix the failing add test".to_string()),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: Some(task),
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Running,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 1,
+            updated_at: 1,
+        };
+
+        let view = build_status_view_with_follow_up(
+            &record,
+            Some("synod inspect".to_string()),
+            "inspect the Canon packet",
+            None,
+        );
+
+        assert_eq!(
+            view.context_summary.as_deref(),
+            Some("canon memory: Canon verification packet [stale]")
+        );
+        assert_eq!(view.context_credibility.as_deref(), Some("stale"));
+        assert_eq!(
+            view.context_primary_inputs.as_deref(),
+            Some([".canon/runs/run-9/verification.md".to_string()].as_slice())
+        );
+        assert_eq!(view.context_staleness_reason.as_deref(), Some("refresh_required"));
+        assert_eq!(
+            view.governance_next_action.as_deref(),
+            Some("refresh: refresh the governed packet and reassess its credibility")
+        );
     }
 
     #[test]

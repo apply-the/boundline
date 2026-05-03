@@ -2990,6 +2990,7 @@ pub enum FixtureRuntimeError {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
     use std::fs;
     use std::path::PathBuf;
 
@@ -2997,21 +2998,25 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        ExecutionAttemptDefinition, ExecutionCommand, ExecutionFailureMode, FilePatch,
-        FixtureRuntimeError, GeneratedAdaptiveCandidate, RankedAdaptiveCandidate, WorkspaceChange,
-        WorkspaceExecutionProfile, WorkspaceFixture, adaptive_failure_evidence,
-        adaptive_no_candidate_reason, adaptive_replan_blocker, adaptive_selection_headline,
-        adaptive_selection_reason, adaptive_transition_kind, analyze_workspace_fixture,
-        apply_fixture_patches, apply_workspace_fixture, build_fixture_plan, build_fixture_runtime,
-        build_rejected_candidate_summaries, build_task_request, build_vertical_slice_plan,
+        AdaptiveCandidateContext, ExecutionAttemptDefinition, ExecutionCommand,
+        ExecutionFailureMode, FilePatch, FixtureRuntimeError, GeneratedAdaptiveCandidate,
+        RankedAdaptiveCandidate, WorkspaceChange, WorkspaceExecutionProfile, WorkspaceFixture,
+        adaptive_failure_evidence, adaptive_no_candidate_reason, adaptive_replan_blocker,
+        adaptive_selection_headline, adaptive_selection_reason, adaptive_transition_kind,
+        analyze_workspace_fixture, apply_fixture_patches, apply_workspace_fixture,
+        boolean_flip_candidates, build_adaptive_attempt_steps, build_adaptive_candidates,
+        build_adaptive_initial_plan, build_attempt_steps, build_fixture_plan,
+        build_fixture_runtime, build_rejected_candidate_summaries, build_review_steps_for_attempt,
+        build_task_request, build_vertical_slice_plan, comparison_flip_candidates,
         execution_manifest_path, guidance_paths_from_text, load_workspace_execution_profile,
         numeric_literal_flip_candidates, ordering_boundary_flip_candidates, resolve_review_vote,
-        result_status_flip_candidates, run_fixture_command, score_adaptive_candidate,
-        verify_workspace_fixture,
+        result_status_flip_candidates, review_workspace_fixture, run_fixture_command,
+        score_adaptive_candidate, verify_workspace_fixture,
     };
     use crate::domain::execution::{
-        AdaptiveChangeKind, AttemptTransitionKind, PathScore, ValidationGuidance,
-        ValidationGuidanceConfidence, ValidationGuidanceSource, ValidationRecord,
+        AdaptiveChangeKind, AdaptiveExecutionProfile, AttemptTransitionKind, PathScore,
+        ValidationGuidance, ValidationGuidanceConfidence, ValidationGuidanceSource,
+        ValidationRecord,
     };
     use crate::domain::flow::{attach_stage_metadata, built_in_flow};
     use crate::domain::governance::{
@@ -3134,6 +3139,46 @@ mod tests {
             ],
         });
         profile
+    }
+
+    fn sample_adaptive_profile(validation_command: ExecutionCommand) -> WorkspaceExecutionProfile {
+        let mut profile = sample_profile(validation_command);
+        profile.attempts.clear();
+        profile.read_targets = vec!["src/lib.rs".to_string()];
+        profile.adaptive = Some(AdaptiveExecutionProfile {
+            max_selected_targets: 1,
+            max_generated_attempts: 4,
+            path_preferences: vec!["src/lib.rs".to_string()],
+            allowed_change_kinds: vec![
+                AdaptiveChangeKind::ComparisonFlip,
+                AdaptiveChangeKind::BooleanFlip,
+            ],
+        });
+        profile
+    }
+
+    fn first_adaptive_candidate(
+        workspace: &std::path::Path,
+        profile: &WorkspaceExecutionProfile,
+        goal: &str,
+    ) -> super::AdaptiveAttemptPlan {
+        let used_signatures = BTreeSet::new();
+        build_adaptive_candidates(
+            workspace,
+            profile,
+            goal,
+            AdaptiveCandidateContext {
+                used_signatures: &used_signatures,
+                previous_attempt_id: None,
+                previous_selected_targets: None,
+                validation_guidance: None,
+                lineage_reason: "selected adaptive candidate for test coverage",
+            },
+        )
+        .unwrap()
+        .into_iter()
+        .next()
+        .expect("adaptive candidate should exist")
     }
 
     fn request(input: serde_json::Value, attempt_number: usize) -> StepExecutionRequest {
@@ -3371,6 +3416,184 @@ mod tests {
     }
 
     #[test]
+    fn build_review_steps_for_attempt_includes_adjudication_for_flow_scoped_reviews() {
+        let mut profile = sample_review_profile(ExecutionCommand {
+            program: "cargo".to_string(),
+            args: vec!["test".to_string(), "--quiet".to_string()],
+        });
+        let review = profile.review.as_mut().unwrap();
+        review.adjudication.enabled = true;
+        review.adjudication.reviewer_id = Some("arbiter".to_string());
+        review.scenarios[0].adjudication_finding = Some(ReviewerFinding {
+            reviewer_id: "arbiter".to_string(),
+            disposition: ReviewerDisposition::Concern,
+            summary: "Needs one more human look".to_string(),
+            details: None,
+        });
+
+        let steps = build_review_steps_for_attempt(
+            &profile,
+            Some(&built_in_flow("bug-fix").unwrap().initial_state()),
+            "attempt-1",
+        )
+        .unwrap();
+
+        assert_eq!(
+            steps.iter().map(|step| step.id.as_str()).collect::<Vec<_>>(),
+            vec![
+                "investigate-review-attempt-1-safety",
+                "investigate-review-attempt-1-maintainability",
+                "investigate-review-attempt-1-vote",
+                "investigate-review-attempt-1-adjudicate",
+                "investigate-review-attempt-1-finalize",
+            ]
+        );
+    }
+
+    #[test]
+    fn build_adaptive_initial_plan_covers_change_and_delivery_flows() {
+        let workspace = write_execution_workspace(
+            "synod-fixture-adaptive-flow-coverage",
+            "pub fn add(left: i32, right: i32) -> bool {\n    left != right\n}\n",
+        );
+        let profile = sample_adaptive_profile(ExecutionCommand {
+            program: "cargo".to_string(),
+            args: vec!["test".to_string(), "--quiet".to_string()],
+        });
+
+        let change = build_adaptive_initial_plan(
+            &workspace,
+            &profile,
+            Some(&built_in_flow("change").unwrap().initial_state()),
+            "understand the bounded change",
+        )
+        .unwrap();
+        assert_eq!(
+            change.steps.iter().map(|step| step.id.as_str()).collect::<Vec<_>>(),
+            vec!["understand-change", "implement", "verify"]
+        );
+
+        let delivery = build_adaptive_initial_plan(
+            &workspace,
+            &profile,
+            Some(&built_in_flow("delivery").unwrap().initial_state()),
+            "deliver the bounded change",
+        )
+        .unwrap();
+        assert_eq!(
+            delivery.steps.iter().map(|step| step.id.as_str()).collect::<Vec<_>>(),
+            vec![
+                "requirements",
+                "architecture",
+                "backlog",
+                "implementation-code",
+                "implementation-verify",
+            ]
+        );
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn build_adaptive_attempt_steps_covers_flow_scoped_and_direct_variants() {
+        let workspace = write_execution_workspace(
+            "synod-fixture-adaptive-attempt-coverage",
+            "pub fn add(left: i32, right: i32) -> bool {\n    left != right\n}\n",
+        );
+        let profile = sample_adaptive_profile(ExecutionCommand {
+            program: "cargo".to_string(),
+            args: vec!["test".to_string(), "--quiet".to_string()],
+        });
+        let candidate = first_adaptive_candidate(&workspace, &profile, "repair the bounded change");
+
+        let flow_steps = build_adaptive_attempt_steps(
+            &profile,
+            Some(&built_in_flow("bug-fix").unwrap().initial_state()),
+            &candidate,
+        )
+        .unwrap();
+        assert_eq!(
+            flow_steps.iter().map(|step| step.id.as_str()).collect::<Vec<_>>(),
+            vec![
+                "investigate-replan-adaptive-attempt-1-code",
+                "investigate-replan-adaptive-attempt-1-verify",
+            ]
+        );
+
+        let direct_steps = build_adaptive_attempt_steps(&profile, None, &candidate).unwrap();
+        assert_eq!(
+            direct_steps.iter().map(|step| step.id.as_str()).collect::<Vec<_>>(),
+            vec!["code-adaptive-attempt-1", "verify-adaptive-attempt-1"]
+        );
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn build_attempt_steps_covers_flow_scoped_and_direct_variants() {
+        let profile = sample_profile(ExecutionCommand {
+            program: "cargo".to_string(),
+            args: vec!["test".to_string(), "--quiet".to_string()],
+        });
+
+        let flow_steps = build_attempt_steps(
+            &profile,
+            Some(&built_in_flow("bug-fix").unwrap().initial_state()),
+            0,
+        )
+        .unwrap();
+        assert_eq!(
+            flow_steps.iter().map(|step| step.id.as_str()).collect::<Vec<_>>(),
+            vec!["investigate-replan-fix-add-code", "investigate-replan-fix-add-verify"]
+        );
+
+        let direct_steps = build_attempt_steps(&profile, None, 0).unwrap();
+        assert_eq!(
+            direct_steps.iter().map(|step| step.id.as_str()).collect::<Vec<_>>(),
+            vec!["code-fix-add", "verify-fix-add"]
+        );
+    }
+
+    #[test]
+    fn comparison_and_boolean_flip_candidates_cover_both_directions() {
+        assert_eq!(
+            comparison_flip_candidates("src/lib.rs", "left != right"),
+            vec![WorkspaceChange {
+                path: "src/lib.rs".to_string(),
+                find: " != ".to_string(),
+                replace: " == ".to_string(),
+            }]
+        );
+        assert_eq!(
+            comparison_flip_candidates("src/lib.rs", "left == right"),
+            vec![WorkspaceChange {
+                path: "src/lib.rs".to_string(),
+                find: " == ".to_string(),
+                replace: " != ".to_string(),
+            }]
+        );
+        assert!(comparison_flip_candidates("src/lib.rs", "left < right").is_empty());
+
+        assert_eq!(
+            boolean_flip_candidates("src/lib.rs", "return false;"),
+            vec![WorkspaceChange {
+                path: "src/lib.rs".to_string(),
+                find: "false".to_string(),
+                replace: "true".to_string(),
+            }]
+        );
+        assert_eq!(
+            boolean_flip_candidates("src/lib.rs", "return true;"),
+            vec![WorkspaceChange {
+                path: "src/lib.rs".to_string(),
+                find: "true".to_string(),
+                replace: "false".to_string(),
+            }]
+        );
+        assert!(boolean_flip_candidates("src/lib.rs", "return value;").is_empty());
+    }
+
+    #[test]
     fn review_validation_failure_is_routed_into_review_state() {
         let workspace = write_execution_workspace(
             "synod-fixture-review-validation-failure",
@@ -3417,6 +3640,255 @@ mod tests {
             result.state_patch.as_ref().unwrap()["latest_review_vote_decision"],
             json!(VoteDecision::Accepted)
         );
+    }
+
+    #[test]
+    fn review_workspace_fixture_covers_skip_and_failure_paths() {
+        let no_review = review_workspace_fixture(
+            &sample_profile(ExecutionCommand {
+                program: "cargo".to_string(),
+                args: vec!["test".to_string(), "--quiet".to_string()],
+            }),
+            request(json!({}), 1),
+        );
+        assert_eq!(no_review.status, ExecutionStatus::Succeeded);
+        assert_eq!(no_review.output.as_ref().unwrap()["review_skipped"], json!(true));
+
+        let profile = sample_review_profile(ExecutionCommand {
+            program: "cargo".to_string(),
+            args: vec!["test".to_string(), "--quiet".to_string()],
+        });
+        let missing_reviewer = review_workspace_fixture(&profile, request(json!({}), 1));
+        assert_eq!(missing_reviewer.error.as_ref().unwrap().code, "missing_reviewer_id");
+
+        let skipped =
+            review_workspace_fixture(&profile, request(json!({"reviewer_id": "safety"}), 1));
+        assert_eq!(skipped.status, ExecutionStatus::Succeeded);
+        assert_eq!(skipped.output.as_ref().unwrap()["review_skipped"], json!(true));
+
+        let mut state = Map::new();
+        state.insert("next_review_trigger".to_string(), json!(ReviewTrigger::PrReady));
+        let unknown = review_workspace_fixture(
+            &profile,
+            request_with_state(json!({"reviewer_id": "ghost"}), 1, state.clone()),
+        );
+        assert_eq!(unknown.error.as_ref().unwrap().code, "unknown_reviewer");
+
+        let mut missing_scenario_profile = profile.clone();
+        missing_scenario_profile.review.as_mut().unwrap().scenarios.clear();
+        let missing_scenario = review_workspace_fixture(
+            &missing_scenario_profile,
+            request_with_state(json!({"reviewer_id": "safety"}), 1, state.clone()),
+        );
+        assert_eq!(missing_scenario.error.as_ref().unwrap().code, "missing_review_scenario");
+
+        let mut missing_finding_profile = profile.clone();
+        missing_finding_profile.review.as_mut().unwrap().scenarios[0].findings =
+            vec![ReviewerFinding {
+                reviewer_id: "maintainability".to_string(),
+                disposition: ReviewerDisposition::Approve,
+                summary: "Looks ready".to_string(),
+                details: None,
+            }];
+        let missing_finding = review_workspace_fixture(
+            &missing_finding_profile,
+            request_with_state(json!({"reviewer_id": "safety"}), 1, state),
+        );
+        assert_eq!(missing_finding.error.as_ref().unwrap().code, "missing_review_finding");
+    }
+
+    #[test]
+    fn review_workspace_fixture_records_adjudication_results() {
+        let mut profile = sample_review_profile(ExecutionCommand {
+            program: "cargo".to_string(),
+            args: vec!["test".to_string(), "--quiet".to_string()],
+        });
+        let review = profile.review.as_mut().unwrap();
+        review.adjudication.enabled = true;
+        review.adjudication.reviewer_id = Some("arbiter".to_string());
+        review.scenarios[0].adjudication_finding = Some(ReviewerFinding {
+            reviewer_id: "arbiter".to_string(),
+            disposition: ReviewerDisposition::Concern,
+            summary: "Needs explicit adjudication".to_string(),
+            details: None,
+        });
+
+        let mut state = Map::new();
+        state.insert("next_review_trigger".to_string(), json!(ReviewTrigger::PrReady));
+        let result = review_workspace_fixture(
+            &profile,
+            request_with_state(json!({"reviewer_id": "arbiter", "adjudication": true}), 1, state),
+        );
+
+        assert_eq!(result.status, ExecutionStatus::Succeeded);
+        assert_eq!(result.output.as_ref().unwrap()["adjudication"], json!(true));
+        assert_eq!(
+            result.state_patch.as_ref().unwrap()["latest_review_adjudication"]["reviewer_id"],
+            json!("arbiter")
+        );
+    }
+
+    #[test]
+    fn resolve_review_vote_covers_skip_invalid_and_incomplete_paths() {
+        let no_review = resolve_review_vote(
+            &sample_profile(ExecutionCommand {
+                program: "cargo".to_string(),
+                args: vec!["test".to_string(), "--quiet".to_string()],
+            }),
+            request(json!({}), 1),
+        );
+        assert_eq!(no_review.status, ExecutionStatus::Succeeded);
+        assert_eq!(no_review.output.as_ref().unwrap()["review_skipped"], json!(true));
+
+        let profile = sample_review_profile(ExecutionCommand {
+            program: "cargo".to_string(),
+            args: vec!["test".to_string(), "--quiet".to_string()],
+        });
+        let no_trigger = resolve_review_vote(&profile, request(json!({}), 1));
+        assert_eq!(no_trigger.status, ExecutionStatus::Succeeded);
+        assert_eq!(no_trigger.output.as_ref().unwrap()["review_skipped"], json!(true));
+
+        let mut invalid_state = Map::new();
+        invalid_state.insert("next_review_trigger".to_string(), json!(ReviewTrigger::PrReady));
+        invalid_state.insert(
+            "latest_review_findings".to_string(),
+            serde_json::to_value(vec![ReviewerFinding {
+                reviewer_id: "ghost".to_string(),
+                disposition: ReviewerDisposition::Approve,
+                summary: "Unknown reviewer".to_string(),
+                details: None,
+            }])
+            .unwrap(),
+        );
+        let invalid_vote =
+            resolve_review_vote(&profile, request_with_state(json!({}), 1, invalid_state));
+        assert_eq!(invalid_vote.error.as_ref().unwrap().code, "invalid_review_vote");
+
+        let mut incomplete_state = Map::new();
+        incomplete_state.insert("next_review_trigger".to_string(), json!(ReviewTrigger::PrReady));
+        incomplete_state.insert(
+            "latest_review_findings".to_string(),
+            serde_json::to_value(vec![
+                profile.review.as_ref().unwrap().scenarios[0].findings[0].clone(),
+            ])
+            .unwrap(),
+        );
+        let incomplete =
+            resolve_review_vote(&profile, request_with_state(json!({}), 1, incomplete_state));
+        assert_eq!(incomplete.error.as_ref().unwrap().code, "incomplete_review_participation");
+    }
+
+    #[test]
+    fn finalize_workspace_review_covers_skip_and_terminal_variants() {
+        let no_review = super::finalize_workspace_review(
+            &sample_profile(ExecutionCommand {
+                program: "cargo".to_string(),
+                args: vec!["test".to_string(), "--quiet".to_string()],
+            }),
+            request(json!({}), 1),
+        );
+        assert_eq!(no_review.status, ExecutionStatus::Succeeded);
+        assert_eq!(no_review.output.as_ref().unwrap()["review_skipped"], json!(true));
+
+        let profile = sample_review_profile(ExecutionCommand {
+            program: "cargo".to_string(),
+            args: vec!["test".to_string(), "--quiet".to_string()],
+        });
+        let no_trigger = super::finalize_workspace_review(&profile, request(json!({}), 1));
+        assert_eq!(no_trigger.status, ExecutionStatus::Succeeded);
+        assert_eq!(no_trigger.output.as_ref().unwrap()["review_skipped"], json!(true));
+
+        let mut rejected_state = Map::new();
+        rejected_state.insert("next_review_trigger".to_string(), json!(ReviewTrigger::PrReady));
+        rejected_state
+            .insert("latest_review_vote_decision".to_string(), json!(VoteDecision::Rejected));
+        let rejected = super::finalize_workspace_review(
+            &profile,
+            request_with_state(json!({}), 1, rejected_state),
+        );
+        assert_eq!(rejected.error.as_ref().unwrap().code, "review_rejected");
+
+        let mut adjudicated_profile = profile.clone();
+        let review = adjudicated_profile.review.as_mut().unwrap();
+        review.adjudication.enabled = true;
+        review.adjudication.reviewer_id = Some("arbiter".to_string());
+
+        let mut block_state = Map::new();
+        block_state.insert("next_review_trigger".to_string(), json!(ReviewTrigger::PrReady));
+        block_state.insert(
+            "latest_review_vote_decision".to_string(),
+            json!(VoteDecision::NeedsAdjudication),
+        );
+        block_state.insert(
+            "latest_review_adjudication".to_string(),
+            serde_json::to_value(ReviewerFinding {
+                reviewer_id: "arbiter".to_string(),
+                disposition: ReviewerDisposition::Block,
+                summary: "Blocking concern".to_string(),
+                details: None,
+            })
+            .unwrap(),
+        );
+        let block = super::finalize_workspace_review(
+            &adjudicated_profile,
+            request_with_state(json!({}), 1, block_state),
+        );
+        assert_eq!(block.error.as_ref().unwrap().code, "review_rejected");
+
+        let mut concern_state = Map::new();
+        concern_state.insert("next_review_trigger".to_string(), json!(ReviewTrigger::PrReady));
+        concern_state.insert(
+            "latest_review_vote_decision".to_string(),
+            json!(VoteDecision::NeedsAdjudication),
+        );
+        concern_state.insert(
+            "latest_review_adjudication".to_string(),
+            serde_json::to_value(ReviewerFinding {
+                reviewer_id: "arbiter".to_string(),
+                disposition: ReviewerDisposition::Concern,
+                summary: "Escalate for follow-up".to_string(),
+                details: None,
+            })
+            .unwrap(),
+        );
+        let concern = super::finalize_workspace_review(
+            &adjudicated_profile,
+            request_with_state(json!({}), 1, concern_state),
+        );
+        assert_eq!(concern.error.as_ref().unwrap().code, "review_escalated");
+
+        let mut missing_adjudication_state = Map::new();
+        missing_adjudication_state
+            .insert("next_review_trigger".to_string(), json!(ReviewTrigger::PrReady));
+        missing_adjudication_state.insert(
+            "latest_review_vote_decision".to_string(),
+            json!(VoteDecision::NeedsAdjudication),
+        );
+        let missing_adjudication = super::finalize_workspace_review(
+            &adjudicated_profile,
+            request_with_state(json!({}), 1, missing_adjudication_state),
+        );
+        assert_eq!(missing_adjudication.error.as_ref().unwrap().code, "missing_adjudication");
+
+        let mut escalate_state = Map::new();
+        escalate_state.insert("next_review_trigger".to_string(), json!(ReviewTrigger::PrReady));
+        escalate_state.insert(
+            "latest_review_vote_decision".to_string(),
+            json!(VoteDecision::NeedsAdjudication),
+        );
+        let escalated = super::finalize_workspace_review(
+            &profile,
+            request_with_state(json!({}), 1, escalate_state),
+        );
+        assert_eq!(escalated.error.as_ref().unwrap().code, "review_escalated");
+
+        let mut missing_vote_state = Map::new();
+        missing_vote_state.insert("next_review_trigger".to_string(), json!(ReviewTrigger::PrReady));
+        let missing_vote = super::finalize_workspace_review(
+            &profile,
+            request_with_state(json!({}), 1, missing_vote_state),
+        );
+        assert_eq!(missing_vote.error.as_ref().unwrap().code, "missing_review_vote");
     }
 
     #[test]
@@ -3606,6 +4078,7 @@ mod tests {
                 readiness: PacketReadiness::Reusable,
                 missing_sections: Vec::new(),
                 headline: "investigation packet ready".to_string(),
+                reason_code: None,
             })
             .unwrap(),
         );

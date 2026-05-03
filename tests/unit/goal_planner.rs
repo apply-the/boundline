@@ -230,6 +230,8 @@ fn build_context_pack_uses_authored_sources_and_workspace_files() {
             negotiation_acceptance_boundary: None,
             latest_trace_ref: Some(".synod/traces/last.json".to_string()),
             workflow_progress: None,
+            canon_capability_snapshot: None,
+            compacted_canon_memory: None,
         },
     );
 
