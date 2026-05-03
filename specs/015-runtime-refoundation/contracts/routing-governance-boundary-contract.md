@@ -5,7 +5,7 @@
 
 ## Overview
 
-This contract defines how Synod selects between the session-native runtime path and the explicit compatibility path, and how Canon artifacts may participate without becoming the orchestration control plane.
+This contract defines how Boundline selects between the session-native runtime path and the explicit compatibility path, and how Canon artifacts may participate without becoming the orchestration control plane.
 
 ## Routing Precedence
 
@@ -21,7 +21,7 @@ This contract defines how Synod selects between the session-native runtime path 
 
 When `native` routing is selected:
 
-1. Synod owns next-action selection from live evidence.
+1. Boundline owns next-action selection from live evidence.
 2. Flow constraints apply only when flow is explicitly confirmed.
 3. Decisions are persisted to session and trace state.
 4. Canon may contribute bounded planning or stage-boundary evidence but does not choose each decision.

@@ -67,7 +67,7 @@
 
 ## Decision 9: Use the constitution as a hard scoping gate
 
-- **Decision**: Keep this feature inside the ratified Synod constitution by limiting scope to sequential, stateful, inspectable delivery orchestration and deferring councils, provider complexity, long-term memory, and Canon-coupled behavior.
+- **Decision**: Keep this feature inside the ratified Boundline constitution by limiting scope to sequential, stateful, inspectable delivery orchestration and deferring councils, provider complexity, long-term memory, and Canon-coupled behavior.
 - **Rationale**: The constitution now defines delivery-first scope and explicit non-goals, which makes the plan easier to defend and less likely to drift into abstract framework work.
 - **Alternatives considered**:
   - Expand this slice to include strategy or provider-routing work: rejected because the constitution defers those capabilities.

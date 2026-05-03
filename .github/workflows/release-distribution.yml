@@ -1,0 +1,162 @@
+name: release-distribution
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Release version without the leading v. Defaults to Cargo.toml or the pushed tag."
+        required: false
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  prepare:
+    name: prepare-release
+    runs-on: ubuntu-latest
+    outputs:
+      boundline_version: ${{ steps.versions.outputs.boundline_version }}
+      canon_version: ${{ steps.versions.outputs.canon_version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: versions
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -n "${{ github.event.inputs.release_version }}" ]]; then
+            boundline_version="${{ github.event.inputs.release_version }}"
+          elif [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            boundline_version="${GITHUB_REF_NAME#v}"
+          else
+            boundline_version="$(sed -n 's/^version = "\([^"]*\)"$/\1/p' Cargo.toml | head -n 1)"
+          fi
+
+          canon_version="$(sed -n 's/^canon_version = "\([^"]*\)"$/\1/p' distribution/canon-bundle.toml | head -n 1)"
+          cargo_version="$(sed -n 's/^version = "\([^"]*\)"$/\1/p' Cargo.toml | head -n 1)"
+
+          if [[ "$cargo_version" != "$boundline_version" ]]; then
+            echo "Cargo.toml version $cargo_version does not match requested release $boundline_version" >&2
+            exit 1
+          fi
+
+          echo "boundline_version=$boundline_version" >> "$GITHUB_OUTPUT"
+          echo "canon_version=$canon_version" >> "$GITHUB_OUTPUT"
+
+  bundle-macos:
+    name: bundle-macos (${{ matrix.label }})
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macos-arm64
+            os: macos-14
+            target: aarch64-apple-darwin
+            archive_suffix: macos-arm64
+          - label: macos-x86_64
+            os: macos-15-intel
+            target: x86_64-apple-darwin
+            archive_suffix: macos-x86_64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked --release --bin boundline --target ${{ matrix.target }}
+      - name: Assemble Boundline + Canon bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          boundline_version="${{ needs.prepare.outputs.boundline_version }}"
+          canon_version="${{ needs.prepare.outputs.canon_version }}"
+          bundle_name="boundline-bundle-${boundline_version}-${{ matrix.archive_suffix }}.tar.gz"
+          canon_archive="canon-${canon_version}-${{ matrix.archive_suffix }}.tar.gz"
+          canon_url="https://github.com/apply-the/canon/releases/download/v${canon_version}/${canon_archive}"
+
+          mkdir -p release-bundle canon-expand
+          curl -fsSL "$canon_url" -o "$canon_archive"
+          tar -xzf "$canon_archive" -C canon-expand
+          cp "target/${{ matrix.target }}/release/boundline" release-bundle/boundline
+          cp "$(find canon-expand -type f -name canon | head -n 1)" release-bundle/canon
+          tar -czf "$bundle_name" -C release-bundle .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: boundline-${{ matrix.archive_suffix }}
+          path: boundline-bundle-${{ needs.prepare.outputs.boundline_version }}-${{ matrix.archive_suffix }}.tar.gz
+
+  bundle-windows:
+    name: bundle-windows
+    needs: prepare
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked --release --bin boundline --target x86_64-pc-windows-msvc
+      - name: Assemble Boundline + Canon bundle
+        shell: pwsh
+        run: |
+          $boundlineVersion = '${{ needs.prepare.outputs.boundline_version }}'
+          $canonVersion = '${{ needs.prepare.outputs.canon_version }}'
+          $bundleName = "boundline-bundle-$boundlineVersion-windows-x86_64.zip"
+          $canonArchive = "canon-$canonVersion-windows-x86_64.zip"
+          $canonUrl = "https://github.com/apply-the/canon/releases/download/v$canonVersion/$canonArchive"
+
+          New-Item -ItemType Directory -Force -Path release-bundle | Out-Null
+          Invoke-WebRequest -Uri $canonUrl -OutFile $canonArchive
+          Expand-Archive -Path $canonArchive -DestinationPath canon-expand -Force
+          Copy-Item "target/x86_64-pc-windows-msvc/release/boundline.exe" "release-bundle/boundline.exe"
+          $canonBinary = Get-ChildItem -Path canon-expand -Filter canon.exe -Recurse | Select-Object -First 1
+          if (-not $canonBinary) {
+            throw "canon.exe not found in $canonArchive"
+          }
+          Copy-Item $canonBinary.FullName "release-bundle/canon.exe"
+          Compress-Archive -Path release-bundle/* -DestinationPath $bundleName -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: boundline-windows-x86_64
+          path: boundline-bundle-${{ needs.prepare.outputs.boundline_version }}-windows-x86_64.zip
+
+  checksums:
+    name: publish-checksums
+    needs:
+      - prepare
+      - bundle-macos
+      - bundle-windows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Generate bundle checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          shasum -a 256 boundline-bundle-* > boundline-distribution-checksums.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: boundline-distribution-checksums
+          path: dist/boundline-distribution-checksums.txt
+      - if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/boundline-bundle-*.tar.gz
+            dist/boundline-bundle-*.zip
+            dist/boundline-distribution-checksums.txt

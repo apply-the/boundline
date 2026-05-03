@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define how the accepted human-authored brief, source provenance, clarification state, and governance intent appear through Synod's existing session, inspect, and trace surfaces.
+Define how the accepted human-authored brief, source provenance, clarification state, and governance intent appear through Boundline's existing session, inspect, and trace surfaces.
 
 ## `status` Surface
 

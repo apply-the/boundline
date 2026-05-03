@@ -1,6 +1,6 @@
 [package]
-name = "synod"
-version = "0.38.0"
+name = "boundline"
+version = "0.39.0"
 edition = "2024"
 license = "MIT"
 

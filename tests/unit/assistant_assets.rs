@@ -3,28 +3,28 @@ use std::fs;
 use std::path::Path;
 
 const CORE_COMMANDS: &[&str] = &[
-    "synod-start",
-    "synod-plan",
-    "synod-step",
-    "synod-run",
-    "synod-status",
-    "synod-next",
-    "synod-inspect",
+    "boundline-start",
+    "boundline-plan",
+    "boundline-step",
+    "boundline-run",
+    "boundline-status",
+    "boundline-next",
+    "boundline-inspect",
 ];
 
 const REQUIRED_COMMANDS: &[&str] = &[
-    "synod-start",
-    "synod-plan",
-    "synod-step",
-    "synod-run",
-    "synod-status",
-    "synod-next",
-    "synod-inspect",
-    "synod-workflow-list",
-    "synod-workflow-run",
-    "synod-workflow-status",
-    "synod-workflow-resume",
-    "synod-workflow-inspect",
+    "boundline-start",
+    "boundline-plan",
+    "boundline-step",
+    "boundline-run",
+    "boundline-status",
+    "boundline-next",
+    "boundline-inspect",
+    "boundline-workflow-list",
+    "boundline-workflow-run",
+    "boundline-workflow-status",
+    "boundline-workflow-resume",
+    "boundline-workflow-inspect",
 ];
 
 #[test]
@@ -131,12 +131,12 @@ fn test_documented_flows_match_the_assistant_asset_surface() {
     assert!(quickstart.contains("corrected_command"), "{quickstart}");
     assert!(
         quickstart.contains(
-            "cargo run --bin synod -- inspect --trace \"$PWD/.synod/traces/<task-id>.json\""
+            "cargo run --bin boundline -- inspect --trace \"$PWD/.boundline/traces/<task-id>.json\""
         ),
         "{quickstart}"
     );
     assert!(
-        quickstart.contains("cargo run --bin synod -- inspect --workspace \"$PWD\""),
+        quickstart.contains("cargo run --bin boundline -- inspect --workspace \"$PWD\""),
         "{quickstart}"
     );
 }

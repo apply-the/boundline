@@ -1,12 +1,12 @@
 use std::fs;
 
-use synod::domain::session::{ActiveSessionRecord, SessionStatus};
-use synod::domain::workflow::WorkflowPhase;
+use boundline::domain::session::{ActiveSessionRecord, SessionStatus};
+use boundline::domain::workflow::WorkflowPhase;
 
 use crate::workspace_fixture::{temp_workflow_layer_workspace, terminal_text};
 
-fn run_synod_in(workspace: &std::path::Path, args: &[&str]) -> std::process::Output {
-    std::process::Command::new(env!("CARGO_BIN_EXE_synod"))
+fn run_boundline_in(workspace: &std::path::Path, args: &[&str]) -> std::process::Output {
+    std::process::Command::new(env!("CARGO_BIN_EXE_boundline"))
         .args(args)
         .current_dir(workspace)
         .output()
@@ -14,7 +14,7 @@ fn run_synod_in(workspace: &std::path::Path, args: &[&str]) -> std::process::Out
 }
 
 fn load_session_record(workspace: &std::path::Path) -> ActiveSessionRecord {
-    serde_json::from_slice(&fs::read(workspace.join(".synod").join("session.json")).unwrap())
+    serde_json::from_slice(&fs::read(workspace.join(".boundline").join("session.json")).unwrap())
         .unwrap()
 }
 
@@ -22,10 +22,10 @@ fn load_session_record(workspace: &std::path::Path) -> ActiveSessionRecord {
 fn workflow_status_reports_paused_capture_state_and_resume_guidance() {
     let workspace = temp_workflow_layer_workspace("workflow-layer-resume-status");
 
-    let start = run_synod_in(&workspace, &["workflow", "run", "default"]);
+    let start = run_boundline_in(&workspace, &["workflow", "run", "default"]);
     assert_eq!(start.status.code(), Some(0), "{}", terminal_text(&start));
 
-    let output = run_synod_in(&workspace, &["workflow", "status", "--workspace", "."]);
+    let output = run_boundline_in(&workspace, &["workflow", "status", "--workspace", "."]);
     let text = terminal_text(&output);
 
     assert_eq!(output.status.code(), Some(0), "{text}");
@@ -38,7 +38,8 @@ fn workflow_status_reports_paused_capture_state_and_resume_guidance() {
 		"{text}"
 	);
     assert!(
-        text.contains("next_command: synod capture --workspace ") && text.contains("--goal <goal>"),
+        text.contains("next_command: boundline capture --workspace ")
+            && text.contains("--goal <goal>"),
         "{text}"
     );
 }
@@ -47,16 +48,16 @@ fn workflow_status_reports_paused_capture_state_and_resume_guidance() {
 fn workflow_resume_continues_after_goal_capture_without_replaying_completed_phases() {
     let workspace = temp_workflow_layer_workspace("workflow-layer-resume-run");
 
-    let start = run_synod_in(&workspace, &["workflow", "run", "default"]);
+    let start = run_boundline_in(&workspace, &["workflow", "run", "default"]);
     assert_eq!(start.status.code(), Some(0), "{}", terminal_text(&start));
 
-    let capture = run_synod_in(
+    let capture = run_boundline_in(
         &workspace,
         &["capture", "--workspace", ".", "--goal", "Fix the failing add test"],
     );
     assert_eq!(capture.status.code(), Some(0), "{}", terminal_text(&capture));
 
-    let output = run_synod_in(&workspace, &["workflow", "resume", "--workspace", "."]);
+    let output = run_boundline_in(&workspace, &["workflow", "resume", "--workspace", "."]);
     let text = terminal_text(&output);
 
     assert_eq!(output.status.code(), Some(0), "{text}");
@@ -78,13 +79,13 @@ fn workflow_resume_continues_after_goal_capture_without_replaying_completed_phas
 fn workflow_inspect_includes_workflow_projection_and_trace_summary() {
     let workspace = temp_workflow_layer_workspace("workflow-layer-inspect");
 
-    let run = run_synod_in(
+    let run = run_boundline_in(
         &workspace,
         &["workflow", "run", "default", "--goal", "Fix the failing add test"],
     );
     assert_eq!(run.status.code(), Some(0), "{}", terminal_text(&run));
 
-    let output = run_synod_in(&workspace, &["workflow", "inspect", "--workspace", "."]);
+    let output = run_boundline_in(&workspace, &["workflow", "inspect", "--workspace", "."]);
     let text = terminal_text(&output);
 
     assert_eq!(output.status.code(), Some(0), "{text}");

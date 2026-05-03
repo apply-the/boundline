@@ -3,7 +3,7 @@
 ## WorkspaceInitProfile
 
 - Purpose: Represents the user-facing setup choice that seeds a repository with
-  bounded Synod files and optional assistant scaffolding.
+  bounded Boundline files and optional assistant scaffolding.
 - Fields:
   - `profile_id`: Stable identifier for the selected init template.
   - `template_kind`: `bug_fix`, `change`, or `delivery`.

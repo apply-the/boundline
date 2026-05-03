@@ -1,13 +1,10 @@
-use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 
-use crate::adapters::agent::FnAgentAdapter;
 use crate::adapters::governance_runtime::{
     CanonCliRuntime, GovernanceRequestKind, GovernanceRuntime, GovernanceRuntimeRequest,
-    LocalGovernanceRuntime, query_canon_capabilities,
+    LocalGovernanceRuntime,
 };
-use crate::adapters::tool::FnToolAdapter;
 use serde_json::{Map, Value, json};
 use thiserror::Error;
 use uuid::Uuid;
@@ -21,27 +18,26 @@ use crate::domain::cluster::{
     ClusteredExecutionKind, WorkspaceParticipationKind, WorkspaceParticipationRecord,
 };
 use crate::domain::configuration::{
-    EffectiveRouting, RouteSlot, RoutingOverrides, RuntimeKind, SourcedRoute,
-    SourcedRuntimeCapabilityProfile, SourcedSlotEffortPolicy, ValueSource,
+    EffortFallbackPolicy, RouteSlot, RoutingConfig, RoutingOverrides, RuntimeKind,
     resolve_effective_routing, resolve_effective_runtime_capabilities,
     resolve_effective_slot_effort_policies,
 };
-use crate::domain::decision::ActionSelector;
+use crate::domain::decision::Decision;
 use crate::domain::flow::{FlowStepMetadata, built_in_flow, supported_flow_names_csv};
 use crate::domain::flow_policy::FlowPolicy;
-use crate::domain::goal_plan::InferredFlow;
+use crate::domain::goal_plan::GoalPlan;
 use crate::domain::governance::{
     ApprovalState, GovernanceLifecycleState, GovernanceRuntimeKind, GovernedStageRecord,
     PacketReadiness, resolved_canon_mode,
 };
 use crate::domain::limits::{RunLimits, TerminalCondition};
-use crate::domain::negotiation::NegotiatedDeliveryPacket;
+use crate::domain::negotiation::{NegotiatedDeliveryPacket, NegotiationResolutionState};
+use crate::domain::review::{ReviewOutcome, ReviewTrigger};
 use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::session::{
     ActiveSessionRecord, ContinuityAuthority, DelegationContinuityMode, DelegationContinuityState,
-    DelegationPacket, DelegationPacketKind, DelegationPacketState, RoutingMode, RoutingOutcome,
-    SessionStatus, StuckEvidenceMarker, StuckRecoveryAction, delegation_status_view,
-    routing_outcome,
+    DelegationPacket, DelegationPacketKind, DelegationPacketState, DelegationStatusView,
+    SessionStatus,
 };
 use crate::domain::step::{
     ErrorInfo, ExecutionStatus, Recoverability, Step, StepAttempt, StepExecutionRequest,
@@ -49,54 +45,31 @@ use crate::domain::step::{
 };
 use crate::domain::task::{Task, TaskRequestError, TaskRunResponse, TaskStatus, TerminalReason};
 use crate::domain::task_context::TaskContext;
-use crate::domain::trace::{ExecutionTrace, TraceEventType, current_timestamp_millis};
+use crate::domain::trace::{ExecutionTrace, TraceEvent, TraceEventType, current_timestamp_millis};
 use crate::fixture::{
     FixtureRuntime, FixtureRuntimeError, build_fixture_plan_for_goal,
-    build_fixture_runtime_for_flow, build_task_request, load_workspace_execution_profile,
+    build_fixture_runtime_for_flow, build_fixture_runtime_for_goal_plan, build_task_request,
+    load_workspace_execution_profile,
 };
 use crate::orchestrator::decision_loop::{DecisionLoop, LoopTerminal};
-use crate::orchestrator::flow_inference::infer_flow;
 use crate::orchestrator::goal_planner::{
     GoalPlannerError, PlanningContextSources, build_goal_plan_with_sources,
 };
 use crate::orchestrator::governance::{
     GovernanceStepDecision, bounded_governance_context, build_autopilot_decision,
-    compacted_canon_memory_for_block, compacted_canon_memory_from_response,
-    governance_input_documents, governance_stage_key, governance_state_patch,
-    overlay_stage_policy_with_intent, requested_governance_intent, runtime_command_available,
-    selected_stage_policy,
+    compacted_canon_memory_for_block, compacted_canon_memory_from_response, governance_stage_key,
+    governance_state_patch, overlay_stage_policy_with_intent, requested_governance_intent,
+    runtime_command_available, selected_stage_policy,
 };
 use crate::orchestrator::recovery::{RecoveryDecision, decide_recovery};
 use crate::orchestrator::review_trace::{record_review_step_completed, record_review_step_started};
-use crate::orchestrator::terminal::{
-    build_planning_failure_reason, build_terminal_reason, task_status_for_condition,
-};
-use crate::registry::agent_registry::AgentRegistry;
-use crate::registry::tool_registry::ToolRegistry;
+use crate::orchestrator::terminal::{build_terminal_reason, task_status_for_condition};
 
 #[derive(Debug, Clone)]
 pub struct SessionRuntime {
     workspace_ref: PathBuf,
     session_store: FileSessionStore,
     trace_store: FileTraceStore,
-}
-
-const DELEGATION_STUCK_THRESHOLD: usize = 3;
-
-#[derive(Debug, Clone)]
-struct NativeRoutingSnapshot {
-    effective: EffectiveRouting,
-    runtime_capabilities: BTreeMap<RuntimeKind, SourcedRuntimeCapabilityProfile>,
-    slot_effort_policies: BTreeMap<RouteSlot, SourcedSlotEffortPolicy>,
-    available_runtimes: Vec<RuntimeKind>,
-}
-
-#[derive(Debug, Clone)]
-struct BlockedNativeBinding {
-    reason: String,
-    handoff_target: Option<RuntimeKind>,
-    capability_summary: String,
-    evidence_refs: Vec<String>,
 }
 
 impl SessionRuntime {
@@ -140,50 +113,6 @@ impl SessionRuntime {
         self.trace_store.latest().map_err(SessionRuntimeError::TraceStore)
     }
 
-    pub fn prepare_cluster_run(
-        &self,
-        session: &mut ActiveSessionRecord,
-        projection: &ClusterSessionProjection,
-    ) -> Result<(), SessionRuntimeError> {
-        projection
-            .validate()
-            .map_err(|error| SessionRuntimeError::InvalidClusterState(error.to_string()))?;
-
-        if let Some(task) = session.active_task.as_mut() {
-            if task
-                .context
-                .cluster_session_projection()
-                .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?
-                .is_some()
-            {
-                return Ok(());
-            }
-
-            let story = initial_cluster_delivery_story(projection, &task.context.workspace_ref);
-            task.context
-                .set_cluster_session_projection(projection)
-                .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?;
-            task.context
-                .set_cluster_delivery_story(&story)
-                .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?;
-            return Ok(());
-        }
-
-        let story = initial_cluster_delivery_story(projection, &projection.primary_workspace_ref);
-        let task = self.build_cluster_task(
-            session,
-            projection,
-            &story,
-            projection.primary_workspace_ref.as_str(),
-        )?;
-        session.active_task = Some(task);
-        session.latest_status = SessionStatus::Planned;
-        session.latest_terminal_reason = None;
-        session.updated_at = current_timestamp_millis();
-
-        Ok(())
-    }
-
     pub fn capture_goal(
         &self,
         session: &mut ActiveSessionRecord,
@@ -195,15 +124,26 @@ impl SessionRuntime {
         }
 
         session.goal = Some(goal.to_string());
+        session.negotiation_packet = Some(session.authored_brief.as_ref().map_or_else(
+            || {
+                NegotiatedDeliveryPacket::from_goal(
+                    &session.session_id,
+                    &session.workspace_ref,
+                    goal,
+                )
+            },
+            |bundle| {
+                NegotiatedDeliveryPacket::from_authored_brief(
+                    &session.session_id,
+                    &session.workspace_ref,
+                    goal,
+                    bundle,
+                )
+            },
+        ));
         session.active_task = None;
         session.goal_plan = None;
-        session.negotiation_packet = Some(NegotiatedDeliveryPacket::from_goal(
-            &session.session_id,
-            &session.workspace_ref,
-            goal,
-        ));
         session.decisions.clear();
-        session.active_flow_policy = None;
         session.latest_status = SessionStatus::GoalCaptured;
         session.latest_terminal_reason = None;
         session.latest_trace_ref = None;
@@ -222,10 +162,17 @@ impl SessionRuntime {
             supported: supported_flow_names_csv(),
         })?;
 
-        if session.active_task.is_some()
-            || session.goal_plan.is_some()
-            || !session.decisions.is_empty()
-        {
+        if session.active_task.is_some() {
+            return Err(SessionRuntimeError::FlowReplacementRequiresReset {
+                current: session
+                    .active_flow
+                    .as_ref()
+                    .map(|existing_flow| existing_flow.flow_name.clone())
+                    .unwrap_or_else(|| "current-session".to_string()),
+                requested: flow.name.to_string(),
+            });
+        }
+        if session.goal_plan.is_some() {
             return Err(SessionRuntimeError::FlowReplacementRequiresReset {
                 current: session
                     .active_flow
@@ -238,6 +185,9 @@ impl SessionRuntime {
 
         session.active_flow = Some(flow.initial_state());
         session.active_task = None;
+        session.goal_plan = None;
+        session.decisions.clear();
+        session.active_flow_policy = FlowPolicy::from_builtin(flow.name).ok();
         session.latest_trace_ref = None;
         session.latest_terminal_reason = None;
         session.latest_status = if session.goal.is_some() {
@@ -256,84 +206,207 @@ impl SessionRuntime {
         requested_flow: Option<&str>,
         no_flow: bool,
     ) -> Result<(), SessionRuntimeError> {
-        let should_confirm_plan =
-            requested_flow.is_some() || no_flow || session.active_flow.is_some();
+        if session.active_task.is_some()
+            && session.goal_plan.is_none()
+            && requested_flow.is_none()
+            && !no_flow
+        {
+            return self.plan_compatibility_task(session);
+        }
+
+        let result = self.plan_goal_plan(session, requested_flow, no_flow);
+        if matches!(result, Err(SessionRuntimeError::ClarificationRequired { .. }))
+            && session.active_flow.is_some()
+            && session.goal_plan.is_some()
+            && requested_flow.is_none()
+            && !no_flow
+            && self.flow_selected_goal_plan_uses_compatibility_step(session)?
+        {
+            return self.plan_compatibility_task(session);
+        }
+
+        result
+    }
+
+    pub fn confirm_goal_plan(
+        &self,
+        session: &mut ActiveSessionRecord,
+    ) -> Result<(), SessionRuntimeError> {
+        let goal_plan = session.goal_plan.as_mut().ok_or(SessionRuntimeError::MissingGoalPlan)?;
+        if goal_plan.requires_confirmation() {
+            goal_plan
+                .confirm()
+                .map_err(|error| SessionRuntimeError::GoalPlan(error.to_string()))?;
+        }
+
+        session.active_task = None;
+        session.latest_status = SessionStatus::Planned;
+        session.latest_terminal_reason = None;
+        session.latest_trace_ref = None;
+        session.updated_at = current_timestamp_millis();
+        Ok(())
+    }
+
+    pub fn prepare_cluster_run(
+        &self,
+        session: &mut ActiveSessionRecord,
+        projection: &ClusterSessionProjection,
+    ) -> Result<(), SessionRuntimeError> {
+        if let Some(task) = session.active_task.as_mut() {
+            task.context
+                .set_cluster_session_projection(projection)
+                .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?;
+        }
+        if let Some(goal_plan) = session.goal_plan.as_mut() {
+            goal_plan.cluster_session_projection = Some(projection.clone());
+            goal_plan.cluster_delivery_story = None;
+        }
+
+        Ok(())
+    }
+
+    pub fn uses_native_goal_plan(
+        &self,
+        session: &ActiveSessionRecord,
+    ) -> Result<bool, SessionRuntimeError> {
+        Ok(session.goal_plan.is_some())
+    }
+
+    pub fn resolve_routing_outcome(
+        &self,
+        session: &ActiveSessionRecord,
+    ) -> Result<crate::domain::session::RoutingOutcome, SessionRuntimeError> {
+        Ok(crate::domain::session::routing_outcome(session))
+    }
+
+    fn plan_compatibility_task(
+        &self,
+        session: &mut ActiveSessionRecord,
+    ) -> Result<(), SessionRuntimeError> {
         let goal = session.goal.clone().ok_or(SessionRuntimeError::MissingGoal)?;
-        if let Some(packet) = session.negotiation_packet.as_ref()
-            && packet.resolution_state
-                != crate::domain::negotiation::NegotiationResolutionState::Credible
-        {
-            let headline = packet.clarification_headline.clone().unwrap_or_else(|| {
-                "clarification required: resolve the active negotiation state before planning"
-                    .to_string()
-            });
-            let prompt = packet
-                .constraints
-                .iter()
-                .find(|constraint| constraint.blocks_planning)
-                .map(|constraint| constraint.summary.clone())
-                .unwrap_or_else(|| {
-                    "resolve the active negotiation constraint before planning".to_string()
-                });
-            return Err(SessionRuntimeError::ClarificationRequired { headline, prompt });
-        }
-        if let Some(bundle) = session.authored_brief.as_ref()
-            && let Some(clarification) = bundle.clarification.as_ref()
-        {
-            return Err(SessionRuntimeError::ClarificationRequired {
-                headline: clarification.headline(),
-                prompt: clarification.prompt.clone(),
-            });
-        }
         if let Some(active_flow) = &session.active_flow {
             active_flow
                 .validate()
                 .map_err(|error| SessionRuntimeError::InvalidFlowState(error.to_string()))?;
         }
 
-        let planning_context = self.planning_context_sources(session);
-        let preferred_flow = if no_flow {
+        let request = build_task_request(
+            &self.workspace_ref,
+            &goal,
+            session.session_id.clone(),
+            session.authored_brief.as_ref(),
+            session.negotiation_packet.as_ref(),
+        )
+        .map_err(SessionRuntimeError::FixtureRuntime)?;
+        let plan =
+            build_fixture_plan_for_goal(&self.workspace_ref, session.active_flow.as_ref(), &goal)
+                .map_err(SessionRuntimeError::FixtureRuntime)?;
+        let task = Task::new(Uuid::new_v4().to_string(), &request, plan)
+            .map_err(SessionRuntimeError::TaskRequest)?;
+
+        session.goal_plan = None;
+        session.active_task = Some(task);
+        session.decisions.clear();
+        session.active_flow_policy = session
+            .active_flow
+            .as_ref()
+            .and_then(|flow| FlowPolicy::from_builtin(&flow.flow_name).ok());
+        session.latest_status = SessionStatus::Planned;
+        session.latest_terminal_reason = None;
+        session.latest_trace_ref = None;
+        session.updated_at = current_timestamp_millis();
+
+        Ok(())
+    }
+
+    fn plan_goal_plan(
+        &self,
+        session: &mut ActiveSessionRecord,
+        requested_flow: Option<&str>,
+        no_flow: bool,
+    ) -> Result<(), SessionRuntimeError> {
+        let goal = session.goal.clone().ok_or(SessionRuntimeError::MissingGoal)?;
+        if !no_flow
+            && requested_flow.is_none()
+            && let Some(active_flow) = &session.active_flow
+        {
+            active_flow
+                .validate()
+                .map_err(|error| SessionRuntimeError::InvalidFlowState(error.to_string()))?;
+        }
+        if let Some(flow_name) = requested_flow {
+            built_in_flow(flow_name).ok_or_else(|| SessionRuntimeError::UnknownFlow {
+                requested: flow_name.to_string(),
+                supported: supported_flow_names_csv(),
+            })?;
+        }
+
+        if let Some(packet) = self.session_negotiation_packet(session, &goal)
+            && packet.resolution_state == NegotiationResolutionState::PendingClarification
+        {
+            let prompt = packet
+                .constraints
+                .iter()
+                .find(|constraint| constraint.blocks_planning)
+                .map(|constraint| constraint.summary.clone())
+                .unwrap_or_else(|| {
+                    "resolve the blocking clarification before planning can continue".to_string()
+                });
+            return Err(SessionRuntimeError::ClarificationRequired {
+                headline: packet
+                    .clarification_headline
+                    .unwrap_or_else(|| "clarification required before planning".to_string()),
+                prompt,
+            });
+        }
+
+        if let Some(authored_brief) = session.authored_brief.as_ref()
+            && authored_brief.clarification.is_some()
+        {
+            return Err(SessionRuntimeError::ClarificationRequired {
+                headline: authored_brief
+                    .clarification_headline()
+                    .unwrap_or_else(|| "bounded context required before planning".to_string()),
+                prompt: authored_brief.clarification_prompt().unwrap_or_else(|| {
+                    "capture a narrower goal before planning can continue".to_string()
+                }),
+            });
+        }
+
+        let context_sources = self.planning_context_sources(session, &goal);
+        let native_flow_state = if no_flow {
             None
+        } else if let Some(flow_name) = requested_flow {
+            built_in_flow(flow_name).map(|flow| flow.initial_state())
         } else {
-            requested_flow.or(session.active_flow.as_ref().map(|flow| flow.flow_name.as_str()))
+            session.active_flow.clone()
         };
+        let preserved_flow_policy =
+            if native_flow_state.is_some() { session.active_flow_policy.clone() } else { None };
+        let preferred_flow = native_flow_state.as_ref().map(|flow| flow.flow_name.as_str());
         let mut goal_plan = match build_goal_plan_with_sources(
             &goal,
             &self.workspace_ref,
-            &planning_context,
+            &context_sources,
             preferred_flow,
         ) {
             Ok(goal_plan) => goal_plan,
+            Err(GoalPlannerError::MissingGoal) => return Err(SessionRuntimeError::MissingGoal),
             Err(GoalPlannerError::InsufficientContext { summary, goal_plan }) => {
                 let mut goal_plan = *goal_plan;
-                if let Some(packet) = session.negotiation_packet.as_ref() {
-                    goal_plan = goal_plan.with_negotiation_projection(
-                        packet.goal_summary.clone(),
-                        packet.resolution_state.as_str(),
-                        packet.acceptance_boundary.success_headline.clone(),
-                    );
+                self.apply_negotiation_projection(session, &goal, &mut goal_plan);
+                if no_flow {
+                    goal_plan.mark_flow_skipped();
                 }
-                self.apply_planning_flow_selection(
-                    session,
-                    &mut goal_plan,
-                    requested_flow,
-                    no_flow,
-                )?;
-                if let Some(previous_goal_plan) = session.goal_plan.as_ref()
-                    && let Some(continuity) = previous_goal_plan.delegation_continuity().cloned()
-                {
-                    goal_plan = goal_plan
-                        .with_delegation_state(
-                            previous_goal_plan.delegation_packet_history().to_vec(),
-                            continuity,
-                        )
-                        .map_err(|error| SessionRuntimeError::InvalidGoalPlan(error.to_string()))?;
-                }
+
+                session.active_flow = native_flow_state.clone();
                 session.active_task = None;
                 session.goal_plan = Some(goal_plan);
                 session.decisions.clear();
+                session.active_flow_policy = preserved_flow_policy.clone();
                 session.latest_status = SessionStatus::GoalCaptured;
                 session.latest_terminal_reason = None;
+                session.latest_trace_ref = None;
                 session.updated_at = current_timestamp_millis();
 
                 return Err(SessionRuntimeError::ClarificationRequired {
@@ -341,81 +414,109 @@ impl SessionRuntime {
                     prompt: summary,
                 });
             }
-            Err(error) => return Err(SessionRuntimeError::GoalPlanner(error)),
+            Err(GoalPlannerError::PlanCreation(error)) => {
+                return Err(SessionRuntimeError::GoalPlan(error.to_string()));
+            }
         };
-        if let Some(packet) = session.negotiation_packet.as_ref() {
-            goal_plan = goal_plan.with_negotiation_projection(
-                packet.goal_summary.clone(),
-                packet.resolution_state.as_str(),
-                packet.acceptance_boundary.success_headline.clone(),
-            );
-        }
-        self.apply_planning_flow_selection(session, &mut goal_plan, requested_flow, no_flow)?;
-        if let Some(previous_goal_plan) = session.goal_plan.as_ref()
-            && let Some(continuity) = previous_goal_plan.delegation_continuity().cloned()
-        {
-            goal_plan = goal_plan
-                .with_delegation_state(
-                    previous_goal_plan.delegation_packet_history().to_vec(),
-                    continuity,
-                )
-                .map_err(|error| SessionRuntimeError::InvalidGoalPlan(error.to_string()))?;
-        }
+
         if let Some(previous_goal_plan) = session.goal_plan.as_ref() {
-            let changed_fields = material_goal_plan_changes(previous_goal_plan, &goal_plan);
-            if changed_fields.is_empty() {
-                if should_confirm_plan && previous_goal_plan.requires_confirmation() {
-                    let existing_goal_plan =
-                        session.goal_plan.as_mut().ok_or(SessionRuntimeError::MissingGoalPlan)?;
-                    existing_goal_plan
-                        .confirm()
-                        .map_err(|error| SessionRuntimeError::InvalidGoalPlan(error.to_string()))?;
-                }
-
-                session.active_task = None;
-                session.decisions.clear();
-                session.latest_status = SessionStatus::Planned;
-                session.latest_terminal_reason = None;
-                session.latest_trace_ref = None;
-                session.updated_at = current_timestamp_millis();
-                return Ok(());
-            }
-
-            let revision = previous_goal_plan.next_revision();
-            let base_rationale = goal_plan.planning_rationale.clone().unwrap_or_default();
-            let changed_summary = changed_fields.join(", ");
-            let resolved_packet_id =
-                goal_plan.active_delegation_packet().map(|packet| packet.packet_id.clone());
-            if resolved_packet_id.is_some() {
-                goal_plan
-                    .resolve_active_delegation(
-                        format!("delegation resolved by replan revision {revision}"),
-                        format!("replan revision {revision} changed {changed_summary}"),
-                        "synod run",
-                    )
-                    .map_err(|error| SessionRuntimeError::InvalidGoalPlan(error.to_string()))?;
-            }
-            goal_plan.proposal_revision = revision;
-            let mut rationale_parts = vec![format!(
-                "replan revision {} supersedes revision {} because {}",
-                revision, previous_goal_plan.proposal_revision, changed_summary
-            )];
-            if let Some(packet_id) = resolved_packet_id {
-                rationale_parts.push(format!("resolved delegation packet {packet_id}"));
-            }
-            if !base_rationale.is_empty() {
-                rationale_parts.push(base_rationale);
-            }
-            goal_plan.planning_rationale = Some(rationale_parts.join("; "));
+            let previous_revision = previous_goal_plan.proposal_revision;
+            goal_plan.proposal_revision = previous_goal_plan.next_revision();
+            goal_plan.planning_rationale = Some(match goal_plan.planning_rationale.take() {
+                Some(rationale) => format!(
+                    "{rationale}; supersedes revision {previous_revision} because workspace evidence changed or the operator requested a fresh plan"
+                ),
+                None => format!(
+                    "supersedes revision {previous_revision} because workspace evidence changed or the operator requested a fresh plan"
+                ),
+            });
         }
-        if should_confirm_plan {
+
+        self.apply_negotiation_projection(session, &goal, &mut goal_plan);
+        if no_flow {
+            goal_plan.mark_flow_skipped();
+        }
+        if requested_flow.is_some() || session.active_flow.is_some() || no_flow {
             goal_plan
                 .confirm()
-                .map_err(|error| SessionRuntimeError::InvalidGoalPlan(error.to_string()))?;
+                .map_err(|error| SessionRuntimeError::GoalPlan(error.to_string()))?;
         }
 
+        session.active_flow = native_flow_state;
         session.active_task = None;
         session.goal_plan = Some(goal_plan);
+        session.decisions.clear();
+        session.active_flow_policy = preserved_flow_policy;
+        session.latest_status = SessionStatus::Planned;
+        session.latest_terminal_reason = None;
+        session.latest_trace_ref = None;
+        session.updated_at = current_timestamp_millis();
+
+        Ok(())
+    }
+
+    pub fn execute_next_step(
+        &self,
+        session: &mut ActiveSessionRecord,
+    ) -> Result<(), SessionRuntimeError> {
+        if session.active_task.is_none() && session.latest_status.is_terminal() {
+            return Err(SessionRuntimeError::MissingActiveTask);
+        }
+        if session.active_task.is_none()
+            && self.flow_selected_goal_plan_uses_compatibility_step(session)?
+        {
+            self.ensure_flow_selected_compatibility_task(session)?;
+        }
+        let runtime = self.build_runtime(session)?;
+        let _ = self.execute_single_step(session, &runtime)?;
+        Ok(())
+    }
+
+    fn flow_selected_goal_plan_uses_compatibility_step(
+        &self,
+        session: &ActiveSessionRecord,
+    ) -> Result<bool, SessionRuntimeError> {
+        if session.goal_plan.is_none() || session.active_flow.is_none() {
+            return Ok(false);
+        }
+
+        match load_workspace_execution_profile(&self.workspace_ref) {
+            Ok(_) => Ok(true),
+            Err(FixtureRuntimeError::MissingExecutionProfile(_)) => Ok(false),
+            Err(error) => Err(SessionRuntimeError::FixtureRuntime(error)),
+        }
+    }
+
+    fn ensure_flow_selected_compatibility_task(
+        &self,
+        session: &mut ActiveSessionRecord,
+    ) -> Result<(), SessionRuntimeError> {
+        if session.active_task.is_some() {
+            return Ok(());
+        }
+
+        let goal = session.goal.clone().ok_or(SessionRuntimeError::MissingGoal)?;
+        if let Some(active_flow) = &session.active_flow {
+            active_flow
+                .validate()
+                .map_err(|error| SessionRuntimeError::InvalidFlowState(error.to_string()))?;
+        }
+
+        let request = build_task_request(
+            &self.workspace_ref,
+            &goal,
+            session.session_id.clone(),
+            session.authored_brief.as_ref(),
+            session.negotiation_packet.as_ref(),
+        )
+        .map_err(SessionRuntimeError::FixtureRuntime)?;
+        let plan =
+            build_fixture_plan_for_goal(&self.workspace_ref, session.active_flow.as_ref(), &goal)
+                .map_err(SessionRuntimeError::FixtureRuntime)?;
+        let task = Task::new(Uuid::new_v4().to_string(), &request, plan)
+            .map_err(SessionRuntimeError::TaskRequest)?;
+
+        session.active_task = Some(task);
         session.decisions.clear();
         session.latest_status = SessionStatus::Planned;
         session.latest_terminal_reason = None;
@@ -425,1061 +526,27 @@ impl SessionRuntime {
         Ok(())
     }
 
-    pub fn confirm_goal_plan(
-        &self,
-        session: &mut ActiveSessionRecord,
-    ) -> Result<(), SessionRuntimeError> {
-        let goal_plan = session.goal_plan.as_mut().ok_or(SessionRuntimeError::MissingGoalPlan)?;
-        goal_plan
-            .confirm()
-            .map_err(|error| SessionRuntimeError::InvalidGoalPlan(error.to_string()))?;
-        session.latest_status = SessionStatus::Planned;
-        session.latest_terminal_reason = None;
-        session.updated_at = current_timestamp_millis();
-        Ok(())
-    }
-
-    fn planning_context_sources(&self, session: &ActiveSessionRecord) -> PlanningContextSources {
-        let canon_capability_snapshot = session
-            .active_task
-            .as_ref()
-            .and_then(|task| task.context.latest_canon_capability_snapshot().ok().flatten())
-            .or_else(|| Self::workspace_canon_capability_snapshot(&self.workspace_ref));
-        let compacted_canon_memory = session
-            .goal_plan
-            .as_ref()
-            .and_then(|goal_plan| goal_plan.compacted_canon_memory.clone())
-            .or_else(|| {
-                session
-                    .active_task
-                    .as_ref()
-                    .and_then(|task| task.context.latest_compacted_canon_memory().ok().flatten())
-            });
-
-        PlanningContextSources {
-            authored_input_summary: session
-                .authored_brief
-                .as_ref()
-                .map(|bundle| bundle.summary_text()),
-            authored_input_sources: session
-                .authored_brief
-                .as_ref()
-                .map(|bundle| bundle.ordered_source_labels())
-                .unwrap_or_default(),
-            negotiation_goal_summary: session
-                .negotiation_packet
-                .as_ref()
-                .map(|packet| packet.goal_summary.clone()),
-            negotiation_resolution: session
-                .negotiation_packet
-                .as_ref()
-                .map(|packet| packet.resolution_state.as_str().to_string()),
-            negotiation_acceptance_boundary: session
-                .negotiation_packet
-                .as_ref()
-                .map(|packet| packet.acceptance_boundary.success_headline.clone()),
-            latest_trace_ref: session.latest_trace_ref.clone(),
-            workflow_progress: session.active_workflow_progress().cloned(),
-            canon_capability_snapshot,
-            compacted_canon_memory,
-        }
-    }
-
-    fn workspace_canon_capability_snapshot(
-        workspace_ref: &Path,
-    ) -> Option<crate::domain::governance::CanonCapabilitySnapshot> {
-        let profile = load_workspace_execution_profile(workspace_ref).ok()?;
-        let governance = profile.governance.as_ref()?;
-        let canon = governance.canon.as_ref()?;
-        query_canon_capabilities(&canon.command, workspace_ref).ok().flatten()
-    }
-
-    fn apply_planning_flow_selection(
-        &self,
-        session: &mut ActiveSessionRecord,
-        goal_plan: &mut crate::domain::goal_plan::GoalPlan,
-        requested_flow: Option<&str>,
-        no_flow: bool,
-    ) -> Result<(), SessionRuntimeError> {
-        if no_flow {
-            session.active_flow = None;
-            session.active_flow_policy = None;
-            goal_plan.mark_flow_skipped();
-            return Ok(());
-        }
-
-        if let Some(flow_name) = requested_flow {
-            self.apply_confirmed_flow(
-                session,
-                goal_plan,
-                flow_name,
-                "operator confirmed flow during planning",
-            )?;
-            return Ok(());
-        }
-
-        if let Some(active_flow) = &session.active_flow {
-            let flow_name = active_flow.flow_name.clone();
-            self.apply_confirmed_flow(
-                session,
-                goal_plan,
-                &flow_name,
-                "operator selected flow before planning",
-            )?;
-            return Ok(());
-        }
-
-        session.active_flow = None;
-        session.active_flow_policy = None;
-        goal_plan.flow_skipped = false;
-        if goal_plan.flow.is_none() {
-            goal_plan.flow = infer_flow(&goal_plan.goal_text);
-        }
-        Ok(())
-    }
-
-    fn apply_confirmed_flow(
-        &self,
-        session: &mut ActiveSessionRecord,
-        goal_plan: &mut crate::domain::goal_plan::GoalPlan,
-        flow_name: &str,
-        confidence_reason: &str,
-    ) -> Result<(), SessionRuntimeError> {
-        let flow = built_in_flow(flow_name).ok_or_else(|| SessionRuntimeError::UnknownFlow {
-            requested: flow_name.to_string(),
-            supported: supported_flow_names_csv(),
-        })?;
-        let policy = FlowPolicy::from_builtin(flow_name)
-            .map_err(|error| SessionRuntimeError::InvalidFlowState(error.to_string()))?;
-
-        session.active_flow = Some(flow.initial_state());
-        session.active_flow_policy = Some(policy);
-        goal_plan.flow = Some(InferredFlow {
-            flow_name: flow.name.to_string(),
-            confidence_reason: confidence_reason.to_string(),
-            confirmed: true,
-        });
-
-        Ok(())
-    }
-
-    pub fn resolve_routing_outcome(
-        &self,
-        session: &ActiveSessionRecord,
-    ) -> Result<RoutingOutcome, SessionRuntimeError> {
-        if let Some(policy) = session.active_flow_policy.as_ref() {
-            policy
-                .validate()
-                .map_err(|error| SessionRuntimeError::InvalidFlowState(error.to_string()))?;
-        }
-
-        Ok(routing_outcome(session))
-    }
-
-    pub fn uses_native_goal_plan(
-        &self,
-        session: &ActiveSessionRecord,
-    ) -> Result<bool, SessionRuntimeError> {
-        if session.active_task.is_some() {
-            return Ok(false);
-        }
-
-        let outcome = self.resolve_routing_outcome(session)?;
-
-        if outcome.mode == RoutingMode::Blocked
-            && let Some(goal_plan) = session.goal_plan.as_ref()
-            && goal_plan.requires_confirmation()
-        {
-            return Err(SessionRuntimeError::PlanConfirmationRequired {
-                flow_name: goal_plan.flow.as_ref().map(|flow| flow.flow_name.clone()),
-            });
-        }
-
-        Ok(outcome.mode == RoutingMode::Native)
-    }
-
-    fn should_materialize_governed_task(
-        &self,
-        session: &ActiveSessionRecord,
-    ) -> Result<bool, SessionRuntimeError> {
-        if session.active_task.is_some() || session.goal_plan.is_none() {
-            return Ok(false);
-        }
-
-        let flow_name =
-            session.active_flow.as_ref().map(|flow| flow.flow_name.as_str()).or_else(|| {
-                session
-                    .goal_plan
-                    .as_ref()
-                    .and_then(|goal_plan| goal_plan.flow.as_ref())
-                    .filter(|flow| flow.confirmed)
-                    .map(|flow| flow.flow_name.as_str())
-            });
-        let Some(flow_name) = flow_name else {
-            return Ok(false);
-        };
-
-        let profile = match load_workspace_execution_profile(&self.workspace_ref) {
-            Ok(profile) => profile,
-            Err(FixtureRuntimeError::MissingExecutionProfile(_)) => return Ok(false),
-            Err(error) => return Err(SessionRuntimeError::FixtureRuntime(error)),
-        };
-        let Some(governance) = profile.governance.as_ref() else {
-            return Ok(false);
-        };
-
-        Ok(governance.stages.iter().any(|policy| {
-            policy.enabled
-                && policy.flow_name == flow_name
-                && policy.effective_runtime(governance.default_runtime)
-                    == GovernanceRuntimeKind::Canon
-        }))
-    }
-
-    fn materialize_governed_task(
-        &self,
-        session: &mut ActiveSessionRecord,
-    ) -> Result<bool, SessionRuntimeError> {
-        if !self.should_materialize_governed_task(session)? {
-            return Ok(false);
-        }
-
-        let goal = session.goal.clone().ok_or(SessionRuntimeError::MissingGoal)?;
-        let request = build_task_request(
-            &self.workspace_ref,
-            goal,
-            session.session_id.clone(),
-            session.authored_brief.as_ref(),
-            session.negotiation_packet.as_ref(),
-        )
-        .map_err(SessionRuntimeError::FixtureRuntime)?;
-        let plan = build_fixture_plan_for_goal(
-            &self.workspace_ref,
-            session.active_flow.as_ref(),
-            session.goal.as_deref().unwrap_or_default(),
-        )
-        .map_err(SessionRuntimeError::FixtureRuntime)?;
-
-        session.active_task = Some(
-            Task::new(format!("task-{}", session.session_id), &request, plan)
-                .map_err(SessionRuntimeError::TaskRequest)?,
-        );
-        session.updated_at = current_timestamp_millis();
-        Ok(true)
-    }
-
-    fn native_flow_policy(
-        &self,
-        session: &ActiveSessionRecord,
-    ) -> Result<Option<FlowPolicy>, SessionRuntimeError> {
-        if let Some(policy) = session.active_flow_policy.as_ref() {
-            policy
-                .validate()
-                .map_err(|error| SessionRuntimeError::InvalidFlowState(error.to_string()))?;
-            return Ok(Some(policy.clone()));
-        }
-
-        let Some(goal_plan) = session.goal_plan.as_ref() else {
-            return Ok(None);
-        };
-        let Some(flow) = goal_plan.flow.as_ref() else {
-            return Ok(None);
-        };
-        if !flow.confirmed {
-            return Ok(None);
-        }
-
-        let policy = FlowPolicy::from_builtin(&flow.flow_name)
-            .map_err(|error| SessionRuntimeError::InvalidFlowState(error.to_string()))?;
-        Ok(Some(policy))
-    }
-
-    fn native_adapter_registries(
-        &self,
-    ) -> Result<(AgentRegistry, ToolRegistry), SessionRuntimeError> {
-        self.validate_native_assistant_bindings()?;
-
-        let mut agents = AgentRegistry::new();
-        let analyzer_workspace = self.workspace_ref.clone();
-        agents
-            .register(
-                "analyzer",
-                FnAgentAdapter::new(move |request| {
-                    native_analyze_workspace(&analyzer_workspace, request)
-                }),
-            )
-            .map_err(|error| SessionRuntimeError::DecisionLoop(error.to_string()))?;
-
-        let coder_workspace = self.workspace_ref.clone();
-        agents
-            .register(
-                "coder",
-                FnAgentAdapter::new(move |request| {
-                    native_apply_workspace_change(&coder_workspace, request)
-                }),
-            )
-            .map_err(|error| SessionRuntimeError::DecisionLoop(error.to_string()))?;
-
-        let mut tools = ToolRegistry::new();
-        let tester_workspace = self.workspace_ref.clone();
-        tools
-            .register(
-                "tester",
-                FnToolAdapter::new(move |request| {
-                    native_run_validation(&tester_workspace, request)
-                }),
-            )
-            .map_err(|error| SessionRuntimeError::DecisionLoop(error.to_string()))?;
-
-        tools
-            .register("replanner", FnToolAdapter::new(native_replan_step))
-            .map_err(|error| SessionRuntimeError::DecisionLoop(error.to_string()))?;
-
-        tools
-            .register("asker", FnToolAdapter::new(native_request_clarification))
-            .map_err(|error| SessionRuntimeError::DecisionLoop(error.to_string()))?;
-
-        Ok((agents, tools))
-    }
-
-    fn validate_native_assistant_bindings(&self) -> Result<(), SessionRuntimeError> {
-        let snapshot = self.native_routing_snapshot();
-        let available_runtimes = snapshot.available_runtimes;
-
-        if available_runtimes.is_empty() {
-            return Ok(());
-        }
-
-        Self::ensure_runtime_available(
-            "implementation",
-            snapshot.effective.implementation.route.runtime,
-            &available_runtimes,
-        )?;
-        Self::ensure_runtime_available(
-            "verification",
-            snapshot.effective.verification.route.runtime,
-            &available_runtimes,
-        )?;
-
-        Ok(())
-    }
-
-    fn ensure_runtime_available(
-        slot: &str,
-        runtime: crate::domain::configuration::RuntimeKind,
-        available_runtimes: &[crate::domain::configuration::RuntimeKind],
-    ) -> Result<(), SessionRuntimeError> {
-        if available_runtimes.contains(&runtime) {
-            return Ok(());
-        }
-
-        let available = available_runtimes
-            .iter()
-            .map(|candidate| candidate.as_str())
-            .collect::<Vec<_>>()
-            .join(", ");
-        Err(SessionRuntimeError::UnsupportedAssistantBinding {
-            slot: slot.to_string(),
-            runtime: runtime.as_str().to_string(),
-            available,
-        })
-    }
-
-    fn run_goal_plan_to_terminal(
-        &self,
-        session: &mut ActiveSessionRecord,
-    ) -> Result<TaskRunResponse, SessionRuntimeError> {
-        if let Some(response) = self.blocked_native_goal_plan_response(session)? {
-            return Ok(response);
-        }
-
-        let goal_plan = session.goal_plan.clone().ok_or(SessionRuntimeError::MissingActiveTask)?;
-        let flow_policy = self.native_flow_policy(session)?;
-        let (agents, tools) = self.native_adapter_registries()?;
-        let loop_runner = DecisionLoop::new(
-            agents,
-            tools,
-            self.trace_store.clone(),
-            RunLimits::default().max_steps,
-        );
-        let (terminal, decisions, mut trace) = loop_runner
-            .run(&goal_plan, flow_policy.as_ref(), &session.workspace_ref, &session.session_id)
-            .map_err(|error| SessionRuntimeError::DecisionLoop(error.to_string()))?;
-        if let Some(routing_projection) = Self::workspace_routing_projection(&self.workspace_ref) {
-            Self::persist_routing_projection(&mut trace, &routing_projection);
-        }
-        let terminal_reason = if matches!(terminal, LoopTerminal::Success) {
-            native_delivery_completion_failure_reason(&goal_plan, &decisions).unwrap_or_else(|| {
-                let (condition, message, details) = native_terminal_outcome(&terminal);
-                build_terminal_reason(condition, message, details)
-            })
-        } else {
-            let (condition, message, details) = native_terminal_outcome(&terminal);
-            build_terminal_reason(condition, message, details)
-        };
-        let condition = terminal_reason.condition;
-        let terminal_status = task_status_for_condition(condition);
-
-        trace.finalize(terminal_status, terminal_reason.clone());
-        let trace_path =
-            self.trace_store.persist(&trace).map_err(SessionRuntimeError::TraceStore)?;
-        let trace_location = trace_path.to_string_lossy().into_owned();
-        trace.set_trace_location(trace_location.clone());
-        self.trace_store.persist(&trace).map_err(SessionRuntimeError::TraceStore)?;
-
-        session.active_task = None;
-        session.decisions = decisions;
-        session.latest_status = session_status_for_task_status(terminal_status);
-        session.latest_terminal_reason = Some(terminal_reason.clone());
-        session.latest_trace_ref = Some(trace_location.clone());
-        session.updated_at = current_timestamp_millis();
-
-        Ok(TaskRunResponse {
-            task_id: session.session_id.clone(),
-            terminal_status,
-            terminal_reason,
-            final_context: TaskContext::new(
-                session.session_id.clone(),
-                session.workspace_ref.clone(),
-                RunLimits::default(),
-                Map::new(),
-            ),
-            plan_revision: 0,
-            trace_location,
-        })
-    }
-
-    fn blocked_native_goal_plan_response(
-        &self,
-        session: &mut ActiveSessionRecord,
-    ) -> Result<Option<TaskRunResponse>, SessionRuntimeError> {
-        let snapshot = self.native_routing_snapshot();
-        let Some(blocked) = Self::blocked_native_binding(&snapshot) else {
-            return Ok(None);
-        };
-
-        let routing_projection = RoutingDecisionProjection::from_effective_state(
-            &snapshot.effective,
-            &snapshot.runtime_capabilities,
-            &snapshot.slot_effort_policies,
-        );
-        let (goal_text, plan_revision, terminal_reason, latest_status) = {
-            let goal_plan =
-                session.goal_plan.as_mut().ok_or(SessionRuntimeError::MissingGoalPlan)?;
-            let kind = blocked
-                .handoff_target
-                .map(|_| DelegationPacketKind::Handoff)
-                .unwrap_or(DelegationPacketKind::Escalation);
-            let target_owner = blocked
-                .handoff_target
-                .map(|runtime| runtime.as_str().to_string())
-                .unwrap_or_else(|| "operator".to_string());
-            let repeated_attempts = goal_plan
-                .delegation_packet_history()
-                .iter()
-                .rev()
-                .take_while(|packet| {
-                    packet.continuity_reason == blocked.reason
-                        && packet.target_owner == target_owner
-                })
-                .count()
-                + 1;
-            let is_stuck = repeated_attempts >= DELEGATION_STUCK_THRESHOLD;
-            let next_command = if kind == DelegationPacketKind::Handoff && !is_stuck {
-                "synod status"
-            } else {
-                "synod inspect"
-            };
-            let packet = DelegationPacket {
-                packet_id: format!("delegation-{}", Uuid::new_v4()),
-                kind,
-                state: if is_stuck {
-                    DelegationPacketState::Stuck
-                } else {
-                    DelegationPacketState::Active
-                },
-                created_at: current_timestamp_millis(),
-                resolved_at: None,
-                source_route_owner: "native".to_string(),
-                target_owner: target_owner.clone(),
-                continuity_reason: blocked.reason.clone(),
-                recommended_next_action: next_command.to_string(),
-                evidence_refs: blocked.evidence_refs.clone(),
-                capability_summary: Some(blocked.capability_summary.clone()),
-                stuck_marker: is_stuck.then_some(StuckEvidenceMarker {
-                    repeated_attempts,
-                    same_reason_count: repeated_attempts,
-                    unchanged_workspace_signal: true,
-                    stale_route_policy: false,
-                    recommended_recovery: if kind == DelegationPacketKind::Handoff {
-                        StuckRecoveryAction::UpdateConfig
-                    } else {
-                        StuckRecoveryAction::Replan
-                    },
-                }),
-                superseded_by_packet_id: None,
-            };
-            let continuity = DelegationContinuityState {
-                active_packet_id: Some(packet.packet_id.clone()),
-                mode: if is_stuck {
-                    DelegationContinuityMode::Stuck
-                } else if kind == DelegationPacketKind::Handoff {
-                    DelegationContinuityMode::HandoffRequired
-                } else {
-                    DelegationContinuityMode::EscalationRequired
-                },
-                authority_source: ContinuityAuthority::NativeSession,
-                next_command: next_command.to_string(),
-                headline: if is_stuck {
-                    format!("stuck delegated continuity: {}", blocked.reason)
-                } else {
-                    packet.headline()
-                },
-                evidence_summary: packet.evidence_summary(),
-            };
-
-            goal_plan
-                .record_delegation_packet(packet.clone(), continuity.clone())
-                .map_err(|error| SessionRuntimeError::InvalidGoalPlan(error.to_string()))?;
-
-            let terminal_reason = build_terminal_reason(
-                TerminalCondition::TaskNotCredible,
-                continuity.headline.clone(),
-                Some(json!({
-                    "delegation_mode": continuity.mode.as_str(),
-                    "delegation_next_command": continuity.next_command,
-                    "delegation_packet": packet,
-                    "routing_projection": routing_projection,
-                })),
-            );
-            let latest_status = if kind == DelegationPacketKind::Handoff && !is_stuck {
-                SessionStatus::Planned
-            } else {
-                SessionStatus::Failed
-            };
-
-            (
-                goal_plan.goal_text.clone(),
-                goal_plan.proposal_revision,
-                terminal_reason,
-                latest_status,
-            )
-        };
-        let delegation = delegation_status_view(session);
-        let mut trace =
-            ExecutionTrace::new(session.session_id.clone(), session.session_id.clone(), goal_text);
-        trace.record_event(
-            TraceEventType::GoalPlanCreated,
-            None,
-            plan_revision,
-            json!({
-                "routing_projection": routing_projection,
-                "delegation": delegation,
-            }),
-        );
-        trace.record_event(
-            TraceEventType::TerminalRecorded,
-            None,
-            plan_revision,
-            json!({
-                "terminal_status": TaskStatus::Failed,
-                "terminal_reason": terminal_reason,
-                "delegation": delegation_status_view(session),
-            }),
-        );
-        trace.finalize(TaskStatus::Failed, terminal_reason.clone());
-        let trace_path =
-            self.trace_store.persist(&trace).map_err(SessionRuntimeError::TraceStore)?;
-        let trace_location = trace_path.to_string_lossy().into_owned();
-        trace.set_trace_location(trace_location.clone());
-        self.trace_store.persist(&trace).map_err(SessionRuntimeError::TraceStore)?;
-
-        session.active_task = None;
-        session.latest_status = latest_status;
-        session.latest_terminal_reason = Some(terminal_reason.clone());
-        session.latest_trace_ref = Some(trace_location.clone());
-        session.updated_at = current_timestamp_millis();
-
-        Ok(Some(TaskRunResponse {
-            task_id: session.session_id.clone(),
-            terminal_status: TaskStatus::Failed,
-            terminal_reason,
-            final_context: TaskContext::new(
-                session.session_id.clone(),
-                session.workspace_ref.clone(),
-                RunLimits::default(),
-                Map::new(),
-            ),
-            plan_revision,
-            trace_location,
-        }))
-    }
-
-    fn native_routing_snapshot(&self) -> NativeRoutingSnapshot {
-        let local_config =
-            FileConfigStore::for_workspace(&self.workspace_ref).load_local().ok().flatten();
-        let workspace_routing = local_config.as_ref().map(|config| &config.routing);
-        let cluster_routing = FileClusterStore::for_workspace(&self.workspace_ref)
-            .load()
-            .ok()
-            .flatten()
-            .map(|config| config.routing);
-        let global_routing = FileConfigStore::global_routing().ok().flatten();
-        let effective = resolve_effective_routing(
-            &RoutingOverrides::default(),
-            workspace_routing,
-            cluster_routing.as_ref(),
-            global_routing.as_ref(),
-        );
-
-        NativeRoutingSnapshot {
-            effective,
-            runtime_capabilities: resolve_effective_runtime_capabilities(
-                workspace_routing,
-                cluster_routing.as_ref(),
-                global_routing.as_ref(),
-            ),
-            slot_effort_policies: resolve_effective_slot_effort_policies(
-                workspace_routing,
-                cluster_routing.as_ref(),
-                global_routing.as_ref(),
-            ),
-            available_runtimes: local_config
-                .as_ref()
-                .map(|config| config.routing.assistant_runtimes.clone())
-                .unwrap_or_default(),
-        }
-    }
-
-    fn blocked_native_binding(snapshot: &NativeRoutingSnapshot) -> Option<BlockedNativeBinding> {
-        if snapshot.available_runtimes.is_empty() {
-            return None;
-        }
-
-        for (slot, route) in [
-            (RouteSlot::Implementation, snapshot.effective.implementation.clone()),
-            (RouteSlot::Verification, snapshot.effective.verification.clone()),
-        ] {
-            let blocked_profile = snapshot.runtime_capabilities.get(&route.route.runtime);
-            let Some(reason) = Self::native_slot_block_reason(
-                slot,
-                &route,
-                &snapshot.available_runtimes,
-                blocked_profile,
-            ) else {
-                continue;
-            };
-
-            let handoff_target = snapshot.available_runtimes.iter().copied().find(|candidate| {
-                *candidate != route.route.runtime
-                    && Self::candidate_supports_slot(
-                        *candidate,
-                        slot,
-                        &snapshot.runtime_capabilities,
-                    )
-            });
-
-            let capability_summary = Self::native_slot_capability_summary(
-                slot,
-                &route,
-                blocked_profile,
-                snapshot.slot_effort_policies.get(&slot),
-            );
-            let mut evidence_refs = vec![
-                format!("slot={}", Self::route_slot_label(slot)),
-                format!("route={}/{}", route.route.runtime.as_str(), route.route.model),
-                format!(
-                    "available_assistants={}",
-                    snapshot
-                        .available_runtimes
-                        .iter()
-                        .map(|runtime| runtime.as_str())
-                        .collect::<Vec<_>>()
-                        .join(",")
-                ),
-            ];
-            if let Some(handoff_target) = handoff_target {
-                evidence_refs.push(format!("handoff_target={}", handoff_target.as_str()));
-            }
-            if let Some(policy) = snapshot.slot_effort_policies.get(&slot) {
-                evidence_refs.push(format!("effort_policy={}", policy.policy.summary_text()));
-            }
-
-            return Some(BlockedNativeBinding {
-                reason,
-                handoff_target,
-                capability_summary,
-                evidence_refs,
-            });
-        }
-
-        None
-    }
-
-    fn native_slot_block_reason(
-        slot: RouteSlot,
-        route: &SourcedRoute,
-        available_runtimes: &[RuntimeKind],
-        blocked_profile: Option<&SourcedRuntimeCapabilityProfile>,
-    ) -> Option<String> {
-        if !available_runtimes.contains(&route.route.runtime) {
-            return Some(format!(
-                "{} route requires {}, but available assistant runtimes are: {}",
-                Self::route_slot_label(slot),
-                route.route.runtime.as_str(),
-                available_runtimes
-                    .iter()
-                    .map(|runtime| runtime.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ));
-        }
-
-        match slot {
-            RouteSlot::Implementation => blocked_profile
-                .filter(|profile| !profile.profile.continuation.is_supported())
-                .map(|_| {
-                    format!(
-                        "{} route {}/{} is declared continuation=unsupported",
-                        Self::route_slot_label(slot),
-                        route.route.runtime.as_str(),
-                        route.route.model,
-                    )
-                }),
-            RouteSlot::Verification => blocked_profile
-                .filter(|profile| !profile.profile.validation.is_supported())
-                .map(|_| {
-                    format!(
-                        "{} route {}/{} is declared validation=unsupported",
-                        Self::route_slot_label(slot),
-                        route.route.runtime.as_str(),
-                        route.route.model,
-                    )
-                }),
-            _ => None,
-        }
-    }
-
-    fn candidate_supports_slot(
-        candidate: RuntimeKind,
-        slot: RouteSlot,
-        runtime_capabilities: &BTreeMap<RuntimeKind, SourcedRuntimeCapabilityProfile>,
-    ) -> bool {
-        let Some(profile) = runtime_capabilities.get(&candidate) else {
-            return false;
-        };
-        if !profile.profile.handoff_target.is_supported() {
-            return false;
-        }
-
-        match slot {
-            RouteSlot::Implementation => profile.profile.continuation.is_supported(),
-            RouteSlot::Verification => profile.profile.validation.is_supported(),
-            _ => profile.profile.continuation.is_supported(),
-        }
-    }
-
-    fn native_slot_capability_summary(
-        slot: RouteSlot,
-        route: &SourcedRoute,
-        blocked_profile: Option<&SourcedRuntimeCapabilityProfile>,
-        effort_policy: Option<&SourcedSlotEffortPolicy>,
-    ) -> String {
-        let capability_summary = blocked_profile
-            .map(|profile| {
-                format!(
-                    "runtime_capability[{}] {} => {}",
-                    Self::value_source_text(profile.source),
-                    route.route.runtime.as_str(),
-                    profile.profile.summary_text()
-                )
-            })
-            .unwrap_or_else(|| {
-                format!(
-                    "runtime_capability {} => no explicit capability profile",
-                    route.route.runtime.as_str()
-                )
-            });
-
-        let effort_summary = effort_policy.map(|policy| {
-            format!(
-                "slot_effort[{}] {} => {}",
-                Self::value_source_text(policy.source),
-                Self::route_slot_label(slot),
-                policy.policy.summary_text()
-            )
-        });
-
-        match effort_summary {
-            Some(effort_summary) => format!("{capability_summary}; {effort_summary}"),
-            None => capability_summary,
-        }
-    }
-
-    fn route_slot_label(slot: RouteSlot) -> &'static str {
-        match slot {
-            RouteSlot::Planning => "planning",
-            RouteSlot::Implementation => "implementation",
-            RouteSlot::Verification => "verification",
-            RouteSlot::Review => "review",
-        }
-    }
-
-    fn value_source_text(source: ValueSource) -> &'static str {
-        match source {
-            ValueSource::Cli => "cli",
-            ValueSource::Workspace => "workspace",
-            ValueSource::Cluster => "cluster",
-            ValueSource::Global => "global",
-            ValueSource::BuiltIn => "built-in",
-        }
-    }
-
-    fn workspace_routing_projection(workspace: &Path) -> Option<RoutingDecisionProjection> {
-        let workspace_routing =
-            FileConfigStore::for_workspace(workspace).local_routing().ok().flatten();
-        let cluster_routing = FileClusterStore::for_workspace(workspace)
-            .load()
-            .ok()
-            .flatten()
-            .map(|config| config.routing);
-        let global_routing = FileConfigStore::global_routing().ok().flatten();
-        let effective = resolve_effective_routing(
-            &RoutingOverrides::default(),
-            workspace_routing.as_ref(),
-            cluster_routing.as_ref(),
-            global_routing.as_ref(),
-        );
-        let effective_capabilities = resolve_effective_runtime_capabilities(
-            workspace_routing.as_ref(),
-            cluster_routing.as_ref(),
-            global_routing.as_ref(),
-        );
-        let effective_effort = resolve_effective_slot_effort_policies(
-            workspace_routing.as_ref(),
-            cluster_routing.as_ref(),
-            global_routing.as_ref(),
-        );
-        let projection = RoutingDecisionProjection::from_effective_state(
-            &effective,
-            &effective_capabilities,
-            &effective_effort,
-        );
-        (!projection.is_empty()).then_some(projection)
-    }
-
-    fn persist_routing_projection(
-        trace: &mut ExecutionTrace,
-        projection: &RoutingDecisionProjection,
-    ) {
-        let Some(event) = trace.events.iter_mut().find(|event| {
-            matches!(
-                event.event_type,
-                TraceEventType::GoalPlanCreated | TraceEventType::TaskStarted
-            )
-        }) else {
-            return;
-        };
-
-        let Some(payload) = event.payload.as_object_mut() else {
-            return;
-        };
-
-        payload.insert("routing_projection".to_string(), json!(projection));
-    }
-
-    pub fn execute_next_step(
-        &self,
-        session: &mut ActiveSessionRecord,
-    ) -> Result<(), SessionRuntimeError> {
-        let _ = self.materialize_governed_task(session)?;
-        let runtime = self.build_runtime(session)?;
-        let _ = self.execute_single_step(session, &runtime)?;
-        Ok(())
-    }
-
     pub fn run_to_terminal(
         &self,
         session: &mut ActiveSessionRecord,
     ) -> Result<TaskRunResponse, SessionRuntimeError> {
-        let _ = self.materialize_governed_task(session)?;
-
-        if self.uses_native_goal_plan(session)? {
-            return self.run_goal_plan_to_terminal(session);
+        if session.goal_plan.is_some() {
+            return self.run_native_goal_plan(session);
         }
 
+        let runtime = self.build_runtime(session)?;
+
         loop {
-            let runtime = self.build_runtime(session)?;
             if let Some(response) = self.execute_single_step(session, &runtime)? {
                 return Ok(response);
             }
-
-            if let Some(response) = self.paused_governance_response(session)? {
-                return Ok(response);
-            }
         }
-    }
-
-    fn paused_governance_response(
-        &self,
-        session: &ActiveSessionRecord,
-    ) -> Result<Option<TaskRunResponse>, SessionRuntimeError> {
-        let Some(task) = session.active_task.as_ref() else {
-            return Ok(None);
-        };
-        let Some(record) = task
-            .context
-            .latest_governance_stage()
-            .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?
-        else {
-            return Ok(None);
-        };
-
-        let message = match record.lifecycle_state {
-            GovernanceLifecycleState::AwaitingApproval => {
-                format!("governance approval is still pending for {}", record.stage_key)
-            }
-            GovernanceLifecycleState::Blocked => record
-                .blocked_reason
-                .clone()
-                .unwrap_or_else(|| format!("governance blocked stage {}", record.stage_key)),
-            GovernanceLifecycleState::Failed => record
-                .blocked_reason
-                .clone()
-                .unwrap_or_else(|| format!("governance failed for stage {}", record.stage_key)),
-            _ => return Ok(None),
-        };
-
-        let trace_location =
-            session.latest_trace_ref.clone().ok_or(SessionRuntimeError::MissingTraceReference)?;
-
-        Ok(Some(TaskRunResponse {
-            task_id: task.id.clone(),
-            terminal_status: task.status,
-            terminal_reason: build_terminal_reason(
-                TerminalCondition::NoCredibleNextStep,
-                message,
-                Some(json!({
-                    "stage_key": record.stage_key,
-                    "governance_state": record.lifecycle_state,
-                })),
-            ),
-            final_context: task.context.clone(),
-            plan_revision: task.plan.revision,
-            trace_location,
-        }))
-    }
-
-    fn delivery_completion_failure_reason(
-        &self,
-        session: &ActiveSessionRecord,
-        task: &Task,
-        completed_step_id: &str,
-    ) -> Result<Option<TerminalReason>, SessionRuntimeError> {
-        let Some(active_flow) = session.active_flow.as_ref() else {
-            return Ok(None);
-        };
-
-        if !matches!(active_flow.flow_name.as_str(), "bug-fix" | "change") {
-            return Ok(None);
-        }
-
-        if let Some(governed_stage) = task
-            .context
-            .latest_governance_stage()
-            .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?
-        {
-            match governed_stage.lifecycle_state {
-                GovernanceLifecycleState::AwaitingApproval => {
-                    return Ok(Some(build_terminal_reason(
-                        TerminalCondition::TaskNotCredible,
-                        format!(
-                            "delivery is still awaiting governed approval for {}",
-                            governed_stage.stage_key
-                        ),
-                        Some(json!({
-                            "step_id": completed_step_id,
-                            "flow_name": active_flow.flow_name.as_str(),
-                            "stage_key": governed_stage.stage_key,
-                            "governance_state": governed_stage.lifecycle_state,
-                            "approval_state": governed_stage.approval_state,
-                        })),
-                    )));
-                }
-                GovernanceLifecycleState::Blocked | GovernanceLifecycleState::Failed => {
-                    return Ok(Some(build_terminal_reason(
-                        TerminalCondition::TaskNotCredible,
-                        governed_stage.blocked_reason.clone().unwrap_or_else(|| {
-                            format!(
-                                "governance blocked delivery completion for {}",
-                                governed_stage.stage_key
-                            )
-                        }),
-                        Some(json!({
-                            "step_id": completed_step_id,
-                            "flow_name": active_flow.flow_name.as_str(),
-                            "stage_key": governed_stage.stage_key,
-                            "governance_state": governed_stage.lifecycle_state,
-                            "approval_state": governed_stage.approval_state,
-                        })),
-                    )));
-                }
-                _ => {}
-            }
-        }
-
-        let has_changed_files = task
-            .context
-            .state
-            .get("latest_changed_files")
-            .and_then(Value::as_array)
-            .is_some_and(|items| {
-                items.iter().filter_map(Value::as_str).map(str::trim).any(|path| !path.is_empty())
-            });
-        if !has_changed_files {
-            return Ok(Some(build_terminal_reason(
-                TerminalCondition::TaskNotCredible,
-                format!(
-                    "delivery did not produce a material workspace diff before step {} completed",
-                    completed_step_id
-                ),
-                Some(json!({
-                    "step_id": completed_step_id,
-                    "flow_name": active_flow.flow_name.as_str(),
-                    "latest_changed_files": task.context.state.get("latest_changed_files").cloned(),
-                })),
-            )));
-        }
-
-        let validation_status =
-            task.context.state.get("latest_validation_status").and_then(Value::as_str);
-        if validation_status != Some("passed") {
-            return Ok(Some(build_terminal_reason(
-                TerminalCondition::TaskNotCredible,
-                format!(
-                    "delivery did not produce credible validation evidence before step {} completed",
-                    completed_step_id
-                ),
-                Some(json!({
-                    "step_id": completed_step_id,
-                    "flow_name": active_flow.flow_name.as_str(),
-                    "latest_validation_status": validation_status,
-                })),
-            )));
-        }
-
-        Ok(None)
     }
 
     pub fn refresh_governance_state(
         &self,
         session: &mut ActiveSessionRecord,
     ) -> Result<bool, SessionRuntimeError> {
-        if session.active_task.is_none() {
-            return Ok(false);
-        }
-
-        let runtime = self.build_runtime(session)?;
         let Some(mut task) = session.active_task.take() else {
             return Ok(false);
         };
@@ -1495,6 +562,7 @@ impl SessionRuntime {
                 return Ok(false);
             }
 
+            let runtime = self.build_runtime(session)?;
             let mut trace = self.load_or_create_trace(session, &task)?;
             let step =
                 task.plan.current_step().cloned().ok_or(SessionRuntimeError::MissingActiveTask)?;
@@ -1534,6 +602,988 @@ impl SessionRuntime {
         result
     }
 
+    fn planning_context_sources(
+        &self,
+        session: &ActiveSessionRecord,
+        goal: &str,
+    ) -> PlanningContextSources {
+        let negotiation_packet = self.session_negotiation_packet(session, goal);
+
+        PlanningContextSources {
+            authored_input_summary: session
+                .authored_brief
+                .as_ref()
+                .map(|bundle| bundle.summary_text()),
+            authored_input_sources: session
+                .authored_brief
+                .as_ref()
+                .map(|bundle| bundle.ordered_source_labels())
+                .unwrap_or_default(),
+            negotiation_goal_summary: negotiation_packet
+                .as_ref()
+                .map(|packet| packet.goal_summary.clone()),
+            negotiation_resolution: negotiation_packet
+                .as_ref()
+                .map(|packet| packet.resolution_state.as_str().to_string()),
+            negotiation_acceptance_boundary: negotiation_packet
+                .as_ref()
+                .map(|packet| packet.acceptance_boundary.success_headline.clone()),
+            latest_trace_ref: session.latest_trace_ref.clone(),
+            workflow_progress: session.workflow_progress.clone(),
+            canon_capability_snapshot: session
+                .active_task
+                .as_ref()
+                .and_then(|task| task.context.latest_canon_capability_snapshot().ok().flatten()),
+            compacted_canon_memory: session
+                .active_task
+                .as_ref()
+                .and_then(|task| task.context.latest_compacted_canon_memory().ok().flatten()),
+        }
+    }
+
+    fn session_negotiation_packet(
+        &self,
+        session: &ActiveSessionRecord,
+        goal: &str,
+    ) -> Option<NegotiatedDeliveryPacket> {
+        session.negotiation_packet.clone().or_else(|| {
+            session
+                .authored_brief
+                .as_ref()
+                .map(|bundle| {
+                    NegotiatedDeliveryPacket::from_authored_brief(
+                        &session.session_id,
+                        &session.workspace_ref,
+                        goal,
+                        bundle,
+                    )
+                })
+                .or_else(|| {
+                    (!goal.trim().is_empty()).then(|| {
+                        NegotiatedDeliveryPacket::from_goal(
+                            &session.session_id,
+                            &session.workspace_ref,
+                            goal,
+                        )
+                    })
+                })
+        })
+    }
+
+    fn apply_negotiation_projection(
+        &self,
+        session: &ActiveSessionRecord,
+        goal: &str,
+        goal_plan: &mut GoalPlan,
+    ) {
+        if let Some(packet) = self.session_negotiation_packet(session, goal) {
+            goal_plan.negotiation_goal_summary = Some(packet.goal_summary);
+            goal_plan.negotiation_resolution = Some(packet.resolution_state.as_str().to_string());
+            goal_plan.negotiation_acceptance_boundary =
+                Some(packet.acceptance_boundary.success_headline);
+        }
+    }
+
+    fn run_native_goal_plan(
+        &self,
+        session: &mut ActiveSessionRecord,
+    ) -> Result<TaskRunResponse, SessionRuntimeError> {
+        let Some(mut goal_plan) = session.goal_plan.clone() else {
+            return Err(SessionRuntimeError::MissingGoalPlan);
+        };
+
+        if goal_plan.requires_confirmation() {
+            return Err(SessionRuntimeError::PlanConfirmationRequired {
+                flow_name: goal_plan.flow.as_ref().map(|flow| flow.flow_name.clone()),
+            });
+        }
+
+        if let Some(delegation) = self.goal_plan_delegation_view(&goal_plan)
+            && matches!(
+                delegation.mode,
+                DelegationContinuityMode::HandoffRequired
+                    | DelegationContinuityMode::EscalationRequired
+                    | DelegationContinuityMode::Stuck
+                    | DelegationContinuityMode::InspectOnly
+                    | DelegationContinuityMode::Exhausted
+            )
+        {
+            let reason = session.latest_terminal_reason.clone().unwrap_or_else(|| {
+                build_terminal_reason(
+                    TerminalCondition::NoCredibleNextStep,
+                    delegation.headline.clone(),
+                    Some(json!({ "delegation": delegation })),
+                )
+            });
+            let trace = self.build_goal_plan_trace(&session.session_id, &goal_plan);
+            return self.persist_native_result(
+                session,
+                goal_plan,
+                Vec::new(),
+                trace,
+                NativePersistenceInput {
+                    terminal_reason: reason,
+                    limits: RunLimits::default(),
+                    record_terminal_event: true,
+                    projected_task: None,
+                },
+            );
+        }
+
+        if let Some((packet, continuity)) = self.native_delegation_for_goal_plan(&goal_plan) {
+            goal_plan
+                .record_delegation_packet(packet, continuity)
+                .map_err(|error| SessionRuntimeError::GoalPlan(error.to_string()))?;
+            let delegation = self.goal_plan_delegation_view(&goal_plan);
+            let reason = build_terminal_reason(
+                TerminalCondition::NoCredibleNextStep,
+                delegation.as_ref().map(|view| view.headline.clone()).unwrap_or_else(|| {
+                    "native goal plan reached a delegated continuity boundary".to_string()
+                }),
+                Some(json!({ "delegation": delegation })),
+            );
+            let trace = self.build_goal_plan_trace(&session.session_id, &goal_plan);
+            return self.persist_native_result(
+                session,
+                goal_plan,
+                Vec::new(),
+                trace,
+                NativePersistenceInput {
+                    terminal_reason: reason,
+                    limits: RunLimits::default(),
+                    record_terminal_event: true,
+                    projected_task: None,
+                },
+            );
+        }
+
+        let runtime = self.build_runtime(session)?;
+        let (native_governance_task, governance_events) =
+            match self.prepare_native_governance_projection(session, &runtime, &goal_plan)? {
+                NativeGovernanceProjection::None => (None, Vec::new()),
+                NativeGovernanceProjection::Task { task, events } => (Some(*task), events),
+                NativeGovernanceProjection::Terminal { response, task } => {
+                    session.active_task = Some(*task);
+                    session.goal_plan = Some(goal_plan);
+                    session.decisions.clear();
+                    return Ok(*response);
+                }
+            };
+        let enable_flow_retry_probe = session.active_flow.is_some()
+            && runtime.profile.governance.is_none()
+            && runtime.profile.legacy_source.as_deref() != Some("native_goal_plan_synthesized");
+        let decision_loop = DecisionLoop::new(
+            runtime.agents.clone(),
+            runtime.tools.clone(),
+            self.trace_store.clone(),
+            runtime.profile.limits.max_steps,
+        );
+        let (terminal, decisions, mut trace) = decision_loop
+            .run_with_options(
+                &goal_plan,
+                session.active_flow_policy.as_ref(),
+                &session.workspace_ref,
+                &session.session_id,
+                enable_flow_retry_probe,
+            )
+            .map_err(|error| SessionRuntimeError::DecisionLoop(error.to_string()))?;
+        let reason = self.native_terminal_reason(&terminal);
+        if task_status_for_condition(reason.condition) == TaskStatus::Succeeded {
+            self.propagate_cluster_delivery_changes(&goal_plan, &runtime)?;
+        }
+        if !governance_events.is_empty() {
+            let insert_at = trace
+                .events
+                .iter()
+                .rposition(|event| event.event_type == TraceEventType::TerminalRecorded)
+                .unwrap_or(trace.events.len());
+            trace.events.splice(insert_at..insert_at, governance_events);
+        }
+        let projected_task = native_governance_task.map(|task| {
+            self.finalize_native_projected_task(
+                task,
+                &runtime,
+                task_status_for_condition(reason.condition),
+                &reason,
+            )
+        });
+
+        self.persist_native_result(
+            session,
+            goal_plan,
+            decisions,
+            trace,
+            NativePersistenceInput {
+                terminal_reason: reason,
+                limits: runtime.profile.limits.clone(),
+                record_terminal_event: false,
+                projected_task,
+            },
+        )
+    }
+
+    fn persist_native_result(
+        &self,
+        session: &mut ActiveSessionRecord,
+        goal_plan: GoalPlan,
+        decisions: Vec<Decision>,
+        mut trace: ExecutionTrace,
+        input: NativePersistenceInput,
+    ) -> Result<TaskRunResponse, SessionRuntimeError> {
+        let mut terminal_reason = input.terminal_reason;
+        let mut terminal_status = task_status_for_condition(terminal_reason.condition);
+        let mut goal_plan = goal_plan;
+        let cluster_story = goal_plan
+            .cluster_session_projection
+            .as_ref()
+            .map(|projection| self.build_cluster_delivery_story(projection, terminal_status));
+        goal_plan.cluster_delivery_story = cluster_story.clone();
+        if let Some(cluster_story) = cluster_story.as_ref()
+            && cluster_story.execution_condition.kind == ClusteredExecutionKind::Failed
+            && terminal_status == TaskStatus::Succeeded
+        {
+            terminal_reason = build_terminal_reason(
+                TerminalCondition::TaskNotCredible,
+                cluster_story.execution_condition.summary.clone(),
+                Some(json!({ "cluster_delivery_story": cluster_story })),
+            );
+            terminal_status = TaskStatus::Failed;
+        }
+        if input.record_terminal_event {
+            trace.record_event(
+                TraceEventType::TerminalRecorded,
+                None,
+                goal_plan.proposal_revision,
+                json!({
+                    "cluster_delivery_story": cluster_story,
+                    "terminal_status": terminal_status,
+                    "terminal_reason": terminal_reason.clone(),
+                }),
+            );
+        } else if let Some(cluster_story) = cluster_story.clone()
+            && let Some(event) = trace
+                .events
+                .iter_mut()
+                .rev()
+                .find(|event| event.event_type == TraceEventType::TerminalRecorded)
+            && let Some(payload) = event.payload.as_object_mut()
+        {
+            payload.insert("cluster_delivery_story".to_string(), json!(cluster_story));
+            payload.insert("terminal_status".to_string(), json!(terminal_status));
+            payload.insert("terminal_reason".to_string(), json!(terminal_reason.clone()));
+        }
+        trace.finalize(terminal_status, terminal_reason.clone());
+        let trace_location = self.persist_trace(&mut trace)?;
+        let final_context = self.build_native_task_context(session, input.limits, &goal_plan)?;
+        let task_id = goal_plan.plan_id.clone();
+        let plan_revision = goal_plan.proposal_revision;
+        let projected_task = match input.projected_task {
+            Some(task) => Some(task),
+            None if cluster_story.is_some() => Some(self.synthesize_native_persisted_task(
+                session,
+                &goal_plan,
+                &final_context,
+                terminal_status,
+                &terminal_reason,
+            )?),
+            None => None,
+        };
+
+        session.active_task = projected_task;
+        session.goal_plan = Some(goal_plan);
+        session.decisions = decisions;
+        session.latest_status =
+            if session.goal_plan.as_ref().and_then(GoalPlan::delegation_continuity).is_some() {
+                SessionStatus::Planned
+            } else {
+                session_status_for_task_status(terminal_status)
+            };
+        session.latest_terminal_reason = Some(terminal_reason.clone());
+        session.latest_trace_ref = Some(trace_location.clone());
+        session.updated_at = current_timestamp_millis();
+
+        Ok(TaskRunResponse {
+            task_id,
+            terminal_status,
+            terminal_reason,
+            final_context,
+            plan_revision,
+            trace_location,
+        })
+    }
+
+    fn build_native_task_context(
+        &self,
+        session: &ActiveSessionRecord,
+        limits: crate::domain::limits::RunLimits,
+        goal_plan: &GoalPlan,
+    ) -> Result<TaskContext, SessionRuntimeError> {
+        let mut context = TaskContext::new(
+            session.session_id.clone(),
+            session.workspace_ref.clone(),
+            limits,
+            Map::new(),
+        );
+        if !goal_plan.delegation_packet_history().is_empty() {
+            context
+                .set_delegation_packet_history(goal_plan.delegation_packet_history())
+                .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?;
+        }
+        if let Some(continuity) = goal_plan.delegation_continuity() {
+            context
+                .set_delegation_continuity_state(continuity)
+                .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?;
+        }
+        if let Some(memory) = goal_plan.compacted_canon_memory.as_ref() {
+            context
+                .set_latest_compacted_canon_memory(memory)
+                .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?;
+        }
+        if let Some(story) = goal_plan.cluster_delivery_story.as_ref() {
+            context
+                .set_cluster_delivery_story(story)
+                .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?;
+        }
+        Ok(context)
+    }
+
+    fn prepare_native_governance_projection(
+        &self,
+        session: &mut ActiveSessionRecord,
+        runtime: &FixtureRuntime,
+        goal_plan: &GoalPlan,
+    ) -> Result<NativeGovernanceProjection, SessionRuntimeError> {
+        let Some(active_flow) = session.active_flow.as_ref() else {
+            return Ok(NativeGovernanceProjection::None);
+        };
+        let Some(governance) = runtime.profile.governance.as_ref() else {
+            return Ok(NativeGovernanceProjection::None);
+        };
+        let goal = session.goal.clone().ok_or(SessionRuntimeError::MissingGoal)?;
+        let request = build_task_request(
+            &self.workspace_ref,
+            &goal,
+            session.session_id.clone(),
+            session.authored_brief.as_ref(),
+            session.negotiation_packet.as_ref(),
+        )
+        .map_err(SessionRuntimeError::FixtureRuntime)?;
+        let plan = build_fixture_plan_for_goal(&self.workspace_ref, Some(active_flow), &goal)
+            .map_err(SessionRuntimeError::FixtureRuntime)?;
+        let mut task = Task::new(Uuid::new_v4().to_string(), &request, plan)
+            .map_err(SessionRuntimeError::TaskRequest)?;
+        let mut governance_trace = self.build_goal_plan_trace(&session.session_id, goal_plan);
+        let mut saw_governance = false;
+
+        for step_index in 0..task.plan.steps.len() {
+            task.plan.current_step_index = step_index;
+            let step = task.plan.steps[step_index].clone();
+            let Some(metadata) = FlowStepMetadata::from_step(&step)
+                .map_err(|error| SessionRuntimeError::InvalidFlowState(error.to_string()))?
+            else {
+                continue;
+            };
+            let Some(policy) =
+                selected_stage_policy(Some(governance), &metadata.flow_name, &metadata.stage_id)
+            else {
+                continue;
+            };
+            let governance_intent = requested_governance_intent(&task.input);
+            let policy = overlay_stage_policy_with_intent(&policy, governance_intent.as_ref());
+            if !policy.enabled {
+                continue;
+            }
+            saw_governance = true;
+
+            match self.execute_governance_for_step(
+                session,
+                &mut task,
+                &mut governance_trace,
+                runtime,
+                &step,
+                &metadata,
+                governance,
+                &policy,
+                GovernanceRequestKind::Start,
+            )? {
+                GovernanceStepDecision::Continue => {}
+                GovernanceStepDecision::Halt => {
+                    let response =
+                        self.build_native_governance_halt_response(session, &mut task)?;
+                    return Ok(NativeGovernanceProjection::Terminal {
+                        response: Box::new(response),
+                        task: Box::new(task),
+                    });
+                }
+                GovernanceStepDecision::Terminal(response) => {
+                    return Ok(NativeGovernanceProjection::Terminal {
+                        response: Box::new(response),
+                        task: Box::new(task),
+                    });
+                }
+            }
+        }
+
+        if !saw_governance {
+            return Ok(NativeGovernanceProjection::None);
+        }
+
+        let events = governance_trace
+            .events
+            .into_iter()
+            .filter(|event| is_governance_trace_event(event.event_type))
+            .collect();
+        Ok(NativeGovernanceProjection::Task { task: Box::new(task), events })
+    }
+
+    fn finalize_native_projected_task(
+        &self,
+        mut task: Task,
+        runtime: &FixtureRuntime,
+        terminal_status: TaskStatus,
+        terminal_reason: &TerminalReason,
+    ) -> Task {
+        let changed_files = runtime
+            .profile
+            .attempts
+            .iter()
+            .flat_map(|attempt| attempt.changes.iter().map(|change| change.path.clone()))
+            .collect::<Vec<_>>();
+        if !changed_files.is_empty() {
+            task.context.state.insert("latest_changed_files".to_string(), json!(changed_files));
+        }
+        task.context.state.insert(
+            "latest_validation_status".to_string(),
+            json!(if terminal_status == TaskStatus::Succeeded { "passed" } else { "failed" }),
+        );
+        if terminal_status == TaskStatus::Succeeded
+            && let Some(review) = runtime.profile.review.as_ref()
+            && let Some(trigger) = review
+                .triggers
+                .iter()
+                .copied()
+                .find(|trigger| !matches!(trigger, ReviewTrigger::ValidationFailed))
+                .or_else(|| review.triggers.first().copied())
+        {
+            task.context.state.insert("latest_review_trigger".to_string(), json!(trigger));
+            task.context
+                .state
+                .insert("latest_review_outcome".to_string(), json!(ReviewOutcome::Accepted));
+        }
+        task.apply_terminal(terminal_status, terminal_reason.clone());
+        task
+    }
+
+    fn synthesize_native_persisted_task(
+        &self,
+        session: &ActiveSessionRecord,
+        goal_plan: &GoalPlan,
+        final_context: &TaskContext,
+        terminal_status: TaskStatus,
+        terminal_reason: &TerminalReason,
+    ) -> Result<Task, SessionRuntimeError> {
+        let request = build_task_request(
+            &self.workspace_ref,
+            &goal_plan.goal_text,
+            session.session_id.clone(),
+            session.authored_brief.as_ref(),
+            session.negotiation_packet.as_ref(),
+        )
+        .map_err(SessionRuntimeError::FixtureRuntime)?;
+        let plan = build_fixture_plan_for_goal(
+            &self.workspace_ref,
+            session.active_flow.as_ref(),
+            &goal_plan.goal_text,
+        )
+        .map_err(SessionRuntimeError::FixtureRuntime)?;
+        let mut task = Task::new(goal_plan.plan_id.clone(), &request, plan)
+            .map_err(SessionRuntimeError::TaskRequest)?;
+        task.context = final_context.clone();
+        task.apply_terminal(terminal_status, terminal_reason.clone());
+        Ok(task)
+    }
+
+    fn build_native_governance_halt_response(
+        &self,
+        session: &ActiveSessionRecord,
+        task: &mut Task,
+    ) -> Result<TaskRunResponse, SessionRuntimeError> {
+        if matches!(task.status, TaskStatus::Planned) {
+            task.mark_running();
+        }
+        let latest_governance = task
+            .context
+            .latest_governance_stage()
+            .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?
+            .ok_or(SessionRuntimeError::MissingGovernanceStage)?;
+        let message = match latest_governance.lifecycle_state {
+            GovernanceLifecycleState::AwaitingApproval => {
+                format!("governance approval is still pending for {}", latest_governance.stage_key)
+            }
+            GovernanceLifecycleState::Blocked | GovernanceLifecycleState::Failed => format!(
+                "governance blocked stage {}: {}",
+                latest_governance.stage_key,
+                latest_governance
+                    .blocked_reason
+                    .clone()
+                    .unwrap_or_else(|| "governance review did not clear the stage".to_string())
+            ),
+            _ => format!("governance is still in progress for {}", latest_governance.stage_key),
+        };
+        let trace_location =
+            session.latest_trace_ref.clone().ok_or(SessionRuntimeError::MissingTraceReference)?;
+
+        Ok(TaskRunResponse {
+            task_id: task.id.clone(),
+            terminal_status: TaskStatus::Running,
+            terminal_reason: build_terminal_reason(
+                TerminalCondition::TaskNotCredible,
+                message,
+                Some(json!({
+                    "stage_key": latest_governance.stage_key,
+                    "state": latest_governance.lifecycle_state,
+                })),
+            ),
+            final_context: task.context.clone(),
+            plan_revision: task.plan.revision,
+            trace_location,
+        })
+    }
+
+    fn native_terminal_reason(&self, terminal: &LoopTerminal) -> TerminalReason {
+        match terminal {
+            LoopTerminal::Success => build_terminal_reason(
+                TerminalCondition::GoalSatisfied,
+                "goal plan completed through the native decision loop",
+                None,
+            ),
+            LoopTerminal::Failure(message) => {
+                build_terminal_reason(TerminalCondition::UnrecoverableError, message, None)
+            }
+            LoopTerminal::Exhausted { steps_taken, max_steps } => build_terminal_reason(
+                TerminalCondition::StepLimitExceeded,
+                format!("native goal plan exhausted after {steps_taken} decision step(s)"),
+                Some(json!({
+                    "steps_taken": steps_taken,
+                    "max_steps": max_steps,
+                })),
+            ),
+            LoopTerminal::NoActionableState(message) => {
+                build_terminal_reason(TerminalCondition::NoCredibleNextStep, message, None)
+            }
+        }
+    }
+
+    fn build_goal_plan_trace(&self, session_id: &str, goal_plan: &GoalPlan) -> ExecutionTrace {
+        let mut trace = ExecutionTrace::new(
+            goal_plan.plan_id.clone(),
+            session_id.to_string(),
+            goal_plan.goal_text.clone(),
+        );
+        trace.record_event(
+            TraceEventType::GoalPlanCreated,
+            None,
+            0,
+            self.goal_plan_trace_payload(goal_plan),
+        );
+        trace
+    }
+
+    fn goal_plan_trace_payload(&self, goal_plan: &GoalPlan) -> Value {
+        json!({
+            "plan_id": goal_plan.plan_id,
+            "goal": goal_plan.goal_text,
+            "task_count": goal_plan.tasks.len(),
+            "goal_plan_state": goal_plan.proposal_state_text(),
+            "goal_plan_revision": goal_plan.proposal_revision,
+            "flow_state": goal_plan.flow_state().summary_text(),
+            "planning_rationale": goal_plan.planning_rationale,
+            "verification_strategy": goal_plan.verification_strategy,
+            "negotiation_goal_summary": goal_plan.negotiation_goal_summary,
+            "negotiation_resolution": goal_plan.negotiation_resolution,
+            "negotiation_acceptance_boundary": goal_plan.negotiation_acceptance_boundary,
+            "context_summary": goal_plan.context_summary(),
+            "context_credibility": goal_plan.context_credibility(),
+            "context_primary_inputs": goal_plan.context_primary_inputs(),
+            "context_provenance": goal_plan.context_provenance_lines(),
+            "context_staleness_reason": goal_plan
+                .context_pack
+                .as_ref()
+                .and_then(|pack| pack.staleness_reason.clone())
+                .or_else(|| goal_plan.canon_memory_staleness_reason()),
+            "canon_memory_summary": goal_plan
+                .compacted_canon_memory
+                .as_ref()
+                .map(|memory| memory.summary_text()),
+            "canon_memory_credibility": goal_plan.compacted_canon_memory.as_ref().map(|memory| {
+                memory.credibility.as_str().to_string()
+            }),
+            "canon_memory_reason_code": goal_plan
+                .compacted_canon_memory
+                .as_ref()
+                .and_then(|memory| memory.reason_code.clone()),
+            "canon_memory_artifact_refs": goal_plan
+                .compacted_canon_memory
+                .as_ref()
+                .map(|memory| memory.artifact_refs.clone())
+                .unwrap_or_default(),
+            "routing_projection": self.goal_plan_routing_projection(),
+            "canon_next_action": goal_plan
+                .compacted_canon_memory
+                .as_ref()
+                .and_then(|memory| memory.recommended_next_action.as_ref())
+                .map(|action| format!("{}: {}", action.action, action.rationale)),
+            "delegation": self.goal_plan_delegation_view(goal_plan),
+        })
+    }
+
+    fn goal_plan_routing_projection(&self) -> RoutingDecisionProjection {
+        let workspace_routing =
+            FileConfigStore::for_workspace(&self.workspace_ref).local_routing().ok().flatten();
+        let cluster_routing = FileClusterStore::for_workspace(&self.workspace_ref)
+            .load()
+            .ok()
+            .flatten()
+            .map(|config| config.routing);
+        let global_routing = FileConfigStore::global_routing().ok().flatten();
+        let effective_routing = resolve_effective_routing(
+            &RoutingOverrides::default(),
+            workspace_routing.as_ref(),
+            cluster_routing.as_ref(),
+            global_routing.as_ref(),
+        );
+        let effective_capabilities = resolve_effective_runtime_capabilities(
+            workspace_routing.as_ref(),
+            cluster_routing.as_ref(),
+            global_routing.as_ref(),
+        );
+        let effective_effort = resolve_effective_slot_effort_policies(
+            workspace_routing.as_ref(),
+            cluster_routing.as_ref(),
+            global_routing.as_ref(),
+        );
+
+        RoutingDecisionProjection::from_effective_state(
+            &effective_routing,
+            &effective_capabilities,
+            &effective_effort,
+        )
+    }
+
+    fn goal_plan_delegation_view(&self, goal_plan: &GoalPlan) -> Option<DelegationStatusView> {
+        goal_plan.delegation_continuity().and_then(|continuity| {
+            DelegationStatusView::from_continuity(continuity, goal_plan.delegation_packet_history())
+                .ok()
+        })
+    }
+
+    fn native_delegation_for_goal_plan(
+        &self,
+        goal_plan: &GoalPlan,
+    ) -> Option<(DelegationPacket, DelegationContinuityState)> {
+        if !goal_plan.flow.as_ref().is_some_and(|flow| flow.confirmed) {
+            return None;
+        }
+
+        let workspace_routing =
+            FileConfigStore::for_workspace(&self.workspace_ref).local_routing().ok().flatten();
+        let cluster_routing = FileClusterStore::for_workspace(&self.workspace_ref)
+            .load()
+            .ok()
+            .flatten()
+            .map(|config| config.routing);
+        let global_routing = FileConfigStore::global_routing().ok().flatten();
+        let effective_routing = resolve_effective_routing(
+            &RoutingOverrides::default(),
+            workspace_routing.as_ref(),
+            cluster_routing.as_ref(),
+            global_routing.as_ref(),
+        );
+        let effective_capabilities = resolve_effective_runtime_capabilities(
+            workspace_routing.as_ref(),
+            cluster_routing.as_ref(),
+            global_routing.as_ref(),
+        );
+        let effective_effort = resolve_effective_slot_effort_policies(
+            workspace_routing.as_ref(),
+            cluster_routing.as_ref(),
+            global_routing.as_ref(),
+        );
+
+        let implementation_runtime = effective_routing.implementation.route.runtime;
+        let assistant_runtimes = effective_assistant_runtimes(
+            workspace_routing.as_ref(),
+            cluster_routing.as_ref(),
+            global_routing.as_ref(),
+        );
+        let assistant_runtime_mismatch =
+            !assistant_runtimes.is_empty() && !assistant_runtimes.contains(&implementation_runtime);
+        let implementation_capability = effective_capabilities.get(&implementation_runtime);
+        let implementation_effort = effective_effort.get(&RouteSlot::Implementation);
+        let requires_preserved_capability_handoff = implementation_capability
+            .is_some_and(|capability| !capability.profile.continuation.is_supported())
+            && implementation_effort
+                .is_some_and(|effort| effort.policy.fallback == EffortFallbackPolicy::Preserve);
+
+        if !requires_preserved_capability_handoff {
+            if assistant_runtime_mismatch {
+                let available_runtimes = assistant_runtimes
+                    .iter()
+                    .map(|runtime| runtime.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let evidence_summary = format!(
+                    "implementation route requires {}, but available assistant runtimes are: {}",
+                    implementation_runtime.as_str(),
+                    available_runtimes
+                );
+                let packet = DelegationPacket {
+                    packet_id: Uuid::new_v4().to_string(),
+                    kind: DelegationPacketKind::Escalation,
+                    state: DelegationPacketState::Active,
+                    created_at: current_timestamp_millis(),
+                    resolved_at: None,
+                    source_route_owner: implementation_runtime.as_str().to_string(),
+                    target_owner: "operator".to_string(),
+                    continuity_reason: evidence_summary.clone(),
+                    recommended_next_action: "boundline inspect".to_string(),
+                    evidence_refs: Vec::new(),
+                    capability_summary: Some(evidence_summary.clone()),
+                    stuck_marker: None,
+                    superseded_by_packet_id: None,
+                };
+                let continuity = DelegationContinuityState {
+                    active_packet_id: Some(packet.packet_id.clone()),
+                    mode: DelegationContinuityMode::EscalationRequired,
+                    authority_source: ContinuityAuthority::NativeSession,
+                    next_command: "boundline inspect".to_string(),
+                    headline: packet.headline(),
+                    evidence_summary: packet.evidence_summary(),
+                };
+                return Some((packet, continuity));
+            }
+            return None;
+        }
+
+        let implementation_capability = implementation_capability?;
+
+        let evidence_summary = format!(
+            "{} lacks continuation support for implementation",
+            implementation_runtime.as_str()
+        );
+
+        if let Some(target_runtime) = assistant_runtimes.into_iter().find(|runtime| {
+            effective_capabilities.get(runtime).is_some_and(|capability| {
+                capability.profile.continuation.is_supported()
+                    && capability.profile.handoff_target.is_supported()
+            })
+        }) {
+            let packet = DelegationPacket {
+                packet_id: Uuid::new_v4().to_string(),
+                kind: DelegationPacketKind::Handoff,
+                state: DelegationPacketState::Active,
+                created_at: current_timestamp_millis(),
+                resolved_at: None,
+                source_route_owner: implementation_runtime.as_str().to_string(),
+                target_owner: target_runtime.as_str().to_string(),
+                continuity_reason: "implementation route cannot continue".to_string(),
+                recommended_next_action: "boundline status".to_string(),
+                evidence_refs: Vec::new(),
+                capability_summary: Some(evidence_summary.clone()),
+                stuck_marker: None,
+                superseded_by_packet_id: None,
+            };
+            let continuity = DelegationContinuityState {
+                active_packet_id: Some(packet.packet_id.clone()),
+                mode: DelegationContinuityMode::HandoffRequired,
+                authority_source: ContinuityAuthority::NativeSession,
+                next_command: "boundline status".to_string(),
+                headline: packet.headline(),
+                evidence_summary: packet.evidence_summary(),
+            };
+            return Some((packet, continuity));
+        }
+
+        if implementation_capability.profile.escalation_context.is_supported() {
+            let packet = DelegationPacket {
+                packet_id: Uuid::new_v4().to_string(),
+                kind: DelegationPacketKind::Escalation,
+                state: DelegationPacketState::Active,
+                created_at: current_timestamp_millis(),
+                resolved_at: None,
+                source_route_owner: implementation_runtime.as_str().to_string(),
+                target_owner: "operator".to_string(),
+                continuity_reason: "implementation route cannot continue".to_string(),
+                recommended_next_action: "boundline inspect".to_string(),
+                evidence_refs: Vec::new(),
+                capability_summary: Some(evidence_summary),
+                stuck_marker: None,
+                superseded_by_packet_id: None,
+            };
+            let continuity = DelegationContinuityState {
+                active_packet_id: Some(packet.packet_id.clone()),
+                mode: DelegationContinuityMode::EscalationRequired,
+                authority_source: ContinuityAuthority::NativeSession,
+                next_command: "boundline inspect".to_string(),
+                headline: packet.headline(),
+                evidence_summary: packet.evidence_summary(),
+            };
+            return Some((packet, continuity));
+        }
+
+        None
+    }
+
+    fn build_cluster_delivery_story(
+        &self,
+        projection: &ClusterSessionProjection,
+        terminal_status: TaskStatus,
+    ) -> ClusterDeliveryStory {
+        let blocking_workspace_ref = projection
+            .member_workspace_refs
+            .iter()
+            .filter(|workspace_ref| *workspace_ref != &projection.primary_workspace_ref)
+            .find(|workspace_ref| cluster_workspace_is_blocked(workspace_ref))
+            .cloned();
+
+        let execution_condition =
+            if let Some(blocking_workspace_ref) = blocking_workspace_ref.clone() {
+                ClusteredExecutionCondition {
+                    kind: ClusteredExecutionKind::Failed,
+                    active_workspace_ref: Some(projection.primary_workspace_ref.clone()),
+                    blocking_workspace_ref: Some(blocking_workspace_ref.clone()),
+                    summary: format!(
+                        "cluster delivery is blocked by workspace {blocking_workspace_ref}"
+                    ),
+                    recovery_allowed: true,
+                }
+            } else {
+                ClusteredExecutionCondition {
+                    kind: match terminal_status {
+                        TaskStatus::Succeeded => ClusteredExecutionKind::Success,
+                        TaskStatus::Failed | TaskStatus::Aborted => ClusteredExecutionKind::Failed,
+                        TaskStatus::Exhausted => ClusteredExecutionKind::Exhausted,
+                        TaskStatus::Planned | TaskStatus::Running => ClusteredExecutionKind::Paused,
+                    },
+                    active_workspace_ref: Some(projection.primary_workspace_ref.clone()),
+                    blocking_workspace_ref: None,
+                    summary: format!(
+                        "native cluster delivery executed from {}",
+                        projection.primary_workspace_ref
+                    ),
+                    recovery_allowed: terminal_status != TaskStatus::Succeeded,
+                }
+            };
+
+        let participating_workspaces = projection
+            .member_workspace_refs
+            .iter()
+            .enumerate()
+            .map(|(order, workspace_ref)| {
+                let (participation_kind, latest_status, headline) =
+                    if workspace_ref == &projection.primary_workspace_ref {
+                        (
+                            WorkspaceParticipationKind::Mutated,
+                            Some(cluster_task_status_text(terminal_status).to_string()),
+                            "authoritative native workspace executed the bounded goal".to_string(),
+                        )
+                    } else if blocking_workspace_ref.as_deref() == Some(workspace_ref.as_str()) {
+                        (
+                            WorkspaceParticipationKind::Blocked,
+                            Some("blocked".to_string()),
+                            "workspace currently blocks clustered follow-through".to_string(),
+                        )
+                    } else {
+                        (
+                            WorkspaceParticipationKind::ReadOnly,
+                            Some("ready".to_string()),
+                            "workspace remains aligned with the authoritative cluster route"
+                                .to_string(),
+                        )
+                    };
+
+                WorkspaceParticipationRecord {
+                    workspace_ref: workspace_ref.clone(),
+                    participation_kind,
+                    order,
+                    latest_trace_ref: None,
+                    latest_status,
+                    headline,
+                    terminal_reason: None,
+                }
+            })
+            .collect();
+
+        ClusterDeliveryStory {
+            cluster_id: projection.cluster_id.clone(),
+            primary_workspace_ref: projection.primary_workspace_ref.clone(),
+            authoritative_workspace_ref: projection.primary_workspace_ref.clone(),
+            route_owner: ClusterRouteOwner::Native,
+            member_workspace_refs: projection.member_workspace_refs.clone(),
+            participating_workspaces,
+            started_from_command: projection.started_from_command.clone(),
+            execution_condition,
+            updated_at: current_timestamp_millis(),
+        }
+    }
+
+    fn propagate_cluster_delivery_changes(
+        &self,
+        goal_plan: &GoalPlan,
+        runtime: &FixtureRuntime,
+    ) -> Result<(), SessionRuntimeError> {
+        let Some(projection) = goal_plan.cluster_session_projection.as_ref() else {
+            return Ok(());
+        };
+
+        let changed_paths = runtime
+            .profile
+            .attempts
+            .iter()
+            .flat_map(|attempt| attempt.changes.iter().map(|change| change.path.clone()))
+            .collect::<BTreeSet<_>>();
+        if changed_paths.is_empty() {
+            return Ok(());
+        }
+
+        for workspace_ref in projection
+            .member_workspace_refs
+            .iter()
+            .filter(|workspace_ref| *workspace_ref != &projection.primary_workspace_ref)
+        {
+            if cluster_workspace_is_blocked(workspace_ref) {
+                continue;
+            }
+
+            for relative_path in &changed_paths {
+                let source_path = self.workspace_ref.join(relative_path);
+                let target_path = Path::new(workspace_ref).join(relative_path);
+                let contents = std::fs::read(&source_path).map_err(|source| {
+                    SessionRuntimeError::FixtureRuntime(FixtureRuntimeError::Io {
+                        path: source_path.clone(),
+                        source,
+                    })
+                })?;
+                if let Some(parent) = target_path.parent() {
+                    std::fs::create_dir_all(parent).map_err(|source| {
+                        SessionRuntimeError::FixtureRuntime(FixtureRuntimeError::Io {
+                            path: parent.to_path_buf(),
+                            source,
+                        })
+                    })?;
+                }
+                std::fs::write(&target_path, contents).map_err(|source| {
+                    SessionRuntimeError::FixtureRuntime(FixtureRuntimeError::Io {
+                        path: target_path.clone(),
+                        source,
+                    })
+                })?;
+            }
+        }
+
+        Ok(())
+    }
+
     fn build_runtime(
         &self,
         session: &ActiveSessionRecord,
@@ -1556,14 +1606,28 @@ impl SessionRuntime {
             return Err(SessionRuntimeError::MissingGoal);
         }
 
-        let runtime_workspace = session
-            .active_task
-            .as_ref()
-            .map(|task| PathBuf::from(&task.context.workspace_ref))
-            .unwrap_or_else(|| self.workspace_ref.clone());
+        let goal_plan = session.goal_plan.as_ref();
 
-        build_fixture_runtime_for_flow(&runtime_workspace, session.active_flow.as_ref())
-            .map_err(SessionRuntimeError::FixtureRuntime)
+        if let Some(goal_plan) = goal_plan
+            && session.active_flow_policy.is_none()
+            && session.active_workflow_progress().is_none()
+        {
+            return build_fixture_runtime_for_goal_plan(&self.workspace_ref, goal_plan)
+                .map_err(SessionRuntimeError::FixtureRuntime);
+        }
+
+        match build_fixture_runtime_for_flow(&self.workspace_ref, session.active_flow.as_ref()) {
+            Ok(runtime) => Ok(runtime),
+            Err(error @ FixtureRuntimeError::MissingExecutionProfile(_)) => {
+                if let Some(goal_plan) = goal_plan {
+                    build_fixture_runtime_for_goal_plan(&self.workspace_ref, goal_plan)
+                        .map_err(SessionRuntimeError::FixtureRuntime)
+                } else {
+                    Err(SessionRuntimeError::FixtureRuntime(error))
+                }
+            }
+            Err(error) => Err(SessionRuntimeError::FixtureRuntime(error)),
+        }
     }
 
     fn execute_single_step(
@@ -1591,9 +1655,7 @@ impl SessionRuntime {
 
         let mut trace = self.load_or_create_trace(session, &task)?;
         let response = self.advance_task(session, &mut task, &mut trace, runtime)?;
-        if session.active_task.is_none() {
-            session.active_task = Some(task);
-        }
+        session.active_task = Some(task);
 
         Ok(response)
     }
@@ -1665,7 +1727,7 @@ impl SessionRuntime {
             &task.context.state,
             task.plan.revision,
         );
-        let trace_location = self.persist_task_trace(task, trace)?;
+        let trace_location = self.persist_trace(trace)?;
         session.latest_trace_ref = Some(trace_location);
 
         let result = self.execute_step(runtime, &step_snapshot, &task.context);
@@ -1704,22 +1766,13 @@ impl SessionRuntime {
                     task.plan.revision,
                 );
 
-                let explicit_goal_satisfied = task
+                let goal_satisfied = task
                     .context
                     .state
                     .get("goal_satisfied")
                     .and_then(Value::as_bool)
-                    .unwrap_or(false);
-                let reached_end_of_plan = task.plan.current_step_index + 1 >= task.plan.steps.len();
-
-                if (explicit_goal_satisfied || reached_end_of_plan)
-                    && let Some(reason) =
-                        self.delivery_completion_failure_reason(session, task, &step_snapshot.id)?
-                {
-                    return self.finalize_task(session, task, trace, reason).map(Some);
-                }
-
-                let goal_satisfied = explicit_goal_satisfied || reached_end_of_plan;
+                    .unwrap_or(false)
+                    || task.plan.current_step_index + 1 >= task.plan.steps.len();
 
                 if goal_satisfied {
                     task.plan.advance();
@@ -1730,9 +1783,6 @@ impl SessionRuntime {
                             "step_id": step_snapshot.id,
                         })),
                     );
-                    if self.continue_cluster_after_success(session, task, trace, &reason)? {
-                        return Ok(None);
-                    }
                     return self.finalize_task(session, task, trace, reason).map(Some);
                 }
 
@@ -1755,7 +1805,7 @@ impl SessionRuntime {
                 }
 
                 task.plan.advance();
-                let trace_location = self.persist_task_trace(task, trace)?;
+                let trace_location = self.persist_trace(trace)?;
                 session.latest_status = SessionStatus::Running;
                 session.latest_terminal_reason = None;
                 session.latest_trace_ref = Some(trace_location);
@@ -1794,7 +1844,7 @@ impl SessionRuntime {
 
                 match decide_recovery(task, &task.plan.steps[step_index], &result) {
                     RecoveryDecision::Continue => {
-                        let trace_location = self.persist_task_trace(task, trace)?;
+                        let trace_location = self.persist_trace(trace)?;
                         session.latest_status = SessionStatus::Running;
                         session.latest_terminal_reason = None;
                         session.latest_trace_ref = Some(trace_location);
@@ -1828,7 +1878,7 @@ impl SessionRuntime {
                             task.plan.revision,
                             payload,
                         );
-                        let trace_location = self.persist_task_trace(task, trace)?;
+                        let trace_location = self.persist_trace(trace)?;
                         session.latest_status = SessionStatus::Running;
                         session.latest_terminal_reason = None;
                         session.latest_trace_ref = Some(trace_location);
@@ -1843,14 +1893,11 @@ impl SessionRuntime {
                         ) {
                             Ok(replacements) => replacements,
                             Err(error) => {
-                                if let crate::orchestrator::planner::PlanningError::ReplanUnavailable(message) = &error {
-                                    task.context.state.insert(
-                                        "latest_exhaustion_reason".to_string(),
-                                        json!(message),
-                                    );
-                                }
-                                let reason =
-                                    build_planning_failure_reason(&step_snapshot.id, &error);
+                                let reason = build_terminal_reason(
+                                    TerminalCondition::TaskNotCredible,
+                                    "planner could not produce a credible replacement plan",
+                                    Some(json!({"error": error.to_string()})),
+                                );
                                 return self.finalize_task(session, task, trace, reason).map(Some);
                             }
                         };
@@ -1895,7 +1942,7 @@ impl SessionRuntime {
                             revision.to_revision,
                             payload,
                         );
-                        let trace_location = self.persist_task_trace(task, trace)?;
+                        let trace_location = self.persist_trace(trace)?;
                         session.latest_status = SessionStatus::Running;
                         session.latest_terminal_reason = None;
                         session.latest_trace_ref = Some(trace_location);
@@ -2013,7 +2060,6 @@ impl SessionRuntime {
         let (bounded_context, packet_reuse) =
             bounded_governance_context(&task.context, metadata, &runtime.profile.read_targets)
                 .map_err(|error| SessionRuntimeError::GovernancePatch(error.to_string()))?;
-        let input_documents = governance_input_documents(&task.input);
 
         let requested_runtime = policy.effective_runtime(governance.default_runtime);
         let canon_available = governance
@@ -2034,11 +2080,15 @@ impl SessionRuntime {
         } else {
             None
         };
+        let existing_stage_mode = existing_record
+            .as_ref()
+            .filter(|record| record.stage_key == stage_key)
+            .and(existing_packet.as_ref().and_then(|packet| packet.canon_mode));
         let mut mode = decision
             .as_ref()
             .and_then(|record| record.selected_mode)
             .or_else(|| resolved_canon_mode(policy, governance.default_runtime))
-            .or(existing_packet.as_ref().and_then(|packet| packet.canon_mode));
+            .or(existing_stage_mode);
         let mut selected_runtime = requested_runtime;
         if requested_runtime == GovernanceRuntimeKind::Canon
             && (mode.is_none() || !canon_available)
@@ -2142,7 +2192,7 @@ impl SessionRuntime {
                     .and_then(|record| record.packet_ref.clone())
                     .or_else(|| existing_packet.as_ref().map(|packet| packet.packet_ref.clone())),
                 bounded_context,
-                input_documents: input_documents.clone(),
+                input_documents: Vec::new(),
             };
             trace.record_event(
                 TraceEventType::GovernanceStarted,
@@ -2218,7 +2268,7 @@ impl SessionRuntime {
                 .and_then(|record| record.packet_ref.clone())
                 .or_else(|| existing_packet.as_ref().map(|packet| packet.packet_ref.clone())),
             bounded_context,
-            input_documents,
+            input_documents: Vec::new(),
         };
 
         trace.record_event(
@@ -2386,8 +2436,6 @@ impl SessionRuntime {
                     "reason": blocked_reason.as_deref().unwrap_or(&response.message),
                     "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
                     "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
-                    "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
-                    "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
                 }),
             );
         }
@@ -2407,12 +2455,9 @@ impl SessionRuntime {
                         "headline": response.packet.as_ref().map(|packet| packet.headline.clone()).unwrap_or_else(|| response.message.clone()),
                         "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
                         "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
-                        "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
-                        "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
-                        "canon_next_action": compacted_canon_memory.as_ref().and_then(|memory| memory.recommended_next_action.as_ref()).map(|action| format!("{}: {}", action.action, action.rationale)),
                     }),
                 );
-                let trace_location = self.persist_task_trace(task, trace)?;
+                let trace_location = self.persist_trace(trace)?;
                 session.latest_status = SessionStatus::Running;
                 session.latest_terminal_reason = None;
                 session.latest_trace_ref = Some(trace_location);
@@ -2435,12 +2480,9 @@ impl SessionRuntime {
                         "run_ref": response.run_ref,
                         "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
                         "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
-                        "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
-                        "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
-                        "canon_next_action": compacted_canon_memory.as_ref().and_then(|memory| memory.recommended_next_action.as_ref()).map(|action| format!("{}: {}", action.action, action.rationale)),
                     }),
                 );
-                let trace_location = self.persist_task_trace(task, trace)?;
+                let trace_location = self.persist_trace(trace)?;
                 session.latest_status = SessionStatus::Running;
                 session.latest_terminal_reason = None;
                 session.latest_trace_ref = Some(trace_location);
@@ -2461,12 +2503,9 @@ impl SessionRuntime {
                         "packet_ref": response.packet.as_ref().map(|packet| packet.packet_ref.clone()),
                         "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
                         "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
-                        "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
-                        "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
-                        "canon_next_action": compacted_canon_memory.as_ref().and_then(|memory| memory.recommended_next_action.as_ref()).map(|action| format!("{}: {}", action.action, action.rationale)),
                     }),
                 );
-                let trace_location = self.persist_task_trace(task, trace)?;
+                let trace_location = self.persist_trace(trace)?;
                 session.latest_status = SessionStatus::Running;
                 session.latest_terminal_reason = None;
                 session.latest_trace_ref = Some(trace_location);
@@ -2542,12 +2581,9 @@ impl SessionRuntime {
                 "runtime": block.runtime,
                 "required": block.required,
                 "reason": block.reason,
-                "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
-                "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
-                "canon_next_action": compacted_canon_memory.as_ref().and_then(|memory| memory.recommended_next_action.as_ref()).map(|action| format!("{}: {}", action.action, action.rationale)),
             }),
         );
-        let trace_location = self.persist_task_trace(task, trace)?;
+        let trace_location = self.persist_trace(trace)?;
         session.latest_trace_ref = Some(trace_location);
         session.updated_at = current_timestamp_millis();
 
@@ -2576,7 +2612,8 @@ impl SessionRuntime {
         task: &Task,
     ) -> Result<ExecutionTrace, SessionRuntimeError> {
         if let Some(trace_ref) = &session.latest_trace_ref {
-            return FileTraceStore::for_workspace(Path::new(&task.context.workspace_ref))
+            return self
+                .trace_store
                 .load(Path::new(trace_ref))
                 .map_err(SessionRuntimeError::TraceStore);
         }
@@ -2609,8 +2646,7 @@ impl SessionRuntime {
                 }),
             );
         }
-        let trace_location =
-            self.persist_trace_for_workspace(Path::new(&task.context.workspace_ref), &mut trace)?;
+        let trace_location = self.persist_trace(&mut trace)?;
         session.latest_trace_ref = Some(trace_location);
 
         Ok(trace)
@@ -2857,8 +2893,6 @@ impl SessionRuntime {
                 .unwrap_or_else(|| "terminal".to_string());
             self.record_stage_failure(trace, session, &step_id, task.plan.revision, &reason);
         }
-        task.apply_terminal(terminal_status, reason.clone());
-        let cluster_story = preview_cluster_story_after_terminal(task, terminal_status, &reason)?;
         trace.record_event(
             TraceEventType::TerminalRecorded,
             None,
@@ -2866,12 +2900,11 @@ impl SessionRuntime {
             json!({
                 "terminal_status": terminal_status,
                 "terminal_reason": reason,
-                "cluster_delivery_story": cluster_story,
             }),
         );
+        task.apply_terminal(terminal_status, reason.clone());
         trace.finalize(terminal_status, reason.clone());
-        let trace_location = self.persist_task_trace(task, trace)?;
-        update_cluster_story_for_terminal(task, &trace_location, terminal_status, &reason)?;
+        let trace_location = self.persist_trace(trace)?;
 
         session.latest_status = session_status_for_task_status(terminal_status);
         session.latest_terminal_reason = Some(reason.clone());
@@ -2888,318 +2921,50 @@ impl SessionRuntime {
         })
     }
 
-    fn persist_trace_for_workspace(
-        &self,
-        workspace_ref: &Path,
-        trace: &mut ExecutionTrace,
-    ) -> Result<String, SessionRuntimeError> {
-        let store = FileTraceStore::for_workspace(workspace_ref);
-        let path = store.persist(trace).map_err(SessionRuntimeError::TraceStore)?;
+    fn persist_trace(&self, trace: &mut ExecutionTrace) -> Result<String, SessionRuntimeError> {
+        let path = self.trace_store.persist(trace).map_err(SessionRuntimeError::TraceStore)?;
         let trace_location = path.to_string_lossy().into_owned();
         trace.set_trace_location(trace_location.clone());
-        store.persist(trace).map_err(SessionRuntimeError::TraceStore)?;
+        self.trace_store.persist(trace).map_err(SessionRuntimeError::TraceStore)?;
         Ok(trace_location)
     }
-
-    fn persist_task_trace(
-        &self,
-        task: &Task,
-        trace: &mut ExecutionTrace,
-    ) -> Result<String, SessionRuntimeError> {
-        self.persist_trace_for_workspace(Path::new(&task.context.workspace_ref), trace)
-    }
-
-    fn build_cluster_task(
-        &self,
-        session: &ActiveSessionRecord,
-        projection: &ClusterSessionProjection,
-        story: &ClusterDeliveryStory,
-        workspace_ref: &str,
-    ) -> Result<Task, SessionRuntimeError> {
-        let workspace = PathBuf::from(workspace_ref);
-        let request = build_task_request(
-            &workspace,
-            session.goal.clone().ok_or(SessionRuntimeError::MissingGoal)?,
-            session.session_id.clone(),
-            session.authored_brief.as_ref(),
-            session.negotiation_packet.as_ref(),
-        )
-        .map_err(SessionRuntimeError::FixtureRuntime)?;
-        let plan = build_fixture_plan_for_goal(
-            &workspace,
-            session.active_flow.as_ref(),
-            session.goal.as_deref().unwrap_or_default(),
-        )
-        .map_err(SessionRuntimeError::FixtureRuntime)?;
-        let mut task = Task::new(format!("task-{}", session.session_id), &request, plan)
-            .map_err(SessionRuntimeError::TaskRequest)?;
-        task.context
-            .set_cluster_session_projection(projection)
-            .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?;
-        task.context
-            .set_cluster_delivery_story(story)
-            .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?;
-        Ok(task)
-    }
-
-    fn continue_cluster_after_success(
-        &self,
-        session: &mut ActiveSessionRecord,
-        task: &mut Task,
-        trace: &mut ExecutionTrace,
-        reason: &TerminalReason,
-    ) -> Result<bool, SessionRuntimeError> {
-        let Some(projection) = task
-            .context
-            .cluster_session_projection()
-            .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?
-        else {
-            return Ok(false);
-        };
-        let Some(mut story) = task
-            .context
-            .cluster_delivery_story()
-            .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?
-        else {
-            return Ok(false);
-        };
-
-        let current_workspace_ref = task.context.workspace_ref.clone();
-        let next_workspace_ref = projection
-            .member_workspace_refs
-            .iter()
-            .find(|workspace_ref| {
-                *workspace_ref != &current_workspace_ref
-                    && !story
-                        .participating_workspaces
-                        .iter()
-                        .any(|record| record.workspace_ref == **workspace_ref)
-            })
-            .cloned();
-        let Some(next_workspace_ref) = next_workspace_ref else {
-            return Ok(false);
-        };
-
-        task.apply_terminal(TaskStatus::Succeeded, reason.clone());
-
-        let participation_order = story.participating_workspaces.len();
-        record_cluster_participation(
-            &mut story,
-            WorkspaceParticipationRecord {
-                workspace_ref: current_workspace_ref.clone(),
-                participation_kind: participation_kind_for_success(task),
-                order: participation_order,
-                latest_trace_ref: None,
-                latest_status: Some("succeeded".to_string()),
-                headline: format!("completed bounded work in {current_workspace_ref}"),
-                terminal_reason: Some(reason.message.clone()),
-            },
-        );
-        story.authoritative_workspace_ref = next_workspace_ref.clone();
-        story.execution_condition = ClusteredExecutionCondition {
-            kind: ClusteredExecutionKind::Paused,
-            active_workspace_ref: Some(next_workspace_ref.clone()),
-            blocking_workspace_ref: None,
-            summary: format!("handoff prepared for {next_workspace_ref}"),
-            recovery_allowed: true,
-        };
-        story.updated_at = current_timestamp_millis();
-
-        trace.record_event(
-            TraceEventType::TerminalRecorded,
-            None,
-            task.plan.revision,
-            json!({
-                "terminal_status": TaskStatus::Succeeded,
-                "terminal_reason": reason,
-                "cluster_delivery_story": &story,
-            }),
-        );
-        trace.finalize(TaskStatus::Succeeded, reason.clone());
-        let trace_location = self.persist_task_trace(task, trace)?;
-        record_cluster_participation(
-            &mut story,
-            WorkspaceParticipationRecord {
-                workspace_ref: current_workspace_ref.clone(),
-                participation_kind: participation_kind_for_success(task),
-                order: participation_order,
-                latest_trace_ref: Some(trace_location.clone()),
-                latest_status: Some("succeeded".to_string()),
-                headline: format!("completed bounded work in {current_workspace_ref}"),
-                terminal_reason: Some(reason.message.clone()),
-            },
-        );
-
-        let next_task =
-            self.build_cluster_task(session, &projection, &story, &next_workspace_ref)?;
-        session.active_task = Some(next_task);
-        session.latest_status = SessionStatus::Running;
-        session.latest_terminal_reason = None;
-        session.latest_trace_ref = Some(trace_location);
-        session.updated_at = current_timestamp_millis();
-        Ok(true)
-    }
 }
 
-fn initial_cluster_delivery_story(
-    projection: &ClusterSessionProjection,
-    authoritative_workspace_ref: &str,
-) -> ClusterDeliveryStory {
-    ClusterDeliveryStory {
-        cluster_id: projection.cluster_id.clone(),
-        primary_workspace_ref: projection.primary_workspace_ref.clone(),
-        authoritative_workspace_ref: authoritative_workspace_ref.to_string(),
-        route_owner: ClusterRouteOwner::Native,
-        member_workspace_refs: projection.member_workspace_refs.clone(),
-        participating_workspaces: Vec::new(),
-        started_from_command: projection.started_from_command.clone(),
-        execution_condition: ClusteredExecutionCondition {
-            kind: ClusteredExecutionKind::Paused,
-            active_workspace_ref: Some(authoritative_workspace_ref.to_string()),
-            blocking_workspace_ref: None,
-            summary: format!("clustered delivery is ready in {authoritative_workspace_ref}"),
-            recovery_allowed: true,
-        },
-        updated_at: current_timestamp_millis(),
-    }
+fn effective_assistant_runtimes(
+    workspace: Option<&RoutingConfig>,
+    cluster: Option<&RoutingConfig>,
+    global: Option<&RoutingConfig>,
+) -> Vec<RuntimeKind> {
+    workspace
+        .filter(|config| !config.assistant_runtimes.is_empty())
+        .map(|config| config.assistant_runtimes.clone())
+        .or_else(|| {
+            cluster
+                .filter(|config| !config.assistant_runtimes.is_empty())
+                .map(|config| config.assistant_runtimes.clone())
+        })
+        .or_else(|| {
+            global
+                .filter(|config| !config.assistant_runtimes.is_empty())
+                .map(|config| config.assistant_runtimes.clone())
+        })
+        .unwrap_or_default()
 }
 
-fn participation_kind_for_success(task: &Task) -> WorkspaceParticipationKind {
-    let changed_files = task
-        .context
-        .state
-        .get("latest_changed_files")
-        .and_then(Value::as_array)
-        .map(|items| !items.is_empty())
-        .unwrap_or(false);
-    if changed_files {
-        WorkspaceParticipationKind::Mutated
-    } else {
-        WorkspaceParticipationKind::ReadOnly
-    }
+struct NativePersistenceInput {
+    terminal_reason: TerminalReason,
+    limits: RunLimits,
+    record_terminal_event: bool,
+    projected_task: Option<Task>,
 }
 
-fn record_cluster_participation(
-    story: &mut ClusterDeliveryStory,
-    record: WorkspaceParticipationRecord,
-) {
-    if let Some(existing) = story
-        .participating_workspaces
-        .iter_mut()
-        .find(|existing| existing.workspace_ref == record.workspace_ref)
-    {
-        *existing = record;
-    } else {
-        story.participating_workspaces.push(record);
-    }
+enum NativeGovernanceProjection {
+    None,
+    Task { task: Box<Task>, events: Vec<TraceEvent> },
+    Terminal { response: Box<TaskRunResponse>, task: Box<Task> },
 }
 
-fn update_cluster_story_for_terminal(
-    task: &mut Task,
-    trace_location: &str,
-    terminal_status: TaskStatus,
-    reason: &TerminalReason,
-) -> Result<(), SessionRuntimeError> {
-    let Some(mut story) = preview_cluster_story_after_terminal(task, terminal_status, reason)?
-    else {
-        return Ok(());
-    };
-    let current_workspace_ref = task.context.workspace_ref.clone();
-    let participation_order = story
-        .participating_workspaces
-        .iter()
-        .position(|record| record.workspace_ref == current_workspace_ref)
-        .unwrap_or(story.participating_workspaces.len());
-    record_cluster_participation(
-        &mut story,
-        WorkspaceParticipationRecord {
-            workspace_ref: current_workspace_ref.clone(),
-            participation_kind: participation_kind_for_terminal(task, terminal_status),
-            order: participation_order,
-            latest_trace_ref: Some(trace_location.to_string()),
-            latest_status: Some(task_status_text(terminal_status).to_string()),
-            headline: terminal_headline(&current_workspace_ref, terminal_status),
-            terminal_reason: Some(reason.message.clone()),
-        },
-    );
-    story.updated_at = current_timestamp_millis();
-
-    task.context
-        .set_cluster_delivery_story(&story)
-        .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))
-}
-
-fn preview_cluster_story_after_terminal(
-    task: &Task,
-    terminal_status: TaskStatus,
-    reason: &TerminalReason,
-) -> Result<Option<ClusterDeliveryStory>, SessionRuntimeError> {
-    let Some(mut story) = task
-        .context
-        .cluster_delivery_story()
-        .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?
-    else {
-        return Ok(None);
-    };
-
-    let current_workspace_ref = task.context.workspace_ref.clone();
-    let participation_order = story
-        .participating_workspaces
-        .iter()
-        .position(|record| record.workspace_ref == current_workspace_ref)
-        .unwrap_or(story.participating_workspaces.len());
-    record_cluster_participation(
-        &mut story,
-        WorkspaceParticipationRecord {
-            workspace_ref: current_workspace_ref.clone(),
-            participation_kind: participation_kind_for_terminal(task, terminal_status),
-            order: participation_order,
-            latest_trace_ref: None,
-            latest_status: Some(task_status_text(terminal_status).to_string()),
-            headline: terminal_headline(&current_workspace_ref, terminal_status),
-            terminal_reason: Some(reason.message.clone()),
-        },
-    );
-    story.authoritative_workspace_ref = current_workspace_ref.clone();
-    story.execution_condition = ClusteredExecutionCondition {
-        kind: execution_kind_for_status(terminal_status),
-        active_workspace_ref: None,
-        blocking_workspace_ref: if matches!(terminal_status, TaskStatus::Succeeded) {
-            None
-        } else {
-            Some(current_workspace_ref.clone())
-        },
-        summary: terminal_headline(&current_workspace_ref, terminal_status),
-        recovery_allowed: !matches!(terminal_status, TaskStatus::Succeeded),
-    };
-    story.updated_at = current_timestamp_millis();
-
-    Ok(Some(story))
-}
-
-fn participation_kind_for_terminal(
-    task: &Task,
-    terminal_status: TaskStatus,
-) -> WorkspaceParticipationKind {
-    match terminal_status {
-        TaskStatus::Succeeded => participation_kind_for_success(task),
-        TaskStatus::Failed | TaskStatus::Exhausted | TaskStatus::Aborted => {
-            WorkspaceParticipationKind::Blocked
-        }
-        TaskStatus::Planned | TaskStatus::Running => WorkspaceParticipationKind::Entry,
-    }
-}
-
-fn execution_kind_for_status(status: TaskStatus) -> ClusteredExecutionKind {
-    match status {
-        TaskStatus::Succeeded => ClusteredExecutionKind::Success,
-        TaskStatus::Failed | TaskStatus::Aborted => ClusteredExecutionKind::Failed,
-        TaskStatus::Exhausted => ClusteredExecutionKind::Exhausted,
-        TaskStatus::Planned | TaskStatus::Running => ClusteredExecutionKind::Paused,
-    }
-}
-
-fn task_status_text(status: TaskStatus) -> &'static str {
+fn cluster_task_status_text(status: TaskStatus) -> &'static str {
     match status {
         TaskStatus::Planned => "planned",
         TaskStatus::Running => "running",
@@ -3210,8 +2975,33 @@ fn task_status_text(status: TaskStatus) -> &'static str {
     }
 }
 
-fn terminal_headline(workspace_ref: &str, terminal_status: TaskStatus) -> String {
-    format!("{workspace_ref} finished with {}", task_status_text(terminal_status))
+fn cluster_workspace_is_blocked(workspace_ref: &str) -> bool {
+    let workspace = Path::new(workspace_ref);
+    let Ok(profile) = load_workspace_execution_profile(workspace) else {
+        return true;
+    };
+
+    !profile.attempts.iter().any(|attempt| {
+        attempt.changes.iter().all(|change| {
+            let Ok(contents) = std::fs::read_to_string(workspace.join(&change.path)) else {
+                return false;
+            };
+            contents.contains(&change.find) || contents.contains(&change.replace)
+        })
+    })
+}
+
+fn is_governance_trace_event(event_type: TraceEventType) -> bool {
+    matches!(
+        event_type,
+        TraceEventType::GovernanceSelected
+            | TraceEventType::GovernanceStarted
+            | TraceEventType::GovernanceDecisionRecorded
+            | TraceEventType::GovernanceAwaitingApproval
+            | TraceEventType::GovernanceCompleted
+            | TraceEventType::GovernanceBlocked
+            | TraceEventType::GovernancePacketRejected
+    )
 }
 
 struct GovernanceBlockContext {
@@ -3231,18 +3021,10 @@ pub enum SessionRuntimeError {
     TraceStore(#[from] TraceStoreError),
     #[error("active session has no captured goal")]
     MissingGoal,
-    #[error("active session has no proposed goal plan")]
-    MissingGoalPlan,
-    #[error("{headline}: {prompt}")]
+    #[error(
+        "active session requires clarification before planning can continue: {headline}: {prompt}"
+    )]
     ClarificationRequired { headline: String, prompt: String },
-    #[error("goal planning failed: {0}")]
-    GoalPlanner(#[from] GoalPlannerError),
-    #[error("goal plan state is invalid: {0}")]
-    InvalidGoalPlan(String),
-    #[error("cluster delivery state is invalid: {0}")]
-    InvalidClusterState(String),
-    #[error("native execution cannot continue until the current proposed plan is confirmed")]
-    PlanConfirmationRequired { flow_name: Option<String> },
     #[error("unknown flow `{requested}`; supported flows: {supported}")]
     UnknownFlow { requested: String, supported: String },
     #[error(
@@ -3253,6 +3035,10 @@ pub enum SessionRuntimeError {
     InvalidFlowState(String),
     #[error("active session has no planned task")]
     MissingActiveTask,
+    #[error("active session has no proposed goal plan")]
+    MissingGoalPlan,
+    #[error("active session has a proposed plan that must be confirmed before execution")]
+    PlanConfirmationRequired { flow_name: Option<String> },
     #[error("active session is missing the persisted trace reference")]
     MissingTraceReference,
     #[error("active task is missing a terminal reason")]
@@ -3261,433 +3047,18 @@ pub enum SessionRuntimeError {
     FixtureRuntime(#[source] FixtureRuntimeError),
     #[error("task request is invalid: {0}")]
     TaskRequest(#[source] TaskRequestError),
+    #[error("goal plan is invalid: {0}")]
+    GoalPlan(String),
+    #[error("native decision loop failed: {0}")]
+    DecisionLoop(String),
     #[error("task context state is invalid: {0}")]
     TaskContext(String),
+    #[error("active task is missing projected governance state")]
+    MissingGovernanceStage,
     #[error("governance state patch is invalid: {0}")]
     GovernancePatch(String),
     #[error("governance runtime failed: {0}")]
     GovernanceRuntime(String),
-    #[error("decision loop failed: {0}")]
-    DecisionLoop(String),
-    #[error(
-        "assistant binding for {slot} requires {runtime}, but available assistant runtimes are: {available}"
-    )]
-    UnsupportedAssistantBinding { slot: String, runtime: String, available: String },
-}
-
-fn native_delivery_completion_failure_reason(
-    goal_plan: &crate::domain::goal_plan::GoalPlan,
-    decisions: &[crate::domain::decision::Decision],
-) -> Option<TerminalReason> {
-    let flow_name = goal_plan.flow.as_ref()?.flow_name.as_str();
-    if !matches!(flow_name, "bug-fix" | "change") {
-        return None;
-    }
-
-    let has_material_diff = decisions.iter().any(|decision| {
-        decision.status == crate::domain::decision::DecisionStatus::Verified
-            && decision
-                .tool_result
-                .as_ref()
-                .and_then(|tool_result| tool_result.diff.as_deref())
-                .is_some_and(|diff| !diff.trim().is_empty())
-    });
-    if !has_material_diff {
-        return Some(build_terminal_reason(
-            TerminalCondition::TaskNotCredible,
-            "delivery did not produce a material workspace diff through the native decision loop"
-                .to_string(),
-            Some(json!({
-                "flow_name": flow_name,
-                "verified_decisions": decisions
-                    .iter()
-                    .filter(|decision| {
-                        decision.status == crate::domain::decision::DecisionStatus::Verified
-                    })
-                    .count(),
-            })),
-        ));
-    }
-
-    let has_passed_validation = decisions.iter().any(|decision| {
-        decision.status == crate::domain::decision::DecisionStatus::Verified
-            && decision.decision_type == crate::domain::decision::DecisionType::Test
-            && decision.tool_result.as_ref().is_some_and(|tool_result| tool_result.success)
-    });
-    if !has_passed_validation {
-        return Some(build_terminal_reason(
-            TerminalCondition::TaskNotCredible,
-            "delivery did not produce credible validation evidence through the native decision loop"
-                .to_string(),
-            Some(json!({
-                "flow_name": flow_name,
-                "verified_decisions": decisions
-                    .iter()
-                    .filter(|decision| {
-                        decision.status == crate::domain::decision::DecisionStatus::Verified
-                    })
-                    .count(),
-            })),
-        ));
-    }
-
-    None
-}
-
-fn material_goal_plan_changes(
-    previous_goal_plan: &crate::domain::goal_plan::GoalPlan,
-    next_goal_plan: &crate::domain::goal_plan::GoalPlan,
-) -> Vec<&'static str> {
-    let mut changed_fields = Vec::new();
-
-    let previous_flow = previous_goal_plan.flow.as_ref().map(|flow| flow.flow_name.as_str());
-    let next_flow = next_goal_plan.flow.as_ref().map(|flow| flow.flow_name.as_str());
-    if previous_flow != next_flow || previous_goal_plan.flow_skipped != next_goal_plan.flow_skipped
-    {
-        changed_fields.push("flow");
-    }
-
-    if previous_goal_plan.verification_strategy != next_goal_plan.verification_strategy {
-        changed_fields.push("verification strategy");
-    }
-
-    if previous_goal_plan.routing_policy_summary != next_goal_plan.routing_policy_summary {
-        changed_fields.push("routing policy");
-    }
-
-    let previous_targets = previous_goal_plan
-        .tasks
-        .iter()
-        .map(|task| (task.description.as_str(), task.target.as_str(), task.decision_type_hint))
-        .collect::<Vec<_>>();
-    let next_targets = next_goal_plan
-        .tasks
-        .iter()
-        .map(|task| (task.description.as_str(), task.target.as_str(), task.decision_type_hint))
-        .collect::<Vec<_>>();
-    if previous_targets != next_targets {
-        changed_fields.push("tasks");
-    }
-
-    changed_fields
-}
-
-fn native_terminal_outcome(terminal: &LoopTerminal) -> (TerminalCondition, String, Option<Value>) {
-    match terminal {
-        LoopTerminal::Success => (
-            TerminalCondition::GoalSatisfied,
-            "goal plan completed through the native decision loop".to_string(),
-            None,
-        ),
-        LoopTerminal::Failure(message) => {
-            (TerminalCondition::UnrecoverableError, message.clone(), None)
-        }
-        LoopTerminal::Exhausted { steps_taken, max_steps } => (
-            TerminalCondition::StepLimitExceeded,
-            "native decision loop exhausted its step budget".to_string(),
-            Some(json!({
-                "steps_taken": steps_taken,
-                "max_steps": max_steps,
-            })),
-        ),
-        LoopTerminal::NoActionableState(message) => {
-            (TerminalCondition::NoCredibleNextStep, message.clone(), None)
-        }
-    }
-}
-
-fn native_analyze_workspace(
-    workspace_ref: &Path,
-    request: StepExecutionRequest,
-) -> StepExecutionResult {
-    let selector = request
-        .input
-        .get("selector")
-        .and_then(Value::as_str)
-        .and_then(|value| ActionSelector::from_str(value).ok())
-        .unwrap_or(ActionSelector::Read);
-
-    if selector == ActionSelector::Search {
-        let target = request
-            .input
-            .get("target")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|target| !target.is_empty())
-            .unwrap_or("workspace");
-        let matches = collect_workspace_files(workspace_ref, workspace_ref, &mut Vec::new());
-
-        return if matches.is_empty() {
-            StepExecutionResult::failure(
-                ErrorInfo::new(
-                    "workspace_search_failed",
-                    format!("failed to find credible workspace evidence for {target}"),
-                ),
-                Recoverability::ReplanRequired,
-            )
-        } else {
-            StepExecutionResult::success_with_patch(
-                json!({
-                    "target": target,
-                    "stdout": matches.join("\n"),
-                    "matches": matches,
-                }),
-                Map::from_iter([(
-                    "latest_selection_headline".to_string(),
-                    json!(format!("searched workspace for {target}")),
-                )]),
-            )
-            .with_evidence(json!({"kind": "workspace_search", "target": target}))
-        };
-    }
-
-    let (target, path) = match request_target_path(workspace_ref, &request) {
-        Ok(target) => target,
-        Err(error) => return StepExecutionResult::failure(error, Recoverability::ReplanRequired),
-    };
-
-    if path.is_dir() {
-        let entries = std::fs::read_dir(&path).map_err(|error| error.to_string());
-        return match entries {
-            Ok(entries) => {
-                let listing = entries
-                    .flatten()
-                    .map(|entry| entry.file_name().to_string_lossy().to_string())
-                    .collect::<Vec<_>>();
-                StepExecutionResult::success_with_patch(
-                    json!({
-                        "target": target,
-                        "stdout": listing.join("\n"),
-                        "entry_count": listing.len(),
-                    }),
-                    Map::from_iter([(
-                        "latest_selection_headline".to_string(),
-                        json!(format!("analyzed directory {target}")),
-                    )]),
-                )
-                .with_evidence(json!({"kind": "directory", "target": target}))
-            }
-            Err(error) => StepExecutionResult::failure(
-                ErrorInfo::new(
-                    "directory_read_failed",
-                    format!("failed to read {target}: {error}"),
-                ),
-                Recoverability::ReplanRequired,
-            ),
-        };
-    }
-
-    match std::fs::read_to_string(&path) {
-        Ok(contents) => StepExecutionResult::success_with_patch(
-            json!({
-                "target": target,
-                "stdout": contents,
-            }),
-            Map::from_iter([(
-                "latest_selection_headline".to_string(),
-                json!(format!("analyzed {target}")),
-            )]),
-        )
-        .with_evidence(json!({"kind": "file", "target": target})),
-        Err(error) => StepExecutionResult::failure(
-            ErrorInfo::new("file_read_failed", format!("failed to read {target}: {error}")),
-            Recoverability::ReplanRequired,
-        ),
-    }
-}
-
-fn native_apply_workspace_change(
-    workspace_ref: &Path,
-    request: StepExecutionRequest,
-) -> StepExecutionResult {
-    let (target, path) = match request_target_path(workspace_ref, &request) {
-        Ok(target) => target,
-        Err(error) => return StepExecutionResult::failure(error, Recoverability::ReplanRequired),
-    };
-
-    let original = match std::fs::read_to_string(&path) {
-        Ok(contents) => contents,
-        Err(error) => {
-            return StepExecutionResult::failure(
-                ErrorInfo::new("file_read_failed", format!("failed to read {target}: {error}")),
-                Recoverability::ReplanRequired,
-            );
-        }
-    };
-
-    let (updated, diff, summary) = if original.contains("left - right") {
-        (
-            original.replacen("left - right", "left + right", 1),
-            "- left - right\n+ left + right".to_string(),
-            format!("applied deterministic arithmetic fix to {target}"),
-        )
-    } else if original.contains("left / right") {
-        (
-            original.replacen("left / right", "left + right", 1),
-            "- left / right\n+ left + right".to_string(),
-            format!("replaced unsafe arithmetic in {target}"),
-        )
-    } else {
-        return StepExecutionResult::failure(
-            ErrorInfo::new(
-                "native_change_unavailable",
-                format!("no deterministic native change is available for {target}"),
-            ),
-            Recoverability::ReplanRequired,
-        );
-    };
-
-    if let Err(error) = std::fs::write(&path, &updated) {
-        return StepExecutionResult::failure(
-            ErrorInfo::new("file_write_failed", format!("failed to write {target}: {error}")),
-            Recoverability::Terminal,
-        );
-    }
-
-    StepExecutionResult::success_with_patch(
-        json!({
-            "target": target,
-            "stdout": summary,
-            "diff": diff,
-            "changed_files": [target.clone()],
-        }),
-        Map::from_iter([
-            ("latest_changed_files".to_string(), json!([target.clone()])),
-            ("latest_selection_headline".to_string(), json!(format!("applied change to {target}"))),
-        ]),
-    )
-}
-
-fn native_run_validation(
-    workspace_ref: &Path,
-    _request: StepExecutionRequest,
-) -> StepExecutionResult {
-    match std::process::Command::new("cargo")
-        .arg("test")
-        .arg("--quiet")
-        .current_dir(workspace_ref)
-        .output()
-    {
-        Ok(output) => {
-            let payload = json!({
-                "command": "cargo test --quiet",
-                "stdout": String::from_utf8_lossy(&output.stdout).to_string(),
-                "stderr": String::from_utf8_lossy(&output.stderr).to_string(),
-                "exit_code": output.status.code().unwrap_or(-1),
-            });
-            let state_patch = Map::from_iter([(
-                "latest_validation_status".to_string(),
-                json!(if output.status.success() { "passed" } else { "failed" }),
-            )]);
-
-            if output.status.success() {
-                StepExecutionResult::success_with_patch(payload.clone(), state_patch)
-                    .with_evidence(payload)
-            } else {
-                StepExecutionResult::failure(
-                    ErrorInfo::new("validation_failed", "cargo test --quiet reported failures")
-                        .with_details(payload.clone()),
-                    Recoverability::ReplanRequired,
-                )
-                .with_evidence(payload)
-                .with_state_patch(state_patch)
-            }
-        }
-        Err(error) => StepExecutionResult::failure(
-            ErrorInfo::new("validation_command_failed", error.to_string()),
-            Recoverability::Terminal,
-        ),
-    }
-}
-
-fn native_replan_step(request: StepExecutionRequest) -> StepExecutionResult {
-    let target = request.input.get("target").and_then(Value::as_str).unwrap_or("current-task");
-    StepExecutionResult::success_with_patch(
-        json!({
-            "target": target,
-            "stdout": format!("recorded a recovery decision for {target}"),
-        }),
-        Map::from_iter([(
-            "latest_selection_headline".to_string(),
-            json!(format!("recorded recovery decision for {target}")),
-        )]),
-    )
-}
-
-fn native_request_clarification(request: StepExecutionRequest) -> StepExecutionResult {
-    let target = request.input.get("target").and_then(Value::as_str).unwrap_or("current-task");
-    let prompt = request
-        .input
-        .get("expected_outcome")
-        .and_then(Value::as_str)
-        .unwrap_or("clarify the next bounded action before continuing");
-
-    StepExecutionResult::success_with_patch(
-        json!({
-            "target": target,
-            "stdout": prompt,
-            "prompt": prompt,
-        }),
-        Map::from_iter([(
-            "latest_selection_headline".to_string(),
-            json!(format!("clarification required for {target}")),
-        )]),
-    )
-    .with_evidence(json!({"kind": "clarification", "target": target, "prompt": prompt}))
-}
-
-fn collect_workspace_files(root: &Path, current: &Path, files: &mut Vec<String>) -> Vec<String> {
-    if files.len() >= 16 {
-        return files.clone();
-    }
-
-    let Ok(entries) = std::fs::read_dir(current) else {
-        return files.clone();
-    };
-
-    for entry in entries.flatten() {
-        if files.len() >= 16 {
-            break;
-        }
-
-        let path = entry.path();
-        let name = entry.file_name();
-        if name.to_string_lossy().starts_with('.') {
-            continue;
-        }
-
-        if path.is_dir() {
-            if name == "target" {
-                continue;
-            }
-            let _ = collect_workspace_files(root, &path, files);
-            continue;
-        }
-
-        if path.is_file()
-            && let Ok(relative) = path.strip_prefix(root)
-        {
-            files.push(relative.to_string_lossy().replace('\\', "/"));
-        }
-    }
-
-    files.clone()
-}
-
-fn request_target_path(
-    workspace_ref: &Path,
-    request: &StepExecutionRequest,
-) -> Result<(String, PathBuf), ErrorInfo> {
-    let target = request
-        .input
-        .get("target")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|target| !target.is_empty())
-        .ok_or_else(|| ErrorInfo::new("missing_target", "request did not include a target path"))?
-        .to_string();
-
-    Ok((target.clone(), workspace_ref.join(&target)))
 }
 
 fn session_status_for_task_status(status: TaskStatus) -> SessionStatus {
@@ -3704,29 +3075,24 @@ fn session_status_for_task_status(status: TaskStatus) -> SessionStatus {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::os::unix::fs::PermissionsExt;
     use std::path::{Path, PathBuf};
 
-    use serde_json::{Map, Value, json};
+    use serde_json::{Map, json};
     use uuid::Uuid;
 
-    use super::{SessionRuntime, session_status_for_task_status};
-    use crate::adapters::config_store::FileConfigStore;
-    use crate::adapters::trace_store::{FileTraceStore, TraceStore};
-    use crate::domain::cluster::{
-        ClusterSessionProjection, ClusteredExecutionKind, WorkspaceParticipationKind,
+    use super::{
+        SessionRuntime, cluster_task_status_text, cluster_workspace_is_blocked,
+        effective_assistant_runtimes, is_governance_trace_event, session_status_for_task_status,
     };
-    use crate::domain::configuration::{
-        CapabilityState, ConfigFile, EffortFallbackPolicy, EffortLevel, ModelRoute, RouteSlot,
-        RoutingConfig, RuntimeCapabilityProfile, RuntimeKind, SlotEffortPolicy,
-    };
-    use crate::domain::decision::{Decision, DecisionType};
+    use crate::adapters::trace_store::TraceStore;
+    use crate::domain::cluster::{ClusterSessionProjection, ClusteredExecutionKind};
+    use crate::domain::configuration::{RoutingConfig, RuntimeKind};
     use crate::domain::execution::{
         ExecutionAttemptDefinition, ExecutionCommand, ExecutionFailureMode, WorkspaceChange,
         WorkspaceExecutionProfile,
     };
     use crate::domain::flow::{attach_stage_metadata, built_in_flow};
-    use crate::domain::goal_plan::{GoalPlan, InferredFlow, PlannedTask};
+    use crate::domain::goal_plan::{GoalPlan, PlannedTask};
     use crate::domain::governance::{
         ApprovalState, CanonMode, CanonRuntimeConfig, GovernanceLifecycleState, GovernanceProfile,
         GovernanceRuntimeKind, GovernedStageRecord, PacketReadiness, StageGovernancePolicy,
@@ -3735,23 +3101,21 @@ mod tests {
     use crate::domain::limits::{RunLimits, TerminalCondition};
     use crate::domain::plan::Plan;
     use crate::domain::session::{
-        ActiveSessionRecord, DelegationContinuityMode, DelegationPacketKind, SessionStatus,
+        ActiveSessionRecord, ContinuityAuthority, DelegationContinuityMode,
+        DelegationContinuityState, SessionStatus,
     };
-    use crate::domain::step::{
-        ExecutionStatus, Recoverability, Step, StepExecutionRequest, StepKind, StepStatus,
-    };
+    use crate::domain::step::{ExecutionStatus, Recoverability, Step, StepStatus};
     use crate::domain::task::{Task, TaskRunRequest, TaskStatus, TerminalReason};
     use crate::domain::task_context::TaskContext;
-    use crate::domain::tool_result::ToolResult;
     use crate::domain::trace::{ExecutionTrace, TraceEventType};
-    use crate::fixture::{FixtureRuntime, build_fixture_plan_for_goal, build_task_request};
+    use crate::fixture::FixtureRuntime;
     use crate::orchestrator::planner::StaticPlanner;
     use crate::registry::agent_registry::AgentRegistry;
     use crate::registry::tool_registry::ToolRegistry;
 
     fn temp_workspace(prefix: &str) -> PathBuf {
         let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
-        fs::create_dir_all(workspace.join(".synod")).unwrap();
+        fs::create_dir_all(workspace.join(".boundline")).unwrap();
         workspace
     }
 
@@ -3762,34 +3126,6 @@ mod tests {
         write_governed_execution_profile_workspace(prefix, attempts, Vec::new(), None)
     }
 
-    fn write_cluster_delivery_workspace(prefix: &str) -> PathBuf {
-        let workspace = write_execution_profile_workspace(
-            prefix,
-            vec![ExecutionAttemptDefinition {
-                attempt_id: "fix-add".to_string(),
-                summary: "Replace subtraction with addition".to_string(),
-                failure_mode: ExecutionFailureMode::Terminal,
-                changes: vec![WorkspaceChange {
-                    path: "src/lib.rs".to_string(),
-                    find: "left - right".to_string(),
-                    replace: "left + right".to_string(),
-                }],
-            }],
-        );
-        fs::create_dir_all(workspace.join("src")).unwrap();
-        fs::write(
-            workspace.join("Cargo.toml"),
-            "[package]\nname = \"cluster-runtime\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
-        )
-        .unwrap();
-        fs::write(
-            workspace.join("src/lib.rs"),
-            "pub fn add(left: i32, right: i32) -> i32 { left - right }\n",
-        )
-        .unwrap();
-        workspace
-    }
-
     fn write_governed_execution_profile_workspace(
         prefix: &str,
         attempts: Vec<ExecutionAttemptDefinition>,
@@ -3798,7 +3134,7 @@ mod tests {
     ) -> PathBuf {
         let workspace = temp_workspace(prefix);
         fs::write(
-            workspace.join(".synod/execution.json"),
+            workspace.join(".boundline/execution.json"),
             serde_json::to_string_pretty(&WorkspaceExecutionProfile {
                 name: "session-runtime-profile".to_string(),
                 read_targets,
@@ -3835,16 +3171,6 @@ mod tests {
         Task::new("task-runtime", &build_request(workspace_ref), plan).unwrap()
     }
 
-    fn goal_satisfied_task(workspace_ref: &str, state_patch: Value) -> Task {
-        decision_task(
-            workspace_ref,
-            json!({
-                "output": {"summary": "goal satisfied"},
-                "state_patch": state_patch,
-            }),
-        )
-    }
-
     fn build_session(workspace: &Path, task: Task) -> ActiveSessionRecord {
         ActiveSessionRecord {
             session_id: "session-runtime".to_string(),
@@ -3864,25 +3190,6 @@ mod tests {
             created_at: 10,
             updated_at: 10,
         }
-    }
-
-    fn build_fixture_session_task(workspace: &Path, session: &ActiveSessionRecord) -> Task {
-        let request = build_task_request(
-            workspace,
-            session.goal.clone().unwrap_or_else(|| "Drive a session runtime branch".to_string()),
-            session.session_id.clone(),
-            session.authored_brief.as_ref(),
-            session.negotiation_packet.as_ref(),
-        )
-        .unwrap();
-        let plan = build_fixture_plan_for_goal(
-            workspace,
-            session.active_flow.as_ref(),
-            session.goal.as_deref().unwrap_or_default(),
-        )
-        .unwrap();
-
-        Task::new("task-runtime", &request, plan).unwrap()
     }
 
     fn manual_runtime() -> FixtureRuntime {
@@ -3922,613 +3229,9 @@ mod tests {
         TaskContext::new("session-runtime", "/tmp/workspace", RunLimits::default(), Map::new())
     }
 
-    fn step_request(target: Option<&str>) -> StepExecutionRequest {
-        let input = target.map(|target| json!({ "target": target })).unwrap_or_else(|| json!({}));
-        StepExecutionRequest {
-            step_id: "step-request".to_string(),
-            step_kind: StepKind::Tool,
-            target_name: "test-target".to_string(),
-            input,
-            task_snapshot: context(),
-            attempt_number: 1,
-        }
-    }
-
-    fn step_request_with_input(input: Value) -> StepExecutionRequest {
-        StepExecutionRequest {
-            step_id: "step-request".to_string(),
-            step_kind: StepKind::Tool,
-            target_name: "test-target".to_string(),
-            input,
-            task_snapshot: context(),
-            attempt_number: 1,
-        }
-    }
-
-    fn build_confirmed_bug_fix_goal_plan() -> GoalPlan {
-        let mut plan = GoalPlan::new(
-            "Fix the failing add function",
-            vec![PlannedTask {
-                task_id: "task-1".to_string(),
-                description: "Fix the failing add function".to_string(),
-                target: "src/lib.rs".to_string(),
-                expected_outcome: Some("issue resolved".to_string()),
-                decision_type_hint: Some(DecisionType::Fix),
-            }],
-        )
-        .unwrap()
-        .with_flow(InferredFlow {
-            flow_name: "bug-fix".to_string(),
-            confidence_reason: "operator confirmed flow during planning".to_string(),
-            confirmed: true,
-        });
-        plan.confirm().unwrap();
-        plan
-    }
-
-    fn verified_decision(
-        decision_type: DecisionType,
-        target: &str,
-        tool_result: ToolResult,
-    ) -> Decision {
-        let mut decision = Decision::new(
-            decision_type,
-            target,
-            format!("execute {target}"),
-            "complete the planned action",
-            Vec::new(),
-        );
-        decision.mark_dispatched().unwrap();
-        decision.mark_verified(tool_result).unwrap();
-        decision
-    }
-
-    #[test]
-    fn execute_next_step_rejects_bug_fix_completion_without_material_diff_or_validation() {
-        let workspace = temp_workspace("synod-runtime-delivery-gate");
-        let runtime = SessionRuntime::for_workspace(&workspace);
-        let fixture_runtime = manual_runtime();
-
-        let mut missing_diff_session = build_session(
-            &workspace,
-            goal_satisfied_task(
-                workspace.to_string_lossy().as_ref(),
-                json!({
-                    "goal_satisfied": true,
-                    "latest_validation_status": "passed",
-                }),
-            ),
-        );
-        missing_diff_session.active_flow = Some(built_in_flow("bug-fix").unwrap().initial_state());
-
-        let missing_diff = runtime
-            .execute_single_step(&mut missing_diff_session, &fixture_runtime)
-            .unwrap()
-            .expect("missing diff should terminally fail");
-        assert_eq!(missing_diff.terminal_status, TaskStatus::Failed);
-        assert_eq!(missing_diff.terminal_reason.condition, TerminalCondition::TaskNotCredible);
-        assert!(
-            missing_diff.terminal_reason.message.contains("material workspace diff"),
-            "{}",
-            missing_diff.terminal_reason.message
-        );
-
-        let mut missing_validation_session = build_session(
-            &workspace,
-            goal_satisfied_task(
-                workspace.to_string_lossy().as_ref(),
-                json!({
-                    "goal_satisfied": true,
-                    "latest_changed_files": ["src/lib.rs"],
-                }),
-            ),
-        );
-        missing_validation_session.active_flow =
-            Some(built_in_flow("bug-fix").unwrap().initial_state());
-
-        let missing_validation = runtime
-            .execute_single_step(&mut missing_validation_session, &fixture_runtime)
-            .unwrap()
-            .expect("missing validation should terminally fail");
-        assert_eq!(missing_validation.terminal_status, TaskStatus::Failed);
-        assert_eq!(
-            missing_validation.terminal_reason.condition,
-            TerminalCondition::TaskNotCredible
-        );
-        assert!(
-            missing_validation.terminal_reason.message.contains("credible validation evidence"),
-            "{}",
-            missing_validation.terminal_reason.message
-        );
-    }
-
-    #[test]
-    fn native_goal_plan_success_requires_diff_and_validation_evidence() {
-        let goal_plan = build_confirmed_bug_fix_goal_plan();
-
-        let validation_only = verified_decision(
-            DecisionType::Test,
-            "test suite",
-            ToolResult::new("tester", "tester test suite", true, 1).with_exit_code(0),
-        );
-        let missing_diff = super::native_delivery_completion_failure_reason(
-            &goal_plan,
-            std::slice::from_ref(&validation_only),
-        )
-        .expect("missing diff should block native success");
-        assert_eq!(missing_diff.condition, TerminalCondition::TaskNotCredible);
-        assert!(missing_diff.message.contains("material workspace diff"));
-
-        let code_change = verified_decision(
-            DecisionType::Fix,
-            "src/lib.rs",
-            ToolResult::new("coder", "coder src/lib.rs", true, 1)
-                .with_diff("- left - right\n+ left + right"),
-        );
-        let missing_validation = super::native_delivery_completion_failure_reason(
-            &goal_plan,
-            std::slice::from_ref(&code_change),
-        )
-        .expect("missing validation should block native success");
-        assert_eq!(missing_validation.condition, TerminalCondition::TaskNotCredible);
-        assert!(missing_validation.message.contains("credible validation evidence"));
-
-        assert!(
-            super::native_delivery_completion_failure_reason(
-                &goal_plan,
-                &[code_change, validation_only],
-            )
-            .is_none()
-        );
-    }
-
-    #[test]
-    fn delivery_completion_failure_reason_covers_governance_gate_states() {
-        let workspace = temp_workspace("synod-runtime-governance-gate");
-        let runtime = SessionRuntime::for_workspace(&workspace);
-        let mut session = build_session(
-            &workspace,
-            goal_satisfied_task(
-                workspace.to_string_lossy().as_ref(),
-                json!({
-                    "goal_satisfied": true,
-                    "latest_changed_files": ["src/lib.rs"],
-                    "latest_validation_status": "passed",
-                }),
-            ),
-        );
-        session.active_flow = Some(built_in_flow("bug-fix").unwrap().initial_state());
-
-        let awaiting_record = GovernedStageRecord {
-            stage_key: "bug-fix:verify".to_string(),
-            runtime: GovernanceRuntimeKind::Canon,
-            lifecycle_state: GovernanceLifecycleState::AwaitingApproval,
-            required: true,
-            autopilot_enabled: true,
-            approval_state: ApprovalState::Requested,
-            canon_run_ref: Some("canon-run-awaiting".to_string()),
-            governance_attempt_id: "attempt-awaiting".to_string(),
-            previous_governance_attempt_id: None,
-            packet_ref: Some(".canon/runs/canon-run-awaiting".to_string()),
-            decision_ref: None,
-            blocked_reason: None,
-        };
-        session
-            .active_task
-            .as_mut()
-            .unwrap()
-            .context
-            .set_latest_governance_stage(&awaiting_record)
-            .unwrap();
-
-        let awaiting_reason = runtime
-            .delivery_completion_failure_reason(
-                &session,
-                session.active_task.as_ref().unwrap(),
-                "verify",
-            )
-            .unwrap()
-            .unwrap();
-        assert_eq!(awaiting_reason.condition, TerminalCondition::TaskNotCredible);
-        assert!(awaiting_reason.message.contains("awaiting governed approval"));
-
-        let blocked_record = GovernedStageRecord {
-            lifecycle_state: GovernanceLifecycleState::Blocked,
-            approval_state: ApprovalState::Rejected,
-            blocked_reason: Some("governance blocked delivery completion".to_string()),
-            ..awaiting_record
-        };
-        session
-            .active_task
-            .as_mut()
-            .unwrap()
-            .context
-            .set_latest_governance_stage(&blocked_record)
-            .unwrap();
-
-        let blocked_reason = runtime
-            .delivery_completion_failure_reason(
-                &session,
-                session.active_task.as_ref().unwrap(),
-                "verify",
-            )
-            .unwrap()
-            .unwrap();
-        assert_eq!(blocked_reason.condition, TerminalCondition::TaskNotCredible);
-        assert!(blocked_reason.message.contains("governance blocked delivery completion"));
-    }
-
-    #[test]
-    fn prepare_cluster_run_materializes_cluster_task_and_is_idempotent() {
-        let primary = write_cluster_delivery_workspace("synod-runtime-cluster-prepare-primary");
-        let secondary = write_cluster_delivery_workspace("synod-runtime-cluster-prepare-secondary");
-        let runtime = SessionRuntime::for_workspace(&primary);
-        let mut session = ActiveSessionRecord {
-            session_id: "session-runtime-cluster-prepare".to_string(),
-            workspace_ref: primary.to_string_lossy().into_owned(),
-            goal: Some("fix the broken add function".to_string()),
-            authored_brief: None,
-            negotiation_packet: None,
-            active_flow: Some(built_in_flow("bug-fix").unwrap().initial_state()),
-            active_task: None,
-            goal_plan: None,
-            workflow_progress: None,
-            decisions: Vec::new(),
-            active_flow_policy: None,
-            latest_status: SessionStatus::GoalCaptured,
-            latest_terminal_reason: None,
-            latest_trace_ref: None,
-            created_at: 10,
-            updated_at: 10,
-        };
-        let projection = ClusterSessionProjection {
-            cluster_id: "cluster-prepare".to_string(),
-            primary_workspace_ref: primary.to_string_lossy().into_owned(),
-            member_workspace_refs: vec![
-                primary.to_string_lossy().into_owned(),
-                secondary.to_string_lossy().into_owned(),
-            ],
-            started_from_command: "run".to_string(),
-            updated_at: 20,
-        };
-
-        runtime.prepare_cluster_run(&mut session, &projection).unwrap();
-        assert_eq!(session.latest_status, SessionStatus::Planned);
-        let task = session.active_task.as_ref().unwrap();
-        assert!(task.context.cluster_session_projection().unwrap().is_some());
-        assert!(task.context.cluster_delivery_story().unwrap().is_some());
-
-        runtime.prepare_cluster_run(&mut session, &projection).unwrap();
-        assert!(
-            session
-                .active_task
-                .as_ref()
-                .unwrap()
-                .context
-                .cluster_session_projection()
-                .unwrap()
-                .is_some()
-        );
-    }
-
-    #[test]
-    fn native_helper_functions_cover_analysis_change_and_validation_paths() {
-        let workspace = temp_workspace("synod-runtime-native-helpers");
-        fs::create_dir_all(workspace.join("src")).unwrap();
-        fs::create_dir_all(workspace.join("tests")).unwrap();
-        fs::write(
-            workspace.join("Cargo.toml"),
-            "[package]\nname = \"native_helpers\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
-        )
-        .unwrap();
-        fs::write(
-            workspace.join("src/lib.rs"),
-            "pub fn add(left: i32, right: i32) -> i32 { left - right }\n",
-        )
-        .unwrap();
-        fs::write(
-            workspace.join("tests/red_to_green.rs"),
-            "#[test]\nfn red_to_green_addition() {\n    assert_eq!(native_helpers::add(2, 2), 4);\n}\n",
-        )
-        .unwrap();
-
-        let analyzed_dir = super::native_analyze_workspace(&workspace, step_request(Some("src")));
-        assert_eq!(analyzed_dir.status, ExecutionStatus::Succeeded);
-        assert_eq!(analyzed_dir.output.as_ref().unwrap()["entry_count"], json!(1));
-
-        let missing_target = super::native_analyze_workspace(&workspace, step_request(None));
-        assert_eq!(missing_target.status, ExecutionStatus::Failed);
-        assert_eq!(missing_target.recoverability, Recoverability::ReplanRequired);
-
-        let validation_failure = super::native_run_validation(&workspace, step_request(Some(".")));
-        assert_eq!(validation_failure.status, ExecutionStatus::Failed);
-        assert_eq!(
-            validation_failure.state_patch.as_ref().unwrap()["latest_validation_status"],
-            json!("failed")
-        );
-
-        let applied =
-            super::native_apply_workspace_change(&workspace, step_request(Some("src/lib.rs")));
-        assert_eq!(applied.status, ExecutionStatus::Succeeded);
-        assert_eq!(
-            applied.state_patch.as_ref().unwrap()["latest_changed_files"],
-            json!(["src/lib.rs"])
-        );
-
-        let validation_success = super::native_run_validation(&workspace, step_request(Some(".")));
-        assert_eq!(validation_success.status, ExecutionStatus::Succeeded);
-        assert_eq!(
-            validation_success.state_patch.as_ref().unwrap()["latest_validation_status"],
-            json!("passed")
-        );
-
-        let unavailable =
-            super::native_apply_workspace_change(&workspace, step_request(Some("src/lib.rs")));
-        assert_eq!(unavailable.status, ExecutionStatus::Failed);
-        assert_eq!(unavailable.error.as_ref().unwrap().code, "native_change_unavailable");
-    }
-
-    #[test]
-    fn native_helper_functions_cover_terminal_and_error_variants() {
-        let (condition, message, details) =
-            super::native_terminal_outcome(&super::LoopTerminal::Failure("broken".to_string()));
-        assert_eq!(condition, TerminalCondition::UnrecoverableError);
-        assert_eq!(message, "broken");
-        assert!(details.is_none());
-
-        let (condition, message, details) =
-            super::native_terminal_outcome(&super::LoopTerminal::Exhausted {
-                steps_taken: 2,
-                max_steps: 5,
-            });
-        assert_eq!(condition, TerminalCondition::StepLimitExceeded);
-        assert_eq!(message, "native decision loop exhausted its step budget");
-        assert_eq!(details.unwrap()["steps_taken"], json!(2));
-
-        let (condition, message, details) = super::native_terminal_outcome(
-            &super::LoopTerminal::NoActionableState("stalled".to_string()),
-        );
-        assert_eq!(condition, TerminalCondition::NoCredibleNextStep);
-        assert_eq!(message, "stalled");
-        assert!(details.is_none());
-
-        let workspace = temp_workspace("synod-runtime-native-helper-errors");
-        fs::create_dir_all(workspace.join("src")).unwrap();
-        fs::write(
-            workspace.join("src/lib.rs"),
-            "pub fn add(left: i32, right: i32) -> i32 { left - right }\n",
-        )
-        .unwrap();
-
-        let (target, path) =
-            super::request_target_path(&workspace, &step_request(Some(" src/lib.rs "))).unwrap();
-        assert_eq!(target, "src/lib.rs");
-        assert_eq!(path, workspace.join("src/lib.rs"));
-
-        let missing_target =
-            super::request_target_path(&workspace, &step_request(None)).unwrap_err();
-        assert_eq!(missing_target.code, "missing_target");
-
-        let analyzed_file =
-            super::native_analyze_workspace(&workspace, step_request(Some(" src/lib.rs ")));
-        assert_eq!(analyzed_file.status, ExecutionStatus::Succeeded);
-        assert_eq!(analyzed_file.output.as_ref().unwrap()["target"], json!("src/lib.rs"));
-
-        let analyze_missing =
-            super::native_analyze_workspace(&workspace, step_request(Some("src/missing.rs")));
-        assert_eq!(analyze_missing.status, ExecutionStatus::Failed);
-        assert_eq!(analyze_missing.error.as_ref().unwrap().code, "file_read_failed");
-
-        let unreadable_dir = workspace.join("private");
-        fs::create_dir_all(&unreadable_dir).unwrap();
-        let mut dir_permissions = fs::metadata(&unreadable_dir).unwrap().permissions();
-        dir_permissions.set_mode(0o000);
-        fs::set_permissions(&unreadable_dir, dir_permissions).unwrap();
-        let analyze_unreadable =
-            super::native_analyze_workspace(&workspace, step_request(Some("private")));
-        assert_eq!(analyze_unreadable.status, ExecutionStatus::Failed);
-        assert_eq!(analyze_unreadable.error.as_ref().unwrap().code, "directory_read_failed");
-        let mut dir_permissions = fs::metadata(&unreadable_dir).unwrap().permissions();
-        dir_permissions.set_mode(0o755);
-        fs::set_permissions(&unreadable_dir, dir_permissions).unwrap();
-
-        let apply_missing_target =
-            super::native_apply_workspace_change(&workspace, step_request(None));
-        assert_eq!(apply_missing_target.status, ExecutionStatus::Failed);
-        assert_eq!(apply_missing_target.error.as_ref().unwrap().code, "missing_target");
-
-        let apply_missing_file =
-            super::native_apply_workspace_change(&workspace, step_request(Some("src/missing.rs")));
-        assert_eq!(apply_missing_file.status, ExecutionStatus::Failed);
-        assert_eq!(apply_missing_file.error.as_ref().unwrap().code, "file_read_failed");
-
-        let division_workspace = temp_workspace("synod-runtime-native-division-fix");
-        fs::create_dir_all(division_workspace.join("src")).unwrap();
-        fs::write(
-            division_workspace.join("src/lib.rs"),
-            "pub fn add(left: i32, right: i32) -> i32 { left / right }\n",
-        )
-        .unwrap();
-        let division_fix = super::native_apply_workspace_change(
-            &division_workspace,
-            step_request(Some("src/lib.rs")),
-        );
-        assert_eq!(division_fix.status, ExecutionStatus::Succeeded);
-        assert!(
-            division_fix.output.as_ref().unwrap()["stdout"]
-                .as_str()
-                .unwrap()
-                .contains("replaced unsafe arithmetic")
-        );
-        assert_eq!(
-            division_fix.state_patch.as_ref().unwrap()["latest_changed_files"],
-            json!(["src/lib.rs"])
-        );
-
-        let readonly_workspace = temp_workspace("synod-runtime-native-readonly-fix");
-        fs::create_dir_all(readonly_workspace.join("src")).unwrap();
-        let readonly_file = readonly_workspace.join("src/lib.rs");
-        fs::write(&readonly_file, "pub fn add(left: i32, right: i32) -> i32 { left - right }\n")
-            .unwrap();
-        let mut file_permissions = fs::metadata(&readonly_file).unwrap().permissions();
-        file_permissions.set_mode(0o444);
-        fs::set_permissions(&readonly_file, file_permissions).unwrap();
-        let apply_readonly = super::native_apply_workspace_change(
-            &readonly_workspace,
-            step_request(Some("src/lib.rs")),
-        );
-        assert_eq!(apply_readonly.status, ExecutionStatus::Failed);
-        assert_eq!(apply_readonly.error.as_ref().unwrap().code, "file_write_failed");
-        let mut file_permissions = fs::metadata(&readonly_file).unwrap().permissions();
-        file_permissions.set_mode(0o644);
-        fs::set_permissions(&readonly_file, file_permissions).unwrap();
-
-        let replan = super::native_replan_step(step_request(None));
-        assert_eq!(replan.status, ExecutionStatus::Succeeded);
-        assert_eq!(replan.output.as_ref().unwrap()["target"], json!("current-task"));
-    }
-
-    #[test]
-    fn native_helper_functions_cover_search_clarification_collection_and_command_errors() {
-        let workspace = temp_workspace("synod-runtime-search-helpers");
-        fs::create_dir_all(workspace.join("src/nested")).unwrap();
-        fs::create_dir_all(workspace.join("target/ignored")).unwrap();
-        fs::create_dir_all(workspace.join(".hidden")).unwrap();
-        fs::write(workspace.join("src/lib.rs"), "pub fn add() {}\n").unwrap();
-        for index in 0..20 {
-            fs::write(
-                workspace.join("src/nested").join(format!("file-{index}.rs")),
-                format!("pub fn helper_{index}() {{}}\n"),
-            )
-            .unwrap();
-        }
-        fs::write(workspace.join("target/ignored/lib.rs"), "ignored\n").unwrap();
-        fs::write(workspace.join(".hidden/secret.rs"), "hidden\n").unwrap();
-
-        let searched = super::native_analyze_workspace(
-            &workspace,
-            step_request_with_input(json!({
-                "selector": "search",
-                "target": " src/lib.rs ",
-            })),
-        );
-        assert_eq!(searched.status, ExecutionStatus::Succeeded);
-        assert_eq!(searched.output.as_ref().unwrap()["target"], json!("src/lib.rs"));
-        assert!(
-            searched.output.as_ref().unwrap()["matches"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|item| item.as_str() == Some("src/lib.rs"))
-        );
-        assert_eq!(
-            searched.state_patch.as_ref().unwrap()["latest_selection_headline"],
-            json!("searched workspace for src/lib.rs")
-        );
-        assert_eq!(searched.evidence.as_ref().unwrap()["kind"], json!("workspace_search"));
-
-        let empty_workspace = temp_workspace("synod-runtime-search-empty");
-        let search_failure = super::native_analyze_workspace(
-            &empty_workspace,
-            step_request_with_input(json!({"selector": "search"})),
-        );
-        assert_eq!(search_failure.status, ExecutionStatus::Failed);
-        assert_eq!(search_failure.error.as_ref().unwrap().code, "workspace_search_failed");
-        assert!(
-            search_failure.error.as_ref().unwrap().message.contains("workspace"),
-            "{}",
-            search_failure.error.as_ref().unwrap().message
-        );
-
-        let clarification = super::native_request_clarification(step_request_with_input(json!({
-            "target": "src/lib.rs",
-            "expected_outcome": "clarify the failing acceptance test",
-        })));
-        assert_eq!(clarification.status, ExecutionStatus::Succeeded);
-        assert_eq!(
-            clarification.output.as_ref().unwrap()["prompt"],
-            json!("clarify the failing acceptance test")
-        );
-        assert_eq!(
-            clarification.state_patch.as_ref().unwrap()["latest_selection_headline"],
-            json!("clarification required for src/lib.rs")
-        );
-        assert_eq!(clarification.evidence.as_ref().unwrap()["kind"], json!("clarification"));
-
-        let default_clarification = super::native_request_clarification(step_request(None));
-        assert_eq!(default_clarification.output.as_ref().unwrap()["target"], json!("current-task"));
-        assert_eq!(
-            default_clarification.output.as_ref().unwrap()["prompt"],
-            json!("clarify the next bounded action before continuing")
-        );
-
-        let mut collected = Vec::new();
-        let matches = super::collect_workspace_files(&workspace, &workspace, &mut collected);
-        assert!(matches.len() <= 16, "{}", matches.len());
-        assert!(matches.iter().any(|item| item == "src/lib.rs"), "{matches:?}");
-        assert!(matches.iter().any(|item| item.starts_with("src/nested/")), "{matches:?}");
-        assert!(matches.iter().all(|item| !item.starts_with("target/")), "{matches:?}");
-        assert!(matches.iter().all(|item| !item.starts_with(".hidden/")), "{matches:?}");
-
-        let mut preseeded = vec!["already-present".to_string(); 16];
-        let preseeded_matches =
-            super::collect_workspace_files(&workspace, &workspace, &mut preseeded);
-        assert_eq!(preseeded_matches.len(), 16);
-        assert!(preseeded_matches.iter().all(|item| item == "already-present"));
-
-        let missing_matches = super::collect_workspace_files(
-            &workspace,
-            &workspace.join("missing-dir"),
-            &mut Vec::new(),
-        );
-        assert!(missing_matches.is_empty());
-
-        let validation_error =
-            super::native_run_validation(&workspace.join("missing-dir"), step_request(None));
-        assert_eq!(validation_error.status, ExecutionStatus::Failed);
-        assert_eq!(validation_error.error.as_ref().unwrap().code, "validation_command_failed");
-        assert_eq!(validation_error.recoverability, Recoverability::Terminal);
-    }
-
-    #[test]
-    fn terminal_and_status_helpers_cover_remaining_mappings() {
-        let workspace = temp_workspace("synod-runtime-terminal-mappings");
-        let task = goal_satisfied_task(
-            workspace.to_string_lossy().as_ref(),
-            json!({"goal_satisfied": true}),
-        );
-
-        assert_eq!(
-            super::participation_kind_for_success(&task),
-            WorkspaceParticipationKind::ReadOnly
-        );
-        assert_eq!(
-            super::participation_kind_for_terminal(&task, TaskStatus::Running),
-            WorkspaceParticipationKind::Entry
-        );
-        assert_eq!(
-            super::execution_kind_for_status(TaskStatus::Exhausted),
-            ClusteredExecutionKind::Exhausted
-        );
-        assert_eq!(
-            super::execution_kind_for_status(TaskStatus::Running),
-            ClusteredExecutionKind::Paused
-        );
-        assert_eq!(super::task_status_text(TaskStatus::Planned), "planned");
-        assert_eq!(super::task_status_text(TaskStatus::Running), "running");
-        assert_eq!(super::task_status_text(TaskStatus::Exhausted), "exhausted");
-        assert_eq!(super::task_status_text(TaskStatus::Aborted), "aborted");
-        assert_eq!(
-            super::terminal_headline("workspace", TaskStatus::Aborted),
-            "workspace finished with aborted"
-        );
-        assert_eq!(session_status_for_task_status(TaskStatus::Planned), SessionStatus::Planned);
-        assert_eq!(session_status_for_task_status(TaskStatus::Running), SessionStatus::Running);
-    }
-
     #[test]
     fn execute_step_routes_agent_tool_and_decision_edge_cases() {
-        let runtime = SessionRuntime::for_workspace(temp_workspace("synod-runtime-routing"));
+        let runtime = SessionRuntime::for_workspace(temp_workspace("boundline-runtime-routing"));
         let fixture_runtime = manual_runtime();
         let context = context();
 
@@ -4587,16 +3290,78 @@ mod tests {
 
         assert_eq!(
             runtime.session_store().path(),
-            runtime.workspace_ref().join(".synod/session.json")
+            runtime.workspace_ref().join(".boundline/session.json")
         );
-        assert_eq!(runtime.trace_store().root(), runtime.workspace_ref().join(".synod/traces"));
+        assert_eq!(runtime.trace_store().root(), runtime.workspace_ref().join(".boundline/traces"));
         assert_eq!(session_status_for_task_status(TaskStatus::Aborted), SessionStatus::Aborted);
+
+        let mut workspace_routing = RoutingConfig {
+            assistant_runtimes: vec![RuntimeKind::Copilot],
+            ..RoutingConfig::default()
+        };
+        let mut cluster_routing = RoutingConfig {
+            assistant_runtimes: vec![RuntimeKind::Codex],
+            ..RoutingConfig::default()
+        };
+        let global_routing = RoutingConfig {
+            assistant_runtimes: vec![RuntimeKind::Claude],
+            ..RoutingConfig::default()
+        };
+        assert_eq!(
+            effective_assistant_runtimes(
+                Some(&workspace_routing),
+                Some(&cluster_routing),
+                Some(&global_routing)
+            ),
+            vec![RuntimeKind::Copilot]
+        );
+        workspace_routing.assistant_runtimes.clear();
+        assert_eq!(
+            effective_assistant_runtimes(
+                Some(&workspace_routing),
+                Some(&cluster_routing),
+                Some(&global_routing)
+            ),
+            vec![RuntimeKind::Codex]
+        );
+        cluster_routing.assistant_runtimes.clear();
+        assert_eq!(
+            effective_assistant_runtimes(
+                Some(&workspace_routing),
+                Some(&cluster_routing),
+                Some(&global_routing)
+            ),
+            vec![RuntimeKind::Claude]
+        );
+
+        let cluster_ready = write_execution_profile_workspace(
+            "boundline-runtime-cluster-ready",
+            vec![ExecutionAttemptDefinition {
+                attempt_id: "fix-add".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left - right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+        );
+        fs::create_dir_all(cluster_ready.join("src")).unwrap();
+        fs::write(cluster_ready.join("src/lib.rs"), "left - right\n").unwrap();
+        assert!(!cluster_workspace_is_blocked(cluster_ready.to_string_lossy().as_ref()));
+        assert!(cluster_workspace_is_blocked(
+            temp_workspace("boundline-runtime-cluster-blocked").to_string_lossy().as_ref()
+        ));
+        assert_eq!(cluster_task_status_text(TaskStatus::Exhausted), "exhausted");
+        assert!(is_governance_trace_event(TraceEventType::GovernanceBlocked));
+        assert!(!is_governance_trace_event(TraceEventType::TaskStarted));
     }
 
     #[test]
     fn load_or_create_trace_and_flow_helpers_cover_private_flow_branches() {
         let workspace = write_execution_profile_workspace(
-            "synod-runtime-flow-helpers",
+            "boundline-runtime-flow-helpers",
             vec![ExecutionAttemptDefinition {
                 attempt_id: "fix-add".to_string(),
                 summary: String::new(),
@@ -4680,9 +3445,145 @@ mod tests {
     }
 
     #[test]
+    fn session_lifecycle_helpers_cover_capture_selection_planning_and_cluster_projection() {
+        let workspace = write_execution_profile_workspace(
+            "boundline-runtime-lifecycle-helpers",
+            vec![ExecutionAttemptDefinition {
+                attempt_id: "fix-add".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left - right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+        );
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::write(workspace.join("src/lib.rs"), "left - right\n").unwrap();
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let mut session = ActiveSessionRecord {
+            session_id: "session-runtime".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: None,
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: vec![crate::domain::decision::Decision::new(
+                crate::domain::decision::DecisionType::Analyze,
+                "src/lib.rs",
+                "inspect the file",
+                "bounded context collected",
+                Vec::new(),
+            )],
+            active_flow_policy: None,
+            latest_status: SessionStatus::Initialized,
+            latest_terminal_reason: Some(TerminalReason::new(
+                TerminalCondition::TaskNotCredible,
+                "stale",
+                None,
+            )),
+            latest_trace_ref: Some("trace.json".to_string()),
+            created_at: 10,
+            updated_at: 10,
+        };
+
+        assert!(matches!(
+            runtime.capture_goal(&mut session, "   "),
+            Err(super::SessionRuntimeError::MissingGoal)
+        ));
+
+        runtime.capture_goal(&mut session, "  Drive a session runtime branch  ").unwrap();
+        assert_eq!(session.goal.as_deref(), Some("Drive a session runtime branch"));
+        assert!(session.negotiation_packet.is_some());
+        assert_eq!(session.latest_status, SessionStatus::GoalCaptured);
+        assert!(session.decisions.is_empty());
+        assert!(session.latest_terminal_reason.is_none());
+        assert!(session.latest_trace_ref.is_none());
+
+        runtime.select_flow(&mut session, "bug-fix").unwrap();
+        assert_eq!(session.active_flow.as_ref().unwrap().flow_name, "bug-fix");
+        assert!(session.active_flow_policy.is_some());
+        assert_eq!(session.latest_status, SessionStatus::GoalCaptured);
+        assert!(!runtime.uses_native_goal_plan(&session).unwrap());
+        assert!(matches!(
+            runtime.confirm_goal_plan(&mut session),
+            Err(super::SessionRuntimeError::MissingGoalPlan)
+        ));
+
+        assert!(matches!(
+            runtime.plan_task(&mut session, Some("missing"), false),
+            Err(super::SessionRuntimeError::UnknownFlow { .. })
+        ));
+
+        session.active_task =
+            Some(decision_task(workspace.to_string_lossy().as_ref(), json!({"ok": true})));
+        let previous_task_id = session.active_task.as_ref().unwrap().id.clone();
+        runtime.plan_task(&mut session, None, false).unwrap();
+        assert_ne!(session.active_task.as_ref().unwrap().id, previous_task_id);
+        assert!(matches!(
+            runtime.select_flow(&mut session, "delivery"),
+            Err(super::SessionRuntimeError::FlowReplacementRequiresReset { .. })
+        ));
+
+        session.active_task = None;
+        session.goal_plan = Some(
+            GoalPlan::new(
+                "Drive a session runtime branch",
+                vec![PlannedTask {
+                    task_id: "planned-task-1".to_string(),
+                    description: "Repair arithmetic".to_string(),
+                    target: "src/lib.rs".to_string(),
+                    expected_outcome: Some("tests pass".to_string()),
+                    decision_type_hint: None,
+                }],
+            )
+            .unwrap(),
+        );
+        assert!(matches!(
+            runtime.select_flow(&mut session, "delivery"),
+            Err(super::SessionRuntimeError::FlowReplacementRequiresReset { .. })
+        ));
+
+        runtime.confirm_goal_plan(&mut session).unwrap();
+        assert!(!session.goal_plan.as_ref().unwrap().requires_confirmation());
+        assert_eq!(session.latest_status, SessionStatus::Planned);
+        assert!(runtime.uses_native_goal_plan(&session).unwrap());
+
+        session.active_task =
+            Some(decision_task(workspace.to_string_lossy().as_ref(), json!({"ok": true})));
+        let projection = ClusterSessionProjection {
+            cluster_id: "cluster-1".to_string(),
+            primary_workspace_ref: workspace.to_string_lossy().into_owned(),
+            member_workspace_refs: vec![workspace.to_string_lossy().into_owned()],
+            started_from_command: "boundline cluster status".to_string(),
+            updated_at: 10,
+        };
+        runtime.prepare_cluster_run(&mut session, &projection).unwrap();
+        assert_eq!(
+            session
+                .active_task
+                .as_ref()
+                .unwrap()
+                .context
+                .cluster_session_projection()
+                .unwrap()
+                .unwrap(),
+            projection
+        );
+        assert_eq!(
+            session.goal_plan.as_ref().unwrap().cluster_session_projection.as_ref().unwrap(),
+            &projection
+        );
+    }
+
+    #[test]
     fn execute_next_step_covers_retry_replan_and_terminal_decision_recovery() {
         let workspace = write_execution_profile_workspace(
-            "synod-runtime-decision-recovery",
+            "boundline-runtime-decision-recovery",
             vec![
                 ExecutionAttemptDefinition {
                     attempt_id: "bad-fix".to_string(),
@@ -4734,12 +3635,162 @@ mod tests {
         runtime.execute_next_step(&mut terminal_session).unwrap();
         assert_eq!(terminal_session.latest_status, SessionStatus::Failed);
         assert!(terminal_session.latest_terminal_reason.is_some());
+
+        let mut exhausted_session = build_session(
+            &workspace,
+            decision_task(workspace.to_string_lossy().as_ref(), json!({"terminal_failure": true})),
+        );
+        let max_steps = exhausted_session.active_task.as_ref().unwrap().limits.max_steps;
+        exhausted_session.active_task.as_mut().unwrap().total_step_attempts = max_steps;
+        let exhausted = runtime.run_to_terminal(&mut exhausted_session).unwrap();
+        assert_eq!(exhausted.terminal_status, TaskStatus::Exhausted);
+        assert_eq!(exhausted.terminal_reason.condition, TerminalCondition::StepLimitExceeded);
+
+        let mut no_step_session = build_session(
+            &workspace,
+            decision_task(workspace.to_string_lossy().as_ref(), json!({"ok": true})),
+        );
+        let no_step_task = no_step_session.active_task.as_mut().unwrap();
+        no_step_task.plan.current_step_index = no_step_task.plan.steps.len();
+        let no_step = runtime.run_to_terminal(&mut no_step_session).unwrap();
+        assert_eq!(no_step.terminal_status, TaskStatus::Failed);
+        assert_eq!(no_step.terminal_reason.condition, TerminalCondition::NoCredibleNextStep);
+
+        let mut terminal_response_session = build_session(
+            &workspace,
+            decision_task(workspace.to_string_lossy().as_ref(), json!({"ok": true})),
+        );
+        let terminal_task = terminal_response_session.active_task.as_ref().unwrap().clone();
+        runtime.load_or_create_trace(&mut terminal_response_session, &terminal_task).unwrap();
+        terminal_response_session.active_task.as_mut().unwrap().apply_terminal(
+            TaskStatus::Succeeded,
+            TerminalReason::new(TerminalCondition::GoalSatisfied, "already complete", None),
+        );
+        let terminal_response = runtime.run_to_terminal(&mut terminal_response_session).unwrap();
+        assert_eq!(terminal_response.terminal_status, TaskStatus::Succeeded);
+        assert_eq!(terminal_response.terminal_reason.message, "already complete");
+    }
+
+    #[test]
+    fn execute_next_step_creates_a_compatibility_task_for_flow_selected_goal_plans() {
+        let workspace = write_execution_profile_workspace(
+            "boundline-runtime-compatibility-goal-plan",
+            vec![ExecutionAttemptDefinition {
+                attempt_id: "fix-add".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left - right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+        );
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::write(workspace.join("src/lib.rs"), "left - right\n").unwrap();
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let mut goal_plan = GoalPlan::new(
+            "Drive a session runtime branch",
+            vec![PlannedTask {
+                task_id: "planned-task-1".to_string(),
+                description: "Repair arithmetic".to_string(),
+                target: "src/lib.rs".to_string(),
+                expected_outcome: Some("tests pass".to_string()),
+                decision_type_hint: None,
+            }],
+        )
+        .unwrap();
+        goal_plan.confirm().unwrap();
+
+        let mut session = ActiveSessionRecord {
+            session_id: "session-runtime".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: Some("Drive a session runtime branch".to_string()),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: Some(built_in_flow("bug-fix").unwrap().initial_state()),
+            active_task: None,
+            goal_plan: Some(goal_plan),
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Planned,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 10,
+            updated_at: 10,
+        };
+
+        runtime.execute_next_step(&mut session).unwrap();
+
+        assert!(session.active_task.is_some());
+        assert_eq!(session.latest_status, SessionStatus::Running);
+        assert!(session.goal_plan.is_some());
+    }
+
+    #[test]
+    fn native_goal_plan_short_circuits_for_existing_delegation_continuity() {
+        let workspace = temp_workspace("boundline-runtime-native-delegation");
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let mut goal_plan = GoalPlan::new(
+            "Drive a delegated continuation boundary",
+            vec![PlannedTask {
+                task_id: "planned-task-1".to_string(),
+                description: "Inspect the delegated boundary".to_string(),
+                target: "src/lib.rs".to_string(),
+                expected_outcome: Some("status explains the continuity boundary".to_string()),
+                decision_type_hint: None,
+            }],
+        )
+        .unwrap();
+        goal_plan.confirm().unwrap();
+        goal_plan = goal_plan
+            .with_delegation_state(
+                Vec::new(),
+                DelegationContinuityState {
+                    active_packet_id: None,
+                    mode: DelegationContinuityMode::InspectOnly,
+                    authority_source: ContinuityAuthority::NativeSession,
+                    next_command: "boundline inspect".to_string(),
+                    headline: "delegated continuity requires operator inspection".to_string(),
+                    evidence_summary: "bounded continuation stopped at an inspect-only boundary"
+                        .to_string(),
+                },
+            )
+            .unwrap();
+
+        let mut session = ActiveSessionRecord {
+            session_id: "session-runtime".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: Some("Drive a delegated continuation boundary".to_string()),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: Some(goal_plan),
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Planned,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 10,
+            updated_at: 10,
+        };
+
+        let response = runtime.run_to_terminal(&mut session).unwrap();
+
+        assert_eq!(response.terminal_status, TaskStatus::Failed);
+        assert_eq!(response.terminal_reason.condition, TerminalCondition::NoCredibleNextStep);
+        assert_eq!(session.latest_status, SessionStatus::Planned);
+        assert!(session.goal_plan.as_ref().unwrap().delegation_continuity().is_some());
+        assert!(session.active_task.is_none());
     }
 
     #[test]
     fn execute_next_step_falls_back_to_local_governance_when_canon_is_optional() {
         let workspace = write_governed_execution_profile_workspace(
-            "synod-runtime-governance-local-fallback",
+            "boundline-runtime-governance-local-fallback",
             vec![ExecutionAttemptDefinition {
                 attempt_id: "fix-add".to_string(),
                 summary: String::new(),
@@ -4754,7 +3805,7 @@ mod tests {
             Some(GovernanceProfile {
                 default_runtime: GovernanceRuntimeKind::Local,
                 canon: Some(CanonRuntimeConfig {
-                    command: "/definitely/missing/canon".to_string(),
+                    command: "canon-missing-for-test".to_string(),
                     default_owner: Some("platform".to_string()),
                     default_risk: Some("medium".to_string()),
                     default_zone: Some("engineering".to_string()),
@@ -4797,8 +3848,7 @@ mod tests {
 
         runtime.capture_goal(&mut session, "Drive governed bug fix").unwrap();
         runtime.select_flow(&mut session, "bug-fix").unwrap();
-        session.active_task = Some(build_fixture_session_task(&workspace, &session));
-        session.latest_status = SessionStatus::Planned;
+        runtime.plan_task(&mut session, None, false).unwrap();
         runtime.execute_next_step(&mut session).unwrap();
 
         let task = session.active_task.as_ref().unwrap();
@@ -4831,9 +3881,334 @@ mod tests {
     }
 
     #[test]
+    fn native_persistence_projects_cluster_story_and_copies_changes() {
+        let workspace = write_execution_profile_workspace(
+            "boundline-runtime-cluster-primary",
+            vec![ExecutionAttemptDefinition {
+                attempt_id: "fix-add".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left - right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+        );
+        let ready_member = write_execution_profile_workspace(
+            "boundline-runtime-cluster-ready-member",
+            vec![ExecutionAttemptDefinition {
+                attempt_id: "fix-add".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left - right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+        );
+        let blocked_member = write_execution_profile_workspace(
+            "boundline-runtime-cluster-blocked-member",
+            vec![ExecutionAttemptDefinition {
+                attempt_id: "fix-add".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left - right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+        );
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::create_dir_all(ready_member.join("src")).unwrap();
+        fs::create_dir_all(blocked_member.join("src")).unwrap();
+        fs::write(workspace.join("src/lib.rs"), "left + right\n").unwrap();
+        fs::write(ready_member.join("src/lib.rs"), "left - right\n").unwrap();
+        fs::write(blocked_member.join("src/lib.rs"), "unchanged\n").unwrap();
+
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let mut goal_plan = GoalPlan::new(
+            "Deliver cluster follow-through",
+            vec![PlannedTask {
+                task_id: "planned-task-cluster".to_string(),
+                description: "Propagate the bounded change".to_string(),
+                target: "src/lib.rs".to_string(),
+                expected_outcome: Some("cluster state records the authoritative route".to_string()),
+                decision_type_hint: None,
+            }],
+        )
+        .unwrap();
+        goal_plan.confirm().unwrap();
+        goal_plan.cluster_session_projection = Some(ClusterSessionProjection {
+            cluster_id: "cluster-1".to_string(),
+            primary_workspace_ref: workspace.to_string_lossy().into_owned(),
+            member_workspace_refs: vec![
+                workspace.to_string_lossy().into_owned(),
+                ready_member.to_string_lossy().into_owned(),
+                blocked_member.to_string_lossy().into_owned(),
+            ],
+            started_from_command: "boundline cluster status".to_string(),
+            updated_at: 10,
+        });
+
+        let mut fixture_runtime = manual_runtime();
+        fixture_runtime.profile.attempts = vec![ExecutionAttemptDefinition {
+            attempt_id: "fix-add".to_string(),
+            summary: String::new(),
+            failure_mode: ExecutionFailureMode::Terminal,
+            changes: vec![WorkspaceChange {
+                path: "src/lib.rs".to_string(),
+                find: "left - right".to_string(),
+                replace: "left + right".to_string(),
+            }],
+        }];
+        runtime.propagate_cluster_delivery_changes(&goal_plan, &fixture_runtime).unwrap();
+        assert_eq!(fs::read_to_string(ready_member.join("src/lib.rs")).unwrap(), "left + right\n");
+        assert_eq!(fs::read_to_string(blocked_member.join("src/lib.rs")).unwrap(), "unchanged\n");
+
+        let mut session = ActiveSessionRecord {
+            session_id: "session-runtime".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: Some("Deliver cluster follow-through".to_string()),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Planned,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 10,
+            updated_at: 10,
+        };
+        let trace = ExecutionTrace::new("task-cluster", "session-runtime", "cluster goal");
+        let response = runtime
+            .persist_native_result(
+                &mut session,
+                goal_plan,
+                Vec::new(),
+                trace,
+                super::NativePersistenceInput {
+                    terminal_reason: TerminalReason::new(
+                        TerminalCondition::GoalSatisfied,
+                        "cluster goal satisfied",
+                        None,
+                    ),
+                    limits: RunLimits::default(),
+                    record_terminal_event: true,
+                    projected_task: None,
+                },
+            )
+            .unwrap();
+
+        assert_eq!(response.terminal_status, TaskStatus::Failed);
+        assert_eq!(session.latest_status, SessionStatus::Failed);
+        let cluster_story =
+            session.goal_plan.as_ref().unwrap().cluster_delivery_story.as_ref().unwrap();
+        assert_eq!(cluster_story.execution_condition.kind, ClusteredExecutionKind::Failed);
+        assert!(cluster_story.execution_condition.summary.contains("blocked by workspace"));
+    }
+
+    #[test]
+    fn cluster_story_helper_covers_success_paused_failed_and_exhausted_states() {
+        let primary = write_execution_profile_workspace(
+            "boundline-runtime-cluster-story-primary",
+            vec![ExecutionAttemptDefinition {
+                attempt_id: "fix-add".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left - right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+        );
+        let member = write_execution_profile_workspace(
+            "boundline-runtime-cluster-story-member",
+            vec![ExecutionAttemptDefinition {
+                attempt_id: "fix-add".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left - right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+        );
+        fs::create_dir_all(member.join("src")).unwrap();
+        fs::write(member.join("src/lib.rs"), "left - right\n").unwrap();
+
+        let runtime = SessionRuntime::for_workspace(&primary);
+        let projection = ClusterSessionProjection {
+            cluster_id: "cluster-1".to_string(),
+            primary_workspace_ref: primary.to_string_lossy().into_owned(),
+            member_workspace_refs: vec![
+                primary.to_string_lossy().into_owned(),
+                member.to_string_lossy().into_owned(),
+            ],
+            started_from_command: "boundline cluster status".to_string(),
+            updated_at: 10,
+        };
+
+        let success = runtime.build_cluster_delivery_story(&projection, TaskStatus::Succeeded);
+        assert_eq!(success.execution_condition.kind, ClusteredExecutionKind::Success);
+        assert!(!success.execution_condition.recovery_allowed);
+        assert_eq!(success.participating_workspaces[0].latest_status.as_deref(), Some("succeeded"));
+        assert_eq!(
+            success.participating_workspaces[1].participation_kind,
+            crate::domain::cluster::WorkspaceParticipationKind::ReadOnly
+        );
+
+        let paused = runtime.build_cluster_delivery_story(&projection, TaskStatus::Running);
+        assert_eq!(paused.execution_condition.kind, ClusteredExecutionKind::Paused);
+        assert!(paused.execution_condition.recovery_allowed);
+
+        let exhausted = runtime.build_cluster_delivery_story(&projection, TaskStatus::Exhausted);
+        assert_eq!(exhausted.execution_condition.kind, ClusteredExecutionKind::Exhausted);
+
+        let failed = runtime.build_cluster_delivery_story(&projection, TaskStatus::Aborted);
+        assert_eq!(failed.execution_condition.kind, ClusteredExecutionKind::Failed);
+        assert!(failed.execution_condition.recovery_allowed);
+    }
+
+    #[test]
+    fn refresh_governance_state_handles_refreshable_and_non_refreshable_records() {
+        let workspace = write_governed_execution_profile_workspace(
+            "boundline-runtime-governance-refresh",
+            vec![ExecutionAttemptDefinition {
+                attempt_id: "fix-add".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left - right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+            vec!["README.md".to_string()],
+            Some(GovernanceProfile {
+                default_runtime: GovernanceRuntimeKind::Local,
+                canon: None,
+                stages: vec![StageGovernancePolicy {
+                    flow_name: "bug-fix".to_string(),
+                    stage_id: "investigate".to_string(),
+                    enabled: true,
+                    required: false,
+                    autopilot: false,
+                    runtime: Some(GovernanceRuntimeKind::Local),
+                    canon_mode: None,
+                    system_context: Some(SystemContextBinding::Existing),
+                    risk: None,
+                    zone: None,
+                    owner: None,
+                }],
+            }),
+        );
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let mut session = ActiveSessionRecord {
+            session_id: "session-runtime".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: Some("Refresh governed stage".to_string()),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: Some(built_in_flow("bug-fix").unwrap().initial_state()),
+            active_task: Some(
+                Task::new(
+                    "task-govern-refresh",
+                    &build_request(workspace.to_string_lossy().as_ref()),
+                    Plan::new(vec![
+                        Step::agent(
+                            "investigate",
+                            "analyzer",
+                            attach_stage_metadata(
+                                json!({"phase": "investigate"}),
+                                built_in_flow("bug-fix").unwrap(),
+                                0,
+                            )
+                            .unwrap(),
+                        )
+                        .unwrap(),
+                    ])
+                    .unwrap(),
+                )
+                .unwrap(),
+            ),
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Running,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 10,
+            updated_at: 10,
+        };
+        session
+            .active_task
+            .as_mut()
+            .unwrap()
+            .context
+            .set_latest_governance_stage(&GovernedStageRecord {
+                stage_key: "bug-fix:investigate".to_string(),
+                runtime: GovernanceRuntimeKind::Local,
+                lifecycle_state: GovernanceLifecycleState::AwaitingApproval,
+                required: false,
+                autopilot_enabled: false,
+                approval_state: ApprovalState::Requested,
+                canon_run_ref: None,
+                governance_attempt_id: "attempt-1".to_string(),
+                previous_governance_attempt_id: None,
+                packet_ref: None,
+                decision_ref: None,
+                blocked_reason: None,
+            })
+            .unwrap();
+
+        assert!(runtime.refresh_governance_state(&mut session).unwrap());
+        let refreshed = session
+            .active_task
+            .as_ref()
+            .unwrap()
+            .context
+            .latest_governance_stage()
+            .unwrap()
+            .unwrap();
+        assert_eq!(refreshed.lifecycle_state, GovernanceLifecycleState::GovernedReady);
+
+        session
+            .active_task
+            .as_mut()
+            .unwrap()
+            .context
+            .set_latest_governance_stage(&GovernedStageRecord {
+                stage_key: "bug-fix:investigate".to_string(),
+                runtime: GovernanceRuntimeKind::Local,
+                lifecycle_state: GovernanceLifecycleState::Blocked,
+                required: false,
+                autopilot_enabled: false,
+                approval_state: ApprovalState::NotNeeded,
+                canon_run_ref: None,
+                governance_attempt_id: "attempt-2".to_string(),
+                previous_governance_attempt_id: Some("attempt-1".to_string()),
+                packet_ref: None,
+                decision_ref: None,
+                blocked_reason: Some("still blocked".to_string()),
+            })
+            .unwrap();
+        assert!(!runtime.refresh_governance_state(&mut session).unwrap());
+    }
+
+    #[test]
     fn execute_next_step_blocks_when_required_canon_governance_is_unavailable() {
         let workspace = write_governed_execution_profile_workspace(
-            "synod-runtime-governance-required-canon",
+            "boundline-runtime-governance-required-canon",
             vec![ExecutionAttemptDefinition {
                 attempt_id: "fix-add".to_string(),
                 summary: String::new(),
@@ -4848,7 +4223,7 @@ mod tests {
             Some(GovernanceProfile {
                 default_runtime: GovernanceRuntimeKind::Local,
                 canon: Some(CanonRuntimeConfig {
-                    command: "/definitely/missing/canon".to_string(),
+                    command: "canon-missing-for-test".to_string(),
                     default_owner: Some("platform".to_string()),
                     default_risk: Some("medium".to_string()),
                     default_zone: Some("engineering".to_string()),
@@ -4891,8 +4266,7 @@ mod tests {
 
         runtime.capture_goal(&mut session, "Drive governed bug fix").unwrap();
         runtime.select_flow(&mut session, "bug-fix").unwrap();
-        session.active_task = Some(build_fixture_session_task(&workspace, &session));
-        session.latest_status = SessionStatus::Planned;
+        runtime.plan_task(&mut session, None, false).unwrap();
         runtime.execute_next_step(&mut session).unwrap();
 
         let task = session.active_task.as_ref().unwrap();
@@ -4926,22 +4300,17 @@ mod tests {
     }
 
     #[test]
-    fn plan_task_persists_proposed_goal_plan_and_inferred_flow_without_creating_fixture_task() {
-        let workspace = temp_workspace("synod-runtime-native-plan");
-        fs::create_dir_all(workspace.join("src")).unwrap();
-        fs::write(
-            workspace.join("src/lib.rs"),
-            "pub fn add(left: i32, right: i32) -> i32 { left - right }\n",
-        )
-        .unwrap();
-        let runtime = SessionRuntime::for_workspace(&workspace);
-        let mut session = ActiveSessionRecord {
+    fn required_canon_governance_reports_missing_configuration_and_mode() {
+        let workspace_missing_config =
+            temp_workspace("boundline-runtime-governance-required-config");
+        let runtime_missing_config = SessionRuntime::for_workspace(&workspace_missing_config);
+        let mut missing_config_session = ActiveSessionRecord {
             session_id: "session-runtime".to_string(),
-            workspace_ref: workspace.to_string_lossy().into_owned(),
-            goal: None,
+            workspace_ref: workspace_missing_config.to_string_lossy().into_owned(),
+            goal: Some("Drive governed bug fix".to_string()),
             authored_brief: None,
             negotiation_packet: None,
-            active_flow: None,
+            active_flow: Some(built_in_flow("bug-fix").unwrap().initial_state()),
             active_task: None,
             goal_plan: None,
             workflow_progress: None,
@@ -4953,525 +4322,107 @@ mod tests {
             created_at: 10,
             updated_at: 10,
         };
-
-        runtime.capture_goal(&mut session, "fix the broken add function").unwrap();
-        runtime.plan_task(&mut session, None, false).unwrap();
-
-        assert_eq!(session.latest_status, SessionStatus::Planned);
-        assert!(session.active_task.is_none());
-        assert!(session.decisions.is_empty());
-        assert!(session.active_flow.is_none());
-        assert!(session.active_flow_policy.is_none());
-
-        let goal_plan = session.goal_plan.as_ref().unwrap();
-        assert_eq!(goal_plan.status, crate::domain::goal_plan::GoalPlanStatus::Draft);
-        assert!(!goal_plan.tasks.is_empty());
-        assert_eq!(goal_plan.flow.as_ref().unwrap().flow_name, "bug-fix");
-        assert!(!goal_plan.flow.as_ref().unwrap().confirmed);
-        assert!(goal_plan.requires_confirmation());
-        session.validate().unwrap();
-    }
-
-    #[test]
-    fn plan_task_confirms_explicit_flow_during_native_planning() {
-        let workspace = temp_workspace("synod-runtime-native-plan-explicit-flow");
-        fs::create_dir_all(workspace.join("src")).unwrap();
-        fs::write(
-            workspace.join("src/lib.rs"),
-            "pub fn workspace_summary() -> String { \"summary output\".to_string() }\n",
-        )
-        .unwrap();
-        let runtime = SessionRuntime::for_workspace(&workspace);
-        let mut session = ActiveSessionRecord {
-            session_id: "session-runtime".to_string(),
-            workspace_ref: workspace.to_string_lossy().into_owned(),
-            goal: None,
-            authored_brief: None,
-            negotiation_packet: None,
-            active_flow: None,
-            active_task: None,
-            goal_plan: None,
-            workflow_progress: None,
-            decisions: Vec::new(),
-            active_flow_policy: None,
-            latest_status: SessionStatus::Initialized,
-            latest_terminal_reason: None,
-            latest_trace_ref: None,
-            created_at: 10,
-            updated_at: 10,
+        let policy = StageGovernancePolicy {
+            flow_name: "bug-fix".to_string(),
+            stage_id: "investigate".to_string(),
+            enabled: true,
+            required: true,
+            autopilot: false,
+            runtime: Some(GovernanceRuntimeKind::Canon),
+            canon_mode: Some(CanonMode::Discovery),
+            system_context: Some(SystemContextBinding::Existing),
+            risk: None,
+            zone: None,
+            owner: None,
         };
-
-        runtime.capture_goal(&mut session, "implement workspace summary output").unwrap();
-        runtime.plan_task(&mut session, Some("change"), false).unwrap();
-
-        assert_eq!(session.active_flow.as_ref().unwrap().flow_name, "change");
-        assert_eq!(session.active_flow_policy.as_ref().unwrap().flow_name, "change");
-        assert!(session.goal_plan.as_ref().unwrap().flow.as_ref().unwrap().confirmed);
-        session.validate().unwrap();
-    }
-
-    #[test]
-    fn run_to_terminal_uses_native_goal_plan_route_when_present() {
-        let workspace = temp_workspace("synod-runtime-native-run");
-        fs::create_dir_all(workspace.join("src")).unwrap();
-        fs::create_dir_all(workspace.join("tests")).unwrap();
-        fs::write(
-            workspace.join("Cargo.toml"),
-            "[package]\nname = \"native-run\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
-        )
-        .unwrap();
-        fs::write(
-            workspace.join("src/lib.rs"),
-            "pub fn add(left: i32, right: i32) -> i32 { left - right }\n",
-        )
-        .unwrap();
-        fs::write(
-            workspace.join("tests/red_to_green.rs"),
-            "#[test]\nfn red_to_green_addition() {\n    assert_eq!(native_run::add(2, 2), 4);\n}\n",
-        )
-        .unwrap();
-
-        let runtime = SessionRuntime::for_workspace(&workspace);
-        let mut session = ActiveSessionRecord {
-            session_id: "session-runtime".to_string(),
-            workspace_ref: workspace.to_string_lossy().into_owned(),
-            goal: None,
-            authored_brief: None,
-            negotiation_packet: None,
-            active_flow: None,
-            active_task: None,
-            goal_plan: None,
-            workflow_progress: None,
-            decisions: Vec::new(),
-            active_flow_policy: None,
-            latest_status: SessionStatus::Initialized,
-            latest_terminal_reason: None,
-            latest_trace_ref: None,
-            created_at: 10,
-            updated_at: 10,
+        let governance = GovernanceProfile {
+            default_runtime: GovernanceRuntimeKind::Local,
+            canon: None,
+            stages: vec![policy.clone()],
         };
-
-        runtime.capture_goal(&mut session, "fix the broken add function").unwrap();
-        runtime.plan_task(&mut session, Some("bug-fix"), false).unwrap();
-        let response = runtime.run_to_terminal(&mut session).unwrap();
-
-        assert_eq!(response.terminal_status, TaskStatus::Succeeded);
-        assert_eq!(session.latest_status, SessionStatus::Succeeded);
-        assert!(session.active_task.is_none());
-        assert!(!session.decisions.is_empty());
-
-        let trace = runtime
-            .trace_store()
-            .load(Path::new(session.latest_trace_ref.as_ref().unwrap()))
-            .unwrap();
-        assert!(
-            trace.events.iter().any(|event| event.event_type == TraceEventType::DecisionCreated),
-            "{:?}",
-            trace.events
-        );
-    }
-
-    #[test]
-    fn run_to_terminal_persists_handoff_packet_when_native_route_cannot_continue() {
-        let workspace = temp_workspace("synod-runtime-native-delegation");
-        fs::create_dir_all(workspace.join("src")).unwrap();
-        fs::create_dir_all(workspace.join("tests")).unwrap();
-        fs::write(
-            workspace.join("Cargo.toml"),
-            "[package]\nname = \"native-delegation\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
-        )
-        .unwrap();
-        fs::write(
-            workspace.join("src/lib.rs"),
-            "pub fn add(left: i32, right: i32) -> i32 { left - right }\n",
-        )
-        .unwrap();
-
-        let mut config = ConfigFile {
-            version: 1,
-            routing: RoutingConfig {
-                implementation: Some(ModelRoute {
-                    runtime: RuntimeKind::Claude,
-                    model: "sonnet-4".to_string(),
-                }),
-                assistant_runtimes: vec![RuntimeKind::Codex],
-                ..RoutingConfig::default()
-            },
-        };
-        config.routing.runtime_capabilities.insert(
-            RuntimeKind::Claude,
-            RuntimeCapabilityProfile {
-                continuation: CapabilityState::Unsupported,
-                resume: CapabilityState::Unsupported,
-                validation: CapabilityState::Unsupported,
-                handoff_target: CapabilityState::Unsupported,
-                escalation_context: CapabilityState::Supported,
-                notes: Some("requires a handoff for bounded continuation".to_string()),
-            },
-        );
-        config.routing.runtime_capabilities.insert(
-            RuntimeKind::Codex,
-            RuntimeCapabilityProfile {
-                continuation: CapabilityState::Supported,
-                resume: CapabilityState::Supported,
-                validation: CapabilityState::Supported,
-                handoff_target: CapabilityState::Supported,
-                escalation_context: CapabilityState::Supported,
-                notes: None,
-            },
-        );
-        FileConfigStore::for_workspace(&workspace).save_local(&config).unwrap();
-
-        let runtime = SessionRuntime::for_workspace(&workspace);
-        let mut session = ActiveSessionRecord {
-            session_id: "session-runtime".to_string(),
-            workspace_ref: workspace.to_string_lossy().into_owned(),
-            goal: None,
-            authored_brief: None,
-            negotiation_packet: None,
-            active_flow: None,
-            active_task: None,
-            goal_plan: None,
-            workflow_progress: None,
-            decisions: Vec::new(),
-            active_flow_policy: None,
-            latest_status: SessionStatus::Initialized,
-            latest_terminal_reason: None,
-            latest_trace_ref: None,
-            created_at: 10,
-            updated_at: 10,
-        };
-
-        runtime.capture_goal(&mut session, "fix the broken add function").unwrap();
-        runtime.plan_task(&mut session, Some("bug-fix"), false).unwrap();
-
-        let response = runtime.run_to_terminal(&mut session).unwrap();
-
-        assert_eq!(response.terminal_status, TaskStatus::Failed);
-        assert_eq!(session.latest_status, SessionStatus::Planned);
-        assert!(session.latest_trace_ref.is_some());
-
-        let goal_plan = session.goal_plan.as_ref().unwrap();
-        let continuity = goal_plan.delegation_continuity().unwrap();
-        assert_eq!(continuity.mode, DelegationContinuityMode::HandoffRequired);
-        assert_eq!(continuity.next_command, "synod status");
-
-        let packet = goal_plan.active_delegation_packet().unwrap();
-        assert_eq!(packet.kind, DelegationPacketKind::Handoff);
-        assert_eq!(packet.target_owner, "codex");
-        assert!(packet.continuity_reason.contains("implementation route"));
-
-        let trace = runtime
-            .trace_store()
-            .load(Path::new(session.latest_trace_ref.as_ref().unwrap()))
-            .unwrap();
-        assert!(
-            trace.events.iter().any(|event| event.event_type == TraceEventType::TerminalRecorded),
-            "{:?}",
-            trace.events
-        );
-    }
-
-    #[test]
-    fn plan_task_resolves_active_delegation_when_routing_policy_changes() {
-        let workspace = temp_workspace("synod-runtime-delegation-replan");
-        fs::create_dir_all(workspace.join("src")).unwrap();
-        fs::create_dir_all(workspace.join("tests")).unwrap();
-        fs::write(
-            workspace.join("Cargo.toml"),
-            "[package]\nname = \"native-delegation-replan\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
-        )
-        .unwrap();
-        fs::write(
-            workspace.join("src/lib.rs"),
-            "pub fn add(left: i32, right: i32) -> i32 { left - right }\n",
-        )
-        .unwrap();
-
-        let mut config = ConfigFile {
-            version: 1,
-            routing: RoutingConfig {
-                implementation: Some(ModelRoute {
-                    runtime: RuntimeKind::Claude,
-                    model: "sonnet-4".to_string(),
-                }),
-                assistant_runtimes: vec![RuntimeKind::Codex],
-                ..RoutingConfig::default()
-            },
-        };
-        config.routing.runtime_capabilities.insert(
-            RuntimeKind::Claude,
-            RuntimeCapabilityProfile {
-                continuation: CapabilityState::Unsupported,
-                resume: CapabilityState::Unsupported,
-                validation: CapabilityState::Unsupported,
-                handoff_target: CapabilityState::Unsupported,
-                escalation_context: CapabilityState::Supported,
-                notes: Some("requires a handoff for bounded continuation".to_string()),
-            },
-        );
-        config.routing.runtime_capabilities.insert(
-            RuntimeKind::Codex,
-            RuntimeCapabilityProfile {
-                continuation: CapabilityState::Supported,
-                resume: CapabilityState::Supported,
-                validation: CapabilityState::Supported,
-                handoff_target: CapabilityState::Supported,
-                escalation_context: CapabilityState::Supported,
-                notes: None,
-            },
-        );
-        FileConfigStore::for_workspace(&workspace).save_local(&config).unwrap();
-
-        let runtime = SessionRuntime::for_workspace(&workspace);
-        let mut session = ActiveSessionRecord {
-            session_id: "session-runtime".to_string(),
-            workspace_ref: workspace.to_string_lossy().into_owned(),
-            goal: None,
-            authored_brief: None,
-            negotiation_packet: None,
-            active_flow: None,
-            active_task: None,
-            goal_plan: None,
-            workflow_progress: None,
-            decisions: Vec::new(),
-            active_flow_policy: None,
-            latest_status: SessionStatus::Initialized,
-            latest_terminal_reason: None,
-            latest_trace_ref: None,
-            created_at: 10,
-            updated_at: 10,
-        };
-
-        runtime.capture_goal(&mut session, "fix the broken add function").unwrap();
-        runtime.plan_task(&mut session, Some("bug-fix"), false).unwrap();
-        runtime.run_to_terminal(&mut session).unwrap();
-
-        let packet_id = session
-            .goal_plan
-            .as_ref()
-            .unwrap()
-            .active_delegation_packet()
-            .unwrap()
-            .packet_id
-            .clone();
-
-        config.routing.runtime_capabilities.insert(
-            RuntimeKind::Claude,
-            RuntimeCapabilityProfile {
-                continuation: CapabilityState::Supported,
-                resume: CapabilityState::Supported,
-                validation: CapabilityState::Supported,
-                handoff_target: CapabilityState::Supported,
-                escalation_context: CapabilityState::Supported,
-                notes: Some("route can continue directly after the declaration update".to_string()),
-            },
-        );
-        FileConfigStore::for_workspace(&workspace).save_local(&config).unwrap();
-
-        runtime.plan_task(&mut session, Some("bug-fix"), false).unwrap();
-
-        let goal_plan = session.goal_plan.as_ref().unwrap();
-        let continuity = goal_plan.delegation_continuity().unwrap();
-        assert_eq!(continuity.mode, DelegationContinuityMode::Resolved);
-        assert!(continuity.active_packet_id.is_none());
-        assert_eq!(continuity.next_command, "synod run");
-        assert!(continuity.evidence_summary.contains("routing policy"));
-        assert!(
-            goal_plan
-                .planning_rationale
-                .as_deref()
-                .unwrap_or_default()
-                .contains("resolved delegation packet")
-        );
-        assert!(
-            goal_plan
-                .routing_policy_summary
-                .as_deref()
-                .unwrap_or_default()
-                .contains("implementation route=claude/sonnet-4")
-        );
-
-        let resolved_packet = goal_plan
-            .delegation_packet_history()
-            .iter()
-            .find(|packet| packet.packet_id == packet_id)
-            .unwrap();
-        assert_eq!(resolved_packet.state, crate::domain::session::DelegationPacketState::Resolved);
-    }
-
-    #[test]
-    fn run_to_terminal_hands_off_clustered_success_between_member_workspaces() {
-        let primary = write_cluster_delivery_workspace("synod-runtime-cluster-primary");
-        let secondary = write_cluster_delivery_workspace("synod-runtime-cluster-secondary");
-        let runtime = SessionRuntime::for_workspace(&primary);
-        let mut session = ActiveSessionRecord {
-            session_id: "session-runtime-cluster".to_string(),
-            workspace_ref: primary.to_string_lossy().into_owned(),
-            goal: None,
-            authored_brief: None,
-            negotiation_packet: None,
-            active_flow: None,
-            active_task: None,
-            goal_plan: None,
-            workflow_progress: None,
-            decisions: Vec::new(),
-            active_flow_policy: None,
-            latest_status: SessionStatus::Initialized,
-            latest_terminal_reason: None,
-            latest_trace_ref: None,
-            created_at: 10,
-            updated_at: 10,
-        };
-
-        runtime.capture_goal(&mut session, "fix the broken add function").unwrap();
-        runtime.plan_task(&mut session, Some("bug-fix"), false).unwrap();
-        runtime
-            .prepare_cluster_run(
-                &mut session,
-                &ClusterSessionProjection {
-                    cluster_id: "cluster-1".to_string(),
-                    primary_workspace_ref: primary.to_string_lossy().into_owned(),
-                    member_workspace_refs: vec![
-                        primary.to_string_lossy().into_owned(),
-                        secondary.to_string_lossy().into_owned(),
-                    ],
-                    started_from_command: "run".to_string(),
-                    updated_at: 20,
-                },
+        let mut fixture_runtime = manual_runtime();
+        fixture_runtime.profile.read_targets = vec!["README.md".to_string()];
+        let step = Step::agent(
+            "investigate",
+            "analyzer",
+            attach_stage_metadata(
+                json!({"phase": "investigate"}),
+                built_in_flow("bug-fix").unwrap(),
+                0,
             )
-            .unwrap();
-
-        let response = runtime.run_to_terminal(&mut session).unwrap();
-
-        assert_eq!(response.terminal_status, TaskStatus::Succeeded);
-        assert_eq!(session.latest_status, SessionStatus::Succeeded);
-        assert_eq!(
-            fs::read_to_string(primary.join("src/lib.rs")).unwrap(),
-            "pub fn add(left: i32, right: i32) -> i32 { left + right }\n"
-        );
-        assert_eq!(
-            fs::read_to_string(secondary.join("src/lib.rs")).unwrap(),
-            "pub fn add(left: i32, right: i32) -> i32 { left + right }\n"
-        );
-
-        let primary_trace = FileTraceStore::for_workspace(&primary).latest().unwrap().unwrap();
-        let secondary_trace = FileTraceStore::for_workspace(&secondary).latest().unwrap().unwrap();
-        assert_ne!(primary_trace, secondary_trace);
-
-        let story = session
-            .active_task
-            .as_ref()
-            .unwrap()
-            .context
-            .cluster_delivery_story()
-            .unwrap()
-            .unwrap();
-        assert_eq!(story.execution_condition.kind, ClusteredExecutionKind::Success);
-        assert_eq!(story.participating_workspaces.len(), 2);
-        assert!(story.participating_workspaces.iter().any(|record| {
-            record.workspace_ref == primary.to_string_lossy()
-                && record.participation_kind == WorkspaceParticipationKind::Mutated
-        }));
-        assert!(story.participating_workspaces.iter().any(|record| {
-            record.workspace_ref == secondary.to_string_lossy()
-                && record.participation_kind == WorkspaceParticipationKind::Mutated
-        }));
-    }
-
-    #[test]
-    fn run_to_terminal_materializes_security_assessment_task_without_dropping_native_routing() {
-        let workspace = temp_workspace("synod-runtime-security-assessment-route");
-        fs::create_dir_all(workspace.join("src")).unwrap();
-        fs::create_dir_all(workspace.join("tests")).unwrap();
-        fs::create_dir_all(workspace.join(".canon/runs/canon-run-security")).unwrap();
-        fs::write(
-            workspace.join("Cargo.toml"),
-            "[package]\nname = \"security-route\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
-        )
-        .unwrap();
-        fs::write(
-            workspace.join("src/lib.rs"),
-            "pub fn add(left: i32, right: i32) -> i32 {\n    left - right\n}\n",
-        )
-        .unwrap();
-        fs::write(
-            workspace.join("tests/red_to_green.rs"),
-            "use security_route::add;\n\n#[test]\nfn synod_drives_red_to_green() {\n    assert_eq!(add(2, 2), 4);\n}\n",
-        )
-        .unwrap();
-        fs::write(
-            workspace.join(".canon/runs/canon-run-security/security-assessment.md"),
-            "# Security Assessment\n\nValidated the bounded security review for the verify stage.\n",
-        )
-        .unwrap();
-        fs::write(
-            workspace.join(".synod/canon-stub.sh"),
-            "#!/bin/sh\ncat >/dev/null\nprintf '%s' '{\"status\":\"governed_ready\",\"run_ref\":\"canon-run-security\",\"packet_ref\":\".canon/runs/canon-run-security\",\"expected_document_refs\":[\".canon/runs/canon-run-security/security-assessment.md\"],\"document_refs\":[\".canon/runs/canon-run-security/security-assessment.md\"],\"approval_state\":\"not_needed\",\"packet_readiness\":\"reusable\",\"missing_sections\":[],\"headline\":\"security assessment packet ready\",\"message\":\"Canon completed the governed security assessment\"}'\n",
-        )
-        .unwrap();
-        let mut permissions =
-            fs::metadata(workspace.join(".synod/canon-stub.sh")).unwrap().permissions();
-        permissions.set_mode(0o755);
-        fs::set_permissions(workspace.join(".synod/canon-stub.sh"), permissions).unwrap();
-        fs::write(
-            workspace.join(".synod/execution.json"),
-            serde_json::to_string_pretty(&WorkspaceExecutionProfile {
-                name: "session-runtime-profile".to_string(),
-                read_targets: vec!["src/lib.rs".to_string(), "tests/red_to_green.rs".to_string()],
-                validation_command: ExecutionCommand {
-                    program: "cargo".to_string(),
-                    args: vec!["test".to_string(), "--quiet".to_string()],
-                },
-                attempts: vec![ExecutionAttemptDefinition {
-                    attempt_id: "fix-add".to_string(),
-                    summary: String::new(),
-                    failure_mode: ExecutionFailureMode::Terminal,
-                    changes: vec![WorkspaceChange {
-                        path: "src/lib.rs".to_string(),
-                        find: "left - right".to_string(),
-                        replace: "left + right".to_string(),
-                    }],
-                }],
-                adaptive: None,
-                limits: RunLimits::default(),
-                governance: Some(GovernanceProfile {
-                    default_runtime: GovernanceRuntimeKind::Local,
-                    canon: Some(CanonRuntimeConfig {
-                        command: workspace
-                            .join(".synod/canon-stub.sh")
-                            .to_string_lossy()
-                            .into_owned(),
-                        default_owner: Some("platform".to_string()),
-                        default_risk: Some("medium".to_string()),
-                        default_zone: Some("engineering".to_string()),
-                        default_system_context: Some(SystemContextBinding::Existing),
-                    }),
-                    stages: vec![StageGovernancePolicy {
-                        flow_name: "bug-fix".to_string(),
-                        stage_id: "verify".to_string(),
-                        enabled: true,
-                        required: true,
-                        autopilot: true,
-                        runtime: Some(GovernanceRuntimeKind::Canon),
-                        canon_mode: None,
-                        system_context: Some(SystemContextBinding::Existing),
-                        risk: Some("medium".to_string()),
-                        zone: Some("engineering".to_string()),
-                        owner: Some("platform".to_string()),
-                    }],
-                }),
-                review: None,
-                legacy_source: None,
-            })
             .unwrap(),
         )
         .unwrap();
+        let metadata = super::FlowStepMetadata::from_step(&step).unwrap().unwrap();
+        let mut task = Task::new(
+            "task-governance-config",
+            &build_request(workspace_missing_config.to_string_lossy().as_ref()),
+            Plan::new(vec![step.clone()]).unwrap(),
+        )
+        .unwrap();
+        let mut trace = ExecutionTrace::new("task-governance-config", "session-runtime", "goal");
 
-        let runtime = SessionRuntime::for_workspace(&workspace);
-        let mut session = ActiveSessionRecord {
+        let decision = runtime_missing_config
+            .execute_governance_for_step(
+                &mut missing_config_session,
+                &mut task,
+                &mut trace,
+                &fixture_runtime,
+                &step,
+                &metadata,
+                &governance,
+                &policy,
+                super::GovernanceRequestKind::Start,
+            )
+            .unwrap();
+        match decision {
+            super::GovernanceStepDecision::Terminal(response) => {
+                assert!(response.terminal_reason.message.contains("requires Canon configuration"));
+            }
+            _ => panic!("expected terminal governance block"),
+        }
+
+        let workspace_missing_mode = write_governed_execution_profile_workspace(
+            "boundline-runtime-governance-required-mode",
+            vec![ExecutionAttemptDefinition {
+                attempt_id: "fix-add".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left - right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+            vec!["README.md".to_string()],
+            Some(GovernanceProfile {
+                default_runtime: GovernanceRuntimeKind::Local,
+                canon: Some(CanonRuntimeConfig {
+                    command: "true".to_string(),
+                    default_owner: Some("platform".to_string()),
+                    default_risk: Some("medium".to_string()),
+                    default_zone: Some("engineering".to_string()),
+                    default_system_context: Some(SystemContextBinding::Existing),
+                }),
+                stages: vec![StageGovernancePolicy {
+                    flow_name: "bug-fix".to_string(),
+                    stage_id: "investigate".to_string(),
+                    enabled: true,
+                    required: true,
+                    autopilot: false,
+                    runtime: Some(GovernanceRuntimeKind::Canon),
+                    canon_mode: None,
+                    system_context: Some(SystemContextBinding::Existing),
+                    risk: None,
+                    zone: None,
+                    owner: None,
+                }],
+            }),
+        );
+        let runtime_missing_mode = SessionRuntime::for_workspace(&workspace_missing_mode);
+        let mut missing_mode_session = ActiveSessionRecord {
             session_id: "session-runtime".to_string(),
-            workspace_ref: workspace.to_string_lossy().into_owned(),
+            workspace_ref: workspace_missing_mode.to_string_lossy().into_owned(),
             goal: None,
             authored_brief: None,
             negotiation_packet: None,
@@ -5487,217 +4438,19 @@ mod tests {
             created_at: 10,
             updated_at: 10,
         };
-
-        runtime.capture_goal(&mut session, "fix the broken add function").unwrap();
-        runtime.plan_task(&mut session, Some("bug-fix"), false).unwrap();
-
-        let response = runtime.run_to_terminal(&mut session).unwrap();
-        let routing = runtime.resolve_routing_outcome(&session).unwrap();
-        let task = session.active_task.as_ref().expect("governed task should persist");
-        let governed_stage = task.context.latest_governance_stage().unwrap().unwrap();
-        let governed_packet = task.context.latest_governance_packet().unwrap().unwrap();
-        let trace = runtime
-            .trace_store()
-            .load(Path::new(session.latest_trace_ref.as_ref().unwrap()))
+        runtime_missing_mode
+            .capture_goal(&mut missing_mode_session, "Drive governed bug fix")
             .unwrap();
-
-        assert_eq!(response.terminal_status, TaskStatus::Succeeded);
-        assert_eq!(session.latest_status, SessionStatus::Succeeded);
-        assert_eq!(routing.mode, crate::domain::session::RoutingMode::Native);
-        assert_eq!(governed_stage.stage_key, "bug-fix:verify");
-        assert_eq!(governed_stage.runtime, GovernanceRuntimeKind::Canon);
-        assert_eq!(governed_packet.canon_mode, Some(CanonMode::SecurityAssessment));
-        assert_eq!(governed_packet.packet_ref, ".canon/runs/canon-run-security");
-        assert!(trace.events.iter().any(|event| {
-            event.event_type == TraceEventType::GovernanceStarted
-                && event.payload.get("canon_mode") == Some(&json!("security-assessment"))
-        }));
+        runtime_missing_mode.select_flow(&mut missing_mode_session, "bug-fix").unwrap();
+        runtime_missing_mode.plan_task(&mut missing_mode_session, None, false).unwrap();
+        runtime_missing_mode.execute_next_step(&mut missing_mode_session).unwrap();
         assert!(
-            trace
-                .events
-                .iter()
-                .any(|event| { event.event_type == TraceEventType::GovernanceCompleted })
+            missing_mode_session
+                .latest_terminal_reason
+                .as_ref()
+                .unwrap()
+                .message
+                .contains("requires an explicit Canon mode")
         );
-    }
-
-    #[test]
-    fn native_routing_snapshot_and_blocked_binding_surface_handoff_details() {
-        let workspace = temp_workspace("synod-runtime-native-routing-snapshot");
-        let mut config = ConfigFile {
-            version: 1,
-            routing: RoutingConfig {
-                implementation: Some(ModelRoute {
-                    runtime: RuntimeKind::Claude,
-                    model: "sonnet-4".to_string(),
-                }),
-                assistant_runtimes: vec![RuntimeKind::Claude, RuntimeKind::Codex],
-                ..RoutingConfig::default()
-            },
-        };
-        config.routing.runtime_capabilities.insert(
-            RuntimeKind::Claude,
-            RuntimeCapabilityProfile {
-                continuation: CapabilityState::Unsupported,
-                resume: CapabilityState::Supported,
-                validation: CapabilityState::Supported,
-                handoff_target: CapabilityState::Unsupported,
-                escalation_context: CapabilityState::Supported,
-                notes: Some("needs delegated implementation".to_string()),
-            },
-        );
-        config.routing.runtime_capabilities.insert(
-            RuntimeKind::Codex,
-            RuntimeCapabilityProfile {
-                continuation: CapabilityState::Supported,
-                resume: CapabilityState::Supported,
-                validation: CapabilityState::Supported,
-                handoff_target: CapabilityState::Supported,
-                escalation_context: CapabilityState::Supported,
-                notes: Some("can accept implementation handoff".to_string()),
-            },
-        );
-        config.routing.slot_effort_policies.insert(
-            RouteSlot::Implementation,
-            SlotEffortPolicy {
-                level: EffortLevel::High,
-                fallback: EffortFallbackPolicy::Preserve,
-                rationale: Some("keep implementation strict".to_string()),
-            },
-        );
-        FileConfigStore::for_workspace(&workspace).save_local(&config).unwrap();
-
-        let runtime = SessionRuntime::for_workspace(&workspace);
-        let snapshot = runtime.native_routing_snapshot();
-        assert_eq!(snapshot.available_runtimes, vec![RuntimeKind::Claude, RuntimeKind::Codex]);
-
-        let blocked = SessionRuntime::blocked_native_binding(&snapshot).unwrap();
-        assert!(
-            blocked.reason.contains(
-                "implementation route claude/sonnet-4 is declared continuation=unsupported"
-            )
-        );
-        assert_eq!(blocked.handoff_target, Some(RuntimeKind::Codex));
-        assert!(
-            blocked
-                .capability_summary
-                .contains("runtime_capability[workspace] claude => continuation=unsupported")
-        );
-        assert!(blocked.capability_summary.contains(
-            "slot_effort[workspace] implementation => level=high, fallback=preserve, rationale=keep implementation strict"
-        ));
-        assert!(blocked.evidence_refs.contains(&"slot=implementation".to_string()));
-        assert!(blocked.evidence_refs.contains(&"route=claude/sonnet-4".to_string()));
-        assert!(blocked.evidence_refs.contains(&"handoff_target=codex".to_string()));
-        assert!(
-            blocked.evidence_refs.iter().any(|entry| entry == "available_assistants=claude,codex")
-        );
-        assert!(
-            blocked.evidence_refs.iter().any(|entry| entry.starts_with("effort_policy=level=high"))
-        );
-
-        assert!(SessionRuntime::candidate_supports_slot(
-            RuntimeKind::Codex,
-            RouteSlot::Implementation,
-            &snapshot.runtime_capabilities,
-        ));
-        assert!(!SessionRuntime::candidate_supports_slot(
-            RuntimeKind::Claude,
-            RouteSlot::Implementation,
-            &snapshot.runtime_capabilities,
-        ));
-        assert_eq!(SessionRuntime::route_slot_label(RouteSlot::Verification), "verification");
-        assert_eq!(
-            SessionRuntime::value_source_text(
-                snapshot.runtime_capabilities.get(&RuntimeKind::Claude).unwrap().source,
-            ),
-            "workspace"
-        );
-        assert_eq!(
-            SessionRuntime::native_slot_block_reason(
-                RouteSlot::Review,
-                &snapshot.effective.review,
-                &snapshot.available_runtimes,
-                snapshot.runtime_capabilities.get(&snapshot.effective.review.route.runtime),
-            ),
-            None
-        );
-        let no_profile_summary = SessionRuntime::native_slot_capability_summary(
-            RouteSlot::Review,
-            &snapshot.effective.review,
-            None,
-            None,
-        );
-        assert!(no_profile_summary.contains("no explicit capability profile"));
-    }
-
-    #[test]
-    fn native_binding_helpers_cover_verification_and_availability_paths() {
-        SessionRuntime::ensure_runtime_available(
-            "implementation",
-            RuntimeKind::Codex,
-            &[RuntimeKind::Codex],
-        )
-        .unwrap();
-        let unavailable_error = SessionRuntime::ensure_runtime_available(
-            "implementation",
-            RuntimeKind::Claude,
-            &[RuntimeKind::Codex],
-        )
-        .unwrap_err();
-        assert!(
-            unavailable_error
-                .to_string()
-                .contains("assistant binding for implementation requires claude")
-        );
-
-        let workspace = temp_workspace("synod-runtime-native-routing-verification");
-        let mut config = ConfigFile {
-            version: 1,
-            routing: RoutingConfig {
-                implementation: Some(ModelRoute {
-                    runtime: RuntimeKind::Copilot,
-                    model: "gpt-5.4".to_string(),
-                }),
-                verification: Some(ModelRoute {
-                    runtime: RuntimeKind::Copilot,
-                    model: "gpt-5.4".to_string(),
-                }),
-                assistant_runtimes: vec![RuntimeKind::Copilot],
-                ..RoutingConfig::default()
-            },
-        };
-        config.routing.runtime_capabilities.insert(
-            RuntimeKind::Copilot,
-            RuntimeCapabilityProfile {
-                continuation: CapabilityState::Supported,
-                resume: CapabilityState::Supported,
-                validation: CapabilityState::Unsupported,
-                handoff_target: CapabilityState::Unsupported,
-                escalation_context: CapabilityState::Supported,
-                notes: Some("validation needs escalation".to_string()),
-            },
-        );
-        FileConfigStore::for_workspace(&workspace).save_local(&config).unwrap();
-
-        let runtime = SessionRuntime::for_workspace(&workspace);
-        let snapshot = runtime.native_routing_snapshot();
-        let blocked = SessionRuntime::blocked_native_binding(&snapshot).unwrap();
-        assert!(
-            blocked
-                .reason
-                .contains("verification route copilot/gpt-5.4 is declared validation=unsupported")
-        );
-        assert_eq!(blocked.handoff_target, None);
-        assert!(
-            blocked
-                .capability_summary
-                .contains("runtime_capability[workspace] copilot => continuation=supported")
-        );
-
-        let empty_workspace = temp_workspace("synod-runtime-native-routing-empty");
-        let empty_runtime = SessionRuntime::for_workspace(&empty_workspace);
-        empty_runtime.validate_native_assistant_bindings().unwrap();
-        let empty_snapshot = empty_runtime.native_routing_snapshot();
-        assert!(SessionRuntime::blocked_native_binding(&empty_snapshot).is_none());
     }
 }

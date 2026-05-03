@@ -5,7 +5,7 @@
 
 ## Purpose
 
-Define how Synod exposes declared runtime capability and effort policy through
+Define how Boundline exposes declared runtime capability and effort policy through
 configuration, planning, and execution surfaces.
 
 ## Required Surface
@@ -20,7 +20,7 @@ configuration, planning, and execution surfaces.
 ## Explicit Boundaries
 
 - Capability projection must not imply that a runtime was probed or validated
-  dynamically unless Synod recorded that evidence explicitly.
+  dynamically unless Boundline recorded that evidence explicitly.
 - Effort policy must not silently override route ownership or execution limits.
 - The surface must not introduce a second provider abstraction vocabulary that
   competes with the existing slot-routing model.

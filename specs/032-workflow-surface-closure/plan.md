@@ -1,6 +1,6 @@
 # Implementation Plan: Product Unification And Surface Closure
 
-**Branch**: `032-workflow-surface-closure` | **Date**: 2026-05-02 | **Spec**: [/Users/rt/workspace/synod/specs/032-workflow-surface-closure/spec.md](/Users/rt/workspace/synod/specs/032-workflow-surface-closure/spec.md)
+**Branch**: `032-workflow-surface-closure` | **Date**: 2026-05-02 | **Spec**: [/Users/rt/workspace/boundline/specs/032-workflow-surface-closure/spec.md](/Users/rt/workspace/boundline/specs/032-workflow-surface-closure/spec.md)
 **Input**: Feature specification from `/specs/032-workflow-surface-closure/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
@@ -8,7 +8,7 @@
 ## Summary
 
 Close the remaining product-identity gap by making named workflows first-class
-assistant surfaces on the same primary session-native Synod path, projecting
+assistant surfaces on the same primary session-native Boundline path, projecting
 workflow routing plus assistant or model binding as explicitly as the direct
 session surfaces, and keeping explicit compatibility follow-up visibly
 subordinate. The slice stays inside the current CLI, session, trace,
@@ -26,7 +26,7 @@ clippy cleanup, and formatting.
 
 **Language/Version**: Rust 1.95.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for this slice  
-**Storage**: Workspace-local `.synod/workflows.toml`, `.synod/config.toml`, `.synod/session.json`, persisted traces under `<workspace>/.synod/traces/`, optional `.synod/execution.json` for explicit compatibility follow-up, optional `.canon/` artifacts, and repository-managed assistant assets under `assistant/`  
+**Storage**: Workspace-local `.boundline/workflows.toml`, `.boundline/config.toml`, `.boundline/session.json`, persisted traces under `<workspace>/.boundline/traces/`, optional `.boundline/execution.json` for explicit compatibility follow-up, optional `.canon/` artifacts, and repository-managed assistant assets under `assistant/`  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, targeted contract or integration tests for workflow surfaces and assistant assets, `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features`, and `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`  
 **Target Platform**: macOS/Linux developer workstations and Linux CI  
 **Project Type**: Single Rust CLI/library crate with workspace-local persisted execution state and repository-managed assistant command assets  
@@ -40,7 +40,7 @@ clippy cleanup, and formatting.
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **PASS** Delivery identity: The slice directly improves bounded engineering-task delivery by letting operators enter and continue the same Synod delivery story through workflows without losing route or next-step credibility. See Summary, Technical Context, and [/Users/rt/workspace/synod/specs/032-workflow-surface-closure/spec.md](/Users/rt/workspace/synod/specs/032-workflow-surface-closure/spec.md).
+- **PASS** Delivery identity: The slice directly improves bounded engineering-task delivery by letting operators enter and continue the same Boundline delivery story through workflows without losing route or next-step credibility. See Summary, Technical Context, and [/Users/rt/workspace/boundline/specs/032-workflow-surface-closure/spec.md](/Users/rt/workspace/boundline/specs/032-workflow-surface-closure/spec.md).
 - **PASS** Delivery-first scope: The plan prioritizes execution ownership, route clarity, workflow follow-through, and inspectability ahead of release polish. See Summary, Technical Context, and research decisions.
 - **PASS** Primary workflow: The main operator path remains session-native, with named workflows compiling onto the same `start -> capture -> plan -> run -> status -> next -> inspect` story; explicit compatibility remains available only as an opt-in subordinate route. See Summary, Technical Context, quickstart, and contracts.
 - **PASS** Bounded execution: Workflow discovery, run, status, resume, and inspect keep explicit stop conditions for missing input, invalid definitions, blocked governance, assistant-binding mismatch, and terminal outcome; no new loops or retries are introduced beyond current runtime limits. See Technical Context, research, data model, and quickstart.
@@ -49,8 +49,8 @@ clippy cleanup, and formatting.
 - **PASS** Sequential-first design: One workflow phase remains active at a time and the slice introduces no concurrency, background workers, or hidden branches. See Technical Context and research.
 - **PASS** Tool-agent symmetry: Workflow guidance, route projection, and continuation remain explicit through CLI output and assistant guidance rather than hidden inside backend-specific behavior. See Summary, research, quickstart, and contracts.
 - **PASS** Observability and explicit intelligence: Workflow identity, phase, route authority, assistant binding, compatibility ownership, blocked conditions, and next commands remain surfaced on the same operator-facing outputs. See Technical Context, contracts, and quickstart.
-- **PASS** Non-goals and external separation: The plan does not create a new provider abstraction layer, UI surface, long-term memory, deployment work, or Canon-owned control flow. See Constraints, research, and [/Users/rt/workspace/synod/specs/032-workflow-surface-closure/spec.md](/Users/rt/workspace/synod/specs/032-workflow-surface-closure/spec.md).
-- **PASS** Minimal slice: The smallest independently valuable capability is one workflow-first assistant and output closure that makes the primary Synod product story explicit without inventing another runtime. See Summary and research.
+- **PASS** Non-goals and external separation: The plan does not create a new provider abstraction layer, UI surface, long-term memory, deployment work, or Canon-owned control flow. See Constraints, research, and [/Users/rt/workspace/boundline/specs/032-workflow-surface-closure/spec.md](/Users/rt/workspace/boundline/specs/032-workflow-surface-closure/spec.md).
+- **PASS** Minimal slice: The smallest independently valuable capability is one workflow-first assistant and output closure that makes the primary Boundline product story explicit without inventing another runtime. See Summary and research.
 
 Mark each line as PASS or FAIL in the completed plan and reference the section that satisfies it.
 

@@ -2,10 +2,10 @@
 
 ## Decision 1: Keep the developer command surface inside the existing crate
 
-- **Decision**: Add one CLI binary target to the current `synod` package rather than creating a separate CLI crate or a second workspace member.
+- **Decision**: Add one CLI binary target to the current `boundline` package rather than creating a separate CLI crate or a second workspace member.
 - **Rationale**: The new feature only needs a thin command surface over the existing orchestrator library, trace store, and deterministic test fixtures. A second crate would add manifest, dependency, and release complexity without creating additional delivery value for this slice.
 - **Alternatives considered**:
-  - Separate `synod-cli` crate: rejected because it duplicates package-level complexity before the CLI has proven value.
+  - Separate `boundline-cli` crate: rejected because it duplicates package-level complexity before the CLI has proven value.
   - Shell scripts only: rejected because the spec requires an explicit, inspectable command interface with reliable exit semantics.
 
 ## Decision 2: Use `clap` as the only new runtime dependency
@@ -18,7 +18,7 @@
 
 ## Decision 3: Reuse the existing trace store and add inspection as a formatting layer
 
-- **Decision**: Keep persisted execution traces under `<workspace>/.synod/traces/` as the canonical execution record and implement trace inspection as a summary layer that reads those traces without changing their storage model.
+- **Decision**: Keep persisted execution traces under `<workspace>/.boundline/traces/` as the canonical execution record and implement trace inspection as a summary layer that reads those traces without changing their storage model.
 - **Rationale**: The current core already emits durable local traces. The missing capability is readable inspection, not a new persistence mechanism. Reusing the existing trace record keeps the feature small and preserves compatibility with the core orchestrator behavior.
 - **Alternatives considered**:
   - Introduce a new trace database or index: rejected because it adds infrastructure outside the scope of a local developer UX slice.
@@ -30,7 +30,7 @@
 - **Rationale**: The spec requires contributors to see meaningful orchestration behavior quickly and repeatedly without relying on synthetic onboarding surfaces or external providers. Workspace fixtures keep the workflow stable, fast to debug, and grounded in real red-to-green behavior.
 - **Alternatives considered**:
   - Use live model or shell integrations in the first release: rejected because they would make onboarding and validation nondeterministic.
-  - Hardcode a synthetic scripted run: rejected because it hides whether Synod can actually validate and change a real workspace.
+  - Hardcode a synthetic scripted run: rejected because it hides whether Boundline can actually validate and change a real workspace.
 
 ## Decision 5: Provide a dedicated `doctor` command for local readiness
 

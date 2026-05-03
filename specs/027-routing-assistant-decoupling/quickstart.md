@@ -13,7 +13,7 @@ assistant/backend binding explicit.
 Set the implementation slot for the current workspace:
 
 ```bash
-cargo run --bin synod -- config set \
+cargo run --bin boundline -- config set \
   --workspace <workspace> \
   --scope workspace \
   --slot implementation \
@@ -25,7 +25,7 @@ Set verification at cluster scope when the workspace belongs to a registered
 cluster:
 
 ```bash
-cargo run --bin synod -- config set \
+cargo run --bin boundline -- config set \
   --workspace <member-workspace> \
   --cluster <primary-workspace> \
   --scope cluster \
@@ -37,7 +37,7 @@ cargo run --bin synod -- config set \
 ## 2. Inspect the effective routing decision
 
 ```bash
-cargo run --bin synod -- config show --workspace <workspace> --scope effective
+cargo run --bin boundline -- config show --workspace <workspace> --scope effective
 ```
 
 Expected behavior:
@@ -50,25 +50,25 @@ Expected behavior:
 ## 3. Run the existing session-native workflow
 
 ```bash
-cargo run --bin synod -- start --workspace <workspace>
-cargo run --bin synod -- capture --workspace <workspace> --goal "Summarize routing ownership while updating backend binding"
-cargo run --bin synod -- plan --workspace <workspace>
-cargo run --bin synod -- run --workspace <workspace>
+cargo run --bin boundline -- start --workspace <workspace>
+cargo run --bin boundline -- capture --workspace <workspace> --goal "Summarize routing ownership while updating backend binding"
+cargo run --bin boundline -- plan --workspace <workspace>
+cargo run --bin boundline -- run --workspace <workspace>
 ```
 
 Expected behavior:
 - `plan` and `run` keep the existing command surface.
 - Runtime output surfaces the active route, its authority source, and the bound
   assistant or command-pack family for the slot being executed.
-- Backend binding does not imply a second orchestration runtime; Synod remains
+- Backend binding does not imply a second orchestration runtime; Boundline remains
   the owner of the run.
 
 ## 4. Continue with runtime follow-up surfaces
 
 ```bash
-cargo run --bin synod -- status --workspace <workspace>
-cargo run --bin synod -- next --workspace <workspace>
-cargo run --bin synod -- inspect --workspace <workspace>
+cargo run --bin boundline -- status --workspace <workspace>
+cargo run --bin boundline -- next --workspace <workspace>
+cargo run --bin boundline -- inspect --workspace <workspace>
 ```
 
 Expected behavior:
@@ -84,13 +84,13 @@ Expected behavior:
 Clustered delivery keeps the primary workspace authoritative:
 
 ```bash
-cargo run --bin synod -- status --cluster <primary-workspace>
+cargo run --bin boundline -- status --cluster <primary-workspace>
 ```
 
 Explicit compatibility inspection stays explicit about the owning trace:
 
 ```bash
-cargo run --bin synod -- inspect --trace <trace-ref>
+cargo run --bin boundline -- inspect --trace <trace-ref>
 ```
 
 Expected behavior:

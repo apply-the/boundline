@@ -3,47 +3,47 @@
 ## Prerequisites
 
 - Work from the repository root.
-- Use a clean workspace with no existing `.synod/session.json`, or start a fresh session before each scenario.
-- Provide a workspace fixture manifest at `.synod/fixture.json` so `plan`, `step`, and `run` have a deterministic red-to-green target.
-- Run commands through `cargo run --bin synod -- ...` when validating locally.
+- Use a clean workspace with no existing `.boundline/session.json`, or start a fresh session before each scenario.
+- Provide a workspace fixture manifest at `.boundline/fixture.json` so `plan`, `step`, and `run` have a deterministic red-to-green target.
+- Run commands through `cargo run --bin boundline -- ...` when validating locally.
 
 ## Scenario 1: Bug-fix flow
 
 1. Start a new session:
 
    ```bash
-   cargo run --bin synod -- start
+   cargo run --bin boundline -- start
    ```
 
 2. Capture a bounded repair goal:
 
    ```bash
-   cargo run --bin synod -- capture --goal "Fix failing checkout tests"
+   cargo run --bin boundline -- capture --goal "Fix failing checkout tests"
    ```
 
 3. Select the bug-fix flow:
 
    ```bash
-   cargo run --bin synod -- flow bug-fix
+   cargo run --bin boundline -- flow bug-fix
    ```
 
 4. Create the flow-aware plan:
 
    ```bash
-   cargo run --bin synod -- plan
+   cargo run --bin boundline -- plan
    ```
 
 5. Execute until completion:
 
    ```bash
-   cargo run --bin synod -- run
+   cargo run --bin boundline -- run
    ```
 
 6. Verify the final state:
 
    ```bash
-   cargo run --bin synod -- status
-   cargo run --bin synod -- inspect --workspace .
+   cargo run --bin boundline -- status
+   cargo run --bin boundline -- inspect --workspace .
    ```
 
 Expected outcome:
@@ -58,7 +58,7 @@ Example status excerpt:
 active_flow: bug-fix
 current_stage: verify
 stage_progress: 3/3
-next_command: synod inspect
+next_command: boundline inspect
 ```
 
 ## Scenario 2: Change flow with stage-aware next guidance
@@ -66,27 +66,27 @@ next_command: synod inspect
 1. Start and capture a change goal:
 
    ```bash
-   cargo run --bin synod -- start
-   cargo run --bin synod -- capture --goal "Add a confirmation email after checkout"
+   cargo run --bin boundline -- start
+   cargo run --bin boundline -- capture --goal "Add a confirmation email after checkout"
    ```
 
 2. Select and plan the change flow:
 
    ```bash
-   cargo run --bin synod -- flow change
-   cargo run --bin synod -- plan
+   cargo run --bin boundline -- flow change
+   cargo run --bin boundline -- plan
    ```
 
 3. Execute one step:
 
    ```bash
-   cargo run --bin synod -- step
+   cargo run --bin boundline -- step
    ```
 
 4. Ask for the next action:
 
    ```bash
-   cargo run --bin synod -- next
+   cargo run --bin boundline -- next
    ```
 
 Expected outcome:
@@ -100,7 +100,7 @@ Example next excerpt:
 active_flow: change
 current_stage: implement
 stage_progress: 2/3
-next_command: synod step
+next_command: boundline step
 ```
 
 ## Scenario 3: Failure stays inside the current stage

@@ -5,7 +5,7 @@
 
 ## R1: Unification should happen in the session-owned summary model, not in a new runtime layer
 
-**Question**: Where should Synod unify the remaining operator-facing surfaces after 015-runtime-refoundation?
+**Question**: Where should Boundline unify the remaining operator-facing surfaces after 015-runtime-refoundation?
 
 **Decision**: Extend the existing session-owned status and trace summary model so route explanation, execution condition, optional review or adaptive or governance state, and compatibility explanations are all projected through the same operator-facing surfaces.
 
@@ -17,7 +17,7 @@
 
 ## R2: Execution condition needs an explicit operator-facing projection
 
-**Question**: How should Synod describe running, blocked, waiting, and terminal states consistently across the CLI?
+**Question**: How should Boundline describe running, blocked, waiting, and terminal states consistently across the CLI?
 
 **Decision**: Introduce an explicit execution-condition projection derived from session and trace state that can explain whether the session is running, blocked, waiting on governance or review, succeeded, failed, exhausted, or has no actionable next step.
 
@@ -41,7 +41,7 @@
 
 ## R4: Compatibility precedence must stay explicit and subordinate to a ready native plan
 
-**Question**: How should Synod reconcile `.synod/execution.json` with a ready session-native plan in operator-facing surfaces?
+**Question**: How should Boundline reconcile `.boundline/execution.json` with a ready session-native plan in operator-facing surfaces?
 
 **Decision**: Keep compatibility as an explicit path that remains available when intentionally selected or when it is the only credible route, but preserve ready session-native plans as the default authoritative route.
 

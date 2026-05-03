@@ -3,7 +3,7 @@
 **Feature Branch**: `021-adaptive-repair-depth`  
 **Created**: 2026-05-01  
 **Status**: Draft  
-**Input**: User description: "Broaden adaptive repair depth so Synod can use validation failure evidence to choose more credible bounded repair attempts, preserve explicit workspace-slice and attempt-lineage evidence, and keep the same bounded orchestration story without introducing Canon-owned control."
+**Input**: User description: "Broaden adaptive repair depth so Boundline can use validation failure evidence to choose more credible bounded repair attempts, preserve explicit workspace-slice and attempt-lineage evidence, and keep the same bounded orchestration story without introducing Canon-owned control."
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -20,17 +20,17 @@
 
 ### User Story 1 - Replan Adaptive Repairs From Validation Evidence (Priority: P1)
 
-A developer running bounded adaptive delivery can have Synod choose the next repair candidate from the latest validation failure evidence instead of exhausting only deterministic syntax flips in a fixed order.
+A developer running bounded adaptive delivery can have Boundline choose the next repair candidate from the latest validation failure evidence instead of exhausting only deterministic syntax flips in a fixed order.
 
 **Why this priority**: The current adaptive path already scores a bounded workspace slice and avoids repeated signatures, but it still relies on deterministic local patterns that ignore why validation failed. This is the smallest credible step toward deeper adaptive repair.
 
-**Independent Test**: Can be fully tested by running an adaptive compatibility execution profile whose first candidate fails validation with actionable failure output, then verifying that Synod selects a materially different next candidate because of that failure evidence and either succeeds or stops explicitly within the configured limits.
+**Independent Test**: Can be fully tested by running an adaptive compatibility execution profile whose first candidate fails validation with actionable failure output, then verifying that Boundline selects a materially different next candidate because of that failure evidence and either succeeds or stops explicitly within the configured limits.
 
 **Acceptance Scenarios**:
 
-1. **Given** an adaptive compatibility run whose first validation failure contains actionable error terms or location hints, **When** Synod replans the next bounded attempt, **Then** it prioritizes a new candidate using that failure evidence instead of falling back to the same deterministic candidate order.
-2. **Given** multiple bounded candidates remain available after a failed validation, **When** one candidate aligns better with the latest failure evidence, **Then** Synod selects that candidate, records why it was preferred, and leaves previously rejected candidates visible in attempt lineage rather than silently forgetting them.
-3. **Given** a failed validation produces no credible new bounded repair path, **When** Synod evaluates the next adaptive attempt, **Then** it stops in an explicit failed or exhausted terminal state with visible evidence that no materially different bounded candidate remained.
+1. **Given** an adaptive compatibility run whose first validation failure contains actionable error terms or location hints, **When** Boundline replans the next bounded attempt, **Then** it prioritizes a new candidate using that failure evidence instead of falling back to the same deterministic candidate order.
+2. **Given** multiple bounded candidates remain available after a failed validation, **When** one candidate aligns better with the latest failure evidence, **Then** Boundline selects that candidate, records why it was preferred, and leaves previously rejected candidates visible in attempt lineage rather than silently forgetting them.
+3. **Given** a failed validation produces no credible new bounded repair path, **When** Boundline evaluates the next adaptive attempt, **Then** it stops in an explicit failed or exhausted terminal state with visible evidence that no materially different bounded candidate remained.
 
 ---
 
@@ -38,14 +38,14 @@ A developer running bounded adaptive delivery can have Synod choose the next rep
 
 An operator can understand why an adaptive attempt changed, which workspace slice remains in play, and how that adaptive run still relates to the explicit compatibility route even when the workspace also uses session-native workflows, review, or governance.
 
-**Why this priority**: Stronger heuristics are only useful if the selection rationale is inspectable. Adaptive behavior that changes silently would violate Synod's bounded, explicit execution model.
+**Why this priority**: Stronger heuristics are only useful if the selection rationale is inspectable. Adaptive behavior that changes silently would violate Boundline's bounded, explicit execution model.
 
 **Independent Test**: Can be fully tested by running an adaptive compatibility scenario that replans after failed validation, then verifying that `run`, `status`, `next`, and `inspect` surface the validation-guided rationale, updated workspace slice or candidate ordering, and explicit compatibility routing without implying workflow-owned or Canon-owned orchestration.
 
 **Acceptance Scenarios**:
 
-1. **Given** an adaptive run that replans after failed validation, **When** the developer checks `status`, `next`, or `inspect`, **Then** Synod exposes the latest validation-guided selection reason, bounded workspace slice, attempt lineage, and terminal or recovery condition.
-2. **Given** a workspace that also defines named workflows or bounded review or governance configuration, **When** adaptive compatibility execution is inspected, **Then** Synod keeps the routing story explicit and does not imply that workflows, review councils, or Canon own the adaptive control flow.
+1. **Given** an adaptive run that replans after failed validation, **When** the developer checks `status`, `next`, or `inspect`, **Then** Boundline exposes the latest validation-guided selection reason, bounded workspace slice, attempt lineage, and terminal or recovery condition.
+2. **Given** a workspace that also defines named workflows or bounded review or governance configuration, **When** adaptive compatibility execution is inspected, **Then** Boundline keeps the routing story explicit and does not imply that workflows, review councils, or Canon own the adaptive control flow.
 
 ---
 
@@ -59,7 +59,7 @@ A maintainer can configure and release the deeper adaptive repair slice without 
 
 **Acceptance Scenarios**:
 
-1. **Given** a maintainer configures an adaptive profile with bounded read targets and validation-guided change kinds, **When** they follow the shipped examples, **Then** Synod accepts the supported profile and documents the resulting route and inspection story coherently.
+1. **Given** a maintainer configures an adaptive profile with bounded read targets and validation-guided change kinds, **When** they follow the shipped examples, **Then** Boundline accepts the supported profile and documents the resulting route and inspection story coherently.
 2. **Given** a maintainer expects open-ended repository exploration, implicit workflow ownership, or Canon-owned adaptive control, **When** they consult the shipped docs or run the feature, **Then** those expectations remain explicitly unsupported.
 
 ---
@@ -70,12 +70,12 @@ A maintainer can configure and release the deeper adaptive repair slice without 
 
 <!--
   ACTION REQUIRED: Capture execution limits, invalid state transitions, missing context,
-  traceability gaps, and failure-handling boundaries. Synod features are invalid if they
+  traceability gaps, and failure-handling boundaries. Boundline features are invalid if they
   ignore how work stops, fails, or becomes non-credible.
 -->
 
 - What happens when validation stderr or stdout contains multiple plausible hints that point to different bounded repair paths?
-- What happens when the latest failure evidence points back to a candidate signature that Synod already tried and rejected earlier in the same run?
+- What happens when the latest failure evidence points back to a candidate signature that Boundline already tried and rejected earlier in the same run?
 - What happens when adaptive execution runs in a workspace that also exposes named workflows, review state, or governance configuration but the operator is still on the explicit compatibility route?
 - What happens when no validation output is available even though the command failed?
 
@@ -104,7 +104,7 @@ A maintainer can configure and release the deeper adaptive repair slice without 
 
 <!--
   ACTION REQUIRED: Name the deferred or excluded capabilities explicitly.
-  Synod specs should normally exclude councils and voting unless the roadmap and
+  Boundline specs should normally exclude councils and voting unless the roadmap and
   constitution explicitly prioritize a bounded review slice; they should otherwise
   exclude provider-routing complexity, distributed execution, long-term memory,
   UI/UX work, and deployment pipelines.
@@ -130,7 +130,7 @@ A maintainer can configure and release the deeper adaptive repair slice without 
 
 ### Measurable Outcomes
 
-- **SC-001**: In representative adaptive failure scenarios with actionable validation output, Synod chooses a materially different second bounded candidate based on that output instead of only following the original deterministic candidate order.
+- **SC-001**: In representative adaptive failure scenarios with actionable validation output, Boundline chooses a materially different second bounded candidate based on that output instead of only following the original deterministic candidate order.
 - **SC-002**: 100% of validation-guided adaptive runs stop in an explicit succeeded, failed, or exhausted terminal state within configured execution limits.
 - **SC-003**: Developers can identify the latest adaptive selection reason, bounded workspace slice, and attempt lineage from `status` or `inspect` in under 2 minutes.
 - **SC-004**: Maintainers can configure and validate a representative validation-guided adaptive profile, plus find the changed route and release guidance, in under 15 minutes without relying on undocumented behavior.
@@ -144,7 +144,7 @@ A maintainer can configure and release the deeper adaptive repair slice without 
   Assumptions must reduce ambiguity without expanding scope.
 -->
 
-- Adaptive execution remains manifest-backed through `<workspace>/.synod/execution.json` for this slice, even when the same workspace also uses session-native workflows for other delivery paths.
+- Adaptive execution remains manifest-backed through `<workspace>/.boundline/execution.json` for this slice, even when the same workspace also uses session-native workflows for other delivery paths.
 - The first delivery gain comes from improving candidate ranking and selection with local validation evidence, not from introducing new open-ended change generators.
 - Existing trace, session, review, and governance surfaces remain the operator-facing observability layers; this slice should deepen those summaries rather than introduce a new adaptive dashboard.
 - The slice closes as the next versioned increment and therefore includes version bump, impacted docs, changelog updates, coverage refresh for modified Rust files, clippy cleanup, and formatting.

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Defines the repository-local workspace fixture manifest used by `synod run` and the session runtime.
+Defines the repository-local workspace fixture manifest used by `boundline run` and the session runtime.
 
 ## Manifest Shape
 
@@ -19,7 +19,7 @@ Defines the repository-local workspace fixture manifest used by `synod run` and 
 - The fixture is fully local and deterministic.
 - The verification command must fail before implementation begins and pass after the patch set is applied for a successful red-to-green run.
 - The fixture remains bounded by the same run-limit rules as the core orchestrator.
-- Successful and non-success runs both produce traces suitable for later inspection with `synod inspect`.
+- Successful and non-success runs both produce traces suitable for later inspection with `boundline inspect`.
 
 ## Failure Contract
 

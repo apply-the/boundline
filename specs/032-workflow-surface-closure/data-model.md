@@ -8,7 +8,7 @@
 ### Workflow Assistant Surface
 
 The assistant-facing command or guidance surface that lets an operator discover,
-start, continue, and inspect a named workflow without leaving the primary Synod
+start, continue, and inspect a named workflow without leaving the primary Boundline
 product story.
 
 ```text
@@ -26,7 +26,7 @@ WorkflowAssistantSurface
 - Every shipped assistant family must expose the same bounded workflow actions,
   even if the artifact format differs.
 - `primary_path` remains true for workflow actions because workflows are part of
-  the same primary Synod product surface as direct session-native execution.
+  the same primary Boundline product surface as direct session-native execution.
 - Chat-only fallback must preserve the exact workflow command rather than
   paraphrasing it into provider-specific prose.
 
@@ -59,7 +59,7 @@ WorkflowRouteProjection
 ### Product Path Cue
 
 The explicit indicator that tells the operator whether the current follow-up is
-on a primary Synod surface or on the subordinate compatibility path.
+on a primary Boundline surface or on the subordinate compatibility path.
 
 ```text
 ProductPathCue

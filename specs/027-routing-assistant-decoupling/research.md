@@ -10,7 +10,7 @@ session and trace story instead of creating a new routing-status file or a new
 top-level command.
 
 **Rationale**: Operators already use `run`, `status`, `next`, and `inspect` to
-understand what Synod is doing. Reusing those surfaces delivers immediate value
+understand what Boundline is doing. Reusing those surfaces delivers immediate value
 without teaching a second workflow or splitting authority away from the current
 session and compatibility follow-up model.
 
@@ -18,7 +18,7 @@ session and compatibility follow-up model.
 - Add a dedicated routing-inspection command: rejected because it would create a
   second read-side workflow for information that materially shapes existing
   execution and follow-up decisions.
-- Persist routing decisions in a new file under `.synod/`: rejected because it
+- Persist routing decisions in a new file under `.boundline/`: rejected because it
   would duplicate information already derivable from config, session, and trace
   state.
 
@@ -52,7 +52,7 @@ orchestration runtime.
 
 **Alternatives Considered**:
 - Introduce assistant-specific execution commands: rejected because it would
-  dilute Synod's ownership of orchestration.
+  dilute Boundline's ownership of orchestration.
 - Introduce a provider-gateway surface first: rejected because it expands scope
   before the simpler inspectable-binding slice proves its value.
 

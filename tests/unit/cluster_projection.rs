@@ -1,6 +1,8 @@
-use synod::cli::output;
-use synod::domain::cluster::{ClusterInspectReport, ClusterMemberState, ClusterMemberStatusView};
-use synod::domain::session::SessionStatus;
+use boundline::cli::output;
+use boundline::domain::cluster::{
+    ClusterInspectReport, ClusterMemberState, ClusterMemberStatusView,
+};
+use boundline::domain::session::SessionStatus;
 
 #[test]
 fn render_cluster_status_includes_member_classifications() {

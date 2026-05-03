@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define how Synod chooses between persisted session evidence and the latest
+Define how Boundline chooses between persisted session evidence and the latest
 authoritative trace when projecting guided follow-through.
 
 ## Contract

@@ -14,10 +14,10 @@
 
 **Decision**: Assemble the context pack from existing bounded sources first: workspace signals, selected file paths, authored briefs, negotiated delivery state, recent traces, and reusable Canon artifacts.
 
-**Rationale**: These inputs already exist in Synod and can be made explicit without introducing a new search service, hidden indexing layer, or long-term memory subsystem.
+**Rationale**: These inputs already exist in Boundline and can be made explicit without introducing a new search service, hidden indexing layer, or long-term memory subsystem.
 
 **Alternatives considered**:
-- Add a new repository-wide retrieval/indexing subsystem first: rejected because it increases complexity before Synod proves the value of explicit context on the current runtime path.
+- Add a new repository-wide retrieval/indexing subsystem first: rejected because it increases complexity before Boundline proves the value of explicit context on the current runtime path.
 - Ignore Canon and traces until later: rejected because the roadmap calls out those sources as part of the bounded context story.
 
 ## Decision 3: Represent credibility explicitly and block non-credible planning
@@ -34,7 +34,7 @@
 
 **Decision**: Reuse existing `plan`, `run`, `status`, `next`, and `inspect` output surfaces for context-pack projection rather than adding a new command.
 
-**Rationale**: The feature should change Synod’s operating model, not add another surface the operator must remember.
+**Rationale**: The feature should change Boundline’s operating model, not add another surface the operator must remember.
 
 **Alternatives considered**:
 - Add a dedicated `context` command first: rejected because it fragments the operator story and delays integration with the primary path.
@@ -48,7 +48,7 @@
 
 **Alternatives considered**:
 - Ignore compatibility surfaces completely: rejected because inspect and follow-through still need aligned explanation.
-- Move context assembly ownership to compatibility execution profiles: rejected because it would invert the current Synod product model.
+- Move context assembly ownership to compatibility execution profiles: rejected because it would invert the current Boundline product model.
 
 ## Decision 6: Keep implementation dependency-free within the current crate
 

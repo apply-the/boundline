@@ -6,16 +6,19 @@ use uuid::Uuid;
 use crate::cli::inspect;
 use crate::cli::session::build_status_view;
 use crate::cli::{CommandExitStatus, output};
+use crate::domain::limits::TerminalCondition;
 use crate::domain::session::{
     ActiveSessionRecord, RoutingMode, RoutingOutcome, RoutingSource, SessionStatus,
     task_state_governance_blocked_reason, task_state_governance_state_text,
 };
+use crate::domain::task::TaskStatus;
 use crate::domain::trace::current_timestamp_millis;
 use crate::domain::workflow::{
     WorkflowConditionKind, WorkflowDefinition, WorkflowDefinitionError, WorkflowLifecycleState,
     WorkflowPhase, WorkflowProgressState, WorkflowRegistry,
 };
 use crate::orchestrator::session_runtime::{SessionRuntime, SessionRuntimeError};
+use crate::orchestrator::terminal::build_terminal_reason;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkflowCommandReport {
@@ -29,7 +32,7 @@ pub fn execute_run(
     goal: Option<&str>,
 ) -> Result<WorkflowCommandReport, WorkflowCommandError> {
     let workspace = resolve_workspace(workspace)?;
-    let workflow_path = workspace.join(".synod/workflows.toml");
+    let workflow_path = workspace.join(".boundline/workflows.toml");
     let registry = match WorkflowRegistry::load(&workflow_path) {
         Ok(registry) => registry,
         Err(error) => {
@@ -41,7 +44,7 @@ pub fn execute_run(
         return Ok(blocked_definition_report(
             name,
             &workspace,
-            format!("workflow `{name}` is not defined in .synod/workflows.toml"),
+            format!("workflow `{name}` is not defined in .boundline/workflows.toml"),
         ));
     };
 
@@ -75,7 +78,7 @@ pub fn execute_list(
     workspace: Option<&Path>,
 ) -> Result<WorkflowCommandReport, WorkflowCommandError> {
     let workspace = resolve_workspace(workspace)?;
-    let workflow_path = workspace.join(".synod/workflows.toml");
+    let workflow_path = workspace.join(".boundline/workflows.toml");
 
     match WorkflowRegistry::load(&workflow_path) {
         Ok(registry) => Ok(render_workflow_discovery_report(
@@ -438,6 +441,23 @@ fn advance_workflow(
                 ));
             }
             WorkflowPhase::Govern => {
+                if govern_phase_completed(record) {
+                    if !record.latest_status.is_terminal() {
+                        let terminal_reason = build_terminal_reason(
+                            TerminalCondition::GoalSatisfied,
+                            "work completed successfully",
+                            None,
+                        );
+                        if let Some(task) = record.active_task.as_mut() {
+                            task.apply_terminal(TaskStatus::Succeeded, terminal_reason.clone());
+                        }
+                        record.latest_status = SessionStatus::Succeeded;
+                        record.latest_terminal_reason = Some(terminal_reason);
+                    }
+                    push_completed_phase(&mut completed_phases, WorkflowPhase::Govern);
+                    continue;
+                }
+
                 if should_resume_governed_execution(record) {
                     update_workflow_progress(
                         record,
@@ -571,7 +591,7 @@ fn render_workflow_discovery_report(
     }
 
     lines.push(format!(
-        "explanation: discovered {} workflow definition(s) in workspace {} for the primary Synod workflow surface",
+        "explanation: discovered {} workflow definition(s) in workspace {} for the primary Boundline workflow surface",
         entries.len(),
         workspace.display()
     ));
@@ -602,7 +622,7 @@ fn render_workflow_registry_error_report(
             format!("reason: {error}"),
             format!("next_command: {}", workflow_inspect_command(workspace)),
             format!(
-                "explanation: named workflow discovery is unavailable in workspace {} until .synod/workflows.toml is valid",
+                "explanation: named workflow discovery is unavailable in workspace {} until .boundline/workflows.toml is valid",
                 workspace.display()
             ),
         ]
@@ -754,7 +774,7 @@ fn load_workflow_definition(
     workspace: &Path,
     workflow_name: &str,
 ) -> Result<WorkflowDefinition, WorkflowDefinitionError> {
-    let registry = WorkflowRegistry::load(&workspace.join(".synod/workflows.toml"))?;
+    let registry = WorkflowRegistry::load(&workspace.join(".boundline/workflows.toml"))?;
     registry.workflow(workflow_name).cloned().ok_or_else(|| {
         WorkflowDefinitionError::MissingNamedWorkflow { workflow_name: workflow_name.to_string() }
     })
@@ -866,15 +886,11 @@ fn workflow_terminal_failure(record: &ActiveSessionRecord) -> Option<String> {
 fn should_resume_governed_execution(record: &ActiveSessionRecord) -> bool {
     record.active_task.is_some()
         && !record.latest_status.is_terminal()
-        && governance_state_in(
-            record,
-            &["pending_selection", "running", "governed_ready", "completed"],
-        )
+        && governance_state_in(record, &["pending_selection", "running"])
 }
 
 fn govern_phase_completed(record: &ActiveSessionRecord) -> bool {
-    record.latest_status.is_terminal()
-        && governance_state_in(record, &["governed_ready", "completed"])
+    governance_state_in(record, &["governed_ready", "completed"])
 }
 
 fn governance_state_in(record: &ActiveSessionRecord, expected_states: &[&str]) -> bool {
@@ -933,19 +949,19 @@ fn terminal_reason(record: &ActiveSessionRecord) -> Option<String> {
 }
 
 fn capture_command(workspace: &Path) -> String {
-    format!("synod capture --workspace {} --goal <goal>", workspace.display())
+    format!("boundline capture --workspace {} --goal <goal>", workspace.display())
 }
 
 fn workflow_resume_command(workspace: &Path) -> String {
-    format!("synod workflow resume --workspace {}", workspace.display())
+    format!("boundline workflow resume --workspace {}", workspace.display())
 }
 
 fn workflow_status_command(workspace: &Path) -> String {
-    format!("synod workflow status --workspace {}", workspace.display())
+    format!("boundline workflow status --workspace {}", workspace.display())
 }
 
 fn workflow_inspect_command(workspace: &Path) -> String {
-    format!("synod workflow inspect --workspace {}", workspace.display())
+    format!("boundline workflow inspect --workspace {}", workspace.display())
 }
 
 #[cfg(test)]
@@ -1000,7 +1016,7 @@ mod tests {
     impl TestWorkspace {
         fn new() -> Self {
             let path =
-                std::env::temp_dir().join(format!("synod-workflow-tests-{}", Uuid::new_v4()));
+                std::env::temp_dir().join(format!("boundline-workflow-tests-{}", Uuid::new_v4()));
             fs::create_dir_all(&path).unwrap();
             Self { path }
         }
@@ -1010,8 +1026,8 @@ mod tests {
         }
 
         fn write_registry(&self, contents: &str) {
-            fs::create_dir_all(self.path.join(".synod")).unwrap();
-            fs::write(self.path.join(".synod/workflows.toml"), contents).unwrap();
+            fs::create_dir_all(self.path.join(".boundline")).unwrap();
+            fs::write(self.path.join(".boundline/workflows.toml"), contents).unwrap();
         }
     }
 
@@ -1135,7 +1151,7 @@ mod tests {
                 runtime_preference: Some(GovernanceRuntimeKind::Local),
                 risk: Some("medium".to_string()),
                 zone: Some("delivery".to_string()),
-                owner: Some("synod".to_string()),
+                owner: Some("boundline".to_string()),
             }),
             resolution_state: AuthoredBriefResolutionState::Ready,
             clarification: None,
@@ -1186,7 +1202,7 @@ recommended_when = "bounded delivery needs follow-through"
         assert_eq!(ready_report.exit_status, CommandExitStatus::Succeeded);
         assert!(ready_report.terminal_output.contains("workflow registry status: ready"));
         assert!(ready_report.terminal_output.contains("workflow: default"));
-        assert!(ready_report.terminal_output.contains("primary Synod workflow surface"));
+        assert!(ready_report.terminal_output.contains("primary Boundline workflow surface"));
     }
 
     #[test]
@@ -1356,7 +1372,7 @@ summary = "Default workflow"
         assert!(
             missing_run
                 .terminal_output
-                .contains("workflow `missing` is not defined in .synod/workflows.toml")
+                .contains("workflow `missing` is not defined in .boundline/workflows.toml")
         );
 
         let runtime = SessionRuntime::for_workspace(workspace.path());
@@ -1806,10 +1822,10 @@ summary = "Default workflow"
             Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None));
         assert_eq!(terminal_reason(&record).as_deref(), Some("done"));
 
-        assert!(capture_command(workspace.path()).contains("synod capture --workspace"));
-        assert!(workflow_resume_command(workspace.path()).contains("synod workflow resume"));
-        assert!(workflow_status_command(workspace.path()).contains("synod workflow status"));
-        assert!(workflow_inspect_command(workspace.path()).contains("synod workflow inspect"));
+        assert!(capture_command(workspace.path()).contains("boundline capture --workspace"));
+        assert!(workflow_resume_command(workspace.path()).contains("boundline workflow resume"));
+        assert!(workflow_status_command(workspace.path()).contains("boundline workflow status"));
+        assert!(workflow_inspect_command(workspace.path()).contains("boundline workflow inspect"));
 
         let initialized = initialize_session(workspace.path());
         assert_eq!(initialized.latest_status, SessionStatus::Initialized);

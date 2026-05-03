@@ -1,13 +1,13 @@
 # Implementation Plan: Domain Agent Templates
 
-**Branch**: `038-domain-agent-templates` | **Date**: 2026-05-03 | **Spec**: [/Users/rt/workspace/synod/specs/038-domain-agent-templates/spec.md](/Users/rt/workspace/synod/specs/038-domain-agent-templates/spec.md)
+**Branch**: `038-domain-agent-templates` | **Date**: 2026-05-03 | **Spec**: [/Users/rt/workspace/boundline/specs/038-domain-agent-templates/spec.md](/Users/rt/workspace/boundline/specs/038-domain-agent-templates/spec.md)
 **Input**: Feature specification from `/specs/038-domain-agent-templates/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
 
 ## Summary
 
-Extend Synod's existing configuration, context assembly, and read-side CLI
+Extend Boundline's existing configuration, context assembly, and read-side CLI
 surfaces so bounded tasks can inherit a first-party domain-template catalog,
 layer shared and workspace-specific standards with explicit precedence, bind
 optional or required external context inputs, and reuse Canon-governed
@@ -22,12 +22,12 @@ modified Rust files.
 
 **Language/Version**: Rust 1.95.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, and collections APIs; no new runtime dependencies planned for this slice  
-**Storage**: Workspace-local `.synod/config.toml`, cluster-local `.synod/cluster.toml`, user-global config at `$XDG_CONFIG_HOME/synod/config.toml` or `$HOME/.config/synod/config.toml`, persisted session and trace state under `.synod/session.json` and `.synod/traces/`, optional `.synod/execution.json`, and repository docs plus assistant assets  
+**Storage**: Workspace-local `.boundline/config.toml`, cluster-local `.boundline/cluster.toml`, user-global config at `$XDG_CONFIG_HOME/boundline/config.toml` or `$HOME/.config/boundline/config.toml`, persisted session and trace state under `.boundline/session.json` and `.boundline/traces/`, optional `.boundline/execution.json`, and repository docs plus assistant assets  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, targeted unit, integration, and contract tests, `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features`, and `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`  
 **Target Platform**: macOS/Linux developer workstations and Linux CI  
 **Project Type**: Single Rust CLI/library crate with file-backed configuration, session, and trace state  
 **Execution Model**: Sequential session-native planning plus bounded observe -> decide -> act -> verify execution where domain guidance is selected from effective config and bounded task evidence, and planning stops explicitly when domain context is insufficient  
-**Observability Surface**: Persisted scoped config, goal-plan context packs, task-context state when present, execution traces under `.synod/traces/`, CLI summaries on `init`, `config show`, `plan`, `run`, `status`, `next`, and `inspect`, plus updated docs and assistant guidance  
+**Observability Surface**: Persisted scoped config, goal-plan context packs, task-context state when present, execution traces under `.boundline/traces/`, CLI summaries on `init`, `config show`, `plan`, `run`, `status`, `next`, and `inspect`, plus updated docs and assistant guidance  
 **Performance Goals**: Operators should identify the active domain family, standards precedence, and supporting external inputs from normal CLI output in under 2 minutes; `init` should seed the relevant workspace domain selections in under 15 minutes on representative repositories; release validation for the slice should complete in under 20 minutes  
 **Constraints**: No new orchestration runtime, no background workers, no hidden concurrency, no Canon-owned template selection, no requirement to execute every possible external context provider directly, no third-party template marketplace, and compatibility follow-up remains subordinate and trace-authoritative  
 **Scale/Scope**: One workspace or registered cluster at a time, a first-party catalog covering the declared major language and framework families, bounded per-task domain selection from existing targets and workspace evidence, and scoped standards plus external bindings resolved from global, cluster, and workspace config
@@ -36,7 +36,7 @@ modified Rust files.
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **PASS** Delivery identity: The slice directly improves bounded engineering-task delivery by letting Synod apply the correct domain guidance, local standards, and supporting context before and during execution. See Summary and Technical Context.
+- **PASS** Delivery identity: The slice directly improves bounded engineering-task delivery by letting Boundline apply the correct domain guidance, local standards, and supporting context before and during execution. See Summary and Technical Context.
 - **PASS** Delivery-first scope: The plan prioritizes init/config persistence, context assembly, planning gates, and execution/inspection surfaces ahead of documentation polish. See Summary, Technical Context, and research decisions.
 - **PASS** Primary workflow: The main operator path remains session-native `start -> capture -> plan -> run -> status -> next -> inspect`; explicit compatibility follow-up stays available but subordinate and trace-authoritative. See Summary, Technical Context, quickstart, and contracts.
 - **PASS** Bounded execution: Planning stops explicitly when no credible domain guidance or required supporting input exists; execution stays inside existing step and retry limits with no background activity. See Summary, Technical Context, contracts, and quickstart.

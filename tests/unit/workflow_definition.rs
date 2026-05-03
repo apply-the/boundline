@@ -1,4 +1,4 @@
-use synod::domain::workflow::{
+use boundline::domain::workflow::{
     WorkflowAvailabilityState, WorkflowDefinitionError, WorkflowPhase, WorkflowRegistry,
 };
 
@@ -11,7 +11,7 @@ use crate::workspace_fixture::{
 fn loads_valid_workflow_definition_from_workspace_file() {
     let workspace = temp_workflow_layer_workspace("workflow-definition-valid");
 
-    let registry = WorkflowRegistry::load(&workspace.join(".synod/workflows.toml")).unwrap();
+    let registry = WorkflowRegistry::load(&workspace.join(".boundline/workflows.toml")).unwrap();
     assert_eq!(registry.workflow_names(), vec!["default"]);
 
     let workflow = registry.workflow("default").unwrap();
@@ -35,7 +35,7 @@ fn loads_valid_workflow_definition_from_workspace_file() {
 fn rejects_unknown_phase_while_parsing_workflow_file() {
     let workspace = temp_invalid_workflow_layer_workspace("workflow-definition-invalid-phase");
 
-    let error = WorkflowRegistry::load(&workspace.join(".synod/workflows.toml")).unwrap_err();
+    let error = WorkflowRegistry::load(&workspace.join(".boundline/workflows.toml")).unwrap_err();
     assert!(matches!(error, WorkflowDefinitionError::ParseWorkflowDefinitions(_)));
 }
 
@@ -93,7 +93,7 @@ fn rejects_govern_phase_when_governance_is_not_allowed() {
 fn loads_optional_discovery_metadata_and_fallback_summary() {
     let workspace = temp_workflow_discovery_workspace("workflow-definition-discovery");
 
-    let registry = WorkflowRegistry::load(&workspace.join(".synod/workflows.toml")).unwrap();
+    let registry = WorkflowRegistry::load(&workspace.join(".boundline/workflows.toml")).unwrap();
     let entries = registry.discovery_entries(&workspace);
 
     let governed = entries.iter().find(|entry| entry.workflow_name == "governed-delivery").unwrap();
@@ -110,5 +110,5 @@ fn loads_optional_discovery_metadata_and_fallback_summary() {
     let quick_fix = entries.iter().find(|entry| entry.workflow_name == "quick-fix").unwrap();
     assert_eq!(quick_fix.summary, "bounded workflow covering capture -> plan -> run -> inspect");
     assert!(quick_fix.recommended_when.is_none());
-    assert!(quick_fix.invocation_command.contains("synod workflow run quick-fix --workspace "));
+    assert!(quick_fix.invocation_command.contains("boundline workflow run quick-fix --workspace "));
 }

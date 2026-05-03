@@ -2,11 +2,11 @@
 
 ## Purpose
 
-Defines the persisted shape and behavioral guarantees of the workspace-scoped session record stored for active Synod work.
+Defines the persisted shape and behavioral guarantees of the workspace-scoped session record stored for active Boundline work.
 
 ## Storage Location
 
-- The active session record MUST live at `<workspace>/.synod/session.json`.
+- The active session record MUST live at `<workspace>/.boundline/session.json`.
 - The file MUST be human-readable JSON.
 - The session record MUST remain local to the workspace and MUST NOT require an external service.
 

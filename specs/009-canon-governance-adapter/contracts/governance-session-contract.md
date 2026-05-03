@@ -6,14 +6,14 @@ Define the user-visible session and terminal output fields that expose governed 
 
 ## Session View Fields
 
-When governance state exists for the active task, Synod projects the following optional fields:
+When governance state exists for the active task, Boundline projects the following optional fields:
 
 - `latest_governance_stage`: Stable stage key such as `bug-fix:implement`
 - `latest_governance_runtime`: `local` or `canon`
 - `latest_governance_state`: `pending_selection`, `running`, `governed_ready`, `awaiting_approval`, `blocked`, `completed`, or `failed`
 - `latest_governance_mode`: Canon mode when the Canon runtime is active
 - `latest_governance_run_ref`: Canon run identifier when a Canon run exists
-- `latest_governance_packet_ref`: Reference to the governed packet reused by Synod
+- `latest_governance_packet_ref`: Reference to the governed packet reused by Boundline
 - `latest_governance_packet_source_stage`: Source stage that produced the reused governed packet when reuse occurred
 - `latest_governance_packet_binding_reason`: Why the packet was reused, such as `same_stage_rerun` or `upstream_stage_context`
 - `latest_governance_approval`: `not_needed`, `requested`, `granted`, `rejected`, or `expired`
@@ -31,7 +31,7 @@ When governance state exists for the active task, Synod projects the following o
 - `next_command` must remain aligned with governance state:
   - For `awaiting_approval`, it should guide the operator toward `status` or `inspect` rather than continuing execution blindly.
   - For `blocked`, it should guide the operator toward the safest inspection or correction command.
-  - For `completed` or `governed_ready`, it should continue the normal Synod flow.
+  - For `completed` or `governed_ready`, it should continue the normal Boundline flow.
 - When the current state is `awaiting_approval`, a later `status`, `step`, or `run` invocation must refresh approval state before rendering a continuation hint.
 
 ## Inspect Expectations

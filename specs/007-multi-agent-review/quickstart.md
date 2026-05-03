@@ -3,13 +3,13 @@
 ## Prerequisites
 
 - Work from the repository root.
-- Use a clean workspace or start with no active `.synod/session.json`.
-- Provide `.synod/execution.json` in the target workspace with a bounded review configuration.
-- Run commands through `cargo run --bin synod -- ...` when validating locally.
+- Use a clean workspace or start with no active `.boundline/session.json`.
+- Provide `.boundline/execution.json` in the target workspace with a bounded review configuration.
+- Run commands through `cargo run --bin boundline -- ...` when validating locally.
 
 ## Example review configuration
 
-Create `.synod/execution.json` in a small Rust workspace:
+Create `.boundline/execution.json` in a small Rust workspace:
 
 ```json
 {
@@ -59,13 +59,13 @@ Create `.synod/execution.json` in a small Rust workspace:
 1. Execute a delivery run against the workspace:
 
    ```bash
-   cargo run --bin synod -- run --goal "Fix the failing add test" --workspace <workspace>
+   cargo run --bin boundline -- run --goal "Fix the failing add test" --workspace <workspace>
    ```
 
 2. Inspect the latest trace:
 
    ```bash
-   cargo run --bin synod -- inspect --workspace <workspace>
+   cargo run --bin boundline -- inspect --workspace <workspace>
    ```
 
 Expected outcome:
@@ -82,7 +82,7 @@ Expected outcome:
 
 Expected outcome:
 
-- Synod records the initial conflicting findings.
+- Boundline records the initial conflicting findings.
 - The first vote indicates that adjudication is required.
 - One bounded adjudication step runs and produces the final review decision.
 - The trace shows both the original vote and the adjudication result.
@@ -94,7 +94,7 @@ Expected outcome:
 
 Expected outcome:
 
-- Synod does not silently approve the result.
+- Boundline does not silently approve the result.
 - The run terminates with an explicit escalated or failed review outcome.
 - `status`, `next`, and `inspect` surface the latest review outcome and the reason it was not accepted.
 

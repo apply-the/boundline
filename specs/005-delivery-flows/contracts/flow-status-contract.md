@@ -2,9 +2,9 @@
 
 ## Status Surface
 
-When an active session has a selected flow, `synod status` must expose flow-specific progress in addition to the existing session fields.
+When an active session has a selected flow, `boundline status` must expose flow-specific progress in addition to the existing session fields.
 
-These flow-specific fields appear in the rendered output of `synod status` and in the shared session-status view consumed by `synod next`. When no flow is active, these fields are omitted rather than rendered as empty placeholders.
+These flow-specific fields appear in the rendered output of `boundline status` and in the shared session-status view consumed by `boundline next`. When no flow is active, these fields are omitted rather than rendered as empty placeholders.
 
 ### Required Fields
 
@@ -26,13 +26,13 @@ current_stage: investigate
 stage_progress: 1/3
 current_step: investigate-analyze
 latest_status: planned
-next_command: synod step
+next_command: boundline step
 explanation: current active session state for the workspace
 ```
 
 ## Next Surface
 
-When an active session has a selected flow, `synod next` must:
+When an active session has a selected flow, `boundline next` must:
 
 - Consider the current stage before recommending the next command.
 - Keep guidance within the active stage after retryable or replannable failure.

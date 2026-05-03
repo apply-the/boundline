@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-05-03
-**Feature**: [/Users/rt/workspace/synod/specs/036-canon-grounded-memory/spec.md](/Users/rt/workspace/synod/specs/036-canon-grounded-memory/spec.md)
+**Feature**: [/Users/rt/workspace/boundline/specs/036-canon-grounded-memory/spec.md](/Users/rt/workspace/boundline/specs/036-canon-grounded-memory/spec.md)
 
 ## Content Quality
 

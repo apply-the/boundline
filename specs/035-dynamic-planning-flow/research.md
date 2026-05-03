@@ -22,7 +22,7 @@
   negotiation projections, latest trace evidence, and goal language as one
   signal rather than the only one.
 - **Rationale**: The pre-035 behavior chooses a flow from goal keywords and then
-  shapes the plan almost statically. Evidence scoring lets Synod prefer bug-fix
+  shapes the plan almost statically. Evidence scoring lets Boundline prefer bug-fix
   when it sees failing-test or trace signals, prefer change when workspace and
   selected targets point to bounded code additions, and prefer delivery only
   when the evidence indicates cross-cutting completion work.
@@ -32,7 +32,7 @@
   - Require explicit flow selection for every plan. Rejected because it removes
     the planning assistance that the feature is meant to improve.
 
-## Decision 3: Use `synod plan` as proposal, `synod plan --confirm` as commit point
+## Decision 3: Use `boundline plan` as proposal, `boundline plan --confirm` as commit point
 
 - **Decision**: Keep the existing `plan` command as the operator-facing entry
   point, but change its semantics so the default invocation produces a proposal,

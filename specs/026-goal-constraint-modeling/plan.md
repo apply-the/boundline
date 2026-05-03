@@ -1,6 +1,6 @@
 # Implementation Plan: Goal Negotiation And Constraint Modeling
 
-**Branch**: `026-goal-constraint-modeling` | **Date**: 2026-05-01 | **Spec**: [/Users/rt/workspace/synod/specs/026-goal-constraint-modeling/spec.md](/Users/rt/workspace/synod/specs/026-goal-constraint-modeling/spec.md)
+**Branch**: `026-goal-constraint-modeling` | **Date**: 2026-05-01 | **Spec**: [/Users/rt/workspace/boundline/specs/026-goal-constraint-modeling/spec.md](/Users/rt/workspace/boundline/specs/026-goal-constraint-modeling/spec.md)
 **Input**: Feature specification from `/specs/026-goal-constraint-modeling/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
@@ -20,7 +20,7 @@ modified Rust files, clippy cleanup, and formatting.
 
 **Language/Version**: Rust 1.95.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, and collections APIs; no new runtime dependencies planned for this slice  
-**Storage**: Workspace-local `.synod/session.json`, `.synod/traces/`, task-context state embedded in persisted session tasks, optional cluster projection in primary-workspace session state, and release-aligned repository docs plus assistant assets  
+**Storage**: Workspace-local `.boundline/session.json`, `.boundline/traces/`, task-context state embedded in persisted session tasks, optional cluster projection in primary-workspace session state, and release-aligned repository docs plus assistant assets  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --no-run --all-targets`, targeted unit, integration, and contract coverage for negotiated capture, planning gate, and follow-up rendering, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, and `cargo nextest run --workspace --all-features`  
 **Target Platform**: macOS/Linux developer workstations and Linux CI
 **Project Type**: Single Rust CLI/library crate with file-backed session and trace state  
@@ -34,16 +34,16 @@ modified Rust files, clippy cleanup, and formatting.
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **PASS** Delivery identity: The slice directly improves bounded engineering-task delivery by making the goal-to-plan boundary explicit and challengeable before code mutation begins. See Summary, Technical Context, and [spec.md](/Users/rt/workspace/synod/specs/026-goal-constraint-modeling/spec.md).
+- **PASS** Delivery identity: The slice directly improves bounded engineering-task delivery by making the goal-to-plan boundary explicit and challengeable before code mutation begins. See Summary, Technical Context, and [spec.md](/Users/rt/workspace/boundline/specs/026-goal-constraint-modeling/spec.md).
 - **PASS** Delivery-first scope: The plan centers on capture, planning, follow-up authority, and validation surfaces first; release polish is a closeout phase, not the feature core. See Summary and Technical Context.
 - **PASS** Primary workflow: Session-native remains the main operator path, while explicit compatibility behavior stays visible and separate instead of becoming an implicit negotiation authority. See Summary, Technical Context, research, and quickstart.
 - **PASS** Bounded execution: Negotiation happens once during capture, planning stays blocked on unresolved ambiguity, and the slice does not introduce open-ended loops or hidden background reasoning. See Technical Context, research, data model, and quickstart.
 - **PASS** Stateful execution: Negotiation output is persisted in session state, projected into task context and traces when execution proceeds, and reused by follow-up surfaces. See Summary, Technical Context, research, and data model.
 - **PASS** Mutable planning: The plan preserves the current plan/replan behavior while making the acceptance boundary and active constraints inspectable before and after any replanning step. See Summary, research, and data model.
-- **PASS** Sequential-first design: One session, one active step, and one negotiation authority remain live at a time; the slice explicitly rejects background negotiation loops or distributed control flow. See Technical Context, research, and [spec.md](/Users/rt/workspace/synod/specs/026-goal-constraint-modeling/spec.md).
+- **PASS** Sequential-first design: One session, one active step, and one negotiation authority remain live at a time; the slice explicitly rejects background negotiation loops or distributed control flow. See Technical Context, research, and [spec.md](/Users/rt/workspace/boundline/specs/026-goal-constraint-modeling/spec.md).
 - **PASS** Tool-agent symmetry: Reasoning stays explicit through negotiated summaries, constraints, and tradeoff traces, while action remains in the existing capture/plan/run flow rather than being hidden behind a new opaque subsystem. See Summary, research, contracts, and quickstart.
 - **PASS** Observability and explicit intelligence: Negotiation packet creation, blocking constraints, selected tradeoffs, and route ownership remain visible through session state, traces, and CLI summaries. See Technical Context, research, quickstart, and contracts.
-- **PASS** Non-goals and external separation: The slice does not require Canon to negotiate plans, does not introduce councils or voting, does not expand provider abstraction, and does not add UI, deployment, or long-term memory surfaces. See Constraints, research, and [spec.md](/Users/rt/workspace/synod/specs/026-goal-constraint-modeling/spec.md).
+- **PASS** Non-goals and external separation: The slice does not require Canon to negotiate plans, does not introduce councils or voting, does not expand provider abstraction, and does not add UI, deployment, or long-term memory surfaces. See Constraints, research, and [spec.md](/Users/rt/workspace/boundline/specs/026-goal-constraint-modeling/spec.md).
 - **PASS** Minimal slice: The smallest independently valuable capability is one explicit negotiated delivery packet that gates planning and remains visible through existing follow-up surfaces. See Summary and research.
 
 ## Project Structure

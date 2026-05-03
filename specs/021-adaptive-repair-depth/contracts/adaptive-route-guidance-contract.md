@@ -9,7 +9,7 @@ Define how adaptive compatibility execution must be explained when the same work
 
 ## Route Guarantees
 
-- Adaptive execution remains an explicit compatibility path backed by `.synod/execution.json` for this slice.
+- Adaptive execution remains an explicit compatibility path backed by `.boundline/execution.json` for this slice.
 - Session-native workflows remain available when invoked, but they must not be described as owning an active adaptive compatibility run.
 - Review or governance projection may appear in the same summaries when configured, but those surfaces must remain additive and must not replace the adaptive route explanation.
 

@@ -2,13 +2,13 @@
 
 ## Purpose
 
-Define how the first bounded Canon governance expansion widens Synod's supported stage-to-mode surface without changing the built-in flow model.
+Define how the first bounded Canon governance expansion widens Boundline's supported stage-to-mode surface without changing the built-in flow model.
 
 ## Rules
 
 ### Rule 1: Built-in flow names remain unchanged
 
-The first slice MUST keep Synod's existing built-in flows:
+The first slice MUST keep Boundline's existing built-in flows:
 
 - `bug-fix`
 - `change`
@@ -30,7 +30,7 @@ The first slice MUST only allow `security-assessment` on the targeted verificati
 
 ### Rule 4: Unsupported mode requests fail explicitly
 
-If a stage binds a Canon mode outside the bounded expansion, Synod MUST reject it explicitly instead of forwarding it as unchecked Canon configuration.
+If a stage binds a Canon mode outside the bounded expansion, Boundline MUST reject it explicitly instead of forwarding it as unchecked Canon configuration.
 
 ### Rule 5: The model must stay extensible for `supply-chain-analysis`
 
@@ -42,7 +42,7 @@ The widened mode-selection and operator-surface model MUST leave room for a late
 
 **Given** a `bug-fix:verify` stage with Canon governance enabled
 
-**When** Synod validates the stage policy
+**When** Boundline validates the stage policy
 
 **Then** `security-assessment` may be selected when the stage satisfies the bounded expansion rules
 
@@ -50,7 +50,7 @@ The widened mode-selection and operator-surface model MUST leave room for a late
 
 **Given** a stage policy that requests `incident` or `migration`
 
-**When** Synod validates the policy
+**When** Boundline validates the policy
 
 **Then** it rejects the configuration explicitly because those modes are outside the current slice
 
@@ -60,4 +60,4 @@ The widened mode-selection and operator-surface model MUST leave room for a late
 
 **When** a later feature adds `supply-chain-analysis`
 
-**Then** the operator-surface and mode-selection model can widen without changing Synod's top-level flow names
+**Then** the operator-surface and mode-selection model can widen without changing Boundline's top-level flow names

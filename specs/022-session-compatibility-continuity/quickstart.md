@@ -6,12 +6,12 @@
 ## Scenario 1: Show Compatibility Follow-Up Without Replacing Native Session State
 
 ```bash
-cd /tmp/synod-session-compatibility-continuity
-cargo run --bin synod -- start --workspace .
-cargo run --bin synod -- capture --workspace . --goal "Fix the failing add test"
-cargo run --bin synod -- plan --workspace . --flow bug-fix
-cargo run --bin synod -- run --workspace . --goal "Fix the failing add test"
-cargo run --bin synod -- status --workspace .
+cd /tmp/boundline-session-compatibility-continuity
+cargo run --bin boundline -- start --workspace .
+cargo run --bin boundline -- capture --workspace . --goal "Fix the failing add test"
+cargo run --bin boundline -- plan --workspace . --flow bug-fix
+cargo run --bin boundline -- run --workspace . --goal "Fix the failing add test"
+cargo run --bin boundline -- status --workspace .
 ```
 
 **Expected**:
@@ -22,10 +22,10 @@ cargo run --bin synod -- status --workspace .
 ## Scenario 2: Recommend Inspect-Oriented Continuity When No Compatibility Session Exists
 
 ```bash
-cd /tmp/synod-session-compatibility-continuity
-cargo run --bin synod -- run --workspace . --goal "Fix the failing add test"
-cargo run --bin synod -- next --workspace .
-cargo run --bin synod -- inspect --workspace .
+cd /tmp/boundline-session-compatibility-continuity
+cargo run --bin boundline -- run --workspace . --goal "Fix the failing add test"
+cargo run --bin boundline -- next --workspace .
+cargo run --bin boundline -- inspect --workspace .
 ```
 
 **Expected**:
@@ -36,13 +36,13 @@ cargo run --bin synod -- inspect --workspace .
 ## Scenario 3: Reuse Shared Summary Wording Across Routes
 
 ```bash
-cd /tmp/synod-session-compatibility-continuity
-cargo run --bin synod -- run --workspace . --goal "Recover after adaptive validation points to helper.rs"
-cargo run --bin synod -- inspect --workspace .
-cargo run --bin synod -- start --workspace .
-cargo run --bin synod -- capture --workspace . --goal "Recover after adaptive validation points to helper.rs"
-cargo run --bin synod -- plan --workspace . --flow bug-fix
-cargo run --bin synod -- run --workspace .
+cd /tmp/boundline-session-compatibility-continuity
+cargo run --bin boundline -- run --workspace . --goal "Recover after adaptive validation points to helper.rs"
+cargo run --bin boundline -- inspect --workspace .
+cargo run --bin boundline -- start --workspace .
+cargo run --bin boundline -- capture --workspace . --goal "Recover after adaptive validation points to helper.rs"
+cargo run --bin boundline -- plan --workspace . --flow bug-fix
+cargo run --bin boundline -- run --workspace .
 ```
 
 **Expected**:

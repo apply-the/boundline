@@ -5,13 +5,13 @@
 
 ## Summary
 
-Replace the current fixture-only vertical slice with a workspace execution profile that still uses the existing orchestrator, session model, and trace store but can read workspace files, apply bounded multi-file change sets, record diff-style change evidence, run validation commands, and retry or replan within explicit delivery limits. The minimal slice keeps execution sequential, supports the new `.synod/execution.json` manifest with backward compatibility for legacy `.synod/fixture.json`, and makes `run`, session planning, status, and inspect surfaces reflect real delivery evidence instead of only fixture patch results.
+Replace the current fixture-only vertical slice with a workspace execution profile that still uses the existing orchestrator, session model, and trace store but can read workspace files, apply bounded multi-file change sets, record diff-style change evidence, run validation commands, and retry or replan within explicit delivery limits. The minimal slice keeps execution sequential, supports the new `.boundline/execution.json` manifest with backward compatibility for legacy `.boundline/fixture.json`, and makes `run`, session planning, status, and inspect surfaces reflect real delivery evidence instead of only fixture patch results.
 
 ## Technical Context
 
 **Language/Version**: Rust 1.95.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`) plus Rust standard library process and filesystem APIs; no new runtime dependencies for the initial execution-engine slice  
-**Storage**: Workspace-local JSON session record at `<workspace>/.synod/session.json`, persisted execution traces under `<workspace>/.synod/traces/`, and workspace execution manifests under `<workspace>/.synod/execution.json` with legacy fallback to `<workspace>/.synod/fixture.json`  
+**Storage**: Workspace-local JSON session record at `<workspace>/.boundline/session.json`, persisted execution traces under `<workspace>/.boundline/traces/`, and workspace execution manifests under `<workspace>/.boundline/execution.json` with legacy fallback to `<workspace>/.boundline/fixture.json`  
 **Testing**: `cargo test --all-targets`, contract and integration coverage for execution manifests and delivery traces, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, `cargo fmt --check`, and `cargo clippy --workspace --all-targets --all-features -- -D warnings`  
 **Target Platform**: macOS and Linux developer workstations plus Linux CI via the existing GitHub Actions workflows  
 **Project Type**: Single Rust CLI crate with file-backed session and trace persistence plus repository-managed assistant assets  
@@ -25,7 +25,7 @@ Replace the current fixture-only vertical slice with a workspace execution profi
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- Delivery identity: PASS. The feature directly upgrades Synod from orchestration-only behavior to working-code delivery in the active workspace.
+- Delivery identity: PASS. The feature directly upgrades Boundline from orchestration-only behavior to working-code delivery in the active workspace.
 - Delivery-first scope: PASS. The plan prioritizes file mutation, validation, terminal handling, and inspectable evidence before any optimization or later review features.
 - Bounded execution: PASS. Delivery attempts, retries, replans, validation runs, and terminal outcomes remain controlled by the existing explicit run limits and terminal conditions.
 - Stateful execution: PASS. Session state, task context, latest validation outcomes, change evidence, and traces all stay inside the existing shared session and trace surfaces.

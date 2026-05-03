@@ -1,10 +1,10 @@
-use synod::domain::cluster::{
+use boundline::domain::cluster::{
     ClusterConfigFile, ClusterDeliveryStory, ClusterFollowUpAuthority, ClusterMemberRegistration,
     ClusterMemberRole, ClusterRouteOwner, ClusterSessionProjection, ClusteredExecutionCondition,
     ClusteredExecutionKind, WorkspaceCluster, WorkspaceParticipationKind,
     WorkspaceParticipationRecord,
 };
-use synod::domain::configuration::{ModelRoute, RoutingConfig, RuntimeKind};
+use boundline::domain::configuration::{ModelRoute, RoutingConfig, RuntimeKind};
 
 fn valid_cluster() -> WorkspaceCluster {
     WorkspaceCluster {
@@ -113,7 +113,7 @@ fn cluster_delivery_story_requires_member_backed_authority_and_participation() {
 #[test]
 fn cluster_follow_up_authority_requires_visible_workspace_and_next_command() {
     let authority = ClusterFollowUpAuthority {
-        authority_kind: synod::domain::cluster::ClusterAuthorityKind::InspectOnly,
+        authority_kind: boundline::domain::cluster::ClusterAuthorityKind::InspectOnly,
         route_owner: ClusterRouteOwner::Compatibility,
         authoritative_workspace_ref: String::new(),
         continuity_reason: String::new(),

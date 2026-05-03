@@ -1,13 +1,13 @@
-use serde_json::json;
-use synod::domain::goal_plan::{GoalPlan, InferredFlow, PlannedTask};
-use synod::domain::limits::RunLimits;
-use synod::domain::plan::Plan;
-use synod::domain::session::{
+use boundline::domain::goal_plan::{GoalPlan, InferredFlow, PlannedTask};
+use boundline::domain::limits::RunLimits;
+use boundline::domain::plan::Plan;
+use boundline::domain::session::{
     ActiveSessionRecord, RoutingMode, RoutingSource, SessionStatus, execution_path_text,
     routing_outcome,
 };
-use synod::domain::step::Step;
-use synod::domain::task::{Task, TaskRunRequest};
+use boundline::domain::step::Step;
+use boundline::domain::task::{Task, TaskRunRequest};
+use serde_json::json;
 
 fn build_task(workspace_ref: &str) -> Task {
     let request = TaskRunRequest {
@@ -51,7 +51,7 @@ fn build_goal_plan(confirmed: bool) -> GoalPlan {
 fn execution_path_prefers_pending_native_goal_plan_over_fixture_state() {
     let record = ActiveSessionRecord {
         session_id: "session-native".to_string(),
-        workspace_ref: "/tmp/synod-session-model".to_string(),
+        workspace_ref: "/tmp/boundline-session-model".to_string(),
         goal: Some("Fix the failing add test".to_string()),
         authored_brief: None,
         negotiation_packet: None,
@@ -76,7 +76,7 @@ fn execution_path_prefers_pending_native_goal_plan_over_fixture_state() {
 
 #[test]
 fn execution_path_uses_fixture_compatibility_when_only_task_state_exists() {
-    let workspace_ref = "/tmp/synod-session-model";
+    let workspace_ref = "/tmp/boundline-session-model";
     let record = ActiveSessionRecord {
         session_id: "session-fixture".to_string(),
         workspace_ref: workspace_ref.to_string(),
@@ -91,7 +91,7 @@ fn execution_path_uses_fixture_compatibility_when_only_task_state_exists() {
         active_flow_policy: None,
         latest_status: SessionStatus::Running,
         latest_terminal_reason: None,
-        latest_trace_ref: Some(format!("{workspace_ref}/.synod/traces/task-1.json")),
+        latest_trace_ref: Some(format!("{workspace_ref}/.boundline/traces/task-1.json")),
         created_at: 10,
         updated_at: 20,
     };
@@ -103,7 +103,7 @@ fn execution_path_uses_fixture_compatibility_when_only_task_state_exists() {
 fn execution_path_marks_goal_captured_sessions_as_pending_plan() {
     let record = ActiveSessionRecord {
         session_id: "session-captured".to_string(),
-        workspace_ref: "/tmp/synod-session-model".to_string(),
+        workspace_ref: "/tmp/boundline-session-model".to_string(),
         goal: Some("Implement the workspace summary".to_string()),
         authored_brief: None,
         negotiation_packet: None,
@@ -127,7 +127,7 @@ fn execution_path_marks_goal_captured_sessions_as_pending_plan() {
 fn routing_outcome_blocks_when_plan_confirmation_is_pending() {
     let record = ActiveSessionRecord {
         session_id: "session-native".to_string(),
-        workspace_ref: "/tmp/synod-session-model".to_string(),
+        workspace_ref: "/tmp/boundline-session-model".to_string(),
         goal: Some("Fix the failing add test".to_string()),
         authored_brief: None,
         negotiation_packet: None,
@@ -154,7 +154,7 @@ fn routing_outcome_blocks_when_plan_confirmation_is_pending() {
 fn routing_outcome_prefers_native_goal_plan_when_plan_is_confirmed() {
     let record = ActiveSessionRecord {
         session_id: "session-native".to_string(),
-        workspace_ref: "/tmp/synod-session-model".to_string(),
+        workspace_ref: "/tmp/boundline-session-model".to_string(),
         goal: Some("Fix the failing add test".to_string()),
         authored_brief: None,
         negotiation_packet: None,

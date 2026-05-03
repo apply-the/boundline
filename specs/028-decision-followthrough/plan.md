@@ -1,6 +1,6 @@
 # Implementation Plan: Decision Continuity And Guided Follow-Through
 
-**Branch**: `028-decision-followthrough` | **Date**: 2026-05-01 | **Spec**: [/Users/rt/workspace/synod/specs/028-decision-followthrough/spec.md](/Users/rt/workspace/synod/specs/028-decision-followthrough/spec.md)
+**Branch**: `028-decision-followthrough` | **Date**: 2026-05-01 | **Spec**: [/Users/rt/workspace/boundline/specs/028-decision-followthrough/spec.md](/Users/rt/workspace/boundline/specs/028-decision-followthrough/spec.md)
 **Input**: Feature specification from `/specs/028-decision-followthrough/spec.md`
 
 **Note**: This plan keeps the 028 slice inside the current session-native and
@@ -12,7 +12,7 @@ the existing read-side surfaces.
 
 Project one explicit follow-through story through `status`, `next`, and
 `inspect` by combining persisted session continuity with authoritative trace
-evidence, so operators can see what Synod should do next and why that next
+evidence, so operators can see what Boundline should do next and why that next
 step is credible. The slice stays inside the current CLI, session, trace, and
 assistant-guidance surfaces, preserves explicit native versus compatibility
 authority, and closes as `0.28.0` with version bump, impacted docs, changelog,
@@ -28,7 +28,7 @@ coverage refresh for touched Rust files, clippy cleanup, and formatting.
 
 **Language/Version**: Rust 1.95.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for the first slice  
-**Storage**: Workspace-local `.synod/session.json`, persisted execution traces under `<workspace>/.synod/traces/`, optional `.synod/execution.json`, optional `.synod/workflows.toml`, optional cluster state under `.synod/cluster.toml`, and repository-managed assistant assets under `assistant/`  
+**Storage**: Workspace-local `.boundline/session.json`, persisted execution traces under `<workspace>/.boundline/traces/`, optional `.boundline/execution.json`, optional `.boundline/workflows.toml`, optional cluster state under `.boundline/cluster.toml`, and repository-managed assistant assets under `assistant/`  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --no-run --all-targets`, targeted unit/contract/integration tests for follow-through guidance and continuity authority, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, and focused regression checks for touched CLI and domain slices  
 **Target Platform**: macOS/Linux developer workstations and Linux CI
 **Project Type**: Single Rust CLI/library crate with file-backed session and trace state plus repository-managed assistant command packs  
@@ -42,7 +42,7 @@ coverage refresh for touched Rust files, clippy cleanup, and formatting.
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **PASS** Delivery identity: The slice improves bounded engineering-task delivery by making the next bounded action and its supporting evidence visible on the existing follow-up surfaces instead of forcing manual reconstruction from raw state. See Summary, Technical Context, and [/Users/rt/workspace/synod/specs/028-decision-followthrough/spec.md](/Users/rt/workspace/synod/specs/028-decision-followthrough/spec.md).
+- **PASS** Delivery identity: The slice improves bounded engineering-task delivery by making the next bounded action and its supporting evidence visible on the existing follow-up surfaces instead of forcing manual reconstruction from raw state. See Summary, Technical Context, and [/Users/rt/workspace/boundline/specs/028-decision-followthrough/spec.md](/Users/rt/workspace/boundline/specs/028-decision-followthrough/spec.md).
 - **PASS** Delivery-first scope: The plan centers on execution follow-through, continuity evidence, and stop-condition clarity first; release polish remains a closeout phase rather than the feature core. See Summary and Technical Context.
 - **PASS** Primary workflow: Session-native remains the default operator path, while explicit compatibility follow-up stays visibly separate and authoritative only when the latest trace owns continuity. See Summary, Technical Context, research, and quickstart.
 - **PASS** Bounded execution: The feature reuses the current sequential runtime, existing run limits, and explicit stop conditions instead of introducing loops or silent recovery. See Technical Context, research, and quickstart.

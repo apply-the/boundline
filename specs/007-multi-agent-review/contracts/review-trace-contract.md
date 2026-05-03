@@ -48,7 +48,7 @@ The vote-resolution payload MUST expose:
 
 ## Inspect output requirements
 
-`synod inspect` MUST make the following information visible after a review phase:
+`boundline inspect` MUST make the following information visible after a review phase:
 
 - the review trigger
 - the participating reviewers
@@ -59,7 +59,7 @@ The vote-resolution payload MUST expose:
 
 ## Session status projection
 
-When a session-backed delivery task has review evidence, `synod status` SHOULD surface:
+When a session-backed delivery task has review evidence, `boundline status` SHOULD surface:
 
 - the latest review trigger
 - the latest review vote summary

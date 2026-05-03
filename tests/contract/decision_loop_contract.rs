@@ -3,17 +3,17 @@ use std::path::PathBuf;
 
 use uuid::Uuid;
 
+use boundline::adapters::agent::FnAgentAdapter;
+use boundline::adapters::tool::FnToolAdapter;
+use boundline::adapters::trace_store::FileTraceStore;
+use boundline::domain::decision::{ActionSelector, DecisionStatus, DecisionType};
+use boundline::domain::flow_policy::FlowPolicy;
+use boundline::domain::goal_plan::{GoalPlan, PlannedTask};
+use boundline::domain::step::{ErrorInfo, Recoverability, StepExecutionResult};
+use boundline::orchestrator::decision_loop::{DecisionLoop, LoopTerminal};
+use boundline::registry::agent_registry::AgentRegistry;
+use boundline::registry::tool_registry::ToolRegistry;
 use serde_json::json;
-use synod::adapters::agent::FnAgentAdapter;
-use synod::adapters::tool::FnToolAdapter;
-use synod::adapters::trace_store::FileTraceStore;
-use synod::domain::decision::{ActionSelector, DecisionStatus, DecisionType};
-use synod::domain::flow_policy::FlowPolicy;
-use synod::domain::goal_plan::{GoalPlan, PlannedTask};
-use synod::domain::step::{ErrorInfo, Recoverability, StepExecutionResult};
-use synod::orchestrator::decision_loop::{DecisionLoop, LoopTerminal};
-use synod::registry::agent_registry::AgentRegistry;
-use synod::registry::tool_registry::ToolRegistry;
 
 fn temp_workspace(prefix: &str) -> PathBuf {
     let ws = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));

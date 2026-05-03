@@ -6,7 +6,13 @@ use serde::Serialize;
 use serde_json::{Map, Value, json};
 use thiserror::Error;
 
+use crate::adapters::cluster_store::FileClusterStore;
+use crate::adapters::config_store::FileConfigStore;
 use crate::adapters::trace_store::TraceStore;
+use crate::domain::configuration::{
+    RoutingOverrides, resolve_effective_routing, resolve_effective_runtime_capabilities,
+    resolve_effective_slot_effort_policies,
+};
 use crate::domain::decision::{
     ActionSelector, Decision, DecisionError, DecisionStatus, DecisionType, EvidenceRef,
 };
@@ -14,6 +20,7 @@ use crate::domain::flow_policy::{FlowPolicy, FlowPolicyError};
 use crate::domain::goal_plan::{GoalPlan, PlannedTask};
 use crate::domain::governance::{CompactedCanonMemory, MemoryCredibilityState};
 use crate::domain::limits::RunLimits;
+use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::step::{
     ErrorInfo, ExecutionStatus, Recoverability, StepExecutionRequest, StepExecutionResult, StepKind,
 };
@@ -29,6 +36,7 @@ struct DecisionActionInput<'a> {
     target: &'a str,
     rationale: &'a str,
     expected_outcome: &'a str,
+    force_retry_once: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -102,6 +110,17 @@ where
         workspace_ref: &str,
         session_id: &str,
     ) -> Result<(LoopTerminal, Vec<Decision>, ExecutionTrace), DecisionLoopError> {
+        self.run_with_options(plan, flow_policy, workspace_ref, session_id, false)
+    }
+
+    pub fn run_with_options(
+        &self,
+        plan: &GoalPlan,
+        flow_policy: Option<&FlowPolicy>,
+        workspace_ref: &str,
+        session_id: &str,
+        enable_flow_retry_probe: bool,
+    ) -> Result<(LoopTerminal, Vec<Decision>, ExecutionTrace), DecisionLoopError> {
         let mut trace = ExecutionTrace::new(
             session_id.to_string(),
             session_id.to_string(),
@@ -131,6 +150,7 @@ where
                     .context_pack
                     .as_ref()
                     .and_then(|pack| pack.staleness_reason.clone()),
+                "routing_projection": workspace_routing_projection(Path::new(workspace_ref)),
                 "canon_memory_summary": plan
                     .compacted_canon_memory
                     .as_ref()
@@ -294,7 +314,8 @@ where
 
             // Simulate tool execution: in the real implementation this dispatches
             // through the tool/agent adapter. For now, produce a synthetic result.
-            let tool_result = self.dispatch_action(&decision, workspace_ref, session_id);
+            let tool_result =
+                self.dispatch_action(&decision, workspace_ref, session_id, enable_flow_retry_probe);
 
             // -- VERIFY --
             if tool_result.success {
@@ -390,6 +411,7 @@ where
         decision: &Decision,
         workspace_ref: &str,
         session_id: &str,
+        enable_flow_retry_probe: bool,
     ) -> ToolResult {
         let selector = decision.selector_kind();
         let (step_kind, adapter_name) = adapter_binding(selector);
@@ -402,6 +424,7 @@ where
                 target: &decision.target,
                 rationale: &decision.rationale,
                 expected_outcome: &decision.expected_outcome,
+                force_retry_once: enable_flow_retry_probe && selector == ActionSelector::Modify,
             }),
             task_snapshot: TaskContext::new(
                 session_id.to_string(),
@@ -779,6 +802,39 @@ fn tool_result_from_step_execution(
     tool_result
 }
 
+fn workspace_routing_projection(workspace: &Path) -> RoutingDecisionProjection {
+    let workspace_routing =
+        FileConfigStore::for_workspace(workspace).local_routing().ok().flatten();
+    let cluster_routing = FileClusterStore::for_workspace(workspace)
+        .load()
+        .ok()
+        .flatten()
+        .map(|config| config.routing);
+    let global_routing = FileConfigStore::global_routing().ok().flatten();
+    let effective_routing = resolve_effective_routing(
+        &RoutingOverrides::default(),
+        workspace_routing.as_ref(),
+        cluster_routing.as_ref(),
+        global_routing.as_ref(),
+    );
+    let effective_capabilities = resolve_effective_runtime_capabilities(
+        workspace_routing.as_ref(),
+        cluster_routing.as_ref(),
+        global_routing.as_ref(),
+    );
+    let effective_effort = resolve_effective_slot_effort_policies(
+        workspace_routing.as_ref(),
+        cluster_routing.as_ref(),
+        global_routing.as_ref(),
+    );
+
+    RoutingDecisionProjection::from_effective_state(
+        &effective_routing,
+        &effective_capabilities,
+        &effective_effort,
+    )
+}
+
 #[derive(Debug, Error)]
 pub enum DecisionLoopError {
     #[error("decision error: {0}")]
@@ -800,9 +856,10 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        Observation, adapter_binding, decision_details, decision_event_payload,
-        failed_recovery_terminal_reason, recovery_completes_task, recovery_decision_type,
-        recovery_event_payload, select_action_selector, successful_recovery_terminal_reason,
+        Observation, adapter_binding, canon_memory_evidence_refs, canon_memory_terminal_reason,
+        decision_details, decision_event_payload, failed_recovery_terminal_reason,
+        recovery_completes_task, recovery_decision_type, recovery_event_payload,
+        select_action_selector, successful_recovery_terminal_reason,
         tool_result_from_step_execution,
     };
     use crate::adapters::trace_store::FileTraceStore;
@@ -1270,5 +1327,48 @@ mod tests {
         }));
 
         fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn canon_memory_helpers_cover_default_reason_and_provenance_links() {
+        let memory = CompactedCanonMemory {
+            headline: "Governed packet is stale".to_string(),
+            credibility: MemoryCredibilityState::Stale,
+            stage_key: Some("bug-fix:verify".to_string()),
+            run_ref: Some("canon-run-2".to_string()),
+            packet_ref: Some(".canon/runs/canon-run-2".to_string()),
+            reason_code: None,
+            artifact_refs: vec![
+                ".canon/runs/canon-run-2/verification.md".to_string(),
+                ".canon/runs/canon-run-2/evidence.md".to_string(),
+            ],
+            mode_summary: None,
+            possible_actions: Vec::new(),
+            recommended_next_action: None,
+            evidence_summary: Some(crate::domain::governance::CanonEvidenceInspectSummary {
+                execution_posture: Some("paused".to_string()),
+                carried_forward_items: Vec::new(),
+                artifact_provenance_links: vec![
+                    "canon:packet=.canon/runs/canon-run-2".to_string(),
+                    "canon:artifact=.canon/runs/canon-run-2/verification.md".to_string(),
+                ],
+                closure_status: None,
+                closure_findings: Vec::new(),
+            }),
+        };
+
+        assert_eq!(
+            canon_memory_terminal_reason(&memory),
+            "Canon-grounded memory is stale: Governed packet is stale"
+        );
+
+        let evidence = canon_memory_evidence_refs(&memory);
+        assert_eq!(evidence[0], EvidenceRef::canon("memory: Governed packet is stale [stale]"));
+        assert!(evidence.contains(&EvidenceRef::canon(".canon/runs/canon-run-2")));
+        assert!(evidence.contains(&EvidenceRef::canon("canon-run-2")));
+        assert!(evidence.contains(&EvidenceRef::canon(".canon/runs/canon-run-2/verification.md")));
+        assert!(evidence.contains(&EvidenceRef::canon(
+            "canon:artifact=.canon/runs/canon-run-2/verification.md"
+        )));
     }
 }

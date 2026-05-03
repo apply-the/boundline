@@ -20,7 +20,7 @@
 
 ### User Story 1 - Select The Next Bounded Action From Decision State (Priority: P1)
 
-An operator can run the primary session-native path and have Synod choose the
+An operator can run the primary session-native path and have Boundline choose the
 next bounded engineering action from explicit decision state and current
 evidence instead of walking a mostly static step order.
 
@@ -36,11 +36,11 @@ evidence, rather than only replaying a static task sequence.
 **Acceptance Scenarios**:
 
 1. **Given** a bounded task whose failing area is not yet localized,
-  **When** the operator runs native execution, **Then** Synod selects an
+  **When** the operator runs native execution, **Then** Boundline selects an
   evidence-gathering action such as read or search before attempting modify or
   test, and records why that action is the next bounded step.
 2. **Given** a bounded task whose evidence already identifies a concrete code
-  target, **When** execution advances, **Then** Synod can select modify or
+  target, **When** execution advances, **Then** Boundline can select modify or
   test directly from decision state and keep the selected action explainable
   from the same recorded evidence.
 
@@ -65,11 +65,11 @@ that lets the operator continue without opening raw JSON.
 **Acceptance Scenarios**:
 
 1. **Given** an active native session with a current decision, **When** the
-  operator asks for `status` or `next`, **Then** Synod shows the selected next
+  operator asks for `status` or `next`, **Then** Boundline shows the selected next
   action, why it was chosen, and what verification or recovery condition will
   control the next transition.
 2. **Given** an authoritative compatibility follow-up trace, **When** the
-  operator uses `inspect`, **Then** Synod keeps compatibility authority
+  operator uses `inspect`, **Then** Boundline keeps compatibility authority
   explicit while still reusing the same decision-driven vocabulary when the
   trace contains it.
 
@@ -87,7 +87,7 @@ that cannot explain failure or recovery would be less trustworthy than the
 current runtime.
 
 **Independent Test**: Run representative tasks that hit missing evidence,
-verification failure, or exhausted recovery options and verify that Synod asks,
+verification failure, or exhausted recovery options and verify that Boundline asks,
 replans, retries, or stops explicitly from decision state without silently
 falling back to generic lifecycle wording.
 
@@ -95,11 +95,11 @@ falling back to generic lifecycle wording.
 
 1. **Given** a bounded task whose current evidence is not sufficient to justify
   another credible engineering action, **When** execution reaches that point,
-  **Then** Synod selects ask or replan explicitly, records why the previous
+  **Then** Boundline selects ask or replan explicitly, records why the previous
   action was insufficient, and keeps the next bounded recovery action visible.
 2. **Given** a bounded task that continues failing after allowed recovery work,
   **When** the configured execution limits or stop conditions are reached,
-  **Then** Synod stops explicitly with a terminal reason derived from decision
+  **Then** Boundline stops explicitly with a terminal reason derived from decision
   state instead of silently ending because a static task list ran out.
 
 ---
@@ -123,7 +123,7 @@ decision-driven operating model.
 
 1. **Given** the `0.34.0` release artifacts, **When** a maintainer follows the
   documented native path, **Then** the runtime, roadmap, and docs all describe
-  explicit decision-driven execution as the primary Synod operating model.
+  explicit decision-driven execution as the primary Boundline operating model.
 2. **Given** modified or newly created Rust files for this slice, **When** the
   maintainer runs release validation, **Then** those files remain above 95%
   line coverage, lint issues introduced by the slice are resolved, and
@@ -133,7 +133,7 @@ decision-driven operating model.
 
 <!--
   ACTION REQUIRED: Capture execution limits, invalid state transitions, missing context,
-  traceability gaps, and failure-handling boundaries. Synod features are invalid if they
+  traceability gaps, and failure-handling boundaries. Boundline features are invalid if they
   ignore how work stops, fails, or becomes non-credible.
 -->
 
@@ -201,7 +201,7 @@ decision-driven operating model.
 
 <!--
   ACTION REQUIRED: Name the deferred or excluded capabilities explicitly.
-  Synod specs should normally exclude councils and voting unless the roadmap and
+  Boundline specs should normally exclude councils and voting unless the roadmap and
   constitution explicitly prioritize a bounded review slice; they should otherwise
   exclude provider-routing complexity, distributed execution, long-term memory,
   UI/UX work, and deployment pipelines.
@@ -244,7 +244,7 @@ decision-driven operating model.
 
 - **SC-001**: In representative bounded native runs, operators can identify
   the currently selected next action, why it was chosen, and what verification
-  or stop condition governs it in under 2 minutes from standard Synod output.
+  or stop condition governs it in under 2 minutes from standard Boundline output.
 - **SC-002**: 100% of representative decision-driven execution runs end each
   loop iteration with either one explicit selected action or one explicit ask,
   replan, or terminal stop state rather than falling back to hidden static-step

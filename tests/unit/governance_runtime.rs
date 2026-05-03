@@ -2,7 +2,7 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
-use synod::{
+use boundline::{
     ApprovalState, CanonCliRuntime, GovernanceBoundedContext, GovernanceInputDocument,
     GovernanceLifecycleState, GovernanceRequestKind, GovernanceRuntime, GovernanceRuntimeKind,
     GovernanceRuntimeRequest, LocalGovernanceRuntime, PacketReadiness, SystemContextBinding,
@@ -16,7 +16,7 @@ fn sample_request() -> GovernanceRuntimeRequest {
         governance_attempt_id: "attempt-1".to_string(),
         stage_key: "bug-fix:investigate".to_string(),
         goal: "Investigate a failing change".to_string(),
-        workspace_ref: "/tmp/synod-workspace".to_string(),
+        workspace_ref: "/tmp/boundline-workspace".to_string(),
         autopilot: false,
         mode: None,
         system_context: None,
@@ -37,7 +37,7 @@ fn sample_request() -> GovernanceRuntimeRequest {
 fn canon_request(workspace: &Path) -> GovernanceRuntimeRequest {
     let mut request = sample_request();
     request.workspace_ref = workspace.to_string_lossy().into_owned();
-    request.mode = Some(synod::CanonMode::Discovery);
+    request.mode = Some(boundline::CanonMode::Discovery);
     request.system_context = Some(SystemContextBinding::Existing);
     request.risk = Some("medium".to_string());
     request.zone = Some("engineering".to_string());
@@ -120,7 +120,7 @@ fn local_governance_runtime_creates_reusable_packet_from_read_targets() {
     assert_eq!(response.status, GovernanceLifecycleState::GovernedReady);
     assert_eq!(packet.runtime, GovernanceRuntimeKind::Local);
     assert_eq!(packet.readiness, PacketReadiness::Reusable);
-    assert_eq!(packet.packet_ref, ".synod/governance/bug-fix-investigate/attempt-1");
+    assert_eq!(packet.packet_ref, ".boundline/governance/bug-fix-investigate/attempt-1");
     assert_eq!(packet.expected_document_refs, vec![format!("{}/brief.md", packet.packet_ref)]);
     assert_eq!(packet.document_refs, vec![format!("{}/brief.md", packet.packet_ref)]);
     assert!(packet.headline.contains("bug-fix:investigate"));
@@ -147,9 +147,9 @@ fn local_governance_runtime_uses_stage_brief_documents_and_explicit_packet_ref()
 
 #[test]
 fn canon_cli_runtime_exposes_configuration_and_reports_unimplemented_execution() {
-    let workspace = temp_workspace("synod-canon-config");
+    let workspace = temp_workspace("boundline-canon-config");
     let script = write_canon_stub(
-        "synod-canon-config-command",
+        "boundline-canon-config-command",
         "{\"status\":\"failed\",\"approval_state\":\"not_needed\",\"message\":\"unused\"}",
     );
     let runtime = CanonCliRuntime::new(script.to_string_lossy().into_owned())
@@ -165,14 +165,14 @@ fn canon_cli_runtime_exposes_configuration_and_reports_unimplemented_execution()
 
 #[test]
 fn canon_cli_runtime_parses_start_response_into_a_reusable_packet() {
-    let workspace = temp_workspace("synod-canon-start");
+    let workspace = temp_workspace("boundline-canon-start");
     write_workspace_file(
         &workspace,
         ".canon/runs/canon-run-123/discovery.md",
         "# Discovery\n\nObserved checkout failure in the parser boundary.\n",
     );
     let script = write_canon_stub(
-        "synod-canon-start-command",
+        "boundline-canon-start-command",
         "{\"status\":\"governed_ready\",\"run_ref\":\"canon-run-123\",\"packet_ref\":\".canon/runs/canon-run-123\",\"expected_document_refs\":[\".canon/runs/canon-run-123/discovery.md\"],\"document_refs\":[\".canon/runs/canon-run-123/discovery.md\"],\"approval_state\":\"not_needed\",\"packet_readiness\":\"reusable\",\"missing_sections\":[],\"headline\":\"discovery packet ready\",\"message\":\"Canon completed the governed stage\"}",
     );
     let runtime = CanonCliRuntime::new(script.to_string_lossy().into_owned())
@@ -185,19 +185,19 @@ fn canon_cli_runtime_parses_start_response_into_a_reusable_packet() {
     assert_eq!(response.run_ref.as_deref(), Some("canon-run-123"));
     assert_eq!(packet.runtime, GovernanceRuntimeKind::Canon);
     assert_eq!(packet.readiness, PacketReadiness::Reusable);
-    assert_eq!(packet.canon_mode, Some(synod::CanonMode::Discovery));
+    assert_eq!(packet.canon_mode, Some(boundline::CanonMode::Discovery));
 }
 
 #[test]
 fn canon_cli_runtime_tolerates_additive_v1_fields_from_canon_036() {
-    let workspace = temp_workspace("synod-canon-additive-v1");
+    let workspace = temp_workspace("boundline-canon-additive-v1");
     write_workspace_file(
         &workspace,
         ".canon/runs/canon-run-036/discovery.md",
         "# Discovery\n\nCaptured governed evidence for the compatibility check.\n",
     );
     let script = write_canon_stub(
-        "synod-canon-additive-v1-command",
+        "boundline-canon-additive-v1-command",
         "{\"adapter_schema_version\":\"v1\",\"status\":\"governed_ready\",\"run_ref\":\"canon-run-036\",\"packet_ref\":\".canon/runs/canon-run-036\",\"expected_document_refs\":[\".canon/runs/canon-run-036/discovery.md\"],\"document_refs\":[\".canon/runs/canon-run-036/discovery.md\"],\"approval_state\":\"not_needed\",\"packet_readiness\":\"reusable\",\"missing_sections\":[],\"headline\":\"discovery packet ready\",\"message\":\"Canon completed the governed stage\",\"reason_code\":\"governed_ready\"}",
     );
     let runtime = CanonCliRuntime::new(script.to_string_lossy().into_owned())
@@ -215,9 +215,9 @@ fn canon_cli_runtime_tolerates_additive_v1_fields_from_canon_036() {
 
 #[test]
 fn canon_cli_runtime_preserves_refresh_lineage_and_pending_state() {
-    let workspace = temp_workspace("synod-canon-refresh");
+    let workspace = temp_workspace("boundline-canon-refresh");
     let script = write_canon_stub(
-        "synod-canon-refresh-command",
+        "boundline-canon-refresh-command",
         "{\"status\":\"awaiting_approval\",\"run_ref\":\"canon-run-456\",\"packet_ref\":\".canon/runs/canon-run-456\",\"expected_document_refs\":[\".canon/runs/canon-run-456/discovery.md\"],\"document_refs\":[],\"approval_state\":\"requested\",\"packet_readiness\":\"pending\",\"missing_sections\":[],\"headline\":\"awaiting approval\",\"message\":\"Canon is waiting for approval\"}",
     );
     let runtime = CanonCliRuntime::new(script.to_string_lossy().into_owned())
@@ -239,9 +239,9 @@ fn canon_cli_runtime_preserves_refresh_lineage_and_pending_state() {
 
 #[test]
 fn canon_cli_runtime_blocks_when_required_request_fields_are_missing() {
-    let workspace = temp_workspace("synod-canon-missing-field");
+    let workspace = temp_workspace("boundline-canon-missing-field");
     let script = write_canon_stub(
-        "synod-canon-missing-field-command",
+        "boundline-canon-missing-field-command",
         "{\"status\":\"failed\",\"approval_state\":\"not_needed\",\"message\":\"unused\"}",
     );
     let runtime = CanonCliRuntime::new(script.to_string_lossy().into_owned())
@@ -255,9 +255,9 @@ fn canon_cli_runtime_blocks_when_required_request_fields_are_missing() {
 
 #[test]
 fn canon_cli_runtime_validates_each_required_field() {
-    let workspace = temp_workspace("synod-canon-required-fields");
+    let workspace = temp_workspace("boundline-canon-required-fields");
     let script = write_canon_stub(
-        "synod-canon-required-fields-command",
+        "boundline-canon-required-fields-command",
         "{\"status\":\"failed\",\"approval_state\":\"not_needed\",\"message\":\"unused\"}",
     );
     let runtime = CanonCliRuntime::new(script.to_string_lossy().into_owned())
@@ -297,7 +297,7 @@ fn canon_cli_runtime_validates_each_required_field() {
 
 #[test]
 fn canon_cli_runtime_handles_startup_and_output_failures() {
-    let workspace = temp_workspace("synod-canon-runtime-failures");
+    let workspace = temp_workspace("boundline-canon-runtime-failures");
 
     let missing_runtime =
         CanonCliRuntime::new("/definitely/missing/canon").with_working_directory(&workspace);
@@ -306,7 +306,7 @@ fn canon_cli_runtime_handles_startup_and_output_failures() {
     assert!(response.message.contains("failed to start Canon"));
 
     let malformed_script = write_shell_script(
-        "synod-canon-malformed-command",
+        "boundline-canon-malformed-command",
         "#!/bin/sh\ncat >/dev/null\nprintf '%s' '{not-json}'\n",
     );
     let malformed_runtime = CanonCliRuntime::new(malformed_script.to_string_lossy().into_owned())
@@ -316,7 +316,7 @@ fn canon_cli_runtime_handles_startup_and_output_failures() {
     assert!(response.message.contains("malformed output"));
 
     let failing_script = write_shell_script(
-        "synod-canon-failing-command",
+        "boundline-canon-failing-command",
         "#!/bin/sh\ncat >/dev/null\necho boom >&2\nexit 2\n",
     );
     let failing_runtime = CanonCliRuntime::new(failing_script.to_string_lossy().into_owned())
@@ -329,9 +329,9 @@ fn canon_cli_runtime_handles_startup_and_output_failures() {
 
 #[test]
 fn canon_cli_runtime_applies_wire_defaults_for_missing_fields() {
-    let workspace = temp_workspace("synod-canon-wire-defaults");
+    let workspace = temp_workspace("boundline-canon-wire-defaults");
     let script = write_canon_stub(
-        "synod-canon-wire-defaults-command",
+        "boundline-canon-wire-defaults-command",
         "{\"status\":\"awaiting_approval\",\"packet_ref\":\".canon/runs/canon-run-default\",\"message\":\"waiting for approval\"}",
     );
     let runtime = CanonCliRuntime::new(script.to_string_lossy().into_owned())
@@ -352,7 +352,7 @@ fn canon_cli_runtime_applies_wire_defaults_for_missing_fields() {
 
 #[test]
 fn packet_readiness_classifier_rejects_documents_without_authored_body() {
-    let workspace = temp_workspace("synod-packet-readiness-rejected");
+    let workspace = temp_workspace("boundline-packet-readiness-rejected");
     write_workspace_file(
         &workspace,
         ".canon/runs/canon-run-789/discovery.md",
@@ -372,7 +372,7 @@ fn packet_readiness_classifier_rejects_documents_without_authored_body() {
 
 #[test]
 fn packet_readiness_classifier_marks_missing_documents_as_incomplete() {
-    let workspace = temp_workspace("synod-packet-readiness-incomplete");
+    let workspace = temp_workspace("boundline-packet-readiness-incomplete");
     write_workspace_file(
         &workspace,
         ".canon/runs/canon-run-790/discovery.md",

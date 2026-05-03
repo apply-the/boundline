@@ -1,4 +1,4 @@
-use synod::domain::review::{
+use boundline::domain::review::{
     ReviewProfileError, ReviewerDefinition, ReviewerDisposition, ReviewerFinding, VoteDecision,
     VoteRuleDefinition, VoteStrategy,
 };

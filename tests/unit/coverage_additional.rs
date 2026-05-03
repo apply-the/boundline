@@ -1,42 +1,42 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use clap::Parser;
-use serde_json::{Value, json};
-use synod::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
-use synod::cli::diagnostics::{diagnose_native_direct_run_workspace, diagnose_workspace};
-use synod::cli::inspect::{TraceSummaryError, summarize_trace};
-use synod::cli::run::{RunCommandError, execute_native_direct_run};
-use synod::cli::session::{
+use boundline::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
+use boundline::cli::diagnostics::{diagnose_native_direct_run_workspace, diagnose_workspace};
+use boundline::cli::inspect::{TraceSummaryError, summarize_trace};
+use boundline::cli::run::{RunCommandError, execute_native_direct_run};
+use boundline::cli::session::{
     SessionCommandError, execute_capture, execute_flow, execute_next, execute_plan, execute_start,
     execute_status, execute_step, render_error,
 };
-use synod::cli::{
+use boundline::cli::{
     Cli, CliValidationError, CommandExitStatus, CommandName, DeveloperCommand,
     DeveloperCommandSession,
 };
-use synod::domain::execution::{
+use boundline::domain::execution::{
     ExecutionAttemptDefinition, ExecutionCommand, ExecutionFailureMode, ExecutionProfileError,
     WorkspaceChange, WorkspaceExecutionProfile,
 };
-use synod::domain::flow::{
+use boundline::domain::flow::{
     FlowStepMetadata, FlowValidationError, SessionFlowState, attach_stage_metadata, built_in_flow,
     supported_flow_names_csv,
 };
-use synod::domain::limits::{RunLimits, TerminalCondition};
-use synod::domain::plan::{Plan, PlanError, PlanStatus};
-use synod::domain::session::{
+use boundline::domain::limits::{RunLimits, TerminalCondition};
+use boundline::domain::plan::{Plan, PlanError, PlanStatus};
+use boundline::domain::session::{
     ActiveSessionRecord, SessionCommand, SessionStatus, SessionStatusView, SessionTransition,
     SessionValidationError,
 };
-use synod::domain::step::Step;
-use synod::domain::task::{
+use boundline::domain::step::Step;
+use boundline::domain::task::{
     Task, TaskPersistenceError, TaskRequestError, TaskRunRequest, TaskStatus, TerminalReason,
 };
-use synod::domain::task_context::TaskContextError;
-use synod::domain::trace::{ExecutionTrace, TraceEventType};
-use synod::fixture::{build_fixture_plan_for_goal, build_task_request};
-use synod::orchestrator::session_runtime::{SessionRuntime, SessionRuntimeError};
+use boundline::domain::task_context::TaskContextError;
+use boundline::domain::trace::{ExecutionTrace, TraceEventType};
+use boundline::fixture::{build_fixture_plan_for_goal, build_task_request};
+use boundline::orchestrator::session_runtime::{SessionRuntime, SessionRuntimeError};
+use clap::Parser;
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 const FIXTURE_CARGO_TOML: &str = r#"[package]
@@ -91,7 +91,7 @@ fn build_planned_record(workspace_ref: &str) -> ActiveSessionRecord {
         active_flow_policy: None,
         latest_status: SessionStatus::Planned,
         latest_terminal_reason: None,
-        latest_trace_ref: Some(format!("{workspace_ref}/.synod/traces/task.json")),
+        latest_trace_ref: Some(format!("{workspace_ref}/.boundline/traces/task.json")),
         created_at: 10,
         updated_at: 20,
     }
@@ -132,7 +132,7 @@ fn build_status_view(record: &ActiveSessionRecord) -> SessionStatusView {
             .and_then(|task| task.plan.current_step().map(|step| step.id.clone())),
         current_step_index: active_task.map(|task| task.plan.current_step_index),
         latest_status: record.latest_status,
-        execution_path: synod::domain::session::execution_path_text(record),
+        execution_path: boundline::domain::session::execution_path_text(record),
         latest_trace_ref: record.latest_trace_ref.clone(),
         latest_decision_status: None,
         latest_decision_target: None,
@@ -176,7 +176,7 @@ fn build_status_view(record: &ActiveSessionRecord) -> SessionStatusView {
         latest_governance_decision: None,
         latest_governance_candidates: None,
         governance_next_action: None,
-        next_command: Some("synod step".to_string()),
+        next_command: Some("boundline step".to_string()),
         explanation: "session state is internally consistent".to_string(),
         ..Default::default()
     }
@@ -215,12 +215,12 @@ fn write_execution_workspace(prefix: &str, attempts: Vec<Value>) -> PathBuf {
     let workspace = temp_workspace(prefix);
     fs::create_dir_all(workspace.join("src")).unwrap();
     fs::create_dir_all(workspace.join("tests")).unwrap();
-    fs::create_dir_all(workspace.join(".synod")).unwrap();
+    fs::create_dir_all(workspace.join(".boundline")).unwrap();
     fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
     fs::write(workspace.join("src/lib.rs"), RED_LIB_RS).unwrap();
     fs::write(workspace.join("tests/red_to_green.rs"), FIXTURE_TEST_RS).unwrap();
     fs::write(
-        workspace.join(".synod/execution.json"),
+        workspace.join(".boundline/execution.json"),
         serde_json::to_string_pretty(&json!({
             "name": "coverage-execution",
             "read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
@@ -297,10 +297,10 @@ fn replan_attempts() -> Vec<Value> {
 
 #[test]
 fn developer_command_sessions_cover_variant_mapping_validation_and_completion() {
-    let workspace = PathBuf::from("/tmp/synod-cli");
-    let trace = PathBuf::from("/tmp/synod-cli/trace.json");
+    let workspace = PathBuf::from("/tmp/boundline-cli");
+    let trace = PathBuf::from("/tmp/boundline-cli/trace.json");
     let commands = vec![
-        DeveloperCommand::Doctor { workspace: workspace.clone() },
+        DeveloperCommand::Doctor { workspace: Some(workspace.clone()), install: false },
         DeveloperCommand::Start { workspace: Some(workspace.clone()), cluster: None },
         DeveloperCommand::Capture {
             workspace: Some(workspace.clone()),
@@ -351,12 +351,13 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
     }
 
     assert_eq!(CommandName::Doctor.to_string(), "doctor");
-    let cli = Cli::try_parse_from(["synod", "inspect", "--workspace", "."]).unwrap();
+    let cli = Cli::try_parse_from(["boundline", "inspect", "--workspace", "."]).unwrap();
     assert!(matches!(cli.command, DeveloperCommand::Inspect { .. }));
 
     let invalid_doctor = DeveloperCommandSession {
         command_name: CommandName::Doctor,
         workspace_ref: Some(" ".to_string()),
+        install_check: false,
         goal: None,
         trace_ref: None,
         started_at: 1,
@@ -596,7 +597,7 @@ fn flow_and_execution_validation_cover_remaining_error_paths() {
 
 #[test]
 fn native_direct_run_diagnostics_do_not_require_execution_profile() {
-    let workspace = temp_workspace("synod-native-direct-run-diagnostics");
+    let workspace = temp_workspace("boundline-native-direct-run-diagnostics");
     fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
 
     let native_report = diagnose_native_direct_run_workspace(&workspace);
@@ -615,10 +616,10 @@ fn native_direct_run_diagnostics_do_not_require_execution_profile() {
 
 #[test]
 fn native_direct_run_diagnostics_ignore_invalid_profile_when_optional() {
-    let workspace = temp_workspace("synod-native-direct-run-invalid-profile");
-    fs::create_dir_all(workspace.join(".synod")).unwrap();
+    let workspace = temp_workspace("boundline-native-direct-run-invalid-profile");
+    fs::create_dir_all(workspace.join(".boundline")).unwrap();
     fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
-    fs::write(workspace.join(".synod/execution.json"), "{not valid json").unwrap();
+    fs::write(workspace.join(".boundline/execution.json"), "{not valid json").unwrap();
 
     let native_report = diagnose_native_direct_run_workspace(&workspace);
     assert!(native_report.ready, "{native_report:?}");
@@ -639,8 +640,10 @@ fn native_direct_run_diagnostics_ignore_invalid_profile_when_optional() {
 
 #[test]
 fn native_direct_run_reuses_existing_initialized_session() {
-    let workspace =
-        write_execution_workspace("synod-native-direct-run-initialized", vec![success_attempt()]);
+    let workspace = write_execution_workspace(
+        "boundline-native-direct-run-initialized",
+        vec![success_attempt()],
+    );
     FileSessionStore::for_workspace(&workspace)
         .persist(&build_started_session(&workspace))
         .unwrap();
@@ -663,7 +666,7 @@ fn native_direct_run_reuses_existing_initialized_session() {
 
 #[test]
 fn native_direct_run_surfaces_clarification_without_planning() {
-    let workspace = temp_workspace("synod-native-direct-run-clarification");
+    let workspace = temp_workspace("boundline-native-direct-run-clarification");
 
     let report = execute_native_direct_run(
         &workspace,
@@ -685,7 +688,7 @@ fn native_direct_run_surfaces_clarification_without_planning() {
 
 #[test]
 fn native_direct_run_rejects_meaningful_active_session_state() {
-    let workspace = temp_workspace("synod-native-direct-run-conflict");
+    let workspace = temp_workspace("boundline-native-direct-run-conflict");
     let session_store = FileSessionStore::for_workspace(&workspace);
     session_store.persist(&build_goal_captured_session(&workspace)).unwrap();
 
@@ -705,7 +708,7 @@ fn native_direct_run_rejects_meaningful_active_session_state() {
 
 #[test]
 fn task_plan_and_session_store_validation_cover_error_branches() {
-    let workspace = "/tmp/synod-task-coverage";
+    let workspace = "/tmp/boundline-task-coverage";
 
     let mut unexpected_terminal = build_task(workspace);
     unexpected_terminal.terminal_reason =
@@ -768,9 +771,9 @@ fn task_plan_and_session_store_validation_cover_error_branches() {
     assert_eq!(reset_plan.current_step_index, 0);
     assert_eq!(reset_plan.status, PlanStatus::Active);
 
-    let workspace = temp_workspace("synod-corrupt-session-store");
+    let workspace = temp_workspace("boundline-corrupt-session-store");
     let store = FileSessionStore::for_workspace(&workspace);
-    assert!(store.path().ends_with(Path::new(".synod/session.json")));
+    assert!(store.path().ends_with(Path::new(".boundline/session.json")));
     fs::create_dir_all(store.path().parent().unwrap()).unwrap();
     fs::write(store.path(), b"{not json").unwrap();
     assert!(matches!(store.load().unwrap_err(), SessionStoreError::Deserialize(_)));
@@ -791,7 +794,7 @@ fn task_plan_and_session_store_validation_cover_error_branches() {
 
 #[test]
 fn session_validation_transition_and_status_view_cover_mismatch_paths() {
-    let workspace = "/tmp/synod-session-coverage";
+    let workspace = "/tmp/boundline-session-coverage";
 
     let mut record = build_planned_record(workspace);
     record.created_at = 20;
@@ -1000,7 +1003,7 @@ fn inspect_summary_and_session_commands_cover_additional_error_paths() {
         TraceSummaryError::MissingStartedStep(step_id) if step_id == "verify"
     ));
 
-    let workspace = temp_workspace("synod-cli-session-errors");
+    let workspace = temp_workspace("boundline-cli-session-errors");
     execute_start(Some(&workspace)).unwrap();
     assert!(matches!(
         execute_plan(Some(&workspace), None, false, false).unwrap_err(),
@@ -1024,15 +1027,15 @@ fn inspect_summary_and_session_commands_cover_additional_error_paths() {
     let confirm_without_proposal = execute_plan(Some(&workspace), None, false, true).unwrap_err();
     assert!(matches!(confirm_without_proposal, SessionCommandError::MissingPlanProposal));
     let rendered = render_error("plan", &confirm_without_proposal);
-    assert!(rendered.contains("run `synod plan` first"), "{rendered}");
-    assert!(rendered.contains("next_command: synod plan"), "{rendered}");
+    assert!(rendered.contains("run `boundline plan` first"), "{rendered}");
+    assert!(rendered.contains("next_command: boundline plan"), "{rendered}");
     assert!(matches!(
         execute_flow(Some(&workspace), "missing-flow").unwrap_err(),
         SessionCommandError::UnknownFlow { .. }
     ));
 
-    let mismatch_workspace = temp_workspace("synod-cli-session-mismatch");
-    let foreign_workspace = temp_workspace("synod-cli-session-foreign");
+    let mismatch_workspace = temp_workspace("boundline-cli-session-mismatch");
+    let foreign_workspace = temp_workspace("boundline-cli-session-foreign");
     let foreign_record = build_planned_record(foreign_workspace.to_string_lossy().as_ref());
     FileSessionStore::for_workspace(&mismatch_workspace).persist(&foreign_record).unwrap();
     assert!(matches!(
@@ -1040,16 +1043,16 @@ fn inspect_summary_and_session_commands_cover_additional_error_paths() {
         SessionCommandError::WorkspaceMismatch { .. }
     ));
 
-    let missing_session_workspace = temp_workspace("synod-cli-next-missing");
+    let missing_session_workspace = temp_workspace("boundline-cli-next-missing");
     let error = execute_next(Some(&missing_session_workspace)).unwrap_err();
     assert!(matches!(error, SessionCommandError::MissingActiveSession));
     let rendered = render_error("next", &error);
-    assert!(rendered.contains("synod start"), "{rendered}");
+    assert!(rendered.contains("boundline start"), "{rendered}");
 }
 
 #[test]
 fn session_runtime_public_methods_cover_goal_flow_and_trace_management() {
-    let workspace = temp_workspace("synod-session-runtime-public");
+    let workspace = temp_workspace("boundline-session-runtime-public");
     let runtime = SessionRuntime::for_workspace(&workspace);
 
     assert_eq!(runtime.workspace_ref(), workspace.as_path());
@@ -1091,7 +1094,7 @@ fn session_runtime_public_methods_cover_goal_flow_and_trace_management() {
 #[test]
 fn session_runtime_runs_successful_terminal_and_replanned_execution_profiles() {
     let success_workspace =
-        write_execution_workspace("synod-runtime-success", vec![success_attempt()]);
+        write_execution_workspace("boundline-runtime-success", vec![success_attempt()]);
     let runtime = SessionRuntime::for_workspace(&success_workspace);
     let mut session = build_goal_captured_session(&success_workspace);
     runtime.plan_task(&mut session, Some("bug-fix"), false).unwrap();
@@ -1106,7 +1109,7 @@ fn session_runtime_runs_successful_terminal_and_replanned_execution_profiles() {
         SessionRuntimeError::MissingActiveTask
     ));
 
-    let replan_workspace = write_execution_workspace("synod-runtime-replan", replan_attempts());
+    let replan_workspace = write_execution_workspace("boundline-runtime-replan", replan_attempts());
     let replan_runtime = SessionRuntime::for_workspace(&replan_workspace);
     let mut replan_session = build_goal_captured_session(&replan_workspace);
     replan_runtime.plan_task(&mut replan_session, Some("bug-fix"), false).unwrap();
@@ -1117,7 +1120,7 @@ fn session_runtime_runs_successful_terminal_and_replanned_execution_profiles() {
 
 #[test]
 fn session_runtime_surfaces_terminal_failures_for_broken_execution_profiles() {
-    let workspace = write_execution_workspace("synod-runtime-failure", vec![failing_attempt()]);
+    let workspace = write_execution_workspace("boundline-runtime-failure", vec![failing_attempt()]);
     let runtime = SessionRuntime::for_workspace(&workspace);
     let mut session = build_goal_captured_session(&workspace);
     runtime.select_flow(&mut session, "bug-fix").unwrap();
@@ -1150,7 +1153,7 @@ fn session_runtime_surfaces_terminal_failures_for_broken_execution_profiles() {
 
 #[test]
 fn session_runtime_public_error_paths_cover_missing_goal_task_and_terminal_shortcuts() {
-    let workspace = write_execution_workspace("synod-runtime-errors", vec![success_attempt()]);
+    let workspace = write_execution_workspace("boundline-runtime-errors", vec![success_attempt()]);
     let runtime = SessionRuntime::for_workspace(&workspace);
 
     let mut no_goal = build_started_session(&workspace);
@@ -1200,7 +1203,7 @@ fn session_runtime_public_error_paths_cover_missing_goal_task_and_terminal_short
     missing_terminal_reason.active_task = Some(broken_terminal_task);
     missing_terminal_reason.latest_status = SessionStatus::Succeeded;
     missing_terminal_reason.latest_trace_ref =
-        Some(workspace.join(".synod/traces/existing.json").to_string_lossy().into_owned());
+        Some(workspace.join(".boundline/traces/existing.json").to_string_lossy().into_owned());
     assert!(matches!(
         runtime.execute_next_step(&mut missing_terminal_reason).unwrap_err(),
         SessionRuntimeError::MissingTerminalReason

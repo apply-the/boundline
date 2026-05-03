@@ -137,7 +137,7 @@ impl GovernanceRuntime for LocalGovernanceRuntime {
 
         let packet_ref = request.packet_ref.clone().unwrap_or_else(|| {
             format!(
-                ".synod/governance/{}/{}",
+                ".boundline/governance/{}/{}",
                 request.stage_key.replace(':', "-"),
                 request.governance_attempt_id
             )
@@ -596,7 +596,7 @@ mod tests {
             system_context: Some(SystemContextBinding::Existing),
             risk: Some("medium".to_string()),
             zone: Some("internal".to_string()),
-            owner: Some("synod".to_string()),
+            owner: Some("boundline".to_string()),
             run_ref: None,
             packet_ref: None,
             bounded_context: GovernanceBoundedContext {

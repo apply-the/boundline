@@ -169,7 +169,7 @@ mod tests {
             goal: "Recover a bounded task".to_string(),
             input: json!({"ticket": "PLAN-1"}),
             session_id: "session-planner".to_string(),
-            workspace_ref: "/tmp/synod-planner".to_string(),
+            workspace_ref: "/tmp/boundline-planner".to_string(),
             limits: RunLimits::default(),
             initial_context: None,
         };

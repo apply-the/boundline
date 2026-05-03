@@ -19,23 +19,23 @@
 
 ### User Story 1 - Start and Reuse Active Work Context (Priority: P1)
 
-As a Synod developer, I can establish and reuse one active session for a workspace so that follow-up commands and assistant interactions continue the same bounded task without forcing me to restate known context.
+As a Boundline developer, I can establish and reuse one active session for a workspace so that follow-up commands and assistant interactions continue the same bounded task without forcing me to restate known context.
 
 **Why this priority**: Without a shared active session, every later interaction remains repetitive, fragile, and inconsistent across CLI and assistant surfaces.
 
-**Independent Test**: Can be fully tested by starting a new session in a workspace, invoking follow-up commands without repeating the original task context, and confirming that Synod either continues from the active session or fails with explicit recovery guidance.
+**Independent Test**: Can be fully tested by starting a new session in a workspace, invoking follow-up commands without repeating the original task context, and confirming that Boundline either continues from the active session or fails with explicit recovery guidance.
 
 **Acceptance Scenarios**:
 
-1. **Given** no active session exists for a workspace, **When** the developer starts a new session, **Then** Synod creates an active session record for that workspace and reports that later interactions can use it automatically.
-2. **Given** an active session already exists with known task context, **When** the developer invokes a follow-up command that depends on that context, **Then** Synod resolves the active session automatically and continues against the same work state without requiring repeated inputs.
-3. **Given** no active session exists, **When** the developer invokes a command that requires one, **Then** Synod stops immediately with a clear message that explains how to establish a session first.
+1. **Given** no active session exists for a workspace, **When** the developer starts a new session, **Then** Boundline creates an active session record for that workspace and reports that later interactions can use it automatically.
+2. **Given** an active session already exists with known task context, **When** the developer invokes a follow-up command that depends on that context, **Then** Boundline resolves the active session automatically and continues against the same work state without requiring repeated inputs.
+3. **Given** no active session exists, **When** the developer invokes a command that requires one, **Then** Boundline stops immediately with a clear message that explains how to establish a session first.
 
 ---
 
 ### User Story 2 - Plan and Execute Through Shared Session State (Priority: P2)
 
-As a Synod developer, I can capture a goal, plan it, and execute work step-by-step or end-to-end through the same session so that progress, traces, and latest outcome remain coherent across invocations.
+As a Boundline developer, I can capture a goal, plan it, and execute work step-by-step or end-to-end through the same session so that progress, traces, and latest outcome remain coherent across invocations.
 
 **Why this priority**: Once an active session exists, the next delivery value is being able to move through the bounded execution flow without manually reconstructing state between commands.
 
@@ -43,15 +43,15 @@ As a Synod developer, I can capture a goal, plan it, and execute work step-by-st
 
 **Acceptance Scenarios**:
 
-1. **Given** an active session with a captured goal, **When** the developer plans the work, **Then** Synod attaches the new plan to the session and resets execution position so subsequent commands operate on the latest plan.
-2. **Given** an active session with a current plan, **When** the developer executes one step at a time or runs the task to a terminal state, **Then** Synod updates the shared session after each meaningful transition, including latest progress and latest trace reference.
-3. **Given** execution fails, retries, replans, exhausts its limits, or aborts, **When** Synod updates the session, **Then** the session preserves the latest actionable state so the developer can inspect what happened and continue or recover deliberately.
+1. **Given** an active session with a captured goal, **When** the developer plans the work, **Then** Boundline attaches the new plan to the session and resets execution position so subsequent commands operate on the latest plan.
+2. **Given** an active session with a current plan, **When** the developer executes one step at a time or runs the task to a terminal state, **Then** Boundline updates the shared session after each meaningful transition, including latest progress and latest trace reference.
+3. **Given** execution fails, retries, replans, exhausts its limits, or aborts, **When** Boundline updates the session, **Then** the session preserves the latest actionable state so the developer can inspect what happened and continue or recover deliberately.
 
 ---
 
 ### User Story 3 - Inspect Session State and Route the Next Action (Priority: P3)
 
-As a Synod developer working from CLI or assistant commands, I can inspect the current session and get the next recommended action so that both interaction surfaces behave consistently over the same bounded task.
+As a Boundline developer working from CLI or assistant commands, I can inspect the current session and get the next recommended action so that both interaction surfaces behave consistently over the same bounded task.
 
 **Why this priority**: Shared state only delivers full value when both CLI and assistant guidance read from the same session and present the same next-step logic.
 
@@ -59,15 +59,15 @@ As a Synod developer working from CLI or assistant commands, I can inspect the c
 
 **Acceptance Scenarios**:
 
-1. **Given** an active session in progress, **When** the developer inspects status or asks for the next action, **Then** Synod reports the current goal, execution position, overall state, latest trace reference, and one valid next command.
-2. **Given** an assistant command is invoked while a valid active session already contains the necessary context, **When** the assistant routes through Synod, **Then** it reuses the active session instead of asking the user to repeat already known goal or trace information.
-3. **Given** the active session is stale, corrupted, or no longer matches the current workspace, **When** the developer asks for status or continuation guidance, **Then** Synod surfaces the problem explicitly and routes the developer to a safe recovery action instead of continuing with hidden assumptions.
+1. **Given** an active session in progress, **When** the developer inspects status or asks for the next action, **Then** Boundline reports the current goal, execution position, overall state, latest trace reference, and one valid next command.
+2. **Given** an assistant command is invoked while a valid active session already contains the necessary context, **When** the assistant routes through Boundline, **Then** it reuses the active session instead of asking the user to repeat already known goal or trace information.
+3. **Given** the active session is stale, corrupted, or no longer matches the current workspace, **When** the developer asks for status or continuation guidance, **Then** Boundline surfaces the problem explicitly and routes the developer to a safe recovery action instead of continuing with hidden assumptions.
 
 ### Edge Cases
 
 <!--
   ACTION REQUIRED: Capture execution limits, invalid state transitions, missing context,
-  traceability gaps, and failure-handling boundaries. Synod features are invalid if they
+  traceability gaps, and failure-handling boundaries. Boundline features are invalid if they
   ignore how work stops, fails, or becomes non-credible.
 -->
 
@@ -99,7 +99,7 @@ As a Synod developer working from CLI or assistant commands, I can inspect the c
 - **FR-009**: The system MUST preserve usable recovery state after retries, replanning, failure, exhaustion, or aborted execution so that follow-up commands can inspect and act on the latest known state.
 - **FR-010**: The system MUST provide a status view over the active session that exposes enough information for a developer to understand what task is in progress, where execution stands, and what trace to inspect next.
 - **FR-011**: The system MUST provide a next-action recommendation for the active session that returns exactly one valid follow-up command together with a brief rationale grounded in the current session state.
-- **FR-012**: Assistant command surfaces MUST reuse the active Synod session before asking the user to restate information already preserved in that session.
+- **FR-012**: Assistant command surfaces MUST reuse the active Boundline session before asking the user to restate information already preserved in that session.
 - **FR-013**: The system MUST detect corrupted, stale, missing, or workspace-mismatched session state and MUST surface explicit recovery guidance rather than continuing with hidden assumptions.
 - **FR-014**: This feature MUST unify interaction state across CLI and assistant surfaces without changing the orchestrator's core execution semantics.
 
@@ -107,7 +107,7 @@ As a Synod developer working from CLI or assistant commands, I can inspect the c
 
 <!--
   ACTION REQUIRED: Name the deferred or excluded capabilities explicitly.
-  Synod specs should normally exclude councils, provider-routing complexity,
+  Boundline specs should normally exclude councils, provider-routing complexity,
   distributed execution, long-term memory, UI/UX work, and deployment pipelines
   unless the constitution has been amended.
 -->
@@ -131,8 +131,8 @@ As a Synod developer working from CLI or assistant commands, I can inspect the c
 
 ### Measurable Outcomes
 
-- **SC-001**: In representative validation flows, developers can start, scope, plan, and execute a bounded task through consecutive Synod interactions without re-entering already confirmed context in at least 90% of sampled sessions.
-- **SC-002**: For 100% of session-dependent commands in the initial release, Synod either resolves a valid active session successfully or fails with explicit recovery guidance in a single response.
+- **SC-001**: In representative validation flows, developers can start, scope, plan, and execute a bounded task through consecutive Boundline interactions without re-entering already confirmed context in at least 90% of sampled sessions.
+- **SC-002**: For 100% of session-dependent commands in the initial release, Boundline either resolves a valid active session successfully or fails with explicit recovery guidance in a single response.
 - **SC-003**: In representative interrupted or failed runs, developers can identify the current session state, latest trace reference, and next recommended action in under 1 minute using the provided status and next-action surfaces.
 - **SC-004**: CLI and assistant command surfaces return equivalent continuation guidance for the same underlying session state across all primary start, plan, execute, inspect, and recovery workflows in the initial scope.
 - **SC-005**: In representative recovery scenarios involving retry, replanning, failure, or exhaustion, developers can continue from the preserved session state without manually reconstructing prior execution context in at least 90% of sampled cases.
@@ -149,5 +149,5 @@ As a Synod developer working from CLI or assistant commands, I can inspect the c
 - The initial release uses a single active session per workspace rather than introducing multi-session selection or switching.
 - The existing orchestrator remains the source of truth for execution behavior, terminal conditions, retries, and replanning semantics.
 - Existing execution traces remain available and continue to serve as the inspectable history of what happened during execution.
-- Assistant command surfaces can invoke or guide Synod commands, but they do not maintain a separate durable state model outside the shared Synod session.
+- Assistant command surfaces can invoke or guide Boundline commands, but they do not maintain a separate durable state model outside the shared Boundline session.
 - Reset, replacement, or cleanup behaviors may be introduced later as dedicated command refinements, but this feature must already make invalid or terminal session states explicit and safe to reason about.

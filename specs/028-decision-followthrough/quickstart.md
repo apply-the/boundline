@@ -11,23 +11,23 @@ reusing persisted session and trace evidence.
 ## 1. Start a bounded session-native workflow
 
 ```bash
-cargo run --bin synod -- start --workspace <workspace>
-cargo run --bin synod -- capture --workspace <workspace> --goal "Fix the failing add test"
-cargo run --bin synod -- plan --workspace <workspace>
-cargo run --bin synod -- run --workspace <workspace>
+cargo run --bin boundline -- start --workspace <workspace>
+cargo run --bin boundline -- capture --workspace <workspace> --goal "Fix the failing add test"
+cargo run --bin boundline -- plan --workspace <workspace>
+cargo run --bin boundline -- run --workspace <workspace>
 ```
 
 Expected behavior:
 - The command workflow remains unchanged.
 - If the run reaches retry, replanning, blocked governance, or another explicit
-  follow-up state, Synod persists enough continuity evidence to explain what
+  follow-up state, Boundline persists enough continuity evidence to explain what
   should happen next.
 
 ## 2. Check guided follow-through on status and next
 
 ```bash
-cargo run --bin synod -- status --workspace <workspace>
-cargo run --bin synod -- next --workspace <workspace>
+cargo run --bin boundline -- status --workspace <workspace>
+cargo run --bin boundline -- next --workspace <workspace>
 ```
 
 Expected behavior:
@@ -41,8 +41,8 @@ Expected behavior:
 ## 3. Reuse continuity after reload or inspect-only follow-up
 
 ```bash
-cargo run --bin synod -- status --workspace <workspace>
-cargo run --bin synod -- inspect --workspace <workspace>
+cargo run --bin boundline -- status --workspace <workspace>
+cargo run --bin boundline -- inspect --workspace <workspace>
 ```
 
 Expected behavior:
@@ -54,9 +54,9 @@ Expected behavior:
 ## 4. Preserve explicit compatibility authority
 
 ```bash
-cargo run --bin synod -- run --workspace <workspace> --goal "Fix the failing add test"
-cargo run --bin synod -- next --workspace <workspace>
-cargo run --bin synod -- inspect --workspace <workspace>
+cargo run --bin boundline -- run --workspace <workspace> --goal "Fix the failing add test"
+cargo run --bin boundline -- next --workspace <workspace>
+cargo run --bin boundline -- inspect --workspace <workspace>
 ```
 
 Expected behavior:

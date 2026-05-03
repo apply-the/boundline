@@ -27,13 +27,13 @@ authoritative negotiation result.
 state, project it into task context when a task is planned, and reference it in
  traces/events instead of creating a new negotiation persistence file.
 
-**Rationale**: `.synod/session.json`, task context, and traces already define
+**Rationale**: `.boundline/session.json`, task context, and traces already define
 the local state model for the current operator story. Reusing them keeps one
 authoritative source of truth and makes negotiation visible to later commands
 without adding reconciliation complexity.
 
 **Alternatives Considered**:
-- Add a dedicated `.synod/negotiation.json`: rejected because it would create a
+- Add a dedicated `.boundline/negotiation.json`: rejected because it would create a
   second local authority to keep in sync with sessions and traces.
 - Recompute negotiation state on demand from the goal and briefs only: rejected
   because follow-up surfaces need a stable, inspectable decision record.

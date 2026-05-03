@@ -1,13 +1,13 @@
 # Implementation Plan: Session-Native Surface Unification
 
-**Branch**: `016-session-native-surface-unification` | **Date**: 2026-04-29 | **Spec**: [/Users/rt/workspace/synod/specs/016-session-native-surface-unification/spec.md](/Users/rt/workspace/synod/specs/016-session-native-surface-unification/spec.md)
+**Branch**: `016-session-native-surface-unification` | **Date**: 2026-04-29 | **Spec**: [/Users/rt/workspace/boundline/specs/016-session-native-surface-unification/spec.md](/Users/rt/workspace/boundline/specs/016-session-native-surface-unification/spec.md)
 **Input**: Feature specification from `/specs/016-session-native-surface-unification/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
 
 ## Summary
 
-Unify Synod's remaining operator-facing runtime surfaces so review, adaptive execution, governed stages, and explicit compatibility runs all project through the same session-native summary model established in 015-runtime-refoundation. The implementation will normalize route explanation, execution condition, latest decision status, optional mode projections, and next-command guidance across `run`, `status`, `next`, and `inspect`, while preserving `.synod/execution.json` as an explicit compatibility surface and keeping Canon bounded to stage-boundary governance.
+Unify Boundline's remaining operator-facing runtime surfaces so review, adaptive execution, governed stages, and explicit compatibility runs all project through the same session-native summary model established in 015-runtime-refoundation. The implementation will normalize route explanation, execution condition, latest decision status, optional mode projections, and next-command guidance across `run`, `status`, `next`, and `inspect`, while preserving `.boundline/execution.json` as an explicit compatibility surface and keeping Canon bounded to stage-boundary governance.
 
 ## Technical Context
 
@@ -19,7 +19,7 @@ Unify Synod's remaining operator-facing runtime surfaces so review, adaptive exe
 
 **Language/Version**: Rust 1.95.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for the first slice  
-**Storage**: Workspace-local `.synod/session.json`, `.synod/traces/`, optional `.synod/execution.json`, optional `.canon/` artifacts, and updated repository docs and assistant assets  
+**Storage**: Workspace-local `.boundline/session.json`, `.boundline/traces/`, optional `.boundline/execution.json`, optional `.canon/` artifacts, and updated repository docs and assistant assets  
 **Testing**: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features`, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, `cargo deny check licenses advisories bans sources`  
 **Target Platform**: macOS/Linux developer workstations and Linux CI
 **Project Type**: Single Rust CLI/library crate with persisted workspace-local session and trace state  

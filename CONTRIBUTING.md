@@ -1,13 +1,13 @@
-# Contributing to synod
+# Contributing to boundline
 
 ## Overview
 
-Synod is a bounded delivery orchestrator. Contributions should keep that bias:
+Boundline is a bounded delivery orchestrator. Contributions should keep that bias:
 
 - prefer small, inspectable changes over broad refactors
 - preserve explicit session state, traces, and CLI guidance
 - preserve the session-native `start -> capture -> plan -> run -> status -> next -> inspect` story as the default operator path
-- treat workflow assistant surfaces and direct native commands as the same primary Synod product story, with compatibility remaining explicit and subordinate
+- treat workflow assistant surfaces and direct native commands as the same primary Boundline product story, with compatibility remaining explicit and subordinate
 - keep direct `run --goal` native-first and require explicit `--compatibility` for manifest-backed execution
 - keep bounded `bug-fix` and `change` completion credible: do not treat the end of a plan as success unless material change evidence and passed validation are both present, or the CLI reports an explicit stop instead
 - keep negotiated delivery packets, acceptance boundaries, and blocking constraints explicit from capture through follow-up surfaces
@@ -17,7 +17,7 @@ Synod is a bounded delivery orchestrator. Contributions should keep that bias:
 - keep runtime capability profiles, slot effort policies, and any resulting delegation packets explicit from `config show` and `plan` through `run`, `status`, `next`, and `inspect`
 - keep clustered delivery sequential-first with one authoritative primary workspace session owner
 - keep continuity explicit when a workspace moves from session-native state to compatibility-trace follow-up
-- treat `synod workflow` as a thin bounded layer over the same session-owned runtime, not as a generic workflow engine
+- treat `boundline workflow` as a thin bounded layer over the same session-owned runtime, not as a generic workflow engine
 - keep the local developer workflow deterministic
 - update tests and docs together with behavior changes
 
@@ -38,7 +38,7 @@ To install the repository git hooks:
 ## Repository Layout
 
 - [src](src): library code, CLI, session-native runtime, and explicit compatibility execution support
-- workspace-local `.synod/workflows.toml`: optional named workflow registry compiled onto the existing session-native phases, with optional `summary` and `recommended_when` metadata surfaced by `synod workflow list`
+- workspace-local `.boundline/workflows.toml`: optional named workflow registry compiled onto the existing session-native phases, with optional `summary` and `recommended_when` metadata surfaced by `boundline workflow list`
 - [tests](tests): top-level Cargo test harnesses plus `unit`, `integration`, and `contract` modules
 - [assistant](assistant): assistant command packs and shared assistant-facing docs
 - [specs](specs): feature specs, plans, research notes, contracts, quickstarts, and task breakdowns
@@ -109,7 +109,7 @@ If you change a user-visible command, session workflow, or flow behavior, update
 
 When a change affects routing, planning, or compatibility behavior, keep the docs explicit about which path is primary and which path is compatibility-only.
 
-If you change `.synod/workflows.toml` semantics or `synod workflow ...` output, keep the docs explicit about workflow discovery guidance, bounded `review`/`govern` follow-through, and unsupported workflow-engine semantics.
+If you change `.boundline/workflows.toml` semantics or `boundline workflow ...` output, keep the docs explicit about workflow discovery guidance, bounded `review`/`govern` follow-through, and unsupported workflow-engine semantics.
 
 If you change governed-stage behavior, keep the docs explicit about which stage now stops for governance, how packet lineage is reused on later stages, and how waiting or blocked guidance appears on both direct session and workflow-aware surfaces.
 
@@ -121,7 +121,7 @@ bounded `read_targets`, candidate credibility and rejection wording, explicit
 exhaustion behavior, and the fact that adaptive repair still remains on the
 explicit compatibility path in this release.
 
-If you change how `status`, `next`, or `inspect` choose the authoritative follow-up state, keep the docs explicit about `continuity_authority`, inspect-only compatibility follow-up, and when `synod start` is or is not actually required.
+If you change how `status`, `next`, or `inspect` choose the authoritative follow-up state, keep the docs explicit about `continuity_authority`, inspect-only compatibility follow-up, and when `boundline start` is or is not actually required.
 
 If you change how `run`, `status`, `next`, or `inspect` align route-summary wording, keep the docs explicit about `route_owner`, any material `route_config_projection`, persisted `effective_routing`, `assistant_bindings`, `runtime_capabilities`, `slot_effort_policies`, `follow_through_guidance`, `follow_through_evidence_source`, and the rule that summary convergence must not hide the real owning route, continuity authority, or any explicit delegation boundary.
 
@@ -137,7 +137,7 @@ continue or must stop explicitly.
 If you change dynamic planning, keep the docs explicit about
 `goal_plan_state`, `goal_plan_revision`, `planning_rationale`,
 `verification_strategy`, bounded proposal supersession, and when
-`synod plan --confirm` is required before native execution can continue.
+`boundline plan --confirm` is required before native execution can continue.
 
 If you change clustered delivery behavior, keep the docs explicit about the
 primary workspace remaining authoritative, member-local trace persistence,
@@ -160,6 +160,6 @@ For CLI or trace-surface changes, include representative output snippets when th
 
 ## Versioning
 
-Synod follows Semantic Versioning.
+Boundline follows Semantic Versioning.
 
 Before `1.0.0`, breaking changes may still land in minor releases, but version bumps should remain intentional and consistent with the user-visible scope of the change.

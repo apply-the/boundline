@@ -1,7 +1,7 @@
-use serde_json::json;
-use synod::domain::flow::{
+use boundline::domain::flow::{
     FLOW_METADATA_KEY, attach_stage_metadata, built_in_flow, supported_flow_names,
 };
+use serde_json::json;
 
 #[test]
 fn built_in_flow_registry_returns_supported_flows() {

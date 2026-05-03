@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-05-03
-**Feature**: [spec.md](/Users/rt/workspace/synod/specs/037-bounded-delegation/spec.md)
+**Feature**: [spec.md](/Users/rt/workspace/boundline/specs/037-bounded-delegation/spec.md)
 
 ## Content Quality
 
@@ -31,4 +31,4 @@
 
 ## Notes
 
-- Validation completed in one pass. The spec keeps delegation bounded, sequential-first, and session-owned so it stays consistent with the constitution while still changing Synod's operating model materially.
+- Validation completed in one pass. The spec keeps delegation bounded, sequential-first, and session-owned so it stays consistent with the constitution while still changing Boundline's operating model materially.

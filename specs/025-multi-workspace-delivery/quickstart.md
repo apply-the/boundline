@@ -8,9 +8,9 @@ run, explicit workspace participation, and cluster-aware follow-up authority.
 ## Prerequisites
 
 - A primary workspace and at least one member workspace already registered in a
-  Synod cluster.
-- Local `.synod/` state available in each participating workspace.
-- Use `cargo run --bin synod -- ...` from the repository root when validating
+  Boundline cluster.
+- Local `.boundline/` state available in each participating workspace.
+- Use `cargo run --bin boundline -- ...` from the repository root when validating
   locally.
 - Treat direct single-workspace and explicit compatibility execution as
   separate paths; this quickstart focuses on the cluster-aware session-native
@@ -28,15 +28,15 @@ run, explicit workspace participation, and cluster-aware follow-up authority.
 ## Example Validation Sequence
 
 ```text
-cargo run --bin synod -- cluster init --workspace <primary-workspace> --cluster-id delivery-b --member <primary-workspace> --member <secondary-workspace>
-cargo run --bin synod -- start --cluster <primary-workspace>
-cargo run --bin synod -- capture --cluster <primary-workspace> --goal "Implement the shared API and update the dependent client"
-cargo run --bin synod -- plan --cluster <primary-workspace> --flow change
-cargo run --bin synod -- run --cluster <primary-workspace>
-cargo run --bin synod -- status --cluster <primary-workspace>
-cargo run --bin synod -- next --cluster <primary-workspace>
-cargo run --bin synod -- inspect --cluster <primary-workspace>
-cargo run --bin synod -- cluster inspect --workspace <primary-workspace>
+cargo run --bin boundline -- cluster init --workspace <primary-workspace> --cluster-id delivery-b --member <primary-workspace> --member <secondary-workspace>
+cargo run --bin boundline -- start --cluster <primary-workspace>
+cargo run --bin boundline -- capture --cluster <primary-workspace> --goal "Implement the shared API and update the dependent client"
+cargo run --bin boundline -- plan --cluster <primary-workspace> --flow change
+cargo run --bin boundline -- run --cluster <primary-workspace>
+cargo run --bin boundline -- status --cluster <primary-workspace>
+cargo run --bin boundline -- next --cluster <primary-workspace>
+cargo run --bin boundline -- inspect --cluster <primary-workspace>
+cargo run --bin boundline -- cluster inspect --workspace <primary-workspace>
 ```
 
 ## Expected CLI Behavior

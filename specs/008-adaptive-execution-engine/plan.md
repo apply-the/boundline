@@ -5,13 +5,13 @@
 
 ## Summary
 
-Broaden Synod beyond fixed pre-authored delivery attempts by introducing a bounded adaptive execution mode that chooses one relevant workspace slice from the current repository state, synthesizes one deterministic candidate change from that slice, validates the result, and replans to the next credible candidate when validation fails. The minimal slice keeps the current orchestrator loop, session model, trace store, and bounded review integration, but extends the execution profile, planner, fixture runtime, and CLI evidence surfaces so adaptive decisions remain explicit, inspectable, and reproducible. The release target for this slice is `0.8.0`.
+Broaden Boundline beyond fixed pre-authored delivery attempts by introducing a bounded adaptive execution mode that chooses one relevant workspace slice from the current repository state, synthesizes one deterministic candidate change from that slice, validates the result, and replans to the next credible candidate when validation fails. The minimal slice keeps the current orchestrator loop, session model, trace store, and bounded review integration, but extends the execution profile, planner, fixture runtime, and CLI evidence surfaces so adaptive decisions remain explicit, inspectable, and reproducible. The release target for this slice is `0.8.0`.
 
 ## Technical Context
 
 **Language/Version**: Rust 1.95.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`) plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies for the initial adaptive slice  
-**Storage**: Workspace-local JSON session record at `<workspace>/.synod/session.json`, persisted execution traces under `<workspace>/.synod/traces/`, and workspace execution manifests under `<workspace>/.synod/execution.json` with legacy fallback to `<workspace>/.synod/fixture.json`  
+**Storage**: Workspace-local JSON session record at `<workspace>/.boundline/session.json`, persisted execution traces under `<workspace>/.boundline/traces/`, and workspace execution manifests under `<workspace>/.boundline/execution.json` with legacy fallback to `<workspace>/.boundline/fixture.json`  
 **Testing**: `cargo test --all-targets`, focused contract and integration coverage for adaptive profile loading, planner behavior, adaptive traces, and CLI surfaces, `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`  
 **Target Platform**: macOS and Linux developer workstations plus Linux CI via the existing GitHub Actions workflows  
 **Project Type**: Single Rust CLI crate with file-backed session and trace persistence plus repository-managed assistant assets  
@@ -25,7 +25,7 @@ Broaden Synod beyond fixed pre-authored delivery attempts by introducing a bound
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- Delivery identity: PASS. The feature directly increases Synod's ability to deliver working code when no fixed attempt list exists by selecting and changing a bounded workspace slice. See Summary and Technical Context.
+- Delivery identity: PASS. The feature directly increases Boundline's ability to deliver working code when no fixed attempt list exists by selecting and changing a bounded workspace slice. See Summary and Technical Context.
 - Delivery-first scope: PASS. The plan prioritizes execution, validation, recovery, and inspectability ahead of optimization or polish. See Summary, Technical Context, and Project Structure.
 - Bounded execution: PASS. Adaptive runs remain limited by explicit run limits, bounded slice selection, bounded candidate generation, and explicit succeeded/failed/exhausted terminal states. See Technical Context and research decisions.
 - Stateful execution: PASS. Adaptive selection evidence, attempt lineage, validation records, and latest slice state are persisted in task context, session projections, and traces. See Technical Context and data model.

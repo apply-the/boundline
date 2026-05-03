@@ -35,9 +35,9 @@
 
 ## Phase 3: User Story 1 - Select And Change The Relevant Workspace Slice (Priority: P1) 🎯 MVP
 
-**Goal**: Let Synod identify one bounded workspace slice from the current repository state, synthesize one adaptive change attempt, and execute it through the existing run flow.
+**Goal**: Let Boundline identify one bounded workspace slice from the current repository state, synthesize one adaptive change attempt, and execute it through the existing run flow.
 
-**Independent Test**: Run Synod against a temporary workspace with an adaptive execution profile, confirm a bounded workspace slice is selected, a synthesized change attempt is applied, validation runs, and `run`/`inspect` expose the adaptive evidence.
+**Independent Test**: Run Boundline against a temporary workspace with an adaptive execution profile, confirm a bounded workspace slice is selected, a synthesized change attempt is applied, validation runs, and `run`/`inspect` expose the adaptive evidence.
 
 ### Tests for User Story 1
 
@@ -60,7 +60,7 @@
 
 **Goal**: Keep failed validation inside one bounded adaptive delivery loop through new candidate synthesis, signature-based non-repeat behavior, and explicit exhausted or failed terminal outcomes.
 
-**Independent Test**: Run adaptive scenarios where the first candidate fails validation, verify that Synod records the failure, chooses a materially different next candidate or slice, and stops explicitly when no credible next path remains.
+**Independent Test**: Run adaptive scenarios where the first candidate fails validation, verify that Boundline records the failure, chooses a materially different next candidate or slice, and stops explicitly when no credible next path remains.
 
 ### Tests for User Story 2
 

@@ -7,7 +7,7 @@
 
 ### Expanded Stage Governance Policy
 
-The bounded policy that decides whether a Synod stage may use a newer Canon governed analysis mode.
+The bounded policy that decides whether a Boundline stage may use a newer Canon governed analysis mode.
 
 ```text
 ExpandedStageGovernancePolicy
@@ -46,11 +46,11 @@ GovernedAnalysisModeSelection
 **Behavioral rules**:
 - Mode selection remains explicit even when only one mode is valid.
 - If no compliant mode exists, the selection must remain blocked rather than invent a fallback.
-- The first slice may add `security-assessment` without changing Synod's top-level flow names.
+- The first slice may add `security-assessment` without changing Boundline's top-level flow names.
 
 ### Governed Analysis Packet Summary
 
-The bounded summary of the Canon packet that Synod uses for governance state and downstream reuse.
+The bounded summary of the Canon packet that Boundline uses for governance state and downstream reuse.
 
 ```text
 GovernedAnalysisPacketSummary
@@ -63,7 +63,7 @@ GovernedAnalysisPacketSummary
 ```
 
 **Behavioral rules**:
-- Synod reuses only packet refs, headlines, readiness, and missing metadata.
+- Boundline reuses only packet refs, headlines, readiness, and missing metadata.
 - A `rejected` or `incomplete` packet is never treated as credible completion.
 - Approval refresh may change the packet's usable state without changing the current flow model.
 
@@ -86,7 +86,7 @@ GovernedAnalysisCondition
 
 ## Relationships
 
-- `ExpandedStageGovernancePolicy` constrains which Canon modes can be selected for a Synod stage.
+- `ExpandedStageGovernancePolicy` constrains which Canon modes can be selected for a Boundline stage.
 - `GovernedAnalysisModeSelection` records the explicit decision to route a stage through `security-assessment`.
 - `GovernedAnalysisPacketSummary` captures the bounded Canon evidence returned by the runtime.
 - `GovernedAnalysisCondition` explains whether the current governed analysis path can continue, must wait, or must stop.

@@ -10,14 +10,14 @@ the existing `status`, `next`, and `inspect` surfaces instead of creating a new
 continuity command or a new persistence file.
 
 **Rationale**: Operators already use those three commands to understand what
-Synod will do next. Reusing them delivers immediate value without splitting the
+Boundline will do next. Reusing them delivers immediate value without splitting the
 read-side workflow or introducing a second authority for follow-up guidance.
 
 **Alternatives Considered**:
 - Add a dedicated continuity-inspection command: rejected because it would make
   operators learn another path for information that directly shapes current
   follow-up decisions.
-- Persist a new standalone next-action file under `.synod/`: rejected because it
+- Persist a new standalone next-action file under `.boundline/`: rejected because it
   would duplicate information that should stay derivable from session and trace
   state.
 
@@ -30,7 +30,7 @@ authoritative trace evidence and make that authority visible.
 
 **Rationale**: The core gap is not lack of evidence but unclear ownership of
 which evidence should guide follow-up. Making the winning evidence source
-explicit keeps Synod inspectable and avoids silent merging of stale session
+explicit keeps Boundline inspectable and avoids silent merging of stale session
 state with newer trace facts.
 
 **Alternatives Considered**:
@@ -78,7 +78,7 @@ action comes from a live native session or an explicit compatibility trace.
 touched-Rust coverage refresh, clippy cleanup, and formatting as first-class
 tasks for the feature rather than post-hoc cleanup.
 
-**Rationale**: The slice changes how operators interpret what Synod should do
+**Rationale**: The slice changes how operators interpret what Boundline should do
 next. The release must ship as one coherent story across runtime output,
 assistant packs, documentation, and validation evidence.
 

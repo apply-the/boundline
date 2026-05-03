@@ -1,17 +1,17 @@
-use serde_json::json;
-use std::fs;
-use synod::domain::brief::normalize_inputs;
-use synod::domain::cluster::ClusterSessionProjection;
-use synod::domain::flow::built_in_flow;
-use synod::domain::goal_plan::{GoalPlan, PlannedTask};
-use synod::domain::limits::RunLimits;
-use synod::domain::plan::Plan;
-use synod::domain::session::{
+use boundline::domain::brief::normalize_inputs;
+use boundline::domain::cluster::ClusterSessionProjection;
+use boundline::domain::flow::built_in_flow;
+use boundline::domain::goal_plan::{GoalPlan, PlannedTask};
+use boundline::domain::limits::RunLimits;
+use boundline::domain::plan::Plan;
+use boundline::domain::session::{
     ActiveSessionRecord, SessionCommand, SessionStatus, SessionStatusView, SessionTransition,
     SessionValidationError,
 };
-use synod::domain::step::Step;
-use synod::domain::task::{Task, TaskRunRequest, TaskStatus, TerminalReason};
+use boundline::domain::step::Step;
+use boundline::domain::task::{Task, TaskRunRequest, TaskStatus, TerminalReason};
+use serde_json::json;
+use std::fs;
 
 fn build_goal_plan() -> GoalPlan {
     let mut plan = GoalPlan::new(
@@ -19,7 +19,7 @@ fn build_goal_plan() -> GoalPlan {
         vec![PlannedTask {
             task_id: "planned-task-1".to_string(),
             description: "Analyze the current CLI path".to_string(),
-            target: "/tmp/synod-session-record/src/lib.rs".to_string(),
+            target: "/tmp/boundline-session-record/src/lib.rs".to_string(),
             expected_outcome: Some("routing gaps understood".to_string()),
             decision_type_hint: None,
         }],
@@ -47,10 +47,10 @@ fn build_task(workspace_ref: &str) -> Task {
 
 #[test]
 fn session_record_round_trips_and_status_values_serialize() {
-    let task = build_task("/tmp/synod-session-record");
+    let task = build_task("/tmp/boundline-session-record");
     let record = ActiveSessionRecord {
         session_id: "session-1".to_string(),
-        workspace_ref: "/tmp/synod-session-record".to_string(),
+        workspace_ref: "/tmp/boundline-session-record".to_string(),
         goal: Some("Deliver a session-backed CLI".to_string()),
         authored_brief: None,
         negotiation_packet: None,
@@ -62,7 +62,9 @@ fn session_record_round_trips_and_status_values_serialize() {
         active_flow_policy: None,
         latest_status: SessionStatus::Planned,
         latest_terminal_reason: None,
-        latest_trace_ref: Some("/tmp/synod-session-record/.synod/traces/task-1.json".to_string()),
+        latest_trace_ref: Some(
+            "/tmp/boundline-session-record/.boundline/traces/task-1.json".to_string(),
+        ),
         created_at: 10,
         updated_at: 20,
     };
@@ -116,7 +118,7 @@ fn session_record_round_trips_and_status_values_serialize() {
         current_step_id: Some("analyze".to_string()),
         current_step_index: Some(0),
         latest_status: SessionStatus::Planned,
-        execution_path: synod::domain::session::execution_path_text(&record),
+        execution_path: boundline::domain::session::execution_path_text(&record),
         latest_trace_ref: record.latest_trace_ref.clone(),
         latest_decision_status: None,
         latest_decision_target: None,
@@ -146,7 +148,7 @@ fn session_record_round_trips_and_status_values_serialize() {
         latest_governance_decision: None,
         latest_governance_candidates: None,
         governance_next_action: None,
-        next_command: Some("synod step".to_string()),
+        next_command: Some("boundline step".to_string()),
         explanation: "the active plan is ready for explicit execution".to_string(),
         ..Default::default()
     };
@@ -158,7 +160,7 @@ fn session_record_validation_rejects_workspace_mismatches_and_external_traces() 
     let task = build_task("/tmp/other-workspace");
     let record = ActiveSessionRecord {
         session_id: "session-2".to_string(),
-        workspace_ref: "/tmp/synod-session-record".to_string(),
+        workspace_ref: "/tmp/boundline-session-record".to_string(),
         goal: Some("Deliver a session-backed CLI".to_string()),
         authored_brief: None,
         negotiation_packet: None,
@@ -170,7 +172,9 @@ fn session_record_validation_rejects_workspace_mismatches_and_external_traces() 
         active_flow_policy: None,
         latest_status: SessionStatus::Planned,
         latest_terminal_reason: None,
-        latest_trace_ref: Some("/tmp/synod-session-record/.synod/traces/task-1.json".to_string()),
+        latest_trace_ref: Some(
+            "/tmp/boundline-session-record/.boundline/traces/task-1.json".to_string(),
+        ),
         created_at: 10,
         updated_at: 20,
     };
@@ -178,7 +182,7 @@ fn session_record_validation_rejects_workspace_mismatches_and_external_traces() 
     assert_eq!(
         record.validate().unwrap_err(),
         SessionValidationError::TaskWorkspaceMismatch {
-            expected: "/tmp/synod-session-record".to_string(),
+            expected: "/tmp/boundline-session-record".to_string(),
             actual: "/tmp/other-workspace".to_string(),
         }
     );
@@ -190,9 +194,9 @@ fn session_record_validation_allows_cluster_member_tasks_when_projection_is_pres
     task.context
         .set_cluster_session_projection(&ClusterSessionProjection {
             cluster_id: "cluster-1".to_string(),
-            primary_workspace_ref: "/tmp/synod-session-record".to_string(),
+            primary_workspace_ref: "/tmp/boundline-session-record".to_string(),
             member_workspace_refs: vec![
-                "/tmp/synod-session-record".to_string(),
+                "/tmp/boundline-session-record".to_string(),
                 "/tmp/cluster-member".to_string(),
             ],
             started_from_command: "run".to_string(),
@@ -201,7 +205,7 @@ fn session_record_validation_allows_cluster_member_tasks_when_projection_is_pres
         .unwrap();
     let record = ActiveSessionRecord {
         session_id: "session-cluster".to_string(),
-        workspace_ref: "/tmp/synod-session-record".to_string(),
+        workspace_ref: "/tmp/boundline-session-record".to_string(),
         goal: Some("Deliver a session-backed CLI".to_string()),
         authored_brief: None,
         negotiation_packet: None,
@@ -213,7 +217,9 @@ fn session_record_validation_allows_cluster_member_tasks_when_projection_is_pres
         active_flow_policy: None,
         latest_status: SessionStatus::Planned,
         latest_terminal_reason: None,
-        latest_trace_ref: Some("/tmp/synod-session-record/.synod/traces/task-1.json".to_string()),
+        latest_trace_ref: Some(
+            "/tmp/boundline-session-record/.boundline/traces/task-1.json".to_string(),
+        ),
         created_at: 10,
         updated_at: 20,
     };
@@ -223,15 +229,19 @@ fn session_record_validation_allows_cluster_member_tasks_when_projection_is_pres
 
 #[test]
 fn terminal_session_requires_terminal_reason_and_consistent_view() {
-    let mut task = build_task("/tmp/synod-session-record");
+    let mut task = build_task("/tmp/boundline-session-record");
     task.apply_terminal(
         TaskStatus::Succeeded,
-        TerminalReason::new(synod::domain::limits::TerminalCondition::GoalSatisfied, "done", None),
+        TerminalReason::new(
+            boundline::domain::limits::TerminalCondition::GoalSatisfied,
+            "done",
+            None,
+        ),
     );
 
     let record = ActiveSessionRecord {
         session_id: "session-terminal".to_string(),
-        workspace_ref: "/tmp/synod-session-record".to_string(),
+        workspace_ref: "/tmp/boundline-session-record".to_string(),
         goal: Some("Deliver a session-backed CLI".to_string()),
         authored_brief: None,
         negotiation_packet: None,
@@ -243,7 +253,9 @@ fn terminal_session_requires_terminal_reason_and_consistent_view() {
         active_flow_policy: None,
         latest_status: SessionStatus::Succeeded,
         latest_terminal_reason: None,
-        latest_trace_ref: Some("/tmp/synod-session-record/.synod/traces/task-1.json".to_string()),
+        latest_trace_ref: Some(
+            "/tmp/boundline-session-record/.boundline/traces/task-1.json".to_string(),
+        ),
         created_at: 10,
         updated_at: 20,
     };
@@ -258,7 +270,7 @@ fn terminal_session_requires_terminal_reason_and_consistent_view() {
 fn goal_captured_sessions_require_a_goal_but_invalid_sessions_can_clear_context() {
     let missing_goal = ActiveSessionRecord {
         session_id: "session-goal-captured".to_string(),
-        workspace_ref: "/tmp/synod-session-record".to_string(),
+        workspace_ref: "/tmp/boundline-session-record".to_string(),
         goal: None,
         authored_brief: None,
         negotiation_packet: None,
@@ -289,11 +301,11 @@ fn goal_captured_sessions_require_a_goal_but_invalid_sessions_can_clear_context(
 fn invalid_flow_state_is_rejected_by_session_validation() {
     let record = ActiveSessionRecord {
         session_id: "session-flow".to_string(),
-        workspace_ref: "/tmp/synod-session-record".to_string(),
+        workspace_ref: "/tmp/boundline-session-record".to_string(),
         goal: Some("Deliver a session-backed CLI".to_string()),
         authored_brief: None,
         negotiation_packet: None,
-        active_flow: Some(synod::domain::flow::SessionFlowState {
+        active_flow: Some(boundline::domain::flow::SessionFlowState {
             flow_name: "bug-fix".to_string(),
             current_stage_id: "verify".to_string(),
             current_stage_index: 0,
@@ -317,7 +329,7 @@ fn invalid_flow_state_is_rejected_by_session_validation() {
 #[test]
 fn goal_captured_status_view_can_project_clarification_fields_from_authored_brief() {
     let workspace = std::env::temp_dir()
-        .join(format!("synod-session-record-clarification-{}", uuid::Uuid::new_v4()));
+        .join(format!("boundline-session-record-clarification-{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(&workspace).unwrap();
     let bundle = normalize_inputs(
         &workspace,
@@ -377,7 +389,7 @@ fn goal_captured_status_view_can_project_clarification_fields_from_authored_brie
         current_step_id: None,
         current_step_index: None,
         latest_status: SessionStatus::GoalCaptured,
-        execution_path: synod::domain::session::execution_path_text(&record),
+        execution_path: boundline::domain::session::execution_path_text(&record),
         latest_trace_ref: None,
         latest_decision_status: None,
         latest_decision_target: None,
@@ -407,7 +419,7 @@ fn goal_captured_status_view_can_project_clarification_fields_from_authored_brie
         latest_governance_decision: None,
         latest_governance_candidates: None,
         governance_next_action: None,
-        next_command: Some("synod capture --goal <narrower goal>".to_string()),
+        next_command: Some("boundline capture --goal <narrower goal>".to_string()),
         explanation: "clarification is required before planning can continue".to_string(),
         ..Default::default()
     };
@@ -421,7 +433,7 @@ fn goal_captured_status_view_can_project_clarification_fields_from_authored_brie
 fn planned_session_with_goal_plan_and_no_active_task_is_valid() {
     let record = ActiveSessionRecord {
         session_id: "session-native-plan".to_string(),
-        workspace_ref: "/tmp/synod-session-record".to_string(),
+        workspace_ref: "/tmp/boundline-session-record".to_string(),
         goal: Some("Deliver a session-backed CLI".to_string()),
         authored_brief: None,
         negotiation_packet: None,

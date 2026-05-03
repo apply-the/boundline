@@ -21,19 +21,19 @@ Every command file MUST include these sections, using assistant-appropriate word
 
 | Assistant Command | Direct Backend | Notes |
 |-------------------|----------------|-------|
-| `synod-start` | `synod doctor --workspace <workspace>` when workspace is known | Establishes readiness and missing context; may remain routing-only until workspace is provided |
-| `synod-plan` | None required | Clarifies or bounds the goal, then routes to `synod-run` |
-| `synod-step` | None required | Advances the workflow by selecting one explicit next action from current context or latest inspection evidence |
-| `synod-run` | `synod run --workspace <workspace> --goal <goal>` | Primary execution path |
-| `synod-status` | `synod inspect --workspace <workspace>` | Uses latest trace in the workspace to summarize current status |
-| `synod-next` | `synod inspect --workspace <workspace>` when evidence is needed | Uses latest trace plus current context to recommend the next command |
-| `synod-inspect` | `synod inspect --trace <trace>` or `synod inspect --workspace <workspace>` | Explicit inspection path |
+| `boundline-start` | `boundline doctor --workspace <workspace>` when workspace is known | Establishes readiness and missing context; may remain routing-only until workspace is provided |
+| `boundline-plan` | None required | Clarifies or bounds the goal, then routes to `boundline-run` |
+| `boundline-step` | None required | Advances the workflow by selecting one explicit next action from current context or latest inspection evidence |
+| `boundline-run` | `boundline run --workspace <workspace> --goal <goal>` | Primary execution path |
+| `boundline-status` | `boundline inspect --workspace <workspace>` | Uses latest trace in the workspace to summarize current status |
+| `boundline-next` | `boundline inspect --workspace <workspace>` when evidence is needed | Uses latest trace plus current context to recommend the next command |
+| `boundline-inspect` | `boundline inspect --trace <trace>` or `boundline inspect --workspace <workspace>` | Explicit inspection path |
 
 ## Output Interpretation Guarantees
 
-- `synod-run`, `synod-status`, `synod-next`, and `synod-inspect` must summarize terminal status, key step results, recovery signals when present, and the most useful next command.
-- `synod-start` must summarize readiness and missing prerequisites.
-- `synod-plan` and `synod-step` must summarize the clarified goal or next action and explain why that route is being recommended.
+- `boundline-run`, `boundline-status`, `boundline-next`, and `boundline-inspect` must summarize terminal status, key step results, recovery signals when present, and the most useful next command.
+- `boundline-start` must summarize readiness and missing prerequisites.
+- `boundline-plan` and `boundline-step` must summarize the clarified goal or next action and explain why that route is being recommended.
 - No command may dump raw CLI logs without summarization.
 
 ## Routing Guarantees

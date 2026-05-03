@@ -22,7 +22,7 @@ impl FileSessionStore {
     }
 
     pub fn for_workspace(workspace_ref: impl AsRef<Path>) -> Self {
-        Self::new(workspace_ref.as_ref().join(".synod").join("session.json"))
+        Self::new(workspace_ref.as_ref().join(".boundline").join("session.json"))
     }
 
     pub fn path(&self) -> &Path {

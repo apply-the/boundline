@@ -17,9 +17,9 @@
 
 **Purpose**: Reserve the `0.27.0` release boundary and prepare routing-aware fixtures plus test registration
 
-- [ ] T001 Bump crate version to `0.27.0` in `/Users/rt/workspace/synod/Cargo.toml` and `/Users/rt/workspace/synod/Cargo.lock`
-- [ ] T002 Extend routing, config, and trace fixtures for inspectable routing scenarios in `/Users/rt/workspace/synod/tests/support/workspace_fixture.rs`
-- [ ] T003 Register routing and assistant-binding test modules in `/Users/rt/workspace/synod/tests/contract.rs`, `/Users/rt/workspace/synod/tests/integration.rs`, and `/Users/rt/workspace/synod/tests/unit.rs`
+- [ ] T001 Bump crate version to `0.27.0` in `/Users/rt/workspace/boundline/Cargo.toml` and `/Users/rt/workspace/boundline/Cargo.lock`
+- [ ] T002 Extend routing, config, and trace fixtures for inspectable routing scenarios in `/Users/rt/workspace/boundline/tests/support/workspace_fixture.rs`
+- [ ] T003 Register routing and assistant-binding test modules in `/Users/rt/workspace/boundline/tests/contract.rs`, `/Users/rt/workspace/boundline/tests/integration.rs`, and `/Users/rt/workspace/boundline/tests/unit.rs`
 
 ---
 
@@ -29,10 +29,10 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T004 Create shared routing-decision and assistant-binding models plus persistence projections in `/Users/rt/workspace/synod/src/domain/routing_decision.rs`, `/Users/rt/workspace/synod/src/domain/session.rs`, `/Users/rt/workspace/synod/src/domain/trace.rs`, and `/Users/rt/workspace/synod/src/lib.rs`
-- [ ] T005 [P] Integrate effective routing resolution and assistant-binding helpers in `/Users/rt/workspace/synod/src/domain/configuration.rs`, `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs`, and `/Users/rt/workspace/synod/src/orchestrator/engine.rs`
-- [ ] T006 [P] Add shared CLI routing-projection and rendering helpers in `/Users/rt/workspace/synod/src/cli/output.rs`, `/Users/rt/workspace/synod/src/cli/inspect.rs`, `/Users/rt/workspace/synod/src/cli/session.rs`, and `/Users/rt/workspace/synod/src/cli/run.rs`
-- [ ] T007 [P] Add foundational unit coverage for routing-decision serialization, assistant-binding mapping, and CLI rendering helpers in `/Users/rt/workspace/synod/tests/unit/routing_decision_models.rs`, `/Users/rt/workspace/synod/tests/unit/assistant_binding.rs`, and `/Users/rt/workspace/synod/tests/unit/cli_output.rs`
+- [ ] T004 Create shared routing-decision and assistant-binding models plus persistence projections in `/Users/rt/workspace/boundline/src/domain/routing_decision.rs`, `/Users/rt/workspace/boundline/src/domain/session.rs`, `/Users/rt/workspace/boundline/src/domain/trace.rs`, and `/Users/rt/workspace/boundline/src/lib.rs`
+- [ ] T005 [P] Integrate effective routing resolution and assistant-binding helpers in `/Users/rt/workspace/boundline/src/domain/configuration.rs`, `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs`, and `/Users/rt/workspace/boundline/src/orchestrator/engine.rs`
+- [ ] T006 [P] Add shared CLI routing-projection and rendering helpers in `/Users/rt/workspace/boundline/src/cli/output.rs`, `/Users/rt/workspace/boundline/src/cli/inspect.rs`, `/Users/rt/workspace/boundline/src/cli/session.rs`, and `/Users/rt/workspace/boundline/src/cli/run.rs`
+- [ ] T007 [P] Add foundational unit coverage for routing-decision serialization, assistant-binding mapping, and CLI rendering helpers in `/Users/rt/workspace/boundline/tests/unit/routing_decision_models.rs`, `/Users/rt/workspace/boundline/tests/unit/assistant_binding.rs`, and `/Users/rt/workspace/boundline/tests/unit/cli_output.rs`
 
 **Checkpoint**: Shared routing-decision primitives exist, assistant binding can be derived from effective routing, and session or trace surfaces can render the new projection without changing the overall operator workflow.
 
@@ -46,14 +46,14 @@
 
 ### Tests for User Story 1
 
-- [ ] T008 [P] [US1] Add contract coverage for routing-decision visibility across execution and follow-up surfaces in `/Users/rt/workspace/synod/tests/contract/routing_decision_surface_contract.rs`
-- [ ] T009 [P] [US1] Add integration coverage for session-native and inspect-only routing follow-up flows in `/Users/rt/workspace/synod/tests/integration/routing_follow_up_flow.rs` and `/Users/rt/workspace/synod/tests/integration/compatibility_routing_follow_up.rs`
+- [ ] T008 [P] [US1] Add contract coverage for routing-decision visibility across execution and follow-up surfaces in `/Users/rt/workspace/boundline/tests/contract/routing_decision_surface_contract.rs`
+- [ ] T009 [P] [US1] Add integration coverage for session-native and inspect-only routing follow-up flows in `/Users/rt/workspace/boundline/tests/integration/routing_follow_up_flow.rs` and `/Users/rt/workspace/boundline/tests/integration/compatibility_routing_follow_up.rs`
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] Persist and validate routing decisions plus authority source in `/Users/rt/workspace/synod/src/domain/session.rs`, `/Users/rt/workspace/synod/src/domain/trace.rs`, `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs`, and `/Users/rt/workspace/synod/src/cli/session.rs`
-- [ ] T011 [US1] Render routing headlines, authority-source cues, and route-owner summaries in `/Users/rt/workspace/synod/src/cli/output.rs`, `/Users/rt/workspace/synod/src/cli/inspect.rs`, and `/Users/rt/workspace/synod/src/cli/run.rs`
-- [ ] T012 [US1] Preserve routing visibility for compatibility and clustered follow-up in `/Users/rt/workspace/synod/src/domain/session.rs`, `/Users/rt/workspace/synod/src/domain/trace.rs`, `/Users/rt/workspace/synod/src/cli/inspect.rs`, and `/Users/rt/workspace/synod/src/cli/output.rs`
+- [ ] T010 [US1] Persist and validate routing decisions plus authority source in `/Users/rt/workspace/boundline/src/domain/session.rs`, `/Users/rt/workspace/boundline/src/domain/trace.rs`, `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs`, and `/Users/rt/workspace/boundline/src/cli/session.rs`
+- [ ] T011 [US1] Render routing headlines, authority-source cues, and route-owner summaries in `/Users/rt/workspace/boundline/src/cli/output.rs`, `/Users/rt/workspace/boundline/src/cli/inspect.rs`, and `/Users/rt/workspace/boundline/src/cli/run.rs`
+- [ ] T012 [US1] Preserve routing visibility for compatibility and clustered follow-up in `/Users/rt/workspace/boundline/src/domain/session.rs`, `/Users/rt/workspace/boundline/src/domain/trace.rs`, `/Users/rt/workspace/boundline/src/cli/inspect.rs`, and `/Users/rt/workspace/boundline/src/cli/output.rs`
 
 **Checkpoint**: Operators can identify the active slot route, its authority source, and ownership from the same follow-up surfaces they already use.
 
@@ -61,19 +61,19 @@
 
 ## Phase 4: User Story 2 - Rebind Assistant Packs Without A Second Runtime (Priority: P2)
 
-**Goal**: Let assistant/backend binding follow effective slot routing while keeping Synod's CLI workflow and orchestration ownership unchanged.
+**Goal**: Let assistant/backend binding follow effective slot routing while keeping Boundline's CLI workflow and orchestration ownership unchanged.
 
 **Independent Test**: Change the configured route for one or more slots and verify that the selected assistant-backed behavior follows the configured binding, while unsupported bindings fail explicitly and compatibility or cluster ownership stays clear.
 
 ### Tests for User Story 2
 
-- [ ] T013 [P] [US2] Add contract coverage for assistant-binding assets, Gemini fallback guidance, and unsupported-runtime handling in `/Users/rt/workspace/synod/tests/contract/assistant_binding_surface_contract.rs` and `/Users/rt/workspace/synod/tests/contract/assistant_command_pack_contract.rs`
-- [ ] T014 [P] [US2] Add unit and integration coverage for routing-aware backend selection in `/Users/rt/workspace/synod/tests/unit/assistant_binding.rs` and `/Users/rt/workspace/synod/tests/integration/routing_backend_selection.rs`
+- [ ] T013 [P] [US2] Add contract coverage for assistant-binding assets, Gemini fallback guidance, and unsupported-runtime handling in `/Users/rt/workspace/boundline/tests/contract/assistant_binding_surface_contract.rs` and `/Users/rt/workspace/boundline/tests/contract/assistant_command_pack_contract.rs`
+- [ ] T014 [P] [US2] Add unit and integration coverage for routing-aware backend selection in `/Users/rt/workspace/boundline/tests/unit/assistant_binding.rs` and `/Users/rt/workspace/boundline/tests/integration/routing_backend_selection.rs`
 
 ### Implementation for User Story 2
 
-- [ ] T015 [US2] Replace hard-wired native adapter registration with routing-aware assistant or backend binding in `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs`, `/Users/rt/workspace/synod/src/adapters/agent.rs`, and `/Users/rt/workspace/synod/src/registry/agent_registry.rs`
-- [ ] T016 [US2] Surface assistant-binding decisions and explicit unsupported-binding behavior in `/Users/rt/workspace/synod/src/cli/config.rs`, `/Users/rt/workspace/synod/src/cli/output.rs`, `/Users/rt/workspace/synod/src/domain/routing_decision.rs`, and `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs`
+- [ ] T015 [US2] Replace hard-wired native adapter registration with routing-aware assistant or backend binding in `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs`, `/Users/rt/workspace/boundline/src/adapters/agent.rs`, and `/Users/rt/workspace/boundline/src/registry/agent_registry.rs`
+- [ ] T016 [US2] Surface assistant-binding decisions and explicit unsupported-binding behavior in `/Users/rt/workspace/boundline/src/cli/config.rs`, `/Users/rt/workspace/boundline/src/cli/output.rs`, `/Users/rt/workspace/boundline/src/domain/routing_decision.rs`, and `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs`
 
 **Checkpoint**: Changing slot routing changes assistant/backend binding predictably, remains inspectable, and does not create a second runtime or a silent fallback.
 
@@ -87,12 +87,12 @@
 
 ### Tests for User Story 3
 
-- [ ] T017 [P] [US3] Add assistant-guidance and continuity coverage for routed follow-up surfaces in `/Users/rt/workspace/synod/tests/contract/assistant_session_continuity_contract.rs` and `/Users/rt/workspace/synod/tests/unit/cli_output.rs`
+- [ ] T017 [P] [US3] Add assistant-guidance and continuity coverage for routed follow-up surfaces in `/Users/rt/workspace/boundline/tests/contract/assistant_session_continuity_contract.rs` and `/Users/rt/workspace/boundline/tests/unit/cli_output.rs`
 
 ### Implementation for User Story 3
 
-- [ ] T018 [US3] Update the routed operator story, impacted docs, assistant guidance, and release notes in `/Users/rt/workspace/synod/README.md`, `/Users/rt/workspace/synod/docs/configuration.md`, `/Users/rt/workspace/synod/docs/getting-started.md`, `/Users/rt/workspace/synod/assistant/README.md`, `/Users/rt/workspace/synod/assistant/claude/commands/synod-plan.md`, `/Users/rt/workspace/synod/assistant/claude/commands/synod-run.md`, `/Users/rt/workspace/synod/assistant/claude/commands/synod-status.md`, `/Users/rt/workspace/synod/assistant/claude/commands/synod-next.md`, `/Users/rt/workspace/synod/assistant/claude/commands/synod-inspect.md`, `/Users/rt/workspace/synod/assistant/codex/commands/synod-plan.md`, `/Users/rt/workspace/synod/assistant/codex/commands/synod-run.md`, `/Users/rt/workspace/synod/assistant/codex/commands/synod-status.md`, `/Users/rt/workspace/synod/assistant/codex/commands/synod-next.md`, `/Users/rt/workspace/synod/assistant/codex/commands/synod-inspect.md`, `/Users/rt/workspace/synod/assistant/copilot/prompts/synod-plan.prompt.md`, `/Users/rt/workspace/synod/assistant/copilot/prompts/synod-run.prompt.md`, `/Users/rt/workspace/synod/assistant/copilot/prompts/synod-status.prompt.md`, `/Users/rt/workspace/synod/assistant/copilot/prompts/synod-next.prompt.md`, `/Users/rt/workspace/synod/assistant/copilot/prompts/synod-inspect.prompt.md`, `/Users/rt/workspace/synod/assistant/gemini/README.md`, `/Users/rt/workspace/synod/CONTRIBUTING.md`, `/Users/rt/workspace/synod/ROADMAP.md`, and `/Users/rt/workspace/synod/CHANGELOG.md`
-- [ ] T019 [US3] Refresh generated agent context for the routed assistant surface in `/Users/rt/workspace/synod/AGENTS.md`
+- [ ] T018 [US3] Update the routed operator story, impacted docs, assistant guidance, and release notes in `/Users/rt/workspace/boundline/README.md`, `/Users/rt/workspace/boundline/docs/configuration.md`, `/Users/rt/workspace/boundline/docs/getting-started.md`, `/Users/rt/workspace/boundline/assistant/README.md`, `/Users/rt/workspace/boundline/assistant/claude/commands/boundline-plan.md`, `/Users/rt/workspace/boundline/assistant/claude/commands/boundline-run.md`, `/Users/rt/workspace/boundline/assistant/claude/commands/boundline-status.md`, `/Users/rt/workspace/boundline/assistant/claude/commands/boundline-next.md`, `/Users/rt/workspace/boundline/assistant/claude/commands/boundline-inspect.md`, `/Users/rt/workspace/boundline/assistant/codex/commands/boundline-plan.md`, `/Users/rt/workspace/boundline/assistant/codex/commands/boundline-run.md`, `/Users/rt/workspace/boundline/assistant/codex/commands/boundline-status.md`, `/Users/rt/workspace/boundline/assistant/codex/commands/boundline-next.md`, `/Users/rt/workspace/boundline/assistant/codex/commands/boundline-inspect.md`, `/Users/rt/workspace/boundline/assistant/copilot/prompts/boundline-plan.prompt.md`, `/Users/rt/workspace/boundline/assistant/copilot/prompts/boundline-run.prompt.md`, `/Users/rt/workspace/boundline/assistant/copilot/prompts/boundline-status.prompt.md`, `/Users/rt/workspace/boundline/assistant/copilot/prompts/boundline-next.prompt.md`, `/Users/rt/workspace/boundline/assistant/copilot/prompts/boundline-inspect.prompt.md`, `/Users/rt/workspace/boundline/assistant/gemini/README.md`, `/Users/rt/workspace/boundline/CONTRIBUTING.md`, `/Users/rt/workspace/boundline/ROADMAP.md`, and `/Users/rt/workspace/boundline/CHANGELOG.md`
+- [ ] T019 [US3] Refresh generated agent context for the routed assistant surface in `/Users/rt/workspace/boundline/AGENTS.md`
 
 **Checkpoint**: Maintainers and assistants have one coherent `0.27.0` story for routing transparency, assistant binding, and release behavior.
 
@@ -102,7 +102,7 @@
 
 **Purpose**: Finish release-quality validation and closeout
 
-- [ ] T020 Run coverage-aware release validation for modified Rust files, refresh `/Users/rt/workspace/synod/lcov.info`, resolve remaining `cargo clippy` issues, run `cargo fmt --all`, and finish with clean validation for touched files under `/Users/rt/workspace/synod/src/` and `/Users/rt/workspace/synod/tests/`
+- [ ] T020 Run coverage-aware release validation for modified Rust files, refresh `/Users/rt/workspace/boundline/lcov.info`, resolve remaining `cargo clippy` issues, run `cargo fmt --all`, and finish with clean validation for touched files under `/Users/rt/workspace/boundline/src/` and `/Users/rt/workspace/boundline/tests/`
 
 ---
 

@@ -5,7 +5,7 @@
 
 ## Purpose
 
-Define how Synod reports which member workspaces participated in one clustered
+Define how Boundline reports which member workspaces participated in one clustered
 delivery story.
 
 ## Required Surface

@@ -6,12 +6,12 @@
 ## R1: Promote named workflows to first-class assistant surfaces
 
 **Decision**: Extend the shipped assistant assets so named workflow discovery
-and continuation are expressed as first-class Synod assistant commands or
-guidance rather than leaving `synod workflow ...` to raw fallback prose.
+and continuation are expressed as first-class Boundline assistant commands or
+guidance rather than leaving `boundline workflow ...` to raw fallback prose.
 
 **Rationale**: The workflow layer already exists as a real operator entrypoint.
 As long as assistants describe it as an undocumented manual escape hatch,
-Synod still presents multiple partially overlapping products.
+Boundline still presents multiple partially overlapping products.
 
 **Alternatives Considered**:
 - Keep workflow guidance only in the shared README: rejected because it leaves
@@ -57,12 +57,12 @@ authoritative place where unsupported assistant bindings fail explicitly.
 ## R4: Keep workflow and direct native execution primary, and compatibility explicit
 
 **Decision**: Treat named workflows and direct session-native commands as the
-two primary Synod entry styles that share one execution model, while keeping
+two primary Boundline entry styles that share one execution model, while keeping
 explicit compatibility follow-up visibly subordinate and trace-authoritative.
 
 **Rationale**: The roadmap goal is product closure, not route proliferation.
 Operators need one clear answer to "what product am I using now?" and that
-answer must remain "Synod" unless they explicitly chose compatibility.
+answer must remain "Boundline" unless they explicitly chose compatibility.
 
 **Alternatives Considered**:
 - Treat workflows as a third parallel execution mode: rejected because it would
@@ -78,7 +78,7 @@ used by Claude, Codex, and Copilot.
 
 **Rationale**: The current shipped artifact for Gemini is documentation rather
 than a chat-native pack. That can still participate in product closure as long
-as it uses the same bounded Synod-owned story and does not imply a special
+as it uses the same bounded Boundline-owned story and does not imply a special
 runtime.
 
 **Alternatives Considered**:
@@ -95,7 +95,7 @@ formatting as first-class tasks in the feature.
 
 **Rationale**: `0.32.0` is explicitly a product-closure slice. It cannot be
 considered done if runtime changes land while release-facing artifacts still
-describe Synod as a set of disconnected surfaces.
+describe Boundline as a set of disconnected surfaces.
 
 **Alternatives Considered**:
 - Defer release surfaces until after implementation: rejected because the

@@ -8,7 +8,7 @@
 ### Decision Continuity Snapshot
 
 The bounded summary of the latest decision, recovery, validation, or governance
-fact that materially explains what Synod should do next.
+fact that materially explains what Boundline should do next.
 
 ```text
 DecisionContinuitySnapshot
@@ -50,7 +50,7 @@ FollowThroughGuidance
 
 ### Continuity Evidence Source
 
-The explicit evidence source Synod chooses when projecting guided follow-through.
+The explicit evidence source Boundline chooses when projecting guided follow-through.
 
 ```text
 ContinuityEvidenceSource
@@ -98,5 +98,5 @@ shown_to_operator -> replaced_with_stop_condition
 ```
 
 The model stays intentionally narrow: it adds explicit continuity guidance to
-the existing Synod session and trace story without creating a new runtime,
+the existing Boundline session and trace story without creating a new runtime,
 background loop, or separate operator surface.

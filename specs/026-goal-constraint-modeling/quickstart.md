@@ -9,8 +9,8 @@ binding constraints explicit.
 
 ## Prerequisites
 
-- A local workspace with writable `.synod/` session and trace state.
-- Use `cargo run --bin synod -- ...` from the repository root when validating
+- A local workspace with writable `.boundline/` session and trace state.
+- Use `cargo run --bin boundline -- ...` from the repository root when validating
   locally.
 - Have either a direct goal or one Markdown brief available so capture can
   derive a negotiated delivery packet.
@@ -31,14 +31,14 @@ binding constraints explicit.
 ## Example Validation Sequence
 
 ```text
-cargo run --bin synod -- start
-cargo run --bin synod -- capture --goal "Fix the failing parser test without widening the public API" --brief docs/example-negotiation-brief.md --risk medium --owner platform
-cargo run --bin synod -- status
-cargo run --bin synod -- plan --flow bug-fix
-cargo run --bin synod -- run
-cargo run --bin synod -- status
-cargo run --bin synod -- next
-cargo run --bin synod -- inspect
+cargo run --bin boundline -- start
+cargo run --bin boundline -- capture --goal "Fix the failing parser test without widening the public API" --brief docs/example-negotiation-brief.md --risk medium --owner platform
+cargo run --bin boundline -- status
+cargo run --bin boundline -- plan --flow bug-fix
+cargo run --bin boundline -- run
+cargo run --bin boundline -- status
+cargo run --bin boundline -- next
+cargo run --bin boundline -- inspect
 ```
 
 ## Expected CLI Behavior

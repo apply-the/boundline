@@ -21,7 +21,7 @@
 ### User Story 1 - Explain The Next Bounded Action (Priority: P1)
 
 An operator can use `status`, `next`, or `inspect` to understand not only what
-Synod wants to do next, but why that next step is now the credible bounded
+Boundline wants to do next, but why that next step is now the credible bounded
 action given the latest decision, recovery, validation, or governance evidence.
 
 **Why this priority**: The smallest valuable follow-through improvement is to
@@ -37,14 +37,14 @@ terms of persisted evidence rather than only generic lifecycle labels.
 
 1. **Given** a bounded delivery task whose latest decision triggered retry,
   replanning, or another explicit follow-up path, **When** the operator runs
-  `synod status` or `synod next`, **Then** Synod reports the next bounded
+  `boundline status` or `boundline next`, **Then** Boundline reports the next bounded
   action together with the evidence that made that action credible.
 2. **Given** a task paused by governance, blocked evidence, or inspect-only
-  compatibility follow-up, **When** the operator runs `synod inspect`,
+  compatibility follow-up, **When** the operator runs `boundline inspect`,
   **Then** the output preserves the same next-action story instead of falling
   back to a generic route or terminal label.
 3. **Given** a task whose evidence is insufficient for another bounded action,
-  **When** the operator checks `status`, `next`, or `inspect`, **Then** Synod
+  **When** the operator checks `status`, `next`, or `inspect`, **Then** Boundline
   explains the stop condition explicitly and does not imply hidden recovery.
 
 ---
@@ -67,15 +67,15 @@ decision continuity and recommended bounded action.
 **Acceptance Scenarios**:
 
 1. **Given** a native session whose latest decision is not terminal,
-  **When** the operator reloads and runs `synod status`, **Then** Synod
+  **When** the operator reloads and runs `boundline status`, **Then** Boundline
   preserves the latest bounded decision continuity needed to explain the next
   action without requiring manual trace reconstruction.
 2. **Given** an explicit compatibility run that owns the latest authoritative
-  follow-up state, **When** the operator runs `synod next` or `synod inspect`,
-  **Then** Synod reuses persisted trace evidence to explain the follow-up path
+  follow-up state, **When** the operator runs `boundline next` or `boundline inspect`,
+  **Then** Boundline reuses persisted trace evidence to explain the follow-up path
   while keeping compatibility ownership explicit.
 3. **Given** older or conflicting evidence between session state and the latest
-  authoritative trace, **When** Synod projects follow-up guidance, **Then** it
+  authoritative trace, **When** Boundline projects follow-up guidance, **Then** it
   makes the winning evidence source explicit instead of silently mixing them.
 
 ---
@@ -86,7 +86,7 @@ A maintainer can ship one coherent `0.28.0` release where the runtime behavior,
 trace or session continuity, documentation, version metadata, and validation
 evidence all describe the same guided follow-through story.
 
-**Why this priority**: This slice changes how operators interpret what Synod
+**Why this priority**: This slice changes how operators interpret what Boundline
 should do next. The release is incomplete if the runtime becomes more explicit
 but docs, changelog, prompts, or validation discipline still describe the old
 generic follow-up behavior.
@@ -114,12 +114,12 @@ coverage refresh for touched Rust files, clippy cleanup, and formatting.
 
 <!--
   ACTION REQUIRED: Capture execution limits, invalid state transitions, missing context,
-  traceability gaps, and failure-handling boundaries. Synod features are invalid if they
+  traceability gaps, and failure-handling boundaries. Boundline features are invalid if they
   ignore how work stops, fails, or becomes non-credible.
 -->
 
 - What happens when the latest evidence does not justify any next bounded
-  action and Synod must stop instead of suggesting another step?
+  action and Boundline must stop instead of suggesting another step?
 - How does the system handle a session reload where persisted session evidence
   and the latest authoritative trace disagree about the most credible follow-up?
 - How does the system surface primary session-native continuity versus explicit
@@ -169,7 +169,7 @@ coverage refresh for touched Rust files, clippy cleanup, and formatting.
 
 <!--
   ACTION REQUIRED: Name the deferred or excluded capabilities explicitly.
-  Synod specs should normally exclude councils and voting unless the roadmap and
+  Boundline specs should normally exclude councils and voting unless the roadmap and
   constitution explicitly prioritize a bounded review slice; they should otherwise
   exclude provider-routing complexity, distributed execution, long-term memory,
   UI/UX work, and deployment pipelines.
@@ -189,12 +189,12 @@ coverage refresh for touched Rust files, clippy cleanup, and formatting.
 
 - **Decision Continuity Snapshot**: The bounded summary of the latest decision,
   recovery or validation implication, and winning evidence source needed to
-  explain what Synod should do next.
+  explain what Boundline should do next.
 - **Follow-Through Guidance**: The operator-facing explanation that connects a
   current session or authoritative trace state to one concrete next bounded
   action or explicit stop condition.
 - **Continuity Evidence Source**: The named source, such as persisted session
-  state or latest authoritative trace, that Synod chooses when projecting the
+  state or latest authoritative trace, that Boundline chooses when projecting the
   next bounded action.
 
 ## Success Criteria *(mandatory)*

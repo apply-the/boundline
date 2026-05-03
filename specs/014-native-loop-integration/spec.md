@@ -9,7 +9,7 @@
 
 ### User Story 1 - Session Planning Uses Goal Plan (Priority: P1)
 
-A developer starts a session, captures a goal, and runs planning. Instead of producing only a fixture-oriented task snapshot, Synod derives and persists a bounded goal plan from the goal and workspace state, proposes an inferred flow, and records the operator's lightweight confirmation so the session carries the plan forward into execution.
+A developer starts a session, captures a goal, and runs planning. Instead of producing only a fixture-oriented task snapshot, Boundline derives and persists a bounded goal plan from the goal and workspace state, proposes an inferred flow, and records the operator's lightweight confirmation so the session carries the plan forward into execution.
 
 **Why this priority**: The session-native path cannot become the primary product story until `plan` produces session-owned planning state instead of stopping at fixture-era planning semantics.
 
@@ -17,15 +17,15 @@ A developer starts a session, captures a goal, and runs planning. Instead of pro
 
 **Acceptance Scenarios**:
 
-1. **Given** an active session with a captured goal and no execution profile, **When** the developer runs planning, **Then** Synod stores a bounded goal plan in the session and exposes the derived tasks in session-facing output.
-2. **Given** an active session with a captured goal whose wording implies a bug fix, **When** planning runs, **Then** Synod proposes the matching flow, records the confirmation outcome in session state, and keeps the session resumable.
-3. **Given** an active session where planning cannot infer a credible flow, **When** planning completes, **Then** Synod still persists the goal plan and records that execution will proceed without flow constraints.
+1. **Given** an active session with a captured goal and no execution profile, **When** the developer runs planning, **Then** Boundline stores a bounded goal plan in the session and exposes the derived tasks in session-facing output.
+2. **Given** an active session with a captured goal whose wording implies a bug fix, **When** planning runs, **Then** Boundline proposes the matching flow, records the confirmation outcome in session state, and keeps the session resumable.
+3. **Given** an active session where planning cannot infer a credible flow, **When** planning completes, **Then** Boundline still persists the goal plan and records that execution will proceed without flow constraints.
 
 ---
 
 ### User Story 2 - Session Run Uses Decision Loop By Default (Priority: P2)
 
-A developer runs execution on a planned session. If the session already contains a goal plan, Synod executes through the bounded decision loop and only falls back to the fixture compatibility path when the operator is explicitly using a declarative execution profile. The primary `run` path therefore follows session-native state instead of implicit fixture defaults.
+A developer runs execution on a planned session. If the session already contains a goal plan, Boundline executes through the bounded decision loop and only falls back to the fixture compatibility path when the operator is explicitly using a declarative execution profile. The primary `run` path therefore follows session-native state instead of implicit fixture defaults.
 
 **Why this priority**: This is the behavioral switch that makes the new planning model matter. Without it, GoalPlan remains metadata while the real runtime still behaves like the old product.
 
@@ -33,15 +33,15 @@ A developer runs execution on a planned session. If the session already contains
 
 **Acceptance Scenarios**:
 
-1. **Given** an active session with a persisted goal plan, **When** the developer runs execution, **Then** Synod chooses the decision loop path and emits decision-oriented trace output instead of fixture-only step playback.
-2. **Given** a workspace with an explicit declarative execution profile and no goal plan, **When** the developer runs execution, **Then** Synod uses the compatibility path and preserves the existing fixture-oriented behavior.
+1. **Given** an active session with a persisted goal plan, **When** the developer runs execution, **Then** Boundline chooses the decision loop path and emits decision-oriented trace output instead of fixture-only step playback.
+2. **Given** a workspace with an explicit declarative execution profile and no goal plan, **When** the developer runs execution, **Then** Boundline uses the compatibility path and preserves the existing fixture-oriented behavior.
 3. **Given** a workspace that contains both a goal plan and a declarative execution profile, **When** the developer runs execution without an explicit compatibility opt-in, **Then** the goal-plan path takes precedence.
 
 ---
 
 ### User Story 3 - Real Adapter-Backed Decisions Are Persisted (Priority: P3)
 
-When Synod executes the decision loop on the session-native CLI path, each decision is dispatched through real runtime adapters and the chosen decision sequence is persisted back into session state and traces. Developers can inspect what was observed, what decision was chosen, which tool or adapter ran, and why execution succeeded, failed, replanned, or exhausted its budget.
+When Boundline executes the decision loop on the session-native CLI path, each decision is dispatched through real runtime adapters and the chosen decision sequence is persisted back into session state and traces. Developers can inspect what was observed, what decision was chosen, which tool or adapter ran, and why execution succeeded, failed, replanned, or exhausted its budget.
 
 **Why this priority**: This closes the trust gap identified in the review. The loop is only credible if it uses the real adapter harness and records the resulting decisions in durable session-owned state.
 
@@ -49,16 +49,16 @@ When Synod executes the decision loop on the session-native CLI path, each decis
 
 **Acceptance Scenarios**:
 
-1. **Given** a planned session whose next action requires reading files and running validation, **When** execution runs, **Then** Synod dispatches those actions through the adapter harness and records structured results for each decision.
+1. **Given** a planned session whose next action requires reading files and running validation, **When** execution runs, **Then** Boundline dispatches those actions through the adapter harness and records structured results for each decision.
 2. **Given** a decision whose verification fails, **When** the loop continues, **Then** the failed decision remains inspectable in session state and the follow-up recovery decision references the failure evidence.
 3. **Given** a session-native run that reaches a terminal state, **When** the developer inspects the session or trace, **Then** the persisted decision list and tool evidence explain how the run terminated.
 
 ### Edge Cases
 
 - What happens when planning derives a goal plan but the operator declines the proposed flow? The goal plan remains valid, the session records that no confirmed flow is active, and execution continues without implicit flow constraints.
-- What happens when execution is requested on a session that has a captured goal but no persisted goal plan? Synod returns an explicit error or remediation message telling the operator to plan first instead of silently falling back to fixture behavior.
-- What happens when the decision loop selects an action but no registered adapter can credibly execute it? Synod records a failed decision with adapter-unavailable evidence and terminates or replans explicitly.
-- What happens when decision execution reaches configured step limits before all planned work is resolved? Synod terminates in an explicit exhaustion state and preserves the accumulated decisions in session state and trace output.
+- What happens when execution is requested on a session that has a captured goal but no persisted goal plan? Boundline returns an explicit error or remediation message telling the operator to plan first instead of silently falling back to fixture behavior.
+- What happens when the decision loop selects an action but no registered adapter can credibly execute it? Boundline records a failed decision with adapter-unavailable evidence and terminates or replans explicitly.
+- What happens when decision execution reaches configured step limits before all planned work is resolved? Boundline terminates in an explicit exhaustion state and preserves the accumulated decisions in session state and trace output.
 - What happens when a compatibility profile is present but the operator intends to use the session-native path? Session-owned planning state takes precedence unless the operator explicitly chooses the compatibility path.
 
 ## Requirements *(mandatory)*

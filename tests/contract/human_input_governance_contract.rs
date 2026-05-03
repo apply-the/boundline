@@ -1,13 +1,13 @@
 use std::path::PathBuf;
 
+use boundline::cli::{Cli, DeveloperCommand};
+use boundline::domain::governance::GovernanceRuntimeKind;
 use clap::Parser;
-use synod::cli::{Cli, DeveloperCommand};
-use synod::domain::governance::GovernanceRuntimeKind;
 
 #[test]
 fn capture_accepts_human_governance_intent_flags() {
     let cli = Cli::try_parse_from([
-        "synod",
+        "boundline",
         "capture",
         "--workspace",
         "/tmp/ws",
@@ -43,7 +43,7 @@ fn capture_accepts_human_governance_intent_flags() {
 #[test]
 fn run_accepts_local_governance_without_business_fields() {
     let cli = Cli::try_parse_from([
-        "synod",
+        "boundline",
         "run",
         "--workspace",
         "/tmp/ws",

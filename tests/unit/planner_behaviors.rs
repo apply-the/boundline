@@ -1,16 +1,16 @@
+use boundline::domain::limits::RunLimits;
+use boundline::domain::plan::Plan;
+use boundline::domain::step::{ErrorInfo, Recoverability, Step, StepExecutionResult};
+use boundline::domain::task::{Task, TaskRunRequest};
+use boundline::orchestrator::planner::{CallbackPlanner, Planner, PlanningError, StaticPlanner};
 use serde_json::json;
-use synod::domain::limits::RunLimits;
-use synod::domain::plan::Plan;
-use synod::domain::step::{ErrorInfo, Recoverability, Step, StepExecutionResult};
-use synod::domain::task::{Task, TaskRunRequest};
-use synod::orchestrator::planner::{CallbackPlanner, Planner, PlanningError, StaticPlanner};
 
 fn build_task() -> Task {
     let request = TaskRunRequest {
         goal: "Replan a bounded task".to_string(),
         input: json!({"ticket": "BUG-10"}),
         session_id: "session-planner".to_string(),
-        workspace_ref: "/tmp/synod-planner".to_string(),
+        workspace_ref: "/tmp/boundline-planner".to_string(),
         limits: RunLimits::default(),
         initial_context: None,
     };

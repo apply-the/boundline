@@ -1,13 +1,13 @@
 # Implementation Plan: Canon-Grounded Reasoning And Structured Memory
 
-**Branch**: `036-canon-grounded-memory` | **Date**: 2026-05-03 | **Spec**: [/Users/rt/workspace/synod/specs/036-canon-grounded-memory/spec.md](/Users/rt/workspace/synod/specs/036-canon-grounded-memory/spec.md)
+**Branch**: `036-canon-grounded-memory` | **Date**: 2026-05-03 | **Spec**: [/Users/rt/workspace/boundline/specs/036-canon-grounded-memory/spec.md](/Users/rt/workspace/boundline/specs/036-canon-grounded-memory/spec.md)
 **Input**: Feature specification from `/specs/036-canon-grounded-memory/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
 
 ## Summary
 
-Extend Synod's primary session-native path so Canon packets, governed artifacts,
+Extend Boundline's primary session-native path so Canon packets, governed artifacts,
 artifact summaries, and capability signals influence bounded planning and later
 decision selection as first-class evidence instead of stage-end output only.
 Persist one compact Canon-grounded reasoning memory inside existing
@@ -22,14 +22,14 @@ files.
 
 **Language/Version**: Rust 1.95.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for the first slice  
-**Storage**: Workspace-local `.synod/session.json`, `.synod/config.toml`, optional `.synod/workflows.toml`, persisted traces under `<workspace>/.synod/traces/`, optional `.synod/execution.json`, task-context state embedded in session tasks, optional `.canon/` governed artifacts, and repository-managed docs plus assistant assets  
+**Storage**: Workspace-local `.boundline/session.json`, `.boundline/config.toml`, optional `.boundline/workflows.toml`, persisted traces under `<workspace>/.boundline/traces/`, optional `.boundline/execution.json`, task-context state embedded in session tasks, optional `.canon/` governed artifacts, and repository-managed docs plus assistant assets  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, targeted unit, integration, and contract tests, `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features`, and `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`  
 **Target Platform**: macOS/Linux developer workstations and Linux CI
 **Project Type**: Single Rust CLI/library crate with file-backed session and trace state  
 **Execution Model**: Sequential session-native planning plus bounded observe -> decide -> act -> verify execution where Canon-grounded context snapshots and compact memory can influence planning, replanning, and later decision selection without introducing background execution  
-**Observability Surface**: Persisted goal-plan/session/task-context state, decision-oriented traces under `.synod/traces/`, CLI summaries on `plan`, `run`, `status`, `next`, and `inspect`, Canon-governance packet lineage, and release docs plus assistant guidance that explain Canon-grounded reasoning and compact-memory credibility  
+**Observability Surface**: Persisted goal-plan/session/task-context state, decision-oriented traces under `.boundline/traces/`, CLI summaries on `plan`, `run`, `status`, `next`, and `inspect`, Canon-governance packet lineage, and release docs plus assistant guidance that explain Canon-grounded reasoning and compact-memory credibility  
 **Performance Goals**: Operators should recover the decisive Canon-grounded evidence and current compact-memory credibility from normal CLI output in under 2 minutes; long-running loops should reuse compact Canon memory when credible instead of replaying the full workspace; maintainers should complete release validation for the slice in under 20 minutes  
-**Constraints**: No new top-level runtime, no distributed or parallel execution, no generic long-term memory subsystem beyond bounded session/task scope, no provider-abstraction refoundation, no Canon-controlled takeover of Synod routing, workflows remain guardrails rather than execution owners, and explicit compatibility follow-up remains subordinate and trace-authoritative  
+**Constraints**: No new top-level runtime, no distributed or parallel execution, no generic long-term memory subsystem beyond bounded session/task scope, no provider-abstraction refoundation, no Canon-controlled takeover of Boundline routing, workflows remain guardrails rather than execution owners, and explicit compatibility follow-up remains subordinate and trace-authoritative  
 **Scale/Scope**: One workspace or registered cluster at a time, bounded by existing session/run limits with one authoritative Canon-grounded memory summary per active goal and explicit credibility state for later loop reuse
 
 ## Constitution Check

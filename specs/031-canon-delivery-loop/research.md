@@ -11,7 +11,7 @@ hooks, the existing `bug-fix` flow stages (`investigate`, `implement`,
 
 **Rationale**: The repo already supports governed stage execution, packet reuse,
 approval refresh, and verify-stage Canon modes. The product gap is not the
-absence of a governance runtime, but the absence of a strong claim that Synod
+absence of a governance runtime, but the absence of a strong claim that Boundline
 now delivers real code changes inside that governed loop.
 
 **Alternatives Considered**:
@@ -30,7 +30,7 @@ credible validation outcome recorded in task context.
 
 **Rationale**: The current runtime can finalize a task successfully simply
 because the last step succeeded or the plan ran out of steps. That is the exact
-behavioral gap behind the criticism that Synod still does not demonstrably
+behavioral gap behind the criticism that Boundline still does not demonstrably
 deliver.
 
 **Alternatives Considered**:
@@ -61,7 +61,7 @@ support a credible claim that the requested code change was actually delivered.
 signals needed to explain why a governed run completed or stopped.
 
 **Rationale**: Feature 031 is only credible if Canon participation stays inside
-the Synod product story rather than creating a second diagnostic surface.
+the Boundline product story rather than creating a second diagnostic surface.
 
 **Alternatives Considered**:
 - Add a dedicated “governed delivery” read command: rejected because it would
@@ -91,7 +91,7 @@ assessment, and approval refresh. Reusing those paths keeps the slice minimal.
 guidance, coverage for modified or created Rust files above 95%, `cargo
 clippy`, and `cargo fmt` as explicit tasks in the implementation plan.
 
-**Rationale**: This feature changes the product claim for Synod. Runtime,
+**Rationale**: This feature changes the product claim for Boundline. Runtime,
 docs, assistant guidance, roadmap, and release evidence must land together or
 the release will contradict itself.
 

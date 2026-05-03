@@ -12,7 +12,7 @@ evidence as live bounded reasoning input.
   planning.
 - Canon-governed evidence may or may not exist; absence must remain explicit.
 
-## `synod plan`
+## `boundline plan`
 
 ### Required behavior
 

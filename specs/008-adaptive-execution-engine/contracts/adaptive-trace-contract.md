@@ -18,7 +18,7 @@ The trace MAY continue to include the existing delivery and review lifecycle eve
 
 ## Inspect output requirements
 
-`synod inspect` MUST make the following visible after an adaptive run:
+`boundline inspect` MUST make the following visible after an adaptive run:
 
 - the workspace slice chosen for each adaptive attempt
 - the sequence of adaptive attempts in execution order

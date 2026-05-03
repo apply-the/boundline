@@ -1,17 +1,17 @@
 use std::path::PathBuf;
 
-use clap::Parser;
-use synod::cli::{Cli, ConfigSubcommand, DeveloperCommand};
-use synod::domain::configuration::{
+use boundline::cli::{Cli, ConfigSubcommand, DeveloperCommand};
+use boundline::domain::configuration::{
     CapabilityState, ConfigShowScope, ConfigWriteScope, EffortFallbackPolicy, EffortLevel,
     RouteSlot, RuntimeKind,
 };
-use synod::domain::domain_templates::{DomainFamily, ExternalContextKind};
+use boundline::domain::domain_templates::{DomainFamily, ExternalContextKind};
+use clap::Parser;
 
 #[test]
 fn config_show_accepts_effective_scope() {
     let cli = Cli::try_parse_from([
-        "synod",
+        "boundline",
         "config",
         "show",
         "--workspace",
@@ -37,7 +37,7 @@ fn config_show_accepts_effective_scope() {
 #[test]
 fn config_set_accepts_workspace_slot_runtime_and_model() {
     let cli = Cli::try_parse_from([
-        "synod",
+        "boundline",
         "config",
         "set",
         "--scope",
@@ -81,7 +81,7 @@ fn config_set_accepts_workspace_slot_runtime_and_model() {
 #[test]
 fn config_set_capability_accepts_runtime_profile_fields() {
     let cli = Cli::try_parse_from([
-        "synod",
+        "boundline",
         "config",
         "set-capability",
         "--scope",
@@ -137,7 +137,7 @@ fn config_set_capability_accepts_runtime_profile_fields() {
 #[test]
 fn config_set_effort_accepts_slot_level_policy() {
     let cli = Cli::try_parse_from([
-        "synod",
+        "boundline",
         "config",
         "set-effort",
         "--scope",
@@ -181,7 +181,7 @@ fn config_set_effort_accepts_slot_level_policy() {
 #[test]
 fn config_domain_commands_accept_family_and_binding_fields() {
     let set_domain = Cli::try_parse_from([
-        "synod",
+        "boundline",
         "config",
         "set-domain",
         "--scope",
@@ -218,7 +218,7 @@ fn config_domain_commands_accept_family_and_binding_fields() {
     }
 
     let bind_context = Cli::try_parse_from([
-        "synod",
+        "boundline",
         "config",
         "bind-context",
         "--scope",

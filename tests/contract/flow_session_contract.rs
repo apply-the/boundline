@@ -2,8 +2,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
+use boundline::domain::session::ActiveSessionRecord;
 use serde_json::json;
-use synod::domain::session::ActiveSessionRecord;
 use uuid::Uuid;
 
 fn run_limits(max_steps: usize) -> serde_json::Value {
@@ -46,24 +46,24 @@ fn execution_profile(name: &str, max_steps: usize) -> serde_json::Value {
 }
 
 fn temp_workspace() -> PathBuf {
-    let workspace = std::env::temp_dir().join(format!("synod-flow-session-{}", Uuid::new_v4()));
-    fs::create_dir_all(workspace.join(".synod")).unwrap();
+    let workspace = std::env::temp_dir().join(format!("boundline-flow-session-{}", Uuid::new_v4()));
+    fs::create_dir_all(workspace.join(".boundline")).unwrap();
     fs::write(
         workspace.join("Cargo.toml"),
-        "[package]\nname = \"synod-fixture\"\nversion = \"0.4.0\"\nedition = \"2024\"\n",
+        "[package]\nname = \"boundline-fixture\"\nversion = \"0.4.0\"\nedition = \"2024\"\n",
     )
     .unwrap();
     fs::write(workspace.join("fixture-target.txt"), "red\n").unwrap();
     fs::write(
-        workspace.join(".synod").join("execution.json"),
+        workspace.join(".boundline").join("execution.json"),
         serde_json::to_vec_pretty(&execution_profile("flow-session", 8)).unwrap(),
     )
     .unwrap();
     workspace
 }
 
-fn run_synod(workspace: &std::path::Path, args: &[&str]) {
-    let output = Command::new(env!("CARGO_BIN_EXE_synod"))
+fn run_boundline(workspace: &std::path::Path, args: &[&str]) {
+    let output = Command::new(env!("CARGO_BIN_EXE_boundline"))
         .args(args)
         .current_dir(workspace)
         .output()
@@ -77,17 +77,17 @@ fn run_synod(workspace: &std::path::Path, args: &[&str]) {
 }
 
 fn load_session_record(workspace: &std::path::Path) -> ActiveSessionRecord {
-    serde_json::from_slice(&fs::read(workspace.join(".synod").join("session.json")).unwrap())
+    serde_json::from_slice(&fs::read(workspace.join(".boundline").join("session.json")).unwrap())
         .unwrap()
 }
 
 #[test]
 fn delivery_flow_plan_persists_stage_tagged_steps_and_active_flow_state() {
     let workspace = temp_workspace();
-    run_synod(&workspace, &["start"]);
-    run_synod(&workspace, &["capture", "--goal", "Deliver the checkout fix"]);
-    run_synod(&workspace, &["flow", "delivery"]);
-    run_synod(&workspace, &["plan"]);
+    run_boundline(&workspace, &["start"]);
+    run_boundline(&workspace, &["capture", "--goal", "Deliver the checkout fix"]);
+    run_boundline(&workspace, &["flow", "delivery"]);
+    run_boundline(&workspace, &["plan"]);
 
     let record = load_session_record(&workspace);
     record.validate().unwrap();

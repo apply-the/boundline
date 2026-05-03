@@ -525,7 +525,7 @@ fn clarification_for_bundle(
     Some(ClarificationRecord {
         clarification_id: Uuid::new_v4().to_string(),
         reason_kind: ClarificationReasonKind::UnboundedRequest,
-        prompt: "Narrow the request to one bounded bug-fix, change, or delivery outcome. Name the single document, component, or failing behavior Synod should address before planning continues.".to_string(),
+        prompt: "Narrow the request to one bounded bug-fix, change, or delivery outcome. Name the single document, component, or failing behavior Boundline should address before planning continues.".to_string(),
         missing_fields: vec!["bounded_scope".to_string()],
         blocking_sources: bundle.sources.iter().map(|source| source.source_id.clone()).collect(),
         turn_index: 1,
@@ -611,14 +611,14 @@ mod tests {
 
     #[test]
     fn rejects_invocation_without_goal_or_briefs() {
-        let workspace = temp_workspace("synod-brief-empty");
+        let workspace = temp_workspace("boundline-brief-empty");
         let error = normalize_inputs(&workspace, None, &[]).unwrap_err();
         assert!(matches!(error, BriefIngestionError::NoInputProvided));
     }
 
     #[test]
     fn normalizes_direct_text_only() {
-        let workspace = temp_workspace("synod-brief-direct");
+        let workspace = temp_workspace("boundline-brief-direct");
         let bundle =
             normalize_inputs(&workspace, Some("  Fix the failing add test  "), &[]).unwrap();
         assert_eq!(bundle.primary_goal_text.as_deref(), Some("Fix the failing add test"));
@@ -628,7 +628,7 @@ mod tests {
 
     #[test]
     fn ingests_markdown_brief_from_workspace() {
-        let workspace = temp_workspace("synod-brief-md");
+        let workspace = temp_workspace("boundline-brief-md");
         let brief = workspace.join("brief.md");
         fs::write(&brief, "# Goal\nReplace subtraction with addition\n").unwrap();
 
@@ -641,8 +641,8 @@ mod tests {
 
     #[test]
     fn rejects_brief_outside_workspace() {
-        let workspace = temp_workspace("synod-brief-out-ws");
-        let foreign = temp_workspace("synod-brief-out-foreign");
+        let workspace = temp_workspace("boundline-brief-out-ws");
+        let foreign = temp_workspace("boundline-brief-out-foreign");
         let brief = foreign.join("brief.md");
         fs::write(&brief, "outside\n").unwrap();
         let error = normalize_inputs(&workspace, None, &[brief]).unwrap_err();
@@ -651,7 +651,7 @@ mod tests {
 
     #[test]
     fn rejects_unsupported_extension() {
-        let workspace = temp_workspace("synod-brief-ext");
+        let workspace = temp_workspace("boundline-brief-ext");
         let brief = workspace.join("brief.txt");
         fs::write(&brief, "nope\n").unwrap();
         let error = normalize_inputs(&workspace, None, &[brief]).unwrap_err();
@@ -660,7 +660,7 @@ mod tests {
 
     #[test]
     fn rejects_missing_source() {
-        let workspace = temp_workspace("synod-brief-missing");
+        let workspace = temp_workspace("boundline-brief-missing");
         let error =
             normalize_inputs(&workspace, None, &[workspace.join("missing.md")]).unwrap_err();
         assert!(matches!(error, BriefIngestionError::MissingSource { .. }));
@@ -668,7 +668,7 @@ mod tests {
 
     #[test]
     fn rejects_empty_source() {
-        let workspace = temp_workspace("synod-brief-empty-src");
+        let workspace = temp_workspace("boundline-brief-empty-src");
         let brief = workspace.join("empty.md");
         fs::write(&brief, "   \n").unwrap();
         let error = normalize_inputs(&workspace, None, &[brief]).unwrap_err();
@@ -677,7 +677,7 @@ mod tests {
 
     #[test]
     fn rejects_too_many_sources() {
-        let workspace = temp_workspace("synod-brief-too-many");
+        let workspace = temp_workspace("boundline-brief-too-many");
         let mut paths = Vec::new();
         for i in 0..(MAX_BRIEF_SOURCES + 1) {
             let path = workspace.join(format!("brief-{i}.md"));
@@ -692,7 +692,7 @@ mod tests {
 
     #[test]
     fn combines_direct_text_and_markdown_briefs() {
-        let workspace = temp_workspace("synod-brief-combo");
+        let workspace = temp_workspace("boundline-brief-combo");
         let brief = workspace.join("plan.md");
         fs::write(&brief, "Step 1: investigate\nStep 2: fix\n").unwrap();
         let bundle = normalize_inputs(&workspace, Some("Goal: deliver fix"), &[brief]).unwrap();

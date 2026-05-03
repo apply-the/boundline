@@ -58,7 +58,7 @@ Reviewer or adjudicator output is malformed when any of the following is true:
 
 ## Inspectability requirements
 
-When adjudication occurs, `synod inspect` and trace summaries MUST show:
+When adjudication occurs, `boundline inspect` and trace summaries MUST show:
 
 - why adjudication was triggered
 - which adjudicator ran

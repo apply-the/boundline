@@ -304,7 +304,7 @@ impl WorkflowRegistry {
                 phases: workflow.phases.clone(),
                 recommended_when: workflow.recommended_when.clone(),
                 invocation_command: format!(
-                    "synod workflow run {} --workspace {}",
+                    "boundline workflow run {} --workspace {}",
                     workflow.workflow_name,
                     workspace.display()
                 ),

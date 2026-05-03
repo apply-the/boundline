@@ -1,9 +1,9 @@
-# Configuration in Synod 0.38.0
+# Configuration in Boundline 0.39.0
 
-Synod `0.38.0` keeps a user-friendly setup and routing configuration surface
+Boundline `0.39.0` keeps a user-friendly setup and routing configuration surface
 for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
-The `0.38.0` release keeps configuration behavior stable while preserving the
+The `0.39.0` release keeps configuration behavior stable while preserving the
 same governed routing defaults across earlier `bug-fix:investigate` work,
 later verify-stage `security-assessment`, workflow-aware projection of the
 same bounded governance state, continuity-aware read-side follow-up, the
@@ -44,7 +44,7 @@ direct native execution; compatibility remains explicit and subordinate rather
 than a hidden default.
 Bug-fix and change completion credibility is now stricter on that same runtime
 surface, but it does not introduce a new routing slot, governance flag, or
-configuration file key: Synod simply requires a material diff plus passed
+configuration file key: Boundline simply requires a material diff plus passed
 validation evidence before those bounded paths can finish successfully.
 Adaptive repair still lives in the explicit compatibility execution manifest;
 there is no separate routing knob for mutation-family selection, credibility
@@ -52,18 +52,18 @@ ranking, explicit adaptive exhaustion, or negotiation-state overrides.
 
 ## What changed
 
-- `synod init` bootstraps an optional compatibility workspace profile and local config under `.synod/`
-- `synod init` can also infer or accept active domain families and seed scoped domain-template defaults plus optional external context bindings
-- direct `synod run --goal` is native-first; add `--compatibility` only when the manifest-backed route is intentional
-- default `synod plan` now creates one evidence-driven proposal and `synod plan --confirm` confirms it; planning lifecycle state is session-owned rather than config-owned
+- `boundline init` bootstraps an optional compatibility workspace profile and local config under `.boundline/`
+- `boundline init` can also infer or accept active domain families and seed scoped domain-template defaults plus optional external context bindings
+- direct `boundline run --goal` is native-first; add `--compatibility` only when the manifest-backed route is intentional
+- default `boundline plan` now creates one evidence-driven proposal and `boundline plan --confirm` confirms it; planning lifecycle state is session-owned rather than config-owned
 - bounded `bug-fix` and `change` completion now requires both material change evidence and passed validation on the native and governed session path
-- `synod config` manages runtime/model routing defaults, runtime capability profiles, slot effort policy, and domain-template settings for planning, implementation, verification, review, and other bounded slots
-- `synod cluster` registers bounded multi-workspace membership and aggregated inspection
-- negotiated delivery modeling stays session-owned and trace-projected; there is no new negotiation-specific key in `config.toml` or `.synod/execution.json`
-- context-pack assembly and credibility projection stay session-owned and trace-projected; there is no new context-specific key in `config.toml` or `.synod/execution.json`
+- `boundline config` manages runtime/model routing defaults, runtime capability profiles, slot effort policy, and domain-template settings for planning, implementation, verification, review, and other bounded slots
+- `boundline cluster` registers bounded multi-workspace membership and aggregated inspection
+- negotiated delivery modeling stays session-owned and trace-projected; there is no new negotiation-specific key in `config.toml` or `.boundline/execution.json`
+- context-pack assembly and credibility projection stay session-owned and trace-projected; there is no new context-specific key in `config.toml` or `.boundline/execution.json`
 - session-native commands can use `--cluster <primary-workspace>` to keep one authoritative primary-owned session while traversing cluster members sequentially
 - continuity between explicit compatibility traces and read-side commands is projected by the CLI surfaces, not by a new config key
-- adaptive validation-guided repair remains configured in `.synod/execution.json`, not in `config.toml`
+- adaptive validation-guided repair remains configured in `.boundline/execution.json`, not in `config.toml`
 - broader adaptive mutation families and explicit exhaustion behavior are still
   configured by the execution manifest, not by new config keys
 - routing values can be global, cluster-scoped, workspace-local, or command-specific
@@ -89,17 +89,17 @@ ranking, explicit adaptive exhaustion, or negotiation-state overrides.
 
 ## Config locations
 
-- Workspace-local: `<workspace>/.synod/config.toml`
-- Cluster-scoped: `<primary-workspace>/.synod/cluster.toml`
-- User-global: `$XDG_CONFIG_HOME/synod/config.toml`
-- User-global fallback: `$HOME/.config/synod/config.toml`
+- Workspace-local: `<workspace>/.boundline/config.toml`
+- Cluster-scoped: `<primary-workspace>/.boundline/cluster.toml`
+- User-global: `$XDG_CONFIG_HOME/boundline/config.toml`
+- User-global fallback: `$HOME/.config/boundline/config.toml`
 
 Workflow definitions are separate from routing config:
 
-- Workspace-local workflow registry: `<workspace>/.synod/workflows.toml`
+- Workspace-local workflow registry: `<workspace>/.boundline/workflows.toml`
 
 That file declares named bounded workflows. It does not participate in runtime
-or model-routing precedence; it is consumed only by `synod workflow ...`.
+or model-routing precedence; it is consumed only by `boundline workflow ...`.
 
 Optional workflow-discovery metadata lives in the same registry file:
 
@@ -118,16 +118,16 @@ review = "review_triggered"
 governance = "governance_required"
 ```
 
-Use `synod workflow list --workspace <workspace>` to render the discovered
+Use `boundline workflow list --workspace <workspace>` to render the discovered
 workflow names, phase chains, summary text, and invocation guidance. If
-`summary` or `recommended_when` are omitted, Synod falls back to the workflow
+`summary` or `recommended_when` are omitted, Boundline falls back to the workflow
 name plus declared phases. The registry remains bounded: no branching, loops,
 fan-out, fan-in, hidden background progression, or Canon-owned workflow control
 are supported.
 
 ## Resolution precedence
 
-Synod resolves each routing slot with this order:
+Boundline resolves each routing slot with this order:
 
 1. explicit CLI input
 2. workspace config
@@ -135,7 +135,7 @@ Synod resolves each routing slot with this order:
 4. global config
 5. built-in defaults
 
-Use `synod config show --scope effective --workspace <workspace> --cluster <primary-workspace>` to inspect
+Use `boundline config show --scope effective --workspace <workspace> --cluster <primary-workspace>` to inspect
 resolved values and their source.
 
 The effective view is now the operator-facing source of truth for backend
@@ -143,7 +143,7 @@ ownership: it shows the resolved route for each slot, the source that won
 precedence, and the assistant binding implied by that route.
 
 When follow-up commands already know which route owns the current work,
-Synod reuses that information and projects only the routing/config facts that
+Boundline reuses that information and projects only the routing/config facts that
 materially explain the current state. In practice, `route_config_projection`
 may include persisted `effective_routing`, `assistant_bindings`,
 `runtime_capabilities`, `slot_effort_policies`,
@@ -153,19 +153,19 @@ intent; it intentionally does not dump every possible config value.
 ## Cluster workflow
 
 ```bash
-synod cluster init \
+boundline cluster init \
 	--workspace <primary-workspace> \
 	--cluster-id delivery-a \
 	--member <primary-workspace> \
 	--member <secondary-workspace>
 
-synod cluster status --workspace <primary-workspace>
-synod cluster inspect --workspace <primary-workspace>
+boundline cluster status --workspace <primary-workspace>
+boundline cluster inspect --workspace <primary-workspace>
 ```
 
-The primary workspace owns `.synod/cluster.toml` and remains the authoritative
-owner of the active clustered session in `<primary-workspace>/.synod/session.json`.
-Member workspaces keep their own `.synod/traces/` and local `.synod/config.toml`
+The primary workspace owns `.boundline/cluster.toml` and remains the authoritative
+owner of the active clustered session in `<primary-workspace>/.boundline/session.json`.
+Member workspaces keep their own `.boundline/traces/` and local `.boundline/config.toml`
 files so terminal evidence stays local to the workspace that executed the
 bounded handoff.
 
@@ -173,25 +173,25 @@ Session-native clustered delivery uses the same bounded commands through the
 primary workspace:
 
 ```bash
-synod start --cluster <primary-workspace>
-synod capture --cluster <primary-workspace> --goal "Fix the failing add test"
-synod plan --cluster <primary-workspace>
-synod run --cluster <primary-workspace>
-synod status --cluster <primary-workspace>
-synod inspect --cluster <primary-workspace>
+boundline start --cluster <primary-workspace>
+boundline capture --cluster <primary-workspace> --goal "Fix the failing add test"
+boundline plan --cluster <primary-workspace>
+boundline run --cluster <primary-workspace>
+boundline status --cluster <primary-workspace>
+boundline inspect --cluster <primary-workspace>
 ```
 
 ## Init workflow
 
 ```bash
-synod init --workspace <workspace>
-synod doctor --workspace <workspace>
+boundline init --workspace <workspace>
+boundline doctor --workspace <workspace>
 ```
 
 Optional domain bootstrap:
 
 ```bash
-synod init \
+boundline init \
 	--workspace <workspace> \
 	--domain systems \
 	--domain react \
@@ -200,14 +200,14 @@ synod init \
 	--required-context-binding "react|design-reference|design/reference.md"
 ```
 
-When init would overwrite existing files, Synod shows a preview and requires
+When init would overwrite existing files, Boundline shows a preview and requires
 `--force` to apply destructive updates.
 
-You do not need `synod init` to use the primary session-native workflow. Use it when you want scaffolded compatibility defaults or assistant setup.
+You do not need `boundline init` to use the primary session-native workflow. Use it when you want scaffolded compatibility defaults or assistant setup.
 
 ## Init templates
 
-`synod init` works without a template flag. If you omit `--template`, Synod
+`boundline init` works without a template flag. If you omit `--template`, Boundline
 defaults to `bug-fix`.
 
 Available starting templates:
@@ -218,74 +218,74 @@ Available starting templates:
 
 Templates are only starting points for the generated compatibility execution profile.
 
-- Need a different starting point later: rerun `synod init --workspace <workspace> --force --template <bug-fix|change|delivery>`
+- Need a different starting point later: rerun `boundline init --workspace <workspace> --force --template <bug-fix|change|delivery>`
 - Need another task of the same type: do not rerun init; start a new session and capture a new goal
-- Need something custom: edit `<workspace>/.synod/execution.json` directly when you intentionally want compatibility behavior
+- Need something custom: edit `<workspace>/.boundline/execution.json` directly when you intentionally want compatibility behavior
 
 `init` template and `flow` are separate concerns: `init` bootstraps the
-optional compatibility profile, while `synod flow` selects the current session-native run shape.
+optional compatibility profile, while `boundline flow` selects the current session-native run shape.
 
 ## Config commands
 
 ### Show
 
 ```bash
-synod config show --workspace <workspace> --scope effective
-synod config show --workspace <workspace> --scope workspace
-synod config show --cluster <primary-workspace> --scope cluster
-synod config show --scope global
+boundline config show --workspace <workspace> --scope effective
+boundline config show --workspace <workspace> --scope workspace
+boundline config show --cluster <primary-workspace> --scope cluster
+boundline config show --scope global
 ```
 
 ### Set delivery-stage routes
 
 ```bash
-synod config set --scope global --slot planning --runtime codex --model gpt-5-codex
-synod config set --cluster <primary-workspace> --scope cluster --slot planning --runtime codex --model gpt-5-codex
-synod config set --workspace <workspace> --scope workspace --slot verification --runtime copilot --model gpt-5.4
+boundline config set --scope global --slot planning --runtime codex --model gpt-5-codex
+boundline config set --cluster <primary-workspace> --scope cluster --slot planning --runtime codex --model gpt-5-codex
+boundline config set --workspace <workspace> --scope workspace --slot verification --runtime copilot --model gpt-5.4
 ```
 
 ### Set review-role routes
 
 ```bash
-synod config set --workspace <workspace> --scope workspace --reviewer safety --runtime claude --model sonnet-4
-synod config set --workspace <workspace> --scope workspace --adjudicator --runtime codex --model gpt-5-codex
+boundline config set --workspace <workspace> --scope workspace --reviewer safety --runtime claude --model sonnet-4
+boundline config set --workspace <workspace> --scope workspace --adjudicator --runtime codex --model gpt-5-codex
 ```
 
 ### Set runtime capability profiles
 
 ```bash
-synod config set-capability --workspace <workspace> --scope workspace --runtime claude --continuation unsupported --resume unsupported --validation supported --handoff-target unsupported --escalation-context supported --notes "requires a handoff for bounded continuation"
+boundline config set-capability --workspace <workspace> --scope workspace --runtime claude --continuation unsupported --resume unsupported --validation supported --handoff-target unsupported --escalation-context supported --notes "requires a handoff for bounded continuation"
 ```
 
 ### Set slot effort policy
 
 ```bash
-synod config set-effort --workspace <workspace> --scope workspace --slot implementation --level high --fallback preserve --rationale "keep implementation on the highest-effort bounded path"
+boundline config set-effort --workspace <workspace> --scope workspace --slot implementation --level high --fallback preserve --rationale "keep implementation on the highest-effort bounded path"
 ```
 
 ### Set domain templates
 
 ```bash
-synod config set-domain --workspace <workspace> --scope workspace --family react --enable --standards "follow the shared UI system"
-synod config set-domain --cluster <primary-workspace> --scope cluster --family systems --enable
-synod config unset-domain --workspace <workspace> --scope workspace --family react
+boundline config set-domain --workspace <workspace> --scope workspace --family react --enable --standards "follow the shared UI system"
+boundline config set-domain --cluster <primary-workspace> --scope cluster --family systems --enable
+boundline config unset-domain --workspace <workspace> --scope workspace --family react
 ```
 
 ### Bind external context inputs
 
 ```bash
-synod config bind-context --workspace <workspace> --scope workspace --family react --kind design-system --reference mcp:design-system --required
-synod config bind-context --workspace <workspace> --scope workspace --family react --kind design-reference --reference design/reference.md
-synod config unbind-context --workspace <workspace> --scope workspace --family react --kind design-system --reference mcp:design-system
+boundline config bind-context --workspace <workspace> --scope workspace --family react --kind design-system --reference mcp:design-system --required
+boundline config bind-context --workspace <workspace> --scope workspace --family react --kind design-reference --reference design/reference.md
+boundline config unbind-context --workspace <workspace> --scope workspace --family react --kind design-system --reference mcp:design-system
 ```
 
 ### Unset values
 
 ```bash
-synod config unset --workspace <workspace> --scope workspace --slot planning
-synod config unset --cluster <primary-workspace> --scope cluster --slot planning
-synod config unset --workspace <workspace> --scope workspace --reviewer safety
-synod config unset-domain --workspace <workspace> --scope workspace --family react
+boundline config unset --workspace <workspace> --scope workspace --slot planning
+boundline config unset --cluster <primary-workspace> --scope cluster --slot planning
+boundline config unset --workspace <workspace> --scope workspace --reviewer safety
+boundline config unset-domain --workspace <workspace> --scope workspace --family react
 ```
 
 ## Runtime support

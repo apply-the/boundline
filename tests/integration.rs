@@ -25,6 +25,15 @@ mod cli_adaptive_execution;
 #[path = "integration/cli_diagnostics.rs"]
 mod cli_diagnostics;
 
+#[path = "integration/distribution_doctor_flow.rs"]
+mod distribution_doctor_flow;
+
+#[path = "integration/distribution_doctor_blocked_flow.rs"]
+mod distribution_doctor_blocked_flow;
+
+#[path = "integration/release_metadata_flow.rs"]
+mod release_metadata_flow;
+
 #[path = "integration/cli_trace_inspection.rs"]
 mod cli_trace_inspection;
 

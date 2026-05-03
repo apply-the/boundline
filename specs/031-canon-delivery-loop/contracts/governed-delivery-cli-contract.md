@@ -3,7 +3,7 @@
 **Feature**: 031-canon-delivery-loop  
 **Date**: 2026-05-02
 
-This contract captures the operator-visible behavior Synod must preserve while
+This contract captures the operator-visible behavior Boundline must preserve while
 bringing Canon inside one real delivery loop.
 
 ## 1. Governed Native Run Success
@@ -16,13 +16,13 @@ bringing Canon inside one real delivery loop.
 
 ### Contract
 
-- `synod run --workspace <workspace> --goal <goal>` remains the primary entry.
+- `boundline run --workspace <workspace> --goal <goal>` remains the primary entry.
 - The run output must keep governance activity visible on the same operator
   surface through `governance_selected`, `governance_started`, and
   `governance_completed` events where applicable.
 - Terminal success is allowed only if the session carries both material changed
   files and passed validation evidence.
-- `synod status`, `synod next`, and `synod inspect` must remain able to project
+- `boundline status`, `boundline next`, and `boundline inspect` must remain able to project
   latest governance state, latest changed files, latest validation status, and
   the same `next_command` story from the persisted session or trace.
 
@@ -51,8 +51,8 @@ bringing Canon inside one real delivery loop.
 
 ### Contract
 
-- Synod must not mark the task as succeeded.
-- Synod must record an explicit terminal reason that explains why the delivery
+- Boundline must not mark the task as succeeded.
+- Boundline must record an explicit terminal reason that explains why the delivery
   claim is not credible.
 - `status` and `inspect` must still surface the latest governance and delivery
   evidence so the operator can diagnose the stop condition from current CLI

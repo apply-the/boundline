@@ -38,10 +38,10 @@ source without changing the underlying delivery path.
 
 1. **Given** a workspace with explicit routing defaults for at least one slot,
   **When** the operator runs the delivery flow or inspects the resulting
-  follow-up state, **Then** Synod identifies which provider/model route owns
+  follow-up state, **Then** Boundline identifies which provider/model route owns
   the active slot and where that routing decision came from.
 2. **Given** a workspace using built-in defaults instead of explicit overrides,
-  **When** the operator checks the same surfaces, **Then** Synod still reports
+  **When** the operator checks the same surfaces, **Then** Boundline still reports
   the active route and makes it clear that the decision came from defaults
   rather than a hidden heuristic.
 3. **Given** a non-success path such as blocked, failed, exhausted, or
@@ -70,15 +70,15 @@ unchanged.
 **Acceptance Scenarios**:
 
 1. **Given** a bounded delivery slot whose configured provider/model route is
-  changed, **When** Synod prepares the assistant-backed execution or guidance
+  changed, **When** Boundline prepares the assistant-backed execution or guidance
   for that slot, **Then** it uses the bound assistant/backend family implied by
   the active route instead of a hard-coded default.
 2. **Given** multiple assistant families that can express the same bounded
-  workflow, **When** the operator changes routing, **Then** Synod keeps command
+  workflow, **When** the operator changes routing, **Then** Boundline keeps command
   names, follow-up surfaces, and orchestration ownership stable while changing
   only the bound backend or command-pack family.
 3. **Given** an explicit compatibility route or clustered session-owned route,
-  **When** assistant/backend binding is projected, **Then** Synod keeps route
+  **When** assistant/backend binding is projected, **Then** Boundline keeps route
   ownership explicit and does not imply that assistant selection created a new
   execution authority.
 
@@ -117,7 +117,7 @@ coverage refresh for touched Rust files, clippy cleanup, and formatting.
 
 <!--
   ACTION REQUIRED: Capture execution limits, invalid state transitions, missing context,
-  traceability gaps, and failure-handling boundaries. Synod features are invalid if they
+  traceability gaps, and failure-handling boundaries. Boundline features are invalid if they
   ignore how work stops, fails, or becomes non-credible.
 -->
 
@@ -156,7 +156,7 @@ coverage refresh for touched Rust files, clippy cleanup, and formatting.
 - **FR-006**: System MUST preserve the existing session-native workflow as the
   primary operator path and MUST keep any explicit compatibility behavior
   visibly separate.
-- **FR-007**: System MUST preserve bounded execution ownership inside Synod and
+- **FR-007**: System MUST preserve bounded execution ownership inside Boundline and
   MUST NOT introduce a second orchestration runtime, background daemon, or
   hidden fan-out control loop.
 - **FR-008**: System MUST keep command-pack selection and backend binding
@@ -175,7 +175,7 @@ coverage refresh for touched Rust files, clippy cleanup, and formatting.
 
 <!--
   ACTION REQUIRED: Name the deferred or excluded capabilities explicitly.
-  Synod specs should normally exclude councils and voting unless the roadmap and
+  Boundline specs should normally exclude councils and voting unless the roadmap and
   constitution explicitly prioritize a bounded review slice; they should otherwise
   exclude provider-routing complexity, distributed execution, long-term memory,
   UI/UX work, and deployment pipelines.
@@ -187,7 +187,7 @@ coverage refresh for touched Rust files, clippy cleanup, and formatting.
   follow-up; `0.27.0` release closeout including version bump, impacted docs,
   changelog, coverage refresh, clippy cleanup, and formatting.
 - **Out of Scope**: provider authentication flows; a generic model gateway;
-  autonomous assistant orchestration outside Synod; UI or dashboard work;
+  autonomous assistant orchestration outside Boundline; UI or dashboard work;
   distributed execution; long-term memory; deployment-pipeline changes; generic
   plugin ecosystems for arbitrary third-party backends.
 
@@ -238,7 +238,7 @@ coverage refresh for touched Rust files, clippy cleanup, and formatting.
   explicit compatibility behavior remains a separate named route.
 - Existing routing configuration already contains enough slot and model context
   to support inspectable projection without inventing a new control plane.
-- Assistant command packs continue to wrap the local Synod CLI instead of
+- Assistant command packs continue to wrap the local Boundline CLI instead of
   becoming a second execution authority.
 - The `0.27.0` release should prefer the smallest coherent improvement to
   routing transparency and assistant binding before any broader provider-gateway

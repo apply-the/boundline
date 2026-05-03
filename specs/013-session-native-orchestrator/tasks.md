@@ -60,7 +60,7 @@ inspectable value independently.
 
 **Goal**: Implement the observe→decide→act→verify→update execution loop
 
-**Independent Test**: Run `synod run` on a session with a captured goal and verify
+**Independent Test**: Run `boundline run` on a session with a captured goal and verify
 the engine produces a sequence of typed, inspectable decision objects in the trace
 
 ### Tests for User Story 1
@@ -88,8 +88,8 @@ the engine produces a sequence of typed, inspectable decision objects in the tra
 
 **Goal**: Derive initial bounded task draft from goal, workspace state, and context
 
-**Independent Test**: Run `synod plan` and verify it produces a GoalPlan with tasks
-referencing real workspace files, without requiring `synod init` or execution profile
+**Independent Test**: Run `boundline plan` and verify it produces a GoalPlan with tasks
+referencing real workspace files, without requiring `boundline init` or execution profile
 
 ### Tests for User Story 2
 
@@ -100,19 +100,19 @@ referencing real workspace files, without requiring `synod init` or execution pr
 
 ### Implementation for User Story 2
 
-- [x] T041 [US2] Implement workspace signal collector in `src/orchestrator/goal_planner.rs`: enumerate file tree (bounded depth 4), detect language from manifests, check `.synod/config.toml` and `.canon/` presence
+- [x] T041 [US2] Implement workspace signal collector in `src/orchestrator/goal_planner.rs`: enumerate file tree (bounded depth 4), detect language from manifests, check `.boundline/config.toml` and `.canon/` presence
 - [x] T042 [US2] Implement task derivation in `src/orchestrator/goal_planner.rs`: parse goal text, match against workspace signals, generate ordered PlannedTask list with targets, expected outcomes, and decision type hints
 - [x] T043 [US2] Implement Canon artifact scanning in `src/orchestrator/goal_planner.rs`: if `.canon/` exists, scan for governed artifacts and include as source_evidence in GoalPlan
-- [x] T044 [US2] Integrate goal planner into `synod plan` command in `src/cli/session.rs`: when session has captured goal and no execution profile, call goal planner, persist GoalPlan in session state, show plan summary to user
-- [x] T045 [US2] Handle error path in `src/cli/session.rs`: if `synod plan` is called without a captured goal, return explicit error message
+- [x] T044 [US2] Integrate goal planner into `boundline plan` command in `src/cli/session.rs`: when session has captured goal and no execution profile, call goal planner, persist GoalPlan in session state, show plan summary to user
+- [x] T045 [US2] Handle error path in `src/cli/session.rs`: if `boundline plan` is called without a captured goal, return explicit error message
 
 ---
 
 ## Phase 5: User Story 3 — Inferred Flow with Lightweight Confirmation (Priority: P3)
 
-**Goal**: Propose inferred flow from goal text during `synod plan`
+**Goal**: Propose inferred flow from goal text during `boundline plan`
 
-**Independent Test**: Capture a goal with "fix" keyword, run `synod plan`, and verify
+**Independent Test**: Capture a goal with "fix" keyword, run `boundline plan`, and verify
 bug-fix flow is proposed with confirmation prompt
 
 ### Tests for User Story 3
@@ -125,9 +125,9 @@ bug-fix flow is proposed with confirmation prompt
 ### Implementation for User Story 3
 
 - [x] T050 [US3] Implement flow inference engine in `src/orchestrator/flow_inference.rs`: match goal text against keyword patterns (fix/bug/broken→bug-fix, add/implement/feature→change, deliver/release/ship→delivery), return InferredFlow with confidence_reason
-- [x] T051 [US3] Integrate flow inference into `synod plan` in `src/cli/session.rs`: after goal plan creation, run inference, show proposed flow to user with confirmation prompt
-- [x] T052 [US3] Implement `--flow` override flag in `synod plan` in `src/cli/session.rs`: skip inference and use explicit flow
-- [x] T053 [US3] Implement `--no-flow` flag in `synod plan` in `src/cli/session.rs`: skip inference and run without flow constraints
+- [x] T051 [US3] Integrate flow inference into `boundline plan` in `src/cli/session.rs`: after goal plan creation, run inference, show proposed flow to user with confirmation prompt
+- [x] T052 [US3] Implement `--flow` override flag in `boundline plan` in `src/cli/session.rs`: skip inference and use explicit flow
+- [x] T053 [US3] Implement `--no-flow` flag in `boundline plan` in `src/cli/session.rs`: skip inference and run without flow constraints
 
 ---
 
@@ -180,14 +180,14 @@ the file, runs verification, and feeds output as evidence for next decision
 
 **Goal**: Preserve fixture execution path as fallback, route correctly
 
-**Independent Test**: Verify `synod run` with `.synod/execution.json` uses fixture
-path; `synod run` with captured goal uses decision loop
+**Independent Test**: Verify `boundline run` with `.boundline/execution.json` uses fixture
+path; `boundline run` with captured goal uses decision loop
 
 ### Tests for User Story 6
 
-- [x] T069 [P] [US6] Integration test: `synod run` with execution profile uses fixture path in `tests/integration/fixture_compat_flow.rs` and register in `tests/integration.rs`
-- [x] T070 [P] [US6] Integration test: `synod run` with captured goal uses decision loop in `tests/integration/session_native_flow.rs` and register in `tests/integration.rs`
-- [x] T071 [P] [US6] Integration test: `synod run` with both goal and profile uses decision loop unless `--profile` is explicit in `tests/integration/session_native_flow.rs`
+- [x] T069 [P] [US6] Integration test: `boundline run` with execution profile uses fixture path in `tests/integration/fixture_compat_flow.rs` and register in `tests/integration.rs`
+- [x] T070 [P] [US6] Integration test: `boundline run` with captured goal uses decision loop in `tests/integration/session_native_flow.rs` and register in `tests/integration.rs`
+- [x] T071 [P] [US6] Integration test: `boundline run` with both goal and profile uses decision loop unless `--profile` is explicit in `tests/integration/session_native_flow.rs`
 
 ### Implementation for User Story 6
 

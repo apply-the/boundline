@@ -1,16 +1,16 @@
 use crate::workspace_fixture::temp_fixture_workspace;
-use synod::domain::negotiation::{
+use boundline::domain::negotiation::{
     NegotiatedDeliveryPacket, NegotiationConstraint, NegotiationConstraintKind,
     NegotiationConstraintSource, NegotiationConstraintState, NegotiationResolutionState,
 };
-use synod::domain::session::{ActiveSessionRecord, SessionStatus};
-use synod::fixture::build_task_request;
-use synod::orchestrator::session_runtime::SessionRuntime;
+use boundline::domain::session::{ActiveSessionRecord, SessionStatus};
+use boundline::fixture::build_task_request;
+use boundline::orchestrator::session_runtime::SessionRuntime;
 use uuid::Uuid;
 
 #[test]
 fn capture_goal_derives_a_credible_negotiation_packet_from_direct_goal() {
-    let workspace = temp_fixture_workspace("synod-negotiation-goal-only");
+    let workspace = temp_fixture_workspace("boundline-negotiation-goal-only");
     let runtime = SessionRuntime::for_workspace(&workspace);
     let mut session = ActiveSessionRecord {
         session_id: "session-negotiation".to_string(),
@@ -44,7 +44,7 @@ fn capture_goal_derives_a_credible_negotiation_packet_from_direct_goal() {
 
 #[test]
 fn plan_task_respects_pending_negotiation_even_without_authored_brief() {
-    let workspace = temp_fixture_workspace("synod-negotiation-plan-gate");
+    let workspace = temp_fixture_workspace("boundline-negotiation-plan-gate");
     let runtime = SessionRuntime::for_workspace(&workspace);
     let mut packet = NegotiatedDeliveryPacket::from_goal(
         "session-negotiation",
@@ -89,7 +89,7 @@ fn plan_task_respects_pending_negotiation_even_without_authored_brief() {
 
 #[test]
 fn plan_task_projects_negotiation_summary_into_goal_plan() {
-    let workspace = temp_fixture_workspace("synod-negotiation-plan-projection");
+    let workspace = temp_fixture_workspace("boundline-negotiation-plan-projection");
     let runtime = SessionRuntime::for_workspace(&workspace);
     let mut session = ActiveSessionRecord {
         session_id: "session-negotiation".to_string(),
@@ -124,7 +124,7 @@ fn plan_task_projects_negotiation_summary_into_goal_plan() {
 
 #[test]
 fn build_task_request_serializes_negotiation_projection_into_input() {
-    let workspace = temp_fixture_workspace("synod-negotiation-task-request");
+    let workspace = temp_fixture_workspace("boundline-negotiation-task-request");
     let packet = NegotiatedDeliveryPacket::from_goal(
         "session-negotiation",
         workspace.to_string_lossy().as_ref(),

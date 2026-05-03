@@ -6,24 +6,24 @@
 ## Scenario 1: Continue A Named Workflow Through Review And Govern
 
 ```bash
-cd /tmp/synod-workflow-follow-through
-cargo run --bin synod -- workflow run governed-delivery --workspace .
-cargo run --bin synod -- workflow resume --workspace .
-cargo run --bin synod -- workflow inspect --workspace .
+cd /tmp/boundline-workflow-follow-through
+cargo run --bin boundline -- workflow run governed-delivery --workspace .
+cargo run --bin boundline -- workflow resume --workspace .
+cargo run --bin boundline -- workflow inspect --workspace .
 ```
 
 **Expected**:
-- Synod progresses through review and govern when their bounded prerequisites are satisfied.
-- If either phase cannot continue, Synod reports an explicit paused, blocked, or failed condition instead of a declaration-only blocker.
+- Boundline progresses through review and govern when their bounded prerequisites are satisfied.
+- If either phase cannot continue, Boundline reports an explicit paused, blocked, or failed condition instead of a declaration-only blocker.
 - `workflow inspect` preserves the same session and trace story as the direct session-native path.
 
 ## Scenario 2: Discover Available Named Workflows And Choose One Correctly
 
 ```bash
-cd /tmp/synod-workflow-follow-through
-cargo run --bin synod -- workflow list --workspace .
-cargo run --bin synod -- workflow run governed-delivery --workspace .
-cargo run --bin synod -- workflow status --workspace .
+cd /tmp/boundline-workflow-follow-through
+cargo run --bin boundline -- workflow list --workspace .
+cargo run --bin boundline -- workflow run governed-delivery --workspace .
+cargo run --bin boundline -- workflow status --workspace .
 ```
 
 **Expected**:
@@ -34,9 +34,9 @@ cargo run --bin synod -- workflow status --workspace .
 ## Scenario 3: Author A Review Or Govern Workflow From Shipped Guidance
 
 ```bash
-cd /tmp/synod-workflow-follow-through
-cat .synod/workflows.toml
-cargo run --bin synod -- workflow list --workspace .
+cd /tmp/boundline-workflow-follow-through
+cat .boundline/workflows.toml
+cargo run --bin boundline -- workflow list --workspace .
 ```
 
 **Expected**:

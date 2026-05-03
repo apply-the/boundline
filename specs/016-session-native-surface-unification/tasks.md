@@ -34,7 +34,7 @@
 - [X] T006 [P] Add shared operator-surface rendering helpers in `src/cli/output.rs` and `src/cli/inspect.rs`
 - [X] T007 Add foundational unit coverage for unified summary and rendering invariants in `tests/unit/session_surface_summary.rs`, `tests/unit/trace_summary.rs`, and `tests/unit/cli_output.rs`
 
-**Checkpoint**: Synod can derive one coherent route, condition, and optional-mode summary before story-specific rendering behavior is widened.
+**Checkpoint**: Boundline can derive one coherent route, condition, and optional-mode summary before story-specific rendering behavior is widened.
 
 ---
 

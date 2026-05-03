@@ -1,21 +1,21 @@
 use std::fs;
 use std::path::Path;
 
+use boundline::adapters::agent::FnAgentAdapter;
+use boundline::adapters::tool::FnToolAdapter;
+use boundline::adapters::trace_store::FileTraceStore;
+use boundline::domain::step::{ErrorInfo, Recoverability, StepExecutionResult};
+use boundline::domain::trace::TraceEventType;
+use boundline::orchestrator::decision_loop::{DecisionLoop, LoopTerminal};
+use boundline::orchestrator::goal_planner::build_goal_plan;
+use boundline::registry::agent_registry::AgentRegistry;
+use boundline::registry::tool_registry::ToolRegistry;
 use serde_json::json;
-use synod::adapters::agent::FnAgentAdapter;
-use synod::adapters::tool::FnToolAdapter;
-use synod::adapters::trace_store::FileTraceStore;
-use synod::domain::step::{ErrorInfo, Recoverability, StepExecutionResult};
-use synod::domain::trace::TraceEventType;
-use synod::orchestrator::decision_loop::{DecisionLoop, LoopTerminal};
-use synod::orchestrator::goal_planner::build_goal_plan;
-use synod::registry::agent_registry::AgentRegistry;
-use synod::registry::tool_registry::ToolRegistry;
 
 use crate::runtime_refoundation::{
     temp_runtime_refoundation_failure_workspace, temp_runtime_refoundation_workspace,
 };
-use crate::workspace_fixture::{run_synod_in, terminal_text};
+use crate::workspace_fixture::{run_boundline_in, terminal_text};
 
 fn build_loop(workspace: &Path, max_steps: usize) -> DecisionLoop<FileTraceStore> {
     let mut agents = AgentRegistry::new();
@@ -85,19 +85,21 @@ fn build_loop(workspace: &Path, max_steps: usize) -> DecisionLoop<FileTraceStore
 fn inspect_preserves_failure_and_recovery_evidence_for_native_no_actionable_runs() {
     let workspace = temp_runtime_refoundation_failure_workspace("runtime-refoundation-failure");
 
-    assert_eq!(run_synod_in(&workspace, &["start"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_synod_in(&workspace, &["capture", "--goal", "fix the failing add test"]).status.code(),
+        run_boundline_in(&workspace, &["capture", "--goal", "fix the failing add test"])
+            .status
+            .code(),
         Some(0)
     );
-    assert_eq!(run_synod_in(&workspace, &["plan", "--no-flow"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(&workspace, &["plan", "--no-flow"]).status.code(), Some(0));
 
-    let run = run_synod_in(&workspace, &["run"]);
+    let run = run_boundline_in(&workspace, &["run"]);
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(1), "{run_text}");
     assert!(run_text.contains("terminal_status: failed"), "{run_text}");
 
-    let inspect = run_synod_in(&workspace, &["inspect", "--workspace", "."]);
+    let inspect = run_boundline_in(&workspace, &["inspect", "--workspace", "."]);
     let inspect_text = terminal_text(&inspect);
     assert_eq!(inspect.status.code(), Some(1), "{inspect_text}");
     assert!(inspect_text.contains("decision_timeline:"), "{inspect_text}");

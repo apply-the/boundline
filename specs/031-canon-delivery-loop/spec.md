@@ -3,7 +3,7 @@
 **Feature Branch**: `031-canon-delivery-loop`  
 **Created**: 2026-05-02  
 **Status**: Draft  
-**Input**: User description: "Make the next Synod feature deliver at least one real bounded code change through the primary session-native path while calling Canon through the governed adapter at change framing, approval-gated review, and verification evidence stages. Keep Synod authoritative for orchestration, retries, routing, next-step choice, and workspace execution. Keep Canon authoritative for governed artifacts, approval state, provenance, and policy gates. Governed and non-governed runs must share the same session, trace, follow-through, and next_command story. The feature must stop explicitly when implementation produces no material workspace diff, no credible validation evidence, or Canon blocks or awaits approval. Include version bump, impacted docs and changelog, focused Rust coverage for modified files, cargo clippy, and cargo fmt."
+**Input**: User description: "Make the next Boundline feature deliver at least one real bounded code change through the primary session-native path while calling Canon through the governed adapter at change framing, approval-gated review, and verification evidence stages. Keep Boundline authoritative for orchestration, retries, routing, next-step choice, and workspace execution. Keep Canon authoritative for governed artifacts, approval state, provenance, and policy gates. Governed and non-governed runs must share the same session, trace, follow-through, and next_command story. The feature must stop explicitly when implementation produces no material workspace diff, no credible validation evidence, or Canon blocks or awaits approval. Include version bump, impacted docs and changelog, focused Rust coverage for modified files, cargo clippy, and cargo fmt."
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -20,19 +20,19 @@
 
 ### User Story 1 - Deliver A Governed Code Change (Priority: P1)
 
-An operator can start from a workspace and a bounded goal, run Synod on the
+An operator can start from a workspace and a bounded goal, run Boundline on the
 primary session-native route, and complete one governed delivery flow that uses
 Canon for change framing, governed review, and verification evidence while
 still ending in real code changes and validation in the same workspace.
 
 **Why this priority**: The roadmap now lives or dies on whether Canon improves
-real code delivery inside Synod. If this slice cannot produce one complete
-governed code change, the Synod and Canon split remains product noise instead
+real code delivery inside Boundline. If this slice cannot produce one complete
+governed code change, the Boundline and Canon split remains product noise instead
 of product value.
 
 **Independent Test**: In a representative Rust workspace with a bounded failing
-task and Canon governance configured, run the primary Synod delivery flow and
-verify that Synod produces a material workspace diff, records Canon-governed
+task and Canon governance configured, run the primary Boundline delivery flow and
+verify that Boundline produces a material workspace diff, records Canon-governed
 stage evidence, completes validation, and leaves one inspectable session and
 trace story.
 
@@ -40,13 +40,13 @@ trace story.
 
 1. **Given** a writable workspace, a bounded goal, and Canon governance enabled
   for change framing, review, and verification, **When** the operator starts
-  the primary Synod delivery flow, **Then** Synod obtains governed change
+  the primary Boundline delivery flow, **Then** Boundline obtains governed change
   framing before implementation, applies a real bounded code change, captures
   governed review and verification evidence, and reaches terminal completion on
   the same session-native route.
 2. **Given** a governed delivery flow that reaches review or verification,
   **When** Canon returns reusable governed evidence for the current stage,
-  **Then** Synod persists that packet or evidence, uses it to continue bounded
+  **Then** Boundline persists that packet or evidence, uses it to continue bounded
   delivery, and keeps the resulting follow-through visible on the same `run`,
   `status`, `next`, and `inspect` surfaces.
 3. **Given** a governed delivery flow that completes, **When** the operator
@@ -58,7 +58,7 @@ trace story.
 
 ### User Story 2 - Stop Safely When Delivery Is Not Credible (Priority: P2)
 
-An operator can trust Synod to stop instead of pretending completion when
+An operator can trust Boundline to stop instead of pretending completion when
 Canon blocks a stage, approval is still outstanding, implementation produces no
 material workspace diff, or validation does not produce credible evidence.
 
@@ -74,17 +74,17 @@ governance context, and a bounded next action.
 **Acceptance Scenarios**:
 
 1. **Given** a governed stage where Canon returns blocked or awaiting-approval
-  status, **When** Synod reaches that stage, **Then** Synod stops the same
+  status, **When** Boundline reaches that stage, **Then** Boundline stops the same
   delivery session in an explicit blocked or approval-gated state and does not
   continue implementation, review, or completion implicitly.
 2. **Given** a governed delivery attempt whose implementation produces no
   material workspace diff or whose verification evidence is absent, stale, or
-  contradicted by workspace results, **When** Synod evaluates completion,
+  contradicted by workspace results, **When** Boundline evaluates completion,
   **Then** it stops explicitly before terminal success and records the bounded
   repair or operator action still required.
 3. **Given** a governed session that paused for approval or blocked governance,
   **When** the blocking condition changes and the operator resumes, **Then**
-  Synod continues from the same persisted session and trace story instead of
+  Boundline continues from the same persisted session and trace story instead of
   creating an unrelated new run.
 
 ---
@@ -97,7 +97,7 @@ learning a second product surface because `run`, `status`, `next`, and
 ownership explicit.
 
 **Why this priority**: Feature 031 only closes the roadmap if Canon becomes
-useful inside the existing Synod product, not beside it as a separate runtime
+useful inside the existing Boundline product, not beside it as a separate runtime
 story.
 
 **Independent Test**: Compare one governed native run, one non-governed native
@@ -123,7 +123,7 @@ subordinate compatibility cues stay explicit.
 
 A maintainer can ship `0.31.0` with runtime behavior, docs, assistant guidance,
 roadmap, changelog, and validation evidence all describing the same story:
-Synod now delivers at least one real governed code flow with Canon inside the
+Boundline now delivers at least one real governed code flow with Canon inside the
 loop.
 
 **Why this priority**: If the runtime changes but version metadata,
@@ -152,12 +152,12 @@ shipped behavior.
 
 <!--
   ACTION REQUIRED: Capture execution limits, invalid state transitions, missing context,
-  traceability gaps, and failure-handling boundaries. Synod features are invalid if they
+  traceability gaps, and failure-handling boundaries. Boundline features are invalid if they
   ignore how work stops, fails, or becomes non-credible.
 -->
 
 - What happens when Canon returns a non-reusable governed packet at a stage
-  Synod expected to continue from?
+  Boundline expected to continue from?
 - How does the system handle implementation that produces no material diff or
   touches files outside the bounded workspace target?
 - How does the system stop when verification evidence is missing, stale, or
@@ -183,12 +183,12 @@ shipped behavior.
   one complete flow can progress through goal, change framing,
   implementation, review, verification, and completion without splitting into a
   second product surface.
-- **FR-002**: System MUST keep Synod authoritative for orchestration, retries,
+- **FR-002**: System MUST keep Boundline authoritative for orchestration, retries,
   routing, next-step choice, and workspace execution even when a stage is
   governed by Canon.
 - **FR-003**: System MUST consume Canon through the machine-facing governance
   adapter contract and persist Canon outcomes as governed packets or evidence
-  that later Synod stages can inspect and reuse.
+  that later Boundline stages can inspect and reuse.
 - **FR-004**: System MUST require successful governed change-framing evidence
   before native implementation begins on a governed delivery flow.
 - **FR-005**: System MUST require both a material workspace diff and credible
@@ -222,7 +222,7 @@ shipped behavior.
 
 <!--
   ACTION REQUIRED: Name the deferred or excluded capabilities explicitly.
-  Synod specs should normally exclude councils and voting unless the roadmap and
+  Boundline specs should normally exclude councils and voting unless the roadmap and
   constitution explicitly prioritize a bounded review slice; they should otherwise
   exclude provider-routing complexity, distributed execution, long-term memory,
   UI/UX work, and deployment pipelines.
@@ -251,7 +251,7 @@ shipped behavior.
   downstream stages.
 - **Delivery Completion Gate**: the combined condition requiring governed stage
   success, material workspace diff, and credible validation evidence before
-  Synod can mark delivery complete.
+  Boundline can mark delivery complete.
 - **Governance Continuity Cue**: surfaced state on `run`, `status`, `next`, and
   `inspect` that tells the operator who currently owns the next step, whether
   approval is pending, and which governed evidence is authoritative.
@@ -293,12 +293,12 @@ shipped behavior.
 -->
 
 - Canon will expose the machine-facing governance adapter surface defined by
-  its current governance-adapter feature before Synod closes this slice.
+  its current governance-adapter feature before Boundline closes this slice.
 - One complete governed delivery flow in representative Rust workspaces is
   sufficient to prove the product model before widening governance coverage
   further.
-- Existing `.synod/session.json`, `.synod/traces/`, and current follow-through
+- Existing `.boundline/session.json`, `.boundline/traces/`, and current follow-through
   surfaces remain the authoritative state model for this feature.
-- Synod's current bounded execution and validation mechanisms are sufficient to
+- Boundline's current bounded execution and validation mechanisms are sufficient to
   demonstrate real delivery value in this slice without introducing a broader
   autonomous execution architecture.

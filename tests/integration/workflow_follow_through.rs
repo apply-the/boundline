@@ -1,15 +1,15 @@
 use std::fs;
 
-use synod::domain::session::{ActiveSessionRecord, SessionStatus};
-use synod::domain::workflow::{WorkflowLifecycleState, WorkflowPhase};
+use boundline::domain::session::{ActiveSessionRecord, SessionStatus};
+use boundline::domain::workflow::{WorkflowLifecycleState, WorkflowPhase};
 
 use crate::workspace_fixture::{
     temp_workflow_follow_through_approval_workspace, temp_workflow_follow_through_workspace,
     terminal_text,
 };
 
-fn run_synod_in(workspace: &std::path::Path, args: &[&str]) -> std::process::Output {
-    std::process::Command::new(env!("CARGO_BIN_EXE_synod"))
+fn run_boundline_in(workspace: &std::path::Path, args: &[&str]) -> std::process::Output {
+    std::process::Command::new(env!("CARGO_BIN_EXE_boundline"))
         .args(args)
         .current_dir(workspace)
         .output()
@@ -17,7 +17,7 @@ fn run_synod_in(workspace: &std::path::Path, args: &[&str]) -> std::process::Out
 }
 
 fn load_session_record(workspace: &std::path::Path) -> ActiveSessionRecord {
-    serde_json::from_slice(&fs::read(workspace.join(".synod").join("session.json")).unwrap())
+    serde_json::from_slice(&fs::read(workspace.join(".boundline").join("session.json")).unwrap())
         .unwrap()
 }
 
@@ -25,7 +25,7 @@ fn load_session_record(workspace: &std::path::Path) -> ActiveSessionRecord {
 fn workflow_run_completes_review_and_govern_when_follow_through_is_ready() {
     let workspace = temp_workflow_follow_through_workspace("workflow-follow-through-success");
 
-    let output = run_synod_in(
+    let output = run_boundline_in(
         &workspace,
         &["workflow", "run", "governed-delivery", "--goal", "Fix the failing checkout flow"],
     );
@@ -53,7 +53,7 @@ fn workflow_run_advances_review_and_pauses_at_govern_when_approval_is_pending() 
     let workspace =
         temp_workflow_follow_through_approval_workspace("workflow-follow-through-pending");
 
-    let output = run_synod_in(
+    let output = run_boundline_in(
         &workspace,
         &["workflow", "run", "governed-delivery", "--goal", "Fix the failing checkout flow"],
     );
@@ -68,7 +68,7 @@ fn workflow_run_advances_review_and_pauses_at_govern_when_approval_is_pending() 
     );
     assert!(text.contains("latest_governance_state: awaiting_approval"), "{text}");
     assert!(text.contains("execution_condition: waiting - governance approval is still pending before execution can continue"), "{text}");
-    assert!(text.contains("next_command: synod workflow resume --workspace "), "{text}");
+    assert!(text.contains("next_command: boundline workflow resume --workspace "), "{text}");
 
     let record = load_session_record(&workspace);
     let progress = record.workflow_progress.expect("workflow progress should exist");
@@ -84,7 +84,7 @@ fn workflow_resume_finishes_after_governance_approval_refresh() {
     let workspace =
         temp_workflow_follow_through_approval_workspace("workflow-follow-through-resume");
 
-    let start = run_synod_in(
+    let start = run_boundline_in(
         &workspace,
         &["workflow", "run", "governed-delivery", "--goal", "Fix the failing checkout flow"],
     );
@@ -92,7 +92,7 @@ fn workflow_resume_finishes_after_governance_approval_refresh() {
 
     fs::write(workspace.join(".canon/approval-state.txt"), "granted\n").unwrap();
 
-    let output = run_synod_in(&workspace, &["workflow", "resume", "--workspace", "."]);
+    let output = run_boundline_in(&workspace, &["workflow", "resume", "--workspace", "."]);
     let text = terminal_text(&output);
 
     assert_eq!(output.status.code(), Some(0), "{text}");

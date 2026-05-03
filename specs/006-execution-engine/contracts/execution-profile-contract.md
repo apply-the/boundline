@@ -6,8 +6,8 @@ Define the workspace-local contract that powers the execution engine.
 
 ## Location
 
-- Preferred: `<workspace>/.synod/execution.json`
-- Legacy fallback: `<workspace>/.synod/fixture.json`
+- Preferred: `<workspace>/.boundline/execution.json`
+- Legacy fallback: `<workspace>/.boundline/fixture.json`
 
 ## Preferred JSON shape
 

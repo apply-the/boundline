@@ -3,7 +3,7 @@
 **Feature Branch**: `012-multi-workspace`  
 **Created**: 2026-04-28  
 **Status**: Draft  
-**Input**: User description: "Bounded multi-workspace orchestration for Synod: add cluster-aware session tracking, cluster-level configuration precedence, cross-workspace trace inspection, and targeted execution that can move between member repositories while preserving bounded state and inspectability."
+**Input**: User description: "Bounded multi-workspace orchestration for Boundline: add cluster-aware session tracking, cluster-level configuration precedence, cross-workspace trace inspection, and targeted execution that can move between member repositories while preserving bounded state and inspectability."
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -20,28 +20,28 @@
 ### User Story 1 - Establish a Clustered Delivery Context (Priority: P1)
 
 As an operator working across two or more repositories for one delivery, I want
-Synod to register those repositories as one bounded cluster so that I can start
+Boundline to register those repositories as one bounded cluster so that I can start
 from a single entry point instead of manually stitching together separate
 workspace sessions.
 
 **Why this priority**: Without a credible clustered entry point, multi-workspace
-delivery remains a manual convention rather than a real Synod capability.
+delivery remains a manual convention rather than a real Boundline capability.
 
 **Independent Test**: Register two repositories into one cluster, start or
-capture clustered work once, and verify that Synod records a shared cluster
+capture clustered work once, and verify that Boundline records a shared cluster
 context without mutating unrelated single-workspace flows.
 
 **Acceptance Scenarios**:
 
-1. **Given** two valid Synod workspaces, **When** the operator initializes a
-  cluster and names both members, **Then** Synod records the cluster membership
+1. **Given** two valid Boundline workspaces, **When** the operator initializes a
+  cluster and names both members, **Then** Boundline records the cluster membership
   and reports one bounded cluster context the operator can reuse.
 2. **Given** an existing cluster, **When** the operator starts clustered work,
-  **Then** Synod records the active cluster identity and member list in the
+  **Then** Boundline records the active cluster identity and member list in the
   session state instead of creating unrelated per-workspace sessions.
 3. **Given** one requested member path is missing, duplicated, or outside the
   allowed workspace boundary, **When** the operator tries to initialize the
-  cluster, **Then** Synod stops without partial registration and explains the
+  cluster, **Then** Boundline stops without partial registration and explains the
   invalid member.
 
 ---
@@ -57,20 +57,20 @@ operator cannot inspect which member workspace moved last or where execution is
 blocked.
 
 **Independent Test**: With one clustered session and at least one recorded
-trace, run cluster-aware status and inspection commands and verify that Synod
+trace, run cluster-aware status and inspection commands and verify that Boundline
 surfaces the latest member state, trace references, and blocking context.
 
 **Acceptance Scenarios**:
 
 1. **Given** a cluster with member workspaces in different session states,
-  **When** the operator requests cluster status, **Then** Synod lists each
+  **When** the operator requests cluster status, **Then** Boundline lists each
   member workspace, its current activity summary, and whether it matches the
   shared cluster context.
 2. **Given** clustered work has produced traces in more than one member
-  workspace, **When** the operator inspects the cluster, **Then** Synod shows a
+  workspace, **When** the operator inspects the cluster, **Then** Boundline shows a
   unified view that points to the latest relevant trace for each member.
 3. **Given** one member workspace has no active session or latest trace,
-  **When** the operator requests cluster inspection, **Then** Synod reports the
+  **When** the operator requests cluster inspection, **Then** Boundline reports the
   gap explicitly rather than implying healthy state.
 
 ---
@@ -90,14 +90,14 @@ reported source for each value.
 
 **Acceptance Scenarios**:
 
-1. **Given** a cluster-level default and no local override, **When** Synod
+1. **Given** a cluster-level default and no local override, **When** Boundline
   resolves a supported setting for a member workspace, **Then** it uses the
   cluster-level value and reports that source.
-2. **Given** a member workspace sets its own local override, **When** Synod
+2. **Given** a member workspace sets its own local override, **When** Boundline
   resolves the same setting, **Then** the workspace-local value wins over the
   cluster-level default and the source is visible.
 3. **Given** the cluster configuration is malformed or conflicts with member
-  identity, **When** Synod loads the cluster defaults, **Then** it blocks the
+  identity, **When** Boundline loads the cluster defaults, **Then** it blocks the
   operation with actionable guidance instead of silently ignoring the problem.
 
 ---
@@ -106,20 +106,20 @@ reported source for each value.
 
 <!--
   ACTION REQUIRED: Capture execution limits, invalid state transitions, missing context,
-  traceability gaps, and failure-handling boundaries. Synod features are invalid if they
+  traceability gaps, and failure-handling boundaries. Boundline features are invalid if they
   ignore how work stops, fails, or becomes non-credible.
 -->
 
-- A cluster member path may point to a valid directory that is not a Synod
-  workspace; Synod must reject that member explicitly.
+- A cluster member path may point to a valid directory that is not a Boundline
+  workspace; Boundline must reject that member explicitly.
 - A member workspace may already contain an active session that belongs to a
-  different cluster identity; Synod must stop and require reconciliation.
+  different cluster identity; Boundline must stop and require reconciliation.
 - A cluster may contain duplicate canonical paths written in different lexical
-  forms; Synod must normalize them before validation.
-- Cluster inspection may find traces in some workspaces but not others; Synod
+  forms; Boundline must normalize them before validation.
+- Cluster inspection may find traces in some workspaces but not others; Boundline
   must surface missing traces as an explicit gap, not as success.
 - A cluster-scoped default may exist for a member workspace that has no local
-  config file; Synod must still resolve the value deterministically.
+  config file; Boundline must still resolve the value deterministically.
 - Single-workspace commands must continue to work unchanged when no cluster
   context is present.
 
@@ -133,39 +133,39 @@ reported source for each value.
 
 ### Functional Requirements
 
-- **FR-001**: Synod MUST provide a way to register a named cluster that contains
+- **FR-001**: Boundline MUST provide a way to register a named cluster that contains
   two or more member workspaces under one bounded delivery context.
-- **FR-002**: Synod MUST validate every requested cluster member before saving
+- **FR-002**: Boundline MUST validate every requested cluster member before saving
   cluster state and MUST refuse partial registration when any member is invalid.
-- **FR-003**: Synod MUST persist enough cluster state for later commands to
+- **FR-003**: Boundline MUST persist enough cluster state for later commands to
   identify the cluster, its member workspaces, and its primary workspace.
-- **FR-004**: Synod MUST let clustered start or capture flows reuse one active
+- **FR-004**: Boundline MUST let clustered start or capture flows reuse one active
   cluster identity instead of creating unrelated per-workspace session state.
-- **FR-005**: Synod MUST preserve existing single-workspace session behavior
+- **FR-005**: Boundline MUST preserve existing single-workspace session behavior
   when no cluster context is requested.
-- **FR-006**: Synod MUST surface cluster status that identifies every member
+- **FR-006**: Boundline MUST surface cluster status that identifies every member
   workspace and its current session summary or missing-state condition.
-- **FR-007**: Synod MUST surface cluster inspection output that identifies the
+- **FR-007**: Boundline MUST surface cluster inspection output that identifies the
   latest relevant trace reference for each member workspace or the absence of
   one.
-- **FR-008**: Synod MUST make cluster inspection output explicit about which
+- **FR-008**: Boundline MUST make cluster inspection output explicit about which
   member workspace is blocked, stale, mismatched, or healthy.
-- **FR-009**: Synod MUST support saving cluster-scoped defaults separately from
+- **FR-009**: Boundline MUST support saving cluster-scoped defaults separately from
   workspace-local and user-global defaults.
-- **FR-010**: Synod MUST resolve effective settings using this precedence:
+- **FR-010**: Boundline MUST resolve effective settings using this precedence:
   explicit CLI input, workspace-local config, cluster-level config,
   user-global config, then built-in defaults.
-- **FR-011**: Synod MUST expose the source of each resolved effective value when
+- **FR-011**: Boundline MUST expose the source of each resolved effective value when
   cluster-aware configuration is inspected.
-- **FR-012**: Synod MUST block cluster-scoped operations when the cluster
+- **FR-012**: Boundline MUST block cluster-scoped operations when the cluster
   configuration is malformed, references an unknown member, or conflicts with
   the active member identity.
-- **FR-013**: Synod MUST preserve inspectable bounded state for cluster-aware
+- **FR-013**: Boundline MUST preserve inspectable bounded state for cluster-aware
   commands so operators can understand what happened without opening internal
   files manually.
-- **FR-014**: Synod MUST document the clustered workflow, precedence model, and
+- **FR-014**: Boundline MUST document the clustered workflow, precedence model, and
   operator expectations alongside the existing single-workspace workflow.
-- **FR-015**: Synod MUST keep the first slice bounded to cluster registration,
+- **FR-015**: Boundline MUST keep the first slice bounded to cluster registration,
   cluster-aware session/status/inspection, and inherited defaults, deferring
   fully automatic cross-repository execution planning to later slices.
 
@@ -173,7 +173,7 @@ reported source for each value.
 
 <!--
   ACTION REQUIRED: Name the deferred or excluded capabilities explicitly.
-  Synod specs should normally exclude councils and voting unless the roadmap and
+  Boundline specs should normally exclude councils and voting unless the roadmap and
   constitution explicitly prioritize a bounded review slice; they should otherwise
   exclude provider-routing complexity, distributed execution, long-term memory,
   UI/UX work, and deployment pipelines.
@@ -233,8 +233,8 @@ reported source for each value.
 -->
 
 - Operators can provide absolute or workspace-relative paths for member
-  workspaces, and Synod can canonicalize them before saving cluster state.
-- Each member workspace continues to own its local `.synod/` files even when it
+  workspaces, and Boundline can canonicalize them before saving cluster state.
+- Each member workspace continues to own its local `.boundline/` files even when it
   participates in a cluster.
 - The first slice may designate one member as the primary workspace for shared
   cluster metadata and inspection entry points.

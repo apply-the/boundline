@@ -1,8 +1,8 @@
-use serde_json::json;
-use synod::domain::step::{
+use boundline::domain::step::{
     ErrorInfo, ExecutionStatus, Recoverability, Step, StepAttempt, StepExecutionResult,
     StepExecutionResultError, StepResultSummary, StepStatus,
 };
+use serde_json::json;
 
 #[test]
 fn step_lifecycle_tracks_attempts_and_failure_state() {

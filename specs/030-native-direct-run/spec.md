@@ -3,7 +3,7 @@
 **Feature Branch**: `030-native-direct-run`  
 **Created**: 2026-05-02  
 **Status**: Draft  
-**Input**: User description: "Make the direct synod run --workspace <workspace> --goal <goal> command bootstrap and execute the session-native goal-plan route by default so the primary delivery story no longer depends on the explicit fixture-backed compatibility path. Keep explicit compatibility execution as a subordinate opt-in path. Include version bump, impacted docs and changelog, coverage above 95% for modified Rust files, clippy cleanup, and cargo fmt."
+**Input**: User description: "Make the direct boundline run --workspace <workspace> --goal <goal> command bootstrap and execute the session-native goal-plan route by default so the primary delivery story no longer depends on the explicit fixture-backed compatibility path. Keep explicit compatibility execution as a subordinate opt-in path. Include version bump, impacted docs and changelog, coverage above 95% for modified Rust files, clippy cleanup, and cargo fmt."
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -27,10 +27,10 @@ run validation, and inspect persisted follow-up state without manually calling
 
 **Why this priority**: The roadmap says the meaningful delivery story must stop
 depending on the explicit compatibility path. If direct `run --goal` still goes
-through compatibility by default, Synod's primary product surface remains split.
+through compatibility by default, Boundline's primary product surface remains split.
 
 **Independent Test**: In a representative Rust workspace with a failing test,
-run `synod run --workspace <workspace> --goal "Fix the failing add test"` and
+run `boundline run --workspace <workspace> --goal "Fix the failing add test"` and
 verify that the command completes on the native goal-plan route, mutates the
 workspace, records decisions and traces, and leaves `status`, `next`, and
 `inspect` usable from the persisted session.
@@ -38,18 +38,18 @@ workspace, records decisions and traces, and leaves `status`, `next`, and
 **Acceptance Scenarios**:
 
 1. **Given** a writable workspace with no active session and a goal that maps to
-  a bounded delivery flow, **When** the operator runs `synod run --workspace
-  <workspace> --goal "Fix the failing add test"`, **Then** Synod bootstraps a
+  a bounded delivery flow, **When** the operator runs `boundline run --workspace
+  <workspace> --goal "Fix the failing add test"`, **Then** Boundline bootstraps a
   native session, produces an executable goal plan, executes on the native
   route, and reports native routing and terminal output instead of explicit
   compatibility routing.
 2. **Given** a writable workspace with no active session and a goal that does
   not produce a credible clarified plan yet, **When** the operator runs the
-  same direct `run` command, **Then** Synod stops explicitly before unsafe
+  same direct `run` command, **Then** Boundline stops explicitly before unsafe
   execution, persists inspectable session or trace state, and tells the
   operator what clarification or follow-up is needed.
 3. **Given** a direct native run has completed, **When** the operator runs
-  `synod status`, `synod next`, or `synod inspect`, **Then** those surfaces
+  `boundline status`, `boundline next`, or `boundline inspect`, **Then** those surfaces
   continue from the persisted native session and trace story instead of acting
   like a compatibility-only run occurred.
 
@@ -58,7 +58,7 @@ workspace, records decisions and traces, and leaves `status`, `next`, and
 ### User Story 2 - Keep Compatibility Explicit And Session-Safe (Priority: P2)
 
 An operator can still choose the compatibility execution path deliberately when
-needed, while Synod avoids silently overwriting an already meaningful native
+needed, while Boundline avoids silently overwriting an already meaningful native
 session when a new direct-run goal arrives.
 
 **Why this priority**: Making direct `run --goal` native by default is only
@@ -67,21 +67,21 @@ secretly discarding active session state.
 
 **Independent Test**: Exercise direct run on a workspace with an existing active
 session and on a workspace where compatibility is explicitly requested, then
-verify that Synod either preserves the active session safely or surfaces the
+verify that Boundline either preserves the active session safely or surfaces the
 deliberate compatibility route explicitly.
 
 **Acceptance Scenarios**:
 
 1. **Given** a workspace with an active session that already contains captured,
    planned, or in-progress delivery state, **When** the operator provides a new
-   direct-run goal, **Then** Synod does not silently overwrite that state and
+   direct-run goal, **Then** Boundline does not silently overwrite that state and
    instead requires an explicit reset or continuation decision.
 2. **Given** an operator deliberately chooses the compatibility route,
-   **When** Synod executes that run, **Then** routing, execution path, trace
+   **When** Boundline executes that run, **Then** routing, execution path, trace
    inspection, and follow-up output stay explicitly compatibility-owned instead
    of being mistaken for session-native delivery.
 3. **Given** a direct run goal does not infer a credible built-in flow,
-   **When** the operator executes the command, **Then** Synod still produces an
+   **When** the operator executes the command, **Then** Boundline still produces an
    executable bounded native plan without stopping on a manual flow-confirmation
    detour.
 
@@ -121,7 +121,7 @@ formatting results.
 
 <!--
   ACTION REQUIRED: Capture execution limits, invalid state transitions, missing context,
-  traceability gaps, and failure-handling boundaries. Synod features are invalid if they
+  traceability gaps, and failure-handling boundaries. Boundline features are invalid if they
   ignore how work stops, fails, or becomes non-credible.
 -->
 
@@ -144,7 +144,7 @@ formatting results.
 
 ### Functional Requirements
 
-- **FR-001**: System MUST let `synod run --workspace <workspace> --goal <goal>`
+- **FR-001**: System MUST let `boundline run --workspace <workspace> --goal <goal>`
   enter the primary session-native delivery path without requiring a prior
   manual `start`, `capture`, or `plan` command sequence.
 - **FR-002**: System MUST persist the same core native session state a manual
@@ -178,7 +178,7 @@ formatting results.
 
 <!--
   ACTION REQUIRED: Name the deferred or excluded capabilities explicitly.
-  Synod specs should normally exclude councils and voting unless the roadmap and
+  Boundline specs should normally exclude councils and voting unless the roadmap and
   constitution explicitly prioritize a bounded review slice; they should otherwise
   exclude provider-routing complexity, distributed execution, long-term memory,
   UI/UX work, and deployment pipelines.
@@ -198,7 +198,7 @@ formatting results.
 
 - **Direct Run Bootstrap Request**: The operator's one-command request to start
   bounded delivery from a workspace plus goal, optionally with briefs and
-  governance intent. It decides whether Synod can create a native session or
+  governance intent. It decides whether Boundline can create a native session or
   must stop explicitly.
 - **Bootstrap Session Projection**: The persisted native session state created
   by direct run, including goal, negotiation summary, goal plan, decisions,
@@ -239,12 +239,12 @@ formatting results.
   Assumptions must reduce ambiguity without expanding scope.
 -->
 
-- Operators invoking direct `run --goal` expect Synod to prefer the primary
+- Operators invoking direct `run --goal` expect Boundline to prefer the primary
   session-native route unless they explicitly ask for compatibility behavior.
 - The current bounded native decision loop and deterministic workspace-change
   adapters are sufficient for this release to claim a native direct-run entry
   story without introducing a broader autonomous coding engine.
-- Existing session and trace persistence surfaces under `.synod/` remain the
+- Existing session and trace persistence surfaces under `.boundline/` remain the
   authoritative state model for the feature.
 - Canon-governed code-development stages remain deferred to the next roadmap
   feature rather than being bundled into this release.

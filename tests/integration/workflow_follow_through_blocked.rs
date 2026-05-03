@@ -1,12 +1,12 @@
 use std::fs;
 
-use synod::domain::session::ActiveSessionRecord;
-use synod::domain::workflow::{WorkflowLifecycleState, WorkflowPhase};
+use boundline::domain::session::ActiveSessionRecord;
+use boundline::domain::workflow::{WorkflowLifecycleState, WorkflowPhase};
 
 use crate::workspace_fixture::{temp_workflow_follow_through_blocked_workspace, terminal_text};
 
-fn run_synod_in(workspace: &std::path::Path, args: &[&str]) -> std::process::Output {
-    std::process::Command::new(env!("CARGO_BIN_EXE_synod"))
+fn run_boundline_in(workspace: &std::path::Path, args: &[&str]) -> std::process::Output {
+    std::process::Command::new(env!("CARGO_BIN_EXE_boundline"))
         .args(args)
         .current_dir(workspace)
         .output()
@@ -14,7 +14,7 @@ fn run_synod_in(workspace: &std::path::Path, args: &[&str]) -> std::process::Out
 }
 
 fn load_session_record(workspace: &std::path::Path) -> ActiveSessionRecord {
-    serde_json::from_slice(&fs::read(workspace.join(".synod").join("session.json")).unwrap())
+    serde_json::from_slice(&fs::read(workspace.join(".boundline").join("session.json")).unwrap())
         .unwrap()
 }
 
@@ -23,7 +23,7 @@ fn workflow_run_blocks_when_govern_phase_has_no_bounded_governance_evidence() {
     let workspace =
         temp_workflow_follow_through_blocked_workspace("workflow-follow-through-blocked");
 
-    let output = run_synod_in(
+    let output = run_boundline_in(
         &workspace,
         &["workflow", "run", "blocked-delivery", "--goal", "Fix the failing add test"],
     );
@@ -33,7 +33,7 @@ fn workflow_run_blocks_when_govern_phase_has_no_bounded_governance_evidence() {
     assert!(text.contains("workflow: blocked-delivery"), "{text}");
     assert!(text.contains("workflow_phase: govern"), "{text}");
     assert!(text.contains("execution_condition: blocked - workflow govern phase requires governance evidence from the active session"), "{text}");
-    assert!(text.contains("next_command: synod workflow inspect --workspace "), "{text}");
+    assert!(text.contains("next_command: boundline workflow inspect --workspace "), "{text}");
 
     let record = load_session_record(&workspace);
     let progress = record.workflow_progress.expect("workflow progress should exist");

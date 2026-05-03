@@ -3,8 +3,8 @@
 ## Prerequisites
 
 1. Work from the repository root on branch `003-assistant-command-packs`.
-2. Have Rust 1.95.0 with `cargo` available so the local Synod CLI can run.
-3. Use a writable workspace so Synod can persist traces under `.synod/traces/`.
+2. Have Rust 1.95.0 with `cargo` available so the local Boundline CLI can run.
+3. Use a writable workspace so Boundline can persist traces under `.boundline/traces/`.
 4. Choose one supported assistant environment: Claude, Codex, or Copilot.
 
 ## Asset Layout
@@ -18,7 +18,7 @@
 
 ### 1. Start from chat
 
-Invoke `/synod-start` in your assistant.
+Invoke `/boundline-start` in your assistant.
 
 Expected outcome:
 
@@ -26,61 +26,61 @@ Expected outcome:
 - The assistant runs or recommends:
 
 ```bash
-cargo run --bin synod -- doctor --workspace "$PWD"
+cargo run --bin boundline -- doctor --workspace "$PWD"
 ```
 
 - The assistant summarizes whether the workspace is ready and what prerequisite, if any, must be fixed.
 
 ### 2. Bound the goal
 
-Invoke `/synod-plan`.
+Invoke `/boundline-plan`.
 
 Expected outcome:
 
 - The assistant asks only for the missing goal details.
-- The assistant turns the goal into a bounded `synod run` objective.
-- The assistant routes directly to `/synod-run`.
+- The assistant turns the goal into a bounded `boundline run` objective.
+- The assistant routes directly to `/boundline-run`.
 
 ### 3. Execute the workflow
 
-Invoke `/synod-run`.
+Invoke `/boundline-run`.
 
 Expected outcome:
 
 - The assistant runs or recommends:
 
 ```bash
-cargo run --bin synod -- run --workspace "$PWD" --goal "Summarize the current bounded developer flow"
+cargo run --bin boundline -- run --workspace "$PWD" --goal "Summarize the current bounded developer flow"
 ```
 
 - The assistant summarizes the terminal status, recovery signals, and trace location.
 
 ### 4. Check latest status or next step
 
-Invoke `/synod-step`, `/synod-status`, or `/synod-next`.
+Invoke `/boundline-step`, `/boundline-status`, or `/boundline-next`.
 
 Expected outcome:
 
 - The assistant runs or recommends:
 
 ```bash
-cargo run --bin synod -- inspect --workspace "$PWD"
+cargo run --bin boundline -- inspect --workspace "$PWD"
 ```
 
-- `/synod-step` recommends one explicit next command using the latest confirmed context or pasted inspection output.
-- `/synod-status` summarizes the latest trace.
-- `/synod-next` uses that same evidence to recommend the most relevant follow-up command.
+- `/boundline-step` recommends one explicit next command using the latest confirmed context or pasted inspection output.
+- `/boundline-status` summarizes the latest trace.
+- `/boundline-next` uses that same evidence to recommend the most relevant follow-up command.
 
 ### 5. Inspect a specific trace
 
-Invoke `/synod-inspect` with a trace path when you need a specific run rather than the latest one.
+Invoke `/boundline-inspect` with a trace path when you need a specific run rather than the latest one.
 
 Expected outcome:
 
 - The assistant runs or recommends:
 
 ```bash
-cargo run --bin synod -- inspect --trace "$PWD/.synod/traces/<task-id>.json"
+cargo run --bin boundline -- inspect --trace "$PWD/.boundline/traces/<task-id>.json"
 ```
 
 - The assistant summarizes final status, recovery events, and next action guidance.
@@ -88,34 +88,34 @@ cargo run --bin synod -- inspect --trace "$PWD/.synod/traces/<task-id>.json"
 
 ### 6. Recover from an unreadable trace
 
-Invoke `/synod-inspect` with a missing or stale trace path.
+Invoke `/boundline-inspect` with a missing or stale trace path.
 
 Expected outcome:
 
 - The assistant runs or recommends:
 
 ```bash
-cargo run --bin synod -- inspect --trace "$PWD/.synod/traces/<task-id>.json"
+cargo run --bin boundline -- inspect --trace "$PWD/.boundline/traces/<task-id>.json"
 ```
 
 - The assistant surfaces `terminal_reason: failed to read the requested trace`.
-- The assistant surfaces `next_command: /synod-inspect`.
-- The assistant surfaces `corrected_command: cargo run --bin synod -- inspect --trace <trace>` so the user can retry with a corrected reference.
+- The assistant surfaces `next_command: /boundline-inspect`.
+- The assistant surfaces `corrected_command: cargo run --bin boundline -- inspect --trace <trace>` so the user can retry with a corrected reference.
 
 ## Chat-Only Walkthrough
 
 1. Invoke the same assistant command.
 2. Let the assistant ask only for missing inputs.
-3. Copy the provided `cargo run --bin synod -- ...` command into your terminal.
+3. Copy the provided `cargo run --bin boundline -- ...` command into your terminal.
 4. Paste the command output back into the chat.
 5. Follow the assistant's summary and next-step recommendation.
 
 Minimum fallback checkpoints:
 
-- `/synod-start` must recover from a not-ready workspace.
-- `/synod-run` must surface a trace location even for non-success outcomes.
-- `/synod-status`, `/synod-next`, and `/synod-inspect` must continue from either a workspace or an explicit trace path.
-- `/synod-inspect` must surface `inspection_target` for successful inspection and `corrected_command` for trace-read failures.
+- `/boundline-start` must recover from a not-ready workspace.
+- `/boundline-run` must surface a trace location even for non-success outcomes.
+- `/boundline-status`, `/boundline-next`, and `/boundline-inspect` must continue from either a workspace or an explicit trace path.
+- `/boundline-inspect` must surface `inspection_target` for successful inspection and `corrected_command` for trace-read failures.
 
 ## Validation Commands
 
@@ -130,8 +130,8 @@ cargo test --all-targets
 ## Minimum Validation Scenarios
 
 1. Each supported assistant exposes the full seven-command pack.
-2. `/synod-start` and `/synod-run` work in both shell-enabled and chat-only modes.
-3. `/synod-status` and `/synod-next` can summarize the latest trace without requiring raw log inspection.
-4. `/synod-inspect` can explain a specific run using only a trace path or workspace reference.
-5. `/synod-step` can continue routing from either confirmed context or pasted inspection output.
+2. `/boundline-start` and `/boundline-run` work in both shell-enabled and chat-only modes.
+3. `/boundline-status` and `/boundline-next` can summarize the latest trace without requiring raw log inspection.
+4. `/boundline-inspect` can explain a specific run using only a trace path or workspace reference.
+5. `/boundline-step` can continue routing from either confirmed context or pasted inspection output.
 6. Trace-read failures expose a replacement inspect command instead of a raw error blob.

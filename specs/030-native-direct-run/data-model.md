@@ -30,7 +30,7 @@ DirectRunBootstrapRequest
 
 ### Direct Run Route Choice
 
-The explicit ownership choice Synod makes before execution starts.
+The explicit ownership choice Boundline makes before execution starts.
 
 ```text
 DirectRunRouteChoice

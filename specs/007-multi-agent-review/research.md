@@ -2,10 +2,10 @@
 
 ## Decision 1: Extend the existing execution manifest with review configuration
 
-- Decision: Add bounded review configuration under `<workspace>/.synod/execution.json` instead of introducing a separate review manifest.
+- Decision: Add bounded review configuration under `<workspace>/.boundline/execution.json` instead of introducing a separate review manifest.
 - Rationale: Review is a post-execution quality-control step over the same bounded delivery run. Reusing the execution manifest keeps delivery and review coupled, avoids duplicate workspace-local config files, and preserves the same local-fixture test story used by the execution engine slice.
 - Alternatives considered:
-  - Create a new `.synod/review.json` manifest: rejected because it would split one delivery lifecycle across two workspace contracts.
+  - Create a new `.boundline/review.json` manifest: rejected because it would split one delivery lifecycle across two workspace contracts.
   - Hard-code councils in the CLI: rejected because it would make review behavior less testable and less inspectable.
 
 ## Decision 2: Model councils as sequential reviewer steps, not parallel fan-out
@@ -35,7 +35,7 @@
 ## Decision 5: Keep the user-facing review surface provider-agnostic while retaining reviewer source metadata
 
 - Decision: Reviewer definitions may record source or provider labels for traceability, but status and inspect center on reviewer role, findings, vote rule, and final decision rather than provider-specific workflow.
-- Rationale: The feature needs provider diversity without turning Synod into a provider-routing framework. Provider labels remain useful evidence while the CLI stays focused on delivery decisions.
+- Rationale: The feature needs provider diversity without turning Boundline into a provider-routing framework. Provider labels remain useful evidence while the CLI stays focused on delivery decisions.
 - Alternatives considered:
   - Hide provider/source metadata entirely: rejected because developers may need to understand which review source participated.
   - Expose provider-specific routing and selection controls as the main UX: rejected because it expands scope into provider abstraction complexity.

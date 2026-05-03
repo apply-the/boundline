@@ -17,9 +17,9 @@
 
 **Purpose**: Reserve the `0.26.0` release boundary and prepare the negotiation test harnesses
 
-- [ ] T001 Bump crate version to `0.26.0` in `/Users/rt/workspace/synod/Cargo.toml` and `/Users/rt/workspace/synod/Cargo.lock`
-- [ ] T002 Extend authored-input fixtures and helper data for negotiated goal scenarios in `/Users/rt/workspace/synod/tests/support/workspace_fixture.rs`
-- [ ] T003 Register negotiation test modules in `/Users/rt/workspace/synod/tests/contract.rs`, `/Users/rt/workspace/synod/tests/integration.rs`, and `/Users/rt/workspace/synod/tests/unit.rs`
+- [ ] T001 Bump crate version to `0.26.0` in `/Users/rt/workspace/boundline/Cargo.toml` and `/Users/rt/workspace/boundline/Cargo.lock`
+- [ ] T002 Extend authored-input fixtures and helper data for negotiated goal scenarios in `/Users/rt/workspace/boundline/tests/support/workspace_fixture.rs`
+- [ ] T003 Register negotiation test modules in `/Users/rt/workspace/boundline/tests/contract.rs`, `/Users/rt/workspace/boundline/tests/integration.rs`, and `/Users/rt/workspace/boundline/tests/unit.rs`
 
 ---
 
@@ -29,10 +29,10 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T004 Create negotiated packet domain models and persistence projections in `/Users/rt/workspace/synod/src/domain/negotiation.rs`, `/Users/rt/workspace/synod/src/domain/session.rs`, `/Users/rt/workspace/synod/src/domain/task_context.rs`, `/Users/rt/workspace/synod/src/domain/trace.rs`, and `/Users/rt/workspace/synod/src/lib.rs`
-- [ ] T005 [P] Integrate shared negotiation derivation and planning hooks in `/Users/rt/workspace/synod/src/domain/brief.rs`, `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs`, and `/Users/rt/workspace/synod/src/orchestrator/goal_planner.rs`
-- [ ] T006 [P] Add session command and projection helpers for negotiated state in `/Users/rt/workspace/synod/src/cli/session.rs`, `/Users/rt/workspace/synod/src/cli/output.rs`, and `/Users/rt/workspace/synod/src/cli/inspect.rs`
-- [ ] T007 [P] Add foundational unit coverage for negotiation serialization, session projections, and trace/task-context helpers in `/Users/rt/workspace/synod/tests/unit/negotiation_models.rs`, `/Users/rt/workspace/synod/tests/unit/session_record.rs`, and `/Users/rt/workspace/synod/tests/unit/task_context_state.rs`
+- [ ] T004 Create negotiated packet domain models and persistence projections in `/Users/rt/workspace/boundline/src/domain/negotiation.rs`, `/Users/rt/workspace/boundline/src/domain/session.rs`, `/Users/rt/workspace/boundline/src/domain/task_context.rs`, `/Users/rt/workspace/boundline/src/domain/trace.rs`, and `/Users/rt/workspace/boundline/src/lib.rs`
+- [ ] T005 [P] Integrate shared negotiation derivation and planning hooks in `/Users/rt/workspace/boundline/src/domain/brief.rs`, `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs`, and `/Users/rt/workspace/boundline/src/orchestrator/goal_planner.rs`
+- [ ] T006 [P] Add session command and projection helpers for negotiated state in `/Users/rt/workspace/boundline/src/cli/session.rs`, `/Users/rt/workspace/boundline/src/cli/output.rs`, and `/Users/rt/workspace/boundline/src/cli/inspect.rs`
+- [ ] T007 [P] Add foundational unit coverage for negotiation serialization, session projections, and trace/task-context helpers in `/Users/rt/workspace/boundline/tests/unit/negotiation_models.rs`, `/Users/rt/workspace/boundline/tests/unit/session_record.rs`, and `/Users/rt/workspace/boundline/tests/unit/task_context_state.rs`
 
 **Checkpoint**: Shared negotiated-delivery primitives are available and the session-native path can persist, validate, and project negotiation state without changing the overall operator workflow.
 
@@ -42,19 +42,19 @@
 
 **Goal**: Let capture derive one explicit negotiated delivery packet and stop planning early when the request is not yet credible.
 
-**Independent Test**: Start a session, capture a goal with or without authored inputs, and confirm that Synod persists one negotiated packet or an explicit clarification/conflict state before planning begins.
+**Independent Test**: Start a session, capture a goal with or without authored inputs, and confirm that Boundline persists one negotiated packet or an explicit clarification/conflict state before planning begins.
 
 ### Tests for User Story 1
 
-- [ ] T008 [P] [US1] Add contract coverage for negotiated capture defaults and planning gate behavior in `/Users/rt/workspace/synod/tests/contract/negotiated_capture_contract.rs`
-- [ ] T009 [P] [US1] Add integration coverage for successful goal-only and authored-brief negotiated capture flows in `/Users/rt/workspace/synod/tests/integration/negotiated_capture_flow.rs`
-- [ ] T010 [P] [US1] Add integration coverage for ambiguous or conflicting negotiated capture outcomes in `/Users/rt/workspace/synod/tests/integration/negotiated_capture_blocked.rs`
+- [ ] T008 [P] [US1] Add contract coverage for negotiated capture defaults and planning gate behavior in `/Users/rt/workspace/boundline/tests/contract/negotiated_capture_contract.rs`
+- [ ] T009 [P] [US1] Add integration coverage for successful goal-only and authored-brief negotiated capture flows in `/Users/rt/workspace/boundline/tests/integration/negotiated_capture_flow.rs`
+- [ ] T010 [P] [US1] Add integration coverage for ambiguous or conflicting negotiated capture outcomes in `/Users/rt/workspace/boundline/tests/integration/negotiated_capture_blocked.rs`
 
 ### Implementation for User Story 1
 
-- [ ] T011 [US1] Implement negotiated packet derivation during capture from goals, authored briefs, governance intent, and defaults in `/Users/rt/workspace/synod/src/domain/negotiation.rs`, `/Users/rt/workspace/synod/src/domain/brief.rs`, and `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs`
-- [ ] T012 [US1] Gate planning on a credible negotiated packet and preserve packet summaries in planned state in `/Users/rt/workspace/synod/src/orchestrator/goal_planner.rs`, `/Users/rt/workspace/synod/src/domain/goal_plan.rs`, and `/Users/rt/workspace/synod/src/cli/session.rs`
-- [ ] T013 [US1] Record negotiation packet creation and blocking signals in session, task-context, and trace state in `/Users/rt/workspace/synod/src/domain/session.rs`, `/Users/rt/workspace/synod/src/domain/task_context.rs`, and `/Users/rt/workspace/synod/src/domain/trace.rs`
+- [ ] T011 [US1] Implement negotiated packet derivation during capture from goals, authored briefs, governance intent, and defaults in `/Users/rt/workspace/boundline/src/domain/negotiation.rs`, `/Users/rt/workspace/boundline/src/domain/brief.rs`, and `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs`
+- [ ] T012 [US1] Gate planning on a credible negotiated packet and preserve packet summaries in planned state in `/Users/rt/workspace/boundline/src/orchestrator/goal_planner.rs`, `/Users/rt/workspace/boundline/src/domain/goal_plan.rs`, and `/Users/rt/workspace/boundline/src/cli/session.rs`
+- [ ] T013 [US1] Record negotiation packet creation and blocking signals in session, task-context, and trace state in `/Users/rt/workspace/boundline/src/domain/session.rs`, `/Users/rt/workspace/boundline/src/domain/task_context.rs`, and `/Users/rt/workspace/boundline/src/domain/trace.rs`
 
 **Checkpoint**: Capture yields one inspectable negotiated packet and planning cannot proceed on materially ambiguous or conflicting boundaries.
 
@@ -68,14 +68,14 @@
 
 ### Tests for User Story 2
 
-- [ ] T014 [P] [US2] Add contract coverage for negotiated follow-up summaries and blocking-constraint cues in `/Users/rt/workspace/synod/tests/contract/constraint_follow_up_contract.rs` and `/Users/rt/workspace/synod/tests/contract/trace_summary_contract.rs`
-- [ ] T015 [P] [US2] Add integration coverage for negotiated `status`, `next`, and `inspect` behavior in `/Users/rt/workspace/synod/tests/integration/negotiated_follow_up_flow.rs` and `/Users/rt/workspace/synod/tests/integration/cli_trace_inspection.rs`
-- [ ] T016 [P] [US2] Add unit coverage for negotiated CLI rendering and inspect projections in `/Users/rt/workspace/synod/tests/unit/cli_output.rs`, `/Users/rt/workspace/synod/tests/unit/negotiation_models.rs`, and `/Users/rt/workspace/synod/tests/unit/compatibility_continuity.rs`
+- [ ] T014 [P] [US2] Add contract coverage for negotiated follow-up summaries and blocking-constraint cues in `/Users/rt/workspace/boundline/tests/contract/constraint_follow_up_contract.rs` and `/Users/rt/workspace/boundline/tests/contract/trace_summary_contract.rs`
+- [ ] T015 [P] [US2] Add integration coverage for negotiated `status`, `next`, and `inspect` behavior in `/Users/rt/workspace/boundline/tests/integration/negotiated_follow_up_flow.rs` and `/Users/rt/workspace/boundline/tests/integration/cli_trace_inspection.rs`
+- [ ] T016 [P] [US2] Add unit coverage for negotiated CLI rendering and inspect projections in `/Users/rt/workspace/boundline/tests/unit/cli_output.rs`, `/Users/rt/workspace/boundline/tests/unit/negotiation_models.rs`, and `/Users/rt/workspace/boundline/tests/unit/compatibility_continuity.rs`
 
 ### Implementation for User Story 2
 
-- [ ] T017 [US2] Implement negotiated rendering across `/Users/rt/workspace/synod/src/cli/output.rs`, `/Users/rt/workspace/synod/src/cli/inspect.rs`, and `/Users/rt/workspace/synod/src/cli/session.rs`
-- [ ] T018 [US2] Keep compatibility and clustered follow-up authority explicit while projecting negotiated state in `/Users/rt/workspace/synod/src/domain/session.rs`, `/Users/rt/workspace/synod/src/domain/trace.rs`, and `/Users/rt/workspace/synod/src/cli/inspect.rs`
+- [ ] T017 [US2] Implement negotiated rendering across `/Users/rt/workspace/boundline/src/cli/output.rs`, `/Users/rt/workspace/boundline/src/cli/inspect.rs`, and `/Users/rt/workspace/boundline/src/cli/session.rs`
+- [ ] T018 [US2] Keep compatibility and clustered follow-up authority explicit while projecting negotiated state in `/Users/rt/workspace/boundline/src/domain/session.rs`, `/Users/rt/workspace/boundline/src/domain/trace.rs`, and `/Users/rt/workspace/boundline/src/cli/inspect.rs`
 
 **Checkpoint**: Operators can identify the active acceptance boundary, binding constraint, and route authority from existing follow-up surfaces.
 
@@ -89,12 +89,12 @@
 
 ### Tests for User Story 3
 
-- [ ] T019 [P] [US3] Add assistant and documentation coverage for negotiated capture and follow-up guidance in `/Users/rt/workspace/synod/tests/contract/assistant_session_continuity_contract.rs` and `/Users/rt/workspace/synod/tests/unit/cli_output.rs`
+- [ ] T019 [P] [US3] Add assistant and documentation coverage for negotiated capture and follow-up guidance in `/Users/rt/workspace/boundline/tests/contract/assistant_session_continuity_contract.rs` and `/Users/rt/workspace/boundline/tests/unit/cli_output.rs`
 
 ### Implementation for User Story 3
 
-- [ ] T020 [US3] Update the negotiated delivery operator story, impacted docs, and release notes in `/Users/rt/workspace/synod/README.md`, `/Users/rt/workspace/synod/docs/getting-started.md`, `/Users/rt/workspace/synod/docs/configuration.md`, `/Users/rt/workspace/synod/assistant/README.md`, `/Users/rt/workspace/synod/CONTRIBUTING.md`, `/Users/rt/workspace/synod/ROADMAP.md`, and `/Users/rt/workspace/synod/CHANGELOG.md`
-- [ ] T021 [US3] Refresh generated agent context for the negotiation surface in `/Users/rt/workspace/synod/AGENTS.md`
+- [ ] T020 [US3] Update the negotiated delivery operator story, impacted docs, and release notes in `/Users/rt/workspace/boundline/README.md`, `/Users/rt/workspace/boundline/docs/getting-started.md`, `/Users/rt/workspace/boundline/docs/configuration.md`, `/Users/rt/workspace/boundline/assistant/README.md`, `/Users/rt/workspace/boundline/CONTRIBUTING.md`, `/Users/rt/workspace/boundline/ROADMAP.md`, and `/Users/rt/workspace/boundline/CHANGELOG.md`
+- [ ] T021 [US3] Refresh generated agent context for the negotiation surface in `/Users/rt/workspace/boundline/AGENTS.md`
 
 **Checkpoint**: Maintainers and assistants have one coherent `0.26.0` story for negotiated capture, planning, and follow-up.
 
@@ -104,7 +104,7 @@
 
 **Purpose**: Finish release-quality validation and closeout
 
-- [ ] T022 Run coverage-aware release validation for modified Rust files, refresh `/Users/rt/workspace/synod/lcov.info`, resolve remaining `cargo clippy` issues, run `cargo fmt --all`, and finish with clean validation for touched files under `/Users/rt/workspace/synod/src/` and `/Users/rt/workspace/synod/tests/`
+- [ ] T022 Run coverage-aware release validation for modified Rust files, refresh `/Users/rt/workspace/boundline/lcov.info`, resolve remaining `cargo clippy` issues, run `cargo fmt --all`, and finish with clean validation for touched files under `/Users/rt/workspace/boundline/src/` and `/Users/rt/workspace/boundline/tests/`
 
 ---
 

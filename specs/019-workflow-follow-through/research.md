@@ -15,7 +15,7 @@
 
 ## R2: Add one bounded workflow discovery surface instead of assistant-only heuristics
 
-**Decision**: Add one operator-facing workflow discovery surface that exposes available named workflows, their intended summary, and invocation guidance directly from Synod.
+**Decision**: Add one operator-facing workflow discovery surface that exposes available named workflows, their intended summary, and invocation guidance directly from Boundline.
 
 **Rationale**: Discovery should be part of the product surface, not something assistants must guess from file contents or external docs. A bounded discovery surface improves assistant ergonomics while preserving one authoritative CLI story.
 

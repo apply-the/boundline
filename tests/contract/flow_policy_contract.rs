@@ -1,8 +1,8 @@
-use synod::adapters::session_store::{FileSessionStore, SessionStore};
-use synod::cli::session::{
+use boundline::adapters::session_store::{FileSessionStore, SessionStore};
+use boundline::cli::session::{
     SessionCommandError, execute_capture, execute_plan, execute_run, execute_start,
 };
-use synod::domain::goal_plan::GoalPlanFlowMode;
+use boundline::domain::goal_plan::GoalPlanFlowMode;
 
 use crate::runtime_refoundation::temp_runtime_refoundation_workspace;
 

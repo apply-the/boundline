@@ -1,42 +1,42 @@
-use crate::workspace_fixture::{run_synod_in, temp_fixture_workspace, terminal_text};
+use crate::workspace_fixture::{run_boundline_in, temp_fixture_workspace, terminal_text};
+use boundline::adapters::trace_store::{FileTraceStore, TraceStore};
+use boundline::domain::limits::TerminalCondition;
+use boundline::domain::task::{TaskStatus, TerminalReason};
+use boundline::domain::trace::{ExecutionTrace, TraceEventType};
 use serde_json::json;
-use synod::adapters::trace_store::{FileTraceStore, TraceStore};
-use synod::domain::limits::TerminalCondition;
-use synod::domain::task::{TaskStatus, TerminalReason};
-use synod::domain::trace::{ExecutionTrace, TraceEventType};
 
 #[test]
 fn start_persists_an_active_session_that_follow_up_commands_reuse_from_current_workspace() {
-    let workspace = temp_fixture_workspace("synod-session-flow");
-    let start = run_synod_in(&workspace, &["start"]);
+    let workspace = temp_fixture_workspace("boundline-session-flow");
+    let start = run_boundline_in(&workspace, &["start"]);
     let start_text = terminal_text(&start);
 
     assert_eq!(start.status.code(), Some(0), "{start_text}");
     assert!(start_text.contains("latest_status: initialized"), "{start_text}");
 
-    let plan = run_synod_in(&workspace, &["plan"]);
+    let plan = run_boundline_in(&workspace, &["plan"]);
     let plan_text = terminal_text(&plan);
 
     assert_eq!(plan.status.code(), Some(1), "{plan_text}");
     assert!(plan_text.contains("plan: session error"), "{plan_text}");
     assert!(plan_text.contains("reason: active session has no captured goal"), "{plan_text}");
-    assert!(plan_text.contains("next_command: synod capture --goal <goal>"), "{plan_text}");
+    assert!(plan_text.contains("next_command: boundline capture --goal <goal>"), "{plan_text}");
 }
 
 #[test]
 fn capture_plan_and_run_keep_session_state_and_trace_synchronized() {
-    let workspace = temp_fixture_workspace("synod-session-flow-state");
+    let workspace = temp_fixture_workspace("boundline-session-flow-state");
 
-    let start = run_synod_in(&workspace, &["start"]);
+    let start = run_boundline_in(&workspace, &["start"]);
     assert_eq!(start.status.code(), Some(0), "{}", terminal_text(&start));
 
-    let capture = run_synod_in(&workspace, &["capture", "--goal", "Fix the failing add test"]);
+    let capture = run_boundline_in(&workspace, &["capture", "--goal", "Fix the failing add test"]);
     assert_eq!(capture.status.code(), Some(0), "{}", terminal_text(&capture));
 
-    let plan = run_synod_in(&workspace, &["plan", "--flow", "bug-fix"]);
+    let plan = run_boundline_in(&workspace, &["plan", "--flow", "bug-fix"]);
     assert_eq!(plan.status.code(), Some(0), "{}", terminal_text(&plan));
 
-    let run = run_synod_in(&workspace, &["run"]);
+    let run = run_boundline_in(&workspace, &["run"]);
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(0), "{run_text}");
     assert!(run_text.contains("decision "), "{run_text}");
@@ -46,28 +46,30 @@ fn capture_plan_and_run_keep_session_state_and_trace_synchronized() {
 
 #[test]
 fn status_next_and_inspect_reuse_the_active_session_view_and_trace_reference() {
-    let workspace = temp_fixture_workspace("synod-session-flow-inspect");
+    let workspace = temp_fixture_workspace("boundline-session-flow-inspect");
 
-    assert_eq!(run_synod_in(&workspace, &["start"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_synod_in(&workspace, &["capture", "--goal", "Fix the failing add test"],).status.code(),
+        run_boundline_in(&workspace, &["capture", "--goal", "Fix the failing add test"],)
+            .status
+            .code(),
         Some(0)
     );
-    assert_eq!(run_synod_in(&workspace, &["plan", "--flow", "bug-fix"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(&workspace, &["plan", "--flow", "bug-fix"]).status.code(), Some(0));
 
-    let status = run_synod_in(&workspace, &["status"]);
+    let status = run_boundline_in(&workspace, &["status"]);
     let status_text = terminal_text(&status);
     assert_eq!(status.status.code(), Some(0), "{status_text}");
     assert!(status_text.contains("latest_status: planned"), "{status_text}");
     assert!(status_text.contains("current_stage: investigate"), "{status_text}");
-    assert!(status_text.contains("next_command: synod run"), "{status_text}");
+    assert!(status_text.contains("next_command: boundline run"), "{status_text}");
 
-    let next = run_synod_in(&workspace, &["next"]);
+    let next = run_boundline_in(&workspace, &["next"]);
     let next_text = terminal_text(&next);
     assert_eq!(next.status.code(), Some(0), "{next_text}");
-    assert!(next_text.contains("next_command: synod run"), "{next_text}");
+    assert!(next_text.contains("next_command: boundline run"), "{next_text}");
 
-    let run = run_synod_in(&workspace, &["run"]);
+    let run = run_boundline_in(&workspace, &["run"]);
     assert_eq!(run.status.code(), Some(0), "{}", terminal_text(&run));
 
     let store = FileTraceStore::for_workspace(&workspace);
@@ -87,8 +89,10 @@ fn status_next_and_inspect_reuse_the_active_session_view_and_trace_reference() {
     foreign_trace.ended_at = Some(u64::MAX - 1);
     store.persist(&foreign_trace).unwrap();
 
-    let inspect =
-        run_synod_in(&workspace, &["inspect", "--workspace", workspace.to_string_lossy().as_ref()]);
+    let inspect = run_boundline_in(
+        &workspace,
+        &["inspect", "--workspace", workspace.to_string_lossy().as_ref()],
+    );
     let inspect_text = terminal_text(&inspect);
     assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
     assert!(inspect_text.contains("inspection_target: session-trace-ref"), "{inspect_text}");

@@ -1,4 +1,4 @@
-use synod::domain::flow::{FlowValidationError, SessionFlowState};
+use boundline::domain::flow::{FlowValidationError, SessionFlowState};
 
 #[test]
 fn session_flow_state_advances_across_known_stages() {

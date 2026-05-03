@@ -1,6 +1,6 @@
-use synod::cli::cluster::execute_init;
-use synod::cli::inspect::execute_inspect;
-use synod::cli::session::{
+use boundline::cli::cluster::execute_init;
+use boundline::cli::inspect::execute_inspect;
+use boundline::cli::session::{
     execute_capture_with_target, execute_plan_with_target, execute_run_with_target,
     execute_start_with_target, execute_status_with_target,
 };

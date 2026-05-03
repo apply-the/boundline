@@ -29,14 +29,14 @@ An operator can use `status`, `next`, `inspect`, and workflow follow-up commands
 **Acceptance Scenarios**:
 
 1. **Given** a workspace with an active session-native run, **When** the operator calls `status`, `next`, and `inspect`, **Then** the returned summary uses the same bounded route, authority, execution-condition, and next-step vocabulary that workflow-aware surfaces use for the same state.
-2. **Given** a workspace whose latest authoritative follow-up state comes from an explicit compatibility trace rather than an active session, **When** the operator calls `status`, `next`, or `inspect`, **Then** Synod aligns the summary wording with the native route surfaces while still making explicit that compatibility owns the current follow-up story.
-3. **Given** a workflow run that is paused or blocked in review or governance, **When** the operator reads the follow-up surfaces, **Then** Synod uses the same summary vocabulary as other routes for condition, authority, and recommended next action without implying that a different route owns the work.
+2. **Given** a workspace whose latest authoritative follow-up state comes from an explicit compatibility trace rather than an active session, **When** the operator calls `status`, `next`, or `inspect`, **Then** Boundline aligns the summary wording with the native route surfaces while still making explicit that compatibility owns the current follow-up story.
+3. **Given** a workflow run that is paused or blocked in review or governance, **When** the operator reads the follow-up surfaces, **Then** Boundline uses the same summary vocabulary as other routes for condition, authority, and recommended next action without implying that a different route owns the work.
 
 ---
 
 ### User Story 2 - Surface Routing And Config Inputs Explicitly (Priority: P2)
 
-An operator can see the routing and configuration inputs that explain why Synod chose a native, workflow, review/governance, or compatibility follow-up path, instead of inferring that behavior from scattered or route-specific output.
+An operator can see the routing and configuration inputs that explain why Boundline chose a native, workflow, review/governance, or compatibility follow-up path, instead of inferring that behavior from scattered or route-specific output.
 
 **Why this priority**: Summary convergence is only trustworthy if the configuration and routing inputs that shaped the result are visible at the same time. Without that projection, unified wording risks hiding why a route was chosen.
 
@@ -44,9 +44,9 @@ An operator can see the routing and configuration inputs that explain why Synod 
 
 **Acceptance Scenarios**:
 
-1. **Given** a workspace with routing defaults, workflow metadata, and governance settings that affect follow-up guidance, **When** the operator checks `status` or `inspect`, **Then** Synod surfaces the relevant config and routing projections alongside the unified summary without requiring the operator to inspect multiple commands manually.
-2. **Given** a direct explicit compatibility run overrides available session-native or workflow defaults, **When** follow-up commands are rendered, **Then** Synod shows the override and preserves explicit compatibility ownership instead of presenting the result as if it came from config-driven native routing alone.
-3. **Given** a workspace mixes session-native state with review/governance pauses or workflow metadata, **When** the operator reads the summary surfaces, **Then** Synod projects only the configuration and routing facts that materially affect follow-up while excluding irrelevant or stale settings.
+1. **Given** a workspace with routing defaults, workflow metadata, and governance settings that affect follow-up guidance, **When** the operator checks `status` or `inspect`, **Then** Boundline surfaces the relevant config and routing projections alongside the unified summary without requiring the operator to inspect multiple commands manually.
+2. **Given** a direct explicit compatibility run overrides available session-native or workflow defaults, **When** follow-up commands are rendered, **Then** Boundline shows the override and preserves explicit compatibility ownership instead of presenting the result as if it came from config-driven native routing alone.
+3. **Given** a workspace mixes session-native state with review/governance pauses or workflow metadata, **When** the operator reads the summary surfaces, **Then** Boundline projects only the configuration and routing facts that materially affect follow-up while excluding irrelevant or stale settings.
 
 ---
 
@@ -69,7 +69,7 @@ A maintainer can ship one `0.24.0` release where runtime behavior, docs, assista
 
 <!--
   ACTION REQUIRED: Capture execution limits, invalid state transitions, missing context,
-  traceability gaps, and failure-handling boundaries. Synod features are invalid if they
+  traceability gaps, and failure-handling boundaries. Boundline features are invalid if they
   ignore how work stops, fails, or becomes non-credible.
 -->
 
@@ -105,7 +105,7 @@ A maintainer can ship one `0.24.0` release where runtime behavior, docs, assista
 
 <!--
   ACTION REQUIRED: Name the deferred or excluded capabilities explicitly.
-  Synod specs should normally exclude councils and voting unless the roadmap and
+  Boundline specs should normally exclude councils and voting unless the roadmap and
   constitution explicitly prioritize a bounded review slice; they should otherwise
   exclude provider-routing complexity, distributed execution, long-term memory,
   UI/UX work, and deployment pipelines.

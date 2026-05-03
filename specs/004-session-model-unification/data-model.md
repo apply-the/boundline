@@ -2,7 +2,7 @@
 
 ## ActiveSessionRecord
 
-Represents the persisted workspace-scoped interaction state for one bounded Synod task.
+Represents the persisted workspace-scoped interaction state for one bounded Boundline task.
 
 ### Fields
 
@@ -161,24 +161,24 @@ Represents the user-visible summary returned by session-aware `status` and `next
 - `current_step_id` and `current_step_index` must agree with the embedded plan when present.
 - `explanation` must never be empty.
 
-*** Add File: /Users/rt/workspace/synod/specs/004-session-model-unification/contracts/session-command-contract.md
+*** Add File: /Users/rt/workspace/boundline/specs/004-session-model-unification/contracts/session-command-contract.md
 # Contract: Session Command Surface
 
 ## Purpose
 
-Defines the required behavior, inputs, and user-visible outputs of the session-backed Synod CLI commands introduced by the session model feature.
+Defines the required behavior, inputs, and user-visible outputs of the session-backed Boundline CLI commands introduced by the session model feature.
 
 ## Command Set
 
 | Command | Purpose |
 |---------|---------|
-| `synod start` | Establish a new active session for the current workspace |
-| `synod capture` | Store or replace the current bounded goal in the active session |
-| `synod plan` | Create an executable plan from the active session goal |
-| `synod step` | Execute exactly one next step from the active session |
-| `synod run` | Continue execution until the task reaches a terminal state |
-| `synod status` | Summarize the active session state |
-| `synod next` | Recommend exactly one next valid command for the active session |
+| `boundline start` | Establish a new active session for the current workspace |
+| `boundline capture` | Store or replace the current bounded goal in the active session |
+| `boundline plan` | Create an executable plan from the active session goal |
+| `boundline step` | Execute exactly one next step from the active session |
+| `boundline run` | Continue execution until the task reaches a terminal state |
+| `boundline status` | Summarize the active session state |
+| `boundline next` | Recommend exactly one next valid command for the active session |
 
 ## Required Behavioral Rules
 
@@ -195,9 +195,9 @@ Defines the required behavior, inputs, and user-visible outputs of the session-b
 
 | Situation | Required Result |
 |-----------|-----------------|
-| No active session | Explicit message telling the user to run `synod start` |
-| Session exists without goal | Explicit message telling the user to use `synod capture` |
-| Session exists without plan | Explicit message telling the user to use `synod plan` |
+| No active session | Explicit message telling the user to run `boundline start` |
+| Session exists without goal | Explicit message telling the user to use `boundline capture` |
+| Session exists without plan | Explicit message telling the user to use `boundline plan` |
 | Session is corrupted or unreadable | Explicit recovery message and no hidden fallback |
 | Latest trace reference is missing | Status or next output must surface the mismatch and guide the user to recover deliberately |
 | Terminal session receives more execution commands | Command must fail clearly or require explicit reset rather than silently continuing |
@@ -209,16 +209,16 @@ Defines the required behavior, inputs, and user-visible outputs of the session-b
 - Any command that reaches a terminal outcome MUST surface the terminal reason.
 - Any command that preserves a non-success recovery state MUST make the next recommended action explicit.
 
-*** Add File: /Users/rt/workspace/synod/specs/004-session-model-unification/contracts/session-record-contract.md
+*** Add File: /Users/rt/workspace/boundline/specs/004-session-model-unification/contracts/session-record-contract.md
 # Contract: Session Record Surface
 
 ## Purpose
 
-Defines the persisted shape and behavioral guarantees of the workspace-scoped session record stored for active Synod work.
+Defines the persisted shape and behavioral guarantees of the workspace-scoped session record stored for active Boundline work.
 
 ## Storage Location
 
-- The active session record MUST live at `<workspace>/.synod/session.json`.
+- The active session record MUST live at `<workspace>/.boundline/session.json`.
 - The file MUST be human-readable JSON.
 - The session record MUST remain local to the workspace and MUST NOT require an external service.
 
@@ -250,16 +250,16 @@ Defines the persisted shape and behavioral guarantees of the workspace-scoped se
 - `step` and `run` MUST persist updated task, status, and trace fields before returning control to the user.
 - Terminal execution MUST preserve the latest task outcome until the user explicitly starts fresh or replaces the active goal.
 
-*** Add File: /Users/rt/workspace/synod/specs/004-session-model-unification/contracts/assistant-session-continuity-contract.md
+*** Add File: /Users/rt/workspace/boundline/specs/004-session-model-unification/contracts/assistant-session-continuity-contract.md
 # Contract: Assistant Session Continuity
 
 ## Purpose
 
-Defines how assistant command packs must reuse and respect the active Synod session introduced by the unified session model.
+Defines how assistant command packs must reuse and respect the active Boundline session introduced by the unified session model.
 
 ## Required Assistant Behavior
 
-- Assistant commands MUST prefer the active Synod session over asking the user to restate goal, workspace, or latest trace information that Synod already preserves.
+- Assistant commands MUST prefer the active Boundline session over asking the user to restate goal, workspace, or latest trace information that Boundline already preserves.
 - Assistant commands MUST route through session-backed CLI commands when they need current status or next-step guidance.
 - Assistant commands MAY still use explicit trace inspection when the user asks about a specific historical run instead of the active session.
 
@@ -267,19 +267,19 @@ Defines how assistant command packs must reuse and respect the active Synod sess
 
 | Assistant Command | Preferred Session-Backed CLI Surface |
 |-------------------|--------------------------------------|
-| `/synod-start` | `synod start` |
-| `/synod-plan` | `synod capture` followed by `synod plan` when a goal must be established first |
-| `/synod-step` | `synod step` |
-| `/synod-run` | `synod run` |
-| `/synod-status` | `synod status` |
-| `/synod-next` | `synod next` |
-| `/synod-inspect` | `synod inspect` |
+| `/boundline-start` | `boundline start` |
+| `/boundline-plan` | `boundline capture` followed by `boundline plan` when a goal must be established first |
+| `/boundline-step` | `boundline step` |
+| `/boundline-run` | `boundline run` |
+| `/boundline-status` | `boundline status` |
+| `/boundline-next` | `boundline next` |
+| `/boundline-inspect` | `boundline inspect` |
 
 ## Continuity Guarantees
 
 - If the active session contains a valid goal, assistant commands MUST NOT ask for that goal again unless the user explicitly changes it.
 - If the active session contains a latest trace reference, assistant commands MUST reuse it before requesting manual trace lookup.
-- If the active session is invalid or missing, assistant commands MUST say so explicitly and route the user to `synod start` or another concrete recovery action.
+- If the active session is invalid or missing, assistant commands MUST say so explicitly and route the user to `boundline start` or another concrete recovery action.
 - Assistant commands MUST preserve the rule that exactly one next command is recommended at a time.
 
 ## Non-Success Handling
@@ -288,14 +288,14 @@ Defines how assistant command packs must reuse and respect the active Synod sess
 - When execution reaches a terminal state, assistant commands MUST treat the session as complete and route the user to inspect, restart, or replace the goal explicitly.
 - When the user refers to an explicit prior trace, assistant continuity MUST not overwrite the active session silently.
 
-*** Add File: /Users/rt/workspace/synod/specs/004-session-model-unification/quickstart.md
+*** Add File: /Users/rt/workspace/boundline/specs/004-session-model-unification/quickstart.md
 # Quickstart: Session & Interaction Model Unification
 
 ## Prerequisites
 
 1. Work from the repository root on branch `004-session-model-unification`.
 2. Have Rust 1.95.0 with `cargo` available.
-3. Use a writable workspace so Synod can persist both `.synod/session.json` and `.synod/traces/`.
+3. Use a writable workspace so Boundline can persist both `.boundline/session.json` and `.boundline/traces/`.
 4. Start from the workspace you want the active session to belong to.
 
 ## Session-Backed CLI Walkthrough
@@ -305,12 +305,12 @@ Defines how assistant command packs must reuse and respect the active Synod sess
 Run:
 
 ```bash
-cargo run --bin synod -- start
+cargo run --bin boundline -- start
 ```
 
 Expected outcome:
 
-- Synod creates `.synod/session.json` in the current workspace.
+- Boundline creates `.boundline/session.json` in the current workspace.
 - The session becomes the active interaction state for later commands.
 - No goal or task plan is required yet.
 
@@ -319,12 +319,12 @@ Expected outcome:
 Run:
 
 ```bash
-cargo run --bin synod -- capture --goal "Summarize the current bounded developer flow"
+cargo run --bin boundline -- capture --goal "Summarize the current bounded developer flow"
 ```
 
 Expected outcome:
 
-- Synod stores the goal in the active session.
+- Boundline stores the goal in the active session.
 - Later planning and execution commands no longer require the goal to be re-entered.
 
 ### 3. Create a plan
@@ -332,12 +332,12 @@ Expected outcome:
 Run:
 
 ```bash
-cargo run --bin synod -- plan
+cargo run --bin boundline -- plan
 ```
 
 Expected outcome:
 
-- Synod creates an executable plan for the active session goal.
+- Boundline creates an executable plan for the active session goal.
 - The active session now includes a persisted task snapshot with current execution position at the first executable step.
 
 ### 4. Execute one step at a time
@@ -345,12 +345,12 @@ Expected outcome:
 Run:
 
 ```bash
-cargo run --bin synod -- step
+cargo run --bin boundline -- step
 ```
 
 Expected outcome:
 
-- Synod executes exactly one next step.
+- Boundline executes exactly one next step.
 - The active session updates task context, plan position, latest status, and latest trace reference.
 - If the step fails, retries, or triggers replanning, the active session preserves the latest actionable state.
 
@@ -359,12 +359,12 @@ Expected outcome:
 Run:
 
 ```bash
-cargo run --bin synod -- run
+cargo run --bin boundline -- run
 ```
 
 Expected outcome:
 
-- Synod resumes from the active session task snapshot and continues until success, failure, exhaustion, or abort.
+- Boundline resumes from the active session task snapshot and continues until success, failure, exhaustion, or abort.
 - The session record captures the final state and latest trace reference.
 
 ### 6. Inspect status and the next action
@@ -372,8 +372,8 @@ Expected outcome:
 Run:
 
 ```bash
-cargo run --bin synod -- status
-cargo run --bin synod -- next
+cargo run --bin boundline -- status
+cargo run --bin boundline -- next
 ```
 
 Expected outcome:
@@ -386,20 +386,20 @@ Expected outcome:
 Run:
 
 ```bash
-cargo run --bin synod -- inspect
+cargo run --bin boundline -- inspect
 ```
 
 Expected outcome:
 
-- Synod uses the active session's latest trace reference when available.
+- Boundline uses the active session's latest trace reference when available.
 - The output reconstructs step progression, recovery events, and terminal reason.
 
 ## Assistant Walkthrough
 
-1. Start from an assistant command that maps to the active session flow, such as `/synod-start`.
+1. Start from an assistant command that maps to the active session flow, such as `/boundline-start`.
 2. Let the assistant establish or reuse the active session.
-3. Use `/synod-plan`, `/synod-step`, `/synod-run`, `/synod-status`, or `/synod-next` without restating already preserved session context.
-4. Use `/synod-inspect` only when the active session or an explicit prior trace needs detailed inspection.
+3. Use `/boundline-plan`, `/boundline-step`, `/boundline-run`, `/boundline-status`, or `/boundline-next` without restating already preserved session context.
+4. Use `/boundline-inspect` only when the active session or an explicit prior trace needs detailed inspection.
 
 ## Recovery Scenarios
 
@@ -413,7 +413,7 @@ If `plan`, `step`, or `run` is invoked before goal capture, expected output shou
 
 ### Corrupted or stale session
 
-If `.synod/session.json` is unreadable, workspace-mismatched, or points at a missing trace, expected output should surface the exact problem and avoid hidden continuation.
+If `.boundline/session.json` is unreadable, workspace-mismatched, or points at a missing trace, expected output should surface the exact problem and avoid hidden continuation.
 
 ### Terminal session reuse
 

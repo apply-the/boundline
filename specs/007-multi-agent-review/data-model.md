@@ -95,7 +95,7 @@
 
 ## VoteRuleDefinition
 
-- Purpose: Describes how Synod resolves reviewer findings.
+- Purpose: Describes how Boundline resolves reviewer findings.
 - Fields:
   - `strategy`: One of `majority` or `weighted`.
   - `reject_on_blocking`: Boolean guard that allows blocking findings to force immediate rejection when configured.

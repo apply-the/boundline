@@ -8,31 +8,31 @@ Define how session-native routing, explicit compatibility behavior, and optional
 
 ### Rule 1: Ready session-native state is the default authoritative route
 
-If the workspace has a valid active session with a ready goal plan or runnable bounded task state, Synod MUST project the route as `native` unless the operator explicitly selected compatibility behavior.
+If the workspace has a valid active session with a ready goal plan or runnable bounded task state, Boundline MUST project the route as `native` unless the operator explicitly selected compatibility behavior.
 
 ### Rule 2: Compatibility remains explicit
 
-If the operator invokes an explicit compatibility path or the workspace only provides a credible compatibility manifest, Synod MAY project the route as `compatibility`.
+If the operator invokes an explicit compatibility path or the workspace only provides a credible compatibility manifest, Boundline MAY project the route as `compatibility`.
 
 Compatibility routing MUST remain visibly labeled across `run`, `status`, and `inspect`.
 
 ### Rule 3: Missing context blocks rather than guesses
 
-If Synod cannot derive a credible session-native route or explicit compatibility route, it MUST project a blocked condition with remediation guidance instead of silently guessing.
+If Boundline cannot derive a credible session-native route or explicit compatibility route, it MUST project a blocked condition with remediation guidance instead of silently guessing.
 
 ## Optional bounded mode projections
 
 ### Review
 
-If review state is present, Synod MUST project review trigger, vote, outcome, or headline using stable summary fields without changing the active route label.
+If review state is present, Boundline MUST project review trigger, vote, outcome, or headline using stable summary fields without changing the active route label.
 
 ### Adaptive execution
 
-If adaptive execution state is present, Synod MUST project workspace-slice and attempt-lineage details using stable summary fields without changing the active route label.
+If adaptive execution state is present, Boundline MUST project workspace-slice and attempt-lineage details using stable summary fields without changing the active route label.
 
 ### Governance
 
-If governance state is present, Synod MUST project stage, runtime, mode, decision, blocked or waiting reason, and next action using stable summary fields.
+If governance state is present, Boundline MUST project stage, runtime, mode, decision, blocked or waiting reason, and next action using stable summary fields.
 
 Governance state MUST NOT imply that Canon owns the per-action control loop.
 
@@ -40,11 +40,11 @@ Governance state MUST NOT imply that Canon owns the per-action control loop.
 
 ### Ready session-native plan plus compatibility manifest
 
-**Given** a workspace with a ready session-native plan and an existing `.synod/execution.json`
+**Given** a workspace with a ready session-native plan and an existing `.boundline/execution.json`
 
-**When** the operator runs `synod status --workspace .`
+**When** the operator runs `boundline status --workspace .`
 
-**Then** Synod projects:
+**Then** Boundline projects:
 
 - route `native`
 - a reason that the ready session-native plan is authoritative
@@ -56,7 +56,7 @@ Governance state MUST NOT imply that Canon owns the per-action control loop.
 
 **When** the operator runs an explicit compatibility command path
 
-**Then** Synod projects:
+**Then** Boundline projects:
 
 - route `compatibility`
 - a reason that the operator selected explicit compatibility behavior
@@ -66,9 +66,9 @@ Governance state MUST NOT imply that Canon owns the per-action control loop.
 
 **Given** a native session that is waiting on stage-boundary governance approval
 
-**When** the operator runs `synod status --workspace .`
+**When** the operator runs `boundline status --workspace .`
 
-**Then** Synod projects:
+**Then** Boundline projects:
 
 - route `native`
 - execution condition `waiting`

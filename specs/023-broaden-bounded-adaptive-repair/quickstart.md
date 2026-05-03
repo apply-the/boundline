@@ -6,7 +6,7 @@ Exercise the complete `0.23.0` adaptive compatibility story: broader bounded mut
 
 ## Prerequisites
 
-- A workspace with `.synod/execution.json` configured for adaptive compatibility execution.
+- A workspace with `.boundline/execution.json` configured for adaptive compatibility execution.
 - `read_targets` that include at least one source file and one test or validation-relevant file.
 - A failing validation command that can be repaired by a bounded local edit rather than an open-ended refactor.
 
@@ -46,18 +46,18 @@ Exercise the complete `0.23.0` adaptive compatibility story: broader bounded mut
 
 ### Initial adaptive run
 
-- `synod run` reports compatibility routing, `execution_condition`, selected workspace slice, and the reason the first bounded candidate was credible.
+- `boundline run` reports compatibility routing, `execution_condition`, selected workspace slice, and the reason the first bounded candidate was credible.
 - The trace persists the chosen mutation family, candidate signature, validation result, and attempt lineage.
 
 ### Replanned adaptive run
 
 - A failed validation can shift the selected target or mutation family when the latest validation guidance makes another bounded candidate more credible.
-- `synod status` and `synod next` both show the latest selection headline, the candidate credibility rationale, and the authoritative compatibility follow-up state when no active session is resumable.
+- `boundline status` and `boundline next` both show the latest selection headline, the candidate credibility rationale, and the authoritative compatibility follow-up state when no active session is resumable.
 
 ### Explicit exhaustion
 
-- When no remaining bounded candidate is credible or allowed, `synod inspect` reports an explicit failed or exhausted terminal reason.
-- `synod next` points to the correct inspect-oriented compatibility follow-up rather than suggesting a hidden retry.
+- When no remaining bounded candidate is credible or allowed, `boundline inspect` reports an explicit failed or exhausted terminal reason.
+- `boundline next` points to the correct inspect-oriented compatibility follow-up rather than suggesting a hidden retry.
 
 ## Validation Checklist
 

@@ -1,37 +1,37 @@
 # Gemini CLI Command Notes
 
-This folder documents Synod usage from Gemini CLI surfaces.
+This folder documents Boundline usage from Gemini CLI surfaces.
 
-Gemini remains CLI-first in `0.37.0`, but it follows the same primary Synod
+Gemini remains CLI-first in `0.39.0`, but it follows the same primary Boundline
 workflow surface used by the other assistants.
 
 compatibility remains an explicit subordinate route.
 
-For now, Gemini support is CLI-only. Use the same Synod command workflow as
+For now, Gemini support is CLI-only. Use the same Boundline command workflow as
 other assistants and treat Gemini as the explicit `gemini-cli` assistant
 binding when `effective_routing` resolves to `gemini`:
 
 ```bash
-cargo run --bin synod -- workflow list --workspace <workspace>
-cargo run --bin synod -- workflow run <name> --workspace <workspace>
-cargo run --bin synod -- workflow status --workspace <workspace>
-cargo run --bin synod -- workflow resume --workspace <workspace>
-cargo run --bin synod -- workflow inspect --workspace <workspace>
-cargo run --bin synod -- init --workspace <workspace> --template bug-fix
-cargo run --bin synod -- doctor --workspace <workspace>
-cargo run --bin synod -- start --workspace <workspace>
-cargo run --bin synod -- capture --workspace <workspace> --goal "<goal>"
-cargo run --bin synod -- plan --workspace <workspace>
-cargo run --bin synod -- plan --workspace <workspace> --confirm
-cargo run --bin synod -- run --workspace <workspace>
+cargo run --bin boundline -- workflow list --workspace <workspace>
+cargo run --bin boundline -- workflow run <name> --workspace <workspace>
+cargo run --bin boundline -- workflow status --workspace <workspace>
+cargo run --bin boundline -- workflow resume --workspace <workspace>
+cargo run --bin boundline -- workflow inspect --workspace <workspace>
+cargo run --bin boundline -- init --workspace <workspace> --template bug-fix
+cargo run --bin boundline -- doctor --workspace <workspace>
+cargo run --bin boundline -- start --workspace <workspace>
+cargo run --bin boundline -- capture --workspace <workspace> --goal "<goal>"
+cargo run --bin boundline -- plan --workspace <workspace>
+cargo run --bin boundline -- plan --workspace <workspace> --confirm
+cargo run --bin boundline -- run --workspace <workspace>
 ```
 
-Use `synod config show|set|unset` for routing changes rather than manual file
+Use `boundline config show|set|unset` for routing changes rather than manual file
 editing. If a workspace declares `assistant_runtimes` and the active
 implementation or verification route selects `gemini` without that capability,
 native execution now records an explicit delegation packet instead of silently
 falling back to a different assistant family. Treat workflow list, run, status, resume, and
-inspect as the primary Synod workflow surface in this release; compatibility
+inspect as the primary Boundline workflow surface in this release; compatibility
 remains an explicit subordinate route when the operator intentionally chooses
 it. When native planning or follow-through surfaces `context_summary`,
 `context_credibility`, `context_primary_inputs`, `context_provenance`, or

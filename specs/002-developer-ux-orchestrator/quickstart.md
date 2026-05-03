@@ -4,21 +4,21 @@
 
 1. Install Rust 1.95.0 with `cargo`, `rustfmt`, and `clippy` available.
 2. Work from the repository root on branch `002-developer-ux-orchestrator`.
-3. Use a writable workspace so Synod can persist traces under `.synod/traces/` and load `.synod/fixture.json`.
+3. Use a writable workspace so Boundline can persist traces under `.boundline/traces/` and load `.boundline/fixture.json`.
 4. Build and run the CLI from the same repository checkout as the library crate.
 
 ## Command Surface
 
-- `synod doctor`: checks local readiness for developer runs.
-- `synod run`: starts a simple bounded custom objective through the default developer flow.
-- `synod inspect`: renders a readable summary from a persisted trace.
+- `boundline doctor`: checks local readiness for developer runs.
+- `boundline run`: starts a simple bounded custom objective through the default developer flow.
+- `boundline inspect`: renders a readable summary from a persisted trace.
 
 ## Local Walkthrough
 
 ### 1. Verify local readiness
 
 ```bash
-cargo run --bin synod -- doctor --workspace "$PWD"
+cargo run --bin boundline -- doctor --workspace "$PWD"
 ```
 
 Expected outcome:
@@ -29,7 +29,7 @@ Expected outcome:
 ### 2. Run the fixture-backed validation slice
 
 ```bash
-cargo run --bin synod -- run --goal "Fix the failing fixture" --workspace "$PWD"
+cargo run --bin boundline -- run --goal "Fix the failing fixture" --workspace "$PWD"
 ```
 
 Expected outcome:
@@ -42,7 +42,7 @@ Expected outcome:
 ### 3. Inspect the recorded trace
 
 ```bash
-cargo run --bin synod -- inspect --trace "$PWD/.synod/traces/<task-id>.json"
+cargo run --bin boundline -- inspect --trace "$PWD/.boundline/traces/<task-id>.json"
 ```
 
 Expected outcome:
@@ -54,13 +54,13 @@ Expected outcome:
 You can also inspect the latest trace in a workspace directly:
 
 ```bash
-cargo run --bin synod -- inspect --workspace "$PWD"
+cargo run --bin boundline -- inspect --workspace "$PWD"
 ```
 
 ### 4. Run a simple custom objective
 
 ```bash
-cargo run --bin synod -- run --goal "Summarize the current bounded developer flow" --workspace "$PWD"
+cargo run --bin boundline -- run --goal "Summarize the current bounded developer flow" --workspace "$PWD"
 ```
 
 Expected outcome:
@@ -72,7 +72,7 @@ Expected outcome:
 ### 5. Exercise a non-success fixture run
 
 ```bash
-cargo run --bin synod -- run --goal "Attempt the broken fixture" --workspace "$BROKEN_FIXTURE"
+cargo run --bin boundline -- run --goal "Attempt the broken fixture" --workspace "$BROKEN_FIXTURE"
 ```
 
 Expected outcome:

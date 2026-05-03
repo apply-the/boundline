@@ -47,7 +47,7 @@ pub fn execute_init(request: InitRequest<'_>) -> Result<InitCommandReport, InitC
         request.required_context_bindings,
     )?;
     let store = FileConfigStore::for_workspace(workspace);
-    let execution_path = workspace.join(".synod/execution.json");
+    let execution_path = workspace.join(".boundline/execution.json");
     let local_config_path = store.local_config_path();
 
     let mut planned = Vec::new();
@@ -72,7 +72,7 @@ pub fn execute_init(request: InitRequest<'_>) -> Result<InitCommandReport, InitC
 
     if (execution_exists || config_exists) && !request.force {
         let mut lines = vec![
-            "init: preview only - existing Synod files would be updated".to_string(),
+            "init: preview only - existing Boundline files would be updated".to_string(),
             "use --force to apply updates to existing files".to_string(),
             format!("template: {}", template_label(template)),
         ];
@@ -149,7 +149,7 @@ pub fn execute_init(request: InitRequest<'_>) -> Result<InitCommandReport, InitC
         }
     }
 
-    lines.push("next: synod doctor --workspace <workspace>".to_string());
+    lines.push("next: boundline doctor --workspace <workspace>".to_string());
 
     Ok(InitCommandReport {
         exit_status: CommandExitStatus::Succeeded,
@@ -425,7 +425,7 @@ mod tests {
 
     #[test]
     fn execute_init_infers_and_seeds_domain_templates() {
-        let workspace = temp_workspace("synod-init-domain");
+        let workspace = temp_workspace("boundline-init-domain");
         fs::write(workspace.join("package.json"), r#"{"dependencies":{"react":"18.0.0"}}"#)
             .unwrap();
         fs::create_dir_all(workspace.join("design")).unwrap();
@@ -456,7 +456,7 @@ mod tests {
 
     #[test]
     fn execute_init_rejects_invalid_domain_binding_format() {
-        let workspace = temp_workspace("synod-init-domain-invalid");
+        let workspace = temp_workspace("boundline-init-domain-invalid");
 
         let error = execute_init(InitRequest {
             workspace: &workspace,
@@ -475,9 +475,9 @@ mod tests {
 
     #[test]
     fn execute_init_previews_existing_files_without_force() {
-        let workspace = temp_workspace("synod-init-preview");
-        fs::create_dir_all(workspace.join(".synod")).unwrap();
-        fs::write(workspace.join(".synod/execution.json"), "{}\n").unwrap();
+        let workspace = temp_workspace("boundline-init-preview");
+        fs::create_dir_all(workspace.join(".boundline")).unwrap();
+        fs::write(workspace.join(".boundline/execution.json"), "{}\n").unwrap();
         FileConfigStore::for_workspace(&workspace).save_local(&Default::default()).unwrap();
 
         let report = execute_init(InitRequest {
@@ -501,7 +501,7 @@ mod tests {
 
     #[test]
     fn execute_init_reports_empty_domain_templates_when_no_detection_matches() {
-        let workspace = temp_workspace("synod-init-empty-domain");
+        let workspace = temp_workspace("boundline-init-empty-domain");
 
         let report = execute_init(InitRequest {
             workspace: &workspace,
@@ -520,7 +520,7 @@ mod tests {
         assert!(report.terminal_output.contains("domain_templates: none"));
 
         let execution_profile =
-            fs::read_to_string(workspace.join(".synod/execution.json")).unwrap();
+            fs::read_to_string(workspace.join(".boundline/execution.json")).unwrap();
         assert!(execution_profile.contains("init-change"));
     }
 
@@ -615,6 +615,6 @@ mod tests {
         let _ = super::runtime_available(RuntimeKind::Claude);
         let _ = super::runtime_available(RuntimeKind::Codex);
         let _ = super::runtime_available(RuntimeKind::Gemini);
-        assert!(!command_in_path("synod-command-that-should-not-exist"));
+        assert!(!command_in_path("boundline-command-that-should-not-exist"));
     }
 }

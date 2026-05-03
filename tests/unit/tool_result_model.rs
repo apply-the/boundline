@@ -1,4 +1,4 @@
-use synod::domain::tool_result::{ToolResult, ToolResultError};
+use boundline::domain::tool_result::{ToolResult, ToolResultError};
 
 #[test]
 fn new_creates_result_with_defaults() {

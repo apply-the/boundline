@@ -2,15 +2,15 @@
 
 ## Purpose
 
-Define the user-facing contract for inspecting, setting, and removing Synod
+Define the user-facing contract for inspecting, setting, and removing Boundline
 runtime and model routing configuration at global or workspace scope.
 
 ## Command Surface
 
-### `synod config show`
+### `boundline config show`
 
 ```text
-synod config show \
+boundline config show \
   [--workspace <path>] \
   [--scope <effective|workspace|global>]
 ```
@@ -20,10 +20,10 @@ synod config show \
   values or effective precedence resolution.
 - Output must show each supported route together with the source of the value.
 
-### `synod config set`
+### `boundline config set`
 
 ```text
-synod config set \
+boundline config set \
   [--workspace <path>] \
   --scope <workspace|global> \
   [--slot <planning|implementation|verification|review>] \
@@ -38,10 +38,10 @@ synod config set \
 - `--workspace` is required when `--scope workspace` is used.
 - `--scope global` writes to the user-scoped config file.
 
-### `synod config unset`
+### `boundline config unset`
 
 ```text
-synod config unset \
+boundline config unset \
   [--workspace <path>] \
   --scope <workspace|global> \
   [--slot <planning|implementation|verification|review>] \

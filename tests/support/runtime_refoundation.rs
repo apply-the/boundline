@@ -70,7 +70,7 @@ fn create_runtime_workspace(prefix: &str, source_contents: &str) -> PathBuf {
     let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
     fs::create_dir_all(workspace.join("src")).unwrap();
     fs::create_dir_all(workspace.join("tests")).unwrap();
-    fs::create_dir_all(workspace.join(".synod")).unwrap();
+    fs::create_dir_all(workspace.join(".boundline")).unwrap();
 
     fs::write(workspace.join("Cargo.toml"), RUNTIME_CARGO_TOML).unwrap();
     fs::write(workspace.join("src/lib.rs"), source_contents).unwrap();
@@ -83,7 +83,7 @@ fn create_runtime_workspace(prefix: &str, source_contents: &str) -> PathBuf {
 
 fn write_execution_profile(workspace: &Path) {
     fs::write(
-        workspace.join(".synod/execution.json"),
+        workspace.join(".boundline/execution.json"),
         serde_json::to_string_pretty(&serde_json::json!({
             "name": "runtime-refoundation-compat-profile",
             "read_targets": ["src/lib.rs", "tests/red_to_green.rs"],

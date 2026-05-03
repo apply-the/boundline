@@ -52,7 +52,7 @@ Decision
 ### GoalPlan
 
 A bounded task draft derived from goal text, workspace state, collected documents,
-and Canon artifacts. Created during `synod plan`, consumed during `synod run`.
+and Canon artifacts. Created during `boundline plan`, consumed during `boundline run`.
 
 ```text
 GoalPlan
@@ -69,7 +69,7 @@ GoalPlan
 ├── workspace_signals: WorkspaceSignals
 │   ├── language: Option<String> (detected from manifest)
 │   ├── file_count: usize
-│   ├── has_config: bool (.synod/config.toml exists)
+│   ├── has_config: bool (.boundline/config.toml exists)
 │   ├── has_canon: bool (.canon/ exists)
 │   └── has_tests: bool (test directory or test files detected)
 ├── flow: Option<InferredFlow>
@@ -85,7 +85,7 @@ GoalPlan
 
 **Relationships**:
 - GoalPlan is stored in session state under `session.goal_plan`
-- GoalPlan tasks are converted to Plan steps when `synod run` begins
+- GoalPlan tasks are converted to Plan steps when `boundline run` begins
 - GoalPlan may be superseded by a Replan decision during execution
 
 **Validation**:
@@ -175,7 +175,7 @@ EvidenceRef
 ### Session (existing: `src/domain/session.rs`)
 
 Add fields:
-- `goal_plan: Option<GoalPlan>` — populated by `synod plan`, consumed by `synod run`
+- `goal_plan: Option<GoalPlan>` — populated by `boundline plan`, consumed by `boundline run`
 - `decisions: Vec<Decision>` — decision log for the current execution
 - `active_flow_policy: Option<FlowPolicy>` — active flow constraints
 

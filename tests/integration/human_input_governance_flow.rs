@@ -1,14 +1,14 @@
 use crate::workspace_fixture::{
-    run_synod_in, temp_canon_governance_workspace, temp_optional_governance_workspace,
+    run_boundline_in, temp_canon_governance_workspace, temp_optional_governance_workspace,
     terminal_text,
 };
 
 #[test]
 fn capture_and_status_project_requested_governance_intent() {
-    let workspace = temp_optional_governance_workspace("synod-human-governance-status");
+    let workspace = temp_optional_governance_workspace("boundline-human-governance-status");
 
-    assert_eq!(run_synod_in(&workspace, &["start"]).status.code(), Some(0));
-    let capture = run_synod_in(
+    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
+    let capture = run_boundline_in(
         &workspace,
         &[
             "capture",
@@ -31,7 +31,7 @@ fn capture_and_status_project_requested_governance_intent() {
     assert!(capture_text.contains("requested_governance_zone: payments"), "{capture_text}");
     assert!(capture_text.contains("requested_governance_owner: platform"), "{capture_text}");
 
-    let status = run_synod_in(&workspace, &["status"]);
+    let status = run_boundline_in(&workspace, &["status"]);
     let status_text = terminal_text(&status);
     assert_eq!(status.status.code(), Some(0), "{status_text}");
     assert!(status_text.contains("requested_governance_runtime: canon"), "{status_text}");
@@ -42,11 +42,11 @@ fn capture_and_status_project_requested_governance_intent() {
 
 #[test]
 fn explicit_canon_request_blocks_without_local_fallback() {
-    let workspace = temp_optional_governance_workspace("synod-human-governance-canon-block");
+    let workspace = temp_optional_governance_workspace("boundline-human-governance-canon-block");
 
-    assert_eq!(run_synod_in(&workspace, &["start"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_synod_in(
+        run_boundline_in(
             &workspace,
             &[
                 "capture",
@@ -66,10 +66,10 @@ fn explicit_canon_request_blocks_without_local_fallback() {
         .code(),
         Some(0)
     );
-    assert_eq!(run_synod_in(&workspace, &["flow", "bug-fix"]).status.code(), Some(0));
-    assert_eq!(run_synod_in(&workspace, &["plan"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(&workspace, &["flow", "bug-fix"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(&workspace, &["plan"]).status.code(), Some(0));
 
-    let run = run_synod_in(&workspace, &["run"]);
+    let run = run_boundline_in(&workspace, &["run"]);
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(1), "{run_text}");
     assert!(
@@ -77,7 +77,7 @@ fn explicit_canon_request_blocks_without_local_fallback() {
         "{run_text}"
     );
 
-    let status = run_synod_in(&workspace, &["status"]);
+    let status = run_boundline_in(&workspace, &["status"]);
     let text = terminal_text(&status);
     assert_eq!(status.status.code(), Some(0), "{text}");
     assert!(text.contains("requested_governance_runtime: canon"), "{text}");
@@ -85,8 +85,10 @@ fn explicit_canon_request_blocks_without_local_fallback() {
     assert!(text.contains("latest_governance_stage: bug-fix:investigate"), "{text}");
     assert!(text.contains("latest_governance_state: blocked"), "{text}");
 
-    let inspect =
-        run_synod_in(&workspace, &["inspect", "--workspace", workspace.to_string_lossy().as_ref()]);
+    let inspect = run_boundline_in(
+        &workspace,
+        &["inspect", "--workspace", workspace.to_string_lossy().as_ref()],
+    );
     let inspect_text = terminal_text(&inspect);
     assert_eq!(inspect.status.code(), Some(1), "{inspect_text}");
     assert!(inspect_text.contains("terminal_status: failed"), "{inspect_text}");
@@ -99,11 +101,11 @@ fn explicit_canon_request_blocks_without_local_fallback() {
 
 #[test]
 fn capture_rejects_explicit_canon_request_missing_owner() {
-    let workspace = temp_optional_governance_workspace("synod-human-governance-missing-owner");
+    let workspace = temp_optional_governance_workspace("boundline-human-governance-missing-owner");
 
-    assert_eq!(run_synod_in(&workspace, &["start"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
 
-    let capture = run_synod_in(
+    let capture = run_boundline_in(
         &workspace,
         &[
             "capture",
@@ -126,11 +128,11 @@ fn capture_rejects_explicit_canon_request_missing_owner() {
 
 #[test]
 fn explicit_local_request_overrides_existing_canon_policy() {
-    let workspace = temp_canon_governance_workspace("synod-human-governance-local-override");
+    let workspace = temp_canon_governance_workspace("boundline-human-governance-local-override");
 
-    assert_eq!(run_synod_in(&workspace, &["start"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_synod_in(
+        run_boundline_in(
             &workspace,
             &["capture", "--goal", "Fix the failing checkout flow", "--governance", "local",],
         )
@@ -138,14 +140,14 @@ fn explicit_local_request_overrides_existing_canon_policy() {
         .code(),
         Some(0)
     );
-    assert_eq!(run_synod_in(&workspace, &["flow", "bug-fix"]).status.code(), Some(0));
-    assert_eq!(run_synod_in(&workspace, &["plan"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(&workspace, &["flow", "bug-fix"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(&workspace, &["plan"]).status.code(), Some(0));
 
-    let run = run_synod_in(&workspace, &["run"]);
+    let run = run_boundline_in(&workspace, &["run"]);
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(0), "{run_text}");
 
-    let status = run_synod_in(&workspace, &["status"]);
+    let status = run_boundline_in(&workspace, &["status"]);
     let text = terminal_text(&status);
     assert_eq!(status.status.code(), Some(0), "{text}");
     assert!(text.contains("requested_governance_runtime: local"), "{text}");
@@ -154,11 +156,11 @@ fn explicit_local_request_overrides_existing_canon_policy() {
 
 #[test]
 fn inspect_projects_requested_governance_intent_for_session_runs() {
-    let workspace = temp_canon_governance_workspace("synod-human-governance-inspect");
+    let workspace = temp_canon_governance_workspace("boundline-human-governance-inspect");
 
-    assert_eq!(run_synod_in(&workspace, &["start"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_synod_in(
+        run_boundline_in(
             &workspace,
             &["capture", "--goal", "Fix the failing checkout flow", "--governance", "local",],
         )
@@ -166,12 +168,14 @@ fn inspect_projects_requested_governance_intent_for_session_runs() {
         .code(),
         Some(0)
     );
-    assert_eq!(run_synod_in(&workspace, &["flow", "bug-fix"]).status.code(), Some(0));
-    assert_eq!(run_synod_in(&workspace, &["plan"]).status.code(), Some(0));
-    assert_eq!(run_synod_in(&workspace, &["run"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(&workspace, &["flow", "bug-fix"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(&workspace, &["plan"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(&workspace, &["run"]).status.code(), Some(0));
 
-    let inspect =
-        run_synod_in(&workspace, &["inspect", "--workspace", workspace.to_string_lossy().as_ref()]);
+    let inspect = run_boundline_in(
+        &workspace,
+        &["inspect", "--workspace", workspace.to_string_lossy().as_ref()],
+    );
     let inspect_text = terminal_text(&inspect);
     assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
     assert!(inspect_text.contains("terminal_status: succeeded"), "{inspect_text}");

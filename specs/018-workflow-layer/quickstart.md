@@ -6,22 +6,22 @@
 ## Scenario 1: Run A Named Workflow Through The Session-Native Route
 
 ```bash
-cd /tmp/synod-workflow-layer
-cargo run --bin synod -- workflow run default --workspace .
+cd /tmp/boundline-workflow-layer
+cargo run --bin boundline -- workflow run default --workspace .
 ```
 
 **Expected**:
-- Synod validates the named workflow before execution begins.
+- Boundline validates the named workflow before execution begins.
 - The workflow starts through the same session-native route already used by direct delivery commands.
 - Output exposes the active workflow name, the current phase, `routing`, `execution_condition`, and the next suggested command.
 
 ## Scenario 2: Resume A Paused Workflow And Inspect The Current Phase
 
 ```bash
-cd /tmp/synod-workflow-layer
-cargo run --bin synod -- workflow status --workspace .
-cargo run --bin synod -- workflow resume --workspace .
-cargo run --bin synod -- workflow inspect --workspace .
+cd /tmp/boundline-workflow-layer
+cargo run --bin boundline -- workflow status --workspace .
+cargo run --bin boundline -- workflow resume --workspace .
+cargo run --bin boundline -- workflow inspect --workspace .
 ```
 
 **Expected**:
@@ -32,13 +32,13 @@ cargo run --bin synod -- workflow inspect --workspace .
 ## Scenario 3: Reject An Invalid Workflow Definition Explicitly
 
 ```bash
-cd /tmp/synod-workflow-layer-invalid
-cargo run --bin synod -- workflow run invalid-flow --workspace .
+cd /tmp/boundline-workflow-layer-invalid
+cargo run --bin boundline -- workflow run invalid-flow --workspace .
 ```
 
 **Expected**:
 - Unsupported workflow semantics are rejected before hidden execution begins.
-- Synod reports an explicit blocked condition and a corrective next action.
+- Boundline reports an explicit blocked condition and a corrective next action.
 - The existing direct session-native commands remain available even though the named workflow was invalid.
 
 ## Validation Commands

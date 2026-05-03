@@ -12,7 +12,7 @@
 **Purpose**: Register the new session feature surface in the existing crate and test harnesses.
 
 - [X] T001 Wire session module exports and test harness entries in src/domain.rs, src/adapters.rs, src/orchestrator.rs, src/cli.rs, tests/unit.rs, tests/integration.rs, and tests/contract.rs
-- [X] T002 [P] Add session command scaffolding in src/cli.rs and src/bin/synod.rs
+- [X] T002 [P] Add session command scaffolding in src/cli.rs and src/bin/boundline.rs
 - [X] T003 [P] Create session feature skeletons in src/domain/session.rs, src/adapters/session_store.rs, src/orchestrator/session_runtime.rs, and src/cli/session.rs
 
 ---
@@ -54,10 +54,10 @@
 - [X] T014 [P] [US1] Implement workspace session create, load, and replace operations in src/adapters/session_store.rs
 - [X] T015 [US1] Implement session integrity validation and workspace-mismatch recovery routing in src/adapters/session_store.rs and src/cli/session.rs
 - [X] T016 [US1] Implement start and session-resolution handlers in src/cli/session.rs
-- [X] T017 [US1] Wire session-native command dispatch and workspace resolution in src/cli.rs and src/bin/synod.rs
+- [X] T017 [US1] Wire session-native command dispatch and workspace resolution in src/cli.rs and src/bin/boundline.rs
 - [X] T018 [US1] Surface session reuse and missing-session guidance in src/cli/output.rs
 
-**Checkpoint**: User Story 1 is complete when Synod can create one active session per workspace and reuse it safely across invocations.
+**Checkpoint**: User Story 1 is complete when Boundline can create one active session per workspace and reuse it safely across invocations.
 
 ---
 
@@ -109,9 +109,9 @@
 - [X] T033 [P] [US3] Implement status-view mapping and next-command derivation in src/domain/session.rs
 - [X] T034 [US3] Implement status and next command handlers in src/cli/session.rs
 - [X] T035 [US3] Implement session-aware inspect fallback and invalid-session guidance in src/cli/inspect.rs
-- [X] T036 [P] [US3] Update Codex assistant commands to reuse active session state in assistant/codex/commands/synod-start.md, assistant/codex/commands/synod-plan.md, assistant/codex/commands/synod-step.md, assistant/codex/commands/synod-run.md, assistant/codex/commands/synod-status.md, assistant/codex/commands/synod-next.md, and assistant/codex/commands/synod-inspect.md
-- [X] T037 [P] [US3] Update Claude assistant commands to reuse active session state in assistant/claude/commands/synod-start.md, assistant/claude/commands/synod-plan.md, assistant/claude/commands/synod-step.md, assistant/claude/commands/synod-run.md, assistant/claude/commands/synod-status.md, assistant/claude/commands/synod-next.md, and assistant/claude/commands/synod-inspect.md
-- [X] T038 [P] [US3] Update Copilot continuity prompts to reuse active session state in assistant/copilot/prompts/synod-start.prompt.md, assistant/copilot/prompts/synod-plan.prompt.md, assistant/copilot/prompts/synod-step.prompt.md, assistant/copilot/prompts/synod-run.prompt.md, assistant/copilot/prompts/synod-status.prompt.md, assistant/copilot/prompts/synod-next.prompt.md, and assistant/copilot/prompts/synod-inspect.prompt.md
+- [X] T036 [P] [US3] Update Codex assistant commands to reuse active session state in assistant/codex/commands/boundline-start.md, assistant/codex/commands/boundline-plan.md, assistant/codex/commands/boundline-step.md, assistant/codex/commands/boundline-run.md, assistant/codex/commands/boundline-status.md, assistant/codex/commands/boundline-next.md, and assistant/codex/commands/boundline-inspect.md
+- [X] T037 [P] [US3] Update Claude assistant commands to reuse active session state in assistant/claude/commands/boundline-start.md, assistant/claude/commands/boundline-plan.md, assistant/claude/commands/boundline-step.md, assistant/claude/commands/boundline-run.md, assistant/claude/commands/boundline-status.md, assistant/claude/commands/boundline-next.md, and assistant/claude/commands/boundline-inspect.md
+- [X] T038 [P] [US3] Update Copilot continuity prompts to reuse active session state in assistant/copilot/prompts/boundline-start.prompt.md, assistant/copilot/prompts/boundline-plan.prompt.md, assistant/copilot/prompts/boundline-step.prompt.md, assistant/copilot/prompts/boundline-run.prompt.md, assistant/copilot/prompts/boundline-status.prompt.md, assistant/copilot/prompts/boundline-next.prompt.md, and assistant/copilot/prompts/boundline-inspect.prompt.md
 - [X] T039 [US3] Align CLI-visible status and next messaging with assistant guidance in src/cli/output.rs and assistant/README.md
 
 **Checkpoint**: User Story 3 is complete when CLI and assistant surfaces produce equivalent, explicit continuation guidance from the same active session.

@@ -1,13 +1,13 @@
 use std::fs;
 
-use crate::workspace_fixture::{run_synod_in, temp_fixture_workspace, terminal_text};
+use crate::workspace_fixture::{run_boundline_in, temp_fixture_workspace, terminal_text};
 
 #[test]
 fn cluster_init_persists_cluster_file_for_two_valid_members() {
-    let primary = temp_fixture_workspace("synod-cluster-primary");
-    let secondary = temp_fixture_workspace("synod-cluster-secondary");
+    let primary = temp_fixture_workspace("boundline-cluster-primary");
+    let secondary = temp_fixture_workspace("boundline-cluster-secondary");
 
-    let output = run_synod_in(
+    let output = run_boundline_in(
         &primary,
         &[
             "cluster",
@@ -26,7 +26,7 @@ fn cluster_init_persists_cluster_file_for_two_valid_members() {
     assert_eq!(output.status.code(), Some(0), "{text}");
     assert!(text.contains("cluster: initialized"), "{text}");
 
-    let cluster_path = primary.join(".synod/cluster.toml");
+    let cluster_path = primary.join(".boundline/cluster.toml");
     assert!(cluster_path.is_file());
 
     let cluster_contents = fs::read_to_string(cluster_path).unwrap();
@@ -36,13 +36,13 @@ fn cluster_init_persists_cluster_file_for_two_valid_members() {
 }
 
 #[test]
-fn cluster_init_rejects_non_synod_member_without_partial_state() {
-    let primary = temp_fixture_workspace("synod-cluster-primary-invalid");
-    let invalid_member = std::env::temp_dir().join("synod-non-member-invalid");
+fn cluster_init_rejects_non_boundline_member_without_partial_state() {
+    let primary = temp_fixture_workspace("boundline-cluster-primary-invalid");
+    let invalid_member = std::env::temp_dir().join("boundline-non-member-invalid");
     let _ = fs::remove_dir_all(&invalid_member);
     fs::create_dir_all(&invalid_member).unwrap();
 
-    let output = run_synod_in(
+    let output = run_boundline_in(
         &primary,
         &[
             "cluster",
@@ -59,6 +59,6 @@ fn cluster_init_rejects_non_synod_member_without_partial_state() {
     );
     let text = terminal_text(&output);
     assert_eq!(output.status.code(), Some(1), "{text}");
-    assert!(text.contains("not a valid Synod workspace"), "{text}");
-    assert!(!primary.join(".synod/cluster.toml").exists());
+    assert!(text.contains("not a valid Boundline workspace"), "{text}");
+    assert!(!primary.join(".boundline/cluster.toml").exists());
 }

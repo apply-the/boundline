@@ -2,37 +2,40 @@ use std::fs;
 use std::path::Path;
 
 use crate::workspace_fixture::{
-    run_synod_in, temp_canon_approval_workspace, temp_canon_autopilot_blocked_workspace,
+    run_boundline_in, temp_canon_approval_workspace, temp_canon_autopilot_blocked_workspace,
     temp_canon_security_approval_workspace, temp_canon_security_assessment_workspace,
     terminal_text,
 };
 
 fn bootstrap_bug_fix(workspace: &Path) {
-    assert_eq!(run_synod_in(workspace, &["start"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_synod_in(workspace, &["capture", "--goal", "Fix the failing checkout flow"])
+        run_boundline_in(workspace, &["capture", "--goal", "Fix the failing checkout flow"])
             .status
             .code(),
         Some(0)
     );
-    assert_eq!(run_synod_in(workspace, &["flow", "bug-fix"]).status.code(), Some(0));
-    assert_eq!(run_synod_in(workspace, &["plan"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(workspace, &["flow", "bug-fix"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(workspace, &["plan"]).status.code(), Some(0));
 }
 
 fn bootstrap_change(workspace: &Path) {
-    assert_eq!(run_synod_in(workspace, &["start"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_synod_in(workspace, &["capture", "--goal", "Update the checkout confirmation copy"])
-            .status
-            .code(),
+        run_boundline_in(
+            workspace,
+            &["capture", "--goal", "Update the checkout confirmation copy"]
+        )
+        .status
+        .code(),
         Some(0)
     );
-    assert_eq!(run_synod_in(workspace, &["flow", "change"]).status.code(), Some(0));
-    assert_eq!(run_synod_in(workspace, &["plan"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(workspace, &["flow", "change"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(workspace, &["plan"]).status.code(), Some(0));
 }
 
 fn rewrite_governance_flow_name(workspace: &Path, flow_name: &str) {
-    let path = workspace.join(".synod/execution.json");
+    let path = workspace.join(".boundline/execution.json");
     let mut profile: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
     let stages = profile
@@ -49,7 +52,7 @@ fn rewrite_governance_flow_name(workspace: &Path, flow_name: &str) {
 }
 
 fn rewrite_governance_canon_mode(workspace: &Path, canon_mode: &str) {
-    let path = workspace.join(".synod/execution.json");
+    let path = workspace.join(".boundline/execution.json");
     let mut profile: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
     let stages = profile
@@ -67,10 +70,10 @@ fn rewrite_governance_canon_mode(workspace: &Path, canon_mode: &str) {
 
 #[test]
 fn governance_autopilot_flow_selects_mode_and_refreshes_after_approval() {
-    let workspace = temp_canon_approval_workspace("synod-governance-autopilot-approval");
+    let workspace = temp_canon_approval_workspace("boundline-governance-autopilot-approval");
     bootstrap_bug_fix(&workspace);
 
-    let run = run_synod_in(&workspace, &["run"]);
+    let run = run_boundline_in(&workspace, &["run"]);
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(0), "{run_text}");
     assert!(run_text.contains("governance_started: bug-fix:investigate (discovery)"), "{run_text}");
@@ -82,7 +85,7 @@ fn governance_autopilot_flow_selects_mode_and_refreshes_after_approval() {
     );
     assert!(run_text.contains("execution_condition: waiting - governance approval is still pending for bug-fix:investigate"), "{run_text}");
 
-    let status = run_synod_in(&workspace, &["status"]);
+    let status = run_boundline_in(&workspace, &["status"]);
     let status_text = terminal_text(&status);
     assert_eq!(status.status.code(), Some(0), "{status_text}");
     assert!(status_text.contains("latest_governance_stage: bug-fix:investigate"), "{status_text}");
@@ -92,11 +95,11 @@ fn governance_autopilot_flow_selects_mode_and_refreshes_after_approval() {
         status_text.contains("governance_next_action: approve: Canon is waiting for approval"),
         "{status_text}"
     );
-    assert!(status_text.contains("next_command: synod status"), "{status_text}");
+    assert!(status_text.contains("next_command: boundline status"), "{status_text}");
 
     fs::write(workspace.join(".canon/approval-state.txt"), "granted\n").unwrap();
 
-    let refreshed = run_synod_in(&workspace, &["status"]);
+    let refreshed = run_boundline_in(&workspace, &["status"]);
     let refreshed_text = terminal_text(&refreshed);
     assert_eq!(refreshed.status.code(), Some(0), "{refreshed_text}");
     assert!(refreshed_text.contains("latest_governance_state: governed_ready"), "{refreshed_text}");
@@ -109,32 +112,33 @@ fn governance_autopilot_flow_selects_mode_and_refreshes_after_approval() {
 
 #[test]
 fn governance_autopilot_flow_blocks_required_stage_without_a_canon_runtime() {
-    let workspace = temp_canon_autopilot_blocked_workspace("synod-governance-autopilot-blocked");
+    let workspace =
+        temp_canon_autopilot_blocked_workspace("boundline-governance-autopilot-blocked");
     bootstrap_bug_fix(&workspace);
 
-    let run = run_synod_in(&workspace, &["run"]);
+    let run = run_boundline_in(&workspace, &["run"]);
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(1), "{run_text}");
     assert!(run_text.contains("governance_blocked: governance required Canon for bug-fix:investigate, but command 'canon-missing' is unavailable"), "{run_text}");
     assert!(run_text.contains("terminal_status: failed"), "{run_text}");
 
-    let status = run_synod_in(&workspace, &["status"]);
+    let status = run_boundline_in(&workspace, &["status"]);
     let status_text = terminal_text(&status);
     assert_eq!(status.status.code(), Some(0), "{status_text}");
     assert!(status_text.contains("latest_status: failed"), "{status_text}");
     assert!(status_text.contains("latest_governance_stage: bug-fix:investigate"), "{status_text}");
     assert!(status_text.contains("latest_governance_runtime: canon"), "{status_text}");
     assert!(status_text.contains("latest_governance_state: blocked"), "{status_text}");
-    assert!(status_text.contains("next_command: synod inspect"), "{status_text}");
+    assert!(status_text.contains("next_command: boundline inspect"), "{status_text}");
 }
 
 #[test]
 fn governance_autopilot_flow_routes_verify_stage_through_security_assessment() {
     let workspace =
-        temp_canon_security_assessment_workspace("synod-governance-security-assessment");
+        temp_canon_security_assessment_workspace("boundline-governance-security-assessment");
     bootstrap_bug_fix(&workspace);
 
-    let run = run_synod_in(&workspace, &["run"]);
+    let run = run_boundline_in(&workspace, &["run"]);
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(0), "{run_text}");
     assert!(run_text.contains("routing: native (goal_plan)"), "{run_text}");
@@ -147,7 +151,7 @@ fn governance_autopilot_flow_routes_verify_stage_through_security_assessment() {
         "{run_text}"
     );
 
-    let status = run_synod_in(&workspace, &["status"]);
+    let status = run_boundline_in(&workspace, &["status"]);
     let status_text = terminal_text(&status);
     assert_eq!(status.status.code(), Some(0), "{status_text}");
     assert!(status_text.contains("execution_path: native_goal_plan"), "{status_text}");
@@ -162,7 +166,7 @@ fn governance_autopilot_flow_routes_verify_stage_through_security_assessment() {
         "{status_text}"
     );
 
-    let inspect = run_synod_in(&workspace, &["inspect", "--workspace", "."]);
+    let inspect = run_boundline_in(&workspace, &["inspect", "--workspace", "."]);
     let inspect_text = terminal_text(&inspect);
     assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
     assert!(
@@ -174,11 +178,11 @@ fn governance_autopilot_flow_routes_verify_stage_through_security_assessment() {
 #[test]
 fn governance_autopilot_flow_routes_change_verify_stage_through_security_assessment() {
     let workspace =
-        temp_canon_security_assessment_workspace("synod-governance-change-security-assessment");
+        temp_canon_security_assessment_workspace("boundline-governance-change-security-assessment");
     rewrite_governance_flow_name(&workspace, "change");
     bootstrap_change(&workspace);
 
-    let run = run_synod_in(&workspace, &["run"]);
+    let run = run_boundline_in(&workspace, &["run"]);
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(0), "{run_text}");
     assert!(run_text.contains("routing: native (goal_plan)"), "{run_text}");
@@ -193,7 +197,7 @@ fn governance_autopilot_flow_routes_change_verify_stage_through_security_assessm
         "{run_text}"
     );
 
-    let status = run_synod_in(&workspace, &["status"]);
+    let status = run_boundline_in(&workspace, &["status"]);
     let status_text = terminal_text(&status);
     assert_eq!(status.status.code(), Some(0), "{status_text}");
     assert!(status_text.contains("execution_path: native_goal_plan"), "{status_text}");
@@ -211,10 +215,11 @@ fn governance_autopilot_flow_routes_change_verify_stage_through_security_assessm
 
 #[test]
 fn governance_autopilot_flow_refreshes_security_assessment_approval_through_status() {
-    let workspace = temp_canon_security_approval_workspace("synod-governance-security-approval");
+    let workspace =
+        temp_canon_security_approval_workspace("boundline-governance-security-approval");
     bootstrap_bug_fix(&workspace);
 
-    let run = run_synod_in(&workspace, &["run"]);
+    let run = run_boundline_in(&workspace, &["run"]);
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(0), "{run_text}");
     assert!(
@@ -232,7 +237,7 @@ fn governance_autopilot_flow_refreshes_security_assessment_approval_through_stat
         "{run_text}"
     );
 
-    let status = run_synod_in(&workspace, &["status"]);
+    let status = run_boundline_in(&workspace, &["status"]);
     let status_text = terminal_text(&status);
     assert_eq!(status.status.code(), Some(0), "{status_text}");
     assert!(status_text.contains("latest_governance_mode: security-assessment"), "{status_text}");
@@ -242,11 +247,11 @@ fn governance_autopilot_flow_refreshes_security_assessment_approval_through_stat
             .contains("governance_next_action: approve: Canon is waiting for security approval"),
         "{status_text}"
     );
-    assert!(status_text.contains("next_command: synod status"), "{status_text}");
+    assert!(status_text.contains("next_command: boundline status"), "{status_text}");
 
     fs::write(workspace.join(".canon/approval-state.txt"), "granted\n").unwrap();
 
-    let refreshed = run_synod_in(&workspace, &["status"]);
+    let refreshed = run_boundline_in(&workspace, &["status"]);
     let refreshed_text = terminal_text(&refreshed);
     assert_eq!(refreshed.status.code(), Some(0), "{refreshed_text}");
     assert!(refreshed_text.contains("latest_governance_state: governed_ready"), "{refreshed_text}");
@@ -256,17 +261,17 @@ fn governance_autopilot_flow_refreshes_security_assessment_approval_through_stat
             .contains("latest_governance_packet_ref: .canon/runs/canon-run-security-approval"),
         "{refreshed_text}"
     );
-    assert!(refreshed_text.contains("next_command: synod step"), "{refreshed_text}");
+    assert!(refreshed_text.contains("next_command: boundline step"), "{refreshed_text}");
 }
 
 #[test]
 fn governance_autopilot_flow_rejects_unsupported_future_canon_mode_configuration() {
     let workspace =
-        temp_canon_security_assessment_workspace("synod-governance-unsupported-security-mode");
+        temp_canon_security_assessment_workspace("boundline-governance-unsupported-security-mode");
     rewrite_governance_canon_mode(&workspace, "supply-chain-analysis");
     bootstrap_bug_fix(&workspace);
 
-    let run = run_synod_in(&workspace, &["run"]);
+    let run = run_boundline_in(&workspace, &["run"]);
     let run_text = terminal_text(&run);
     assert_ne!(run.status.code(), Some(0), "{run_text}");
     assert!(run_text.contains("run: session error"), "{run_text}");

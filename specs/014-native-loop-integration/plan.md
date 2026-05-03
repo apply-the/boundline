@@ -1,6 +1,6 @@
 # Implementation Plan: Native Loop Integration
 
-**Branch**: `014-native-loop-integration` | **Date**: 2026-04-29 | **Spec**: [/Users/rt/workspace/synod/specs/014-native-loop-integration/spec.md](/Users/rt/workspace/synod/specs/014-native-loop-integration/spec.md)
+**Branch**: `014-native-loop-integration` | **Date**: 2026-04-29 | **Spec**: [/Users/rt/workspace/boundline/specs/014-native-loop-integration/spec.md](/Users/rt/workspace/boundline/specs/014-native-loop-integration/spec.md)
 **Input**: Feature specification from `/specs/014-native-loop-integration/spec.md`
 
 ## Summary
@@ -11,12 +11,12 @@ Move the real session CLI onto the native planning and decision-loop path by mak
 
 **Language/Version**: Rust 1.95.0, edition 2024  
 **Primary Dependencies**: `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, Rust standard library filesystem and process APIs  
-**Storage**: Workspace-local `.synod/session.json`, `.synod/traces/`, optional `.synod/execution.json`, optional `.canon/` artifacts  
+**Storage**: Workspace-local `.boundline/session.json`, `.boundline/traces/`, optional `.boundline/execution.json`, optional `.canon/` artifacts  
 **Testing**: `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features`, contract/integration/unit harnesses under `tests/`, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`  
 **Target Platform**: macOS/Linux developer workstations and Linux CI  
 **Project Type**: Single Rust CLI/library crate with workspace-local persisted execution state  
 **Execution Model**: Sequential session-owned planning followed by a bounded one-decision-at-a-time loop with explicit fixture fallback routing  
-**Observability Surface**: Active session record, persisted execution trace, `synod status`, `synod run`, and `synod inspect` output  
+**Observability Surface**: Active session record, persisted execution trace, `boundline status`, `boundline run`, and `boundline inspect` output  
 **Performance Goals**: Session planning stays sub-5s on local workspaces up to 1000 files; routing overhead is negligible relative to existing CLI execution; inspect surfaces expose routing and decision state without extra commands  
 **Constraints**: No silent flow auto-confirmation, no dependency on Canon for core control flow, no parallel execution, no hidden fixture fallback when a goal plan is present, preserve explicit declarative compatibility behavior  
 **Scale/Scope**: One active session per workspace, bounded step counts from existing limits, native loop aimed at small-to-medium local engineering tasks on the CLI path

@@ -8,9 +8,9 @@ Defines the developer-facing CLI surface used to run, inspect, and diagnose the 
 
 | Command | Purpose | Required Inputs |
 |---------|---------|-----------------|
-| `synod doctor` | Verify local readiness before attempting a run | `workspace_ref` |
-| `synod run` | Execute a simple bounded developer-supplied objective | `goal`, `workspace_ref` |
-| `synod inspect` | Render a readable summary from a persisted trace | `trace_ref` or a supported workspace-local default |
+| `boundline doctor` | Verify local readiness before attempting a run | `workspace_ref` |
+| `boundline run` | Execute a simple bounded developer-supplied objective | `goal`, `workspace_ref` |
+| `boundline inspect` | Render a readable summary from a persisted trace | `trace_ref` or a supported workspace-local default |
 
 ## Invocation Shape
 

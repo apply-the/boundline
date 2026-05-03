@@ -16,27 +16,27 @@ starts.
 
 **Why this priority**: Planning quality is currently limited by a captured goal
 that is inspectable but still too implicit. The smallest valuable next step is
-to make bounded acceptance and constraint decisions visible before Synod turns
+to make bounded acceptance and constraint decisions visible before Boundline turns
 that goal into a plan.
 
 **Independent Test**: Start a session, capture a goal with or without authored
-brief inputs, and verify that Synod stores one negotiation packet showing the
+brief inputs, and verify that Boundline stores one negotiation packet showing the
 normalized goal, acceptance boundary, key constraints, and any blocking
 clarification state without requiring planning to run.
 
 **Acceptance Scenarios**:
 
 1. **Given** a new session with a goal and one or more authored brief inputs,
-   **When** the operator runs the capture step, **Then** Synod records one
+   **When** the operator runs the capture step, **Then** Boundline records one
    negotiated delivery packet that summarizes the intended outcome, in-scope
    work, out-of-scope work, acceptance checks, and binding constraints for the
    session-native story.
 2. **Given** a new session with only a direct goal and no authored brief,
-   **When** the operator runs the capture step, **Then** Synod still derives a
+   **When** the operator runs the capture step, **Then** Boundline still derives a
    negotiation packet with explicit defaults rather than leaving planning to
    infer hidden constraints.
 3. **Given** a captured goal whose acceptance boundary or required constraints
-   are materially ambiguous, **When** Synod cannot derive a credible negotiated
+   are materially ambiguous, **When** Boundline cannot derive a credible negotiated
    packet, **Then** it stops before planning with an explicit clarification or
    blocked state that names what must be resolved.
 
@@ -65,11 +65,11 @@ acceptance boundary, binding constraints, and selected tradeoff story.
    collapsing back to goal-only output.
 2. **Given** a planned or running session whose bounded execution reaches a
    blocked, failed, or exhausted state, **When** the operator checks follow-up
-   output, **Then** Synod identifies which constraint, acceptance boundary, or
+   output, **Then** Boundline identifies which constraint, acceptance boundary, or
    unresolved tradeoff is currently binding the next action.
 3. **Given** an explicit compatibility route is used instead of the primary
    session-native path, **When** the operator inspects follow-up behavior,
-   **Then** Synod keeps that compatibility route explicit and does not imply
+   **Then** Boundline keeps that compatibility route explicit and does not imply
    that hidden session-native negotiation authority exists.
 
 ---
@@ -183,7 +183,7 @@ the required validation suite all pass for the release.
 - **Acceptance Boundary**: The operator-visible statement of what must be true
   for the goal to count as satisfied and what evidence later surfaces should use
   to justify that claim.
-- **Tradeoff Summary**: The inspectable explanation of why Synod preserved one
+- **Tradeoff Summary**: The inspectable explanation of why Boundline preserved one
   bounded plan shape or constraint priority instead of another.
 
 ## Success Criteria *(mandatory)*

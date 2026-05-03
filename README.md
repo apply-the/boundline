@@ -1,265 +1,136 @@
-# Synod
+# Boundline
 
-![Synod banner](docs/images/synod-banner.jpg)
+![Boundline banner](docs/images/boundline-banner.jpg)
 
-[![CI](https://github.com/apply-the/synod/actions/workflows/ci.yml/badge.svg)](https://github.com/apply-the/synod/actions/workflows/ci.yml)
-[![Lint](https://github.com/apply-the/synod/actions/workflows/lint.yml/badge.svg)](https://github.com/apply-the/synod/actions/workflows/lint.yml)
-[![Vulnerabilities](https://github.com/apply-the/synod/actions/workflows/vulnerabilities.yml/badge.svg)](https://github.com/apply-the/synod/actions/workflows/vulnerabilities.yml)
-[![Coverage](https://codecov.io/gh/apply-the/synod/graph/badge.svg)](https://codecov.io/gh/apply-the/synod)
+[![CI](https://github.com/apply-the/boundline/actions/workflows/ci.yml/badge.svg)](https://github.com/apply-the/boundline/actions/workflows/ci.yml)
+[![Lint](https://github.com/apply-the/boundline/actions/workflows/lint.yml/badge.svg)](https://github.com/apply-the/boundline/actions/workflows/lint.yml)
+[![Vulnerabilities](https://github.com/apply-the/boundline/actions/workflows/vulnerabilities.yml/badge.svg)](https://github.com/apply-the/boundline/actions/workflows/vulnerabilities.yml)
+[![Coverage](https://codecov.io/gh/apply-the/boundline/graph/badge.svg)](https://codecov.io/gh/apply-the/boundline)
 
-**Synod is a local CLI for bounded software-delivery work. The primary path is
-session-native: start a session, capture a goal, plan a bounded `GoalPlan`, run
-through the decision loop, and inspect the resulting session state and traces.
-`synod init` remains optional bootstrap, declarative execution profiles remain
-available as an explicit compatibility path, and `synod workflow` adds an
-optional thin named-workflow layer over the same session-owned runtime. In
-`0.38.0`, workflows and direct runs remain the two primary entry styles on
-that same Synod-owned runtime, while explicit compatibility follow-up remains a
-subordinate route. Direct `run --goal` remains the native-first entrypoint, but Synod
-now refuses to call bounded `bug-fix` and `change` work complete unless the
-session records both a material workspace diff and passed validation evidence.
-Planning also assembles one explicit bounded context pack from workspace
-signals, authored input, negotiated delivery state, recent traces, and reusable
-Canon artifacts, then stops early when that context is not credible enough to
-support a bounded plan. Governed verify-stage Canon work stays on that same
-operator path, and successful governed delivery now leaves
-`latest_changed_files`, `latest_validation_status`, and governed packet
-lineage visible on the same session follow-through story. Direct `run --goal`
-still bootstraps the native session path by default, creates one evidence-driven
-plan proposal, confirms that proposal automatically for the bootstrap path, and
-leaves the same persisted session story behind for `status`, `next`, and
-`inspect`.
-`run --compatibility --goal ...` keeps the declarative execution-profile route
-available as an explicit subordinate path. `capture`, `plan`, `run`, `status`,
-`next`, and `inspect` also project negotiated-delivery fields,
-`context_summary`, `context_credibility`, explicit context inputs and
-provenance, plus effective routing, assistant bindings, and persisted route
-snapshots across the same session and trace story. `status`, `next`, and
-`inspect` now also project `follow_through_guidance`,
-`follow_through_evidence_source`, `follow_through_next_action`, and
-`follow_through_stop_reason` when persisted session or trace evidence can make
-the next bounded action explicit. In `0.38.0`, the same route projection can
-also preserve `runtime_capabilities` and `slot_effort_policies`, while blocked
-native continuation now persists explicit handoff, escalation, resolved, or
-stuck delegation packets instead of stopping behind an opaque route error.
-When a workspace opts into domain templates, the same bounded context story
-also carries the selected domain family, the winning standards source, and any
-required external-input status so domain-specific guidance stays inspectable on
-the same operator path.
-Canon capability snapshots,
-compact Canon-grounded memory, and governed recommended actions also feed that
-same bounded reasoning path, so stale or contradicted governed evidence can
-stop planning or decision execution explicitly while `run`, `status`, `next`,
-and `inspect` keep the same Canon-grounded summary, credibility, provenance,
-artifact references, and `governance_next_action` visible. The native loop also persists
-explicit selector-driven actions such as `read`, `search`, `modify`, `test`,
-`ask`, and `replan`, and the read-side surfaces now keep the latest selector,
-rationale, evidence basis, and verification intent visible. When declared
-assistant availability or runtime capability policy makes the next bounded
-native step non-credible, Synod now records one explicit delegation boundary
-and keeps the decisive packet visible on `run`, `status`, `next`, and
-`inspect`. The same
-session-native surfaces can also run against `--cluster <primary-workspace>`
-so one authoritative session can plan and
-deliver a bounded change across registered member repositories while `run`,
-`status`, `next`, and `inspect` keep `route_owner`, material
-`route_config_projection` including `effective_routing`,
-`assistant_bindings`, `runtime_capabilities`, and `slot_effort_policies`,
-`cluster_route_owner`,
-`cluster_authoritative_workspace`, `cluster_execution_condition`,
-participating workspaces, and any blocking member explicit.**
+**Boundline is a local delivery orchestrator for bounded engineering work.** It
+decides what to do next, executes bounded work, validates outcomes, keeps the
+authoritative session state, and exposes the same story through `run`,
+`status`, `next`, and `inspect`. Canon is optional and secondary: it only
+enters when you deliberately want governed stages, approvals, or governed
+artifacts.
 
-## What Synod Does
+## Quick Path Brutale
 
-The main surface is the `synod` CLI:
+Install Boundline through the release-aligned channel that matches your machine,
+then verify the Boundline plus Canon pairing before touching workspace state.
 
-- `doctor` validates that a workspace is ready to run.
-- `init` optionally bootstraps `.synod` workspace files, assistant runtime setup, and active domain-template defaults.
-- `config` shows, sets, and unsets routing defaults, declared runtime capability profiles, slot effort policies, and scoped domain-template settings plus external context bindings.
-- `start`, `capture`, `flow`, `plan`, and `step` drive the session workflow, with `capture` deriving one negotiated delivery packet before planning and `plan` assembling one bounded context pack before persisting a proposed or confirmed `GoalPlan`.
-- `run` executes a bounded delivery task end to end, preferring native session planning when a `GoalPlan` exists.
-- `status`, `next`, and `inspect` explain the current session, latest compatibility trace, authoritative follow-up state, explicit `route_owner`, material `route_config_projection`, effective routing, assistant bindings, runtime capability and effort-policy projection, delegation packet state, context-pack summary and credibility, guided follow-through, the active negotiation summary, and cluster authority when a registered cluster owns the run.
-- `workflow list|run|status|resume|inspect` lets a named workflow reuse the same route, session, and trace surfaces without introducing a second runtime.
+### Install
 
-Use it when you want delivery work to stay bounded and inspectable:
+- macOS via Homebrew formula once the release bundle checksums are published:
 
-- drive work from a captured goal instead of from a pre-authored manifest alone
-- make acceptance boundaries and blocking constraints explicit before planning locks the next bounded change
-- keep planning, execution, and evidence explicit in session state and traces
-- run validation after each bounded action
-- resume from saved session state and traces
-- fall back to declarative execution profiles only when that compatibility path is intentional
+```bash
+brew install https://raw.githubusercontent.com/apply-the/boundline/v0.39.0/distribution/homebrew/Formula/boundline.rb
+```
 
-Local execution is the default. When governance is configured, Synod can also
-route stages through [Canon](https://github.com/apply-the/canon) while keeping
-the same CLI surface.
+- Windows via winget after the release manifest is published:
 
-## Why This Is Better Than Markdown-Only Agent Frameworks
+```powershell
+winget install ApplyThe.Boundline
+```
 
-No-code and Markdown-centric agent frameworks are useful when you want to
-declare behavior without building much runtime. They are usually good at three
-things:
+- Source fallback when you are outside the official bundled channels:
 
-- no-code frameworks: model roles, prompts, routing rules, and handoff shapes
-- Markdown-only agents and skills: package reusable instructions, constraints,
-	and operator guidance
-- workflow files: name repeatable paths and phase order for common tasks
+```bash
+git clone https://github.com/apply-the/boundline.git
+cd boundline
+cargo install --path .
+```
 
-Some orchestration can absolutely be done that way. Markdown agents can route
-between roles, skills can constrain behavior, and workflow files can define a
-repeatable sequence of phases. That is often enough for lightweight automation
-or prompt-driven collaboration.
+### Verify The Install
 
-Where Synod differs is not that orchestration is impossible without it. The
-difference is that Markdown and workflow files alone usually make orchestration
-convention-based rather than runtime-owned. They describe what should happen,
-but they do not by themselves provide an authoritative session model, bounded
-planning and replanning, validation execution, resumable state transitions,
-trace storage, or governed evidence capture.
+```bash
+boundline doctor --install
+```
 
-Synod uses those artifacts as inputs and interfaces rather than as the source
-of orchestration truth:
+You should see the running Boundline version, the documented Canon support target,
+the candidate install channels for the current machine, and one explicit
+pairing state: `ready`, `already_satisfied`, `blocked`, or `repair_needed`.
 
-- Markdown briefs can be captured as human-authored input
-- assistant command packs can wrap the CLI for Copilot, Codex, Claude, and
-	Gemini while following route-slot binding instead of hard-wired providers
-- named workflow definitions can reuse the same bounded session-owned runtime
+### Run The First Bounded Session
 
-Synod excels when delivery work must stay inspectable, resumable, and bounded.
-It owns the executable control plane: it decides what runs next, records what
-happened, mutates the workspace, runs validation, preserves session
-continuity, projects the same state through `run`, `status`, `next`, and
-`inspect`, and can layer governance on top without changing the operator
-surface.
+```bash
+boundline doctor --workspace <workspace>
+boundline start --workspace <workspace>
+boundline capture --workspace <workspace> --goal "Fix the failing add test"
+boundline plan --workspace <workspace>
+boundline plan --workspace <workspace> --confirm
+boundline run --workspace <workspace>
+boundline status --workspace <workspace>
+```
 
-## Canon Compatibility
+`boundline init` remains optional. Use it only when you want scaffolded
+compatibility/bootstrap files, assistant setup, or seeded domain-template
+defaults before the session-native path starts.
 
-Canon is the governed runtime Synod can use for policy gates, artifact
-contracts, approvals, and evidence capture. Synod still owns orchestration;
-Canon owns how governed work is recorded and validated.
+The primary product story stays explicit: `session-native: start a session -> capture a goal -> plan -> confirm -> run -> status -> inspect`.
+Declarative `.boundline/execution.json` execution remains available as an explicit compatibility path when you intentionally need the manifest-backed route.
 
-Canon is not a mandatory dependency for Synod. You can use Synod on its own
-for the default local and session-native workflows; Canon is only needed when
-you explicitly enable governed routes.
+## Read This In Two Layers
 
-When Synod governance is configured to use
-[Canon](https://github.com/apply-the/canon), the current adapter is validated
-against Canon `0.39.0` on the machine-facing `canon governance start|refresh|capabilities`
-`--json` `v1` adapter surface.
+- Quick path: this README plus [docs/getting-started.md](docs/getting-started.md)
+- Advanced architecture: [docs/architecture.md](docs/architecture.md)
+- Assistant-specific command packs: [assistant/README.md](assistant/README.md)
 
-This compatibility note refers to the Canon CLI version only. Earlier or later
-Canon versions may work, but they are not part of the documented compatibility
-surface yet.
+Stop after the quick path if all you need is install, verify, and run.
+Continue into the advanced architecture doc only when you need deeper routing,
+workflow, cluster, compatibility, or governance detail.
 
-Current Canon support in Synod remains intentionally bounded: Canon governs
-stage-level policy, approvals, artifacts, and evidence, while Synod keeps
-orchestration ownership and can reuse governed `bug-fix:investigate` plus later
-verify-stage `security-assessment` on the same operator surface. Synod does not
-yet claim full Canon mode parity with every `0.39.0` governed mode; the current
-integration remains scoped to the subset of Canon modes and governed stages that
-Synod models explicitly.
+## What Boundline Owns
+
+The main surface is the `boundline` CLI:
+
+- `doctor --install` verifies the installed Boundline plus Canon pairing.
+- `doctor --workspace` verifies that a target repository is ready for bounded work.
+- `init` optionally bootstraps `.boundline` files, assistant setup, and domain defaults.
+- `config` shows, sets, and unsets routing defaults, capability policy, effort policy, and domain-template settings.
+- `start`, `capture`, `flow`, `plan`, and `step` drive the session-native workflow.
+- `run` executes the bounded delivery task, preferring native session planning when a `GoalPlan` exists.
+- `status`, `next`, and `inspect` explain the current session, follow-through, route ownership, and bounded evidence.
+- `workflow list|run|status|resume|inspect` adds named entrypoints over the same session-owned runtime instead of creating a second runtime.
+
+## Boundline And Canon
+
+Boundline is the product and orchestration owner. Canon is the governed runtime
+Boundline can reuse for policy gates, approvals, structured artifacts, and evidence
+capture. Boundline still owns the operator journey, session state, bounded
+planning, execution, and validation.
+
+The current Boundline adapter documents Canon `0.39.0` support on the machine-facing
+`canon governance start|refresh|capabilities --json` `v1` adapter surface.
+That version note is about the Canon CLI compatibility target only; it does not
+turn Canon into the orchestrator.
+
+## Distribution Surface
+
+- Homebrew formula source of truth: `distribution/homebrew/Formula/boundline.rb`
+- winget manifest source of truth: `distribution/winget/manifests/a/ApplyThe/Boundline/0.39.0/`
+- Release bundles source of truth: `.github/workflows/release-distribution.yml`
+- Bundle policy source of truth: `distribution/canon-bundle.toml`
+- Source fallback remains supported when the bundled channels are unavailable or still waiting on external channel publication
 
 For contributor setup and validation expectations, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Install
+## Advanced Architecture
 
-Requirements:
+If you want the deeper product model, continue below or jump straight to
+[docs/architecture.md](docs/architecture.md). The rest of this README is the
+longer architecture-oriented explanation, not the first-run guide.
 
-- Rust `1.95.0`
-- `cargo`
-
-Run from source:
-
-```bash
-git clone https://github.com/apply-the/synod.git
-cd synod
-cargo run --bin synod -- --help
-```
-
-Install the CLI locally:
-
-```bash
-cargo install --path .
-synod --help
-```
-
-If you are actively changing the repository, prefer `cargo run --bin synod -- ...`
-from the repo root so the command always uses your current source tree.
-
-## Use Synod
-
-The shortest way to think about Synod is:
-
-1. Point it at a workspace.
-2. Optionally run `synod init` once if you want scaffolded defaults.
-3. Optionally tune routing defaults with `synod config`.
-4. Capture a goal or provide Markdown briefs so Synod can persist one negotiated delivery packet.
-5. Run `synod plan` to persist an evidence-driven bounded `GoalPlan` proposal only after the negotiated packet is credible and one bounded context pack is explicit enough to support planning.
-6. Run `synod plan --confirm` to confirm the current proposal when the CLI reports that execution is waiting on plan confirmation.
-7. Run `synod run` to execute through the native decision loop.
-8. Read `status`, `next`, or `inspect` to continue from the active acceptance boundary, context-credibility state, and follow-up state.
-
-When you want a reusable named entrypoint for the same session-owned route, add
-`.synod/workflows.toml` and use:
-
-```bash
-synod workflow list --workspace <workspace>
-synod workflow run governed-delivery --workspace <workspace> --goal "Fix the failing add test"
-synod workflow status --workspace <workspace>
-synod workflow resume --workspace <workspace>
-synod workflow inspect --workspace <workspace>
-```
-
-The workflow layer is intentionally bounded: workflows compile into Synod's
-existing `capture`, `clarify`, `plan`, `run`, `review`, `govern`, and `inspect`
-phases instead of introducing a generic automation DSL. `workflow list` exposes
-named workflow summaries plus invocation guidance, and `workflow run|resume`
-can now carry bounded `review` and `govern` phases to completion or an explicit
-paused, blocked, or failed state on the same session-owned route.
-
-### 1. Optional bootstrap
-
-```bash
-synod init --workspace <workspace>
-synod doctor --workspace <workspace>
-```
-
-`--template` is optional. If you omit it, Synod starts with `bug-fix`.
-Available starting templates are `bug-fix`, `change`, and `delivery`.
-
-A template only seeds the generated compatibility execution profile. It does not lock the
-workspace, and it does not decide the later `synod flow` choice.
-
-If you want a different starting point later, rerun init with `--force`:
-
-```bash
-synod init --workspace <workspace> --force --template delivery
-```
-
-If you already know the active domain families, standards, or supporting
-inputs for the workspace, seed them during bootstrap:
-
-```bash
-synod init \
-	--workspace <workspace> \
-	--domain systems \
-	--domain react \
-	--domain-standard "react=follow the shared UI system" \
-	--context-binding "react|design-system|mcp:design-system" \
-	--required-context-binding "react|design-reference|design/reference.md"
-```
-
-If you just need another task of the same type, do not rerun init. Start a new
-session, capture the new goal, and run the workflow again.
+### Advanced Configuration And Cluster Examples
 
 Optional routing setup:
 
 ```bash
-synod config set --scope global --slot planning --runtime codex --model gpt-5-codex
-synod config set --workspace <workspace> --scope workspace --reviewer safety --runtime copilot --model gpt-5.4
-synod config set-domain --workspace <workspace> --scope workspace --family react --enable --standards "follow the shared UI system"
-synod config bind-context --workspace <workspace> --scope workspace --family react --kind design-system --reference mcp:design-system --required
-synod config show --workspace <workspace> --scope effective
+boundline config set --scope global --slot planning --runtime codex --model gpt-5-codex
+boundline config set --workspace <workspace> --scope workspace --reviewer safety --runtime copilot --model gpt-5.4
+boundline config set-domain --workspace <workspace> --scope workspace --family react --enable --standards "follow the shared UI system"
+boundline config bind-context --workspace <workspace> --scope workspace --family react --kind design-system --reference mcp:design-system --required
+boundline config show --workspace <workspace> --scope effective
 ```
 
 The effective view now reports the resolved slot route, its authority source,
@@ -270,59 +141,59 @@ execution starts.
 Optional clustered setup across two repositories:
 
 ```bash
-synod cluster init \
+boundline cluster init \
 	--workspace <primary-workspace> \
 	--cluster-id delivery-a \
 	--member <primary-workspace> \
 	--member <secondary-workspace>
 
-synod cluster status --workspace <primary-workspace>
-synod config set --cluster <primary-workspace> --scope cluster --slot planning --runtime codex --model gpt-5-codex
-synod config show --workspace <secondary-workspace> --cluster <primary-workspace> --scope effective
+boundline cluster status --workspace <primary-workspace>
+boundline config set --cluster <primary-workspace> --scope cluster --slot planning --runtime codex --model gpt-5-codex
+boundline config show --workspace <secondary-workspace> --cluster <primary-workspace> --scope effective
 ```
 
 Session-native clustered delivery keeps the primary workspace authoritative:
 
 ```bash
-synod start --cluster <primary-workspace>
-synod capture --cluster <primary-workspace> --goal "Fix the failing add test"
-synod plan --cluster <primary-workspace>
-synod run --cluster <primary-workspace>
-synod status --cluster <primary-workspace>
-synod inspect --cluster <primary-workspace>
+boundline start --cluster <primary-workspace>
+boundline capture --cluster <primary-workspace> --goal "Fix the failing add test"
+boundline plan --cluster <primary-workspace>
+boundline run --cluster <primary-workspace>
+boundline status --cluster <primary-workspace>
+boundline inspect --cluster <primary-workspace>
 ```
 
 ### 2. Run the session workflow
 
 ```bash
-synod doctor --workspace <workspace>
-synod start --workspace <workspace>
-synod capture --workspace <workspace> --goal "Fix the failing add test"
+boundline doctor --workspace <workspace>
+boundline start --workspace <workspace>
+boundline capture --workspace <workspace> --goal "Fix the failing add test"
 # or capture from one or more Markdown brief files inside the workspace:
-synod capture --workspace <workspace> --brief docs/brief.md
+boundline capture --workspace <workspace> --brief docs/brief.md
 # optional explicit flow selection still exists:
-synod flow bug-fix --workspace <workspace>
+boundline flow bug-fix --workspace <workspace>
 # or confirm/override during planning:
-# synod plan --workspace <workspace> --flow bug-fix
-# synod plan --workspace <workspace> --no-flow
-synod plan --workspace <workspace>
-synod plan --workspace <workspace> --confirm
-synod run --workspace <workspace>
-synod status --workspace <workspace>
-synod inspect --workspace <workspace>
+# boundline plan --workspace <workspace> --flow bug-fix
+# boundline plan --workspace <workspace> --no-flow
+boundline plan --workspace <workspace>
+boundline plan --workspace <workspace> --confirm
+boundline run --workspace <workspace>
+boundline status --workspace <workspace>
+boundline inspect --workspace <workspace>
 ```
 
 When the change spans a registered cluster, enter the same session-native flow
 through the primary workspace instead of switching ownership to a member:
 
 ```bash
-synod start --cluster <primary-workspace>
-synod capture --cluster <primary-workspace> --goal "Fix the failing add test"
-synod plan --cluster <primary-workspace>
-synod plan --cluster <primary-workspace> --confirm
-synod run --cluster <primary-workspace>
-synod status --cluster <primary-workspace>
-synod inspect --cluster <primary-workspace>
+boundline start --cluster <primary-workspace>
+boundline capture --cluster <primary-workspace> --goal "Fix the failing add test"
+boundline plan --cluster <primary-workspace>
+boundline plan --cluster <primary-workspace> --confirm
+boundline run --cluster <primary-workspace>
+boundline status --cluster <primary-workspace>
+boundline inspect --cluster <primary-workspace>
 ```
 
 What those commands do, in short:
@@ -333,21 +204,21 @@ What those commands do, in short:
 - `flow` optionally selects `bug-fix`, `change`, or `delivery` ahead of planning.
 - `plan` derives the next bounded `GoalPlan` from captured input plus workspace state only when the negotiated packet is credible, the bounded context is explicit enough, and any active domain template still matches the selected target with required inputs available.
 - `plan --confirm` confirms the current proposal so native execution can continue.
-- `run` executes through the native session route whenever a `GoalPlan` exists; governed `bug-fix:investigate` and later verify-stage Canon `security-assessment` can stay on that same route, while declarative `.synod/execution.json` execution remains the explicit compatibility path.
+- `run` executes through the native session route whenever a `GoalPlan` exists; governed `bug-fix:investigate` and later verify-stage Canon `security-assessment` can stay on that same route, while declarative `.boundline/execution.json` execution remains the explicit compatibility path.
 - `status` reports the current session snapshot with explicit `routing`, `execution_condition`, negotiation summary, next-step guidance, and clustered authority or participation cues when the run spans a registered cluster.
 - `inspect` summarizes the latest trace and evidence with the same route, negotiation, and execution-condition story plus trace-specific cluster detail.
 
 Optional named workflow layer:
 
 ```bash
-synod workflow list --workspace <workspace>
-synod workflow run governed-delivery --workspace <workspace> --goal "Fix the failing add test"
-synod workflow status --workspace <workspace>
-synod workflow resume --workspace <workspace>
-synod workflow inspect --workspace <workspace>
+boundline workflow list --workspace <workspace>
+boundline workflow run governed-delivery --workspace <workspace> --goal "Fix the failing add test"
+boundline workflow status --workspace <workspace>
+boundline workflow resume --workspace <workspace>
+boundline workflow inspect --workspace <workspace>
 ```
 
-`synod workflow run` reuses the same session-native runtime. It persists named
+`boundline workflow run` reuses the same session-native runtime. It persists named
 workflow progress in the active session and reports the same `routing`,
 `execution_condition`, and `next_command` story as the direct session commands.
 Use `workflow list` first when the workspace offers multiple named workflows or
@@ -359,10 +230,10 @@ If you want one command to capture, plan, and run on the primary session-owned
 route, call `run` directly with a workspace and goal:
 
 ```bash
-synod run --workspace <workspace> --goal "Fix the failing add test"
+boundline run --workspace <workspace> --goal "Fix the failing add test"
 ```
 
-This native-first path does not require `.synod/execution.json`. It bootstraps a
+This native-first path does not require `.boundline/execution.json`. It bootstraps a
 safe session, reuses negotiated delivery capture, creates one evidence-driven
 proposal, confirms it for the direct-run bootstrap, and leaves the same
 persisted native follow-up story behind for `status`, `next`, and `inspect`.
@@ -371,7 +242,7 @@ If you intentionally want the execution-profile path instead, opt in
 explicitly:
 
 ```bash
-synod run --workspace <workspace> --compatibility --goal "Fix the failing add test"
+boundline run --workspace <workspace> --compatibility --goal "Fix the failing add test"
 ```
 
 In `0.38.0`, the explicit compatibility path still carries the negotiated delivery
@@ -397,19 +268,19 @@ surfaces the selected `candidate_family` plus credibility and rejection
 reasons, and stops explicitly when the validation evidence is absent or too
 weak to justify another materially different bounded attempt.
 
-After an explicit compatibility run, `synod status --workspace <workspace>` and
-`synod next --workspace <workspace>` remain usable even when no active session
-exists. In that case Synod now reports `continuity_authority:
+After an explicit compatibility run, `boundline status --workspace <workspace>` and
+`boundline next --workspace <workspace>` remain usable even when no active session
+exists. In that case Boundline now reports `continuity_authority:
 compatibility_trace`, an inspect-only compatibility follow-up, and
-`next_command: synod inspect --workspace <workspace>` so the operator can keep
+`next_command: boundline inspect --workspace <workspace>` so the operator can keep
 working from the latest workspace trace without guessing.
 
 ### 4. Inspect what happened
 
-Synod writes:
+Boundline writes:
 
-- session state to `<workspace>/.synod/session.json`
-- traces to `<workspace>/.synod/traces/`
+- session state to `<workspace>/.boundline/session.json`
+- traces to `<workspace>/.boundline/traces/`
 - latest execution evidence to the CLI output of `run`, `status`, `next`, and `inspect`
 
 Depending on the manifest, that output can also include:
@@ -426,22 +297,22 @@ Depending on the manifest, that output can also include:
 
 ## Common Workflow
 
-- run `synod init --workspace <workspace>`
+- run `boundline init --workspace <workspace>`
 - optionally add `--template change` or `--template delivery` when you want a different starting profile than the default `bug-fix`
-- optionally tune defaults with `synod config show|set|unset`
-- run `synod doctor --workspace <workspace>`
-- capture a goal with `synod capture`
-- optionally select `bug-fix`, `change`, or `delivery` with `synod flow`, or let `synod plan` infer the flow from evidence
-- run `synod plan`, confirm the proposal with `synod plan --confirm` when required, then run `synod run` for the native session path
-- use direct `synod run --workspace <workspace> --goal ...` when you want Synod to bootstrap the native session path in one command
+- optionally tune defaults with `boundline config show|set|unset`
+- run `boundline doctor --workspace <workspace>`
+- capture a goal with `boundline capture`
+- optionally select `bug-fix`, `change`, or `delivery` with `boundline flow`, or let `boundline plan` infer the flow from evidence
+- run `boundline plan`, confirm the proposal with `boundline plan --confirm` when required, then run `boundline run` for the native session path
+- use direct `boundline run --workspace <workspace> --goal ...` when you want Boundline to bootstrap the native session path in one command
 - add `--compatibility` to direct `run --goal` only when you intentionally want execution-profile behavior
-- inspect the result with `synod status`, `synod next`, and `synod inspect`
+- inspect the result with `boundline status`, `boundline next`, and `boundline inspect`
 
 ## Documentation
 
 Start here if you want more than the short README flow:
 
-- **[Getting Started](docs/getting-started.md)**: install Synod, prepare a workspace, run the first task, then inspect the result
+- **[Getting Started](docs/getting-started.md)**: install Boundline, prepare a workspace, run the first task, then inspect the result
 - **[Configuration](docs/configuration.md)**: init templates, routing precedence, and review-role routing
 - **[Adaptive Execution](docs/adaptive-execution.md)**: adaptive execution manifest and replanning behavior
 - **[Review Voting](docs/review-voting.md)**: review councils and vote resolution
@@ -450,7 +321,7 @@ Start here if you want more than the short README flow:
 
 ## Separation
 
-- Synod: bounded task orchestration, agent and tool coordination, retries,
+- Boundline: bounded task orchestration, agent and tool coordination, retries,
   replanning, execution loops, and developer-facing traceability.
 - Canon: governed runs, policy and approval gates, artifact contracts, input snapshots, evidence, decision logs, and persistence.
 
@@ -458,7 +329,7 @@ Canon does not orchestrate agents or decide strategy. It enforces how work is re
 
 ## Current Build Priorities
 
-For current Synod feature work, the priority order is:
+For current Boundline feature work, the priority order is:
 
 1. execution
 2. orchestration
@@ -475,36 +346,36 @@ pipelines until they are explicitly reprioritized.
 
 ```mermaid
 flowchart TD
-	U[User / Copilot / Claude / Codex] --> S[Synod<br/>Agents + orchestration]
+	U[User / Copilot / Claude / Codex] --> S[Boundline<br/>Agents + orchestration]
 	S --> C[Canon CLI<br/>Governed runtime]
 	C --> D[.canon/<br/>Runs, artifacts, evidence, decisions]
 ```
 
 ## Long-term Runtime Flow
 
-1. Synod receives a task and selects strategy, agents, and providers.
-2. Synod opens a governed run in Canon with risk, zone, and ownership.
+1. Boundline receives a task and selects strategy, agents, and providers.
+2. Boundline opens a governed run in Canon with risk, zone, and ownership.
 3. Agents read inputs and write contract-shaped outputs into Canon artifacts.
 4. Canon validates, applies gates, and persists evidence and decisions.
-5. Synod continues review, execution, and iteration until completion.
+5. Boundline continues review, execution, and iteration until completion.
 
 ## Design Principle
 
-Canon stays stable as the contract and source of truth. Synod evolves quickly as the intelligence and orchestration layer on top.
+Canon stays stable as the contract and source of truth. Boundline evolves quickly as the intelligence and orchestration layer on top.
 
 ## Implemented Core
 
 The current repository implements the delivery orchestrator core as a Rust library crate plus a local CLI binary.
 
-- `synod::Orchestrator`: runs one bounded task through a sequential execution loop.
-- `synod::StaticPlanner`: provides deterministic initial plans and queued replans for tests.
-- `synod::AgentRegistry` and `synod::ToolRegistry`: register named execution endpoints.
-- `synod::FileTraceStore`: persists execution traces under `<workspace>/.synod/traces/`.
-- `synod::FileSessionStore` and `synod::SessionRuntime`: persist and resume active session state under `<workspace>/.synod/session.json`, with clustered delivery keeping the authoritative session in the primary workspace while member workspaces persist their own terminal traces.
-- `synod::FileConfigStore` and configuration-domain types: persist global and workspace routing defaults with explicit source precedence.
-- `synod::ReviewProfile` and related review-domain types: configure bounded councils, reviewer findings, voting, and optional adjudication from `.synod/execution.json`.
-- `synod::TaskRunRequest` and `synod::TaskRunResponse`: define the run contract used by tests and future delivery flows.
-- `synod` CLI binary: exposes `init`, `config`, `doctor`, `start`, `capture`, `flow`, `plan`, `step`, `run`, `status`, `next`, and `inspect` over the existing core.
+- `boundline::Orchestrator`: runs one bounded task through a sequential execution loop.
+- `boundline::StaticPlanner`: provides deterministic initial plans and queued replans for tests.
+- `boundline::AgentRegistry` and `boundline::ToolRegistry`: register named execution endpoints.
+- `boundline::FileTraceStore`: persists execution traces under `<workspace>/.boundline/traces/`.
+- `boundline::FileSessionStore` and `boundline::SessionRuntime`: persist and resume active session state under `<workspace>/.boundline/session.json`, with clustered delivery keeping the authoritative session in the primary workspace while member workspaces persist their own terminal traces.
+- `boundline::FileConfigStore` and configuration-domain types: persist global and workspace routing defaults with explicit source precedence.
+- `boundline::ReviewProfile` and related review-domain types: configure bounded councils, reviewer findings, voting, and optional adjudication from `.boundline/execution.json`.
+- `boundline::TaskRunRequest` and `boundline::TaskRunResponse`: define the run contract used by tests and future delivery flows.
+- `boundline` CLI binary: exposes `init`, `config`, `doctor`, `start`, `capture`, `flow`, `plan`, `step`, `run`, `status`, `next`, and `inspect` over the existing core.
 
 The current implementation covers:
 
@@ -521,27 +392,27 @@ The current implementation covers:
 
 ## Developer CLI
 
-The local `synod` binary keeps the developer experience local, deterministic,
-and backed by both `<workspace>/.synod/session.json` and
-`<workspace>/.synod/traces/`. `synod init` scaffolds the workspace execution
-profile at `<workspace>/.synod/execution.json` only for the explicit compatibility path, and `synod config` manages
+The local `boundline` binary keeps the developer experience local, deterministic,
+and backed by both `<workspace>/.boundline/session.json` and
+`<workspace>/.boundline/traces/`. `boundline init` scaffolds the workspace execution
+profile at `<workspace>/.boundline/execution.json` only for the explicit compatibility path, and `boundline config` manages
 global and workspace routing defaults.
 
-Direct `synod run --workspace <workspace> --goal ...` now bootstraps the native
+Direct `boundline run --workspace <workspace> --goal ...` now bootstraps the native
 session route by default. Add `--compatibility` only when the manifest-backed
 execution path is the deliberate choice.
 
 The primary init + session flow is:
 
-1. `synod init --workspace <workspace>`
+1. `boundline init --workspace <workspace>`
 2. optional: if you want a non-default starting profile, rerun or start with `--template change|delivery`
-3. optional: `synod config show|set|unset`
-4. `synod start`
-5. `synod capture --goal "..."`
-6. optional: `synod flow bug-fix|change|delivery`
-7. `synod plan`
-8. `synod step` or `synod run`
-9. `synod status`, `synod next`, and `synod inspect --workspace <workspace>`
+3. optional: `boundline config show|set|unset`
+4. `boundline start`
+5. `boundline capture --goal "..."`
+6. optional: `boundline flow bug-fix|change|delivery`
+7. `boundline plan`
+8. `boundline step` or `boundline run`
+9. `boundline status`, `boundline next`, and `boundline inspect --workspace <workspace>`
 
 When a flow is selected, `status` and `next` surface `active_flow`,
 `current_stage`, and `stage_progress`. `run` and `inspect` also render flow and
@@ -621,7 +492,7 @@ surface.
 - Shared installation and workflow guidance lives in `assistant/README.md`.
 - Claude and Codex use slash-style Markdown command files.
 - Copilot uses `.prompt.md` prompt files.
-- All fallback commands are runnable from the repository root with `cargo run --bin synod -- ...`.
+- All fallback commands are runnable from the repository root with `cargo run --bin boundline -- ...`.
 
 For the assistant workflow walkthrough, see
 [`specs/003-assistant-command-packs/quickstart.md`](specs/003-assistant-command-packs/quickstart.md).

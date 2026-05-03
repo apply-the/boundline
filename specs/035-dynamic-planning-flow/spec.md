@@ -9,7 +9,7 @@
 
 ### User Story 1 - Infer A Bounded Plan From Workspace Evidence (Priority: P1)
 
-An operator can capture a bounded goal and have Synod infer a credible flow,
+An operator can capture a bounded goal and have Boundline infer a credible flow,
 target set, and verification approach from the current context pack and observed
 workspace evidence instead of relying on keyword-first flow matching and a mostly
 static analyze-then-implement plan shape.
@@ -27,11 +27,11 @@ from keyword matches alone.
 
 1. **Given** a goal whose wording is ambiguous but whose workspace evidence
   strongly indicates a bug in existing Rust code, **When** the operator runs
-  `plan`, **Then** Synod proposes a bounded bug-fix style plan with evidence-backed
+  `plan`, **Then** Boundline proposes a bounded bug-fix style plan with evidence-backed
   targets and verification steps even when the goal text alone would not have
   produced that flow.
 2. **Given** a goal whose workspace evidence indicates a new capability with no
-  existing failing test, **When** the operator runs `plan`, **Then** Synod
+  existing failing test, **When** the operator runs `plan`, **Then** Boundline
   proposes a bounded change-style plan with explicit implementation and
   verification intent derived from the context pack instead of replaying a fixed
   task sequence.
@@ -44,7 +44,7 @@ An operator can see the inferred flow and proposed bounded plan, then confirm it
 explicitly or rerun planning with bounded adjustments while keeping the operator
 in control of the execution shape.
 
-**Why this priority**: Dynamic planning is only credible if Synod remains
+**Why this priority**: Dynamic planning is only credible if Boundline remains
 inspectable and operator-controlled instead of silently changing the plan shape
 behind the normal session workflow.
 
@@ -55,11 +55,11 @@ and any bounded operator action needed before execution continues.
 **Acceptance Scenarios**:
 
 1. **Given** a newly inferred bounded plan, **When** the operator checks
-  `status` or `next`, **Then** Synod surfaces the proposed flow, why it was
+  `status` or `next`, **Then** Boundline surfaces the proposed flow, why it was
   inferred, which evidence justified it, and whether execution is waiting on
   explicit confirmation.
 2. **Given** a workflow-aware session with a proposed dynamic plan, **When** the
-  operator confirms it, **Then** Synod preserves workflow guidance as a guardrail
+  operator confirms it, **Then** Boundline preserves workflow guidance as a guardrail
   while recording that the plan shape is now session-authoritative and ready for
   execution.
 
@@ -72,22 +72,22 @@ flow choice when execution reveals stronger evidence, while keeping acceptance
 boundary, stop conditions, and reasoning explicit.
 
 **Why this priority**: The roadmap requires dynamic planning rather than a one-time
-proposal. Without bounded replanning, Synod would still be locked into a
+proposal. Without bounded replanning, Boundline would still be locked into a
 mostly stage-static execution model.
 
 **Independent Test**: Run representative bounded tasks where the first inferred
-plan becomes non-credible after analysis or validation and verify that Synod
+plan becomes non-credible after analysis or validation and verify that Boundline
 records a bounded replan revision instead of silently continuing the old plan or
 jumping to an unrelated fallback.
 
 **Acceptance Scenarios**:
 
 1. **Given** a planned bounded change whose first analysis reveals a different
-  target family than originally proposed, **When** Synod replans, **Then** it
+  target family than originally proposed, **When** Boundline replans, **Then** it
   records a new bounded proposal with updated targets or verification strategy
   and keeps the acceptance boundary visible.
 2. **Given** a bounded execution path whose validation evidence invalidates the
-  current flow choice, **When** Synod replans, **Then** it can change the flow
+  current flow choice, **When** Boundline replans, **Then** it can change the flow
   choice or stop explicitly, but it must keep the rationale, revision lineage,
   and operator-facing next action inspectable.
 
@@ -112,7 +112,7 @@ dynamic planning operating model.
 
 1. **Given** the `0.35.0` release artifacts, **When** a maintainer follows the
   documented native path, **Then** the runtime, roadmap, and docs all describe
-  evidence-driven infer -> propose -> confirm planning as the primary Synod
+  evidence-driven infer -> propose -> confirm planning as the primary Boundline
   planning model.
 2. **Given** modified or newly created Rust files for this slice, **When** the
   maintainer runs release validation, **Then** those files remain above 95%
@@ -185,7 +185,7 @@ dynamic planning operating model.
 
 ### Key Entities *(include if feature involves data)*
 
-- **PlanningInference**: the bounded evidence-backed explanation of why Synod
+- **PlanningInference**: the bounded evidence-backed explanation of why Boundline
   inferred one flow, target family, and verification strategy instead of another.
 - **PlanProposal**: the proposed bounded execution shape produced by planning,
   including selected flow, selected targets, verification intent, and the
@@ -203,12 +203,12 @@ dynamic planning operating model.
 
 - **SC-001**: In representative native planning runs, operators can identify
   the inferred flow, selected targets, verification strategy, and confirmation
-  state from standard Synod output in under 2 minutes.
+  state from standard Boundline output in under 2 minutes.
 - **SC-002**: 100% of representative planning and replanning runs end with one
   explicit proposed plan, one explicit confirmed plan, or one explicit stop
   reason instead of silently falling back to keyword-only flow selection.
 - **SC-003**: In representative replanning scenarios, developers can identify
-  why Synod revised the flow or target set and what revision is authoritative
+  why Boundline revised the flow or target set and what revision is authoritative
   from `status`, `next`, or `inspect` without reading raw JSON.
 - **SC-004**: All modified or newly created Rust files in this slice finish the
   release validation suite above 95% line coverage with clean formatting and

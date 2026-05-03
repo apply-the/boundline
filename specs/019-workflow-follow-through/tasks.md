@@ -17,9 +17,9 @@
 
 **Purpose**: Reserve the release boundary and test harness for the workflow follow-through slice
 
-- [x] T001 Bump crate version to `0.19.0` in `/Users/rt/workspace/synod/Cargo.toml` and `/Users/rt/workspace/synod/Cargo.lock`
-- [x] T002 Create workflow follow-through fixture helpers and discovery-oriented workflow samples in `/Users/rt/workspace/synod/tests/support/workspace_fixture.rs`
-- [x] T003 Register workflow follow-through test modules in `/Users/rt/workspace/synod/tests/contract.rs`, `/Users/rt/workspace/synod/tests/integration.rs`, and `/Users/rt/workspace/synod/tests/unit.rs`
+- [x] T001 Bump crate version to `0.19.0` in `/Users/rt/workspace/boundline/Cargo.toml` and `/Users/rt/workspace/boundline/Cargo.lock`
+- [x] T002 Create workflow follow-through fixture helpers and discovery-oriented workflow samples in `/Users/rt/workspace/boundline/tests/support/workspace_fixture.rs`
+- [x] T003 Register workflow follow-through test modules in `/Users/rt/workspace/boundline/tests/contract.rs`, `/Users/rt/workspace/boundline/tests/integration.rs`, and `/Users/rt/workspace/boundline/tests/unit.rs`
 
 ---
 
@@ -29,9 +29,9 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [x] T004 Extend workflow definition, discovery metadata, and progress-state primitives for executable review/govern follow-through in `/Users/rt/workspace/synod/src/domain/workflow.rs` and `/Users/rt/workspace/synod/src/lib.rs`
-- [x] T005 [P] Extend active session, goal-plan projection, and CLI summary inputs for workflow discovery and review/govern follow-through in `/Users/rt/workspace/synod/src/domain/session.rs`, `/Users/rt/workspace/synod/src/domain/goal_plan.rs`, and `/Users/rt/workspace/synod/src/cli/output.rs`
-- [x] T006 [P] Add foundational unit coverage for follow-through validation, discovery metadata, and session-projection invariants in `/Users/rt/workspace/synod/tests/unit/workflow_definition.rs`, `/Users/rt/workspace/synod/tests/unit/workflow_session_projection.rs`, and `/Users/rt/workspace/synod/tests/unit/cli_output.rs`
+- [x] T004 Extend workflow definition, discovery metadata, and progress-state primitives for executable review/govern follow-through in `/Users/rt/workspace/boundline/src/domain/workflow.rs` and `/Users/rt/workspace/boundline/src/lib.rs`
+- [x] T005 [P] Extend active session, goal-plan projection, and CLI summary inputs for workflow discovery and review/govern follow-through in `/Users/rt/workspace/boundline/src/domain/session.rs`, `/Users/rt/workspace/boundline/src/domain/goal_plan.rs`, and `/Users/rt/workspace/boundline/src/cli/output.rs`
+- [x] T006 [P] Add foundational unit coverage for follow-through validation, discovery metadata, and session-projection invariants in `/Users/rt/workspace/boundline/tests/unit/workflow_definition.rs`, `/Users/rt/workspace/boundline/tests/unit/workflow_session_projection.rs`, and `/Users/rt/workspace/boundline/tests/unit/cli_output.rs`
 
 **Checkpoint**: Workflow definitions can describe bounded discovery metadata and session-owned review/govern follow-through before story-specific CLI flow is added.
 
@@ -41,20 +41,20 @@
 
 **Goal**: Let a named workflow execute bounded review and govern phases through the existing session-native runtime instead of stopping at those phases as declaration-only blockers.
 
-**Independent Test**: Define one valid named workflow that includes `review` and `govern`, run it through a representative bounded engineering task, and confirm that Synod either completes those phases or stops in an explicit paused, blocked, or failed state without manual session edits.
+**Independent Test**: Define one valid named workflow that includes `review` and `govern`, run it through a representative bounded engineering task, and confirm that Boundline either completes those phases or stops in an explicit paused, blocked, or failed state without manual session edits.
 
 ### Tests for User Story 1
 
-- [x] T007 [P] [US1] Add contract coverage for the workflow follow-through command surface in `/Users/rt/workspace/synod/tests/contract/workflow_follow_through_command_contract.rs`
-- [x] T008 [P] [US1] Add integration coverage for executing review and govern through a named workflow in `/Users/rt/workspace/synod/tests/integration/workflow_follow_through.rs`
-- [x] T009 [P] [US1] Add integration coverage for blocked or non-success review/govern follow-through in `/Users/rt/workspace/synod/tests/integration/workflow_follow_through_blocked.rs`
+- [x] T007 [P] [US1] Add contract coverage for the workflow follow-through command surface in `/Users/rt/workspace/boundline/tests/contract/workflow_follow_through_command_contract.rs`
+- [x] T008 [P] [US1] Add integration coverage for executing review and govern through a named workflow in `/Users/rt/workspace/boundline/tests/integration/workflow_follow_through.rs`
+- [x] T009 [P] [US1] Add integration coverage for blocked or non-success review/govern follow-through in `/Users/rt/workspace/boundline/tests/integration/workflow_follow_through_blocked.rs`
 
 ### Implementation for User Story 1
 
-- [x] T010 [US1] Implement executable review and govern workflow phases in `/Users/rt/workspace/synod/src/cli/workflow.rs` and `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs`
-- [x] T011 [US1] Align workflow-aware session, status, next, and inspect summaries for review/govern follow-through in `/Users/rt/workspace/synod/src/cli/output.rs`, `/Users/rt/workspace/synod/src/cli/inspect.rs`, and `/Users/rt/workspace/synod/src/cli/session.rs`
-- [x] T012 [US1] Persist explicit paused, blocked, failed, and completed follow-through outcomes in `/Users/rt/workspace/synod/src/domain/session.rs` and `/Users/rt/workspace/synod/src/domain/goal_plan.rs`
-- [x] T013 [US1] Preserve route ownership and inspectable evidence for review/govern workflow outcomes in `/Users/rt/workspace/synod/src/cli/workflow.rs` and `/Users/rt/workspace/synod/src/domain/workflow.rs`
+- [x] T010 [US1] Implement executable review and govern workflow phases in `/Users/rt/workspace/boundline/src/cli/workflow.rs` and `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs`
+- [x] T011 [US1] Align workflow-aware session, status, next, and inspect summaries for review/govern follow-through in `/Users/rt/workspace/boundline/src/cli/output.rs`, `/Users/rt/workspace/boundline/src/cli/inspect.rs`, and `/Users/rt/workspace/boundline/src/cli/session.rs`
+- [x] T012 [US1] Persist explicit paused, blocked, failed, and completed follow-through outcomes in `/Users/rt/workspace/boundline/src/domain/session.rs` and `/Users/rt/workspace/boundline/src/domain/goal_plan.rs`
+- [x] T013 [US1] Preserve route ownership and inspectable evidence for review/govern workflow outcomes in `/Users/rt/workspace/boundline/src/cli/workflow.rs` and `/Users/rt/workspace/boundline/src/domain/workflow.rs`
 
 **Checkpoint**: A named workflow can carry review and govern to an explicit bounded outcome through the primary session-native route.
 
@@ -68,15 +68,15 @@
 
 ### Tests for User Story 2
 
-- [x] T014 [P] [US2] Add contract coverage for the workflow discovery surface in `/Users/rt/workspace/synod/tests/contract/workflow_discovery_contract.rs`
-- [x] T015 [P] [US2] Add integration coverage for listing and invoking named workflows from discovery guidance in `/Users/rt/workspace/synod/tests/integration/workflow_discovery.rs`
-- [x] T016 [P] [US2] Add unit coverage for workflow discovery summaries and invocation guidance in `/Users/rt/workspace/synod/tests/unit/workflow_definition.rs` and `/Users/rt/workspace/synod/tests/unit/cli_output.rs`
+- [x] T014 [P] [US2] Add contract coverage for the workflow discovery surface in `/Users/rt/workspace/boundline/tests/contract/workflow_discovery_contract.rs`
+- [x] T015 [P] [US2] Add integration coverage for listing and invoking named workflows from discovery guidance in `/Users/rt/workspace/boundline/tests/integration/workflow_discovery.rs`
+- [x] T016 [P] [US2] Add unit coverage for workflow discovery summaries and invocation guidance in `/Users/rt/workspace/boundline/tests/unit/workflow_definition.rs` and `/Users/rt/workspace/boundline/tests/unit/cli_output.rs`
 
 ### Implementation for User Story 2
 
-- [x] T017 [US2] Add the workflow discovery command surface and argument parsing in `/Users/rt/workspace/synod/src/cli.rs` and `/Users/rt/workspace/synod/src/cli/workflow.rs`
-- [x] T018 [US2] Implement workflow discovery metadata loading, fallback summaries, and validation in `/Users/rt/workspace/synod/src/domain/workflow.rs` and `/Users/rt/workspace/synod/src/cli/workflow.rs`
-- [x] T019 [US2] Surface assistant-friendly workflow invocation guidance and active-workflow continuation cues in `/Users/rt/workspace/synod/src/cli/output.rs` and `/Users/rt/workspace/synod/src/cli/session.rs`
+- [x] T017 [US2] Add the workflow discovery command surface and argument parsing in `/Users/rt/workspace/boundline/src/cli.rs` and `/Users/rt/workspace/boundline/src/cli/workflow.rs`
+- [x] T018 [US2] Implement workflow discovery metadata loading, fallback summaries, and validation in `/Users/rt/workspace/boundline/src/domain/workflow.rs` and `/Users/rt/workspace/boundline/src/cli/workflow.rs`
+- [x] T019 [US2] Surface assistant-friendly workflow invocation guidance and active-workflow continuation cues in `/Users/rt/workspace/boundline/src/cli/output.rs` and `/Users/rt/workspace/boundline/src/cli/session.rs`
 
 **Checkpoint**: Operators and assistants can discover valid workflows and invoke them through one coherent workflow-aware CLI story.
 
@@ -90,13 +90,13 @@
 
 ### Tests for User Story 3
 
-- [x] T020 [P] [US3] Add contract coverage for workflow registry guidance and supported authored examples in `/Users/rt/workspace/synod/tests/contract/workflow_registry_guidance_contract.rs`
-- [x] T021 [P] [US3] Add integration coverage that direct session-native and explicit compatibility routes remain available with discovery-enabled workflow registries in `/Users/rt/workspace/synod/tests/integration/workflow_follow_through_compat.rs`
+- [x] T020 [P] [US3] Add contract coverage for workflow registry guidance and supported authored examples in `/Users/rt/workspace/boundline/tests/contract/workflow_registry_guidance_contract.rs`
+- [x] T021 [P] [US3] Add integration coverage that direct session-native and explicit compatibility routes remain available with discovery-enabled workflow registries in `/Users/rt/workspace/boundline/tests/integration/workflow_follow_through_compat.rs`
 
 ### Implementation for User Story 3
 
-- [x] T022 [US3] Preserve direct session-native and explicit compatibility behavior when workflow discovery metadata is present in `/Users/rt/workspace/synod/src/cli/run.rs`, `/Users/rt/workspace/synod/src/cli/session.rs`, and `/Users/rt/workspace/synod/src/cli/workflow.rs`
-- [x] T023 [US3] Ship bounded registry authoring examples and workflow command relationship guidance in `/Users/rt/workspace/synod/README.md`, `/Users/rt/workspace/synod/docs/getting-started.md`, `/Users/rt/workspace/synod/docs/configuration.md`, and `/Users/rt/workspace/synod/assistant/README.md`
+- [x] T022 [US3] Preserve direct session-native and explicit compatibility behavior when workflow discovery metadata is present in `/Users/rt/workspace/boundline/src/cli/run.rs`, `/Users/rt/workspace/boundline/src/cli/session.rs`, and `/Users/rt/workspace/boundline/src/cli/workflow.rs`
+- [x] T023 [US3] Ship bounded registry authoring examples and workflow command relationship guidance in `/Users/rt/workspace/boundline/README.md`, `/Users/rt/workspace/boundline/docs/getting-started.md`, `/Users/rt/workspace/boundline/docs/configuration.md`, and `/Users/rt/workspace/boundline/assistant/README.md`
 
 **Checkpoint**: Registry authors have clear supported examples, and the workflow layer remains bounded and session-owned without taking over every execution path.
 
@@ -106,9 +106,9 @@
 
 **Purpose**: Release alignment, contributor context, roadmap, changelog, and final validation closeout
 
-- [x] T024 [P] Refresh generated agent and contributor context for the workflow follow-through surface in `/Users/rt/workspace/synod/AGENTS.md` and `/Users/rt/workspace/synod/CONTRIBUTING.md`
-- [x] T025 Update `/Users/rt/workspace/synod/ROADMAP.md`, `/Users/rt/workspace/synod/CHANGELOG.md`, and any touched workflow-related assistant assets under `/Users/rt/workspace/synod/assistant/` to reflect the `0.19.0` workflow follow-through release
-- [x] T026 Run coverage-aware release validation, refresh `/Users/rt/workspace/synod/lcov.info`, resolve remaining `cargo clippy` issues, run `cargo fmt --all`, and finish with clean validation for touched files under `/Users/rt/workspace/synod/src/` and `/Users/rt/workspace/synod/tests/`
+- [x] T024 [P] Refresh generated agent and contributor context for the workflow follow-through surface in `/Users/rt/workspace/boundline/AGENTS.md` and `/Users/rt/workspace/boundline/CONTRIBUTING.md`
+- [x] T025 Update `/Users/rt/workspace/boundline/ROADMAP.md`, `/Users/rt/workspace/boundline/CHANGELOG.md`, and any touched workflow-related assistant assets under `/Users/rt/workspace/boundline/assistant/` to reflect the `0.19.0` workflow follow-through release
+- [x] T026 Run coverage-aware release validation, refresh `/Users/rt/workspace/boundline/lcov.info`, resolve remaining `cargo clippy` issues, run `cargo fmt --all`, and finish with clean validation for touched files under `/Users/rt/workspace/boundline/src/` and `/Users/rt/workspace/boundline/tests/`
 
 ---
 

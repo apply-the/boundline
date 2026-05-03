@@ -7,10 +7,10 @@
 
 **Decision**: Derive compatibility follow-up continuity from the existing active session record plus the latest workspace trace instead of introducing a new persistence file in the first slice.
 
-**Rationale**: The roadmap explicitly prefers reuse of existing session and trace surfaces before adding a new runtime surface. The current system already persists session-native state in `.synod/session.json` and compatibility traces in `.synod/traces/`.
+**Rationale**: The roadmap explicitly prefers reuse of existing session and trace surfaces before adding a new runtime surface. The current system already persists session-native state in `.boundline/session.json` and compatibility traces in `.boundline/traces/`.
 
 **Alternatives Considered**:
-- Add a new compatibility continuity file under `.synod/`: rejected because it widens the persistence model before proving that existing state is insufficient.
+- Add a new compatibility continuity file under `.boundline/`: rejected because it widens the persistence model before proving that existing state is insufficient.
 - Copy compatibility results into the active native session as if they were native: rejected because it blurs route ownership and risks hiding which path actually ran.
 
 ## R2: Teach `status` and `next` to reason about compatibility follow-up explicitly

@@ -21,7 +21,7 @@ the active domain guidance without taking ownership of template selection.
 
 - Canon may augment the bounded context, but it must not decide the active
   domain template or standards precedence.
-- Synod must not claim to execute every possible MCP or external provider
+- Boundline must not claim to execute every possible MCP or external provider
   protocol in this slice; bindings are bounded references and status surfaces.
 - A required supporting input must trigger an explicit blocked or downgraded
   outcome when it is unavailable rather than silently disappearing.

@@ -32,6 +32,6 @@
 ## Notes
 
 - Validated after drafting with no remaining placeholder text or clarification markers.
-- The spec keeps the product claim narrow: Synod must prove one real governed code-delivery flow before broader product-unification work proceeds.
-- Canon remains downstream and bounded; Synod remains orchestration and execution owner.
+- The spec keeps the product claim narrow: Boundline must prove one real governed code-delivery flow before broader product-unification work proceeds.
+- Canon remains downstream and bounded; Boundline remains orchestration and execution owner.
 - This spec is ready for `/speckit.plan`.

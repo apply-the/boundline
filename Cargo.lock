@@ -65,6 +65,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4512299f36f043ab09a583e57bceb5a5aab7a73db1805848e8fef3c9e8c78b3"
 
 [[package]]
+name = "boundline"
+version = "0.39.0"
+dependencies = [
+ "clap",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "toml",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.20.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -363,19 +376,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
-]
-
-[[package]]
-name = "synod"
-version = "0.38.0"
-dependencies = [
- "clap",
- "serde",
- "serde_json",
- "thiserror",
- "toml",
- "tracing",
- "uuid",
 ]
 
 [[package]]

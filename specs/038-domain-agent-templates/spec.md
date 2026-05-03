@@ -10,27 +10,27 @@
 ### User Story 1 - Apply The Right Domain Expert Per Task (Priority: P1)
 
 An operator can run the primary session-native path on a mixed-stack repository
-and have Synod choose the most relevant domain expert for the current bounded
+and have Boundline choose the most relevant domain expert for the current bounded
 task, so the resulting plan and code guidance reflect the affected language,
 framework, and project standards instead of a generic assistant style.
 
-**Why this priority**: This is the core operating-model change. If Synod still
+**Why this priority**: This is the core operating-model change. If Boundline still
 approaches repository work with one generic expert, the rest of the feature is
 just configuration without delivery value.
 
 **Independent Test**: Use a repository that contains multiple supported stacks,
 run the primary `capture -> plan -> run` flow against different task targets,
-and verify that Synod identifies and surfaces the matching domain expert before
+and verify that Boundline identifies and surfaces the matching domain expert before
 the first modifying step.
 
 **Acceptance Scenarios**:
 
 1. **Given** a repository with a Rust service and a React application,
    **When** the operator runs a bounded task against the Rust service,
-   **Then** Synod applies the Rust-focused domain guidance as the primary
+   **Then** Boundline applies the Rust-focused domain guidance as the primary
    expert for that task and shows that choice on the standard operator path.
 2. **Given** a bounded task that moves from backend files to frontend files,
-   **When** Synod replans or advances to the next bounded step,
+   **When** Boundline replans or advances to the next bounded step,
    **Then** it updates the applied domain guidance to match the new target
    instead of reusing one generic expert across the whole session.
 
@@ -38,7 +38,7 @@ the first modifying step.
 
 ### User Story 2 - Apply Layered Template Inheritance (Priority: P2)
 
-An operator can initialize a workspace from Synod's base domain templates,
+An operator can initialize a workspace from Boundline's base domain templates,
 optionally inherit reusable company-wide standards shared across repositories,
 and then refine those standards with project-specific rules without polluting
 other workspaces through a clear base-template, shared-standard, and
@@ -60,7 +60,7 @@ repository.
 1. **Given** a new workspace that opts into shared company standards,
    **When** the operator selects supported domain families during
    initialization,
-   **Then** Synod prepares project guidance by combining the default domain
+   **Then** Boundline prepares project guidance by combining the default domain
    expertise with the shared standards before applying any workspace-specific
   overrides.
 2. **Given** two workspaces that share the same reusable standards,
@@ -72,8 +72,8 @@ repository.
 
 ### User Story 3 - Keep Domain Coverage Bounded And Inspectable (Priority: P3)
 
-An operator can see which domain experts Synod supports, which ones are active
-for the current project, and when Synod cannot select a credible expert for the
+An operator can see which domain experts Boundline supports, which ones are active
+for the current project, and when Boundline cannot select a credible expert for the
 current bounded task.
 
 **Why this priority**: Broad domain coverage is only credible if operators can
@@ -81,7 +81,7 @@ inspect the support story and if unsupported or ambiguous work stops explicitly
 instead of silently drifting into low-quality output.
 
 **Independent Test**: Inspect a workspace with declared domain support, run one
-task inside the supported catalog and one outside it, and verify that Synod
+task inside the supported catalog and one outside it, and verify that Boundline
 either names the active expert clearly or stops with an explicit bounded gap.
 
 **Acceptance Scenarios**:
@@ -89,43 +89,43 @@ either names the active expert clearly or stops with an explicit bounded gap.
 1. **Given** a workspace with supported language, framework, and project
    standards already selected,
    **When** the operator inspects the active task context,
-   **Then** Synod shows which domain expert families and project rules are
+   **Then** Boundline shows which domain expert families and project rules are
    shaping the current bounded step.
 2. **Given** a task whose target files do not match any supported domain or
    match conflicting domain signals,
-   **When** Synod cannot identify a credible expert,
-   **Then** Synod stops or falls back explicitly with a bounded explanation
+   **When** Boundline cannot identify a credible expert,
+   **Then** Boundline stops or falls back explicitly with a bounded explanation
    instead of silently applying mismatched guidance.
 
 ---
 
 ### User Story 4 - Reuse Governed And External Context Inputs (Priority: P4)
 
-An operator can let Synod enrich the active domain expert with approved
+An operator can let Boundline enrich the active domain expert with approved
 governed artifacts and optional external context inputs, such as design
 references, design-system guidance, or token sources, when those inputs are
 relevant to the bounded task.
 
 **Why this priority**: This is where Canon and external tool ecosystems add
-value, but they must stay subordinate to Synod's bounded execution model.
+value, but they must stay subordinate to Boundline's bounded execution model.
 They should improve domain specificity without becoming the owner of template
 selection or project customization.
 
 **Independent Test**: Run a bounded frontend or mobile task once with approved
 governed standards and relevant external context inputs available, and once
-without them. Synod must surface the extra inputs when present and continue or
+without them. Boundline must surface the extra inputs when present and continue or
 stop explicitly when a required input is unavailable.
 
 **Acceptance Scenarios**:
 
 1. **Given** a workspace with governance enabled and approved standards
   artifacts relevant to a frontend task,
-  **When** Synod plans or runs that bounded task,
+  **When** Boundline plans or runs that bounded task,
   **Then** it reuses those governed artifacts as supporting inputs without
   letting Canon replace the active domain template or workspace rules.
 2. **Given** a workspace with external context inputs bound to a relevant
   domain expert,
-  **When** Synod assembles the bounded task context,
+  **When** Boundline assembles the bounded task context,
   **Then** it surfaces whether those inputs were used, unavailable, stale, or
   skipped instead of silently assuming they were present.
 
@@ -190,7 +190,7 @@ stop explicitly when a required input is unavailable.
 - **FR-006**: System MUST let operators revise workspace-specific standards
   after initialization and apply those revisions to later bounded tasks.
 - **FR-007**: System MUST apply domain guidance through an explicit precedence
-  order: Synod default template, reusable shared standards, and then
+  order: Boundline default template, reusable shared standards, and then
   workspace-specific standards, with the narrower scope winning on conflicts.
 - **FR-008**: System MUST give workspace-specific standards precedence over
   broader defaults while preserving broader guidance for uncovered areas.
@@ -256,7 +256,7 @@ stop explicitly when a required input is unavailable.
 
 ### Key Entities *(include if feature involves data)*
 
-- **Domain Template Family**: Synod's default expert guidance for one supported
+- **Domain Template Family**: Boundline's default expert guidance for one supported
   language or framework family, including the standards and bounded delivery
   expectations associated with that family.
 - **Shared Standards Overlay**: the reusable cross-workspace standards pack
@@ -288,7 +288,7 @@ stop explicitly when a required input is unavailable.
   step.
 - **SC-003**: In representative mixed-stack tasks, operators can identify the
   active language, framework, and project-rule context for the current bounded
-  step in under 2 minutes using standard Synod output.
+  step in under 2 minutes using standard Boundline output.
 - **SC-004**: In representative override-conflict scenarios, 100% of
   project-specific standards take precedence over default domain guidance while
   uncovered areas still retain the matching default guidance.
@@ -305,9 +305,9 @@ stop explicitly when a required input is unavailable.
   compatibility follow-up stays secondary but must reuse the same domain
   guidance summary when it owns the latest authoritative state.
 - Canon remains optional and downstream in this slice; when governance is
-  enabled it contributes approved supporting artifacts, but Synod still owns
+  enabled it contributes approved supporting artifacts, but Boundline still owns
   template selection, precedence, and bounded task routing.
-- Synod-maintained default guidance covers the declared first-party catalog in
+- Boundline-maintained default guidance covers the declared first-party catalog in
   this slice; adding new external or community-maintained template families is
   a future decision, not part of the initial macrofeature.
 - Teams are willing to select active domain experts during setup and to keep

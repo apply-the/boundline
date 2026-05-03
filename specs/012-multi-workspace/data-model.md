@@ -7,7 +7,7 @@
 - Fields:
   - `cluster_id`: Stable human-readable identifier for the cluster.
   - `primary_workspace_ref`: Canonical path to the workspace that owns
-    `.synod/cluster.toml`.
+    `.boundline/cluster.toml`.
   - `members`: Ordered list of `ClusterMemberRegistration` values.
   - `routing`: Optional cluster-scoped routing defaults.
   - `created_at`: Millisecond timestamp for cluster creation.
@@ -100,7 +100,7 @@
 ## Persistence Notes
 
 - `WorkspaceCluster` and `ClusterRoutingConfig` persist together in
-  `.synod/cluster.toml` under the primary workspace.
+  `.boundline/cluster.toml` under the primary workspace.
 - `ClusterSessionProjection` persists inside the primary workspace active
   session record so clustered flows remain discoverable through existing session
   surfaces.

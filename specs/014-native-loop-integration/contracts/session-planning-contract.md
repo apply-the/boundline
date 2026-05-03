@@ -32,7 +32,7 @@ This contract defines what the session CLI must persist and report when native p
 
 1. If the operator supplies an explicit flow during planning, the stored flow is confirmed.
 2. If the operator explicitly disables flow, the stored plan records no active flow constraint.
-3. If Synod infers a flow without explicit confirmation, the plan stores the proposal but execution may not silently treat it as confirmed.
+3. If Boundline infers a flow without explicit confirmation, the plan stores the proposal but execution may not silently treat it as confirmed.
 4. A previously confirmed session flow remains authoritative unless the operator explicitly resets or replaces it.
 
 ## Failure Contract

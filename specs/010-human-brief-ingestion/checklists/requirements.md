@@ -31,6 +31,6 @@
 
 ## Notes
 
-- Validated against the current delivery-first Synod constitution.
+- Validated against the current delivery-first Boundline constitution.
 - Assumes the initial human-facing input slice targets inline text, text files,
   Markdown files, and explicit workspace document references.

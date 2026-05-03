@@ -13,24 +13,24 @@ validation.
 ## Scenario 1: Native execution selects explicit bounded actions
 
 1. Start a fresh session:
-   `cargo run --bin synod -- start`
+   `cargo run --bin boundline -- start`
 2. Capture a bounded goal:
-   `cargo run --bin synod -- capture --goal "fix the failing bounded add behavior"`
+   `cargo run --bin boundline -- capture --goal "fix the failing bounded add behavior"`
 3. Plan the task:
-   `cargo run --bin synod -- plan`
+   `cargo run --bin boundline -- plan`
 4. Run the native path:
-   `cargo run --bin synod -- run`
+   `cargo run --bin boundline -- run`
 5. Verify the output and trace expose a selector-driven sequence such as
    `read` or `search` before `modify`, followed by `test` when verification is due.
 
 ## Scenario 2: Decision-driven state remains visible on read-side surfaces
 
 1. Inspect the active session:
-   `cargo run --bin synod -- status`
+   `cargo run --bin boundline -- status`
 2. Ask for the next recommended action:
-   `cargo run --bin synod -- next`
+   `cargo run --bin boundline -- next`
 3. Inspect the authoritative trace:
-   `cargo run --bin synod -- inspect`
+   `cargo run --bin boundline -- inspect`
 4. Verify these surfaces expose the current selector, its rationale, the
    evidence basis, and any verification or recovery intent.
 
@@ -38,8 +38,8 @@ validation.
 
 1. Run a bounded task where current evidence is insufficient or validation keeps failing.
 2. Continue with:
-   `cargo run --bin synod -- run`
-3. Verify Synod surfaces `ask`, `replan`, retry, or terminal stop explicitly
+   `cargo run --bin boundline -- run`
+3. Verify Boundline surfaces `ask`, `replan`, retry, or terminal stop explicitly
    rather than silently exhausting a static plan.
 4. Verify `status`, `next`, or `inspect` keep the same bounded recovery or stop story visible.
 

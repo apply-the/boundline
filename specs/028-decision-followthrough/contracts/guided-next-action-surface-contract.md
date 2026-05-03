@@ -3,7 +3,7 @@
 ## Purpose
 
 Define how `status`, `next`, and `inspect` must explain the next bounded action
-for `0.28.0` without widening the Synod control plane.
+for `0.28.0` without widening the Boundline control plane.
 
 ## Contract
 
@@ -19,9 +19,9 @@ for `0.28.0` without widening the Synod control plane.
 
 ## Required Visible Outcomes
 
-- Operators can tell what Synod wants to do next.
+- Operators can tell what Boundline wants to do next.
 - Operators can tell why that next step is currently credible.
-- Operators can tell when Synod is intentionally stopping because no further
+- Operators can tell when Boundline is intentionally stopping because no further
   bounded action is credible.
 
 ## Boundary Conditions

@@ -1,15 +1,16 @@
 use std::fs;
 
+use boundline::adapters::trace_store::{FileTraceStore, TraceStore};
+use boundline::domain::limits::TerminalCondition;
+use boundline::domain::task::{TaskStatus, TerminalReason};
+use boundline::domain::trace::{ExecutionTrace, TraceEventType};
 use serde_json::json;
-use synod::adapters::trace_store::{FileTraceStore, TraceStore};
-use synod::domain::limits::TerminalCondition;
-use synod::domain::task::{TaskStatus, TerminalReason};
-use synod::domain::trace::{ExecutionTrace, TraceEventType};
 use uuid::Uuid;
 
 #[test]
 fn persists_trace_metadata_and_event_fields_in_a_contract_shape() {
-    let workspace = std::env::temp_dir().join(format!("synod-trace-contract-{}", Uuid::new_v4()));
+    let workspace =
+        std::env::temp_dir().join(format!("boundline-trace-contract-{}", Uuid::new_v4()));
     fs::create_dir_all(&workspace).unwrap();
 
     let store = FileTraceStore::for_workspace(&workspace);

@@ -1,12 +1,12 @@
 use crate::workspace_fixture::{
     temp_optional_governance_workspace, temp_required_governance_workspace,
 };
-use synod::fixture::load_workspace_execution_profile;
-use synod::{CanonMode, GovernanceRuntimeKind};
+use boundline::fixture::load_workspace_execution_profile;
+use boundline::{CanonMode, GovernanceRuntimeKind};
 
 #[test]
 fn execution_profile_contract_loads_optional_governance_stage_policy() {
-    let workspace = temp_optional_governance_workspace("synod-governance-profile-contract");
+    let workspace = temp_optional_governance_workspace("boundline-governance-profile-contract");
 
     let profile = load_workspace_execution_profile(&workspace).unwrap();
     let governance = profile.governance.expect("governance profile should be present");
@@ -23,7 +23,7 @@ fn execution_profile_contract_loads_optional_governance_stage_policy() {
 
 #[test]
 fn execution_profile_contract_preserves_required_governance_policy() {
-    let workspace = temp_required_governance_workspace("synod-governance-required-contract");
+    let workspace = temp_required_governance_workspace("boundline-governance-required-contract");
 
     let profile = load_workspace_execution_profile(&workspace).unwrap();
     let governance = profile.governance.expect("governance profile should be present");

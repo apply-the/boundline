@@ -19,7 +19,7 @@
 
 ### User Story 1 - Run a Fixture-Backed Validation Slice (Priority: P1)
 
-As a Synod developer, I can run a fixture-backed bounded task from the command line so I can observe the orchestrator drive a real failing test to a passing state without reading test code first.
+As a Boundline developer, I can run a fixture-backed bounded task from the command line so I can observe the orchestrator drive a real failing test to a passing state without reading test code first.
 
 **Why this priority**: The current core works, but its behavior should be visible through a real workspace-backed red-to-green slice instead of a synthetic onboarding path.
 
@@ -27,29 +27,29 @@ As a Synod developer, I can run a fixture-backed bounded task from the command l
 
 **Acceptance Scenarios**:
 
-1. **Given** a developer with a valid workspace fixture and a failing verification command, **When** they start the run, **Then** Synod confirms the red state, executes analyze/code/verify steps, and ends with an explicit success outcome plus trace location.
+1. **Given** a developer with a valid workspace fixture and a failing verification command, **When** they start the run, **Then** Boundline confirms the red state, executes analyze/code/verify steps, and ends with an explicit success outcome plus trace location.
 2. **Given** a fixture-backed run where the patch cannot be applied or verification still fails, **When** execution stops, **Then** the terminal output shows the failing step and final reason clearly enough that the developer can understand why the run ended non-successfully.
 
 ---
 
 ### User Story 2 - Run a Simple Custom Task (Priority: P2)
 
-As a developer evaluating Synod, I can start a simple bounded task from the command line against a local workspace fixture so I can see how the orchestrator behaves on an objective I supply myself.
+As a developer evaluating Boundline, I can start a simple bounded task from the command line against a local workspace fixture so I can see how the orchestrator behaves on an objective I supply myself.
 
 **Why this priority**: After the documented red-to-green slice, developers need one small step toward their own local objective while staying deterministic and easy to understand.
 
-**Independent Test**: Can be fully tested by providing a custom goal through the command interface and confirming that Synod executes the fixture-backed analyze/code/verify slice, reports progress, and persists a trace for later inspection.
+**Independent Test**: Can be fully tested by providing a custom goal through the command interface and confirming that Boundline executes the fixture-backed analyze/code/verify slice, reports progress, and persists a trace for later inspection.
 
 **Acceptance Scenarios**:
 
-1. **Given** a developer-supplied bounded goal and a valid workspace fixture, **When** the run command starts execution, **Then** Synod executes the analyze/code/verify slice, reports the active steps, and ends with a trace location the developer can inspect.
-2. **Given** a custom run that stops in a non-success terminal state, **When** the command exits, **Then** Synod reports the final reason in actionable terms and leaves behind a trace that explains the path to failure.
+1. **Given** a developer-supplied bounded goal and a valid workspace fixture, **When** the run command starts execution, **Then** Boundline executes the analyze/code/verify slice, reports the active steps, and ends with a trace location the developer can inspect.
+2. **Given** a custom run that stops in a non-success terminal state, **When** the command exits, **Then** Boundline reports the final reason in actionable terms and leaves behind a trace that explains the path to failure.
 
 ---
 
 ### User Story 3 - Inspect a Recorded Run (Priority: P3)
 
-As a developer troubleshooting Synod, I can inspect a recorded run through a dedicated trace-view command so I can understand executed steps, recovery events, and final outcome without opening raw trace data manually.
+As a developer troubleshooting Boundline, I can inspect a recorded run through a dedicated trace-view command so I can understand executed steps, recovery events, and final outcome without opening raw trace data manually.
 
 **Why this priority**: The core already records traces, but raw files are a poor developer experience. A readable inspection surface makes the existing observability actually usable.
 
@@ -57,18 +57,18 @@ As a developer troubleshooting Synod, I can inspect a recorded run through a ded
 
 **Acceptance Scenarios**:
 
-1. **Given** a completed run with a persisted trace, **When** the developer invokes the trace inspection command, **Then** Synod presents the executed steps, recovery events, and final status in a readable summary.
+1. **Given** a completed run with a persisted trace, **When** the developer invokes the trace inspection command, **Then** Boundline presents the executed steps, recovery events, and final status in a readable summary.
 2. **Given** a trace from a failed or exhausted run, **When** the developer inspects it, **Then** the output highlights the terminal reason and the last meaningful recovery action before the run stopped.
 
 ### Edge Cases
 
 <!--
   ACTION REQUIRED: Capture execution limits, invalid state transitions, missing context,
-  traceability gaps, and failure-handling boundaries. Synod features are invalid if they
+  traceability gaps, and failure-handling boundaries. Boundline features are invalid if they
   ignore how work stops, fails, or becomes non-credible.
 -->
 
-- What happens when the local workspace is missing a prerequisite such as `.synod/fixture.json`, a writable trace directory, or a runnable verification command?
+- What happens when the local workspace is missing a prerequisite such as `.boundline/fixture.json`, a writable trace directory, or a runnable verification command?
 - How does the system handle a run that ends before success because a patch target is missing, verification still fails, or execution limits are exhausted?
 - What happens when a developer tries to inspect a missing, unreadable, or malformed trace file?
 - How does the output stay understandable when a step emits large or noisy intermediate data that should not flood the terminal?
@@ -100,7 +100,7 @@ As a developer troubleshooting Synod, I can inspect a recorded run through a ded
 
 <!--
   ACTION REQUIRED: Name the deferred or excluded capabilities explicitly.
-  Synod specs should normally exclude councils, provider-routing complexity,
+  Boundline specs should normally exclude councils, provider-routing complexity,
   distributed execution, long-term memory, UI/UX work, and deployment pipelines
   unless the constitution has been amended.
 -->

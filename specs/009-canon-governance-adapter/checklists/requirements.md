@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning  
 **Created**: 2026-04-26  
-**Feature**: [spec.md](/Users/rt/workspace/synod/specs/009-canon-governance-adapter/spec.md)
+**Feature**: [spec.md](/Users/rt/workspace/boundline/specs/009-canon-governance-adapter/spec.md)
 
 ## Content Quality
 
@@ -31,4 +31,4 @@
 
 ## Notes
 
-- Spec validated against the Synod constitution and adjusted to keep Canon integration optional over a local governance runtime so the feature remains independently testable.
+- Spec validated against the Boundline constitution and adjusted to keep Canon integration optional over a local governance runtime so the feature remains independently testable.

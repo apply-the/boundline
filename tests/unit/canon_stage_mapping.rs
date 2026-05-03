@@ -1,4 +1,4 @@
-use synod::{
+use boundline::{
     CanonMode, GovernanceRuntimeKind, StageGovernancePolicy, autopilot_action_text,
     candidate_canon_modes, resolved_canon_mode, supported_canon_modes_for_stage,
 };
@@ -118,10 +118,10 @@ fn canon_stage_mapping_preserves_explicit_mode_and_local_defaults() {
 
 #[test]
 fn canon_stage_mapping_exposes_cli_action_labels() {
-    assert_eq!(autopilot_action_text(synod::AutopilotAction::SelectMode), "select_mode");
+    assert_eq!(autopilot_action_text(boundline::AutopilotAction::SelectMode), "select_mode");
     assert_eq!(
-        autopilot_action_text(synod::AutopilotAction::RetryStageWithNarrowedContext),
+        autopilot_action_text(boundline::AutopilotAction::RetryStageWithNarrowedContext),
         "retry_stage_with_narrowed_context"
     );
-    assert_eq!(autopilot_action_text(synod::AutopilotAction::BlockStage), "block_stage");
+    assert_eq!(autopilot_action_text(boundline::AutopilotAction::BlockStage), "block_stage");
 }

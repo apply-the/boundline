@@ -55,7 +55,7 @@
 
 - Purpose: Defines how flow-aware execution stays bounded without introducing a second limit system.
 - Rules:
-  - A flow-aware task inherits the existing task-level limits already enforced by Synod for total step attempts, retries, and replans.
+  - A flow-aware task inherits the existing task-level limits already enforced by Boundline for total step attempts, retries, and replans.
   - Stage recovery may retry or replan only while the next recovery action would stay within those existing task-level limits.
   - Stage exhaustion occurs when the next retry or replan would exceed the inherited task-level limits, or when the planner reports no credible next step for the current stage.
   - Stage exhaustion terminates the flow in a failed terminal state; it does not skip to a later stage.

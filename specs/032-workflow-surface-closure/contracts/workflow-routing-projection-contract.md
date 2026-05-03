@@ -23,14 +23,14 @@ execution condition, route-config projection, and bounded next-step guidance.
 **Given** the active workflow route resolves to an assistant runtime outside the
 declared capability list  
 **When** the operator starts or resumes the workflow  
-**Then** Synod must stop explicitly with a surfaced assistant-binding failure
+**Then** Boundline must stop explicitly with a surfaced assistant-binding failure
 instead of silently falling back to a different runtime.
 
 ### 3. Workflow discovery still signals the primary product path
 
 **Given** workflow discovery succeeds  
 **When** the operator reads the discovery output  
-**Then** the reported invocation guidance must clearly point back to Synod's
+**Then** the reported invocation guidance must clearly point back to Boundline's
 workflow command family and not to a separate provider-owned surface.
 
 ## Acceptance Notes

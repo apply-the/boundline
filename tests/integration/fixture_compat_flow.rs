@@ -1,12 +1,12 @@
-use crate::workspace_fixture::{run_synod_in, temp_fixture_workspace, terminal_text};
+use crate::workspace_fixture::{run_boundline_in, temp_fixture_workspace, terminal_text};
 
-/// Verify direct `synod run --goal` now prefers the native session path even when
+/// Verify direct `boundline run --goal` now prefers the native session path even when
 /// a compatibility execution profile exists.
 #[test]
 fn direct_run_with_execution_profile_prefers_native_path_by_default() {
     let workspace = temp_fixture_workspace("fixture-compat");
 
-    let output = run_synod_in(
+    let output = run_boundline_in(
         &workspace,
         &["run", "--workspace", ".", "--goal", "Fix the failing add test"],
     );

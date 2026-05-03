@@ -1,9 +1,9 @@
 #![allow(dead_code)]
 
-use serde_json::json;
-use synod::domain::step::{
+use boundline::domain::step::{
     ErrorInfo, Recoverability, StepExecutionResult, StepExecutionResultError,
 };
+use serde_json::json;
 
 fn retryable_failure_result() -> StepExecutionResult {
     StepExecutionResult::failure(

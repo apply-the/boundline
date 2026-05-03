@@ -1,4 +1,4 @@
-use synod::domain::goal_plan::{GoalPlan, GoalPlanFlowMode, InferredFlow, PlannedTask};
+use boundline::domain::goal_plan::{GoalPlan, GoalPlanFlowMode, InferredFlow, PlannedTask};
 
 fn build_plan() -> GoalPlan {
     GoalPlan::new(

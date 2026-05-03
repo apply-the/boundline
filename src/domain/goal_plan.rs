@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
+use crate::domain::cluster::{ClusterDeliveryStory, ClusterSessionProjection};
 use crate::domain::decision::{DecisionType, EvidenceRef};
 use crate::domain::governance::CompactedCanonMemory;
 use crate::domain::session::{
@@ -283,6 +284,10 @@ pub struct GoalPlan {
     pub workflow_progress: Option<WorkflowProgressState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compacted_canon_memory: Option<CompactedCanonMemory>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cluster_session_projection: Option<ClusterSessionProjection>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cluster_delivery_story: Option<ClusterDeliveryStory>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub delegation_packet_history: Vec<DelegationPacket>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -325,6 +330,8 @@ impl GoalPlan {
             flow_skipped: false,
             workflow_progress: None,
             compacted_canon_memory: None,
+            cluster_session_projection: None,
+            cluster_delivery_story: None,
             delegation_packet_history: Vec::new(),
             delegation_continuity: None,
             proposal_revision: default_goal_plan_revision(),
@@ -363,6 +370,16 @@ impl GoalPlan {
             continuity
                 .validate(&self.delegation_packet_history)
                 .map_err(GoalPlanError::InvalidDelegationContinuity)?;
+        }
+        if let Some(projection) = &self.cluster_session_projection {
+            projection
+                .validate()
+                .map_err(|error| GoalPlanError::InvalidClusterProjection(error.to_string()))?;
+        }
+        if let Some(story) = &self.cluster_delivery_story {
+            story
+                .validate()
+                .map_err(|error| GoalPlanError::InvalidClusterDeliveryStory(error.to_string()))?;
         }
         if self.proposal_revision == 0 {
             return Err(GoalPlanError::MissingProposalRevision);
@@ -726,13 +743,23 @@ pub enum GoalPlanError {
     InvalidDelegationPacket(String),
     #[error("invalid delegation continuity: {0}")]
     InvalidDelegationContinuity(String),
+    #[error("invalid cluster projection: {0}")]
+    InvalidClusterProjection(String),
+    #[error("invalid cluster delivery story: {0}")]
+    InvalidClusterDeliveryStory(String),
     #[error("invalid goal plan status transition from {from:?} to {to:?}")]
     InvalidTransition { from: GoalPlanStatus, to: GoalPlanStatus },
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{GoalPlan, PlannedTask};
+    use super::{
+        ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan, PlannedTask,
+    };
+    use crate::domain::governance::{
+        CanonEvidenceInspectSummary, CanonModeSummary, CanonResultActionSummary,
+        CompactedCanonMemory, MemoryCredibilityState,
+    };
     use crate::domain::session::{
         ContinuityAuthority, DelegationContinuityMode, DelegationContinuityState, DelegationPacket,
         DelegationPacketKind, DelegationPacketState, StuckEvidenceMarker, StuckRecoveryAction,
@@ -765,7 +792,7 @@ mod tests {
                 DelegationPacketKind::Escalation => "operator".to_string(),
             },
             continuity_reason: "declared runtime cannot continue the bounded step".to_string(),
-            recommended_next_action: "synod status".to_string(),
+            recommended_next_action: "boundline status".to_string(),
             evidence_refs: vec!["routing:implementation=claude/sonnet-4".to_string()],
             capability_summary: Some(
                 "claude lacks continuation support for implementation".to_string(),
@@ -787,7 +814,7 @@ mod tests {
                 active_packet_id: Some("packet-1".to_string()),
                 mode: DelegationContinuityMode::HandoffRequired,
                 authority_source: ContinuityAuthority::NativeSession,
-                next_command: "synod status".to_string(),
+                next_command: "boundline status".to_string(),
                 headline: "handoff required: implementation route cannot continue".to_string(),
                 evidence_summary: "routing policy requires a handoff".to_string(),
             },
@@ -800,7 +827,7 @@ mod tests {
                 active_packet_id: Some("packet-2".to_string()),
                 mode: DelegationContinuityMode::EscalationRequired,
                 authority_source: ContinuityAuthority::NativeSession,
-                next_command: "synod inspect".to_string(),
+                next_command: "boundline inspect".to_string(),
                 headline: "escalation required: no declared continuation path remains".to_string(),
                 evidence_summary: "all declared routes are blocked by capability policy"
                     .to_string(),
@@ -841,7 +868,7 @@ mod tests {
                 active_packet_id: Some("packet-stuck".to_string()),
                 mode: DelegationContinuityMode::Stuck,
                 authority_source: ContinuityAuthority::NativeSession,
-                next_command: "synod inspect".to_string(),
+                next_command: "boundline inspect".to_string(),
                 headline: "stuck delegated continuity requires recovery".to_string(),
                 evidence_summary: "the same blocked continuity reason repeated three times"
                     .to_string(),
@@ -852,7 +879,7 @@ mod tests {
         plan.resolve_active_delegation(
             "delegated continuity resolved after config update",
             "operator updated the declared runtime policy",
-            "synod run",
+            "boundline run",
         )
         .unwrap();
 
@@ -867,6 +894,101 @@ mod tests {
         let continuity = plan.delegation_continuity().unwrap();
         assert_eq!(continuity.mode, DelegationContinuityMode::Resolved);
         assert!(continuity.active_packet_id.is_none());
-        assert_eq!(continuity.next_command, "synod run");
+        assert_eq!(continuity.next_command, "boundline run");
+    }
+
+    #[test]
+    fn context_and_flow_helpers_surface_negotiation_and_canon_memory_details() {
+        let mut plan = GoalPlan::new(
+            "Tighten bounded context",
+            vec![PlannedTask {
+                task_id: "planned-task-context".to_string(),
+                description: "Confirm the governed packet context".to_string(),
+                target: "src/lib.rs".to_string(),
+                expected_outcome: Some("status reflects bounded context".to_string()),
+                decision_type_hint: None,
+            }],
+        )
+        .unwrap()
+        .with_context_pack(ContextPack {
+            pack_id: "cp-context".to_string(),
+            summary: "bounded context from src/lib.rs".to_string(),
+            credibility: ContextPackCredibility::Credible,
+            inputs: vec![ContextInput {
+                kind: ContextInputKind::WorkspaceFile,
+                reference: "src/lib.rs".to_string(),
+                rationale: "primary workspace slice".to_string(),
+                source: "workspace_scan".to_string(),
+                primary: true,
+            }],
+            selected_targets: vec!["src/lib.rs".to_string()],
+            staleness_reason: None,
+        })
+        .with_negotiation_projection(
+            "deliver the smallest safe fix",
+            "confirmed",
+            "tests stay green",
+        )
+        .with_compacted_canon_memory(CompactedCanonMemory {
+            headline: "Governed packet needs refresh".to_string(),
+            credibility: MemoryCredibilityState::Stale,
+            stage_key: Some("bug-fix:verify".to_string()),
+            run_ref: Some("canon-run-1".to_string()),
+            packet_ref: Some(".canon/runs/canon-run-1".to_string()),
+            reason_code: Some("refresh_required".to_string()),
+            artifact_refs: vec![".canon/runs/canon-run-1/verification.md".to_string()],
+            mode_summary: Some(CanonModeSummary {
+                headline: "Discovery mode packet ready".to_string(),
+                artifact_packet_summary: "packet can be resumed".to_string(),
+                execution_posture: Some("awaiting operator review".to_string()),
+                primary_artifact_title: "verification packet".to_string(),
+                primary_artifact_path: ".canon/runs/canon-run-1/verification.md".to_string(),
+                primary_artifact_action: CanonResultActionSummary {
+                    label: "inspect".to_string(),
+                    target: ".canon/runs/canon-run-1/verification.md".to_string(),
+                },
+                result_excerpt: "governed packet is reusable once refreshed".to_string(),
+                action_chip_labels: vec!["inspect".to_string()],
+            }),
+            possible_actions: Vec::new(),
+            recommended_next_action: None,
+            evidence_summary: Some(CanonEvidenceInspectSummary {
+                execution_posture: Some("paused".to_string()),
+                carried_forward_items: Vec::new(),
+                artifact_provenance_links: vec![
+                    "canon:packet=.canon/runs/canon-run-1".to_string(),
+                    "canon:artifact=.canon/runs/canon-run-1/verification.md".to_string(),
+                ],
+                closure_status: None,
+                closure_findings: Vec::new(),
+            }),
+        });
+
+        assert_eq!(
+            plan.context_summary().as_deref(),
+            Some(
+                "bounded context from src/lib.rs; canon memory: Governed packet needs refresh [stale]"
+            )
+        );
+        assert_eq!(plan.context_credibility().as_deref(), Some("credible"));
+        assert_eq!(plan.context_primary_inputs(), vec!["src/lib.rs".to_string()]);
+        assert!(
+            plan.context_provenance_lines()
+                .iter()
+                .any(|line| line.contains("canon_memory_packet: .canon/runs/canon-run-1"))
+        );
+        assert!(plan
+            .context_provenance_lines()
+            .iter()
+            .any(|line| line.contains("canon_memory_mode: Discovery mode packet ready; packet can be resumed; execution posture: awaiting operator review")));
+        assert_eq!(plan.canon_memory_staleness_reason().as_deref(), Some("refresh_required"));
+        assert_eq!(plan.negotiation_goal_summary.as_deref(), Some("deliver the smallest safe fix"));
+        assert_eq!(plan.negotiation_resolution.as_deref(), Some("confirmed"));
+        assert_eq!(plan.negotiation_acceptance_boundary.as_deref(), Some("tests stay green"));
+
+        plan.mark_flow_skipped();
+        let flow_state = plan.flow_state();
+        assert_eq!(flow_state.mode, super::GoalPlanFlowMode::Skipped);
+        assert!(flow_state.flow_name.is_none());
     }
 }

@@ -19,6 +19,18 @@ mod cli_command_contract;
 #[path = "contract/diagnostics_report_contract.rs"]
 mod diagnostics_report_contract;
 
+#[path = "contract/distribution_cli_contract.rs"]
+mod distribution_cli_contract;
+
+#[path = "contract/distribution_metadata_contract.rs"]
+mod distribution_metadata_contract;
+
+#[path = "contract/distribution_docs_contract.rs"]
+mod distribution_docs_contract;
+
+#[path = "contract/distribution_release_surface_contract.rs"]
+mod distribution_release_surface_contract;
+
 #[path = "contract/trace_summary_contract.rs"]
 mod trace_summary_contract;
 

@@ -17,30 +17,30 @@ Follow-up TODOs:
 - None
 -->
 
-# Synod Spec Kit Constitution
+# Boundline Spec Kit Constitution
 
 ## Core Principles
 
 ### I. Delivery Identity
 
-- Synod MUST be specified and implemented as a delivery orchestrator.
+- Boundline MUST be specified and implemented as a delivery orchestrator.
 - Features MUST directly improve multi-step engineering execution, task coordination,
 	state handling, or working-code production.
-- Features MUST NOT redefine Synod as a generic agent platform, chat framework, or
+- Features MUST NOT redefine Boundline as a generic agent platform, chat framework, or
 	prompt experimentation surface.
 
-Rationale: a tight identity prevents drift into work that makes Synod broader but less
+Rationale: a tight identity prevents drift into work that makes Boundline broader but less
 useful for delivery.
 
 ### II. Delivery-First Scope
 
-- Every feature MUST answer this question clearly: does it help Synod deliver working
+- Every feature MUST answer this question clearly: does it help Boundline deliver working
 	code or complete engineering tasks more reliably?
 - If delivery value is unclear, indirect, or speculative, the feature MUST be rejected.
 - Priority order for all planning and review MUST remain: execution, orchestration,
 	decomposition, validation, optimization, polish.
 
-Rationale: Synod only earns complexity when that complexity improves delivery outcomes.
+Rationale: Boundline only earns complexity when that complexity improves delivery outcomes.
 
 ### III. No Abstract Agent Systems
 
@@ -65,7 +65,7 @@ Rationale: bounded execution is required for safety, credibility, and debugging.
 
 ### V. Stateful Execution
 
-- Synod features MUST read from shared task context and MUST write meaningful updates
+- Boundline features MUST read from shared task context and MUST write meaningful updates
 	back to that context.
 - Stateless execution patterns MUST be treated as invalid unless the spec explicitly
 	justifies why state is unnecessary.
@@ -81,7 +81,7 @@ Rationale: delivery work is iterative, and iteration without state is not reliab
 - Plan changes MUST remain understandable and traceable to explicit evidence.
 - Opaque self-modifying behavior that cannot be explained in traces MUST be rejected.
 
-Rationale: Synod must adapt without becoming inscrutable.
+Rationale: Boundline must adapt without becoming inscrutable.
 
 ### VII. Execution Over Perfect Planning
 
@@ -108,7 +108,7 @@ Rationale: sequential behavior is the easiest execution model to inspect and tru
 - Features MUST NOT privilege reasoning paths over action paths or vice versa.
 - Execution models MUST make "think", "act", and "evaluate" transitions visible.
 
-Rationale: Synod delivers by combining reasoning and action, not by hiding one behind
+Rationale: Boundline delivers by combining reasoning and action, not by hiding one behind
 the other.
 
 ### X. Required Observability
@@ -128,7 +128,7 @@ Rationale: inspectability is a requirement, not a later enhancement.
 	be introduced without surfaced evidence and rationale.
 - Specs MUST describe how important decisions become visible to developers.
 
-Rationale: trust in Synod depends on visible control flow rather than implied magic.
+Rationale: trust in Boundline depends on visible control flow rather than implied magic.
 
 ### XII. Strict Non-Goals
 
@@ -177,11 +177,11 @@ Rationale: delivery systems are only credible when they handle failure explicitl
 
 - Specs MUST NOT depend on Canon behavior, external persistence models, or governance
 	runtimes in order to function.
-- Synod features MUST remain independently testable and executable.
-- External systems MAY receive outputs later, but they MUST NOT define Synod's core
+- Boundline features MUST remain independently testable and executable.
+- External systems MAY receive outputs later, but they MUST NOT define Boundline's core
 	control flow for the feature under review.
 
-Rationale: Synod must remain a usable delivery engine even when adjacent systems evolve.
+Rationale: Boundline must remain a usable delivery engine even when adjacent systems evolve.
 
 ### XVII. Evolution Without Premature Lock-In
 
@@ -191,7 +191,7 @@ Rationale: Synod must remain a usable delivery engine even when adjacent systems
 	architecture.
 - Designs that lock future architecture too early MUST be rejected.
 
-Rationale: Synod needs growth paths without paying for future complexity before it is
+Rationale: Boundline needs growth paths without paying for future complexity before it is
 needed.
 
 ### XVIII. Done Means Executable Delivery
@@ -222,7 +222,7 @@ Rationale: completion is defined by delivery behavior, not by conceptual ambitio
 - Every plan MUST perform a Constitution Check against these principles and record pass
 	or fail decisions with justification.
 - Every task breakdown MUST include work for validation, failure handling, and
-	observability whenever those concerns appear in the spec; for Synod delivery features,
+	observability whenever those concerns appear in the spec; for Boundline delivery features,
 	reviewers SHOULD expect those concerns by default.
 - Reviews MUST reject features that invert the delivery-first priority order or that
 	reintroduce deferred non-goals without an approved amendment.
@@ -236,7 +236,7 @@ Rationale: completion is defined by delivery behavior, not by conceptual ambitio
 	level preferences.
 - Amendments MUST include a written summary of the change, impacted principles or
 	sections, a Sync Impact Report, and updates to affected templates or guidance files.
-- Amendments MUST be approved by Synod maintainers before they are treated as active
+- Amendments MUST be approved by Boundline maintainers before they are treated as active
 	governance.
 - Versioning policy MUST use semantic versioning: MAJOR for removed or redefined
 	principles, MINOR for new principles or materially expanded guidance, and PATCH for

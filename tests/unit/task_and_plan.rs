@@ -1,15 +1,15 @@
+use boundline::domain::limits::{RunLimits, TerminalCondition};
+use boundline::domain::plan::{Plan, PlanError, PlanStatus};
+use boundline::domain::step::{Recoverability, Step, StepError};
+use boundline::domain::task::{Task, TaskRequestError, TaskRunRequest, TaskStatus, TerminalReason};
 use serde_json::{Map, json};
-use synod::domain::limits::{RunLimits, TerminalCondition};
-use synod::domain::plan::{Plan, PlanError, PlanStatus};
-use synod::domain::step::{Recoverability, Step, StepError};
-use synod::domain::task::{Task, TaskRequestError, TaskRunRequest, TaskStatus, TerminalReason};
 
 fn build_request() -> TaskRunRequest {
     TaskRunRequest {
         goal: "Ship a bounded change".to_string(),
         input: json!({"ticket": "BUG-9"}),
         session_id: "session-task".to_string(),
-        workspace_ref: "/tmp/synod-task".to_string(),
+        workspace_ref: "/tmp/boundline-task".to_string(),
         limits: RunLimits::default(),
         initial_context: None,
     }

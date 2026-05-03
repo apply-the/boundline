@@ -158,7 +158,7 @@ pub fn execute_custom_run(
             "run",
             loaded_trace.as_ref(),
             &response,
-            "/synod-inspect",
+            "/boundline-inspect",
         ));
         return Ok(RunCommandReport {
             exit_status: CommandExitStatus::NonSuccess,

@@ -67,6 +67,12 @@ mod canon_stage_mapping;
 #[path = "unit/coverage_additional.rs"]
 mod coverage_additional;
 
+#[path = "unit/distribution_diagnostics.rs"]
+mod distribution_diagnostics;
+
+#[path = "unit/distribution_metadata.rs"]
+mod distribution_metadata;
+
 #[path = "unit/human_input_ingestion.rs"]
 mod human_input_ingestion;
 

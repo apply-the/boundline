@@ -1,10 +1,10 @@
 use std::str::FromStr;
 
-use synod::domain::decision::{
+use boundline::domain::decision::{
     ActionSelector, Decision, DecisionError, DecisionStatus, DecisionType, EvidenceKind,
     EvidenceRef,
 };
-use synod::domain::tool_result::ToolResult;
+use boundline::domain::tool_result::ToolResult;
 
 #[test]
 fn new_decision_has_pending_status_and_generated_id() {

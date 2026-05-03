@@ -5,13 +5,13 @@
 
 ## Summary
 
-Add deterministic delivery flows on top of the existing session model so a workspace session can bind one built-in flow, expose the current stage, advance through a fixed stage order, and keep retries or replans bounded within the active stage. The implementation stays inside the current Rust CLI crate, reuses the persisted session record and trace store under `<workspace>/.synod/`, extends status and next-command guidance with flow awareness, and preserves non-flow session usage. Flow-aware planning will map `session.active_flow.flow_name` to built-in fixture-backed step generators in `src/fixture.rs` that emit flat, stage-tagged plans for the existing sequential orchestrator.
+Add deterministic delivery flows on top of the existing session model so a workspace session can bind one built-in flow, expose the current stage, advance through a fixed stage order, and keep retries or replans bounded within the active stage. The implementation stays inside the current Rust CLI crate, reuses the persisted session record and trace store under `<workspace>/.boundline/`, extends status and next-command guidance with flow awareness, and preserves non-flow session usage. Flow-aware planning will map `session.active_flow.flow_name` to built-in fixture-backed step generators in `src/fixture.rs` that emit flat, stage-tagged plans for the existing sequential orchestrator.
 
 ## Technical Context
 
 **Language/Version**: Rust 1.95.0, edition 2024 for the existing CLI and orchestrator backend  
 **Primary Dependencies**: Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`); no new runtime dependencies for this slice  
-**Storage**: Workspace-local JSON session record at `<workspace>/.synod/session.json` plus persisted execution traces under `<workspace>/.synod/traces/`  
+**Storage**: Workspace-local JSON session record at `<workspace>/.boundline/session.json` plus persisted execution traces under `<workspace>/.boundline/traces/`  
 **Testing**: `cargo test` with new unit, integration, and contract coverage for flow definitions, session serialization, CLI flow selection, stage-aware status and next guidance, and bounded recovery inside a stage  
 **Target Platform**: macOS and Linux developer workstations plus Linux CI for formatting, linting, and test validation  
 **Project Type**: Single Rust package with a local CLI, orchestrator engine, file-backed state, and repository-managed assistant command assets  

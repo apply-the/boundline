@@ -2,27 +2,27 @@
 
 ## Purpose
 
-Defines the repository layout and required coverage for the assistant-native command packs shipped with Synod.
+Defines the repository layout and required coverage for the assistant-native command packs shipped with Boundline.
 
 ## Supported Packs
 
 | Assistant | Root | Asset Surface | File Pattern |
 |-----------|------|---------------|--------------|
-| Claude | `assistant/claude/commands/` | Slash-style command files | `synod-<command>.md` |
-| Codex | `assistant/codex/commands/` | Slash-style command files | `synod-<command>.md` |
-| Copilot | `assistant/copilot/prompts/` | Prompt files | `synod-<command>.prompt.md` |
+| Claude | `assistant/claude/commands/` | Slash-style command files | `boundline-<command>.md` |
+| Codex | `assistant/codex/commands/` | Slash-style command files | `boundline-<command>.md` |
+| Copilot | `assistant/copilot/prompts/` | Prompt files | `boundline-<command>.prompt.md` |
 
 ## Required Command Coverage
 
 Every assistant pack MUST include exactly one file for each of the following commands:
 
-- `synod-start`
-- `synod-plan`
-- `synod-step`
-- `synod-run`
-- `synod-status`
-- `synod-next`
-- `synod-inspect`
+- `boundline-start`
+- `boundline-plan`
+- `boundline-step`
+- `boundline-run`
+- `boundline-status`
+- `boundline-next`
+- `boundline-inspect`
 
 ## Documentation Requirements
 

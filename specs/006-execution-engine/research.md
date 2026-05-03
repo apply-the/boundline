@@ -2,10 +2,10 @@
 
 ## Decision 1: Introduce a workspace execution profile with legacy fixture fallback
 
-- Decision: Load execution configuration from `.synod/execution.json` and fall back to the existing `.synod/fixture.json` manifest by converting the legacy shape into the new execution-profile model.
+- Decision: Load execution configuration from `.boundline/execution.json` and fall back to the existing `.boundline/fixture.json` manifest by converting the legacy shape into the new execution-profile model.
 - Rationale: Spec 006 needs a more honest execution surface than a hard-coded red-to-green fixture, but the repository already has working fixture tests and session flows. A new execution profile provides a forward-looking contract without breaking existing workspaces or tests on day one.
 - Alternatives considered:
-  - Keep only `.synod/fixture.json`: rejected because it preserves the old feature framing and makes it harder to express richer delivery evidence and multiple change attempts.
+  - Keep only `.boundline/fixture.json`: rejected because it preserves the old feature framing and makes it harder to express richer delivery evidence and multiple change attempts.
   - Replace the fixture manifest with a breaking format change: rejected because it would add migration risk while the feature is still establishing the new execution model.
 
 ## Decision 2: Reuse the existing orchestrator loop and registry interfaces

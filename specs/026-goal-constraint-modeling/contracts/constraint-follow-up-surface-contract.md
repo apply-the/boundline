@@ -12,7 +12,7 @@ story after capture.
 
 - `plan`, `run`, `status`, `next`, and `inspect` must identify the active
   acceptance boundary or summarize it clearly when that boundary materially
-  shapes what Synod can do next.
+  shapes what Boundline can do next.
 - Follow-up output must expose which constraint or tradeoff is currently binding
   when the session is blocked, failed, exhausted, or inspect-only.
 - When a tradeoff was chosen, the surface must summarize why that choice won

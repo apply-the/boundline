@@ -10,7 +10,7 @@
 ## Delivery Status (v0.10.0)
 
 The v0.10.0 release now reflects the full delivered scope of this feature.
-Synod accepts direct text, repeated Markdown briefs, referenced workspace
+Boundline accepts direct text, repeated Markdown briefs, referenced workspace
 Markdown, clarification-aware task drafting, and business-level governance
 intent across `capture`, direct-input `run`, `status`, and `inspect`.
 All tasks below are complete and describe the delivered implementation.
@@ -38,7 +38,7 @@ All tasks below are complete and describe the delivered implementation.
 - [X] T007 [P] Extend session, trace, status, and inspect projection primitives for input provenance and clarification state in src/domain/trace.rs, src/domain/session.rs, src/cli/output.rs, and src/cli/inspect.rs
 - [X] T008 Implement direct-run and assistant handoff for normalized human input in src/cli/run.rs, src/orchestrator/engine.rs, and src/orchestrator/session_runtime.rs
 
-**Checkpoint**: Foundation ready - Synod can parse human-facing input, normalize it deterministically, persist it with the active session, and expose enough state for later story-specific behavior.
+**Checkpoint**: Foundation ready - Boundline can parse human-facing input, normalize it deterministically, persist it with the active session, and expose enough state for later story-specific behavior.
 
 ---
 
@@ -46,7 +46,7 @@ All tasks below are complete and describe the delivered implementation.
 
 **Goal**: Let a developer start a bounded task from plain text or one authored Markdown brief without authoring an internal manifest.
 
-**Independent Test**: Start a new task from either plain text or one Markdown brief, then verify that Synod captures the request, derives a bounded task draft, and either plans the work or stops with one explicit clarification without asking for internal files.
+**Independent Test**: Start a new task from either plain text or one Markdown brief, then verify that Boundline captures the request, derives a bounded task draft, and either plans the work or stops with one explicit clarification without asking for internal files.
 
 ### Tests for User Story 1
 
@@ -60,7 +60,7 @@ All tasks below are complete and describe the delivered implementation.
 - [X] T013 [US1] Connect planning-ready versus clarification-blocked task draft derivation for session commands and direct `run` in src/cli/session.rs, src/cli/run.rs, src/fixture.rs, and src/orchestrator/engine.rs
 - [X] T014 [US1] Surface captured brief summaries and clarification headlines in src/domain/trace.rs, src/cli/output.rs, src/cli/inspect.rs, and src/cli/session.rs
 
-**Checkpoint**: User Story 1 is complete when Synod can start from direct text or one Markdown brief, persist the accepted brief, and stop credibly when clarification is required.
+**Checkpoint**: User Story 1 is complete when Boundline can start from direct text or one Markdown brief, persist the accepted brief, and stop credibly when clarification is required.
 
 ---
 
@@ -68,7 +68,7 @@ All tasks below are complete and describe the delivered implementation.
 
 **Goal**: Let a developer combine multiple Markdown briefs and text-referenced workspace documents into one bounded, inspectable authored bundle.
 
-**Independent Test**: Start a task from multiple Markdown files and a text note that references existing repository documents, then verify that Synod resolves the inputs into one bounded bundle with visible provenance and stops explicitly on missing or conflicting sources.
+**Independent Test**: Start a task from multiple Markdown files and a text note that references existing repository documents, then verify that Boundline resolves the inputs into one bounded bundle with visible provenance and stops explicitly on missing or conflicting sources.
 
 ### Tests for User Story 2
 
@@ -82,7 +82,7 @@ All tasks below are complete and describe the delivered implementation.
 - [X] T019 [US2] Persist accepted source provenance, conflict metadata, and resumed-session continuity in src/domain/session.rs, src/adapters/session_store.rs, and src/domain/task.rs
 - [X] T020 [US2] Extend `status`, `inspect`, and trace rendering for ordered source sets, deduplication outcomes, and source-specific failure reasons in src/domain/trace.rs, src/cli/output.rs, and src/cli/inspect.rs
 
-**Checkpoint**: User Stories 1 and 2 are complete when Synod can reuse multiple authored sources, preserve precedence visibly, and refuse silent merges or omissions.
+**Checkpoint**: User Stories 1 and 2 are complete when Boundline can reuse multiple authored sources, preserve precedence visibly, and refuse silent merges or omissions.
 
 ---
 
@@ -90,7 +90,7 @@ All tasks below are complete and describe the delivered implementation.
 
 **Goal**: Let a developer declare governance intent in business terms alongside the authored brief and carry that intent through the existing governed execution path.
 
-**Independent Test**: Start a governed task from human-authored input plus business-level governance values, then verify that Synod maps them into internal governance behavior and reports blocked or approval-gated states without asking for internal configuration.
+**Independent Test**: Start a governed task from human-authored input plus business-level governance values, then verify that Boundline maps them into internal governance behavior and reports blocked or approval-gated states without asking for internal configuration.
 
 ### Tests for User Story 3
 

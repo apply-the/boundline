@@ -1,5 +1,5 @@
-use synod::domain::decision::{DecisionType, EvidenceRef};
-use synod::domain::goal_plan::{
+use boundline::domain::decision::{DecisionType, EvidenceRef};
+use boundline::domain::goal_plan::{
     ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan, GoalPlanError,
     GoalPlanFlowMode, GoalPlanFlowState, GoalPlanStatus, InferredFlow, PlannedTask,
     WorkspaceSignals,
@@ -260,7 +260,7 @@ fn goal_plan_validation_rejects_stale_context_without_reason() {
             credibility: ContextPackCredibility::Stale,
             inputs: vec![ContextInput {
                 kind: ContextInputKind::RecentTrace,
-                reference: ".synod/traces/old.json".to_string(),
+                reference: ".boundline/traces/old.json".to_string(),
                 rationale: "was the last authoritative trace".to_string(),
                 source: "latest_trace".to_string(),
                 primary: false,

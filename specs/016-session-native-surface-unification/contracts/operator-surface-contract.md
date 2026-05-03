@@ -66,7 +66,7 @@ routing: native (goal-plan) - session-native plan is ready
 execution_condition: running - executing the next bounded decision
 latest_decision_status: dispatched
 latest_decision_target: src/lib.rs
-next_command: synod inspect --workspace .
+next_command: boundline inspect --workspace .
 ```
 
 ### Governed waiting example
@@ -74,8 +74,8 @@ next_command: synod inspect --workspace .
 ```text
 routing: native (goal-plan) - session-native plan is ready
 execution_condition: waiting - governance approval is required before the next bounded action
-governance_next_action: synod run --workspace . --approve-governance
-next_command: synod run --workspace . --approve-governance
+governance_next_action: boundline run --workspace . --approve-governance
+next_command: boundline run --workspace . --approve-governance
 ```
 
 ### Compatibility example
@@ -83,5 +83,5 @@ next_command: synod run --workspace . --approve-governance
 ```text
 routing: compatibility (execution-profile) - explicit compatibility path selected
 execution_condition: terminal - compatibility run completed with explicit manifest-backed routing
-next_command: synod inspect --workspace .
+next_command: boundline inspect --workspace .
 ```

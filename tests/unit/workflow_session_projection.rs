@@ -1,9 +1,9 @@
-use synod::domain::goal_plan::{GoalPlan, PlannedTask};
-use synod::domain::session::{
+use boundline::domain::goal_plan::{GoalPlan, PlannedTask};
+use boundline::domain::session::{
     ActiveSessionRecord, SessionStatus, SessionStatusView, SessionValidationError,
     execution_path_text,
 };
-use synod::domain::workflow::{WorkflowLifecycleState, WorkflowPhase, WorkflowProgressState};
+use boundline::domain::workflow::{WorkflowLifecycleState, WorkflowPhase, WorkflowProgressState};
 
 fn build_goal_plan() -> GoalPlan {
     GoalPlan::new(
@@ -23,7 +23,7 @@ fn build_goal_plan() -> GoalPlan {
         current_phase: Some(WorkflowPhase::Plan),
         completed_phases: vec![WorkflowPhase::Capture],
         blocked_reason: None,
-        next_action: Some("synod workflow resume default".to_string()),
+        next_action: Some("boundline workflow resume default".to_string()),
         routing_summary: Some("native session plan is active".to_string()),
     })
 }
@@ -34,7 +34,7 @@ fn build_record() -> ActiveSessionRecord {
 
     ActiveSessionRecord {
         session_id: "session-workflow-projection".to_string(),
-        workspace_ref: "/tmp/synod-workflow-projection".to_string(),
+        workspace_ref: "/tmp/boundline-workflow-projection".to_string(),
         goal: Some("Deliver a named workflow".to_string()),
         authored_brief: None,
         negotiation_packet: None,
@@ -118,7 +118,7 @@ fn build_view(record: &ActiveSessionRecord) -> SessionStatusView {
         latest_governance_decision: None,
         latest_governance_candidates: None,
         governance_next_action: None,
-        next_command: Some("synod workflow resume default".to_string()),
+        next_command: Some("boundline workflow resume default".to_string()),
         explanation: "workflow projection is consistent".to_string(),
         ..Default::default()
     }
@@ -130,7 +130,10 @@ fn goal_plan_surfaces_workflow_identity_phase_and_next_action() {
 
     assert_eq!(goal_plan.workflow_name().as_deref(), Some("default"));
     assert_eq!(goal_plan.workflow_phase_text().as_deref(), Some("plan"));
-    assert_eq!(goal_plan.workflow_next_action().as_deref(), Some("synod workflow resume default"));
+    assert_eq!(
+        goal_plan.workflow_next_action().as_deref(),
+        Some("boundline workflow resume default")
+    );
 }
 
 #[test]
@@ -158,7 +161,7 @@ fn session_status_view_rejects_workflow_phase_mismatch() {
 fn session_status_view_accepts_session_owned_workflow_progress_without_goal_plan() {
     let record = ActiveSessionRecord {
         session_id: "session-workflow-session-owned".to_string(),
-        workspace_ref: "/tmp/synod-workflow-session-owned".to_string(),
+        workspace_ref: "/tmp/boundline-workflow-session-owned".to_string(),
         goal: None,
         authored_brief: None,
         negotiation_packet: None,
@@ -174,7 +177,7 @@ fn session_status_view_accepts_session_owned_workflow_progress_without_goal_plan
                 "workflow is waiting for a captured goal before it can continue".to_string(),
             ),
             next_action: Some(
-                "synod capture --workspace /tmp/synod-workflow-session-owned --goal <goal>"
+                "boundline capture --workspace /tmp/boundline-workflow-session-owned --goal <goal>"
                     .to_string(),
             ),
             routing_summary: Some("routing: blocked (session_state) - session has no goal plan or compatibility task to route".to_string()),
@@ -192,10 +195,7 @@ fn session_status_view_accepts_session_owned_workflow_progress_without_goal_plan
     view.validate(&record).unwrap();
     assert_eq!(view.active_workflow.as_deref(), Some("default"));
     assert_eq!(view.workflow_phase.as_deref(), Some("capture"));
-    assert!(
-        view.workflow_next_action
-            .as_deref()
-            .unwrap()
-            .contains("synod capture --workspace /tmp/synod-workflow-session-owned --goal <goal>")
-    );
+    assert!(view.workflow_next_action.as_deref().unwrap().contains(
+        "boundline capture --workspace /tmp/boundline-workflow-session-owned --goal <goal>"
+    ));
 }

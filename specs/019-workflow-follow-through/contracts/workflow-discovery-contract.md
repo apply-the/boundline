@@ -34,13 +34,13 @@ The discovery surface MUST remain read-only and MUST NOT activate a workflow or 
 workflow: governed-delivery
 summary: use when the task requires review and governance before completion
 phases: capture -> plan -> run -> review -> govern -> inspect
-invoke_with: synod workflow run governed-delivery --workspace .
+invoke_with: boundline workflow run governed-delivery --workspace .
 ```
 
 ### Workspace with invalid workflow definitions
 
 ```text
 workflow registry status: invalid
-reason: unsupported workflow shape present in .synod/workflows.toml
-next_command: synod workflow inspect --workspace .
+reason: unsupported workflow shape present in .boundline/workflows.toml
+next_command: boundline workflow inspect --workspace .
 ```

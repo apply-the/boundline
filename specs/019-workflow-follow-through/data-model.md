@@ -23,7 +23,7 @@ WorkflowDefinition
 ```
 
 **Behavioral rules**:
-- Supported phases remain bounded to Synod's existing delivery phases.
+- Supported phases remain bounded to Boundline's existing delivery phases.
 - Phase order remains sequential.
 - Discovery metadata is optional and must not change runtime ownership or phase semantics.
 
