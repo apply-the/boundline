@@ -1,4 +1,4 @@
-use synod::{
+use boundline::{
     ApprovalState, GovernanceBoundedContext, GovernanceLifecycleState, GovernanceRequestKind,
     GovernanceRuntime, GovernanceRuntimeKind, GovernanceRuntimeRequest, LocalGovernanceRuntime,
     PacketReadiness,
@@ -10,7 +10,7 @@ fn request_with(read_targets: Vec<&str>) -> GovernanceRuntimeRequest {
         governance_attempt_id: "contract-attempt".to_string(),
         stage_key: "bug-fix:investigate".to_string(),
         goal: "Investigate a failing change".to_string(),
-        workspace_ref: "/tmp/synod-governance-contract".to_string(),
+        workspace_ref: "/tmp/boundline-governance-contract".to_string(),
         autopilot: false,
         mode: None,
         system_context: None,

@@ -6,12 +6,12 @@
 ## Scenario 1: Route A Verification Stage Through `security-assessment`
 
 ```bash
-cd /tmp/synod-governed-security
-cargo run --bin synod -- start --workspace .
-cargo run --bin synod -- capture --workspace . --goal "fix the credential leak in the API handler"
-cargo run --bin synod -- flow bug-fix --workspace .
-cargo run --bin synod -- plan --workspace .
-cargo run --bin synod -- run --workspace .
+cd /tmp/boundline-governed-security
+cargo run --bin boundline -- start --workspace .
+cargo run --bin boundline -- capture --workspace . --goal "fix the credential leak in the API handler"
+cargo run --bin boundline -- flow bug-fix --workspace .
+cargo run --bin boundline -- plan --workspace .
+cargo run --bin boundline -- run --workspace .
 ```
 
 **Expected**:
@@ -21,10 +21,10 @@ cargo run --bin synod -- run --workspace .
 ## Scenario 2: Approval-Gated Security Analysis Refreshes Through Status
 
 ```bash
-cd /tmp/synod-governed-security
-cargo run --bin synod -- status --workspace .
-cargo run --bin synod -- next --workspace .
-cargo run --bin synod -- inspect --workspace .
+cd /tmp/boundline-governed-security
+cargo run --bin boundline -- status --workspace .
+cargo run --bin boundline -- next --workspace .
+cargo run --bin boundline -- inspect --workspace .
 ```
 
 **Expected**:
@@ -34,8 +34,8 @@ cargo run --bin synod -- inspect --workspace .
 ## Scenario 3: Unsupported Canon Mode Is Rejected Explicitly
 
 ```bash
-cd /tmp/synod-governed-security-invalid
-cargo run --bin synod -- run --workspace .
+cd /tmp/boundline-governed-security-invalid
+cargo run --bin boundline -- run --workspace .
 ```
 
 **Expected**:

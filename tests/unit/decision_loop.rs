@@ -3,20 +3,20 @@ use std::path::PathBuf;
 
 use uuid::Uuid;
 
-use serde_json::json;
-use synod::adapters::agent::FnAgentAdapter;
-use synod::adapters::tool::FnToolAdapter;
-use synod::adapters::trace_store::FileTraceStore;
-use synod::domain::decision::{ActionSelector, DecisionStatus, DecisionType, EvidenceRef};
-use synod::domain::flow_policy::FlowPolicy;
-use synod::domain::goal_plan::{
+use boundline::adapters::agent::FnAgentAdapter;
+use boundline::adapters::tool::FnToolAdapter;
+use boundline::adapters::trace_store::FileTraceStore;
+use boundline::domain::decision::{ActionSelector, DecisionStatus, DecisionType, EvidenceRef};
+use boundline::domain::flow_policy::FlowPolicy;
+use boundline::domain::goal_plan::{
     ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan, PlannedTask,
 };
-use synod::domain::step::{ErrorInfo, ExecutionStatus, Recoverability, StepExecutionResult};
-use synod::domain::trace::TraceEventType;
-use synod::orchestrator::decision_loop::{DecisionLoop, LoopTerminal, Observation};
-use synod::registry::agent_registry::AgentRegistry;
-use synod::registry::tool_registry::ToolRegistry;
+use boundline::domain::step::{ErrorInfo, ExecutionStatus, Recoverability, StepExecutionResult};
+use boundline::domain::trace::TraceEventType;
+use boundline::orchestrator::decision_loop::{DecisionLoop, LoopTerminal, Observation};
+use boundline::registry::agent_registry::AgentRegistry;
+use boundline::registry::tool_registry::ToolRegistry;
+use serde_json::json;
 
 fn temp_workspace(prefix: &str) -> PathBuf {
     let ws = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));

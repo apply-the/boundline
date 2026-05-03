@@ -18,7 +18,7 @@
 
 ## Decision 3: Reuse the existing CLI backend instead of adding new runtime services or workflow subcommands
 
-- **Decision**: Use the current Synod CLI commands as the direct execution backend: `doctor` for readiness checks, `run` for bounded execution, and `inspect` for latest-trace or explicit-trace summaries. Model `start`, `plan`, `step`, `status`, and `next` as assistant-native workflow commands that gather context, route to existing CLI commands, and interpret results.
+- **Decision**: Use the current Boundline CLI commands as the direct execution backend: `doctor` for readiness checks, `run` for bounded execution, and `inspect` for latest-trace or explicit-trace summaries. Model `start`, `plan`, `step`, `status`, and `next` as assistant-native workflow commands that gather context, route to existing CLI commands, and interpret results.
 - **Rationale**: The repository already has a usable local execution and inspection surface. Reusing it keeps the feature within the existing CLI-first architecture and avoids expanding the orchestration runtime just to satisfy assistant packaging.
 - **Alternatives considered**:
   - Add new CLI subcommands for every assistant command name: rejected because it would expand the runtime surface and require new execution semantics before the assistant packs themselves have shipped.
@@ -42,13 +42,13 @@
 
 ## Decision 6: Use latest-trace inspection as the status and next-step evidence source
 
-- **Decision**: Have assistant `status`, `next`, and fallback inspection paths rely on `synod inspect --workspace <workspace>` when no explicit trace path is provided, and `synod inspect --trace <trace>` when a concrete trace reference is available.
+- **Decision**: Have assistant `status`, `next`, and fallback inspection paths rely on `boundline inspect --workspace <workspace>` when no explicit trace path is provided, and `boundline inspect --trace <trace>` when a concrete trace reference is available.
 - **Rationale**: The existing inspect command already exposes the most useful evidence for follow-up routing: terminal status, recovery events, and readable step summaries. Reusing it avoids a second status backend.
 - **Alternatives considered**:
   - Create a separate status data format: rejected because it duplicates the readable trace-summary surface that already exists.
   - Infer next steps without inspection evidence: rejected because it would reintroduce hidden assistant logic and weaken trace-backed guidance.
 
-*** Add File: /Users/rt/workspace/synod/specs/003-assistant-command-packs/data-model.md
+*** Add File: /Users/rt/workspace/boundline/specs/003-assistant-command-packs/data-model.md
 # Data Model: Assistant Command Packs
 
 ## AssistantCommandPack
@@ -86,7 +86,7 @@ Represents one assistant-facing workflow command.
 
 | Field | Shape | Required | Notes |
 |-------|-------|----------|-------|
-| `command_name` | Enum | Yes | `synod-start`, `synod-plan`, `synod-step`, `synod-run`, `synod-status`, `synod-next`, or `synod-inspect` |
+| `command_name` | Enum | Yes | `boundline-start`, `boundline-plan`, `boundline-step`, `boundline-run`, `boundline-status`, `boundline-next`, or `boundline-inspect` |
 | `assistant_id` | Enum | Yes | Owning assistant pack |
 | `user_intent` | Non-empty string | Yes | Plain-language outcome the user expects |
 | `required_inputs` | Ordered list of input descriptors | Yes | Includes required and optional fields such as workspace, goal, or trace reference |
@@ -127,7 +127,7 @@ Represents the explicit conversational state carried across assistant commands.
 | Field | Shape | Required | Notes |
 |-------|-------|----------|-------|
 | `workspace_ref` | Path-like string | No | Required before any direct CLI command can run |
-| `goal` | Non-empty string | No | Required before `/synod-run`; may be clarified by `/synod-plan` |
+| `goal` | Non-empty string | No | Required before `/boundline-run`; may be clarified by `/boundline-plan` |
 | `latest_trace_ref` | Path-like string | No | Preferred for explicit inspection when available |
 | `latest_terminal_status` | Enum | No | Latest known terminal outcome from run or inspect results |
 | `last_command_name` | Enum | No | Most recent assistant command executed |
@@ -185,14 +185,14 @@ Represents the user-readable result returned by an assistant command after direc
 - Produced by one `AssistantCommandDefinition`.
 - Updates one `ConversationWorkflowContext`.
 
-*** Add File: /Users/rt/workspace/synod/specs/003-assistant-command-packs/quickstart.md
+*** Add File: /Users/rt/workspace/boundline/specs/003-assistant-command-packs/quickstart.md
 # Quickstart: Assistant Command Packs
 
 ## Prerequisites
 
 1. Work from the repository root on branch `003-assistant-command-packs`.
-2. Have Rust 1.95.0 with `cargo` available so the local Synod CLI can run.
-3. Use a writable workspace so Synod can persist traces under `.synod/traces/`.
+2. Have Rust 1.95.0 with `cargo` available so the local Boundline CLI can run.
+3. Use a writable workspace so Boundline can persist traces under `.boundline/traces/`.
 4. Choose one supported assistant environment: Claude, Codex, or Copilot.
 
 ## Asset Layout
@@ -206,7 +206,7 @@ Represents the user-readable result returned by an assistant command after direc
 
 ### 1. Start from chat
 
-Invoke `/synod-start` in your assistant.
+Invoke `/boundline-start` in your assistant.
 
 Expected outcome:
 
@@ -214,60 +214,60 @@ Expected outcome:
 - The assistant runs or recommends:
 
 ```bash
-cargo run --bin synod -- doctor --workspace "$PWD"
+cargo run --bin boundline -- doctor --workspace "$PWD"
 ```
 
 - The assistant summarizes whether the workspace is ready and what prerequisite, if any, must be fixed.
 
 ### 2. Bound the goal
 
-Invoke `/synod-plan`.
+Invoke `/boundline-plan`.
 
 Expected outcome:
 
 - The assistant asks only for the missing goal details.
-- The assistant turns the goal into a bounded `synod run` objective.
-- The assistant routes directly to `/synod-run`.
+- The assistant turns the goal into a bounded `boundline run` objective.
+- The assistant routes directly to `/boundline-run`.
 
 ### 3. Execute the workflow
 
-Invoke `/synod-run`.
+Invoke `/boundline-run`.
 
 Expected outcome:
 
 - The assistant runs or recommends:
 
 ```bash
-cargo run --bin synod -- run --workspace "$PWD" --goal "Summarize the current bounded developer flow"
+cargo run --bin boundline -- run --workspace "$PWD" --goal "Summarize the current bounded developer flow"
 ```
 
 - The assistant summarizes the terminal status, recovery signals, and trace location.
 
 ### 4. Check latest status or next step
 
-Invoke `/synod-status` or `/synod-next`.
+Invoke `/boundline-status` or `/boundline-next`.
 
 Expected outcome:
 
 - The assistant runs or recommends:
 
 ```bash
-cargo run --bin synod -- inspect --workspace "$PWD"
+cargo run --bin boundline -- inspect --workspace "$PWD"
 ```
 
-- `/synod-status` summarizes the latest trace.
-- `/synod-next` uses that same evidence to recommend the most relevant follow-up command.
+- `/boundline-status` summarizes the latest trace.
+- `/boundline-next` uses that same evidence to recommend the most relevant follow-up command.
 
 ### 5. Inspect a specific trace
 
-Invoke `/synod-inspect` with a trace path when you need a specific run rather than the latest one.
+Invoke `/boundline-inspect` with a trace path when you need a specific run rather than the latest one.
 
 Expected outcome:
 
 - The assistant runs or recommends:
 
 ```bash
-cargo run --bin synod -- inspect --trace "$PWD/.synod/traces/<task-id>.json"
+cargo run --bin boundline -- inspect --trace "$PWD/.boundline/traces/<task-id>.json"
 ```
 
 - The assistant summarizes final status, recovery events, and next action guidance.
@@ -276,15 +276,15 @@ cargo run --bin synod -- inspect --trace "$PWD/.synod/traces/<task-id>.json"
 
 1. Invoke the same assistant command.
 2. Let the assistant ask only for missing inputs.
-3. Copy the provided `cargo run --bin synod -- ...` command into your terminal.
+3. Copy the provided `cargo run --bin boundline -- ...` command into your terminal.
 4. Paste the command output back into the chat.
 5. Follow the assistant's summary and next-step recommendation.
 
 Minimum fallback checkpoints:
 
-- `/synod-start` must recover from a not-ready workspace.
-- `/synod-run` must surface a trace location even for non-success outcomes.
-- `/synod-status`, `/synod-next`, and `/synod-inspect` must continue from either a workspace or an explicit trace path.
+- `/boundline-start` must recover from a not-ready workspace.
+- `/boundline-run` must surface a trace location even for non-success outcomes.
+- `/boundline-status`, `/boundline-next`, and `/boundline-inspect` must continue from either a workspace or an explicit trace path.
 
 ## Validation Commands
 
@@ -299,6 +299,6 @@ cargo test --all-targets
 ## Minimum Validation Scenarios
 
 1. Each supported assistant exposes the full seven-command pack.
-2. `/synod-start` and `/synod-run` work in both shell-enabled and chat-only modes.
-3. `/synod-status` and `/synod-next` can summarize the latest trace without requiring raw log inspection.
-4. `/synod-inspect` can explain a specific run using only a trace path or workspace reference.
+2. `/boundline-start` and `/boundline-run` work in both shell-enabled and chat-only modes.
+3. `/boundline-status` and `/boundline-next` can summarize the latest trace without requiring raw log inspection.
+4. `/boundline-inspect` can explain a specific run using only a trace path or workspace reference.

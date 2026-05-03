@@ -5,7 +5,7 @@
 
 ## Summary
 
-Build the first Synod orchestration brain as a single Rust library crate that executes bounded tasks through a sequential loop, routes work to named agents and tools, preserves session-scoped state across steps, applies explicit retry and replanning policy, and emits inspectable execution traces without depending on Canon integration.
+Build the first Boundline orchestration brain as a single Rust library crate that executes bounded tasks through a sequential loop, routes work to named agents and tools, preserves session-scoped state across steps, applies explicit retry and replanning policy, and emits inspectable execution traces without depending on Canon integration.
 
 ## Technical Context
 
@@ -23,7 +23,7 @@ Build the first Synod orchestration brain as a single Rust library crate that ex
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- Delivery identity: PASS. The feature defines Synod as a delivery orchestrator for bounded engineering tasks, not as a generic agent platform.
+- Delivery identity: PASS. The feature defines Boundline as a delivery orchestrator for bounded engineering tasks, not as a generic agent platform.
 - Delivery-first scope: PASS. The plan is centered on execution, orchestration, recovery, and traceability rather than optimization or polish.
 - Bounded execution: PASS. The design enforces sequential execution, explicit terminal conditions, and configured step and recovery limits.
 - Stateful execution: PASS. Shared task context is a core model and every step reads from or writes to that context.

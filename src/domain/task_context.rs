@@ -346,7 +346,7 @@ mod tests {
     fn round_trips_delegation_history_and_continuity_state() {
         let mut context = TaskContext::new(
             "session-1",
-            "/tmp/synod-task-context",
+            "/tmp/boundline-task-context",
             RunLimits::default(),
             Map::new(),
         );
@@ -359,7 +359,7 @@ mod tests {
             source_route_owner: "native".to_string(),
             target_owner: "codex".to_string(),
             continuity_reason: "implementation route cannot continue credibly".to_string(),
-            recommended_next_action: "synod status".to_string(),
+            recommended_next_action: "boundline status".to_string(),
             evidence_refs: vec!["routing:implementation=claude/sonnet-4".to_string()],
             capability_summary: Some(
                 "claude lacks continuation support for implementation".to_string(),
@@ -371,7 +371,7 @@ mod tests {
             active_packet_id: Some("packet-1".to_string()),
             mode: DelegationContinuityMode::HandoffRequired,
             authority_source: ContinuityAuthority::NativeSession,
-            next_command: "synod status".to_string(),
+            next_command: "boundline status".to_string(),
             headline: "handoff required: implementation route cannot continue".to_string(),
             evidence_summary: "routing policy requires a handoff".to_string(),
         };

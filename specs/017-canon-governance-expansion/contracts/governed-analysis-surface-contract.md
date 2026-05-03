@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define the minimum operator-facing information that Synod must expose when a bounded stage routes through Canon `security-assessment`.
+Define the minimum operator-facing information that Boundline must expose when a bounded stage routes through Canon `security-assessment`.
 
 ## Requirements
 
@@ -49,7 +49,7 @@ selected_canon_mode: security-assessment
 execution_condition: waiting - governance approval is still pending before execution can continue
 latest_governance_run_ref: canon-run-security-100
 latest_governance_packet_ref: .canon/runs/canon-run-security-100
-next_command: synod status
+next_command: boundline status
 ```
 
 ### Unsupported mode blocked
@@ -58,5 +58,5 @@ next_command: synod status
 routing: blocked (session_state) - session cannot continue with the requested governed analysis
 selected_canon_mode: security-assessment
 execution_condition: blocked - the requested Canon mode is not supported for this stage
-next_command: synod inspect --workspace .
+next_command: boundline inspect --workspace .
 ```

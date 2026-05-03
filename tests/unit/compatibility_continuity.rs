@@ -1,21 +1,21 @@
-use synod::cli::output::{render_compatibility_follow_up_status, render_session_status};
-use synod::domain::session::{
+use boundline::cli::output::{render_compatibility_follow_up_status, render_session_status};
+use boundline::domain::session::{
     CompatibilityFollowUpMode, CompatibilityFollowUpView, ContinuityAuthority, SessionStatus,
     SessionStatusView,
 };
-use synod::domain::task::TaskStatus;
+use boundline::domain::task::TaskStatus;
 
 fn compatibility_follow_up() -> CompatibilityFollowUpView {
     CompatibilityFollowUpView {
         follow_up_mode: CompatibilityFollowUpMode::InspectOnly,
-        trace_ref: "/tmp/workspace/.synod/traces/compat.json".to_string(),
+        trace_ref: "/tmp/workspace/.boundline/traces/compat.json".to_string(),
         routing_summary:
             "routing: compatibility (execution_profile) - trace came from the explicit compatibility runtime"
                 .to_string(),
         execution_condition: "terminal - work completed successfully".to_string(),
         terminal_status: TaskStatus::Succeeded,
         terminal_reason: "work completed successfully".to_string(),
-        next_command: "synod inspect --workspace /tmp/workspace".to_string(),
+        next_command: "boundline inspect --workspace /tmp/workspace".to_string(),
     }
 }
 
@@ -38,7 +38,7 @@ fn render_compatibility_follow_up_status_surfaces_authority_and_inspect_command(
     );
     assert!(rendered.contains("compatibility_follow_up: inspect_only"), "{rendered}");
     assert!(
-        rendered.contains("next_command: synod inspect --workspace /tmp/workspace"),
+        rendered.contains("next_command: boundline inspect --workspace /tmp/workspace"),
         "{rendered}"
     );
     assert!(
@@ -119,7 +119,7 @@ fn render_session_status_surfaces_compatibility_follow_up_without_replacing_nati
         latest_governance_decision: None,
         latest_governance_candidates: None,
         governance_next_action: None,
-        next_command: Some("synod run".to_string()),
+        next_command: Some("boundline run".to_string()),
         explanation: "native session remains authoritative".to_string(),
         ..Default::default()
     });
@@ -141,9 +141,10 @@ fn render_session_status_surfaces_compatibility_follow_up_without_replacing_nati
     );
     assert!(rendered.contains("compatibility_follow_up: inspect_only"), "{rendered}");
     assert!(
-        rendered
-            .contains("compatibility_follow_up_command: synod inspect --workspace /tmp/workspace"),
+        rendered.contains(
+            "compatibility_follow_up_command: boundline inspect --workspace /tmp/workspace"
+        ),
         "{rendered}"
     );
-    assert!(rendered.contains("next_command: synod run"), "{rendered}");
+    assert!(rendered.contains("next_command: boundline run"), "{rendered}");
 }

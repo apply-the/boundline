@@ -38,7 +38,7 @@
 
 ### Implementation for User Story 1
 
-- [x] T006 [US1] Extend `synod plan` argument parsing in `src/cli.rs` and `src/cli/session.rs` to support lightweight flow confirmation inputs for the native path
+- [x] T006 [US1] Extend `boundline plan` argument parsing in `src/cli.rs` and `src/cli/session.rs` to support lightweight flow confirmation inputs for the native path
 - [x] T007 [US1] Wire `infer_flow` and goal-plan persistence into planning in `src/cli/session.rs` and `src/orchestrator/session_runtime.rs`
 - [x] T008 [US1] Persist confirmed flow policy or explicit no-flow outcome in `src/orchestrator/session_runtime.rs` and `src/domain/session.rs`
 - [x] T009 [US1] Update planning output surfaces in `src/cli/output.rs` and `src/cli/session.rs` so the operator can see confirmed, proposed, or absent flow state
@@ -60,7 +60,7 @@
 
 ### Implementation for User Story 2
 
-- [x] T012 [US2] Route `synod run` through native decision-loop selection in `src/cli/session.rs`
+- [x] T012 [US2] Route `boundline run` through native decision-loop selection in `src/cli/session.rs`
 - [x] T013 [US2] Implement native/compat/blocked routing behavior and remediation messages in `src/orchestrator/session_runtime.rs`
 - [x] T014 [US2] Keep fixture runtime assembly explicit in `src/orchestrator/session_runtime.rs` and `src/fixture.rs` without treating it as the implicit default for planned work
 - [x] T015 [US2] Extend inspect or status-facing output in `src/cli/session.rs` and `src/cli/output.rs` so route choice is visible to the operator

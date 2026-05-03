@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-05-02
-**Feature**: [/Users/rt/workspace/synod/specs/034-decision-driven-orchestrator/spec.md](/Users/rt/workspace/synod/specs/034-decision-driven-orchestrator/spec.md)
+**Feature**: [/Users/rt/workspace/boundline/specs/034-decision-driven-orchestrator/spec.md](/Users/rt/workspace/boundline/specs/034-decision-driven-orchestrator/spec.md)
 
 ## Content Quality
 

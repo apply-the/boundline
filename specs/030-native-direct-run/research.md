@@ -5,7 +5,7 @@
 
 ## R1: Make direct `run --goal` native-first by default
 
-**Decision**: Treat direct `synod run --workspace <workspace> --goal <goal>` as
+**Decision**: Treat direct `boundline run --workspace <workspace> --goal <goal>` as
 an entry to the existing session-native goal-plan path by default.
 
 **Rationale**: The current product contradiction is that the one-command run
@@ -76,7 +76,7 @@ execution readiness, while compatibility execution continues to require a valid
 execution profile.
 
 **Rationale**: If native direct run still depends on diagnostics that insist on
-`.synod/execution.json`, the route default would change on paper but not in
+`.boundline/execution.json`, the route default would change on paper but not in
 practice.
 
 **Alternatives Considered**:

@@ -17,9 +17,9 @@
 
 **Purpose**: Reserve the release boundary and prepare adaptive fixtures and harness surfaces for the adaptive-repair-depth slice
 
-- [ ] T001 Bump crate version to `0.21.0` in `/Users/rt/workspace/synod/Cargo.toml` and `/Users/rt/workspace/synod/Cargo.lock`
-- [ ] T002 Create validation-guided adaptive fixture helpers and bounded multi-target workspaces in `/Users/rt/workspace/synod/tests/support/workspace_fixture.rs`
-- [ ] T003 Register adaptive-repair-depth test modules in `/Users/rt/workspace/synod/tests/integration.rs`, `/Users/rt/workspace/synod/tests/contract.rs`, and `/Users/rt/workspace/synod/tests/unit.rs`
+- [ ] T001 Bump crate version to `0.21.0` in `/Users/rt/workspace/boundline/Cargo.toml` and `/Users/rt/workspace/boundline/Cargo.lock`
+- [ ] T002 Create validation-guided adaptive fixture helpers and bounded multi-target workspaces in `/Users/rt/workspace/boundline/tests/support/workspace_fixture.rs`
+- [ ] T003 Register adaptive-repair-depth test modules in `/Users/rt/workspace/boundline/tests/integration.rs`, `/Users/rt/workspace/boundline/tests/contract.rs`, and `/Users/rt/workspace/boundline/tests/unit.rs`
 
 ---
 
@@ -29,9 +29,9 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T004 Extend adaptive guidance, selection-evidence, and attempt-lineage primitives in `/Users/rt/workspace/synod/src/domain/execution.rs` and `/Users/rt/workspace/synod/src/fixture.rs`
-- [ ] T005 [P] Extend session and inspect projection helpers for validation-guided adaptive evidence in `/Users/rt/workspace/synod/src/domain/session.rs`, `/Users/rt/workspace/synod/src/cli/session.rs`, `/Users/rt/workspace/synod/src/cli/output.rs`, and `/Users/rt/workspace/synod/src/cli/inspect.rs`
-- [ ] T006 [P] Add foundational unit coverage for adaptive evidence summaries and output rendering in `/Users/rt/workspace/synod/tests/unit/adaptive_execution.rs`, `/Users/rt/workspace/synod/tests/unit/cli_output.rs`, and `/Users/rt/workspace/synod/tests/unit/coverage_additional.rs`
+- [ ] T004 Extend adaptive guidance, selection-evidence, and attempt-lineage primitives in `/Users/rt/workspace/boundline/src/domain/execution.rs` and `/Users/rt/workspace/boundline/src/fixture.rs`
+- [ ] T005 [P] Extend session and inspect projection helpers for validation-guided adaptive evidence in `/Users/rt/workspace/boundline/src/domain/session.rs`, `/Users/rt/workspace/boundline/src/cli/session.rs`, `/Users/rt/workspace/boundline/src/cli/output.rs`, and `/Users/rt/workspace/boundline/src/cli/inspect.rs`
+- [ ] T006 [P] Add foundational unit coverage for adaptive evidence summaries and output rendering in `/Users/rt/workspace/boundline/tests/unit/adaptive_execution.rs`, `/Users/rt/workspace/boundline/tests/unit/cli_output.rs`, and `/Users/rt/workspace/boundline/tests/unit/coverage_additional.rs`
 
 **Checkpoint**: The runtime and projection layers can represent validation-guided adaptive evidence before story-specific scenarios are completed.
 
@@ -45,14 +45,14 @@
 
 ### Tests for User Story 1
 
-- [ ] T007 [P] [US1] Add contract coverage for validation-guided adaptive command output in `/Users/rt/workspace/synod/tests/contract/adaptive_run_contract.rs` and `/Users/rt/workspace/synod/tests/contract/adaptive_session_contract.rs`
-- [ ] T008 [P] [US1] Add integration coverage for validation-guided adaptive replanning in `/Users/rt/workspace/synod/tests/integration/cli_adaptive_execution.rs`
-- [ ] T009 [P] [US1] Add unit coverage for validation-guided candidate ranking and signature exclusion in `/Users/rt/workspace/synod/tests/unit/adaptive_execution.rs`
+- [ ] T007 [P] [US1] Add contract coverage for validation-guided adaptive command output in `/Users/rt/workspace/boundline/tests/contract/adaptive_run_contract.rs` and `/Users/rt/workspace/boundline/tests/contract/adaptive_session_contract.rs`
+- [ ] T008 [P] [US1] Add integration coverage for validation-guided adaptive replanning in `/Users/rt/workspace/boundline/tests/integration/cli_adaptive_execution.rs`
+- [ ] T009 [P] [US1] Add unit coverage for validation-guided candidate ranking and signature exclusion in `/Users/rt/workspace/boundline/tests/unit/adaptive_execution.rs`
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] Implement validation-guided candidate extraction and bounded target reranking in `/Users/rt/workspace/synod/src/fixture.rs` and `/Users/rt/workspace/synod/src/domain/execution.rs`
-- [ ] T011 [US1] Persist validation-guided selection reasons, updated workspace slices, and richer attempt-lineage transitions in `/Users/rt/workspace/synod/src/fixture.rs` and `/Users/rt/workspace/synod/src/domain/session.rs`
+- [ ] T010 [US1] Implement validation-guided candidate extraction and bounded target reranking in `/Users/rt/workspace/boundline/src/fixture.rs` and `/Users/rt/workspace/boundline/src/domain/execution.rs`
+- [ ] T011 [US1] Persist validation-guided selection reasons, updated workspace slices, and richer attempt-lineage transitions in `/Users/rt/workspace/boundline/src/fixture.rs` and `/Users/rt/workspace/boundline/src/domain/session.rs`
 
 **Checkpoint**: Adaptive compatibility runs can replan from validation evidence instead of only exhausting the deterministic candidate order.
 
@@ -66,13 +66,13 @@
 
 ### Tests for User Story 2
 
-- [ ] T012 [P] [US2] Add contract coverage for adaptive selection evidence and route guidance in `/Users/rt/workspace/synod/tests/contract/adaptive_trace_contract.rs` and `/Users/rt/workspace/synod/tests/contract/adaptive_route_guidance_contract.rs`
-- [ ] T013 [P] [US2] Add integration coverage for adaptive route-story projection in `/Users/rt/workspace/synod/tests/integration/adaptive_route_story.rs`
+- [ ] T012 [P] [US2] Add contract coverage for adaptive selection evidence and route guidance in `/Users/rt/workspace/boundline/tests/contract/adaptive_trace_contract.rs` and `/Users/rt/workspace/boundline/tests/contract/adaptive_route_guidance_contract.rs`
+- [ ] T013 [P] [US2] Add integration coverage for adaptive route-story projection in `/Users/rt/workspace/boundline/tests/integration/adaptive_route_story.rs`
 
 ### Implementation for User Story 2
 
-- [ ] T014 [US2] Surface validation-guided adaptive reasons and changed bounded slices in `/Users/rt/workspace/synod/src/cli/output.rs`, `/Users/rt/workspace/synod/src/cli/session.rs`, and `/Users/rt/workspace/synod/src/cli/inspect.rs`
-- [ ] T015 [US2] Keep compatibility-route ownership explicit when workflows, review, or governance are present in `/Users/rt/workspace/synod/src/cli/output.rs`, `/Users/rt/workspace/synod/src/cli/session.rs`, and `/Users/rt/workspace/synod/src/cli/inspect.rs`
+- [ ] T014 [US2] Surface validation-guided adaptive reasons and changed bounded slices in `/Users/rt/workspace/boundline/src/cli/output.rs`, `/Users/rt/workspace/boundline/src/cli/session.rs`, and `/Users/rt/workspace/boundline/src/cli/inspect.rs`
+- [ ] T015 [US2] Keep compatibility-route ownership explicit when workflows, review, or governance are present in `/Users/rt/workspace/boundline/src/cli/output.rs`, `/Users/rt/workspace/boundline/src/cli/session.rs`, and `/Users/rt/workspace/boundline/src/cli/inspect.rs`
 
 **Checkpoint**: Developers can inspect adaptive path changes and route boundaries without inferring hidden ownership or heuristics.
 
@@ -86,12 +86,12 @@
 
 ### Tests for User Story 3
 
-- [ ] T016 [P] [US3] Add contract coverage for adaptive profile guidance and assistant continuity in `/Users/rt/workspace/synod/tests/contract/adaptive_route_guidance_contract.rs` and `/Users/rt/workspace/synod/tests/contract/assistant_session_continuity_contract.rs`
+- [ ] T016 [P] [US3] Add contract coverage for adaptive profile guidance and assistant continuity in `/Users/rt/workspace/boundline/tests/contract/adaptive_route_guidance_contract.rs` and `/Users/rt/workspace/boundline/tests/contract/assistant_session_continuity_contract.rs`
 
 ### Implementation for User Story 3
 
-- [ ] T017 [US3] Ship bounded adaptive repair guidance in `/Users/rt/workspace/synod/README.md`, `/Users/rt/workspace/synod/docs/adaptive-execution.md`, `/Users/rt/workspace/synod/docs/getting-started.md`, `/Users/rt/workspace/synod/docs/configuration.md`, and `/Users/rt/workspace/synod/assistant/README.md`
-- [ ] T018 [US3] Update contributor and roadmap guidance for the adaptive-repair-depth slice in `/Users/rt/workspace/synod/CONTRIBUTING.md` and `/Users/rt/workspace/synod/ROADMAP.md`
+- [ ] T017 [US3] Ship bounded adaptive repair guidance in `/Users/rt/workspace/boundline/README.md`, `/Users/rt/workspace/boundline/docs/adaptive-execution.md`, `/Users/rt/workspace/boundline/docs/getting-started.md`, `/Users/rt/workspace/boundline/docs/configuration.md`, and `/Users/rt/workspace/boundline/assistant/README.md`
+- [ ] T018 [US3] Update contributor and roadmap guidance for the adaptive-repair-depth slice in `/Users/rt/workspace/boundline/CONTRIBUTING.md` and `/Users/rt/workspace/boundline/ROADMAP.md`
 
 **Checkpoint**: Maintainers have one coherent authored example for validation-guided adaptive repair and its route boundaries.
 
@@ -101,9 +101,9 @@
 
 **Purpose**: Release alignment, changelog, agent context, and final validation closeout
 
-- [ ] T019 [P] Refresh generated agent context for the adaptive-repair-depth surface in `/Users/rt/workspace/synod/AGENTS.md`
-- [ ] T020 Update `/Users/rt/workspace/synod/CHANGELOG.md` and any touched adaptive-related assistant assets under `/Users/rt/workspace/synod/assistant/` to reflect the `0.21.0` adaptive-repair-depth release
-- [ ] T021 Run coverage-aware release validation for modified Rust files, refresh `/Users/rt/workspace/synod/lcov.info`, resolve remaining `cargo clippy` issues, run `cargo fmt --all`, and finish with clean validation for touched files under `/Users/rt/workspace/synod/src/` and `/Users/rt/workspace/synod/tests/`
+- [ ] T019 [P] Refresh generated agent context for the adaptive-repair-depth surface in `/Users/rt/workspace/boundline/AGENTS.md`
+- [ ] T020 Update `/Users/rt/workspace/boundline/CHANGELOG.md` and any touched adaptive-related assistant assets under `/Users/rt/workspace/boundline/assistant/` to reflect the `0.21.0` adaptive-repair-depth release
+- [ ] T021 Run coverage-aware release validation for modified Rust files, refresh `/Users/rt/workspace/boundline/lcov.info`, resolve remaining `cargo clippy` issues, run `cargo fmt --all`, and finish with clean validation for touched files under `/Users/rt/workspace/boundline/src/` and `/Users/rt/workspace/boundline/tests/`
 
 ---
 

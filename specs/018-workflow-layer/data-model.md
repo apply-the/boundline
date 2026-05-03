@@ -27,7 +27,7 @@ WorkflowDefinition
 
 ### Workflow Phase
 
-The bounded workflow step that maps directly onto an existing Synod delivery capability.
+The bounded workflow step that maps directly onto an existing Boundline delivery capability.
 
 ```text
 WorkflowPhase
@@ -41,7 +41,7 @@ WorkflowPhase
 ```
 
 **Behavioral rules**:
-- A phase is valid only if Synod already has a credible runtime path for it.
+- A phase is valid only if Boundline already has a credible runtime path for it.
 - The first slice allows one active phase at a time.
 - Conditional phases may be skipped only when their bounded condition is not met explicitly.
 

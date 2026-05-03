@@ -9,7 +9,7 @@
 
 ## Delivery Status (v0.11.0 delivered)
 
-This feature delivers a human-friendly `synod init` workflow, editable runtime
+This feature delivers a human-friendly `boundline init` workflow, editable runtime
 and model routing with global and workspace precedence, differentiated review
 and adjudication routing, and synchronized documentation for the full operator
 path. The target release is `0.11.0`.
@@ -36,30 +36,30 @@ path. The target release is `0.11.0`.
 - [X] T007 [P] Add init-preview, config-inspection, and runtime-capability rendering primitives in src/cli/output.rs and src/cli/diagnostics.rs
 - [X] T008 Implement bounded template builders, preview generation, and assistant setup helpers in src/fixture.rs and assistant/
 
-**Checkpoint**: Foundation ready - Synod can parse init/config commands, persist global and workspace config, resolve precedence deterministically, and describe pending setup changes before mutating repository files.
+**Checkpoint**: Foundation ready - Boundline can parse init/config commands, persist global and workspace config, resolve precedence deterministically, and describe pending setup changes before mutating repository files.
 
 ---
 
 ## Phase 3: User Story 1 - Initialize a Workspace Without Hand-Written JSON (Priority: P1)
 
-**Goal**: Let a developer bootstrap a bounded Synod workspace with `synod init` instead of manually authoring internal JSON.
+**Goal**: Let a developer bootstrap a bounded Boundline workspace with `boundline init` instead of manually authoring internal JSON.
 
-**Independent Test**: Run `synod init` in a fresh repository, choose a template, confirm the preview, then verify that the workspace is ready for `doctor`, `start`, `capture`, and `run` without manual file editing; rerun init on an existing workspace and verify it previews changes instead of silently overwriting files.
+**Independent Test**: Run `boundline init` in a fresh repository, choose a template, confirm the preview, then verify that the workspace is ready for `doctor`, `start`, `capture`, and `run` without manual file editing; rerun init on an existing workspace and verify it previews changes instead of silently overwriting files.
 
 ### Tests for User Story 1
 
-- [X] T009 [P] [US1] Add contract coverage for `synod init` preview, confirmation, and destructive-update rules in tests/contract/init_cli_contract.rs
+- [X] T009 [P] [US1] Add contract coverage for `boundline init` preview, confirmation, and destructive-update rules in tests/contract/init_cli_contract.rs
 - [X] T010 [P] [US1] Add integration coverage for fresh-workspace bootstrap and safe rerun behavior in tests/integration/init_bootstrap_flow.rs
 - [X] T011 [P] [US1] Add unit coverage for template generation and runtime capability detection in tests/unit/init_templates.rs and tests/unit/runtime_capability.rs
 
 ### Implementation for User Story 1
 
-- [X] T012 [US1] Implement `synod init` preview and apply flow in src/cli/init.rs, src/cli.rs, and src/fixture.rs
+- [X] T012 [US1] Implement `boundline init` preview and apply flow in src/cli/init.rs, src/cli.rs, and src/fixture.rs
 - [X] T013 [US1] Generate bounded workspace files and safe overwrite behavior in src/domain/execution.rs, src/adapters/config_store.rs, and src/cli/diagnostics.rs
 - [X] T014 [US1] Scaffold and refresh repository-local assistant setup selections during init in assistant/README.md, assistant/claude/commands/, assistant/codex/commands/, assistant/copilot/prompts/, and assistant/gemini/
 - [X] T015 [US1] Surface init summaries, next-step guidance, and missing-runtime warnings in src/cli/output.rs and README.md
 
-**Checkpoint**: User Story 1 is complete when Synod can bootstrap a fresh workspace, preview destructive changes on rerun, and leave the repository ready for the bounded execution flow without manual JSON authoring.
+**Checkpoint**: User Story 1 is complete when Boundline can bootstrap a fresh workspace, preview destructive changes on rerun, and leave the repository ready for the bounded execution flow without manual JSON authoring.
 
 ---
 
@@ -71,14 +71,14 @@ path. The target release is `0.11.0`.
 
 ### Tests for User Story 2
 
-- [X] T016 [P] [US2] Add contract coverage for `synod config show`, `set`, and `unset` in tests/contract/config_cli_contract.rs and tests/contract/routing_resolution_contract.rs
+- [X] T016 [P] [US2] Add contract coverage for `boundline config show`, `set`, and `unset` in tests/contract/config_cli_contract.rs and tests/contract/routing_resolution_contract.rs
 - [X] T017 [P] [US2] Add integration coverage for global-plus-workspace precedence resolution in tests/integration/config_precedence_flow.rs
 - [X] T018 [P] [US2] Add unit coverage for config persistence, precedence, and invalid route validation in tests/unit/config_store.rs and tests/unit/config_resolution.rs
 
 ### Implementation for User Story 2
 
 - [X] T019 [US2] Implement global and workspace config load/save/unset behavior in src/adapters/config_store.rs and src/domain/configuration.rs
-- [X] T020 [US2] Implement `synod config show`, `set`, and `unset` in src/cli/config.rs, src/cli.rs, and src/cli/output.rs
+- [X] T020 [US2] Implement `boundline config show`, `set`, and `unset` in src/cli/config.rs, src/cli.rs, and src/cli/output.rs
 - [X] T021 [US2] Resolve effective routing precedence and source attribution in src/domain/configuration.rs, src/fixture.rs, and src/domain/trace.rs
 - [X] T022 [US2] Integrate effective routing snapshots into diagnostics and runtime preparation in src/cli/diagnostics.rs, src/cli/run.rs, and src/cli/session.rs
 
@@ -105,7 +105,7 @@ path. The target release is `0.11.0`.
 - [X] T028 [US3] Validate reviewer-role conflicts, missing adjudicator routing, and unavailable review runtimes in src/cli/config.rs, src/cli/init.rs, and src/cli/diagnostics.rs
 - [X] T029 [US3] Keep assistant-facing command packs aligned with routed review and setup behavior in assistant/README.md, assistant/claude/commands/, assistant/codex/commands/, assistant/copilot/prompts/, and assistant/gemini/
 
-**Checkpoint**: All user stories are complete when Synod supports distinct delivery and review routing, including differentiated voting-council participants and adjudication, with clear effective-config output.
+**Checkpoint**: All user stories are complete when Boundline supports distinct delivery and review routing, including differentiated voting-council participants and adjudication, with clear effective-config output.
 
 ---
 
@@ -148,7 +148,7 @@ path. The target release is `0.11.0`.
 
 - **Setup**: T002 and T003 can run in parallel after T001.
 - **Foundational**: T005, T006, and T007 can run in parallel after T004; T008 should follow once the shared models exist.
-- **US1**: T009, T010, and T011 can run in parallel; T013 and T014 can overlap once `synod init` command wiring exists.
+- **US1**: T009, T010, and T011 can run in parallel; T013 and T014 can overlap once `boundline init` command wiring exists.
 - **US2**: T016, T017, and T018 can run in parallel; T019 and T021 can overlap once config schema is stable.
 - **US3**: T023, T024, and T025 can run in parallel; T026 and T029 can overlap once review-role routing semantics are fixed.
 - **Polish**: T030, T031, and T032 can run in parallel before the final validation task T033.
@@ -157,12 +157,12 @@ path. The target release is `0.11.0`.
 
 ```bash
 # Build the User Story 1 validation surface together:
-Task: "T009 Add contract coverage for synod init preview, confirmation, and destructive-update rules in tests/contract/init_cli_contract.rs"
+Task: "T009 Add contract coverage for boundline init preview, confirmation, and destructive-update rules in tests/contract/init_cli_contract.rs"
 Task: "T010 Add integration coverage for fresh-workspace bootstrap and safe rerun behavior in tests/integration/init_bootstrap_flow.rs"
 Task: "T011 Add unit coverage for template generation and runtime capability detection in tests/unit/init_templates.rs and tests/unit/runtime_capability.rs"
 
 # Then split command and scaffolding work:
-Task: "T012 Implement synod init preview and apply flow in src/cli/init.rs, src/cli.rs, and src/fixture.rs"
+Task: "T012 Implement boundline init preview and apply flow in src/cli/init.rs, src/cli.rs, and src/fixture.rs"
 Task: "T014 Scaffold and refresh repository-local assistant setup selections during init in assistant/README.md, assistant/claude/commands/, assistant/codex/commands/, assistant/copilot/prompts/, and assistant/gemini/"
 ```
 
@@ -170,7 +170,7 @@ Task: "T014 Scaffold and refresh repository-local assistant setup selections dur
 
 ```bash
 # Validate config precedence together:
-Task: "T016 Add contract coverage for synod config show, set, and unset in tests/contract/config_cli_contract.rs and tests/contract/routing_resolution_contract.rs"
+Task: "T016 Add contract coverage for boundline config show, set, and unset in tests/contract/config_cli_contract.rs and tests/contract/routing_resolution_contract.rs"
 Task: "T017 Add integration coverage for global-plus-workspace precedence resolution in tests/integration/config_precedence_flow.rs"
 Task: "T018 Add unit coverage for config persistence, precedence, and invalid route validation in tests/unit/config_store.rs and tests/unit/config_resolution.rs"
 

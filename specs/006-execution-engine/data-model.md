@@ -19,7 +19,7 @@
 
 ## ExecutionAttemptDefinition
 
-- Purpose: Represents one bounded change attempt that Synod can apply before validating the result.
+- Purpose: Represents one bounded change attempt that Boundline can apply before validating the result.
 - Fields:
   - `attempt_id`: Stable identifier for traces and task state.
   - `changes`: Ordered list of `WorkspaceChange` records.

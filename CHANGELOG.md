@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Synod are documented in this file.
+All notable changes to Boundline are documented in this file.
 
 This changelog is reconstructed from feature-spec delivery under `specs/`, the
 workspace version bumps recorded in `Cargo.toml`, and the corresponding release
@@ -8,7 +8,7 @@ commits in git history. The repository does not currently use release tags, so
 each release below maps a published version to the spec directories first
 introduced between that version bump and the previous one.
 
-Synod follows Semantic Versioning. Before `1.0.0`, breaking changes may occur
+Boundline follows Semantic Versioning. Before `1.0.0`, breaking changes may occur
 in minor releases.
 
 The repository history contains no release bumps for `0.2.0`, `0.6.0`,
@@ -19,9 +19,21 @@ recorded workspace version.
 
 Delivered specs:
 
-- None recorded after `0.38.0`
+- None recorded after `0.39.0`
 
 Highlights:
+
+## [0.39.0] - 2026-05-03
+
+Delivered specs:
+
+- `039` - Distribution & Bundling
+
+Highlights:
+
+- Add repo-managed Homebrew and winget metadata plus a release workflow that assembles Boundline bundles with a compatible Canon companion for the documented install surface.
+- Introduce `boundline doctor --install` so operators can verify the running Boundline version, the documented Canon support target, and whether the local pairing is ready, already satisfied, blocked, or repair-needed.
+- Split public docs and assistant guidance into a brutal quick path plus a separate advanced architecture layer while keeping Boundline as the orchestration owner and Canon as the bounded governance companion.
 
 ## [0.38.0] - 2026-05-03
 
@@ -31,7 +43,7 @@ Delivered specs:
 
 Highlights:
 
-- Add workspace-, cluster-, and global-scoped domain-template settings so `synod init` can infer or accept active domain families, seed layered standards, and persist optional or required external context bindings in `.synod/config.toml`.
+- Add workspace-, cluster-, and global-scoped domain-template settings so `boundline init` can infer or accept active domain families, seed layered standards, and persist optional or required external context bindings in `.boundline/config.toml`.
 - Make planning apply the right active domain family for the bounded target, surface the winning standards source and supporting-input status through context summary and provenance, and stop explicitly when enabled domain templates do not match or required domain inputs are missing or stale.
 - Extend `config show`, assistant guidance, roadmap, configuration docs, README, and changelog for the `0.38.0` release while keeping Canon and other external systems as supporting bounded inputs rather than template owners.
 
@@ -68,7 +80,7 @@ Delivered specs:
 Highlights:
 
 - Replace keyword-first native planning with an evidence-driven `infer -> propose -> confirm` loop that persists `goal_plan_state`, `goal_plan_revision`, `planning_rationale`, and `verification_strategy` across `plan`, `run`, `status`, `next`, and `inspect`.
-- Add explicit `synod plan --confirm`, block native `run` while the current proposal is unconfirmed, and allow bounded replanning by superseding the active proposal revision when workspace evidence changes materially.
+- Add explicit `boundline plan --confirm`, block native `run` while the current proposal is unconfirmed, and allow bounded replanning by superseding the active proposal revision when workspace evidence changes materially.
 - Align direct native `run --goal` with the same proposal-plus-confirm planning contract, then update README, getting-started, configuration, assistant guidance, roadmap, contributor docs, and changelog for the `0.35.0` release.
 
 ## [0.34.0] - 2026-05-02
@@ -119,8 +131,8 @@ Highlights:
 
 - Promote workflow discovery and continuation to first-class assistant surfaces
   for Claude, Codex, and Copilot while aligning Gemini CLI guidance to the same
-  workflow-first Synod vocabulary.
-- Keep workflow follow-through on the same primary Synod product surface as
+  workflow-first Boundline vocabulary.
+- Keep workflow follow-through on the same primary Boundline product surface as
   direct native execution, with explicit `route_owner`,
   `route_config_projection`, and bounded next-command guidance.
 - Keep explicit compatibility follow-up visibly subordinate instead of letting
@@ -154,12 +166,12 @@ Delivered specs:
 
 Highlights:
 
-- Make direct `synod run --workspace <workspace> --goal ...` bootstrap the
+- Make direct `boundline run --workspace <workspace> --goal ...` bootstrap the
   native session route by default, including negotiated capture, executable
   planning, decision-loop execution, and persisted follow-up through `status`,
   `next`, and `inspect`.
 - Preserve declarative execution profiles as an explicit subordinate route via
-  `synod run --compatibility --workspace <workspace> --goal ...`, and block
+  `boundline run --compatibility --workspace <workspace> --goal ...`, and block
   native direct run from silently overwriting meaningful active session state.
 - Update README, configuration, getting-started, assistant guidance, roadmap,
   contributor docs, and changelog for the release.
@@ -353,15 +365,15 @@ Delivered specs:
 
 Highlights:
 
-- Make bounded `review` and `govern` phases executable from `synod workflow`
+- Make bounded `review` and `govern` phases executable from `boundline workflow`
   so named workflows can complete or stop in explicit paused, blocked, failed,
   or completed states on the same session-owned route.
-- Add `synod workflow list` plus optional workflow-registry discovery metadata
+- Add `boundline workflow list` plus optional workflow-registry discovery metadata
   (`summary`, `recommended_when`) so operators and assistants can choose the
   correct named workflow without reading raw registry files.
 - Keep direct session-native commands and explicit compatibility routing
   available when no named workflow is invoked, even when a workspace defines
-  `.synod/workflows.toml`.
+  `.boundline/workflows.toml`.
 - Update README, getting-started, configuration, assistant guidance, roadmap,
   and contributor docs for the completed workflow follow-through slice.
 
@@ -373,9 +385,9 @@ Delivered specs:
 
 Highlights:
 
-- Add workspace-local `.synod/workflows.toml` as a bounded named-workflow
-  registry compiled onto Synod's existing session-native phases.
-- Add `synod workflow run`, `status`, `resume`, and `inspect` so named
+- Add workspace-local `.boundline/workflows.toml` as a bounded named-workflow
+  registry compiled onto Boundline's existing session-native phases.
+- Add `boundline workflow run`, `status`, `resume`, and `inspect` so named
   workflows reuse the same session, routing, trace, and next-command story as
   direct session-native delivery work.
 - Persist workflow identity, active phase, lifecycle pauses, and next-action
@@ -425,7 +437,7 @@ Delivered specs:
 
 Highlights:
 
-- Refound Synod around `start -> capture -> plan -> run -> status -> inspect`
+- Refound Boundline around `start -> capture -> plan -> run -> status -> inspect`
   as the primary operator journey for bounded delivery work.
 - Treat flow as confirmed policy constraints over bounded decisions rather than
   as a rigid script, while preserving failure evidence and recovery state for
@@ -461,9 +473,9 @@ Delivered specs:
 
 Highlights:
 
-- Added `synod init` to scaffold bounded workspace defaults under `.synod/`
+- Added `boundline init` to scaffold bounded workspace defaults under `.boundline/`
   without hand-authoring setup files.
-- Added `synod config show|set|unset` for runtime/model routing at global and
+- Added `boundline config show|set|unset` for runtime/model routing at global and
   workspace scope.
 - Added deterministic routing precedence (`CLI > workspace > global > built-in`)
   with effective-source visibility.
@@ -478,11 +490,11 @@ Delivered specs:
 
 Highlights:
 
-- `synod capture` and `synod run` accept one or more `--brief <path>.md`
+- `boundline capture` and `boundline run` accept one or more `--brief <path>.md`
   arguments alongside (or instead of) `--goal`. Brief contents are normalized
   into a single goal text projected through the existing capture pipeline so
   developers no longer need to author free-text prose only on the command line.
-- New `synod::domain::brief` module (`AuthoredBriefBundle`,
+- New `boundline::domain::brief` module (`AuthoredBriefBundle`,
   `InputSourceReference`, `BriefIngestionError`, `normalize_inputs`) enforces
   workspace-bounded `.md`/`.markdown` sources, an upper bound of 10 brief
   files per invocation, and a 256 KiB per-source size cap.
@@ -536,9 +548,9 @@ Delivered specs:
 
 Highlights:
 
-- Add workspace execution manifests under `<workspace>/.synod/execution.json`
-  with fallback to the legacy `<workspace>/.synod/fixture.json` shape.
-- Let Synod apply bounded workspace changes, run validation commands, and take
+- Add workspace execution manifests under `<workspace>/.boundline/execution.json`
+  with fallback to the legacy `<workspace>/.boundline/fixture.json` shape.
+- Let Boundline apply bounded workspace changes, run validation commands, and take
   explicit retry or replan paths based on manifest policy.
 - Persist changed-file evidence, validation results, and terminal outcomes in
   session state and file-backed traces.
@@ -565,7 +577,7 @@ Delivered specs:
 
 Highlights:
 
-- Persist active workspace session state under `<workspace>/.synod/session.json`.
+- Persist active workspace session state under `<workspace>/.boundline/session.json`.
 - Unify `start`, `capture`, `plan`, `step`, `run`, `status`, `next`, and
   `inspect` around one session-native CLI workflow.
 - Tighten session validation and status projection so operators can resume work
@@ -598,5 +610,5 @@ Highlights:
 - Introduce the bounded delivery orchestrator core as a Rust library crate.
 - Establish deterministic planning, registry-based execution endpoints,
   bounded retries, bounded replanning, and explicit terminal states.
-- Persist execution traces under `<workspace>/.synod/traces/` as the foundation
+- Persist execution traces under `<workspace>/.boundline/traces/` as the foundation
   for later CLI, session, and delivery surfaces.

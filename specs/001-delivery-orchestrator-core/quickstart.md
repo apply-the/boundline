@@ -4,7 +4,7 @@
 
 1. Install Rust 1.95.0 with `rustfmt` and `clippy` available.
 2. Work from the repository root on branch `001-delivery-orchestrator-core`.
-3. Use a writable workspace path so trace files can be created under `.synod/traces/`.
+3. Use a writable workspace path so trace files can be created under `.boundline/traces/`.
 
 ## Current Implementation Surface
 
@@ -18,7 +18,7 @@
 
 ```rust
 use serde_json::json;
-use synod::{
+use boundline::{
    AgentRegistry, FileTraceStore, FnAgentAdapter, FnToolAdapter, Orchestrator, Plan,
    RunLimits, StaticPlanner, Step, StepExecutionRequest, StepExecutionResult,
    TaskRunRequest, ToolRegistry,
@@ -57,14 +57,14 @@ let orchestrator = Orchestrator::new(
    planner,
    agents,
    tools,
-   FileTraceStore::for_workspace("/tmp/synod-workspace"),
+   FileTraceStore::for_workspace("/tmp/boundline-workspace"),
 );
 
 let response = orchestrator.run(TaskRunRequest {
    goal: "Fix a bounded engineering task".to_string(),
    input: json!({"ticket": "BUG-123"}),
    session_id: "session-1".to_string(),
-   workspace_ref: "/tmp/synod-workspace".to_string(),
+   workspace_ref: "/tmp/boundline-workspace".to_string(),
    limits: RunLimits::default(),
    initial_context: None,
 })?;

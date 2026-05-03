@@ -8,7 +8,7 @@ Define the minimum behavior for approval refresh and packet-lineage visibility a
 
 ### 1. Refresh happens before resumed progression
 
-When a governed session is resumed or inspected through later commands, Synod MUST refresh approval and packet-readiness state before allowing the next governed stage to continue.
+When a governed session is resumed or inspected through later commands, Boundline MUST refresh approval and packet-readiness state before allowing the next governed stage to continue.
 
 ### 2. Packet lineage stays bounded and explicit
 
@@ -20,7 +20,7 @@ When later governed work reuses a prior packet, the surfaces MUST expose:
 
 ### 3. Refresh outcomes do not hide non-success transitions
 
-When refreshed state changes from waiting to blocked or from waiting to reusable, Synod MUST report the updated state explicitly and MUST NOT advance hidden work.
+When refreshed state changes from waiting to blocked or from waiting to reusable, Boundline MUST report the updated state explicitly and MUST NOT advance hidden work.
 
 ## Acceptance Examples
 

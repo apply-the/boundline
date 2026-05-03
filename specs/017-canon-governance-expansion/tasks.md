@@ -17,9 +17,9 @@
 
 **Purpose**: Release boundary and test-harness setup for the governance expansion slice
 
-- [X] T001 Bump crate version to `0.17.0` in `/Users/rt/workspace/synod/Cargo.toml` and `/Users/rt/workspace/synod/Cargo.lock`
-- [X] T002 Create governed security-analysis fixture helpers in `/Users/rt/workspace/synod/tests/support/workspace_fixture.rs`
-- [X] T003 Register new governance-expansion test modules in `/Users/rt/workspace/synod/tests/contract.rs`, `/Users/rt/workspace/synod/tests/integration.rs`, and `/Users/rt/workspace/synod/tests/unit.rs`
+- [X] T001 Bump crate version to `0.17.0` in `/Users/rt/workspace/boundline/Cargo.toml` and `/Users/rt/workspace/boundline/Cargo.lock`
+- [X] T002 Create governed security-analysis fixture helpers in `/Users/rt/workspace/boundline/tests/support/workspace_fixture.rs`
+- [X] T003 Register new governance-expansion test modules in `/Users/rt/workspace/boundline/tests/contract.rs`, `/Users/rt/workspace/boundline/tests/integration.rs`, and `/Users/rt/workspace/boundline/tests/unit.rs`
 
 ---
 
@@ -29,10 +29,10 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [X] T004 Extend Canon mode and stage-validation primitives for the bounded expansion in `/Users/rt/workspace/synod/src/domain/governance.rs`
-- [ ] T005 [P] Extend autopilot selection, escalation hooks, and bounded packet-reuse helpers in `/Users/rt/workspace/synod/src/orchestrator/governance.rs`
-- [X] T006 [P] Extend session-visible governance projection helpers in `/Users/rt/workspace/synod/src/domain/session.rs`, `/Users/rt/workspace/synod/src/cli/output.rs`, and `/Users/rt/workspace/synod/src/cli/inspect.rs`
-- [X] T007 Add foundational unit coverage for mode validation and governance projection invariants in `/Users/rt/workspace/synod/tests/unit/canon_stage_mapping.rs`, `/Users/rt/workspace/synod/tests/unit/governance_policy.rs`, and `/Users/rt/workspace/synod/tests/unit/cli_output.rs`
+- [X] T004 Extend Canon mode and stage-validation primitives for the bounded expansion in `/Users/rt/workspace/boundline/src/domain/governance.rs`
+- [ ] T005 [P] Extend autopilot selection, escalation hooks, and bounded packet-reuse helpers in `/Users/rt/workspace/boundline/src/orchestrator/governance.rs`
+- [X] T006 [P] Extend session-visible governance projection helpers in `/Users/rt/workspace/boundline/src/domain/session.rs`, `/Users/rt/workspace/boundline/src/cli/output.rs`, and `/Users/rt/workspace/boundline/src/cli/inspect.rs`
+- [X] T007 Add foundational unit coverage for mode validation and governance projection invariants in `/Users/rt/workspace/boundline/tests/unit/canon_stage_mapping.rs`, `/Users/rt/workspace/boundline/tests/unit/governance_policy.rs`, and `/Users/rt/workspace/boundline/tests/unit/cli_output.rs`
 
 **Checkpoint**: The bounded governance-expansion model exists before any story-specific routing or rendering changes widen behavior.
 
@@ -42,20 +42,20 @@
 
 **Goal**: Let targeted existing-system verification stages route through Canon `security-assessment` while staying inside the same bounded session-native execution loop.
 
-**Independent Test**: Prepare a `bug-fix` or `change` session that reaches `verify`, enable Canon governance for that stage, and confirm that Synod starts a governed `security-assessment` path, records the selected mode, and either continues, waits, or blocks explicitly.
+**Independent Test**: Prepare a `bug-fix` or `change` session that reaches `verify`, enable Canon governance for that stage, and confirm that Boundline starts a governed `security-assessment` path, records the selected mode, and either continues, waits, or blocks explicitly.
 
 ### Tests for User Story 1
 
-- [X] T008 [P] [US1] Add Canon runtime contract coverage for `security-assessment` start and refresh payloads in `/Users/rt/workspace/synod/tests/contract/canon_runtime_contract.rs`
-- [X] T009 [P] [US1] Add integration coverage for bug-fix and change verification routing through `security-assessment` in `/Users/rt/workspace/synod/tests/integration/governance_autopilot_flow.rs`
-- [X] T010 [P] [US1] Add integration coverage for invalid context or unsupported governed-mode blocking in `/Users/rt/workspace/synod/tests/integration/governance_autopilot_flow.rs`
+- [X] T008 [P] [US1] Add Canon runtime contract coverage for `security-assessment` start and refresh payloads in `/Users/rt/workspace/boundline/tests/contract/canon_runtime_contract.rs`
+- [X] T009 [P] [US1] Add integration coverage for bug-fix and change verification routing through `security-assessment` in `/Users/rt/workspace/boundline/tests/integration/governance_autopilot_flow.rs`
+- [X] T010 [P] [US1] Add integration coverage for invalid context or unsupported governed-mode blocking in `/Users/rt/workspace/boundline/tests/integration/governance_autopilot_flow.rs`
 
 ### Implementation for User Story 1
 
-- [X] T011 [US1] Add `security-assessment` to the Canon mode model and targeted verify-stage mappings in `/Users/rt/workspace/synod/src/domain/governance.rs`
-- [ ] T012 [US1] Extend Canon request and response handling for governed security analysis in `/Users/rt/workspace/synod/src/adapters/governance_runtime.rs`
-- [ ] T013 [US1] Route targeted verification stages through governed `security-assessment` using existing start and refresh semantics in `/Users/rt/workspace/synod/src/orchestrator/engine.rs`, `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs`, and `/Users/rt/workspace/synod/src/orchestrator/governance.rs`
-- [ ] T014 [US1] Persist selected Canon mode, packet provenance, and blocked reasons for governed security-analysis runs in `/Users/rt/workspace/synod/src/orchestrator/governance.rs` and `/Users/rt/workspace/synod/src/cli/session.rs`
+- [X] T011 [US1] Add `security-assessment` to the Canon mode model and targeted verify-stage mappings in `/Users/rt/workspace/boundline/src/domain/governance.rs`
+- [ ] T012 [US1] Extend Canon request and response handling for governed security analysis in `/Users/rt/workspace/boundline/src/adapters/governance_runtime.rs`
+- [ ] T013 [US1] Route targeted verification stages through governed `security-assessment` using existing start and refresh semantics in `/Users/rt/workspace/boundline/src/orchestrator/engine.rs`, `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs`, and `/Users/rt/workspace/boundline/src/orchestrator/governance.rs`
+- [ ] T014 [US1] Persist selected Canon mode, packet provenance, and blocked reasons for governed security-analysis runs in `/Users/rt/workspace/boundline/src/orchestrator/governance.rs` and `/Users/rt/workspace/boundline/src/cli/session.rs`
 
 **Checkpoint**: Targeted verification stages can run through governed security analysis and stop explicitly on approval or blocked conditions.
 
@@ -69,15 +69,15 @@
 
 ### Tests for User Story 2
 
-- [X] T015 [P] [US2] Add contract coverage for governed-analysis session fields in `/Users/rt/workspace/synod/tests/contract/governance_session_contract.rs`
-- [ ] T016 [P] [US2] Add integration coverage for coherent run, status, next, and inspect summaries in `/Users/rt/workspace/synod/tests/integration/governance_autopilot_flow.rs`
-- [ ] T017 [P] [US2] Add unit coverage for governed-analysis rendering and packet binding headlines in `/Users/rt/workspace/synod/tests/unit/cli_output.rs` and `/Users/rt/workspace/synod/tests/unit/session_record.rs`
+- [X] T015 [P] [US2] Add contract coverage for governed-analysis session fields in `/Users/rt/workspace/boundline/tests/contract/governance_session_contract.rs`
+- [ ] T016 [P] [US2] Add integration coverage for coherent run, status, next, and inspect summaries in `/Users/rt/workspace/boundline/tests/integration/governance_autopilot_flow.rs`
+- [ ] T017 [P] [US2] Add unit coverage for governed-analysis rendering and packet binding headlines in `/Users/rt/workspace/boundline/tests/unit/cli_output.rs` and `/Users/rt/workspace/boundline/tests/unit/session_record.rs`
 
 ### Implementation for User Story 2
 
-- [ ] T018 [US2] Extend session-status and run rendering for selected Canon mode, packet provenance, and next-action guidance in `/Users/rt/workspace/synod/src/cli/output.rs` and `/Users/rt/workspace/synod/src/cli/session.rs`
-- [ ] T019 [US2] Extend trace summarization and inspect output for governed analysis mode selection and packet binding in `/Users/rt/workspace/synod/src/cli/inspect.rs`
-- [ ] T020 [US2] Keep approval refresh and suggested-next-command behavior aligned for governed security-analysis sessions in `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs` and `/Users/rt/workspace/synod/src/domain/session.rs`
+- [ ] T018 [US2] Extend session-status and run rendering for selected Canon mode, packet provenance, and next-action guidance in `/Users/rt/workspace/boundline/src/cli/output.rs` and `/Users/rt/workspace/boundline/src/cli/session.rs`
+- [ ] T019 [US2] Extend trace summarization and inspect output for governed analysis mode selection and packet binding in `/Users/rt/workspace/boundline/src/cli/inspect.rs`
+- [ ] T020 [US2] Keep approval refresh and suggested-next-command behavior aligned for governed security-analysis sessions in `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs` and `/Users/rt/workspace/boundline/src/domain/session.rs`
 
 **Checkpoint**: Governed security analysis is visible through one coherent session-native operator story.
 
@@ -91,13 +91,13 @@
 
 ### Tests for User Story 3
 
-- [X] T021 [P] [US3] Add unit coverage for unsupported-mode rejection and future-compatible selection behavior in `/Users/rt/workspace/synod/tests/unit/governance_policy.rs` and `/Users/rt/workspace/synod/tests/unit/canon_stage_mapping.rs`
-- [ ] T022 [P] [US3] Add contract or integration coverage that non-expanded sessions preserve current behavior in `/Users/rt/workspace/synod/tests/contract/governance_session_contract.rs` and `/Users/rt/workspace/synod/tests/integration/governance_autopilot_flow.rs`
+- [X] T021 [P] [US3] Add unit coverage for unsupported-mode rejection and future-compatible selection behavior in `/Users/rt/workspace/boundline/tests/unit/governance_policy.rs` and `/Users/rt/workspace/boundline/tests/unit/canon_stage_mapping.rs`
+- [ ] T022 [P] [US3] Add contract or integration coverage that non-expanded sessions preserve current behavior in `/Users/rt/workspace/boundline/tests/contract/governance_session_contract.rs` and `/Users/rt/workspace/boundline/tests/integration/governance_autopilot_flow.rs`
 
 ### Implementation for User Story 3
 
-- [ ] T023 [US3] Reject unsupported newer Canon modes explicitly while preserving bounded expansion hooks in `/Users/rt/workspace/synod/src/domain/governance.rs` and `/Users/rt/workspace/synod/src/orchestrator/governance.rs`
-- [ ] T024 [US3] Keep the widened packet-provenance and mode-selection model compatible with a later `supply-chain-analysis` slice in `/Users/rt/workspace/synod/src/domain/governance.rs`, `/Users/rt/workspace/synod/src/cli/output.rs`, and `/Users/rt/workspace/synod/src/cli/inspect.rs`
+- [ ] T023 [US3] Reject unsupported newer Canon modes explicitly while preserving bounded expansion hooks in `/Users/rt/workspace/boundline/src/domain/governance.rs` and `/Users/rt/workspace/boundline/src/orchestrator/governance.rs`
+- [ ] T024 [US3] Keep the widened packet-provenance and mode-selection model compatible with a later `supply-chain-analysis` slice in `/Users/rt/workspace/boundline/src/domain/governance.rs`, `/Users/rt/workspace/boundline/src/cli/output.rs`, and `/Users/rt/workspace/boundline/src/cli/inspect.rs`
 
 **Checkpoint**: The first slice stays bounded to `security-assessment` while leaving a clear structural path for later Canon governance expansion.
 
@@ -107,9 +107,9 @@
 
 **Purpose**: Release alignment, generated context, validation, coverage, and docs
 
-- [ ] T025 [P] Refresh generated agent and contributor context in `/Users/rt/workspace/synod/AGENTS.md` and `/Users/rt/workspace/synod/CONTRIBUTING.md`
+- [ ] T025 [P] Refresh generated agent and contributor context in `/Users/rt/workspace/boundline/AGENTS.md` and `/Users/rt/workspace/boundline/CONTRIBUTING.md`
 - [X] T026 [P] Run focused governance validation and refresh `lcov.info` via `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features`, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, and `cargo deny check licenses advisories bans sources`
-- [X] T027 Update `/Users/rt/workspace/synod/README.md`, `/Users/rt/workspace/synod/ROADMAP.md`, `/Users/rt/workspace/synod/CHANGELOG.md`, `/Users/rt/workspace/synod/docs/`, `/Users/rt/workspace/synod/assistant/`, `/Users/rt/workspace/synod/.specify/templates/`, and touched tests or `lcov.info` for the `0.17.0` Canon governance expansion release, guarantee coverage on touched Rust files, run `cargo fmt`, and resolve all `cargo clippy` warnings and errors
+- [X] T027 Update `/Users/rt/workspace/boundline/README.md`, `/Users/rt/workspace/boundline/ROADMAP.md`, `/Users/rt/workspace/boundline/CHANGELOG.md`, `/Users/rt/workspace/boundline/docs/`, `/Users/rt/workspace/boundline/assistant/`, `/Users/rt/workspace/boundline/.specify/templates/`, and touched tests or `lcov.info` for the `0.17.0` Canon governance expansion release, guarantee coverage on touched Rust files, run `cargo fmt`, and resolve all `cargo clippy` warnings and errors
 
 ---
 

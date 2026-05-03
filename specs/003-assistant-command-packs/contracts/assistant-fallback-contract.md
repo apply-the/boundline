@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Defines how assistant commands continue a Synod workflow when direct shell execution is unavailable.
+Defines how assistant commands continue a Boundline workflow when direct shell execution is unavailable.
 
 ## Fallback Exchange Shape
 
@@ -16,17 +16,17 @@ Defines how assistant commands continue a Synod workflow when direct shell execu
 
 | Command | Minimum Context Before Fallback Can Continue |
 |---------|----------------------------------------------|
-| `synod-start` | `workspace_ref` |
-| `synod-plan` | Broad user goal |
-| `synod-step` | Current workflow context or pasted inspection output |
-| `synod-run` | `workspace_ref`, `goal` |
-| `synod-status` | `workspace_ref` or `trace_ref` |
-| `synod-next` | `workspace_ref` or `trace_ref`, plus latest known outcome if already available |
-| `synod-inspect` | `trace_ref` or `workspace_ref` |
+| `boundline-start` | `workspace_ref` |
+| `boundline-plan` | Broad user goal |
+| `boundline-step` | Current workflow context or pasted inspection output |
+| `boundline-run` | `workspace_ref`, `goal` |
+| `boundline-status` | `workspace_ref` or `trace_ref` |
+| `boundline-next` | `workspace_ref` or `trace_ref`, plus latest known outcome if already available |
+| `boundline-inspect` | `trace_ref` or `workspace_ref` |
 
 ## Output Handling Rules
 
-- The assistant MUST accept pasted output from `synod doctor`, `synod run`, or `synod inspect`.
+- The assistant MUST accept pasted output from `boundline doctor`, `boundline run`, or `boundline inspect`.
 - The assistant MUST extract the terminal state, actionable problems, recovery events, trace references, and next-step cues when present.
 - The assistant MUST ask for more output only when the pasted content is insufficient to determine the command outcome.
 - The assistant MUST preserve already confirmed context and MUST NOT ask the user to re-enter it unless the pasted output contradicts it.
@@ -36,9 +36,9 @@ Defines how assistant commands continue a Synod workflow when direct shell execu
 | Backend Outcome | Assistant Obligation |
 |-----------------|----------------------|
 | Invalid invocation or missing input | Explain the missing field and provide the corrected command |
-| Non-success run | Summarize failure or exhaustion, surface recovery signals if present, and recommend `synod-next` or `synod-inspect` |
+| Non-success run | Summarize failure or exhaustion, surface recovery signals if present, and recommend `boundline-next` or `boundline-inspect` |
 | Trace read failure | Ask for a corrected trace reference or workspace and provide the replacement inspect command |
-| Readiness failure | Summarize the blocking prerequisite and route back to `synod-start` once corrected |
+| Readiness failure | Summarize the blocking prerequisite and route back to `boundline-start` once corrected |
 
 ## Behavioral Guarantees
 

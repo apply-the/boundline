@@ -11,7 +11,7 @@ Add a minimal developer-facing CLI to the existing Rust package so contributors 
 
 **Language/Version**: Rust 1.95.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies (`serde`, `serde_json`, `thiserror`, `tracing`, `uuid`) plus `clap` 4.x for a stable subcommand-based CLI surface  
-**Storage**: In-memory task state during execution and local file-backed traces under `<workspace>/.synod/traces/` through the existing trace store  
+**Storage**: In-memory task state during execution and local file-backed traces under `<workspace>/.boundline/traces/` through the existing trace store  
 **Testing**: `cargo test` with unit, integration, and contract tests, plus CLI-focused integration coverage over deterministic fixture-backed runs and custom goals  
 **Target Platform**: macOS and Linux developer workstations, plus Linux CI validation for formatting, linting, and tests  
 **Project Type**: Single Rust package with a reusable library crate and one local developer CLI binary  
@@ -61,7 +61,7 @@ Cargo.toml
 src/
 ├── lib.rs
 ├── bin/
-│   └── synod.rs
+│   └── boundline.rs
 ├── cli.rs
 ├── cli/
 │   ├── diagnostics.rs

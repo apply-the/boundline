@@ -12,7 +12,7 @@
 **Purpose**: Register the delivery-flow surface in the existing crate and test harnesses.
 
 - [X] T001 Wire flow module exports and test harness entries in src/domain.rs, src/lib.rs, tests/unit.rs, tests/integration.rs, and tests/contract.rs
-- [X] T002 [P] Add CLI command scaffolding for `flow` in src/cli.rs and src/bin/synod.rs
+- [X] T002 [P] Add CLI command scaffolding for `flow` in src/cli.rs and src/bin/boundline.rs
 - [X] T003 [P] Create delivery-flow feature skeletons in src/domain/flow.rs, src/cli/session.rs, src/orchestrator/session_runtime.rs, tests/unit/flow_definition.rs, tests/integration/flow_cli_run.rs, and tests/contract/flow_command_contract.rs
 
 ---
@@ -45,13 +45,13 @@
 
 > **NOTE**: Write these tests first and confirm they fail before implementing the story.
 
-- [X] T011 [P] [US1] Add contract coverage for `synod flow bug-fix` selection and rejection cases in tests/contract/flow_command_contract.rs
+- [X] T011 [P] [US1] Add contract coverage for `boundline flow bug-fix` selection and rejection cases in tests/contract/flow_command_contract.rs
 - [X] T012 [P] [US1] Add integration coverage for the bug-fix happy path in tests/integration/flow_cli_run.rs
 - [X] T013 [P] [US1] Add integration coverage for retry staying inside the active bug-fix stage in tests/integration/flow_cli_run.rs
 
 ### Implementation for User Story 1
 
-- [X] T014 [P] [US1] Implement the `flow` command handler and dispatch for bug-fix selection in src/cli/session.rs, src/cli.rs, and src/bin/synod.rs
+- [X] T014 [P] [US1] Implement the `flow` command handler and dispatch for bug-fix selection in src/cli/session.rs, src/cli.rs, and src/bin/boundline.rs
 - [X] T015 [US1] Implement bug-fix flow planning and initial stage binding in src/orchestrator/session_runtime.rs and src/fixture.rs
 - [X] T016 [US1] Enforce same-stage retry or replan behavior, configured execution bounds, and stage transition recording for bug-fix execution in src/orchestrator/engine.rs and src/domain/trace.rs
 - [X] T017 [US1] Persist bug-fix flow state and stage progression in src/domain/session.rs and src/orchestrator/session_runtime.rs
@@ -158,12 +158,12 @@
 
 ```bash
 # Build the User Story 1 validation surface together:
-Task: "T011 Add contract coverage for `synod flow bug-fix` selection and rejection cases in tests/contract/flow_command_contract.rs"
+Task: "T011 Add contract coverage for `boundline flow bug-fix` selection and rejection cases in tests/contract/flow_command_contract.rs"
 Task: "T012 Add integration coverage for the bug-fix happy path in tests/integration/flow_cli_run.rs"
 Task: "T013 Add integration coverage for retry staying inside the active bug-fix stage in tests/integration/flow_cli_run.rs"
 
 # Split command and planning work after tests are in place:
-Task: "T014 Implement the `flow` command handler and dispatch for bug-fix selection in src/cli/session.rs, src/cli.rs, and src/bin/synod.rs"
+Task: "T014 Implement the `flow` command handler and dispatch for bug-fix selection in src/cli/session.rs, src/cli.rs, and src/bin/boundline.rs"
 Task: "T015 Implement bug-fix flow planning and initial stage binding in src/orchestrator/session_runtime.rs and src/fixture.rs"
 ```
 

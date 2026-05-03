@@ -5,13 +5,13 @@
 
 ## Summary
 
-Introduce a workspace-scoped session layer that sits between Synod's CLI and the existing orchestrator runtime so goal capture, planning state, current execution position, latest outcome, and latest trace survive across invocations. The plan preserves the current Rust crate and bounded sequential orchestration semantics, adds a file-backed session record under `<workspace>/.synod/session.json`, introduces session-backed CLI commands for `start`, `capture`, `plan`, `step`, `run`, `status`, and `next`, and updates assistant continuity rules so chat and CLI operate against the same explicit interaction state.
+Introduce a workspace-scoped session layer that sits between Boundline's CLI and the existing orchestrator runtime so goal capture, planning state, current execution position, latest outcome, and latest trace survive across invocations. The plan preserves the current Rust crate and bounded sequential orchestration semantics, adds a file-backed session record under `<workspace>/.boundline/session.json`, introduces session-backed CLI commands for `start`, `capture`, `plan`, `step`, `run`, `status`, and `next`, and updates assistant continuity rules so chat and CLI operate against the same explicit interaction state.
 
 ## Technical Context
 
 **Language/Version**: Rust 1.95.0, edition 2024 for the existing CLI and orchestrator backend  
 **Primary Dependencies**: Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`); no new runtime dependencies for this slice  
-**Storage**: Workspace-local JSON session record at `<workspace>/.synod/session.json` plus the existing file-backed traces under `<workspace>/.synod/traces/`  
+**Storage**: Workspace-local JSON session record at `<workspace>/.boundline/session.json` plus the existing file-backed traces under `<workspace>/.boundline/traces/`  
 **Testing**: `cargo test` with new unit, integration, and contract tests for session persistence, CLI continuity, assistant continuity, recovery handling, and status routing  
 **Target Platform**: macOS and Linux developer workstations plus Linux CI for formatting, linting, and test validation  
 **Project Type**: Single Rust package with a local CLI, orchestrator engine, and repository-managed assistant command assets  

@@ -200,8 +200,8 @@ fn canonical_workspace(path: &Path) -> Result<PathBuf, ClusterCommandError> {
         ClusterCommandError::WorkspaceRead { path: path.to_path_buf(), source }
     })?;
 
-    if !is_synod_workspace(&canonical) {
-        return Err(ClusterCommandError::NotSynodWorkspace(canonical));
+    if !is_boundline_workspace(&canonical) {
+        return Err(ClusterCommandError::NotBoundlineWorkspace(canonical));
     }
 
     Ok(canonical)
@@ -241,10 +241,10 @@ fn normalize_members(
     Ok(normalized)
 }
 
-fn is_synod_workspace(path: &Path) -> bool {
-    path.join(".synod/execution.json").is_file()
-        || path.join(".synod/config.toml").is_file()
-        || path.join(".synod/session.json").is_file()
+fn is_boundline_workspace(path: &Path) -> bool {
+    path.join(".boundline/execution.json").is_file()
+        || path.join(".boundline/config.toml").is_file()
+        || path.join(".boundline/session.json").is_file()
 }
 
 #[derive(Debug, Error)]
@@ -255,8 +255,8 @@ pub enum ClusterCommandError {
     MemberCount { count: usize },
     #[error("primary workspace {0} must also appear in the --member list")]
     PrimaryWorkspaceMissing(PathBuf),
-    #[error("workspace is not a valid Synod workspace: {0}")]
-    NotSynodWorkspace(PathBuf),
+    #[error("workspace is not a valid Boundline workspace: {0}")]
+    NotBoundlineWorkspace(PathBuf),
     #[error("failed to read workspace {path}: {source}")]
     WorkspaceRead { path: PathBuf, source: std::io::Error },
     #[error("cluster config already exists at {0}")]

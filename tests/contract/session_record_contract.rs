@@ -1,14 +1,14 @@
 use std::fs;
 
-use crate::workspace_fixture::{run_synod_in, temp_fixture_workspace, terminal_text};
-use synod::domain::session::{ActiveSessionRecord, SessionStatus};
+use crate::workspace_fixture::{run_boundline_in, temp_fixture_workspace, terminal_text};
+use boundline::domain::session::{ActiveSessionRecord, SessionStatus};
 
 #[test]
 fn start_creates_a_valid_workspace_scoped_session_record() {
-    let workspace = temp_fixture_workspace("synod-session-contract");
-    let output = run_synod_in(&workspace, &["start"]);
+    let workspace = temp_fixture_workspace("boundline-session-contract");
+    let output = run_boundline_in(&workspace, &["start"]);
     let text = terminal_text(&output);
-    let session_path = workspace.join(".synod").join("session.json");
+    let session_path = workspace.join(".boundline").join("session.json");
 
     assert_eq!(output.status.code(), Some(0), "{text}");
     assert!(session_path.exists(), "{text}");

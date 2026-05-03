@@ -9,11 +9,11 @@
 
 ### User Story 1 - Route Work Through Declared Runtime Capabilities (Priority: P1)
 
-An operator can run the primary session-native path and have Synod shape the
+An operator can run the primary session-native path and have Boundline shape the
 next bounded action around declared runtime capabilities and effort policies
 instead of discovering backend limits only after execution stalls.
 
-**Why this priority**: This is the core operating-model change. If Synod still
+**Why this priority**: This is the core operating-model change. If Boundline still
 chooses and explains work as if all runtimes were interchangeable, delegation is
 implicit guesswork rather than a bounded delivery feature.
 
@@ -27,11 +27,11 @@ step.
 
 1. **Given** a credible native session where the configured implementation
    runtime lacks a required delivery capability, **When** the operator runs
-   `plan` or `run`, **Then** Synod chooses a bounded delegation or stop path
+   `plan` or `run`, **Then** Boundline chooses a bounded delegation or stop path
    explicitly instead of pretending the direct route can still execute.
 2. **Given** a credible native session where multiple declared runtimes can
    perform the next bounded step with different effort policies, **When** the
-   operator runs `plan`, **Then** Synod records which route it selected and why
+   operator runs `plan`, **Then** Boundline records which route it selected and why
    using the declared effort and capability policy rather than hidden fallback
    behavior.
 
@@ -56,11 +56,11 @@ that explains the boundary and drives the next bounded action.
 
 1. **Given** a native session where a bounded step cannot continue on the
    current route but can continue credibly through another declared runtime or
-   slot, **When** `run` reaches that boundary, **Then** Synod persists a
+   slot, **When** `run` reaches that boundary, **Then** Boundline persists a
    handoff packet with the needed evidence, recommended target, and next
    bounded command instead of failing with an opaque routing error.
 2. **Given** a native session where no declared runtime can continue credibly,
-   **When** `run` reaches that boundary, **Then** Synod persists an escalation
+   **When** `run` reaches that boundary, **Then** Boundline persists an escalation
    packet that names the blocking reason, preserves the evidence basis, and
    stops in an explicit terminal state.
 
@@ -68,7 +68,7 @@ that explains the boundary and drives the next bounded action.
 
 ### User Story 3 - Detect Stuck Delegation And Preserve Recovery (Priority: P3)
 
-An operator can rely on Synod to detect when delegated delivery has become stuck
+An operator can rely on Boundline to detect when delegated delivery has become stuck
 or non-credible and to preserve a bounded recovery path instead of looping
 silently.
 
@@ -78,19 +78,19 @@ first-class behavior.
 
 **Independent Test**: Run representative sessions that produce repeated blocked
 actions, unchanged workspace state, failed validations, or unresolved packets.
-Synod must convert those patterns into an explicit stuck condition, a bounded
+Boundline must convert those patterns into an explicit stuck condition, a bounded
 recovery recommendation, and inspectable packet history.
 
 **Acceptance Scenarios**:
 
 1. **Given** a delegated session that keeps revisiting the same blocked
-   condition without new evidence, **When** Synod evaluates the next bounded
+   condition without new evidence, **When** Boundline evaluates the next bounded
    action, **Then** it marks the continuity state as stuck and recommends a
    replan, escalation, or resolution command instead of repeating the same
    attempt.
 2. **Given** a delegated session where a handoff packet becomes obsolete because
    the workspace, routing declaration, or validation evidence changed,
-   **When** the operator continues the session, **Then** Synod resolves or
+   **When** the operator continues the session, **Then** Boundline resolves or
    supersedes that packet explicitly rather than leaving stale delegation state
    as the active source of truth.
 
@@ -113,7 +113,7 @@ creation, and stuck detection, then run the release validation suite.
 **Acceptance Scenarios**:
 
 1. **Given** the `0.37.0` release artifacts, **When** a maintainer follows the
-   documented native path, **Then** Synod, the roadmap, and assistant guidance
+   documented native path, **Then** Boundline, the roadmap, and assistant guidance
    all describe delegated execution as part of the same session-owned bounded
    delivery model.
 2. **Given** the modified or new Rust files for this slice, **When** the
@@ -186,7 +186,7 @@ creation, and stuck detection, then run the release validation suite.
   supersession, and read-side projection on the native and compatibility-aware
   surfaces it changes.
 - **FR-016**: System MUST include explicit release-closeout work for bumping the
-  Synod version to `0.37.0`, updating impacted docs and assistant guidance,
+  Boundline version to `0.37.0`, updating impacted docs and assistant guidance,
   refreshing the roadmap, and recording the release in the changelog.
 - **FR-017**: System MUST finish with clean formatting, clean lint results, and
   line coverage above 95% for every modified or newly created Rust file in this
@@ -225,7 +225,7 @@ creation, and stuck detection, then run the release validation suite.
 
 - **SC-001**: In representative routing scenarios with differing declared
   runtime capabilities, operators can identify which capability or effort rule
-  changed the selected bounded path in under 2 minutes using standard Synod
+  changed the selected bounded path in under 2 minutes using standard Boundline
   output.
 - **SC-002**: In representative delivery blocks, 100% of blocked native runs
   either persist a handoff packet, persist an escalation packet, or stop with an
@@ -234,7 +234,7 @@ creation, and stuck detection, then run the release validation suite.
   identify the active packet, its decisive evidence, and its next recovery or
   continuation action from `status`, `next`, or `inspect` without opening raw
   persisted JSON.
-- **SC-004**: In representative repeated-block scenarios, Synod detects and
+- **SC-004**: In representative repeated-block scenarios, Boundline detects and
   surfaces a stuck continuity state before repeating the same blocked action more
   than the configured limit.
 - **SC-005**: All modified or newly created Rust files in this slice complete

@@ -1,14 +1,14 @@
 use std::fs;
 
-use synod::adapters::session_store::{FileSessionStore, SessionStore};
-use synod::cli::cluster::execute_init;
-use synod::cli::inspect::execute_inspect;
-use synod::cli::session::{
+use boundline::adapters::session_store::{FileSessionStore, SessionStore};
+use boundline::cli::cluster::execute_init;
+use boundline::cli::inspect::execute_inspect;
+use boundline::cli::session::{
     execute_capture_with_target, execute_plan_with_target, execute_run_with_target,
     execute_start_with_target, execute_status_with_target,
 };
-use synod::domain::cluster::ClusteredExecutionKind;
-use synod::domain::session::SessionStatus;
+use boundline::domain::cluster::ClusteredExecutionKind;
+use boundline::domain::session::SessionStatus;
 
 use crate::workspace_fixture::temp_cluster_workspaces;
 

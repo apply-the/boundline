@@ -1,10 +1,10 @@
-# Review Voting in Synod 0.17.0
+# Review Voting in Boundline 0.17.0
 
-Synod `0.17.0` keeps the bounded multi-agent review phase on top of the session-native
-runtime. Review configuration still lives inside `<workspace>/.synod/execution.json`
+Boundline `0.17.0` keeps the bounded multi-agent review phase on top of the session-native
+runtime. Review configuration still lives inside `<workspace>/.boundline/execution.json`
 under the `review` key when the explicit compatibility manifest path or a review-configured
 workspace is used. Runtime/model routing for review roles is configured
-through `synod config` in global or workspace scope and resolved by precedence.
+through `boundline config` in global or workspace scope and resolved by precedence.
 
 The `0.17.0` surface-unification slice keeps review behavior bounded while
 making `run`, `status`, `next`, and `inspect` report review state through the
@@ -17,13 +17,13 @@ same route and `execution_condition` summary model as the rest of the session.
 - structured findings with `approve`, `concern`, or `block`
 - vote strategies: `majority` and `weighted`
 - optional adjudication through a distinct adjudicator reviewer
-- persisted review evidence in `.synod/traces/` and projected review status in `.synod/session.json`
+- persisted review evidence in `.boundline/traces/` and projected review status in `.boundline/session.json`
 
 ## Routing and role differentiation
 
 - `reviewers[*].source` remains the runtime-facing review source field in the
   bounded execution profile.
-- `synod config` lets operators set defaults for review and per-reviewer role
+- `boundline config` lets operators set defaults for review and per-reviewer role
   overrides without editing the manifest directly.
 - adjudication can use a dedicated route that differs from both delivery stages
   and the review council defaults.
@@ -89,7 +89,7 @@ same route and `execution_condition` summary model as the rest of the session.
 
 `weighted` uses the configured reviewer `weight` values.
 
-In both strategies, Synod resolves the council with these rules:
+In both strategies, Boundline resolves the council with these rules:
 
 1. if `reject_on_blocking` is `true` and any blocking finding is present, the vote is rejected immediately
 2. if approvals are strictly greater than half of the total weight, the vote is accepted
@@ -101,7 +101,7 @@ In both strategies, Synod resolves the council with these rules:
 ## Adjudication behavior
 
 When the vote result is `needs_adjudication` and `adjudication.enabled` is true,
-Synod executes one additional reviewer step for the configured adjudicator.
+Boundline executes one additional reviewer step for the configured adjudicator.
 
 - the adjudicator reviewer must be distinct from the main council reviewers
 - the scenario may define one `adjudication_finding`
@@ -114,10 +114,10 @@ the final review outcome becomes `escalated`.
 
 When review is triggered, the local CLI surfaces review evidence in four places:
 
-- `synod run`: review trigger, reviewer findings, vote summary, review outcome
-- `synod status`: latest review trigger, vote summary, outcome, and reviewer headline
-- `synod next`: the same projected review state plus the next suggested command
-- `synod inspect`: ordered review timeline reconstructed from persisted trace events
+- `boundline run`: review trigger, reviewer findings, vote summary, review outcome
+- `boundline status`: latest review trigger, vote summary, outcome, and reviewer headline
+- `boundline next`: the same projected review state plus the next suggested command
+- `boundline inspect`: ordered review timeline reconstructed from persisted trace events
 
 The persisted trace emits dedicated review events for:
 

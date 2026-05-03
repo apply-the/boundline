@@ -11,7 +11,7 @@ goal-plan proposal on the native session path.
 - No blocking negotiation or authored-brief clarification remains unresolved.
 - The workspace can be inspected for bounded context.
 
-## `synod plan`
+## `boundline plan`
 
 ### Input
 
@@ -36,7 +36,7 @@ goal-plan proposal on the native session path.
 - If context credibility is insufficient, return a clarification-required result,
   persist the insufficient proposal state, and explain the missing evidence.
 
-## `synod plan --confirm`
+## `boundline plan --confirm`
 
 ### Preconditions
 
@@ -54,7 +54,7 @@ goal-plan proposal on the native session path.
 - If the current proposal is superseded or invalid, return a bounded operator
   error explaining why confirmation is not possible.
 
-## `synod run`
+## `boundline run`
 
 ### Required behavior
 

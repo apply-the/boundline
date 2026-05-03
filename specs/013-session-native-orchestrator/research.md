@@ -9,7 +9,7 @@
 
 **Decision**: Flat JSON object within session trace events and session state.
 
-**Rationale**: Flat JSON keeps the model inspectable via `synod inspect` and
+**Rationale**: Flat JSON keeps the model inspectable via `boundline inspect` and
 debuggable with `jq`. Evidence inputs are string references (trace event IDs,
 file paths, Canon artifact paths) rather than embedded copies.
 
@@ -43,7 +43,7 @@ file paths, Canon artifact paths) rather than embedded copies.
 
 **Decision**: File tree enumeration via `std::fs::read_dir` (recursive, bounded
 depth), manifest parsing (`Cargo.toml` for Rust, `package.json` for JS/TS),
-Synod config check (`.synod/config.toml`), Canon artifact presence (`.canon/`).
+Boundline config check (`.boundline/config.toml`), Canon artifact presence (`.canon/`).
 
 **Rationale**: All signals are local filesystem reads. No network calls, no
 process spawning. Fast and deterministic.
@@ -104,8 +104,8 @@ the `output` Value or from the concrete tool implementation.
 
 1. If session has `goal_plan` → use decision loop
 2. If `--profile` flag is explicit → use fixture path
-3. If `.synod/execution.json` exists and no active session goal → use fixture path
-4. If session has goal but no plan → error: run `synod plan` first
+3. If `.boundline/execution.json` exists and no active session goal → use fixture path
+4. If session has goal but no plan → error: run `boundline plan` first
 5. Else → error: no execution context available
 
 **Rationale**: Clean, deterministic, backward-compatible. Session-native path

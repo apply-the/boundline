@@ -1,23 +1,23 @@
 use serde_json::json;
 
-use synod::domain::brief::{
+use boundline::domain::brief::{
     AuthoredBriefBundle, AuthoredBriefResolutionState, InputSourceKind, InputSourceReference,
 };
-use synod::domain::flow_policy::FlowPolicy;
-use synod::domain::goal_plan::{GoalPlan, GoalPlanFlowMode, InferredFlow, PlannedTask};
-use synod::domain::limits::RunLimits;
-use synod::domain::negotiation::{
+use boundline::domain::flow_policy::FlowPolicy;
+use boundline::domain::goal_plan::{GoalPlan, GoalPlanFlowMode, InferredFlow, PlannedTask};
+use boundline::domain::limits::RunLimits;
+use boundline::domain::negotiation::{
     NegotiatedDeliveryPacket, NegotiationConstraint, NegotiationConstraintKind,
     NegotiationConstraintSource, NegotiationConstraintState, NegotiationResolutionState,
 };
-use synod::domain::plan::Plan;
-use synod::domain::session::{ActiveSessionRecord, RoutingMode, RoutingSource, SessionStatus};
-use synod::domain::step::Step;
-use synod::domain::task::{
+use boundline::domain::plan::Plan;
+use boundline::domain::session::{ActiveSessionRecord, RoutingMode, RoutingSource, SessionStatus};
+use boundline::domain::step::Step;
+use boundline::domain::task::{
     ClarificationReasonKind, ClarificationRecord, ClarificationStatus, Task, TaskRunRequest,
 };
-use synod::normalize_brief_inputs;
-use synod::orchestrator::session_runtime::{SessionRuntime, SessionRuntimeError};
+use boundline::normalize_brief_inputs;
+use boundline::orchestrator::session_runtime::{SessionRuntime, SessionRuntimeError};
 
 fn build_task(workspace_ref: &str) -> Task {
     let request = TaskRunRequest {
@@ -94,7 +94,7 @@ fn flow_policy_helpers_report_stage_id_and_progress() {
 
 #[test]
 fn session_runtime_resolve_routing_outcome_blocks_pending_plan_confirmation() {
-    let workspace = std::env::temp_dir().join("synod-runtime-routing-pending");
+    let workspace = std::env::temp_dir().join("boundline-runtime-routing-pending");
     std::fs::create_dir_all(&workspace).unwrap();
     let runtime = SessionRuntime::for_workspace(&workspace);
     let record = ActiveSessionRecord {
@@ -124,7 +124,7 @@ fn session_runtime_resolve_routing_outcome_blocks_pending_plan_confirmation() {
 
 #[test]
 fn session_runtime_resolve_routing_outcome_uses_compatibility_when_only_task_exists() {
-    let workspace = std::env::temp_dir().join("synod-runtime-routing-compat");
+    let workspace = std::env::temp_dir().join("boundline-runtime-routing-compat");
     std::fs::create_dir_all(&workspace).unwrap();
     let workspace_ref = workspace.to_string_lossy().into_owned();
     let runtime = SessionRuntime::for_workspace(&workspace);
@@ -155,7 +155,7 @@ fn session_runtime_resolve_routing_outcome_uses_compatibility_when_only_task_exi
 
 #[test]
 fn plan_task_blocks_when_context_pack_is_not_credible() {
-    let workspace = std::env::temp_dir().join("synod-runtime-routing-blocked-context");
+    let workspace = std::env::temp_dir().join("boundline-runtime-routing-blocked-context");
     std::fs::create_dir_all(&workspace).unwrap();
     let runtime = SessionRuntime::for_workspace(&workspace);
     let mut record = ActiveSessionRecord {
@@ -182,7 +182,7 @@ fn plan_task_blocks_when_context_pack_is_not_credible() {
     assert!(matches!(err, SessionRuntimeError::ClarificationRequired { .. }));
     assert_eq!(record.latest_status, SessionStatus::GoalCaptured);
     let goal_plan = record.goal_plan.as_ref().unwrap();
-    assert_eq!(goal_plan.status, synod::domain::goal_plan::GoalPlanStatus::Draft);
+    assert_eq!(goal_plan.status, boundline::domain::goal_plan::GoalPlanStatus::Draft);
     assert_eq!(goal_plan.context_credibility().as_deref(), Some("insufficient"));
     assert!(
         goal_plan.context_summary().as_deref().unwrap().contains("no credible bounded context")
@@ -192,7 +192,7 @@ fn plan_task_blocks_when_context_pack_is_not_credible() {
 
 #[test]
 fn plan_task_uses_authored_brief_as_credible_context_on_empty_workspace() {
-    let workspace = std::env::temp_dir().join("synod-runtime-routing-authored-context");
+    let workspace = std::env::temp_dir().join("boundline-runtime-routing-authored-context");
     std::fs::create_dir_all(&workspace).unwrap();
     let runtime = SessionRuntime::for_workspace(&workspace);
     let brief =
@@ -230,12 +230,12 @@ fn plan_task_uses_authored_brief_as_credible_context_on_empty_workspace() {
 
 #[test]
 fn repeated_plan_task_revises_goal_plan_when_workspace_evidence_changes() {
-    let workspace =
-        std::env::temp_dir().join(format!("synod-runtime-routing-replan-{}", uuid::Uuid::new_v4()));
+    let workspace = std::env::temp_dir()
+        .join(format!("boundline-runtime-routing-replan-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(workspace.join("src")).unwrap();
     std::fs::write(
         workspace.join("Cargo.toml"),
-        "[package]\nname = \"synod_runtime_routing_replan\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        "[package]\nname = \"boundline_runtime_routing_replan\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
     )
     .unwrap();
     std::fs::write(
@@ -292,7 +292,7 @@ fn repeated_plan_task_revises_goal_plan_when_workspace_evidence_changes() {
 
 #[test]
 fn plan_task_blocks_on_negotiation_and_authored_brief_clarifications() {
-    let workspace = std::env::temp_dir().join("synod-runtime-routing-clarifications");
+    let workspace = std::env::temp_dir().join("boundline-runtime-routing-clarifications");
     std::fs::create_dir_all(&workspace).unwrap();
     let runtime = SessionRuntime::for_workspace(&workspace);
 

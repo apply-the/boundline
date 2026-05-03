@@ -1,11 +1,11 @@
 use std::path::Path;
 
-use synod::adapters::session_store::{FileSessionStore, SessionStore};
-use synod::adapters::trace_store::{FileTraceStore, TraceStore};
-use synod::cli::session::{execute_capture, execute_plan, execute_run, execute_start};
-use synod::domain::goal_plan::GoalPlanStatus;
-use synod::domain::session::SessionStatus;
-use synod::domain::trace::TraceEventType;
+use boundline::adapters::session_store::{FileSessionStore, SessionStore};
+use boundline::adapters::trace_store::{FileTraceStore, TraceStore};
+use boundline::cli::session::{execute_capture, execute_plan, execute_run, execute_start};
+use boundline::domain::goal_plan::GoalPlanStatus;
+use boundline::domain::session::SessionStatus;
+use boundline::domain::trace::TraceEventType;
 
 use crate::runtime_refoundation::{
     temp_runtime_refoundation_governed_workspace, temp_runtime_refoundation_workspace,

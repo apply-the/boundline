@@ -1,14 +1,14 @@
 use std::path::PathBuf;
 
+use boundline::cli::{Cli, DeveloperCommand};
+use boundline::domain::configuration::{InitTemplate, RuntimeKind};
+use boundline::domain::domain_templates::DomainFamily;
 use clap::Parser;
-use synod::cli::{Cli, DeveloperCommand};
-use synod::domain::configuration::{InitTemplate, RuntimeKind};
-use synod::domain::domain_templates::DomainFamily;
 
 #[test]
 fn init_accepts_template_and_assistant_runtimes() {
     let cli = Cli::try_parse_from([
-        "synod",
+        "boundline",
         "init",
         "--workspace",
         "/tmp/ws",
@@ -49,7 +49,7 @@ fn init_accepts_template_and_assistant_runtimes() {
 #[test]
 fn init_accepts_domain_templates_standards_and_bindings() {
     let cli = Cli::try_parse_from([
-        "synod",
+        "boundline",
         "init",
         "--workspace",
         "/tmp/ws",
@@ -95,7 +95,7 @@ fn init_accepts_domain_templates_standards_and_bindings() {
 
 #[test]
 fn init_accepts_workspace_without_template() {
-    let cli = Cli::try_parse_from(["synod", "init", "--workspace", "/tmp/ws"]).unwrap();
+    let cli = Cli::try_parse_from(["boundline", "init", "--workspace", "/tmp/ws"]).unwrap();
 
     match cli.command {
         DeveloperCommand::Init {

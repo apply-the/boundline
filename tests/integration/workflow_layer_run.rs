@@ -1,14 +1,14 @@
 use std::fs;
 
-use synod::domain::session::{ActiveSessionRecord, SessionStatus};
-use synod::domain::workflow::WorkflowPhase;
+use boundline::domain::session::{ActiveSessionRecord, SessionStatus};
+use boundline::domain::workflow::WorkflowPhase;
 
 use crate::workspace_fixture::{
     temp_invalid_workflow_layer_workspace, temp_workflow_layer_workspace, terminal_text,
 };
 
-fn run_synod_in(workspace: &std::path::Path, args: &[&str]) -> std::process::Output {
-    std::process::Command::new(env!("CARGO_BIN_EXE_synod"))
+fn run_boundline_in(workspace: &std::path::Path, args: &[&str]) -> std::process::Output {
+    std::process::Command::new(env!("CARGO_BIN_EXE_boundline"))
         .args(args)
         .current_dir(workspace)
         .output()
@@ -16,7 +16,7 @@ fn run_synod_in(workspace: &std::path::Path, args: &[&str]) -> std::process::Out
 }
 
 fn load_session_record(workspace: &std::path::Path) -> ActiveSessionRecord {
-    serde_json::from_slice(&fs::read(workspace.join(".synod").join("session.json")).unwrap())
+    serde_json::from_slice(&fs::read(workspace.join(".boundline").join("session.json")).unwrap())
         .unwrap()
 }
 
@@ -24,7 +24,7 @@ fn load_session_record(workspace: &std::path::Path) -> ActiveSessionRecord {
 fn workflow_run_creates_a_session_and_persists_workflow_progress() {
     let workspace = temp_workflow_layer_workspace("workflow-layer-run");
 
-    let output = run_synod_in(
+    let output = run_boundline_in(
         &workspace,
         &["workflow", "run", "default", "--goal", "Fix the failing add test"],
     );
@@ -48,12 +48,12 @@ fn workflow_run_creates_a_session_and_persists_workflow_progress() {
 fn workflow_run_blocks_invalid_definitions_without_creating_a_session() {
     let workspace = temp_invalid_workflow_layer_workspace("workflow-layer-run-invalid");
 
-    let output = run_synod_in(
+    let output = run_boundline_in(
         &workspace,
         &["workflow", "run", "invalid-flow", "--goal", "Fix the failing add test"],
     );
     let text = terminal_text(&output);
 
     assert_eq!(output.status.code(), Some(1), "{text}");
-    assert!(!workspace.join(".synod").join("session.json").exists());
+    assert!(!workspace.join(".boundline").join("session.json").exists());
 }

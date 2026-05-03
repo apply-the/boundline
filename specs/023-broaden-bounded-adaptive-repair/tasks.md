@@ -17,9 +17,9 @@
 
 **Purpose**: Reserve the release boundary and prepare adaptive fixtures and harnesses for the `0.23.0` slice
 
-- [ ] T001 Bump crate version to `0.23.0` in `/Users/rt/workspace/synod/Cargo.toml` and `/Users/rt/workspace/synod/Cargo.lock`
-- [ ] T002 Extend bounded adaptive workspace fixtures for broader mutation families and exhaustion scenarios in `/Users/rt/workspace/synod/tests/support/workspace_fixture.rs`
-- [ ] T003 Register broaden-bounded-adaptive-repair test modules in `/Users/rt/workspace/synod/tests/contract.rs`, `/Users/rt/workspace/synod/tests/integration.rs`, and `/Users/rt/workspace/synod/tests/unit.rs`
+- [ ] T001 Bump crate version to `0.23.0` in `/Users/rt/workspace/boundline/Cargo.toml` and `/Users/rt/workspace/boundline/Cargo.lock`
+- [ ] T002 Extend bounded adaptive workspace fixtures for broader mutation families and exhaustion scenarios in `/Users/rt/workspace/boundline/tests/support/workspace_fixture.rs`
+- [ ] T003 Register broaden-bounded-adaptive-repair test modules in `/Users/rt/workspace/boundline/tests/contract.rs`, `/Users/rt/workspace/boundline/tests/integration.rs`, and `/Users/rt/workspace/boundline/tests/unit.rs`
 
 ---
 
@@ -29,9 +29,9 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T004 Extend adaptive execution profile and change-kind primitives for broader bounded mutation families in `/Users/rt/workspace/synod/src/domain/execution.rs`
-- [ ] T005 [P] Extend adaptive candidate synthesis, credibility ranking, signature persistence, and explicit exhaustion plumbing for depleted, ambiguous, or non-credible evidence in `/Users/rt/workspace/synod/src/fixture.rs` and `/Users/rt/workspace/synod/src/orchestrator/terminal.rs`
-- [ ] T006 [P] Add foundational unit coverage for execution-profile validation, candidate credibility, and summary rendering in `/Users/rt/workspace/synod/tests/unit/execution_profile.rs`, `/Users/rt/workspace/synod/tests/unit/adaptive_execution.rs`, and `/Users/rt/workspace/synod/tests/unit/cli_output.rs`
+- [ ] T004 Extend adaptive execution profile and change-kind primitives for broader bounded mutation families in `/Users/rt/workspace/boundline/src/domain/execution.rs`
+- [ ] T005 [P] Extend adaptive candidate synthesis, credibility ranking, signature persistence, and explicit exhaustion plumbing for depleted, ambiguous, or non-credible evidence in `/Users/rt/workspace/boundline/src/fixture.rs` and `/Users/rt/workspace/boundline/src/orchestrator/terminal.rs`
+- [ ] T006 [P] Add foundational unit coverage for execution-profile validation, candidate credibility, and summary rendering in `/Users/rt/workspace/boundline/tests/unit/execution_profile.rs`, `/Users/rt/workspace/boundline/tests/unit/adaptive_execution.rs`, and `/Users/rt/workspace/boundline/tests/unit/cli_output.rs`
 
 **Checkpoint**: The runtime can represent broader bounded adaptive candidates, rank them credibly, and stop explicitly when no bounded replan remains.
 
@@ -45,14 +45,14 @@
 
 ### Tests for User Story 1
 
-- [ ] T007 [P] [US1] Add contract coverage for adaptive change-kind and run-trace behavior in `/Users/rt/workspace/synod/tests/contract/orchestrator_run.rs` and `/Users/rt/workspace/synod/tests/contract/trace_summary_contract.rs`
-- [ ] T008 [P] [US1] Add integration coverage for broader bounded adaptive repair scenarios in `/Users/rt/workspace/synod/tests/integration/cli_adaptive_execution.rs`
-- [ ] T009 [P] [US1] Add unit coverage for family-aware candidate ranking, rejection, and signature exclusion in `/Users/rt/workspace/synod/tests/unit/adaptive_execution.rs`
+- [ ] T007 [P] [US1] Add contract coverage for adaptive change-kind and run-trace behavior in `/Users/rt/workspace/boundline/tests/contract/orchestrator_run.rs` and `/Users/rt/workspace/boundline/tests/contract/trace_summary_contract.rs`
+- [ ] T008 [P] [US1] Add integration coverage for broader bounded adaptive repair scenarios in `/Users/rt/workspace/boundline/tests/integration/cli_adaptive_execution.rs`
+- [ ] T009 [P] [US1] Add unit coverage for family-aware candidate ranking, rejection, and signature exclusion in `/Users/rt/workspace/boundline/tests/unit/adaptive_execution.rs`
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] Implement new bounded mutation-family generators and manifest-backed change-kind handling in `/Users/rt/workspace/synod/src/fixture.rs` and `/Users/rt/workspace/synod/src/domain/execution.rs`
-- [ ] T011 [US1] Implement family-aware credibility scoring, validation-guided rejection handling, and persisted candidate evidence in `/Users/rt/workspace/synod/src/fixture.rs` and `/Users/rt/workspace/synod/src/domain/execution.rs`
+- [ ] T010 [US1] Implement new bounded mutation-family generators and manifest-backed change-kind handling in `/Users/rt/workspace/boundline/src/fixture.rs` and `/Users/rt/workspace/boundline/src/domain/execution.rs`
+- [ ] T011 [US1] Implement family-aware credibility scoring, validation-guided rejection handling, and persisted candidate evidence in `/Users/rt/workspace/boundline/src/fixture.rs` and `/Users/rt/workspace/boundline/src/domain/execution.rs`
 
 **Checkpoint**: Adaptive compatibility runs can repair a broader set of bounded failures without leaving the explicit compatibility path.
 
@@ -66,13 +66,13 @@
 
 ### Tests for User Story 2
 
-- [ ] T012 [P] [US2] Add contract coverage for adaptive credibility and exhaustion summaries in `/Users/rt/workspace/synod/tests/contract/runtime_routing_contract.rs`, `/Users/rt/workspace/synod/tests/contract/session_command_contract.rs`, and `/Users/rt/workspace/synod/tests/contract/trace_summary_contract.rs`
-- [ ] T013 [P] [US2] Add integration coverage for adaptive credibility projection and exhaustion follow-up, including missing or ambiguous validation evidence, in `/Users/rt/workspace/synod/tests/integration/session_adaptive_flow.rs` and `/Users/rt/workspace/synod/tests/integration/cli_trace_inspection.rs`
+- [ ] T012 [P] [US2] Add contract coverage for adaptive credibility and exhaustion summaries in `/Users/rt/workspace/boundline/tests/contract/runtime_routing_contract.rs`, `/Users/rt/workspace/boundline/tests/contract/session_command_contract.rs`, and `/Users/rt/workspace/boundline/tests/contract/trace_summary_contract.rs`
+- [ ] T013 [P] [US2] Add integration coverage for adaptive credibility projection and exhaustion follow-up, including missing or ambiguous validation evidence, in `/Users/rt/workspace/boundline/tests/integration/session_adaptive_flow.rs` and `/Users/rt/workspace/boundline/tests/integration/cli_trace_inspection.rs`
 
 ### Implementation for User Story 2
 
-- [ ] T014 [US2] Surface adaptive credibility, rejected-candidate, and exhaustion summaries in `/Users/rt/workspace/synod/src/cli/output.rs`, `/Users/rt/workspace/synod/src/cli/session.rs`, and `/Users/rt/workspace/synod/src/cli/inspect.rs`
-- [ ] T015 [US2] Keep terminal conditions and compatibility follow-up guidance explicit for exhausted adaptive runs, including missing or ambiguous validation evidence, in `/Users/rt/workspace/synod/src/orchestrator/terminal.rs`, `/Users/rt/workspace/synod/src/cli/session.rs`, and `/Users/rt/workspace/synod/src/cli/inspect.rs`
+- [ ] T014 [US2] Surface adaptive credibility, rejected-candidate, and exhaustion summaries in `/Users/rt/workspace/boundline/src/cli/output.rs`, `/Users/rt/workspace/boundline/src/cli/session.rs`, and `/Users/rt/workspace/boundline/src/cli/inspect.rs`
+- [ ] T015 [US2] Keep terminal conditions and compatibility follow-up guidance explicit for exhausted adaptive runs, including missing or ambiguous validation evidence, in `/Users/rt/workspace/boundline/src/orchestrator/terminal.rs`, `/Users/rt/workspace/boundline/src/cli/session.rs`, and `/Users/rt/workspace/boundline/src/cli/inspect.rs`
 
 **Checkpoint**: Developers can tell why an adaptive candidate was selected, why others were rejected, and why bounded recovery stopped.
 
@@ -86,11 +86,11 @@
 
 ### Tests for User Story 3
 
-- [ ] T016 [P] [US3] Add assistant and documentation coverage for adaptive operator guidance in `/Users/rt/workspace/synod/tests/contract/assistant_session_continuity_contract.rs` and `/Users/rt/workspace/synod/tests/unit/assistant_assets.rs`
+- [ ] T016 [P] [US3] Add assistant and documentation coverage for adaptive operator guidance in `/Users/rt/workspace/boundline/tests/contract/assistant_session_continuity_contract.rs` and `/Users/rt/workspace/boundline/tests/unit/assistant_assets.rs`
 
 ### Implementation for User Story 3
 
-- [ ] T017 [US3] Update the adaptive operator story, impacted docs, and release notes in `/Users/rt/workspace/synod/README.md`, `/Users/rt/workspace/synod/docs/adaptive-execution.md`, `/Users/rt/workspace/synod/docs/getting-started.md`, `/Users/rt/workspace/synod/docs/configuration.md`, `/Users/rt/workspace/synod/assistant/README.md`, `/Users/rt/workspace/synod/CONTRIBUTING.md`, `/Users/rt/workspace/synod/ROADMAP.md`, and `/Users/rt/workspace/synod/CHANGELOG.md`
+- [ ] T017 [US3] Update the adaptive operator story, impacted docs, and release notes in `/Users/rt/workspace/boundline/README.md`, `/Users/rt/workspace/boundline/docs/adaptive-execution.md`, `/Users/rt/workspace/boundline/docs/getting-started.md`, `/Users/rt/workspace/boundline/docs/configuration.md`, `/Users/rt/workspace/boundline/assistant/README.md`, `/Users/rt/workspace/boundline/CONTRIBUTING.md`, `/Users/rt/workspace/boundline/ROADMAP.md`, and `/Users/rt/workspace/boundline/CHANGELOG.md`
 
 **Checkpoint**: Maintainers and assistants have one coherent `0.23.0` story for bounded adaptive repair, credibility, and exhaustion.
 
@@ -100,8 +100,8 @@
 
 **Purpose**: Refresh generated context and finish release validation
 
-- [ ] T018 [P] Refresh generated agent context for the broaden-bounded-adaptive-repair surface in `/Users/rt/workspace/synod/AGENTS.md`
-- [ ] T019 Run coverage-aware release validation for modified Rust files, refresh `/Users/rt/workspace/synod/lcov.info`, resolve remaining `cargo clippy` issues, run `cargo fmt --all`, and finish with clean validation for touched files under `/Users/rt/workspace/synod/src/` and `/Users/rt/workspace/synod/tests/`
+- [ ] T018 [P] Refresh generated agent context for the broaden-bounded-adaptive-repair surface in `/Users/rt/workspace/boundline/AGENTS.md`
+- [ ] T019 Run coverage-aware release validation for modified Rust files, refresh `/Users/rt/workspace/boundline/lcov.info`, resolve remaining `cargo clippy` issues, run `cargo fmt --all`, and finish with clean validation for touched files under `/Users/rt/workspace/boundline/src/` and `/Users/rt/workspace/boundline/tests/`
 
 ---
 

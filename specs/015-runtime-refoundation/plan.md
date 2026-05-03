@@ -1,17 +1,17 @@
 # Implementation Plan: Runtime Refoundation
 
-**Branch**: `015-runtime-refoundation` | **Date**: 2026-04-29 | **Spec**: [/Users/rt/workspace/synod/specs/015-runtime-refoundation/spec.md](/Users/rt/workspace/synod/specs/015-runtime-refoundation/spec.md)
+**Branch**: `015-runtime-refoundation` | **Date**: 2026-04-29 | **Spec**: [/Users/rt/workspace/boundline/specs/015-runtime-refoundation/spec.md](/Users/rt/workspace/boundline/specs/015-runtime-refoundation/spec.md)
 **Input**: Feature specification from `/specs/015-runtime-refoundation/spec.md`
 
 ## Summary
 
-Refound Synod's primary delivery path around session-native runtime control instead of fixture-shaped replay. Planning will derive a bounded task draft from captured goals, workspace evidence, authored inputs, and available Canon artifacts; execution will choose explicit next decisions from live state through a bounded observe-decide-act-verify-update loop; flow will become an operator-confirmed policy surface; compatibility execution remains explicit rather than implicit; and status or inspection output will explain route choice, decision history, recovery, and terminal outcome.
+Refound Boundline's primary delivery path around session-native runtime control instead of fixture-shaped replay. Planning will derive a bounded task draft from captured goals, workspace evidence, authored inputs, and available Canon artifacts; execution will choose explicit next decisions from live state through a bounded observe-decide-act-verify-update loop; flow will become an operator-confirmed policy surface; compatibility execution remains explicit rather than implicit; and status or inspection output will explain route choice, decision history, recovery, and terminal outcome.
 
 ## Technical Context
 
 **Language/Version**: Rust 1.95.0, edition 2024  
 **Primary Dependencies**: `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, process, and collections APIs  
-**Storage**: Workspace-local `.synod/session.json`, `.synod/traces/`, optional `.synod/execution.json`, optional `.canon/` artifacts, plus repository docs and assistant assets updated as part of rollout  
+**Storage**: Workspace-local `.boundline/session.json`, `.boundline/traces/`, optional `.boundline/execution.json`, optional `.canon/` artifacts, plus repository docs and assistant assets updated as part of rollout  
 **Testing**: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features`, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, `cargo deny check licenses advisories bans sources`  
 **Target Platform**: macOS/Linux developer workstations and Linux CI  
 **Project Type**: Single Rust CLI/library crate with workspace-local persisted execution state  
@@ -25,15 +25,15 @@ Refound Synod's primary delivery path around session-native runtime control inst
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **PASS** Delivery identity: The slice directly improves bounded engineering delivery by making session-native planning and live-state execution the primary path rather than a declarative profile replay. See Summary, Technical Context, and [spec.md](/Users/rt/workspace/synod/specs/015-runtime-refoundation/spec.md).
+- **PASS** Delivery identity: The slice directly improves bounded engineering delivery by making session-native planning and live-state execution the primary path rather than a declarative profile replay. See Summary, Technical Context, and [spec.md](/Users/rt/workspace/boundline/specs/015-runtime-refoundation/spec.md).
 - **PASS** Delivery-first scope: The work is about execution control, planning, recovery, routing, validation, and inspectability before documentation polish or secondary ergonomics. See Summary and Constraints.
-- **PASS** Bounded execution: Start conditions, explicit route selection, max steps or retries, and terminal states remain first-class runtime behavior for both success and non-success paths. See Technical Context, research decisions, quickstart scenarios, and [spec.md](/Users/rt/workspace/synod/specs/015-runtime-refoundation/spec.md).
+- **PASS** Bounded execution: Start conditions, explicit route selection, max steps or retries, and terminal states remain first-class runtime behavior for both success and non-success paths. See Technical Context, research decisions, quickstart scenarios, and [spec.md](/Users/rt/workspace/boundline/specs/015-runtime-refoundation/spec.md).
 - **PASS** Stateful execution: The runtime persists bounded task drafts, decision history, flow constraint state, routing outcome, and terminal evidence in session and trace surfaces. See Summary, data-model, and contracts.
 - **PASS** Mutable planning: The initial bounded task draft remains explicit and later recovery or replanning decisions mutate runtime intent through inspectable state transitions rather than hidden heuristics. See Summary, research, and data-model.
 - **PASS** Sequential-first design: Execution remains one bounded decision at a time; no concurrency, background workers, or hidden fan-out are introduced. See Execution Model and Constraints.
 - **PASS** Tool-agent symmetry: Reasoning, file mutation, validation, and route selection all remain explicit and observable through decision and evidence records rather than hiding action behind text-only planning. See Summary, research, and contracts.
 - **PASS** Observability and explicit intelligence: Route choice, bounded task draft content, decision selection, failure evidence, recovery decisions, and terminal reasoning stay visible through session and trace output. See Observability Surface, quickstart, and contracts.
-- **PASS** Non-goals and external separation: Canon remains a bounded planning or stage-boundary input; provider expansion, distributed execution, UI, long-term memory, and review councils stay out of scope. See Constraints and [spec.md](/Users/rt/workspace/synod/specs/015-runtime-refoundation/spec.md).
+- **PASS** Non-goals and external separation: Canon remains a bounded planning or stage-boundary input; provider expansion, distributed execution, UI, long-term memory, and review councils stay out of scope. See Constraints and [spec.md](/Users/rt/workspace/boundline/specs/015-runtime-refoundation/spec.md).
 - **PASS** Minimal slice: The smallest independently valuable capability is a single coherent refoundation where the primary session path plans and runs from live state without requiring init-first or fixture-first mental models. See Summary.
 
 ## Project Structure

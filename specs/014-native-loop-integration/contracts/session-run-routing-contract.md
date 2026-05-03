@@ -5,7 +5,7 @@
 
 ## Overview
 
-This contract defines how `synod run` selects between the native decision-loop path and the fixture compatibility path.
+This contract defines how `boundline run` selects between the native decision-loop path and the fixture compatibility path.
 
 ## Routing Priority
 

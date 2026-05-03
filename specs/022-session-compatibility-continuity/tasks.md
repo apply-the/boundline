@@ -17,9 +17,9 @@
 
 **Purpose**: Reserve the release boundary and prepare continuity fixtures and harnesses for the `0.22.0` slice
 
-- [X] T001 Bump crate version to `0.22.0` in `/Users/rt/workspace/synod/Cargo.toml` and `/Users/rt/workspace/synod/Cargo.lock`
-- [X] T002 Reuse the existing compatibility continuity fixture helpers in `/Users/rt/workspace/synod/tests/support/runtime_refoundation.rs` and `/Users/rt/workspace/synod/tests/support/workspace_fixture.rs` for the new coverage
-- [X] T003 Register continuity test modules in `/Users/rt/workspace/synod/tests/contract.rs`, `/Users/rt/workspace/synod/tests/integration.rs`, and `/Users/rt/workspace/synod/tests/unit.rs`
+- [X] T001 Bump crate version to `0.22.0` in `/Users/rt/workspace/boundline/Cargo.toml` and `/Users/rt/workspace/boundline/Cargo.lock`
+- [X] T002 Reuse the existing compatibility continuity fixture helpers in `/Users/rt/workspace/boundline/tests/support/runtime_refoundation.rs` and `/Users/rt/workspace/boundline/tests/support/workspace_fixture.rs` for the new coverage
+- [X] T003 Register continuity test modules in `/Users/rt/workspace/boundline/tests/contract.rs`, `/Users/rt/workspace/boundline/tests/integration.rs`, and `/Users/rt/workspace/boundline/tests/unit.rs`
 
 ---
 
@@ -29,9 +29,9 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [X] T004 Extend continuity authority and shared follow-up summary primitives in `/Users/rt/workspace/synod/src/domain/session.rs` and `/Users/rt/workspace/synod/src/cli/session.rs`
-- [X] T005 [P] Extend trace-resolution and shared summary helpers for compatibility follow-up in `/Users/rt/workspace/synod/src/cli/inspect.rs` and `/Users/rt/workspace/synod/src/cli/output.rs`
-- [X] T006 [P] Add foundational unit coverage for continuity authority and summary fallback behavior in `/Users/rt/workspace/synod/tests/unit/compatibility_continuity.rs` and `/Users/rt/workspace/synod/tests/unit/cli_output.rs`
+- [X] T004 Extend continuity authority and shared follow-up summary primitives in `/Users/rt/workspace/boundline/src/domain/session.rs` and `/Users/rt/workspace/boundline/src/cli/session.rs`
+- [X] T005 [P] Extend trace-resolution and shared summary helpers for compatibility follow-up in `/Users/rt/workspace/boundline/src/cli/inspect.rs` and `/Users/rt/workspace/boundline/src/cli/output.rs`
+- [X] T006 [P] Add foundational unit coverage for continuity authority and summary fallback behavior in `/Users/rt/workspace/boundline/tests/unit/compatibility_continuity.rs` and `/Users/rt/workspace/boundline/tests/unit/cli_output.rs`
 
 **Checkpoint**: The runtime can represent authoritative follow-up state before story-specific command behavior is completed.
 
@@ -45,15 +45,15 @@
 
 ### Tests for User Story 1
 
-- [X] T007 [P] [US1] Add contract coverage for compatibility follow-up command behavior in `/Users/rt/workspace/synod/tests/contract/compatibility_continuity_contract.rs`
-- [X] T008 [P] [US1] Add integration coverage for active native session plus newer compatibility trace in `/Users/rt/workspace/synod/tests/integration/session_compatibility_continuity.rs`
-- [X] T009 [P] [US1] Add integration coverage for no-session compatibility follow-up and inspect-only continuity in `/Users/rt/workspace/synod/tests/integration/session_compatibility_continuity.rs`
+- [X] T007 [P] [US1] Add contract coverage for compatibility follow-up command behavior in `/Users/rt/workspace/boundline/tests/contract/compatibility_continuity_contract.rs`
+- [X] T008 [P] [US1] Add integration coverage for active native session plus newer compatibility trace in `/Users/rt/workspace/boundline/tests/integration/session_compatibility_continuity.rs`
+- [X] T009 [P] [US1] Add integration coverage for no-session compatibility follow-up and inspect-only continuity in `/Users/rt/workspace/boundline/tests/integration/session_compatibility_continuity.rs`
 
 ### Implementation for User Story 1
 
-- [X] T010 [US1] Implement continuity authority resolution from active session state and latest workspace trace in `/Users/rt/workspace/synod/src/cli/session.rs` and `/Users/rt/workspace/synod/src/domain/session.rs`
-- [X] T011 [US1] Surface explicit inspect-oriented next-command behavior for compatibility follow-up in `/Users/rt/workspace/synod/src/cli/session.rs` and `/Users/rt/workspace/synod/src/cli/output.rs`
-- [X] T012 [US1] Reuse existing compatibility run output and inspect fallback metadata in `/Users/rt/workspace/synod/src/cli/run.rs` and `/Users/rt/workspace/synod/src/cli/inspect.rs` for later continuity resolution
+- [X] T010 [US1] Implement continuity authority resolution from active session state and latest workspace trace in `/Users/rt/workspace/boundline/src/cli/session.rs` and `/Users/rt/workspace/boundline/src/domain/session.rs`
+- [X] T011 [US1] Surface explicit inspect-oriented next-command behavior for compatibility follow-up in `/Users/rt/workspace/boundline/src/cli/session.rs` and `/Users/rt/workspace/boundline/src/cli/output.rs`
+- [X] T012 [US1] Reuse existing compatibility run output and inspect fallback metadata in `/Users/rt/workspace/boundline/src/cli/run.rs` and `/Users/rt/workspace/boundline/src/cli/inspect.rs` for later continuity resolution
 
 **Checkpoint**: Compatibility follow-up is now clear and bounded even when a native session also exists.
 
@@ -67,13 +67,13 @@
 
 ### Tests for User Story 2
 
-- [X] T013 [P] [US2] Add contract coverage for shared route summary wording in `/Users/rt/workspace/synod/tests/contract/runtime_routing_contract.rs` and `/Users/rt/workspace/synod/tests/contract/trace_summary_contract.rs`
-- [X] T014 [P] [US2] Add integration coverage for aligned native and compatibility summaries in `/Users/rt/workspace/synod/tests/integration/runtime_refoundation_compat.rs` and `/Users/rt/workspace/synod/tests/integration/session_adaptive_flow.rs`
+- [X] T013 [P] [US2] Add contract coverage for shared route summary wording in `/Users/rt/workspace/boundline/tests/contract/runtime_routing_contract.rs` and `/Users/rt/workspace/boundline/tests/contract/trace_summary_contract.rs`
+- [X] T014 [P] [US2] Add integration coverage for aligned native and compatibility summaries in `/Users/rt/workspace/boundline/tests/integration/runtime_refoundation_compat.rs` and `/Users/rt/workspace/boundline/tests/integration/session_adaptive_flow.rs`
 
 ### Implementation for User Story 2
 
-- [X] T015 [US2] Unify overlapping summary wording across `status`, `next`, and `inspect` in `/Users/rt/workspace/synod/src/cli/output.rs` and `/Users/rt/workspace/synod/src/cli/inspect.rs`
-- [X] T016 [US2] Project compatibility continuity summaries alongside native session summaries without hiding route ownership in `/Users/rt/workspace/synod/src/cli/session.rs` and `/Users/rt/workspace/synod/src/domain/session.rs`
+- [X] T015 [US2] Unify overlapping summary wording across `status`, `next`, and `inspect` in `/Users/rt/workspace/boundline/src/cli/output.rs` and `/Users/rt/workspace/boundline/src/cli/inspect.rs`
+- [X] T016 [US2] Project compatibility continuity summaries alongside native session summaries without hiding route ownership in `/Users/rt/workspace/boundline/src/cli/session.rs` and `/Users/rt/workspace/boundline/src/domain/session.rs`
 
 **Checkpoint**: Native and compatibility follow-up outputs now feel coherent while preserving explicit route differences.
 
@@ -87,12 +87,12 @@
 
 ### Tests for User Story 3
 
-- [X] T017 [P] [US3] Add assistant and documentation continuity coverage in `/Users/rt/workspace/synod/tests/contract/assistant_session_continuity_contract.rs` and `/Users/rt/workspace/synod/tests/unit/assistant_assets.rs`
+- [X] T017 [P] [US3] Add assistant and documentation continuity coverage in `/Users/rt/workspace/boundline/tests/contract/assistant_session_continuity_contract.rs` and `/Users/rt/workspace/boundline/tests/unit/assistant_assets.rs`
 
 ### Implementation for User Story 3
 
-- [X] T018 [US3] Ship continuity guidance in `/Users/rt/workspace/synod/README.md`, `/Users/rt/workspace/synod/docs/getting-started.md`, `/Users/rt/workspace/synod/docs/configuration.md`, `/Users/rt/workspace/synod/docs/adaptive-execution.md`, and `/Users/rt/workspace/synod/assistant/README.md`
-- [X] T019 [US3] Update contributor and release guidance for `0.22.0` in `/Users/rt/workspace/synod/CONTRIBUTING.md`, `/Users/rt/workspace/synod/ROADMAP.md`, and `/Users/rt/workspace/synod/CHANGELOG.md`
+- [X] T018 [US3] Ship continuity guidance in `/Users/rt/workspace/boundline/README.md`, `/Users/rt/workspace/boundline/docs/getting-started.md`, `/Users/rt/workspace/boundline/docs/configuration.md`, `/Users/rt/workspace/boundline/docs/adaptive-execution.md`, and `/Users/rt/workspace/boundline/assistant/README.md`
+- [X] T019 [US3] Update contributor and release guidance for `0.22.0` in `/Users/rt/workspace/boundline/CONTRIBUTING.md`, `/Users/rt/workspace/boundline/ROADMAP.md`, and `/Users/rt/workspace/boundline/CHANGELOG.md`
 
 **Checkpoint**: Maintainers and assistants have one coherent continuity story for the release.
 
@@ -102,8 +102,8 @@
 
 **Purpose**: Refresh generated context and finish release validation
 
-- [X] T020 [P] Refresh generated agent context in `/Users/rt/workspace/synod/AGENTS.md`
-- [X] T021 Run coverage-aware release validation for modified Rust files, refresh `/Users/rt/workspace/synod/lcov.info`, resolve remaining `cargo clippy` issues, run `cargo fmt --all`, and finish with clean validation for touched files under `/Users/rt/workspace/synod/src/` and `/Users/rt/workspace/synod/tests/`
+- [X] T020 [P] Refresh generated agent context in `/Users/rt/workspace/boundline/AGENTS.md`
+- [X] T021 Run coverage-aware release validation for modified Rust files, refresh `/Users/rt/workspace/boundline/lcov.info`, resolve remaining `cargo clippy` issues, run `cargo fmt --all`, and finish with clean validation for touched files under `/Users/rt/workspace/boundline/src/` and `/Users/rt/workspace/boundline/tests/`
 
 ---
 

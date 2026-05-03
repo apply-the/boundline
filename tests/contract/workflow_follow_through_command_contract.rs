@@ -3,8 +3,8 @@ use crate::workspace_fixture::{
     terminal_text,
 };
 
-fn run_synod_in(workspace: &std::path::Path, args: &[&str]) -> std::process::Output {
-    std::process::Command::new(env!("CARGO_BIN_EXE_synod"))
+fn run_boundline_in(workspace: &std::path::Path, args: &[&str]) -> std::process::Output {
+    std::process::Command::new(env!("CARGO_BIN_EXE_boundline"))
         .args(args)
         .current_dir(workspace)
         .output()
@@ -16,7 +16,7 @@ fn workflow_follow_through_contract_surfaces_govern_pause_with_actionable_guidan
     let workspace =
         temp_workflow_follow_through_approval_workspace("workflow-follow-through-contract-pending");
 
-    let output = run_synod_in(
+    let output = run_boundline_in(
         &workspace,
         &["workflow", "run", "governed-delivery", "--goal", "Fix the failing checkout flow"],
     );
@@ -30,7 +30,7 @@ fn workflow_follow_through_contract_surfaces_govern_pause_with_actionable_guidan
         "{text}"
     );
     assert!(text.contains("execution_condition: waiting - governance approval is still pending before execution can continue"), "{text}");
-    assert!(text.contains("next_command: synod workflow resume --workspace "), "{text}");
+    assert!(text.contains("next_command: boundline workflow resume --workspace "), "{text}");
     assert!(!text.contains("not yet executable from the workflow command surface"), "{text}");
 }
 
@@ -39,7 +39,7 @@ fn workflow_follow_through_contract_completes_review_and_govern_without_static_b
     let workspace =
         temp_workflow_follow_through_workspace("workflow-follow-through-contract-ready");
 
-    let output = run_synod_in(
+    let output = run_boundline_in(
         &workspace,
         &["workflow", "run", "governed-delivery", "--goal", "Fix the failing checkout flow"],
     );

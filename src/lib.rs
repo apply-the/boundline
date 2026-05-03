@@ -31,6 +31,10 @@ pub use domain::configuration::{
     RouteSlot, RoutingConfig, RoutingOverrides, RuntimeKind, SourcedRoute, ValueSource,
     resolve_effective_routing,
 };
+pub use domain::distribution::{
+    CompanionState, DistributionChannel, SUPPORTED_CANON_VERSION, evaluate_canon_install,
+    supported_distribution_channels,
+};
 pub use domain::execution::{
     ChangeEvidence, ChangeStatus, ExecutionAttemptDefinition, ExecutionCommand,
     ExecutionFailureMode, ValidationRecord, WorkspaceChange, WorkspaceExecutionProfile,

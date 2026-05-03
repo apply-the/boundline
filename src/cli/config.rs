@@ -1160,7 +1160,7 @@ mod tests {
 
     #[test]
     fn mutation_and_scope_helpers_cover_validation_and_workspace_paths() {
-        let workspace = temp_workspace("synod-cli-config-helpers");
+        let workspace = temp_workspace("boundline-cli-config-helpers");
         let config = ConfigFile {
             version: 1,
             routing: RoutingConfig {
@@ -1175,12 +1175,12 @@ mod tests {
         let saved_path =
             save_config_for_scope(Some(workspace.as_path()), ConfigWriteScope::Workspace, &config)
                 .unwrap();
-        assert!(saved_path.ends_with(Path::new(".synod/config.toml")));
+        assert!(saved_path.ends_with(Path::new(".boundline/config.toml")));
 
         let (loaded, location) =
             load_config_for_scope(Some(workspace.as_path()), ConfigWriteScope::Workspace).unwrap();
         assert_eq!(loaded.routing.planning.unwrap().model, "gpt-5-codex");
-        assert!(location.contains(".synod/config.toml"));
+        assert!(location.contains(".boundline/config.toml"));
 
         assert!(matches!(
             mutation_target(None, None, false),
@@ -1228,7 +1228,7 @@ mod tests {
 
     #[test]
     fn execute_show_surfaces_workspace_cluster_effective_and_missing_scope_errors() {
-        let workspace = temp_workspace("synod-cli-config-show");
+        let workspace = temp_workspace("boundline-cli-config-show");
 
         let local_config = ConfigFile {
             version: 1,
@@ -1319,7 +1319,7 @@ mod tests {
             Err(ConfigCommandError::ClusterRequired)
         ));
 
-        let missing_cluster_workspace = temp_workspace("synod-cli-config-show-missing-cluster");
+        let missing_cluster_workspace = temp_workspace("boundline-cli-config-show-missing-cluster");
         assert!(matches!(
             execute_show(
                 Some(missing_cluster_workspace.as_path()),
@@ -1332,7 +1332,7 @@ mod tests {
 
     #[test]
     fn execute_set_and_unset_cover_workspace_and_cluster_targets() {
-        let workspace = temp_workspace("synod-cli-config-set-unset");
+        let workspace = temp_workspace("boundline-cli-config-set-unset");
 
         let slot_report = execute_set(SetConfigRequest {
             workspace: Some(workspace.as_path()),
@@ -1519,7 +1519,7 @@ mod tests {
 
     #[test]
     fn capability_and_effort_commands_cover_workspace_cluster_and_invalid_policy_paths() {
-        let workspace = temp_workspace("synod-cli-config-policy");
+        let workspace = temp_workspace("boundline-cli-config-policy");
 
         let capability_report = execute_set_capability(SetCapabilityRequest {
             workspace: Some(workspace.as_path()),
@@ -1679,7 +1679,8 @@ mod tests {
             .is_ok()
         );
 
-        let missing_cluster_workspace = temp_workspace("synod-cli-config-policy-missing-cluster");
+        let missing_cluster_workspace =
+            temp_workspace("boundline-cli-config-policy-missing-cluster");
         assert!(matches!(
             execute_unset_capability(
                 Some(missing_cluster_workspace.as_path()),
@@ -1702,7 +1703,7 @@ mod tests {
 
     #[test]
     fn domain_template_commands_cover_workspace_mutations_and_effective_rendering() {
-        let workspace = temp_workspace("synod-cli-config-domain");
+        let workspace = temp_workspace("boundline-cli-config-domain");
 
         let report = execute_set_domain(SetDomainRequest {
             workspace: Some(workspace.as_path()),
@@ -1780,7 +1781,7 @@ mod tests {
 
     #[test]
     fn domain_template_commands_cover_cluster_mutations_and_helper_rendering() {
-        let workspace = temp_workspace("synod-cli-config-domain-cluster");
+        let workspace = temp_workspace("boundline-cli-config-domain-cluster");
         let cluster_config = build_cluster_config(&workspace);
         FileClusterStore::for_workspace(&workspace).save(&cluster_config).unwrap();
 

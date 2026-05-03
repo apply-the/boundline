@@ -35,9 +35,9 @@
 
 ## Phase 3: User Story 1 - Review A Delivery Result (Priority: P1) 🎯 MVP
 
-**Goal**: Let Synod append one bounded review council to a reviewable delivery result and accept the output when the council vote resolves in favor of approval.
+**Goal**: Let Boundline append one bounded review council to a reviewable delivery result and accept the output when the council vote resolves in favor of approval.
 
-**Independent Test**: Run Synod against a temporary workspace with review configuration, confirm reviewer findings are captured, the vote resolves to acceptance, and run/status/inspect expose the accepted review outcome.
+**Independent Test**: Run Boundline against a temporary workspace with review configuration, confirm reviewer findings are captured, the vote resolves to acceptance, and run/status/inspect expose the accepted review outcome.
 
 ### Tests for User Story 1
 
@@ -60,7 +60,7 @@
 
 **Goal**: Keep conflicting reviewer input inside one bounded review lifecycle through explicit voting, optional adjudication, and terminal rejection, escalation, or failure.
 
-**Independent Test**: Run review scenarios with blocking findings, ties, missing reviewer output, and duplicate triggers; verify that Synod rejects, adjudicates, escalates, or fails explicitly within configured limits.
+**Independent Test**: Run review scenarios with blocking findings, ties, missing reviewer output, and duplicate triggers; verify that Boundline rejects, adjudicates, escalates, or fails explicitly within configured limits.
 
 ### Tests for User Story 2
 

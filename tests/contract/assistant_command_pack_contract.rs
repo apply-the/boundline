@@ -1,8 +1,9 @@
 use std::path::{Path, PathBuf};
 
-const US1_COMMANDS: &[&str] = &["synod-start", "synod-plan"];
-const US2_COMMANDS: &[&str] = &["synod-step", "synod-run", "synod-status", "synod-next"];
-const US3_COMMANDS: &[&str] = &["synod-inspect"];
+const US1_COMMANDS: &[&str] = &["boundline-start", "boundline-plan"];
+const US2_COMMANDS: &[&str] =
+    &["boundline-step", "boundline-run", "boundline-status", "boundline-next"];
+const US3_COMMANDS: &[&str] = &["boundline-inspect"];
 
 #[test]
 fn test_command_pack_covers_start_and_plan_commands() {

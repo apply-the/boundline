@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define the minimum operator-facing behavior for executing bounded review and govern phases from the `synod workflow` command surface.
+Define the minimum operator-facing behavior for executing bounded review and govern phases from the `boundline workflow` command surface.
 
 ## Requirements
 
@@ -39,7 +39,7 @@ workflow: governed-delivery
 workflow_phase: govern
 routing: native (goal_plan) - goal plan is ready for native execution
 execution_condition: waiting - governance approval is still required before workflow progression can continue
-next_command: synod workflow resume --workspace .
+next_command: boundline workflow resume --workspace .
 ```
 
 ### Governance blocked explicitly
@@ -49,5 +49,5 @@ workflow: governed-delivery
 workflow_phase: govern
 routing: native (goal_plan) - goal plan is ready for native execution
 execution_condition: blocked - governance cannot continue until the required approval state is resolved
-next_command: synod workflow inspect --workspace .
+next_command: boundline workflow inspect --workspace .
 ```

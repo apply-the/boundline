@@ -1,17 +1,17 @@
 use crate::workspace_fixture::{
-    run_synod_in, temp_fixture_workspace, terminal_text, write_markdown_brief,
+    run_boundline_in, temp_fixture_workspace, terminal_text, write_markdown_brief,
 };
 use serde_json::Value;
 use std::fs;
 
 #[test]
 fn capture_combines_explicit_and_referenced_markdown_sources_in_stable_order() {
-    let workspace = temp_fixture_workspace("synod-human-multi-source");
+    let workspace = temp_fixture_workspace("boundline-human-multi-source");
     write_markdown_brief(&workspace, "docs/explicit.md", "Explicit context\n");
     write_markdown_brief(&workspace, "docs/referenced.md", "Referenced context\n");
 
-    assert_eq!(run_synod_in(&workspace, &["start"]).status.code(), Some(0));
-    let capture = run_synod_in(
+    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
+    let capture = run_boundline_in(
         &workspace,
         &[
             "capture",
@@ -24,9 +24,10 @@ fn capture_combines_explicit_and_referenced_markdown_sources_in_stable_order() {
     let capture_text = terminal_text(&capture);
     assert_eq!(capture.status.code(), Some(0), "{capture_text}");
 
-    let session_json: Value =
-        serde_json::from_str(&fs::read_to_string(workspace.join(".synod/session.json")).unwrap())
-            .unwrap();
+    let session_json: Value = serde_json::from_str(
+        &fs::read_to_string(workspace.join(".boundline/session.json")).unwrap(),
+    )
+    .unwrap();
     let sources = session_json
         .get("authored_brief")
         .and_then(|bundle| bundle.get("sources"))
@@ -49,7 +50,7 @@ fn capture_combines_explicit_and_referenced_markdown_sources_in_stable_order() {
         vec!["docs/explicit.md"]
     );
 
-    let status = run_synod_in(&workspace, &["status"]);
+    let status = run_boundline_in(&workspace, &["status"]);
     let status_text = terminal_text(&status);
     assert_eq!(status.status.code(), Some(0), "{status_text}");
     assert!(
@@ -64,11 +65,13 @@ fn capture_combines_explicit_and_referenced_markdown_sources_in_stable_order() {
 
 #[test]
 fn capture_fails_when_goal_text_references_a_missing_markdown_source() {
-    let workspace = temp_fixture_workspace("synod-human-missing-reference");
+    let workspace = temp_fixture_workspace("boundline-human-missing-reference");
 
-    assert_eq!(run_synod_in(&workspace, &["start"]).status.code(), Some(0));
-    let capture =
-        run_synod_in(&workspace, &["capture", "--goal", "Use docs/missing.md to drive the task"]);
+    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
+    let capture = run_boundline_in(
+        &workspace,
+        &["capture", "--goal", "Use docs/missing.md to drive the task"],
+    );
     let text = terminal_text(&capture);
     assert_eq!(capture.status.code(), Some(1), "{text}");
     assert!(text.contains("brief source"), "{text}");

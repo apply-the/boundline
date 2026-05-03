@@ -2,11 +2,11 @@
 
 ## Purpose
 
-Define the minimum adaptive evidence surfaced through `synod status` and `synod next`.
+Define the minimum adaptive evidence surfaced through `boundline status` and `boundline next`.
 
 ## Required status fields
 
-When an adaptive delivery task has started, `synod status` SHOULD surface:
+When an adaptive delivery task has started, `boundline status` SHOULD surface:
 
 - `latest_workspace_slice`
 - `latest_selection_headline`
@@ -16,7 +16,7 @@ When an adaptive delivery task has started, `synod status` SHOULD surface:
 
 ## Required next guidance behavior
 
-When adaptive execution remains in progress or ends non-successfully, `synod next` MUST preserve:
+When adaptive execution remains in progress or ends non-successfully, `boundline next` MUST preserve:
 
 - the latest adaptive slice summary
 - the latest validation outcome

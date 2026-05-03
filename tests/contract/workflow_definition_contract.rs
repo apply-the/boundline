@@ -1,5 +1,5 @@
 use crate::workspace_fixture::{
-    run_synod_in, temp_workflow_layer_workspace, terminal_text, write_workflow_definitions,
+    run_boundline_in, temp_workflow_layer_workspace, terminal_text, write_workflow_definitions,
 };
 
 #[test]
@@ -17,7 +17,7 @@ fn workflow_run_rejects_review_phase_when_review_is_not_allowed() {
         ),
     );
 
-    let output = run_synod_in(
+    let output = run_boundline_in(
         &workspace,
         &["workflow", "run", "default", "--goal", "Fix the failing add test"],
     );
@@ -49,7 +49,7 @@ fn workflow_run_rejects_govern_phase_when_governance_is_not_allowed() {
         ),
     );
 
-    let output = run_synod_in(
+    let output = run_boundline_in(
         &workspace,
         &["workflow", "run", "default", "--goal", "Fix the failing add test"],
     );

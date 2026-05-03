@@ -591,7 +591,7 @@ mod tests {
 
     #[test]
     fn detect_domain_families_prefers_target_and_workspace_hints() {
-        let workspace = std::env::temp_dir().join("synod-domain-template-detect");
+        let workspace = std::env::temp_dir().join("boundline-domain-template-detect");
         let _ = fs::remove_dir_all(&workspace);
         fs::create_dir_all(workspace.join("src/components")).unwrap();
         fs::write(workspace.join("package.json"), r#"{"dependencies":{"react":"18.0.0"}}"#)
@@ -604,7 +604,7 @@ mod tests {
 
     #[test]
     fn detect_domain_families_covers_mixed_backend_and_dotnet_workspace_hints() {
-        let workspace = std::env::temp_dir().join("synod-domain-template-mixed");
+        let workspace = std::env::temp_dir().join("boundline-domain-template-mixed");
         let _ = fs::remove_dir_all(&workspace);
         fs::create_dir_all(workspace.join("src/server")).unwrap();
         fs::write(
@@ -624,7 +624,7 @@ mod tests {
 
     #[test]
     fn binding_status_detects_missing_and_stale_file_inputs() {
-        let workspace = std::env::temp_dir().join("synod-domain-template-binding");
+        let workspace = std::env::temp_dir().join("boundline-domain-template-binding");
         let _ = fs::remove_dir_all(&workspace);
         fs::create_dir_all(workspace.join("src")).unwrap();
         fs::create_dir_all(workspace.join("design")).unwrap();

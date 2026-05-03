@@ -1176,7 +1176,7 @@ mod tests {
     }
 
     fn build_request(limits: RunLimits) -> TaskRunRequest {
-        build_request_for_workspace(limits, "/tmp/synod-engine")
+        build_request_for_workspace(limits, "/tmp/boundline-engine")
     }
 
     fn build_request_for_workspace(limits: RunLimits, workspace_ref: &str) -> TaskRunRequest {
@@ -1191,7 +1191,12 @@ mod tests {
     }
 
     fn build_context() -> TaskContext {
-        TaskContext::new("session-engine", "/tmp/synod-engine", RunLimits::default(), Map::new())
+        TaskContext::new(
+            "session-engine",
+            "/tmp/boundline-engine",
+            RunLimits::default(),
+            Map::new(),
+        )
     }
 
     fn build_orchestrator(planner: TestPlanner) -> Orchestrator<TestPlanner, TestTraceStore> {
@@ -1224,7 +1229,7 @@ mod tests {
             default_runtime: GovernanceRuntimeKind::Local,
             canon: command.map(|command| CanonRuntimeConfig {
                 command: command.to_string(),
-                default_owner: Some("team-synod".to_string()),
+                default_owner: Some("team-boundline".to_string()),
                 default_risk: Some("medium".to_string()),
                 default_zone: Some("core".to_string()),
                 default_system_context: Some(SystemContextBinding::Existing),
@@ -1240,7 +1245,7 @@ mod tests {
                 system_context: Some(SystemContextBinding::Existing),
                 risk: Some("medium".to_string()),
                 zone: Some("core".to_string()),
-                owner: Some("team-synod".to_string()),
+                owner: Some("team-boundline".to_string()),
             }],
         }
     }
@@ -1292,7 +1297,7 @@ mod tests {
     }
 
     fn build_governed_task() -> Task {
-        build_governed_task_for_stage("investigate", "/tmp/synod-engine")
+        build_governed_task_for_stage("investigate", "/tmp/boundline-engine")
     }
 
     fn build_governed_task_for_stage(stage_id: &str, workspace_ref: &str) -> Task {
@@ -1563,7 +1568,7 @@ mod tests {
             approval_state: ApprovalState::NotNeeded,
             run_ref: None,
             packet: Some(crate::domain::governance::GovernedStagePacket {
-                packet_ref: ".synod/governance/bug-fix-investigate/attempt-1".to_string(),
+                packet_ref: ".boundline/governance/bug-fix-investigate/attempt-1".to_string(),
                 runtime: GovernanceRuntimeKind::Local,
                 canon_mode: None,
                 expected_document_refs: vec!["packet/brief.md".to_string()],
@@ -1773,7 +1778,7 @@ mod tests {
             Some(script.to_string_lossy().as_ref()),
             None,
         );
-        let mut task = build_governed_task_for_stage("verify", "/tmp/synod-engine");
+        let mut task = build_governed_task_for_stage("verify", "/tmp/boundline-engine");
         let mut trace = ExecutionTrace::new("task-governed", "session-engine", "goal");
 
         let result = orchestrator.ensure_stage_governance(&mut task, &mut trace).unwrap();

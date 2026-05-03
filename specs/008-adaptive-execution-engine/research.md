@@ -2,10 +2,10 @@
 
 ## Decision 1: Extend the existing execution profile with an adaptive mode
 
-- Decision: Add an optional adaptive execution mode to `<workspace>/.synod/execution.json` instead of creating a second manifest or replacing the current attempt-based profile outright.
+- Decision: Add an optional adaptive execution mode to `<workspace>/.boundline/execution.json` instead of creating a second manifest or replacing the current attempt-based profile outright.
 - Rationale: Spec 008 must broaden execution beyond fixed pre-authored attempts without breaking the working session, flow, trace, and review surfaces already established in Specs 006 and 007. Extending the existing profile keeps one delivery contract per workspace and allows legacy manifest behavior to remain valid.
 - Alternatives considered:
-  - Introduce a separate `.synod/adaptive.json` manifest: rejected because it would split one bounded delivery loop across multiple configuration contracts.
+  - Introduce a separate `.boundline/adaptive.json` manifest: rejected because it would split one bounded delivery loop across multiple configuration contracts.
   - Replace the current attempt-based profile entirely: rejected because it would make 006-style deterministic scenarios and legacy fixture conversion harder to preserve.
 
 ## Decision 2: Use a dedicated adaptive planner instead of precomputing all replans

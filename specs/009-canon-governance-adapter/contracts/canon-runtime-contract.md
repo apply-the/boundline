@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define the request and response semantics between Synod's `CanonCliRuntime` adapter and the rest of the Synod runtime so Canon-backed stage governance remains replaceable, testable, and visible.
+Define the request and response semantics between Boundline's `CanonCliRuntime` adapter and the rest of the Boundline runtime so Canon-backed stage governance remains replaceable, testable, and visible.
 
 ## Request Shape
 
@@ -29,13 +29,13 @@ Define the request and response semantics between Synod's `CanonCliRuntime` adap
   "input_documents": [
     {
       "kind": "stage-brief",
-      "path": ".synod/governance/delivery-requirements/input.md"
+      "path": ".boundline/governance/delivery-requirements/input.md"
     }
   ]
 }
 ```
 
-For approval refreshes on a previously started Canon run, Synod reuses the same contract with `request_kind = "refresh"` and includes the current `run_ref` plus the existing `packet_ref` when one already exists.
+For approval refreshes on a previously started Canon run, Boundline reuses the same contract with `request_kind = "refresh"` and includes the current `run_ref` plus the existing `packet_ref` when one already exists.
 
 ## Response Shape
 
@@ -60,7 +60,7 @@ For approval refreshes on a previously started Canon run, Synod reuses the same 
 
 ## Supported Mode Packet Expectations (First Slice)
 
-Synod's first slice treats the following primary document as required for packet readiness under each supported Canon mode:
+Boundline's first slice treats the following primary document as required for packet readiness under each supported Canon mode:
 
 - `requirements` -> `<packet_ref>/requirements.md`
 - `architecture` -> `<packet_ref>/architecture.md`
@@ -71,7 +71,7 @@ Synod's first slice treats the following primary document as required for packet
 - `verification` -> `<packet_ref>/verification.md`
 - `pr-review` -> `<packet_ref>/pr-review.md`
 
-`expected_document_refs` must enumerate these Synod-supported primary document paths for the selected mode.
+`expected_document_refs` must enumerate these Boundline-supported primary document paths for the selected mode.
 
 ## Adapter Guarantees
 
@@ -84,18 +84,18 @@ Synod's first slice treats the following primary document as required for packet
 - `status = governed_ready` is valid only when `packet_readiness = reusable`.
 - `status = awaiting_approval` requires `approval_state = requested`.
 - `status = blocked` requires a non-empty blocking message.
-- `expected_document_refs` must enumerate the minimum required packet documents for the selected mode so Synod can validate packet readiness deterministically.
+- `expected_document_refs` must enumerate the minimum required packet documents for the selected mode so Boundline can validate packet readiness deterministically.
 - `missing_sections` must be an ordered list of symbolic section references formatted as `<document_ref>#<section_slug>`.
 
 ## Failure Semantics
 
 - Missing required request fields such as `mode`, `system_context`, `risk`, or `zone` must return `status = blocked`; the adapter must not invent them silently.
 - `request_kind = refresh` must preserve the original `run_ref`, `packet_ref`, and `governance_attempt_id` lineage rather than creating a second governed attempt.
-- If Canon returns success but the resulting packet is empty, scaffold-only, or missing authored required sections, the adapter must return `packet_readiness = incomplete` or `rejected` and Synod must treat the stage as not ready.
+- If Canon returns success but the resulting packet is empty, scaffold-only, or missing authored required sections, the adapter must return `packet_readiness = incomplete` or `rejected` and Boundline must treat the stage as not ready.
 - If Canon cannot be executed at all, times out, or returns malformed output, the adapter must return `status = failed` or `blocked` with no false `run_ref`.
 - When a later `status`, `step`, or `run` refreshes a stage that is `awaiting_approval`, the adapter must report the new approval state without losing the original `run_ref` or `packet_ref` lineage.
 
 ## Local Testability
 
-- The Synod runtime must be able to replace this adapter with a deterministic fake or with `LocalGovernanceRuntime` in unit, contract, and integration tests.
-- The rest of Synod must depend only on these request and response semantics, not on Canon's internal implementation details.
+- The Boundline runtime must be able to replace this adapter with a deterministic fake or with `LocalGovernanceRuntime` in unit, contract, and integration tests.
+- The rest of Boundline must depend only on these request and response semantics, not on Canon's internal implementation details.

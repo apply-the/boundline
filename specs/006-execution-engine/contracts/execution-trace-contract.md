@@ -43,7 +43,7 @@ The completed payload for a validation step MUST expose:
 
 ## Inspect output requirements
 
-`synod inspect` MUST make the following information visible after a delivery run:
+`boundline inspect` MUST make the following information visible after a delivery run:
 
 - the inspection target and trace path
 - the executed steps and their final status
@@ -54,7 +54,7 @@ The completed payload for a validation step MUST expose:
 
 ## Session status projection
 
-When a session-backed delivery task has execution evidence, `synod status` SHOULD surface:
+When a session-backed delivery task has execution evidence, `boundline status` SHOULD surface:
 
 - the latest changed files
 - the latest validation outcome

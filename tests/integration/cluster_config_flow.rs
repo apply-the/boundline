@@ -1,11 +1,11 @@
-use crate::workspace_fixture::{run_synod_in, temp_fixture_workspace, terminal_text};
+use crate::workspace_fixture::{run_boundline_in, temp_fixture_workspace, terminal_text};
 
 #[test]
 fn cluster_scope_config_is_used_for_effective_resolution_until_workspace_overrides_it() {
-    let primary = temp_fixture_workspace("synod-cluster-config-primary");
-    let secondary = temp_fixture_workspace("synod-cluster-config-secondary");
+    let primary = temp_fixture_workspace("boundline-cluster-config-primary");
+    let secondary = temp_fixture_workspace("boundline-cluster-config-secondary");
 
-    let init = run_synod_in(
+    let init = run_boundline_in(
         &primary,
         &[
             "cluster",
@@ -22,7 +22,7 @@ fn cluster_scope_config_is_used_for_effective_resolution_until_workspace_overrid
     );
     assert_eq!(init.status.code(), Some(0), "{}", terminal_text(&init));
 
-    let set_cluster = run_synod_in(
+    let set_cluster = run_boundline_in(
         &primary,
         &[
             "config",
@@ -41,7 +41,7 @@ fn cluster_scope_config_is_used_for_effective_resolution_until_workspace_overrid
     );
     assert_eq!(set_cluster.status.code(), Some(0), "{}", terminal_text(&set_cluster));
 
-    let show_cluster = run_synod_in(
+    let show_cluster = run_boundline_in(
         &secondary,
         &[
             "config",
@@ -61,7 +61,7 @@ fn cluster_scope_config_is_used_for_effective_resolution_until_workspace_overrid
         "{show_cluster_text}"
     );
 
-    let set_workspace = run_synod_in(
+    let set_workspace = run_boundline_in(
         &secondary,
         &[
             "config",
@@ -80,7 +80,7 @@ fn cluster_scope_config_is_used_for_effective_resolution_until_workspace_overrid
     );
     assert_eq!(set_workspace.status.code(), Some(0), "{}", terminal_text(&set_workspace));
 
-    let show_workspace = run_synod_in(
+    let show_workspace = run_boundline_in(
         &secondary,
         &[
             "config",

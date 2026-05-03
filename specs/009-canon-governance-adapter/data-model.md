@@ -11,14 +11,14 @@
 
 ## GovernanceProfile
 
-- Purpose: Declares how Synod should govern built-in flow stages for one workspace.
+- Purpose: Declares how Boundline should govern built-in flow stages for one workspace.
 - Fields:
   - `default_runtime`: `GovernanceRuntimeKind` used when no stage-specific runtime overrides it.
   - `canon`: Optional `CanonRuntimeConfig` used only when the Canon runtime is selected for at least one stage.
   - `stages`: Ordered list of `StageGovernancePolicy` records keyed by flow and stage.
 - Validation rules:
   - `stages` must not contain duplicate `(flow_name, stage_id)` pairs.
-  - Every `(flow_name, stage_id)` must map to a supported built-in Synod flow stage.
+  - Every `(flow_name, stage_id)` must map to a supported built-in Boundline flow stage.
   - If any stage selects the Canon runtime, `canon` must be present and valid.
   - Canon stage policies must validate against the first-slice stage-to-mode whitelist before the workspace profile loads successfully.
 
@@ -46,7 +46,7 @@
 
 ## StageGovernancePolicy
 
-- Purpose: Describes governance behavior for one built-in Synod flow stage.
+- Purpose: Describes governance behavior for one built-in Boundline flow stage.
 - Fields:
   - `flow_name`: One of `bug-fix`, `change`, or `delivery`.
   - `stage_id`: Built-in stage identifier inside the selected flow.
@@ -62,7 +62,7 @@
 - Validation rules:
   - `required` implies `enabled`.
   - `autopilot` implies `enabled`.
-  - If the effective runtime is `canon`, `canon_mode` must be present unless exactly one compliant whitelist mode exists and Synod can derive it deterministically at load time.
+  - If the effective runtime is `canon`, `canon_mode` must be present unless exactly one compliant whitelist mode exists and Boundline can derive it deterministically at load time.
   - If `canon_mode` is present, it must be allowed for the `(flow_name, stage_id)` pair in the first-slice mapping.
   - `system_context = existing` means the stage is grounded in the current repository or an earlier governed packet; `system_context = new` means the stage is grounded only in a newly authored governed brief.
   - For the first slice, `change`, `backlog`, `implementation`, `verification`, and `pr-review` bindings must use `existing`; `requirements`, `discovery`, and `architecture` may bind either `new` or `existing` when the selected Canon mode allows it.
@@ -81,7 +81,7 @@
   - `canon_run_ref`: Optional Canon run identifier.
   - `governance_attempt_id`: Stable identifier for this governed stage attempt.
   - `previous_governance_attempt_id`: Optional earlier attempt for the same stage.
-  - `packet_ref`: Optional reference to the governed stage packet reused by Synod.
+  - `packet_ref`: Optional reference to the governed stage packet reused by Boundline.
   - `decision_ref`: Optional reference to the latest `AutopilotDecisionRecord`.
   - `blocked_reason`: Optional reason when governance could not continue.
 - Validation rules:
@@ -103,7 +103,7 @@
   - `failed`
 - Validation rules:
   - `awaiting_approval` may occur only when approval is genuinely required by the selected governance path.
-  - `completed` implies that the stage may continue to normal Synod execution.
+  - `completed` implies that the stage may continue to normal Boundline execution.
   - First-slice transitions are limited to `pending_selection -> running -> governed_ready|awaiting_approval|blocked|failed`, `governed_ready -> completed`, and `awaiting_approval -> governed_ready|blocked`.
   - `blocked`, `failed`, and `completed` are terminal for the current governed attempt.
 
@@ -121,7 +121,7 @@
 
 ## GovernedStagePacket
 
-- Purpose: Represents the governed document set and readiness state that later Synod stages may reuse as bounded reasoning input.
+- Purpose: Represents the governed document set and readiness state that later Boundline stages may reuse as bounded reasoning input.
 - Fields:
   - `packet_ref`: Stable reference used in session and trace surfaces.
   - `runtime`: Source runtime that produced the packet.
@@ -159,7 +159,7 @@
   - `binding_reason`: Short explanation such as `same_stage_rerun` or `upstream_stage_context`.
 - Validation rules:
   - `packet_ref` must refer to a `GovernedStagePacket` with `readiness = reusable`.
-  - `upstream_stage_key` and `downstream_stage_key` must belong to the same active Synod session.
+  - `upstream_stage_key` and `downstream_stage_key` must belong to the same active Boundline session.
   - For the first slice, `upstream_stage_key` must equal either `downstream_stage_key` on rerun, the immediately previous stage in the same built-in flow, or the explicit escalation source stage for a newly opened downstream governed attempt.
   - The first slice assumes linear built-in flows only; branching packet lineage is invalid for this feature version.
 

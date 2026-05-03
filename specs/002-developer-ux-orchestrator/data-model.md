@@ -83,7 +83,7 @@ Represents the bounded developer-supplied objective launched by the `run` comman
 ### Relationships
 
 - Consumed by one `DeveloperCommandSession` with `command_name = run`.
-- Consumes one `WorkspaceFixture` loaded from `.synod/fixture.json`.
+- Consumes one `WorkspaceFixture` loaded from `.boundline/fixture.json`.
 - Produces one orchestrator task run and one persisted trace.
 
 ## TraceSummaryView

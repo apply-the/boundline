@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::domain::configuration::{ConfigFile, RoutingConfig};
 
-const LOCAL_CONFIG_RELATIVE: &str = ".synod/config.toml";
+const LOCAL_CONFIG_RELATIVE: &str = ".boundline/config.toml";
 
 #[derive(Debug, Clone)]
 pub struct FileConfigStore {
@@ -24,11 +24,11 @@ impl FileConfigStore {
 
     pub fn global_config_path() -> PathBuf {
         if let Some(xdg_home) = env::var_os("XDG_CONFIG_HOME") {
-            return PathBuf::from(xdg_home).join("synod/config.toml");
+            return PathBuf::from(xdg_home).join("boundline/config.toml");
         }
 
         let home = env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
-        home.join(".config/synod/config.toml")
+        home.join(".config/boundline/config.toml")
     }
 
     pub fn load_local(&self) -> Result<Option<ConfigFile>, ConfigStoreError> {
@@ -120,7 +120,7 @@ mod tests {
 
     #[test]
     fn local_round_trip_works() {
-        let workspace = std::env::temp_dir().join(format!("synod-config-{}", Uuid::new_v4()));
+        let workspace = std::env::temp_dir().join(format!("boundline-config-{}", Uuid::new_v4()));
         fs::create_dir_all(&workspace).unwrap();
 
         let store = FileConfigStore::for_workspace(&workspace);
@@ -129,7 +129,7 @@ mod tests {
             Some(ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-5-codex".to_string() });
 
         let path = store.save_local(&cfg).unwrap();
-        assert!(path.ends_with(".synod/config.toml"));
+        assert!(path.ends_with(".boundline/config.toml"));
 
         let loaded = store.load_local().unwrap().unwrap();
         assert_eq!(loaded.routing.planning.unwrap().model, "gpt-5-codex");
@@ -138,7 +138,7 @@ mod tests {
     #[test]
     fn local_routing_returns_none_when_missing() {
         let workspace =
-            std::env::temp_dir().join(format!("synod-config-missing-{}", Uuid::new_v4()));
+            std::env::temp_dir().join(format!("boundline-config-missing-{}", Uuid::new_v4()));
         fs::create_dir_all(&workspace).unwrap();
         let store = FileConfigStore::for_workspace(&workspace);
         assert!(store.local_routing().unwrap().is_none());
@@ -147,7 +147,7 @@ mod tests {
     #[test]
     fn invalid_routing_is_rejected_before_write() {
         let workspace =
-            std::env::temp_dir().join(format!("synod-config-invalid-{}", Uuid::new_v4()));
+            std::env::temp_dir().join(format!("boundline-config-invalid-{}", Uuid::new_v4()));
         fs::create_dir_all(&workspace).unwrap();
 
         let store = FileConfigStore::for_workspace(&workspace);

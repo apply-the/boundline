@@ -6,7 +6,7 @@
 ## Intent
 
 Named workflows must be available through the shipped assistant surfaces as
-first-class Synod guidance, not as raw undocumented escape hatches.
+first-class Boundline guidance, not as raw undocumented escape hatches.
 
 ## Scenarios
 
@@ -15,7 +15,7 @@ first-class Synod guidance, not as raw undocumented escape hatches.
 **Given** a workspace with valid workflow definitions  
 **When** an operator asks Claude, Codex, or Copilot how to use workflows  
 **Then** the assistant surface must expose workflow discovery, run, status,
-resume, and inspect through the same bounded Synod command vocabulary.
+resume, and inspect through the same bounded Boundline command vocabulary.
 
 ### 2. Gemini remains CLI-first but not conceptually separate
 
@@ -35,7 +35,7 @@ inventing provider-specific continuation steps.
 
 ## Acceptance Notes
 
-- Assistant workflow guidance must stay thin over the local Synod CLI.
+- Assistant workflow guidance must stay thin over the local Boundline CLI.
 - Missing workflow guidance in a shipped assistant family is a contract failure.
 - The contract should be validated by assistant asset tests that look for the
   required sections and exact workflow command snippets.

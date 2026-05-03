@@ -20,17 +20,17 @@
 
 ### User Story 1 - Repair More Credible Bounded Failures (Priority: P1)
 
-A developer using the explicit compatibility route can have Synod try materially different bounded repair strategies after failed validation instead of exhausting only arithmetic, comparison, or boolean flips.
+A developer using the explicit compatibility route can have Boundline try materially different bounded repair strategies after failed validation instead of exhausting only arithmetic, comparison, or boolean flips.
 
 **Why this priority**: The adaptive path is already useful, but it is too narrow to recover many representative failures. Expanding bounded mutation families is the largest delivery gain available without changing route ownership.
 
-**Independent Test**: Can be fully tested by running representative adaptive compatibility profiles whose first attempt fails for non-arithmetic reasons, then verifying that Synod selects a different bounded candidate family, updates the trace and follow-up surfaces, and either succeeds or stops explicitly within configured limits.
+**Independent Test**: Can be fully tested by running representative adaptive compatibility profiles whose first attempt fails for non-arithmetic reasons, then verifying that Boundline selects a different bounded candidate family, updates the trace and follow-up surfaces, and either succeeds or stops explicitly within configured limits.
 
 **Acceptance Scenarios**:
 
-1. **Given** an adaptive compatibility run whose first validation failure points to a bounded textual replacement, missing branch, or wrong literal rather than an arithmetic mismatch, **When** Synod replans, **Then** it can choose a different supported bounded mutation family instead of exhausting immediately.
-2. **Given** several bounded mutation families remain credible for the selected workspace slice, **When** the latest validation evidence aligns better with one family than the others, **Then** Synod prefers that family and records why it was selected.
-3. **Given** a candidate family has already produced a materially identical failed result in the same run, **When** Synod considers the next bounded attempt, **Then** it avoids repeating that failed candidate unless new bounded evidence justifies it.
+1. **Given** an adaptive compatibility run whose first validation failure points to a bounded textual replacement, missing branch, or wrong literal rather than an arithmetic mismatch, **When** Boundline replans, **Then** it can choose a different supported bounded mutation family instead of exhausting immediately.
+2. **Given** several bounded mutation families remain credible for the selected workspace slice, **When** the latest validation evidence aligns better with one family than the others, **Then** Boundline prefers that family and records why it was selected.
+3. **Given** a candidate family has already produced a materially identical failed result in the same run, **When** Boundline considers the next bounded attempt, **Then** it avoids repeating that failed candidate unless new bounded evidence justifies it.
 
 ---
 
@@ -38,15 +38,15 @@ A developer using the explicit compatibility route can have Synod try materially
 
 An operator can tell why one adaptive candidate was chosen, why another candidate was skipped, and when the bounded compatibility path is truly exhausted instead of merely failing without explanation.
 
-**Why this priority**: Broader mutation families are only trustworthy if the selection logic remains inspectable. Synod cannot become more adaptive by becoming less explicit.
+**Why this priority**: Broader mutation families are only trustworthy if the selection logic remains inspectable. Boundline cannot become more adaptive by becoming less explicit.
 
 **Independent Test**: Can be fully tested by running adaptive compatibility scenarios that replan multiple times, then verifying that `run`, `status`, `next`, and `inspect` expose candidate credibility, rejection reasons, exhaustion reasons, and explicit compatibility ownership.
 
 **Acceptance Scenarios**:
 
-1. **Given** an adaptive run that chooses one bounded candidate over several alternatives, **When** the developer checks `status` or `inspect`, **Then** Synod explains the latest credibility reason, selection headline, attempt lineage, and why the rejected alternatives were not chosen.
-2. **Given** an adaptive run reaches a state where no remaining bounded candidate is credible, **When** the run stops, **Then** Synod reports an explicit exhausted or failed terminal outcome with enough evidence to show why bounded recovery ended.
-3. **Given** a workspace also has session-native state, named workflows, review configuration, or governance configuration, **When** adaptive compatibility execution is inspected, **Then** Synod preserves the explicit compatibility route story and does not imply session-native, workflow-owned, or Canon-owned adaptive control.
+1. **Given** an adaptive run that chooses one bounded candidate over several alternatives, **When** the developer checks `status` or `inspect`, **Then** Boundline explains the latest credibility reason, selection headline, attempt lineage, and why the rejected alternatives were not chosen.
+2. **Given** an adaptive run reaches a state where no remaining bounded candidate is credible, **When** the run stops, **Then** Boundline reports an explicit exhausted or failed terminal outcome with enough evidence to show why bounded recovery ended.
+3. **Given** a workspace also has session-native state, named workflows, review configuration, or governance configuration, **When** adaptive compatibility execution is inspected, **Then** Boundline preserves the explicit compatibility route story and does not imply session-native, workflow-owned, or Canon-owned adaptive control.
 
 ---
 
@@ -69,7 +69,7 @@ A maintainer can configure, validate, and release the deeper adaptive slice with
 
 <!--
   ACTION REQUIRED: Capture execution limits, invalid state transitions, missing context,
-  traceability gaps, and failure-handling boundaries. Synod features are invalid if they
+  traceability gaps, and failure-handling boundaries. Boundline features are invalid if they
   ignore how work stops, fails, or becomes non-credible.
 -->
 
@@ -105,7 +105,7 @@ A maintainer can configure, validate, and release the deeper adaptive slice with
 
 <!--
   ACTION REQUIRED: Name the deferred or excluded capabilities explicitly.
-  Synod specs should normally exclude councils and voting unless the roadmap and
+  Boundline specs should normally exclude councils and voting unless the roadmap and
   constitution explicitly prioritize a bounded review slice; they should otherwise
   exclude provider-routing complexity, distributed execution, long-term memory,
   UI/UX work, and deployment pipelines.
@@ -131,7 +131,7 @@ A maintainer can configure, validate, and release the deeper adaptive slice with
 
 ### Measurable Outcomes
 
-- **SC-001**: In representative adaptive compatibility scenarios that are not solvable by arithmetic, comparison, or boolean flips alone, Synod chooses a materially different bounded second candidate instead of exhausting immediately.
+- **SC-001**: In representative adaptive compatibility scenarios that are not solvable by arithmetic, comparison, or boolean flips alone, Boundline chooses a materially different bounded second candidate instead of exhausting immediately.
 - **SC-002**: 100% of deeper adaptive runs stop in an explicit succeeded, failed, or exhausted terminal state within configured execution limits.
 - **SC-003**: Developers can identify the latest adaptive selection reason, rejection or exhaustion rationale, and bounded workspace slice from `status` or `inspect` in under 2 minutes.
 - **SC-004**: Maintainers can follow the shipped `0.23.0` docs to configure and validate a representative broader adaptive profile in under 15 minutes without depending on undocumented behavior.
@@ -145,7 +145,7 @@ A maintainer can configure, validate, and release the deeper adaptive slice with
   Assumptions must reduce ambiguity without expanding scope.
 -->
 
-- Adaptive execution remains manifest-backed through `<workspace>/.synod/execution.json` for this slice, even when the same workspace also uses session-native routes for other work.
+- Adaptive execution remains manifest-backed through `<workspace>/.boundline/execution.json` for this slice, even when the same workspace also uses session-native routes for other work.
 - The deeper adaptive slice should prefer additional bounded mutation families and better credibility reasoning over any new top-level execution surface.
 - Existing trace, session, review, governance, and assistant-facing surfaces remain the required observability layers; this slice should deepen their summaries rather than add a new dashboard or persistence file.
 - The feature closes as `0.23.0` and therefore includes version bump, impacted docs, assistant guidance, changelog updates, coverage refresh for modified Rust files, clippy cleanup, and formatting.

@@ -7,10 +7,10 @@ defaults between workspace-local and user-global configuration.
 
 ## Command Surface
 
-### `synod config show`
+### `boundline config show`
 
 ```text
-synod config show \
+boundline config show \
   [--workspace <member-workspace>] \
   [--cluster <primary-workspace>] \
   [--scope <effective|workspace|cluster|global>]
@@ -21,10 +21,10 @@ synod config show \
 - `--scope effective` may combine workspace-local, cluster, global, and built-in
   values.
 
-### `synod config set`
+### `boundline config set`
 
 ```text
-synod config set \
+boundline config set \
   [--workspace <member-workspace>] \
   [--cluster <primary-workspace>] \
   --scope <workspace|cluster|global> \
@@ -36,13 +36,13 @@ synod config set \
 ```
 
 - `--cluster` is required when `--scope cluster` is selected.
-- Cluster-scoped writes persist inside `.synod/cluster.toml` in the primary
+- Cluster-scoped writes persist inside `.boundline/cluster.toml` in the primary
   workspace.
 
-### `synod config unset`
+### `boundline config unset`
 
 ```text
-synod config unset \
+boundline config unset \
   [--workspace <member-workspace>] \
   [--cluster <primary-workspace>] \
   --scope <workspace|cluster|global> \

@@ -1,13 +1,13 @@
 # Implementation Plan: Context Assembly Foundation
 
-**Branch**: `033-context-assembly-foundation` | **Date**: 2026-05-02 | **Spec**: [/Users/rt/workspace/synod/specs/033-context-assembly-foundation/spec.md](/Users/rt/workspace/synod/specs/033-context-assembly-foundation/spec.md)
+**Branch**: `033-context-assembly-foundation` | **Date**: 2026-05-02 | **Spec**: [/Users/rt/workspace/boundline/specs/033-context-assembly-foundation/spec.md](/Users/rt/workspace/boundline/specs/033-context-assembly-foundation/spec.md)
 **Input**: Feature specification from `/specs/033-context-assembly-foundation/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
 
 ## Summary
 
-Introduce a first-class bounded `ContextPack` into goal planning so Synod stops
+Introduce a first-class bounded `ContextPack` into goal planning so Boundline stops
 planning from ambient repository state and instead derives explicit planning
 inputs from workspace signals, authored briefs, negotiated delivery state,
 recent traces, and reusable Canon artifacts. The slice remains inside the
@@ -25,12 +25,12 @@ coverage, clippy, and formatting closeout.
 
 **Language/Version**: Rust 1.95.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, collections, and process APIs; no new runtime dependencies planned for this slice  
-**Storage**: Workspace-local `.synod/session.json`, `.synod/config.toml`, `.synod/workflows.toml`, persisted traces under `<workspace>/.synod/traces/`, optional `.synod/execution.json`, optional `.canon/` artifacts, and updated repository docs plus assistant assets  
+**Storage**: Workspace-local `.boundline/session.json`, `.boundline/config.toml`, `.boundline/workflows.toml`, persisted traces under `<workspace>/.boundline/traces/`, optional `.boundline/execution.json`, optional `.canon/` artifacts, and updated repository docs plus assistant assets  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, targeted unit and contract coverage for goal planning and output projection, `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features`, and `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`  
 **Target Platform**: macOS/Linux developer workstations and Linux CI  
 **Project Type**: Single Rust CLI/library crate with workspace-local persisted execution state and repository-managed assistant assets  
 **Execution Model**: Sequential session-native planning and bounded execution where context assembly happens before goal-plan confirmation and later surfaces project the same context-pack state without introducing background workers or parallel branches  
-**Observability Surface**: Persisted goal plans, session projections, trace `GoalPlanCreated` payloads, `plan`, `run`, `status`, `next`, and `inspect` summaries, plus release docs that describe context assembly as part of the primary Synod path  
+**Observability Surface**: Persisted goal plans, session projections, trace `GoalPlanCreated` payloads, `plan`, `run`, `status`, `next`, and `inspect` summaries, plus release docs that describe context assembly as part of the primary Boundline path  
 **Performance Goals**: Operators should identify context inputs and provenance from standard output in under 2 minutes; maintainers should validate the `0.33.0` release story in under 20 minutes  
 **Constraints**: No new top-level runtime, no hidden retrieval loops, no unbounded repository indexing, no provider-routing refoundation, no GUI work, no distributed execution, and no Canon control-plane expansion beyond bounded artifact reuse  
 **Scale/Scope**: One workspace or registered cluster at a time; bounded context packs should stay concise enough to explain one planned task sequence and its evidence without replaying the whole repository

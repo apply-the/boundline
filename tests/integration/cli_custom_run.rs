@@ -1,12 +1,12 @@
 use crate::workspace_fixture::{
-    extract_trace_path, run_synod, temp_broken_fixture_workspace, temp_fixture_workspace,
+    extract_trace_path, run_boundline, temp_broken_fixture_workspace, temp_fixture_workspace,
     temp_replanning_execution_workspace, terminal_text,
 };
 
 #[test]
 fn custom_run_executes_the_fixture_vertical_slice_and_persists_a_trace() {
-    let workspace = temp_fixture_workspace("synod-cli-run");
-    let output = run_synod(&[
+    let workspace = temp_fixture_workspace("boundline-cli-run");
+    let output = run_boundline(&[
         "run",
         "--goal",
         "Fix the failing add test",
@@ -29,8 +29,8 @@ fn custom_run_executes_the_fixture_vertical_slice_and_persists_a_trace() {
 
 #[test]
 fn custom_run_reports_non_success_and_keeps_the_trace_for_inspection() {
-    let workspace = temp_broken_fixture_workspace("synod-cli-run-broken");
-    let output = run_synod(&[
+    let workspace = temp_broken_fixture_workspace("boundline-cli-run-broken");
+    let output = run_boundline(&[
         "run",
         "--goal",
         "Attempt the fixture patch on a broken workspace",
@@ -49,8 +49,8 @@ fn custom_run_reports_non_success_and_keeps_the_trace_for_inspection() {
 
 #[test]
 fn custom_run_replans_to_a_later_execution_attempt_after_failed_validation() {
-    let workspace = temp_replanning_execution_workspace("synod-cli-run-replan");
-    let output = run_synod(&[
+    let workspace = temp_replanning_execution_workspace("boundline-cli-run-replan");
+    let output = run_boundline(&[
         "run",
         "--goal",
         "Recover after the first validation fails",

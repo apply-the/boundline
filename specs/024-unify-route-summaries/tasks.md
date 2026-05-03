@@ -17,9 +17,9 @@
 
 **Purpose**: Reserve the `0.24.0` release boundary and prepare mixed-route fixtures and harnesses for the unified summary slice
 
-- [ ] T001 Bump crate version to `0.24.0` in `/Users/rt/workspace/synod/Cargo.toml` and `/Users/rt/workspace/synod/Cargo.lock`
-- [ ] T002 Extend mixed-route workspace fixtures and helper data for native, workflow, governance, and compatibility follow-up scenarios in `/Users/rt/workspace/synod/tests/support/workspace_fixture.rs`
-- [ ] T003 Register unify-route-summaries test modules in `/Users/rt/workspace/synod/tests/contract.rs`, `/Users/rt/workspace/synod/tests/integration.rs`, and `/Users/rt/workspace/synod/tests/unit.rs`
+- [ ] T001 Bump crate version to `0.24.0` in `/Users/rt/workspace/boundline/Cargo.toml` and `/Users/rt/workspace/boundline/Cargo.lock`
+- [ ] T002 Extend mixed-route workspace fixtures and helper data for native, workflow, governance, and compatibility follow-up scenarios in `/Users/rt/workspace/boundline/tests/support/workspace_fixture.rs`
+- [ ] T003 Register unify-route-summaries test modules in `/Users/rt/workspace/boundline/tests/contract.rs`, `/Users/rt/workspace/boundline/tests/integration.rs`, and `/Users/rt/workspace/boundline/tests/unit.rs`
 
 ---
 
@@ -29,9 +29,9 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T004 Extend the shared follow-up summary and trace projection models for unified route summaries in `/Users/rt/workspace/synod/src/domain/session.rs` and `/Users/rt/workspace/synod/src/domain/trace.rs`
-- [ ] T005 [P] Align runtime projection builders for route ownership, continuity authority, and material config inputs in `/Users/rt/workspace/synod/src/cli/session.rs`, `/Users/rt/workspace/synod/src/orchestrator/engine.rs`, and `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs`
-- [ ] T006 [P] Add foundational unit coverage for summary-model convergence and projection helpers in `/Users/rt/workspace/synod/tests/unit/session_record.rs`, `/Users/rt/workspace/synod/tests/unit/workflow_session_projection.rs`, `/Users/rt/workspace/synod/tests/unit/compatibility_continuity.rs`, and `/Users/rt/workspace/synod/tests/unit/coverage_additional.rs`
+- [ ] T004 Extend the shared follow-up summary and trace projection models for unified route summaries in `/Users/rt/workspace/boundline/src/domain/session.rs` and `/Users/rt/workspace/boundline/src/domain/trace.rs`
+- [ ] T005 [P] Align runtime projection builders for route ownership, continuity authority, and material config inputs in `/Users/rt/workspace/boundline/src/cli/session.rs`, `/Users/rt/workspace/boundline/src/orchestrator/engine.rs`, and `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs`
+- [ ] T006 [P] Add foundational unit coverage for summary-model convergence and projection helpers in `/Users/rt/workspace/boundline/tests/unit/session_record.rs`, `/Users/rt/workspace/boundline/tests/unit/workflow_session_projection.rs`, `/Users/rt/workspace/boundline/tests/unit/compatibility_continuity.rs`, and `/Users/rt/workspace/boundline/tests/unit/coverage_additional.rs`
 
 **Checkpoint**: Unified summary primitives are available and route ownership plus config inputs can be projected consistently.
 
@@ -45,14 +45,14 @@
 
 ### Tests for User Story 1
 
-- [ ] T007 [P] [US1] Add contract coverage for aligned follow-up summary vocabulary in `/Users/rt/workspace/synod/tests/contract/trace_summary_contract.rs` and `/Users/rt/workspace/synod/tests/contract/route_summary_contract.rs`
-- [ ] T008 [P] [US1] Add integration coverage for mixed-route summary alignment in `/Users/rt/workspace/synod/tests/integration/route_summary_projection.rs`
-- [ ] T009 [P] [US1] Add unit coverage for aligned CLI summary rendering in `/Users/rt/workspace/synod/tests/unit/cli_output.rs` and `/Users/rt/workspace/synod/tests/unit/terminal_precedence.rs`
+- [ ] T007 [P] [US1] Add contract coverage for aligned follow-up summary vocabulary in `/Users/rt/workspace/boundline/tests/contract/trace_summary_contract.rs` and `/Users/rt/workspace/boundline/tests/contract/route_summary_contract.rs`
+- [ ] T008 [P] [US1] Add integration coverage for mixed-route summary alignment in `/Users/rt/workspace/boundline/tests/integration/route_summary_projection.rs`
+- [ ] T009 [P] [US1] Add unit coverage for aligned CLI summary rendering in `/Users/rt/workspace/boundline/tests/unit/cli_output.rs` and `/Users/rt/workspace/boundline/tests/unit/terminal_precedence.rs`
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] Implement unified route-summary rendering across `/Users/rt/workspace/synod/src/cli/output.rs`, `/Users/rt/workspace/synod/src/cli/inspect.rs`, and `/Users/rt/workspace/synod/src/cli/session.rs`
-- [ ] T011 [US1] Preserve explicit route owner, continuity authority, and route evidence in `/Users/rt/workspace/synod/src/domain/session.rs`, `/Users/rt/workspace/synod/src/domain/trace.rs`, and `/Users/rt/workspace/synod/src/cli/inspect.rs`
+- [ ] T010 [US1] Implement unified route-summary rendering across `/Users/rt/workspace/boundline/src/cli/output.rs`, `/Users/rt/workspace/boundline/src/cli/inspect.rs`, and `/Users/rt/workspace/boundline/src/cli/session.rs`
+- [ ] T011 [US1] Preserve explicit route owner, continuity authority, and route evidence in `/Users/rt/workspace/boundline/src/domain/session.rs`, `/Users/rt/workspace/boundline/src/domain/trace.rs`, and `/Users/rt/workspace/boundline/src/cli/inspect.rs`
 
 **Checkpoint**: Operators can read one coherent follow-up story across supported routes without losing ownership cues.
 
@@ -66,14 +66,14 @@
 
 ### Tests for User Story 2
 
-- [ ] T012 [P] [US2] Add contract coverage for config projection and ownership preservation in `/Users/rt/workspace/synod/tests/contract/route_summary_contract.rs` and `/Users/rt/workspace/synod/tests/contract/trace_summary_contract.rs`
-- [ ] T013 [P] [US2] Add integration coverage for explicit route overrides and material config projection in `/Users/rt/workspace/synod/tests/integration/route_config_projection.rs` and `/Users/rt/workspace/synod/tests/integration/cli_adaptive_execution.rs`
-- [ ] T014 [P] [US2] Add unit coverage for config filtering and summary projection in `/Users/rt/workspace/synod/tests/unit/cli_output.rs`, `/Users/rt/workspace/synod/tests/unit/session_record.rs`, and `/Users/rt/workspace/synod/tests/unit/coverage_additional.rs`
+- [ ] T012 [P] [US2] Add contract coverage for config projection and ownership preservation in `/Users/rt/workspace/boundline/tests/contract/route_summary_contract.rs` and `/Users/rt/workspace/boundline/tests/contract/trace_summary_contract.rs`
+- [ ] T013 [P] [US2] Add integration coverage for explicit route overrides and material config projection in `/Users/rt/workspace/boundline/tests/integration/route_config_projection.rs` and `/Users/rt/workspace/boundline/tests/integration/cli_adaptive_execution.rs`
+- [ ] T014 [P] [US2] Add unit coverage for config filtering and summary projection in `/Users/rt/workspace/boundline/tests/unit/cli_output.rs`, `/Users/rt/workspace/boundline/tests/unit/session_record.rs`, and `/Users/rt/workspace/boundline/tests/unit/coverage_additional.rs`
 
 ### Implementation for User Story 2
 
-- [ ] T015 [US2] Implement material config projection and explicit route-override summaries in `/Users/rt/workspace/synod/src/cli/session.rs`, `/Users/rt/workspace/synod/src/cli/output.rs`, and `/Users/rt/workspace/synod/src/cli/inspect.rs`
-- [ ] T016 [US2] Filter stale or irrelevant config while preserving compatibility and workflow ownership semantics in `/Users/rt/workspace/synod/src/domain/session.rs`, `/Users/rt/workspace/synod/src/orchestrator/engine.rs`, and `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs`
+- [ ] T015 [US2] Implement material config projection and explicit route-override summaries in `/Users/rt/workspace/boundline/src/cli/session.rs`, `/Users/rt/workspace/boundline/src/cli/output.rs`, and `/Users/rt/workspace/boundline/src/cli/inspect.rs`
+- [ ] T016 [US2] Filter stale or irrelevant config while preserving compatibility and workflow ownership semantics in `/Users/rt/workspace/boundline/src/domain/session.rs`, `/Users/rt/workspace/boundline/src/orchestrator/engine.rs`, and `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs`
 
 **Checkpoint**: Unified summaries expose the right routing and config facts without implying hidden ownership.
 
@@ -87,12 +87,12 @@
 
 ### Tests for User Story 3
 
-- [ ] T017 [P] [US3] Add assistant and documentation coverage for mixed-route summary guidance in `/Users/rt/workspace/synod/tests/contract/assistant_session_continuity_contract.rs` and `/Users/rt/workspace/synod/tests/unit/cli_output.rs`
+- [ ] T017 [P] [US3] Add assistant and documentation coverage for mixed-route summary guidance in `/Users/rt/workspace/boundline/tests/contract/assistant_session_continuity_contract.rs` and `/Users/rt/workspace/boundline/tests/unit/cli_output.rs`
 
 ### Implementation for User Story 3
 
-- [ ] T018 [US3] Update the unified route-summary operator story, impacted docs, and release notes in `/Users/rt/workspace/synod/README.md`, `/Users/rt/workspace/synod/docs/getting-started.md`, `/Users/rt/workspace/synod/docs/configuration.md`, `/Users/rt/workspace/synod/docs/adaptive-execution.md`, `/Users/rt/workspace/synod/assistant/README.md`, `/Users/rt/workspace/synod/CONTRIBUTING.md`, `/Users/rt/workspace/synod/ROADMAP.md`, and `/Users/rt/workspace/synod/CHANGELOG.md`
-- [ ] T019 [US3] Refresh generated agent context for the unified summary surface in `/Users/rt/workspace/synod/AGENTS.md`
+- [ ] T018 [US3] Update the unified route-summary operator story, impacted docs, and release notes in `/Users/rt/workspace/boundline/README.md`, `/Users/rt/workspace/boundline/docs/getting-started.md`, `/Users/rt/workspace/boundline/docs/configuration.md`, `/Users/rt/workspace/boundline/docs/adaptive-execution.md`, `/Users/rt/workspace/boundline/assistant/README.md`, `/Users/rt/workspace/boundline/CONTRIBUTING.md`, `/Users/rt/workspace/boundline/ROADMAP.md`, and `/Users/rt/workspace/boundline/CHANGELOG.md`
+- [ ] T019 [US3] Refresh generated agent context for the unified summary surface in `/Users/rt/workspace/boundline/AGENTS.md`
 
 **Checkpoint**: Maintainers and assistants have one coherent `0.24.0` story for route summaries, ownership, and config projection.
 
@@ -102,7 +102,7 @@
 
 **Purpose**: Finish validation and release-quality checks
 
-- [ ] T020 Run coverage-aware release validation for modified Rust files, refresh `/Users/rt/workspace/synod/lcov.info`, resolve remaining `cargo clippy` issues, run `cargo fmt --all`, and finish with clean validation for touched files under `/Users/rt/workspace/synod/src/` and `/Users/rt/workspace/synod/tests/`
+- [ ] T020 Run coverage-aware release validation for modified Rust files, refresh `/Users/rt/workspace/boundline/lcov.info`, resolve remaining `cargo clippy` issues, run `cargo fmt --all`, and finish with clean validation for touched files under `/Users/rt/workspace/boundline/src/` and `/Users/rt/workspace/boundline/tests/`
 
 ---
 

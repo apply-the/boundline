@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning  
 **Created**: 2026-05-02  
-**Feature**: [/Users/rt/workspace/synod/specs/032-workflow-surface-closure/spec.md](/Users/rt/workspace/synod/specs/032-workflow-surface-closure/spec.md)
+**Feature**: [/Users/rt/workspace/boundline/specs/032-workflow-surface-closure/spec.md](/Users/rt/workspace/boundline/specs/032-workflow-surface-closure/spec.md)
 
 ## Content Quality
 
@@ -32,4 +32,4 @@
 ## Notes
 
 - Validated against the roadmap-defined 032 outcome with no open clarification markers.
-- Workflow-first assistant surfaces, inspectable routing, and release closeout remain intentionally bounded to the existing Synod product and CLI story.
+- Workflow-first assistant surfaces, inspectable routing, and release closeout remain intentionally bounded to the existing Boundline product and CLI story.

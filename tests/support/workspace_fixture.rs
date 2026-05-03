@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 const FIXTURE_CARGO_TOML: &str = concat!(
     "[package]\n",
-    "name = \"synod-fixture\"\n",
+    "name = \"boundline-fixture\"\n",
     "version = \"0.1.0\"\n",
     "edition = \"2024\"\n",
 );
@@ -38,7 +38,7 @@ const ORDERING_BOUNDARY_LIB_RS: &str =
     concat!("pub fn includes_threshold(value: i32) -> bool {\n", "    value > 3\n", "}\n",);
 
 const ORDERING_BOUNDARY_TEST_RS: &str = concat!(
-    "use synod_fixture::includes_threshold;\n\n",
+    "use boundline_fixture::includes_threshold;\n\n",
     "#[test]\n",
     "fn threshold_is_inclusive() {\n",
     "    assert!(includes_threshold(3));\n",
@@ -60,9 +60,9 @@ const GUIDED_ADAPTIVE_VALIDATE_SH: &str = concat!(
 const MISSING_CANON_COMMAND: &str = "/definitely/missing/canon";
 
 const FIXTURE_TEST_RS: &str = concat!(
-    "use synod_fixture::add;\n\n",
+    "use boundline_fixture::add;\n\n",
     "#[test]\n",
-    "fn synod_drives_red_to_green() {\n",
+    "fn boundline_drives_red_to_green() {\n",
     "    assert_eq!(add(2, 2), 4);\n",
     "}\n",
 );
@@ -294,16 +294,20 @@ pub fn temp_replanning_execution_workspace(prefix: &str) -> PathBuf {
     )
 }
 
-pub fn run_synod(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_synod"))
+pub fn run_boundline(args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_boundline"))
         .args(args)
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
         .unwrap()
 }
 
-pub fn run_synod_in(workspace: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_synod")).args(args).current_dir(workspace).output().unwrap()
+pub fn run_boundline_in(workspace: &Path, args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_boundline"))
+        .args(args)
+        .current_dir(workspace)
+        .output()
+        .unwrap()
 }
 
 pub fn write_markdown_brief(
@@ -320,7 +324,7 @@ pub fn write_markdown_brief(
 }
 
 pub fn write_workflow_definitions(workspace: &Path, contents: impl AsRef<str>) -> PathBuf {
-    let path = workspace.join(".synod/workflows.toml");
+    let path = workspace.join(".boundline/workflows.toml");
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).unwrap();
     }
@@ -347,13 +351,13 @@ fn create_fixture_workspace(prefix: &str, attempts: Vec<serde_json::Value>) -> P
     let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
     fs::create_dir_all(workspace.join("src")).unwrap();
     fs::create_dir_all(workspace.join("tests")).unwrap();
-    fs::create_dir_all(workspace.join(".synod")).unwrap();
+    fs::create_dir_all(workspace.join(".boundline")).unwrap();
 
     fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
     fs::write(workspace.join("src/lib.rs"), RED_LIB_RS).unwrap();
     fs::write(workspace.join("tests/red_to_green.rs"), FIXTURE_TEST_RS).unwrap();
     fs::write(
-        workspace.join(".synod/execution.json"),
+        workspace.join(".boundline/execution.json"),
         serde_json::to_string_pretty(&serde_json::json!({
             "name": "red-to-green-execution",
             "read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
@@ -379,7 +383,7 @@ fn create_workflow_fixture_workspace(
     let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
     fs::create_dir_all(workspace.join("src")).unwrap();
     fs::create_dir_all(workspace.join("tests")).unwrap();
-    fs::create_dir_all(workspace.join(".synod")).unwrap();
+    fs::create_dir_all(workspace.join(".boundline")).unwrap();
 
     fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
     fs::write(workspace.join("src/lib.rs"), RED_LIB_RS).unwrap();
@@ -397,13 +401,13 @@ fn create_adaptive_fixture_workspace(prefix: &str, source_contents: &str) -> Pat
     let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
     fs::create_dir_all(workspace.join("src")).unwrap();
     fs::create_dir_all(workspace.join("tests")).unwrap();
-    fs::create_dir_all(workspace.join(".synod")).unwrap();
+    fs::create_dir_all(workspace.join(".boundline")).unwrap();
 
     fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
     fs::write(workspace.join("src/lib.rs"), source_contents).unwrap();
     fs::write(workspace.join("tests/red_to_green.rs"), FIXTURE_TEST_RS).unwrap();
     fs::write(
-        workspace.join(".synod/execution.json"),
+        workspace.join(".boundline/execution.json"),
         serde_json::to_string_pretty(&serde_json::json!({
             "name": "adaptive-red-to-green-execution",
             "read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
@@ -430,7 +434,7 @@ fn create_adaptive_guided_fixture_workspace(prefix: &str) -> PathBuf {
     let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
     fs::create_dir_all(workspace.join("src")).unwrap();
     fs::create_dir_all(workspace.join("tests")).unwrap();
-    fs::create_dir_all(workspace.join(".synod")).unwrap();
+    fs::create_dir_all(workspace.join(".boundline")).unwrap();
 
     fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
     fs::write(workspace.join("src/lib.rs"), GUIDED_ADAPTIVE_LIB_RS).unwrap();
@@ -444,7 +448,7 @@ fn create_adaptive_guided_fixture_workspace(prefix: &str) -> PathBuf {
     fs::set_permissions(&validate_script, permissions).unwrap();
 
     fs::write(
-        workspace.join(".synod/execution.json"),
+        workspace.join(".boundline/execution.json"),
         serde_json::to_string_pretty(&serde_json::json!({
             "name": "adaptive-guided-replanning-execution",
             "read_targets": ["src/lib.rs", "src/helper.rs", "tests/red_to_green.rs"],
@@ -471,13 +475,13 @@ fn create_adaptive_ordering_boundary_workspace(prefix: &str) -> PathBuf {
     let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
     fs::create_dir_all(workspace.join("src")).unwrap();
     fs::create_dir_all(workspace.join("tests")).unwrap();
-    fs::create_dir_all(workspace.join(".synod")).unwrap();
+    fs::create_dir_all(workspace.join(".boundline")).unwrap();
 
     fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
     fs::write(workspace.join("src/lib.rs"), ORDERING_BOUNDARY_LIB_RS).unwrap();
     fs::write(workspace.join("tests/red_to_green.rs"), ORDERING_BOUNDARY_TEST_RS).unwrap();
     fs::write(
-        workspace.join(".synod/execution.json"),
+        workspace.join(".boundline/execution.json"),
         serde_json::to_string_pretty(&serde_json::json!({
             "name": "adaptive-ordering-boundary-execution",
             "read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
@@ -502,7 +506,7 @@ fn create_adaptive_ordering_boundary_workspace(prefix: &str) -> PathBuf {
 
 fn write_basic_execution_profile(workspace: &Path, profile_name: &str) {
     fs::write(
-        workspace.join(".synod/execution.json"),
+        workspace.join(".boundline/execution.json"),
         serde_json::to_string_pretty(&serde_json::json!({
             "name": profile_name,
             "read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
@@ -529,13 +533,13 @@ fn create_governance_fixture_workspace(prefix: &str, required: bool) -> PathBuf 
     let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
     fs::create_dir_all(workspace.join("src")).unwrap();
     fs::create_dir_all(workspace.join("tests")).unwrap();
-    fs::create_dir_all(workspace.join(".synod")).unwrap();
+    fs::create_dir_all(workspace.join(".boundline")).unwrap();
 
     fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
     fs::write(workspace.join("src/lib.rs"), RED_LIB_RS).unwrap();
     fs::write(workspace.join("tests/red_to_green.rs"), FIXTURE_TEST_RS).unwrap();
     fs::write(
-        workspace.join(".synod/execution.json"),
+        workspace.join(".boundline/execution.json"),
         serde_json::to_string_pretty(&serde_json::json!({
             "name": if required {
                 "required-governance-execution"
@@ -590,7 +594,7 @@ fn create_governance_fixture_workspace(prefix: &str, required: bool) -> PathBuf 
 }
 
 fn write_review_profile_into_execution_profile(workspace: &Path) {
-    let path = workspace.join(".synod/execution.json");
+    let path = workspace.join(".boundline/execution.json");
     let mut profile: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
     profile["review"] = serde_json::json!({
@@ -650,7 +654,7 @@ fn create_canon_governance_fixture_workspace(
     let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
     fs::create_dir_all(workspace.join("src")).unwrap();
     fs::create_dir_all(workspace.join("tests")).unwrap();
-    fs::create_dir_all(workspace.join(".synod")).unwrap();
+    fs::create_dir_all(workspace.join(".boundline")).unwrap();
     fs::create_dir_all(workspace.join(".canon/runs")).unwrap();
 
     fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
@@ -665,7 +669,7 @@ fn create_canon_governance_fixture_workspace(
     write_canon_fixture_documents(&workspace, scenario);
 
     fs::write(
-        workspace.join(".synod/execution.json"),
+        workspace.join(".boundline/execution.json"),
         serde_json::to_string_pretty(&serde_json::json!({
             "name": match scenario {
                 CanonFixtureScenario::Reusable => "canon-governance-execution",
@@ -842,7 +846,7 @@ fn write_canon_fixture_documents(workspace: &Path, scenario: CanonFixtureScenari
 }
 
 fn write_canon_stub_script(workspace: &Path, scenario: CanonFixtureScenario) -> PathBuf {
-    let script_path = workspace.join(".synod/canon-stub.sh");
+    let script_path = workspace.join(".boundline/canon-stub.sh");
     let script = match scenario {
         CanonFixtureScenario::Reusable => {
             r#"#!/bin/sh

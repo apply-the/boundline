@@ -1,13 +1,26 @@
 # Assistant Command Packs
 
-This directory contains Markdown-based commands to run `synod` from various AI assistants (Claude, Codex, Copilot, Gemini CLI).
+This directory contains Markdown-based commands to run `boundline` from various AI assistants (Claude, Codex, Copilot, Gemini CLI).
 
-The primary delivery surface is session-native: `start -> capture -> plan -> run -> status -> next -> inspect` against `<workspace>/.synod/session.json` and `<workspace>/.synod/traces/`.
+The primary delivery surface is session-native: `start -> capture -> plan -> run -> status -> next -> inspect` against `<workspace>/.boundline/session.json` and `<workspace>/.boundline/traces/`.
 
-In `0.38.0`, workflows and direct runs are primary surfaces of the same Synod
+In `0.39.0`, assistants should treat installation verification as the first
+boundary in a new environment: prefer the README quick path, run
+`boundline doctor --install` before workspace commands, and only then move into the
+session-native workflow.
+
+Keep the product boundary explicit in assistant narration:
+
+- Boundline owns orchestration, planning, execution, validation, and session state.
+- Canon is the optional governed companion runtime, not the product entrypoint.
+- If a user only needs the fast path, point them to README plus
+	`docs/getting-started.md`; use `docs/architecture.md` only for the second
+	read level.
+
+In `0.39.0`, workflows and direct runs are primary surfaces of the same Boundline
 product story, while compatibility remains explicit and subordinate.
 
-In `0.38.0`, direct `run --goal` still bootstraps that native session path by
+In `0.39.0`, direct `run --goal` still bootstraps that native session path by
 default, while `run --compatibility --goal ...` remains the explicit
 execution-profile route. `capture` persists `negotiation_goal_summary`,
 `negotiation_resolution`, and `negotiation_acceptance_boundary` before
@@ -19,7 +32,7 @@ Assistants should preserve those fields across `plan`, `run`, `status`,
 In the same release, native execution also keeps explicit selector-driven
 guidance visible on the read-side surfaces. Preserve `latest_selection_headline`,
 `latest_selection_reason`, and inspect `selector:` lines exactly when they
-appear: they explain which bounded action Synod chose next and why.
+appear: they explain which bounded action Boundline chose next and why.
 
 In the same release, native planning also persists `context_summary`,
 `context_credibility`, `context_primary_inputs`, `context_provenance`, and
@@ -36,15 +49,15 @@ In the same release, Canon capability snapshots and compact Canon-grounded
 memory can also populate those context fields and `governance_next_action`
 across `plan`, `run`, `status`, `next`, and `inspect`. Preserve that governed
 memory exactly, including artifact-backed provenance and stale-memory wording:
-it can be the authoritative reason Synod stops instead of continuing.
+it can be the authoritative reason Boundline stops instead of continuing.
 
 Native planning now also persists `goal_plan_state`, `goal_plan_revision`,
 `planning_rationale`, and `verification_strategy` when available. Preserve
 those values exactly: they explain whether the current proposal is still
-waiting for confirmation, what changed across revisions, and how Synod expects
+waiting for confirmation, what changed across revisions, and how Boundline expects
 to validate the bounded plan.
 
-`synod init` still scaffolds `<workspace>/.synod/execution.json` plus local routing config, but that manifest is now an explicit compatibility/bootstrap surface rather than the default product story.
+`boundline init` still scaffolds `<workspace>/.boundline/execution.json` plus local routing config, but that manifest is now an explicit compatibility/bootstrap surface rather than the default product story.
 
 When a user asks for direct `run --goal`, assistants should prefer the native
 route by default. Add `--compatibility` only when the user explicitly wants the
@@ -52,7 +65,7 @@ manifest-backed compatibility path.
 
 When an explicit compatibility run leaves no resumable session, assistants
 should treat `continuity_authority: compatibility_trace` as an inspect-only
-follow-up state rather than a reason to restart from `synod start`.
+follow-up state rather than a reason to restart from `boundline start`.
 
 When `run`, `status`, `next`, or `inspect` report `route_owner` and
 `route_config_projection`, assistants should preserve those fields in their
@@ -102,16 +115,16 @@ fields appear in CLI output.
 Clustered session-native delivery uses the same CLI surface through the primary
 workspace:
 
-- `cargo run --bin synod -- start --cluster <primary-workspace>`
-- `cargo run --bin synod -- capture --cluster <primary-workspace> --goal "<goal>"`
-- `cargo run --bin synod -- plan --cluster <primary-workspace>`
-- `cargo run --bin synod -- plan --cluster <primary-workspace> --confirm`
-- `cargo run --bin synod -- run --cluster <primary-workspace>`
-- `cargo run --bin synod -- status --cluster <primary-workspace>`
-- `cargo run --bin synod -- next --cluster <primary-workspace>`
-- `cargo run --bin synod -- inspect --cluster <primary-workspace>`
+- `cargo run --bin boundline -- start --cluster <primary-workspace>`
+- `cargo run --bin boundline -- capture --cluster <primary-workspace> --goal "<goal>"`
+- `cargo run --bin boundline -- plan --cluster <primary-workspace>`
+- `cargo run --bin boundline -- plan --cluster <primary-workspace> --confirm`
+- `cargo run --bin boundline -- run --cluster <primary-workspace>`
+- `cargo run --bin boundline -- status --cluster <primary-workspace>`
+- `cargo run --bin boundline -- next --cluster <primary-workspace>`
+- `cargo run --bin boundline -- inspect --cluster <primary-workspace>`
 
-When a workspace defines `.synod/workflows.toml`, assistants may also use the
+When a workspace defines `.boundline/workflows.toml`, assistants may also use the
 bounded named-workflow surface: `workflow list -> workflow run -> workflow
 status -> workflow resume -> workflow inspect`. Those commands reuse the same session and trace
 story instead of opening a second runtime, including governed `bug-fix:investigate`
@@ -128,7 +141,7 @@ Each AI assistant has its own local or remote configuration. Currently, all comm
 - **Copilot**: Copy `./assistant/copilot/prompts/*.prompt.md` to `.github/prompts/` or reference via `#file`.
 - **Claude**: Load the respective `.md` files as projects or upload as attachments to the context window.
 - **Codex**: Import into the corresponding workbench.
-- **Gemini CLI**: Reference the command docs from this directory and run the mapped Synod CLI commands locally.
+- **Gemini CLI**: Reference the command docs from this directory and run the mapped Boundline CLI commands locally.
 
 Gemini remains an explicit CLI fallback in this release. Claude, Codex, and
 Copilot command packs should follow the active route slot binding instead of
@@ -143,16 +156,16 @@ If the shell/terminal is *not* available:
 3. Tell the user to run it manually, wait for it to finish, and paste the output.
 
 If the shell/terminal *is* available:
-1. Run the mapped CLI command directly from the repository root with `cargo run --bin synod -- ...`.
+1. Run the mapped CLI command directly from the repository root with `cargo run --bin boundline -- ...`.
 2. Do not explain syntax.
 3. Prefer CLI-reported `next_command` or `corrected_command` when present instead of inventing a follow-up.
 
 ## Workflows
 
 ### Starting a Workflow (User Story 1)
-- `/synod-init`: Runs `cargo run --bin synod -- init --workspace <workspace>` before first use or when workspace setup is missing. Add `--template <change|delivery>` only when the user explicitly wants a different starting profile than the default `bug-fix`. Use `--force` when replacing an existing generated profile.
-- `/synod-start`: Confirms the workspace and runs `cargo run --bin synod -- start --workspace <workspace>` to initialize the active session.
-- `/synod-plan`: Captures human-authored input into the active session, then runs `cargo run --bin synod -- plan --workspace <workspace>`. When the user gives direct text, use `cargo run --bin synod -- capture --workspace <workspace> --goal "<goal>"`. When the user provides Markdown brief files, use `cargo run --bin synod -- capture --workspace <workspace> --brief <path> [--brief <path> ...]`. When both are present, pass both `--goal` and repeated `--brief` flags in the same capture command. Summaries should preserve proposed, confirmed, skipped, or absent flow state, `goal_plan_state`, `goal_plan_revision`, `planning_rationale`, `verification_strategy`, the negotiated delivery fields, and any CLI-reported confirm or clarification guidance.
+- `/boundline-init`: Runs `cargo run --bin boundline -- init --workspace <workspace>` before first use or when workspace setup is missing. Add `--template <change|delivery>` only when the user explicitly wants a different starting profile than the default `bug-fix`. Use `--force` when replacing an existing generated profile.
+- `/boundline-start`: Confirms the workspace and runs `cargo run --bin boundline -- start --workspace <workspace>` to initialize the active session.
+- `/boundline-plan`: Captures human-authored input into the active session, then runs `cargo run --bin boundline -- plan --workspace <workspace>`. When the user gives direct text, use `cargo run --bin boundline -- capture --workspace <workspace> --goal "<goal>"`. When the user provides Markdown brief files, use `cargo run --bin boundline -- capture --workspace <workspace> --brief <path> [--brief <path> ...]`. When both are present, pass both `--goal` and repeated `--brief` flags in the same capture command. Summaries should preserve proposed, confirmed, skipped, or absent flow state, `goal_plan_state`, `goal_plan_revision`, `planning_rationale`, `verification_strategy`, the negotiated delivery fields, and any CLI-reported confirm or clarification guidance.
 
 When `plan`, `run`, `status`, `next`, or `inspect` report `context_summary`,
 `context_credibility`, `context_primary_inputs`, `context_provenance`, or
@@ -167,40 +180,40 @@ into a generic suggestion.
 When those same commands report `goal_plan_state`, `goal_plan_revision`,
 `planning_rationale`, or `verification_strategy`, assistants should preserve
 those fields exactly and treat an unconfirmed proposal as a real stop
-condition until the CLI points to `synod plan --confirm`.
+condition until the CLI points to `boundline plan --confirm`.
 
 When the user asks to tune defaults for planning, verification, or review roles,
-assistants should use `cargo run --bin synod -- config show|set|unset ...`
+assistants should use `cargo run --bin boundline -- config show|set|unset ...`
 instead of asking users to edit config files manually.
 When the user asks to tune domain families, layered standards, or supporting
-external inputs, assistants should use `cargo run --bin synod -- config show`,
+external inputs, assistants should use `cargo run --bin boundline -- config show`,
 `config set-domain`, `config unset-domain`, `config bind-context`, and
-`config unbind-context` instead of editing `.synod/config.toml` directly.
+`config unbind-context` instead of editing `.boundline/config.toml` directly.
 
-If the user explicitly selects a built-in flow, assistants should run `cargo run --bin synod -- flow <bug-fix|change|delivery> --workspace <workspace>` after capture and before plan. There is no separate assistant command pack for `flow`; use the raw CLI subcommand directly.
+If the user explicitly selects a built-in flow, assistants should run `cargo run --bin boundline -- flow <bug-fix|change|delivery> --workspace <workspace>` after capture and before plan. There is no separate assistant command pack for `flow`; use the raw CLI subcommand directly.
 
 ### Continuing a Workflow (User Story 2)
-- `/synod-step`: Executes `cargo run --bin synod -- step --workspace <workspace>` and summarizes `routing`, `execution_condition`, `latest_status`, any updated `latest_trace_ref`, `next_command`, and flow-stage fields when present.
-- `/synod-run`: Executes `cargo run --bin synod -- run --workspace <workspace>` and summarizes `routing`, `route_owner`, `route_config_projection` when present, `execution_condition`, `execution_path`, `flow_state`, `negotiation_goal_summary`, `negotiation_resolution`, `negotiation_acceptance_boundary`, `context_summary`, `context_credibility`, `context_primary_inputs`, `context_provenance`, `context_staleness_reason`, `delegation_mode`, `delegation_packet_id`, `delegation_packet_kind`, `delegation_packet_state`, `delegation_target_owner`, `delegation_headline`, `delegation_evidence_summary`, `terminal_status`, `terminal_reason`, `changed_files`, validation summaries, `trace`, `next_command`, and any flow/stage lifecycle events. When adaptive execution is active, also summarize `workspace_slice`, `candidate_family`, `selection_headline`, `selection_reason`, `rejected_candidates`, explicit adaptive exhaustion when present, and `attempt_lineage`. When review is configured, also summarize `review_trigger`, reviewer findings, `review_vote`, and `review_outcome`. When governance is active, also summarize `latest_governance_stage`, `latest_governance_runtime`, `latest_governance_mode`, `latest_governance_run_ref`, packet provenance including `latest_governance_packet_ref` and any binding reason, approval state, any packet rejection or blocked rationale, and `governance_next_action` when present.
-- `/synod-status`: Executes `cargo run --bin synod -- status --workspace <workspace>` and summarizes the active session state or latest compatibility follow-up for the current workspace, including `routing`, `route_owner`, `route_config_projection` when present, `execution_condition`, `continuity_authority`, `compatibility_follow_up`, `compatibility_trace_ref`, `compatibility_follow_up_command`, `execution_path`, `flow_state`, `goal_plan_state`, `goal_plan_revision`, `planning_rationale`, `verification_strategy`, `latest_decision_status`, `latest_decision_target`, `active_flow`, `current_stage`, `stage_progress`, `authored_input_summary`, `authored_input_sources`, `authored_input_deduplicated_sources`, `negotiation_goal_summary`, `negotiation_resolution`, `negotiation_acceptance_boundary`, `context_summary`, `context_credibility`, `context_primary_inputs`, `context_provenance`, `context_staleness_reason`, `delegation_mode`, `delegation_packet_id`, `delegation_packet_kind`, `delegation_packet_state`, `delegation_target_owner`, `delegation_headline`, `delegation_evidence_summary`, `latest_changed_files`, `latest_workspace_slice`, `latest_selection_headline`, `latest_candidate_family`, `latest_selection_reason`, `latest_rejected_candidates`, `latest_attempt_lineage`, `latest_validation_status`, `latest_exhaustion_reason`, `follow_through_guidance`, `follow_through_evidence_source`, `follow_through_next_action`, `follow_through_stop_reason`, and the latest review fields when available. When governance is active, surface `latest_governance_stage`, `latest_governance_state`, `latest_governance_mode`, `latest_governance_run_ref`, `latest_governance_packet_ref`, any packet binding reason, autopilot candidates, and `governance_next_action` so the operator knows whether to wait for approval or resolve a blocker instead of continuing execution.
-- `/synod-next`: Executes `cargo run --bin synod -- next --workspace <workspace>` and summarizes `routing`, `route_owner`, `route_config_projection` when present, `execution_condition`, `continuity_authority`, `compatibility_follow_up`, `compatibility_trace_ref`, `latest_status`, `goal_plan_state`, `goal_plan_revision`, `planning_rationale`, `verification_strategy`, `negotiation_goal_summary`, `negotiation_resolution`, `negotiation_acceptance_boundary`, `context_summary`, `context_credibility`, `context_primary_inputs`, `context_provenance`, `context_staleness_reason`, `delegation_mode`, `delegation_packet_id`, `delegation_packet_kind`, `delegation_packet_state`, `delegation_target_owner`, `delegation_headline`, `delegation_evidence_summary`, `explanation`, `follow_through_guidance`, `follow_through_evidence_source`, `follow_through_next_action`, `follow_through_stop_reason`, and the CLI-reported `next_command`, plus flow-stage context, the latest adaptive slice, `candidate_family`, selection reason, exhaustion reason when present, validation state, and the latest review outcome when present.
+- `/boundline-step`: Executes `cargo run --bin boundline -- step --workspace <workspace>` and summarizes `routing`, `execution_condition`, `latest_status`, any updated `latest_trace_ref`, `next_command`, and flow-stage fields when present.
+- `/boundline-run`: Executes `cargo run --bin boundline -- run --workspace <workspace>` and summarizes `routing`, `route_owner`, `route_config_projection` when present, `execution_condition`, `execution_path`, `flow_state`, `negotiation_goal_summary`, `negotiation_resolution`, `negotiation_acceptance_boundary`, `context_summary`, `context_credibility`, `context_primary_inputs`, `context_provenance`, `context_staleness_reason`, `delegation_mode`, `delegation_packet_id`, `delegation_packet_kind`, `delegation_packet_state`, `delegation_target_owner`, `delegation_headline`, `delegation_evidence_summary`, `terminal_status`, `terminal_reason`, `changed_files`, validation summaries, `trace`, `next_command`, and any flow/stage lifecycle events. When adaptive execution is active, also summarize `workspace_slice`, `candidate_family`, `selection_headline`, `selection_reason`, `rejected_candidates`, explicit adaptive exhaustion when present, and `attempt_lineage`. When review is configured, also summarize `review_trigger`, reviewer findings, `review_vote`, and `review_outcome`. When governance is active, also summarize `latest_governance_stage`, `latest_governance_runtime`, `latest_governance_mode`, `latest_governance_run_ref`, packet provenance including `latest_governance_packet_ref` and any binding reason, approval state, any packet rejection or blocked rationale, and `governance_next_action` when present.
+- `/boundline-status`: Executes `cargo run --bin boundline -- status --workspace <workspace>` and summarizes the active session state or latest compatibility follow-up for the current workspace, including `routing`, `route_owner`, `route_config_projection` when present, `execution_condition`, `continuity_authority`, `compatibility_follow_up`, `compatibility_trace_ref`, `compatibility_follow_up_command`, `execution_path`, `flow_state`, `goal_plan_state`, `goal_plan_revision`, `planning_rationale`, `verification_strategy`, `latest_decision_status`, `latest_decision_target`, `active_flow`, `current_stage`, `stage_progress`, `authored_input_summary`, `authored_input_sources`, `authored_input_deduplicated_sources`, `negotiation_goal_summary`, `negotiation_resolution`, `negotiation_acceptance_boundary`, `context_summary`, `context_credibility`, `context_primary_inputs`, `context_provenance`, `context_staleness_reason`, `delegation_mode`, `delegation_packet_id`, `delegation_packet_kind`, `delegation_packet_state`, `delegation_target_owner`, `delegation_headline`, `delegation_evidence_summary`, `latest_changed_files`, `latest_workspace_slice`, `latest_selection_headline`, `latest_candidate_family`, `latest_selection_reason`, `latest_rejected_candidates`, `latest_attempt_lineage`, `latest_validation_status`, `latest_exhaustion_reason`, `follow_through_guidance`, `follow_through_evidence_source`, `follow_through_next_action`, `follow_through_stop_reason`, and the latest review fields when available. When governance is active, surface `latest_governance_stage`, `latest_governance_state`, `latest_governance_mode`, `latest_governance_run_ref`, `latest_governance_packet_ref`, any packet binding reason, autopilot candidates, and `governance_next_action` so the operator knows whether to wait for approval or resolve a blocker instead of continuing execution.
+- `/boundline-next`: Executes `cargo run --bin boundline -- next --workspace <workspace>` and summarizes `routing`, `route_owner`, `route_config_projection` when present, `execution_condition`, `continuity_authority`, `compatibility_follow_up`, `compatibility_trace_ref`, `latest_status`, `goal_plan_state`, `goal_plan_revision`, `planning_rationale`, `verification_strategy`, `negotiation_goal_summary`, `negotiation_resolution`, `negotiation_acceptance_boundary`, `context_summary`, `context_credibility`, `context_primary_inputs`, `context_provenance`, `context_staleness_reason`, `delegation_mode`, `delegation_packet_id`, `delegation_packet_kind`, `delegation_packet_state`, `delegation_target_owner`, `delegation_headline`, `delegation_evidence_summary`, `explanation`, `follow_through_guidance`, `follow_through_evidence_source`, `follow_through_next_action`, `follow_through_stop_reason`, and the CLI-reported `next_command`, plus flow-stage context, the latest adaptive slice, `candidate_family`, selection reason, exhaustion reason when present, validation state, and the latest review outcome when present.
 
 When `status`, `next`, or `inspect` surface compatibility follow-up, treat it as
 evidence that the user previously chose `run --compatibility`; do not infer that
 plain `run --goal` should continue to use the compatibility route.
 
 ### Named Workflow Layer (Workflow Slice)
-- Use `/synod-workflow-list`, `/synod-workflow-run`, `/synod-workflow-status`, `/synod-workflow-resume`, and `/synod-workflow-inspect` as the assistant-native entrypoints when a workspace provides `.synod/workflows.toml`.
-- `cargo run --bin synod -- workflow list --workspace <workspace>` should summarize the available workflow names, any shipped summary or `recommended_when` guidance, the declared phase chain, and the exact `workflow run` command to start each one.
-- `cargo run --bin synod -- workflow run <name> --workspace <workspace> [--goal "<goal>"]` should summarize `workflow`, `workflow_phase`, `routing`, `route_owner`, `route_config_projection`, `execution_condition`, `execution_path`, and `next_command`, including actionable paused or blocked states when bounded `review` or `govern` follow-through cannot complete yet.
-- `cargo run --bin synod -- workflow status --workspace <workspace>` should report the same session story as `status`, with workflow identity, active phase, route projection, and any workflow-owned next action added.
-- `cargo run --bin synod -- workflow resume --workspace <workspace>` should be preferred over inventing a phase-specific follow-up when the CLI reports it as `next_command`, especially for bounded `review` or `govern` follow-through.
-- `cargo run --bin synod -- workflow inspect --workspace <workspace>` should combine workflow projection with trace inspection when a trace exists and should preserve the same primary-versus-subordinate product story.
+- Use `/boundline-workflow-list`, `/boundline-workflow-run`, `/boundline-workflow-status`, `/boundline-workflow-resume`, and `/boundline-workflow-inspect` as the assistant-native entrypoints when a workspace provides `.boundline/workflows.toml`.
+- `cargo run --bin boundline -- workflow list --workspace <workspace>` should summarize the available workflow names, any shipped summary or `recommended_when` guidance, the declared phase chain, and the exact `workflow run` command to start each one.
+- `cargo run --bin boundline -- workflow run <name> --workspace <workspace> [--goal "<goal>"]` should summarize `workflow`, `workflow_phase`, `routing`, `route_owner`, `route_config_projection`, `execution_condition`, `execution_path`, and `next_command`, including actionable paused or blocked states when bounded `review` or `govern` follow-through cannot complete yet.
+- `cargo run --bin boundline -- workflow status --workspace <workspace>` should report the same session story as `status`, with workflow identity, active phase, route projection, and any workflow-owned next action added.
+- `cargo run --bin boundline -- workflow resume --workspace <workspace>` should be preferred over inventing a phase-specific follow-up when the CLI reports it as `next_command`, especially for bounded `review` or `govern` follow-through.
+- `cargo run --bin boundline -- workflow inspect --workspace <workspace>` should combine workflow projection with trace inspection when a trace exists and should preserve the same primary-versus-subordinate product story.
 
 ### Inspecting Prior Runs (User Story 3)
-- `/synod-inspect`: Executes `cargo run --bin synod -- inspect --trace <trace>` for an explicit trace or `cargo run --bin synod -- inspect --workspace <workspace>` for the workspace-selected trace. Workspace-based inspect may reuse the active session's `latest_trace_ref` before falling back to the latest workspace trace.
+- `/boundline-inspect`: Executes `cargo run --bin boundline -- inspect --trace <trace>` for an explicit trace or `cargo run --bin boundline -- inspect --workspace <workspace>` for the workspace-selected trace. Workspace-based inspect may reuse the active session's `latest_trace_ref` before falling back to the latest workspace trace.
 - Successful inspection summaries must expose `inspection_target`, `trace`, `routing_summary`, `route_owner`, `route_config_projection` when present, `execution_condition`, `goal_plan_summary`, `negotiation_goal_summary`, `negotiation_resolution`, `negotiation_acceptance_boundary`, `context_summary`, `context_credibility`, `context_primary_inputs`, `context_provenance`, `context_staleness_reason`, `delegation_mode`, `delegation_packet_id`, `delegation_packet_kind`, `delegation_packet_state`, `delegation_target_owner`, `delegation_headline`, `delegation_evidence_summary`, `decision_timeline`, `failure_evidence`, `adaptive_evidence`, `follow_through_guidance`, `follow_through_evidence_source`, `follow_through_next_action`, `follow_through_stop_reason`, `terminal_status`, `terminal_reason`, `authored_input_summary`, `authored_input_sources`, `authored_input_deduplicated_sources` when present, changed-file headlines, validation headlines, adaptive slice and lineage evidence when present, `candidate_family`, selection reason, rejected candidates, explicit exhaustion when present, review trigger, reviewer findings, vote summary, review outcome, governance runtime/mode/run-ref evidence, governance packet provenance when present, `governance_next_action` when present, and `next_command` so assistants can continue routing without dumping raw logs.
-- Trace-read failures must expose `terminal_reason`, `next_command: /synod-inspect`, and a `corrected_command` that tells the user how to retry with a corrected trace reference or workspace. Workspace-based inspect session errors should route back to `/synod-start`.
+- Trace-read failures must expose `terminal_reason`, `next_command: /boundline-inspect`, and a `corrected_command` that tells the user how to retry with a corrected trace reference or workspace. Workspace-based inspect session errors should route back to `/boundline-start`.
 
 For the current adaptive execution manifest shape, broader bounded mutation-family vocabulary, and validation-guided bounded replanning behavior, see [`docs/adaptive-execution.md`](../docs/adaptive-execution.md).
 
@@ -222,7 +235,7 @@ For the current review manifest shape and vote semantics, see [`docs/review-voti
 - In chat-only mode, always provide exact copyable commands, wait for the user to run them, and update the workflow state only after pasted output.
 - Preserve `inspection_target` when the user is working from an explicit trace instead of the latest workspace trace.
 - When CLI output includes `next_command`, prefer that route instead of inventing a follow-up.
-- When `status` or `next` reports `continuity_authority: compatibility_trace` or `compatibility_follow_up: inspect_only`, route to `/synod-inspect` instead of `/synod-start`.
+- When `status` or `next` reports `continuity_authority: compatibility_trace` or `compatibility_follow_up: inspect_only`, route to `/boundline-inspect` instead of `/boundline-start`.
 - When CLI output includes `corrected_command`, reuse it instead of inventing a replacement inspect invocation.
 - When governance output reports `awaiting_approval` or `blocked`, do not suggest an ungoverned bypass; prefer `status` or `inspect` exactly as the CLI recommends and surface `governance_next_action` when the CLI provides it.
 - When a user is operating on a registered cluster, keep the primary workspace authoritative and prefer the CLI-reported `--cluster <primary-workspace>` follow-up instead of replacing it with member-scoped `--workspace` commands.

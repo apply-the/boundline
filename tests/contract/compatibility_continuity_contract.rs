@@ -1,5 +1,5 @@
-use synod::cli::run::{RunCommandError, execute_custom_run, execute_native_direct_run};
-use synod::cli::session::{
+use boundline::cli::run::{RunCommandError, execute_custom_run, execute_native_direct_run};
+use boundline::cli::session::{
     execute_capture, execute_next, execute_plan, execute_start, execute_status,
 };
 
@@ -45,7 +45,7 @@ fn status_contract_preserves_native_snapshot_and_surfaces_compatibility_follow_u
     assert!(
         status
             .terminal_output
-            .contains("compatibility_follow_up_command: synod inspect --workspace "),
+            .contains("compatibility_follow_up_command: boundline inspect --workspace "),
         "{}",
         status.terminal_output
     );
@@ -71,7 +71,7 @@ fn next_contract_without_active_session_uses_latest_compatibility_trace_as_autho
         next.terminal_output
     );
     assert!(
-        next.terminal_output.contains("next_command: synod inspect --workspace "),
+        next.terminal_output.contains("next_command: boundline inspect --workspace "),
         "{}",
         next.terminal_output
     );

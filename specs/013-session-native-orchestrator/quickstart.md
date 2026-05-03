@@ -12,20 +12,20 @@ cargo init --name test-project
 echo 'fn broken() { panic!("fix me"); }' > src/lib.rs
 
 # Start a session and capture a goal
-synod start --workspace .
-synod capture --goal "fix the broken function in src/lib.rs"
+boundline start --workspace .
+boundline capture --goal "fix the broken function in src/lib.rs"
 
 # Plan from goal
-synod plan
+boundline plan
 
 # Run the decision loop
-synod run
+boundline run
 
 # Inspect the decisions
-synod inspect
+boundline inspect
 ```
 
-**Expected**: `synod run` produces at least one decision object in the trace. Each
+**Expected**: `boundline run` produces at least one decision object in the trace. Each
 decision has type, target, rationale, expected_outcome, and evidence_inputs. The
 session terminates in an explicit terminal state.
 
@@ -33,28 +33,28 @@ session terminates in an explicit terminal state.
 
 ```bash
 # Check trace for decision objects
-cat .synod/traces/*.json | jq '.events[] | select(.event_type == "decision_created")'
+cat .boundline/traces/*.json | jq '.events[] | select(.event_type == "decision_created")'
 
 # Check terminal state
-cat .synod/session.json | jq '.status'
+cat .boundline/session.json | jq '.status'
 ```
 
 ## Test Scenario 2: Goal-Derived Planning (US2)
 
 ```bash
 cd /tmp/test-workspace
-synod start --workspace .
-synod capture --goal "add input validation to the parse function"
-synod plan
+boundline start --workspace .
+boundline capture --goal "add input validation to the parse function"
+boundline plan
 ```
 
-**Expected**: `synod plan` produces a GoalPlan with tasks derived from workspace
+**Expected**: `boundline plan` produces a GoalPlan with tasks derived from workspace
 state. The plan references files actually present in the workspace.
 
 **Verify**:
 
 ```bash
-cat .synod/session.json | jq '.goal_plan'
+cat .boundline/session.json | jq '.goal_plan'
 # Should show tasks with targets matching real files
 ```
 
@@ -62,15 +62,15 @@ cat .synod/session.json | jq '.goal_plan'
 
 ```bash
 # Bug-fix goal
-synod start --workspace .
-synod capture --goal "fix the failing test in auth.rs"
-synod plan
+boundline start --workspace .
+boundline capture --goal "fix the failing test in auth.rs"
+boundline plan
 # Expected: proposes bug-fix flow
 
 # Change goal
-synod start --workspace .
-synod capture --goal "add a new validation layer to the API"
-synod plan
+boundline start --workspace .
+boundline capture --goal "add a new validation layer to the API"
+boundline plan
 # Expected: proposes change flow
 ```
 
@@ -79,7 +79,7 @@ synod plan
 ```bash
 # Existing fixture workflow still works
 cd /tmp/test-workspace
-cat > .synod/execution.json << 'EOF'
+cat > .boundline/execution.json << 'EOF'
 {
   "goal": "test fixture compat",
   "workspace_ref": ".",
@@ -87,19 +87,19 @@ cat > .synod/execution.json << 'EOF'
 }
 EOF
 
-synod run
+boundline run
 # Expected: uses fixture path, same output as v0.12.0
 ```
 
 ## Test Scenario 5: Decision Verification Failure and Recovery (US1 edge case)
 
 ```bash
-synod start --workspace .
-synod capture --goal "fix the broken test"
-synod plan
-synod run
+boundline start --workspace .
+boundline capture --goal "fix the broken test"
+boundline plan
+boundline run
 # If a verification fails, inspect the recovery decision
-synod inspect
+boundline inspect
 ```
 
 **Expected**: Failed verification produces a recovery decision (fix or replan)

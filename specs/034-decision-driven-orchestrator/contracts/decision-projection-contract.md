@@ -2,7 +2,7 @@
 
 ## Goal
 
-Operators can understand selector-driven execution from the existing Synod
+Operators can understand selector-driven execution from the existing Boundline
 read-side surfaces without reading raw persisted traces.
 
 ## Required Surfaces

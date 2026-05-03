@@ -1,13 +1,13 @@
 use std::path::Path;
 
-use synod::FileConfigStore;
-use synod::adapters::session_store::{FileSessionStore, SessionStore};
-use synod::cli::inspect::execute_inspect;
-use synod::cli::run::{execute_custom_run, execute_native_direct_run};
-use synod::cli::session::{
+use boundline::FileConfigStore;
+use boundline::adapters::session_store::{FileSessionStore, SessionStore};
+use boundline::cli::inspect::execute_inspect;
+use boundline::cli::run::{execute_custom_run, execute_native_direct_run};
+use boundline::cli::session::{
     execute_capture, execute_next, execute_plan, execute_run, execute_start, execute_status,
 };
-use synod::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
+use boundline::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
 
 use crate::runtime_refoundation::{
     temp_runtime_refoundation_compat_workspace, temp_runtime_refoundation_governed_workspace,
@@ -404,7 +404,7 @@ fn native_run_persists_delegation_when_route_runtime_missing_from_declared_assis
         run.terminal_output
     );
     assert_eq!(continuity.mode.as_str(), "escalation_required");
-    assert_eq!(continuity.next_command, "synod inspect");
+    assert_eq!(continuity.next_command, "boundline inspect");
 }
 
 #[test]

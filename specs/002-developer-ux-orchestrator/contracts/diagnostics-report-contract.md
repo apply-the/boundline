@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Defines the readiness report emitted by `synod doctor`.
+Defines the readiness report emitted by `boundline doctor`.
 
 ## Report Shape
 

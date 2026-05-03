@@ -3,19 +3,19 @@
 **Feature Branch**: `036-canon-grounded-memory`  
 **Created**: 2026-05-03  
 **Status**: Draft  
-**Input**: User description: "Implement Spec 036 Canon-Grounded Reasoning And Structured Memory: align Synod with Canon 0.39.0 as the stable governance release, treat Canon packets, governed artifacts, artifact summaries, and capability signals as live planning and decision inputs instead of stage-end output only, add durable bounded summarization and context compaction so long-running sessions can carry forward important evidence across loops without replaying the whole workspace, preserve bounded operator control and inspectability on the existing native session path, and ship the feature complete with version bump, docs, changelog, cargo fmt, cargo clippy, and modified Rust file coverage above 95 percent."
+**Input**: User description: "Implement Spec 036 Canon-Grounded Reasoning And Structured Memory: align Boundline with Canon 0.39.0 as the stable governance release, treat Canon packets, governed artifacts, artifact summaries, and capability signals as live planning and decision inputs instead of stage-end output only, add durable bounded summarization and context compaction so long-running sessions can carry forward important evidence across loops without replaying the whole workspace, preserve bounded operator control and inspectability on the existing native session path, and ship the feature complete with version bump, docs, changelog, cargo fmt, cargo clippy, and modified Rust file coverage above 95 percent."
 
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Plan With Canon-Grounded Context (Priority: P1)
 
-An operator can run the primary session-native path and have Synod treat current
+An operator can run the primary session-native path and have Boundline treat current
 Canon packets, governed artifacts, artifact summaries, and capability signals as
 live planning evidence rather than as downstream governance residue.
 
 **Why this priority**: This is the operating-model change named by Spec 036. If
 planning still treats Canon as a side channel, the feature has not changed how
-Synod reasons about bounded delivery.
+Boundline reasons about bounded delivery.
 
 **Independent Test**: Capture a bounded goal in a workspace that already
 contains reusable Canon artifacts and capability signals, then run
@@ -27,11 +27,11 @@ changes the proposed plan compared with workspace-only reasoning.
 
 1. **Given** a credible native session and reusable Canon artifacts that narrow
    the bounded change surface, **When** the operator runs `plan`, **Then**
-   Synod proposes a bounded plan whose rationale and verification strategy cite
+   Boundline proposes a bounded plan whose rationale and verification strategy cite
    that Canon-grounded evidence rather than treating it as optional decoration.
 2. **Given** a credible native session where Canon capability signals show that
    a downstream governed step can or cannot support a bounded follow-through,
-   **When** the operator runs `plan`, **Then** Synod shapes the proposal and
+   **When** the operator runs `plan`, **Then** Boundline shapes the proposal and
    next action around those capability limits instead of discovering them only
    after execution starts.
 
@@ -40,7 +40,7 @@ changes the proposed plan compared with workspace-only reasoning.
 ### User Story 2 - Carry Forward Compacted Canon Memory Across Loops (Priority: P2)
 
 An operator can continue a long-running session without replaying the whole
-workspace because Synod carries forward a durable, compact reasoning memory of
+workspace because Boundline carries forward a durable, compact reasoning memory of
 the Canon-grounded evidence that still matters to the next bounded decision.
 
 **Why this priority**: Canon-grounded reasoning is incomplete if the evidence is
@@ -55,12 +55,12 @@ re-reading the same full workspace or governed artifact set.
 **Acceptance Scenarios**:
 
 1. **Given** a session that already consumed Canon packets and governed
-   artifacts, **When** later loop iterations continue or replan, **Then** Synod
+   artifacts, **When** later loop iterations continue or replan, **Then** Boundline
    carries forward a compact reasoning memory that preserves the still-relevant
    constraints, packet lineage, and evidence headlines needed for the next
    bounded decision.
 2. **Given** a long-running session where prior Canon-grounded evidence becomes
-   stale, contradicted, or insufficient, **When** Synod reaches a later planning
+   stale, contradicted, or insufficient, **When** Boundline reaches a later planning
    or decision point, **Then** it records the memory boundary explicitly and
    stops, refreshes, or replans instead of silently treating stale compacted
    memory as authoritative.
@@ -70,7 +70,7 @@ re-reading the same full workspace or governed artifact set.
 ### User Story 3 - Inspect Canon Influence And Bounded Stops (Priority: P3)
 
 An operator can see exactly how Canon-grounded evidence influenced planning,
-decision selection, and bounded stop conditions through the normal Synod
+decision selection, and bounded stop conditions through the normal Boundline
 read-side surfaces.
 
 **Why this priority**: The feature adds more reasoning input, so inspectability
@@ -86,12 +86,12 @@ evidence, and any explicit stop or refresh requirement.
 **Acceptance Scenarios**:
 
 1. **Given** a plan or decision that used Canon-grounded evidence, **When** the
-   operator reads `status`, `next`, or `inspect`, **Then** Synod surfaces the
+   operator reads `status`, `next`, or `inspect`, **Then** Boundline surfaces the
    compacted Canon memory, the decisive evidence headline, and the packet or
    capability reason that changed the bounded execution path.
 2. **Given** a session where Canon-grounded memory is missing, stale,
    contradictory, or insufficient for the next bounded action, **When** the
-   operator attempts to continue, **Then** Synod reports an explicit stop,
+   operator attempts to continue, **Then** Boundline reports an explicit stop,
    refresh, or replanning requirement instead of falling back to opaque
    workspace-only reasoning.
 
@@ -179,7 +179,7 @@ with the shipped behavior.
   Canon-grounded planning influence, compact-memory persistence, stale-memory
   handling, and read-side projection.
 - **FR-013**: System MUST include explicit release-closeout work for bumping the
-  Synod version to `0.36.0`, updating impacted docs and assistant guidance,
+  Boundline version to `0.36.0`, updating impacted docs and assistant guidance,
   refreshing the roadmap, and recording the release in the changelog.
 - **FR-014**: System MUST finish with clean formatting, clean lint results, and
   line coverage above 95% for every modified or newly created Rust file in this
@@ -193,7 +193,7 @@ with the shipped behavior.
   projection; release closeout for `0.36.0`.
 - **Out of Scope**: a new standalone memory subsystem beyond bounded task and
   session scope; distributed or parallel execution; new UI surfaces; Canon-led
-  takeover of Synod control flow; review councils or generic voting; provider
+  takeover of Boundline control flow; review councils or generic voting; provider
   abstraction refoundation; unrelated Canon compatibility churn that does not
   change bounded reasoning behavior.
 
@@ -202,7 +202,7 @@ with the shipped behavior.
 - **Canon Context Snapshot**: the bounded session-owned projection of the Canon
   packets, governed artifacts, artifact summaries, and capability signals that
   are currently relevant to planning or decision selection.
-- **Compacted Reasoning Memory**: the durable summary Synod carries across loops
+- **Compacted Reasoning Memory**: the durable summary Boundline carries across loops
   so later bounded steps can reuse Canon-grounded evidence without replaying the
   whole workspace or full artifact bundle.
 - **Canon Influence Projection**: the operator-visible explanation of how
@@ -218,7 +218,7 @@ with the shipped behavior.
 
 - **SC-001**: In representative native planning scenarios with relevant Canon
   evidence, operators can identify which Canon-grounded inputs changed the plan
-  and why in under 2 minutes using standard Synod output.
+  and why in under 2 minutes using standard Boundline output.
 - **SC-002**: In representative long-running native sessions, 100% of later
   bounded decisions either reuse credible compacted Canon-grounded memory or stop
   explicitly with a refresh, replan, or insufficiency reason.
@@ -232,7 +232,7 @@ with the shipped behavior.
 ## Assumptions
 
 - Canon `0.39.0` is the stable governance release to align against for this
-  slice, and Synod can treat its current packet, artifact, and capability
+  slice, and Boundline can treat its current packet, artifact, and capability
   surfaces as stable for the near term.
 - The primary operator path remains the session-native route; explicit
   compatibility-governed follow-up remains an opt-in or continuity path rather

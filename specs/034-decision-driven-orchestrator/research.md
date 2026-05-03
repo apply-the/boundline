@@ -43,7 +43,7 @@ longer has a credible engineering action and surfaces a clarification or
 capture-style recovery path through existing follow-through surfaces.
 
 **Rationale**: The roadmap requires `ask` to be a first-class next-action
-selector, but Synod still needs bounded sequential behavior and an operator
+selector, but Boundline still needs bounded sequential behavior and an operator
 visible stop condition. Treating `ask` as an explicit selector plus surfaced
 clarification state meets that need without introducing an interactive runtime
 conversation loop.
@@ -98,7 +98,7 @@ bounded, and sufficient to prove the operating-model shift in this slice.
 but allow `inspect` and related read-side projections to reuse selector
 terminology when compatibility traces contain the enriched decision payloads.
 
-**Rationale**: Synod's product hierarchy already makes native execution primary.
+**Rationale**: Boundline's product hierarchy already makes native execution primary.
 034 should improve the shared explanation surface without letting compatibility
 follow-up read like a second primary runtime.
 

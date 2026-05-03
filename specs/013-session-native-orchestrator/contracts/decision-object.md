@@ -90,7 +90,7 @@ depend on this shape.
 
 ## CLI Output Contract
 
-`synod inspect` MUST display each decision with:
+`boundline inspect` MUST display each decision with:
 
 ```text
 Decision [id_short] (type: code, status: verified)

@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 use uuid::Uuid;
 
-use synod::domain::goal_plan::GoalPlanStatus;
-use synod::orchestrator::goal_planner::{
+use boundline::domain::goal_plan::GoalPlanStatus;
+use boundline::orchestrator::goal_planner::{
     GoalPlannerError, PlanningContextSources, build_goal_plan, build_goal_plan_with_sources,
 };
 

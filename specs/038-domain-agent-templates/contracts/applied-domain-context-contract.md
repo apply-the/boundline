@@ -5,7 +5,7 @@
 
 ## Purpose
 
-Define how Synod selects, persists, and projects the active domain guidance for
+Define how Boundline selects, persists, and projects the active domain guidance for
 bounded planning and execution.
 
 ## Required Surface

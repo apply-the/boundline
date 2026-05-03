@@ -14,11 +14,11 @@ Exercise the complete `0.33.0` story: explicit context assembly before plan conf
 ## Scenario 1: Context pack is created during planning
 
 1. Start a fresh session:
-   `cargo run --bin synod -- start`
+   `cargo run --bin boundline -- start`
 2. Capture a bounded goal with authored context:
-   `cargo run --bin synod -- capture --goal "fix the failing context summary output"`
+   `cargo run --bin boundline -- capture --goal "fix the failing context summary output"`
 3. Plan the task:
-   `cargo run --bin synod -- plan`
+   `cargo run --bin boundline -- plan`
 4. Verify the output and persisted session expose:
    - a context summary
    - a credible context state
@@ -28,18 +28,18 @@ Exercise the complete `0.33.0` story: explicit context assembly before plan conf
 ## Scenario 2: Context projection stays visible during follow-through
 
 1. Continue with:
-   `cargo run --bin synod -- status`
+   `cargo run --bin boundline -- status`
 2. Ask for the bounded next action:
-   `cargo run --bin synod -- next`
+   `cargo run --bin boundline -- next`
 3. Inspect the current authoritative trace or session:
-   `cargo run --bin synod -- inspect`
+   `cargo run --bin boundline -- inspect`
 4. Verify the same context-pack vocabulary remains visible on these surfaces.
 
 ## Scenario 3: Non-credible context stops planning explicitly
 
 1. Capture a goal in a workspace with no credible relevant code or artifact inputs.
 2. Run:
-   `cargo run --bin synod -- plan`
+   `cargo run --bin boundline -- plan`
 3. Verify planning stops explicitly and the output explains that the context pack is insufficient or stale rather than silently proceeding.
 4. Verify `status` or `next` keeps the same blocked context summary visible so the recovery action is inspectable.
 

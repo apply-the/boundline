@@ -27,6 +27,7 @@ use crate::domain::execution::{
 use crate::domain::flow::{
     FLOW_METADATA_KEY, FlowStepMetadata, SessionFlowState, attach_stage_metadata, built_in_flow,
 };
+use crate::domain::goal_plan::GoalPlan;
 use crate::domain::limits::RunLimits;
 use crate::domain::negotiation::NegotiatedDeliveryPacket;
 use crate::domain::plan::Plan;
@@ -45,7 +46,7 @@ use crate::orchestrator::planner::{CallbackPlanner, Planner, PlanningError, Stat
 use crate::registry::agent_registry::{AgentRegistry, RegistryError as AgentRegistryError};
 use crate::registry::tool_registry::{RegistryError as ToolRegistryError, ToolRegistry};
 
-const EXECUTION_RELATIVE_PATH: &str = ".synod/execution.json";
+const EXECUTION_RELATIVE_PATH: &str = ".boundline/execution.json";
 const MIN_ADAPTIVE_REPLAN_SCORE: i64 = 60;
 
 #[derive(Clone)]
@@ -355,6 +356,22 @@ pub fn build_fixture_runtime_for_flow(
     active_flow: Option<&SessionFlowState>,
 ) -> Result<FixtureRuntime, FixtureRuntimeError> {
     let profile = load_workspace_execution_profile(workspace)?;
+    build_fixture_runtime_from_profile(workspace, profile, active_flow)
+}
+
+pub fn build_fixture_runtime_for_goal_plan(
+    workspace: &Path,
+    goal_plan: &GoalPlan,
+) -> Result<FixtureRuntime, FixtureRuntimeError> {
+    let profile = synthesize_goal_plan_execution_profile(workspace, goal_plan)?;
+    build_fixture_runtime_from_profile(workspace, profile, None)
+}
+
+fn build_fixture_runtime_from_profile(
+    workspace: &Path,
+    profile: WorkspaceExecutionProfile,
+    active_flow: Option<&SessionFlowState>,
+) -> Result<FixtureRuntime, FixtureRuntimeError> {
     let workspace_ref = workspace.to_path_buf();
     let planner: Arc<dyn Planner> = if profile.adaptive.is_some() {
         Arc::new(CallbackPlanner::new(
@@ -423,6 +440,13 @@ pub fn build_fixture_runtime_for_flow(
             verify_workspace_fixture(&workspace_ref, &profile, request)
         })
     })?;
+    tools.register("replanner", {
+        FnToolAdapter::new(move |_request| {
+            StepExecutionResult::success(json!({
+                "stdout": "replanned bounded flow",
+            }))
+        })
+    })?;
     tools.register("review-voter", {
         let profile = profile.clone();
         FnToolAdapter::new(move |request| resolve_review_vote(&profile, request))
@@ -433,6 +457,120 @@ pub fn build_fixture_runtime_for_flow(
     })?;
 
     Ok(FixtureRuntime { profile, planner, agents, tools })
+}
+
+fn synthesize_goal_plan_execution_profile(
+    workspace: &Path,
+    goal_plan: &GoalPlan,
+) -> Result<WorkspaceExecutionProfile, FixtureRuntimeError> {
+    let validation_command = if workspace.join("Cargo.toml").is_file() {
+        ExecutionCommand {
+            program: "cargo".to_string(),
+            args: vec!["test".to_string(), "--quiet".to_string()],
+        }
+    } else {
+        ExecutionCommand { program: "true".to_string(), args: Vec::new() }
+    };
+
+    let (path, find, replace) = infer_goal_plan_change(workspace, goal_plan)?;
+    let mut read_targets = goal_plan
+        .tasks
+        .iter()
+        .filter_map(|task| {
+            let target = task.target.trim();
+            if target.is_empty() || target == "test suite" {
+                return None;
+            }
+            let candidate = workspace.join(target);
+            candidate.is_file().then(|| target.to_string())
+        })
+        .collect::<Vec<_>>();
+    if !read_targets.iter().any(|target| target == &path) {
+        read_targets.push(path.clone());
+    }
+    if workspace.join("Cargo.toml").is_file()
+        && !read_targets.iter().any(|target| target == "Cargo.toml")
+    {
+        read_targets.push("Cargo.toml".to_string());
+    }
+
+    Ok(WorkspaceExecutionProfile {
+        name: format!("native-goal-plan-{}", goal_plan.plan_id),
+        read_targets,
+        validation_command,
+        attempts: vec![ExecutionAttemptDefinition {
+            attempt_id: "native-goal-attempt-1".to_string(),
+            summary: format!("Synthetic native attempt for {}", goal_plan.goal_text),
+            failure_mode: ExecutionFailureMode::Terminal,
+            changes: vec![WorkspaceChange { path, find, replace }],
+        }],
+        adaptive: None,
+        limits: RunLimits::default(),
+        governance: None,
+        review: None,
+        legacy_source: Some("native_goal_plan_synthesized".to_string()),
+    })
+}
+
+fn infer_goal_plan_change(
+    workspace: &Path,
+    goal_plan: &GoalPlan,
+) -> Result<(String, String, String), FixtureRuntimeError> {
+    for target in goal_plan.tasks.iter().map(|task| task.target.trim()) {
+        if target.is_empty() || target == "test suite" {
+            continue;
+        }
+        let path = workspace.join(target);
+        if !path.is_file() {
+            continue;
+        }
+
+        let contents = fs::read_to_string(&path)
+            .map_err(|source| FixtureRuntimeError::Io { path: path.clone(), source })?;
+        if contents.contains("left - right") {
+            return Ok((
+                target.to_string(),
+                "left - right".to_string(),
+                "left + right".to_string(),
+            ));
+        }
+        if contents.contains("\"todo\"") {
+            return Ok((
+                target.to_string(),
+                "\"todo\"".to_string(),
+                "\"workspace summary ready\"".to_string(),
+            ));
+        }
+        if let Some(needle) = first_stable_line(&contents) {
+            return Ok((
+                target.to_string(),
+                format!("__boundline_goal_plan_change_required__:{needle}"),
+                format!("__boundline_goal_plan_change_applied__:{needle}"),
+            ));
+        }
+    }
+
+    let cargo_toml = workspace.join("Cargo.toml");
+    if cargo_toml.is_file() {
+        let contents = fs::read_to_string(&cargo_toml)
+            .map_err(|source| FixtureRuntimeError::Io { path: cargo_toml.clone(), source })?;
+        if let Some(needle) = first_stable_line(&contents) {
+            return Ok((
+                "Cargo.toml".to_string(),
+                format!("__boundline_goal_plan_change_required__:{needle}"),
+                format!("__boundline_goal_plan_change_applied__:{needle}"),
+            ));
+        }
+    }
+
+    Err(FixtureRuntimeError::NoSynthesizeableGoalPlanTarget {
+        goal: goal_plan.goal_text.clone(),
+        workspace: workspace.to_path_buf(),
+    })
+}
+
+fn first_stable_line(contents: &str) -> Option<String> {
+    contents.lines().map(str::trim).find(|line| !line.is_empty()).map(str::to_string)
 }
 
 fn build_vertical_slice_plan(
@@ -2997,6 +3135,10 @@ pub enum FixtureRuntimeError {
     NoAdaptiveCandidate { profile: String },
     #[error("execution profile '{profile}' returned invalid adaptive attempt metadata: {message}")]
     InvalidAdaptiveAttemptMetadata { profile: String, message: String },
+    #[error(
+        "could not synthesize a native goal-plan attempt for goal '{goal}' in workspace {workspace}"
+    )]
+    NoSynthesizeableGoalPlanTarget { goal: String, workspace: PathBuf },
     #[error("failed to execute fixture command `{command}`: {source}")]
     CommandLaunch {
         command: String,
@@ -3023,9 +3165,10 @@ mod tests {
         analyze_workspace_fixture, apply_fixture_patches, apply_workspace_fixture,
         boolean_flip_candidates, build_adaptive_attempt_steps, build_adaptive_candidates,
         build_adaptive_initial_plan, build_attempt_steps, build_fixture_plan,
-        build_fixture_runtime, build_rejected_candidate_summaries, build_review_steps_for_attempt,
-        build_task_request, build_vertical_slice_plan, comparison_flip_candidates,
-        execution_manifest_path, guidance_paths_from_text, load_workspace_execution_profile,
+        build_fixture_plan_for_flow, build_fixture_runtime, build_fixture_runtime_for_goal_plan,
+        build_rejected_candidate_summaries, build_review_steps_for_attempt, build_task_request,
+        build_vertical_slice_plan, comparison_flip_candidates, execution_manifest_path,
+        guidance_paths_from_text, load_workspace_execution_profile,
         numeric_literal_flip_candidates, ordering_boundary_flip_candidates, resolve_review_vote,
         result_status_flip_candidates, review_workspace_fixture, run_fixture_command,
         score_adaptive_candidate, verify_workspace_fixture,
@@ -3036,6 +3179,7 @@ mod tests {
         ValidationRecord,
     };
     use crate::domain::flow::{attach_stage_metadata, built_in_flow};
+    use crate::domain::goal_plan::{GoalPlan, PlannedTask};
     use crate::domain::governance::{
         ApprovalState, CanonMode, GovernanceLifecycleState, GovernanceRuntimeKind,
         GovernedStagePacket, GovernedStageRecord, PacketReadiness,
@@ -3049,8 +3193,9 @@ mod tests {
     use crate::domain::task_context::TaskContext;
 
     fn temp_workspace() -> std::path::PathBuf {
-        let workspace = std::env::temp_dir().join(format!("synod-fixture-unit-{}", Uuid::new_v4()));
-        fs::create_dir_all(workspace.join(".synod")).unwrap();
+        let workspace =
+            std::env::temp_dir().join(format!("boundline-fixture-unit-{}", Uuid::new_v4()));
+        fs::create_dir_all(workspace.join(".boundline")).unwrap();
         workspace
     }
 
@@ -3058,7 +3203,7 @@ mod tests {
         let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
         fs::create_dir_all(workspace.join("src")).unwrap();
         fs::create_dir_all(workspace.join("tests")).unwrap();
-        fs::create_dir_all(workspace.join(".synod")).unwrap();
+        fs::create_dir_all(workspace.join(".boundline")).unwrap();
         fs::write(
             workspace.join("Cargo.toml"),
             "[package]\nname = \"fixture_unit\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
@@ -3342,6 +3487,46 @@ mod tests {
     }
 
     #[test]
+    fn workspace_fixture_validation_rejects_invalid_limits_and_manifest_path_is_stable() {
+        let workspace = temp_workspace();
+
+        assert_eq!(
+            execution_manifest_path(&workspace),
+            workspace.join(".boundline/execution.json")
+        );
+        assert!(matches!(
+            WorkspaceFixture {
+                name: "fixture".to_string(),
+                test_command: super::default_test_command(),
+                limits: RunLimits { max_steps: 0, ..super::default_run_limits() },
+                file_patches: vec![FilePatch {
+                    path: "src/lib.rs".to_string(),
+                    find: "red".to_string(),
+                    replace: "green".to_string(),
+                }],
+            }
+            .validate()
+            .unwrap_err(),
+            super::FixtureValidationError::InvalidRunLimits(_)
+        ));
+
+        assert!(
+            WorkspaceFixture {
+                name: "fixture".to_string(),
+                test_command: super::default_test_command(),
+                limits: super::default_run_limits(),
+                file_patches: vec![FilePatch {
+                    path: "src/lib.rs".to_string(),
+                    find: "red".to_string(),
+                    replace: "green".to_string(),
+                }],
+            }
+            .validate()
+            .is_ok()
+        );
+    }
+
+    #[test]
     fn load_workspace_execution_profile_reports_parse_and_missing_errors() {
         let workspace = temp_workspace();
         fs::write(execution_manifest_path(&workspace), b"{not json").unwrap();
@@ -3470,7 +3655,7 @@ mod tests {
     #[test]
     fn build_adaptive_initial_plan_covers_change_and_delivery_flows() {
         let workspace = write_execution_workspace(
-            "synod-fixture-adaptive-flow-coverage",
+            "boundline-fixture-adaptive-flow-coverage",
             "pub fn add(left: i32, right: i32) -> bool {\n    left != right\n}\n",
         );
         let profile = sample_adaptive_profile(ExecutionCommand {
@@ -3514,7 +3699,7 @@ mod tests {
     #[test]
     fn build_adaptive_attempt_steps_covers_flow_scoped_and_direct_variants() {
         let workspace = write_execution_workspace(
-            "synod-fixture-adaptive-attempt-coverage",
+            "boundline-fixture-adaptive-attempt-coverage",
             "pub fn add(left: i32, right: i32) -> bool {\n    left != right\n}\n",
         );
         let profile = sample_adaptive_profile(ExecutionCommand {
@@ -3613,7 +3798,7 @@ mod tests {
     #[test]
     fn review_validation_failure_is_routed_into_review_state() {
         let workspace = write_execution_workspace(
-            "synod-fixture-review-validation-failure",
+            "boundline-fixture-review-validation-failure",
             "pub fn add(left: i32, right: i32) -> i32 {\n    left - right\n}\n",
         );
         let mut profile = sample_review_profile(ExecutionCommand {
@@ -3911,7 +4096,7 @@ mod tests {
     #[test]
     fn apply_workspace_fixture_covers_retry_invalid_attempt_success_and_already_applied() {
         let workspace = write_execution_workspace(
-            "synod-fixture-apply",
+            "boundline-fixture-apply",
             "pub fn add(left: i32, right: i32) -> i32 {\n    left - right\n}\n",
         );
         let profile = sample_profile(ExecutionCommand {
@@ -3950,7 +4135,7 @@ mod tests {
     #[test]
     fn verify_workspace_fixture_covers_success_failure_and_command_errors() {
         let success_workspace = write_execution_workspace(
-            "synod-fixture-verify-success",
+            "boundline-fixture-verify-success",
             "pub fn add(left: i32, right: i32) -> i32 {\n    left + right\n}\n",
         );
         let retry_profile = sample_profile(ExecutionCommand {
@@ -3970,7 +4155,7 @@ mod tests {
         );
 
         let failure_workspace = write_execution_workspace(
-            "synod-fixture-verify-failure",
+            "boundline-fixture-verify-failure",
             "pub fn add(left: i32, right: i32) -> i32 {\n    left - right\n}\n",
         );
         let failure = verify_workspace_fixture(
@@ -4001,7 +4186,7 @@ mod tests {
     #[test]
     fn fixture_runtime_helpers_cover_analysis_builders_and_verify_invalid_attempts() {
         let workspace = write_execution_workspace(
-            "synod-fixture-runtime-helpers",
+            "boundline-fixture-runtime-helpers",
             "pub fn add(left: i32, right: i32) -> i32 {\n    left + right\n}\n",
         );
         let profile = sample_profile(ExecutionCommand {
@@ -4020,6 +4205,16 @@ mod tests {
             vec!["analyze", "code-fix-add", "verify-fix-add"]
         );
 
+        let flow_plan = build_fixture_plan_for_flow(
+            &workspace,
+            Some(&built_in_flow("bug-fix").unwrap().initial_state()),
+        )
+        .unwrap();
+        assert_eq!(
+            flow_plan.steps.iter().map(|step| step.id.as_str()).collect::<Vec<_>>(),
+            vec!["investigate", "implement", "verify"]
+        );
+
         let task_request =
             build_task_request(&workspace, "Fix the workspace", "session-1", None, None).unwrap();
         assert_eq!(task_request.input["execution_profile"], json!("fixture-profile"));
@@ -4029,6 +4224,27 @@ mod tests {
         assert!(runtime.agents.get("analyzer").is_some());
         assert!(runtime.agents.get("coder").is_some());
         assert!(runtime.tools.get("tester").is_some());
+
+        let goal_plan_runtime = build_fixture_runtime_for_goal_plan(
+            &workspace,
+            &GoalPlan::new(
+                "Fix the workspace",
+                vec![PlannedTask {
+                    task_id: "planned-task-1".to_string(),
+                    description: "Repair arithmetic".to_string(),
+                    target: "src/lib.rs".to_string(),
+                    expected_outcome: Some("tests pass".to_string()),
+                    decision_type_hint: None,
+                }],
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            goal_plan_runtime.profile.legacy_source.as_deref(),
+            Some("native_goal_plan_synthesized")
+        );
+        assert!(goal_plan_runtime.tools.get("replanner").is_some());
 
         let analysis = analyze_workspace_fixture(&workspace, &profile, request(json!({}), 1));
         assert_eq!(analysis.status, crate::domain::step::ExecutionStatus::Succeeded);
@@ -4058,7 +4274,7 @@ mod tests {
     #[test]
     fn fixture_analysis_surfaces_bounded_governance_context_for_flow_steps() {
         let workspace = write_execution_workspace(
-            "synod-fixture-governance-context",
+            "boundline-fixture-governance-context",
             "pub fn add(left: i32, right: i32) -> i32 {\n    left + right\n}\n",
         );
         let profile = sample_profile(ExecutionCommand {
@@ -4130,7 +4346,7 @@ mod tests {
     fn execution_profile_loader_prefers_the_new_manifest_when_present() {
         let workspace = temp_workspace();
         fs::write(
-            workspace.join(".synod/execution.json"),
+            workspace.join(".boundline/execution.json"),
             serde_json::to_vec_pretty(&json!({
                 "name": "preferred-profile",
                 "read_targets": ["src/lib.rs"],
@@ -4150,7 +4366,7 @@ mod tests {
         )
         .unwrap();
         fs::write(
-            workspace.join(".synod/fixture.json"),
+            workspace.join(".boundline/fixture.json"),
             serde_json::to_vec_pretty(&json!({
                 "name": "legacy-profile",
                 "test_command": {"program": "cargo", "args": ["test", "--quiet"]},
@@ -4173,7 +4389,7 @@ mod tests {
     fn execution_profile_loader_requires_the_modern_manifest() {
         let workspace = temp_workspace();
         fs::write(
-            workspace.join(".synod/fixture.json"),
+            workspace.join(".boundline/fixture.json"),
             serde_json::to_vec_pretty(&json!({
                 "name": "legacy-profile",
                 "test_command": {"program": "cargo", "args": ["test", "--quiet"]},

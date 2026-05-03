@@ -1951,9 +1951,11 @@ pub(crate) fn task_state_governance_candidate_actions(task: &Task) -> Option<Vec
 
 pub(crate) fn governance_next_action_for_state(governance_state: Option<&str>) -> Option<String> {
     match governance_state {
-        Some("awaiting_approval") => Some("wait for approval and rerun synod status".to_string()),
+        Some("awaiting_approval") => {
+            Some("wait for approval and rerun boundline status".to_string())
+        }
         Some("blocked") => {
-            Some("resolve the governance blocker, then rerun synod step".to_string())
+            Some("resolve the governance blocker, then rerun boundline step".to_string())
         }
         _ => None,
     }
@@ -2137,7 +2139,7 @@ mod tests {
             active_flow_policy: None,
             latest_status: SessionStatus::Planned,
             latest_terminal_reason: None,
-            latest_trace_ref: Some(format!("{workspace_ref}/.synod/traces/task-1.json")),
+            latest_trace_ref: Some(format!("{workspace_ref}/.boundline/traces/task-1.json")),
             created_at: 10,
             updated_at: 20,
         }
@@ -2256,7 +2258,7 @@ mod tests {
             latest_governance_decision: None,
             latest_governance_candidates: None,
             governance_next_action: None,
-            next_command: Some("synod step".to_string()),
+            next_command: Some("boundline step".to_string()),
             explanation: "view is consistent".to_string(),
         }
     }
@@ -2428,7 +2430,7 @@ mod tests {
 
     #[test]
     fn status_view_rejects_stage_count_trace_and_step_index_mismatches() {
-        let workspace = "/tmp/synod-session-domain";
+        let workspace = "/tmp/boundline-session-domain";
         let record = build_record(workspace);
 
         let mut wrong_stage_index = build_view(&record);
@@ -2490,7 +2492,7 @@ mod tests {
             source_route_owner: "native".to_string(),
             target_owner: "codex".to_string(),
             continuity_reason: String::new(),
-            recommended_next_action: "synod status".to_string(),
+            recommended_next_action: "boundline status".to_string(),
             evidence_refs: Vec::new(),
             capability_summary: None,
             stuck_marker: None,
@@ -2507,7 +2509,7 @@ mod tests {
             active_packet_id: None,
             mode: DelegationContinuityMode::HandoffRequired,
             authority_source: ContinuityAuthority::NativeSession,
-            next_command: "synod status".to_string(),
+            next_command: "boundline status".to_string(),
             headline: "handoff required: implementation route cannot continue".to_string(),
             evidence_summary: "routing policy requires a handoff".to_string(),
         };
@@ -2572,7 +2574,7 @@ mod tests {
 
     #[test]
     fn status_view_rejects_derived_state_mismatches_and_blank_metadata() {
-        let record = build_derived_state_record("/tmp/synod-session-domain-derived");
+        let record = build_derived_state_record("/tmp/boundline-session-domain-derived");
         let view = build_derived_view(&record);
 
         macro_rules! assert_view_error {
@@ -2756,7 +2758,7 @@ mod tests {
 
     #[test]
     fn active_session_validation_covers_goal_plan_and_workflow_branches() {
-        let workspace = "/tmp/synod-session-domain-goal-plan";
+        let workspace = "/tmp/boundline-session-domain-goal-plan";
 
         let mut missing_goal = build_record(workspace);
         missing_goal.goal = None;
@@ -2778,7 +2780,7 @@ mod tests {
             current_phase: Some(WorkflowPhase::Run),
             completed_phases: Vec::new(),
             blocked_reason: None,
-            next_action: Some("synod step".to_string()),
+            next_action: Some("boundline step".to_string()),
             routing_summary: None,
         });
         assert!(matches!(
@@ -2794,7 +2796,7 @@ mod tests {
 
     #[test]
     fn status_view_rejects_negotiation_and_context_projection_mismatches() {
-        let workspace = "/tmp/synod-session-domain-context";
+        let workspace = "/tmp/boundline-session-domain-context";
         let mut record = build_record(workspace);
         record.negotiation_packet = Some(NegotiatedDeliveryPacket::from_goal(
             &record.session_id,
@@ -2879,7 +2881,7 @@ mod tests {
 
     #[test]
     fn status_view_rejects_flow_workflow_and_participant_projection_mismatches() {
-        let workspace = "/tmp/synod-session-domain-workflow";
+        let workspace = "/tmp/boundline-session-domain-workflow";
         let mut record = build_record(workspace);
         record.goal_plan = Some(build_context_goal_plan());
         record.workflow_progress = Some(WorkflowProgressState {
@@ -2888,7 +2890,7 @@ mod tests {
             current_phase: Some(WorkflowPhase::Review),
             completed_phases: vec![WorkflowPhase::Capture, WorkflowPhase::Plan],
             blocked_reason: None,
-            next_action: Some("synod review".to_string()),
+            next_action: Some("boundline review".to_string()),
             routing_summary: Some("routing: native (goal_plan)".to_string()),
         });
 
@@ -2930,7 +2932,7 @@ mod tests {
         );
 
         let mut wrong_workflow_next_action = view;
-        wrong_workflow_next_action.workflow_next_action = Some("synod inspect".to_string());
+        wrong_workflow_next_action.workflow_next_action = Some("boundline inspect".to_string());
         assert_view_error!(
             wrong_workflow_next_action,
             SessionValidationError::StatusViewWorkflowNextActionMismatch { .. }
@@ -2981,7 +2983,7 @@ mod tests {
             source_route_owner: "native".to_string(),
             target_owner: "codex".to_string(),
             continuity_reason: String::new(),
-            recommended_next_action: "synod status".to_string(),
+            recommended_next_action: "boundline status".to_string(),
             evidence_refs: vec!["trace:delegation:packet-1".to_string()],
             capability_summary: Some("continuation=unsupported".to_string()),
             stuck_marker: None,
@@ -3008,7 +3010,7 @@ mod tests {
             source_route_owner: "native".to_string(),
             target_owner: "operator".to_string(),
             continuity_reason: "verification route cannot validate directly".to_string(),
-            recommended_next_action: "synod inspect".to_string(),
+            recommended_next_action: "boundline inspect".to_string(),
             evidence_refs: Vec::new(),
             capability_summary: Some("validation=unsupported".to_string()),
             stuck_marker: None,
@@ -3023,7 +3025,7 @@ mod tests {
 
     #[test]
     fn delegation_status_and_next_command_fall_back_to_task_context_and_validate_modes() {
-        let workspace = "/tmp/synod-session-domain-delegation-context";
+        let workspace = "/tmp/boundline-session-domain-delegation-context";
         let mut record = build_record(workspace);
         record.goal_plan = None;
 
@@ -3036,7 +3038,7 @@ mod tests {
             source_route_owner: "native".to_string(),
             target_owner: "operator".to_string(),
             continuity_reason: "verification route cannot continue".to_string(),
-            recommended_next_action: "synod inspect".to_string(),
+            recommended_next_action: "boundline inspect".to_string(),
             evidence_refs: vec!["trace:delegation:packet-stuck".to_string()],
             capability_summary: Some("validation=unsupported".to_string()),
             stuck_marker: Some(StuckEvidenceMarker {
@@ -3052,7 +3054,7 @@ mod tests {
             active_packet_id: Some(packet.packet_id.clone()),
             mode: DelegationContinuityMode::Stuck,
             authority_source: ContinuityAuthority::NativeSession,
-            next_command: "synod inspect".to_string(),
+            next_command: "boundline inspect".to_string(),
             headline: "stuck delegated continuity: verification route cannot continue".to_string(),
             evidence_summary: "trace:delegation:packet-stuck".to_string(),
         };
@@ -3077,13 +3079,13 @@ mod tests {
         assert_eq!(status.packet_kind, Some(DelegationPacketKind::Escalation));
         assert_eq!(status.packet_state, Some(DelegationPacketState::Stuck));
         assert_eq!(status.target_owner.as_deref(), Some("operator"));
-        assert_eq!(delegation_next_command(&record), Some("synod inspect".to_string()));
+        assert_eq!(delegation_next_command(&record), Some("boundline inspect".to_string()));
 
         let resolved = DelegationContinuityState {
             active_packet_id: None,
             mode: DelegationContinuityMode::Resolved,
             authority_source: ContinuityAuthority::NativeSession,
-            next_command: "synod run".to_string(),
+            next_command: "boundline run".to_string(),
             headline: "delegation resolved after routing update".to_string(),
             evidence_summary: "routing policy now supports direct continuation".to_string(),
         };
@@ -3096,7 +3098,7 @@ mod tests {
             active_packet_id: Some(packet.packet_id.clone()),
             mode: DelegationContinuityMode::Resolved,
             authority_source: ContinuityAuthority::NativeSession,
-            next_command: "synod run".to_string(),
+            next_command: "boundline run".to_string(),
             headline: "delegation resolved".to_string(),
             evidence_summary: "routing policy changed".to_string(),
         };
@@ -3111,7 +3113,7 @@ mod tests {
             active_packet_id: None,
             mode: DelegationContinuityMode::Resolved,
             authority_source: ContinuityAuthority::NoFollowUpState,
-            next_command: "synod run".to_string(),
+            next_command: "boundline run".to_string(),
             headline: "delegation resolved".to_string(),
             evidence_summary: "routing policy changed".to_string(),
         };
@@ -3129,7 +3131,7 @@ mod tests {
 
     #[test]
     fn routing_outcome_covers_delegation_goal_plan_compatibility_goal_capture_and_empty_session() {
-        let workspace = "/tmp/synod-session-domain-routing";
+        let workspace = "/tmp/boundline-session-domain-routing";
 
         let packet = DelegationPacket {
             packet_id: "packet-routing".to_string(),
@@ -3140,7 +3142,7 @@ mod tests {
             source_route_owner: "native".to_string(),
             target_owner: "codex".to_string(),
             continuity_reason: "implementation route requires handoff".to_string(),
-            recommended_next_action: "synod status".to_string(),
+            recommended_next_action: "boundline status".to_string(),
             evidence_refs: vec!["trace:delegation:packet-routing".to_string()],
             capability_summary: Some("continuation=unsupported".to_string()),
             stuck_marker: None,
@@ -3150,7 +3152,7 @@ mod tests {
             active_packet_id: Some(packet.packet_id.clone()),
             mode: DelegationContinuityMode::HandoffRequired,
             authority_source: ContinuityAuthority::NativeSession,
-            next_command: "synod status".to_string(),
+            next_command: "boundline status".to_string(),
             headline: packet.headline(),
             evidence_summary: packet.evidence_summary(),
         };

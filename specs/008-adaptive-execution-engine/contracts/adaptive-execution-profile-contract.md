@@ -6,7 +6,7 @@ Define the workspace-local execution manifest shape that enables adaptive execut
 
 ## Location
 
-- Embedded under `<workspace>/.synod/execution.json`
+- Embedded under `<workspace>/.boundline/execution.json`
 
 ## Preferred JSON shape
 

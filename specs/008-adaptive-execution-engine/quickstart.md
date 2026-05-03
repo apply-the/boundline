@@ -3,13 +3,13 @@
 ## Prerequisites
 
 - Work from the repository root.
-- Use a clean workspace or start with no active `.synod/session.json`.
-- Provide `.synod/execution.json` in the target workspace.
-- Run commands through `cargo run --bin synod -- ...` when validating locally.
+- Use a clean workspace or start with no active `.boundline/session.json`.
+- Provide `.boundline/execution.json` in the target workspace.
+- Run commands through `cargo run --bin boundline -- ...` when validating locally.
 
 ## Example adaptive execution profile
 
-Create `.synod/execution.json` in a small Rust workspace:
+Create `.boundline/execution.json` in a small Rust workspace:
 
 ```json
 {
@@ -33,13 +33,13 @@ Create `.synod/execution.json` in a small Rust workspace:
 1. Execute a delivery run against the workspace:
 
    ```bash
-   cargo run --bin synod -- run --goal "Fix the failing add test" --workspace <workspace>
+   cargo run --bin boundline -- run --goal "Fix the failing add test" --workspace <workspace>
    ```
 
 2. Inspect the latest trace:
 
    ```bash
-   cargo run --bin synod -- inspect --workspace <workspace>
+   cargo run --bin boundline -- inspect --workspace <workspace>
    ```
 
 Expected outcome:

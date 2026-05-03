@@ -2,18 +2,18 @@
 
 ## Purpose
 
-Define the minimum observable behavior of `synod run` when adaptive execution is active.
+Define the minimum observable behavior of `boundline run` when adaptive execution is active.
 
 ## Invocation
 
 ```bash
-cargo run --bin synod -- run --goal "<goal>" --workspace <workspace>
+cargo run --bin boundline -- run --goal "<goal>" --workspace <workspace>
 ```
 
 or, after a planned session exists:
 
 ```bash
-cargo run --bin synod -- run --workspace <workspace>
+cargo run --bin boundline -- run --workspace <workspace>
 ```
 
 ## Success contract

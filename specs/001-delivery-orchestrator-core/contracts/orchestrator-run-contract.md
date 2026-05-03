@@ -6,7 +6,7 @@ Defines the library-facing contract for starting and completing one bounded orch
 
 ## Consumers
 
-- Future Synod delivery flows
+- Future Boundline delivery flows
 - CLI or editor commands that submit bounded engineering tasks
 - Integration tests using fake endpoints
 

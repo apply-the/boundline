@@ -3,16 +3,16 @@
 ## Prerequisites
 
 - Work from the repository root.
-- Prepare at least two repositories that already contain Synod workspace state
+- Prepare at least two repositories that already contain Boundline workspace state
   or are ready to be initialized.
-- Use `cargo run --bin synod -- ...` when validating locally.
+- Use `cargo run --bin boundline -- ...` when validating locally.
 - Treat the first slice as cluster bootstrap, status/inspection, and inherited
   defaults rather than automatic cross-repository execution planning.
 
 ## Scenario 1: Register a cluster
 
 ```bash
-cargo run --bin synod -- cluster init \
+cargo run --bin boundline -- cluster init \
   --workspace <primary-workspace> \
   --cluster-id delivery-a \
   --member <primary-workspace> \
@@ -21,7 +21,7 @@ cargo run --bin synod -- cluster init \
 
 Expected outcome:
 
-- Synod creates `.synod/cluster.toml` in the primary workspace.
+- Boundline creates `.boundline/cluster.toml` in the primary workspace.
 - The cluster summary shows the cluster id, primary workspace, and canonical
   member list.
 - If a member path is invalid or duplicated, no partial cluster file is left
@@ -30,13 +30,13 @@ Expected outcome:
 ## Scenario 2: Inspect cluster status
 
 ```bash
-cargo run --bin synod -- cluster status \
+cargo run --bin boundline -- cluster status \
   --workspace <primary-workspace>
 ```
 
 Expected outcome:
 
-- Synod lists every member workspace in the cluster.
+- Boundline lists every member workspace in the cluster.
 - Each member is marked explicitly as healthy, missing-session, blocked,
   mismatched, or invalid.
 - The report makes it clear which member requires operator action.
@@ -44,13 +44,13 @@ Expected outcome:
 ## Scenario 3: Inspect cluster traces
 
 ```bash
-cargo run --bin synod -- cluster inspect \
+cargo run --bin boundline -- cluster inspect \
   --workspace <primary-workspace>
 ```
 
 Expected outcome:
 
-- Synod shows the latest relevant trace reference for each member workspace.
+- Boundline shows the latest relevant trace reference for each member workspace.
 - Members with no trace are surfaced explicitly as a gap.
 - The operator can move from the cluster view to the relevant workspace trace
   without guessing paths.
@@ -58,14 +58,14 @@ Expected outcome:
 ## Scenario 4: Save a cluster-level default and verify precedence
 
 ```bash
-cargo run --bin synod -- config set \
+cargo run --bin boundline -- config set \
   --cluster <primary-workspace> \
   --scope cluster \
   --slot planning \
   --runtime codex \
   --model gpt-5-codex
 
-cargo run --bin synod -- config show \
+cargo run --bin boundline -- config show \
   --workspace <secondary-workspace> \
   --cluster <primary-workspace> \
   --scope effective
@@ -73,7 +73,7 @@ cargo run --bin synod -- config show \
 
 Expected outcome:
 
-- Synod saves the cluster-level default into `.synod/cluster.toml`.
+- Boundline saves the cluster-level default into `.boundline/cluster.toml`.
 - Effective config for the member workspace shows cluster as the source when no
   local override exists.
 - Workspace-local values still override the cluster default when present.

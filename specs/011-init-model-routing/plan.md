@@ -5,7 +5,7 @@
 
 ## Summary
 
-Add a human-friendly `synod init` entry point that scaffolds bounded workspace
+Add a human-friendly `boundline init` entry point that scaffolds bounded workspace
 files, detects supported assistant runtimes, offers repository-local assistant
 setup when needed, and stores editable runtime/model routing defaults with
 deterministic precedence across CLI flags, workspace-local config, user-scoped
@@ -25,7 +25,7 @@ the effective configuration inspectable through CLI and output surfaces.
 
 **Language/Version**: Rust 1.95.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`) plus `toml` for human-editable config serialization; no additional runtime abstraction crates for the first slice  
-**Storage**: Workspace-local `.synod/execution.json`, `.synod/session.json`, `.synod/traces/`, new workspace-local `.synod/config.toml`, and new user-scoped global config at `$XDG_CONFIG_HOME/synod/config.toml` with fallback to `$HOME/.config/synod/config.toml` on macOS/Linux developer machines  
+**Storage**: Workspace-local `.boundline/execution.json`, `.boundline/session.json`, `.boundline/traces/`, new workspace-local `.boundline/config.toml`, and new user-scoped global config at `$XDG_CONFIG_HOME/boundline/config.toml` with fallback to `$HOME/.config/boundline/config.toml` on macOS/Linux developer machines  
 **Testing**: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --all-targets`, focused contract tests for CLI and config surfaces, focused integration tests for init and precedence, and unit tests for config resolution and validation  
 **Target Platform**: macOS and Linux developer workstations, Linux CI, and VS Code assistant-driven repository sessions  
 **Project Type**: Single Rust CLI crate with file-backed workspace state, repository-managed assistant assets, and no background services  
@@ -48,7 +48,7 @@ the effective configuration inspectable through CLI and output surfaces.
 - Tool-agent symmetry: PASS. Runtime choice, review routing, assistant setup, and config precedence are exposed as explicit CLI actions and persisted values rather than hidden automation. See contracts and quickstart.
 - Observability and explicit intelligence: PASS. Effective routing inspection, previewed file writes, runtime capability reports, and traceable config sources make the setup path inspectable. See Technical Context and contracts.
 - Non-goals and external separation: PASS. The plan does not depend on Canon for correctness, does not introduce distributed execution or UI work, and constrains provider/model support to a bounded approved slice. See Technical Context and Scope Boundaries.
-- Minimal slice: PASS. The smallest independently valuable capability is a usable `synod init` plus editable routing config with explicit precedence and differentiated review-role defaults. See Summary.
+- Minimal slice: PASS. The smallest independently valuable capability is a usable `boundline init` plus editable routing config with explicit precedence and differentiated review-role defaults. See Summary.
 
 Mark each line as PASS or FAIL in the completed plan and reference the section that satisfies it.
 
@@ -121,7 +121,7 @@ tests/
 **Structure Decision**: Keep the feature inside the existing crate and assistant
 asset tree. Add one new config adapter, dedicated `init` and `config` CLI
 modules, and one new configuration domain model rather than spreading routing
-logic across unrelated modules. Keep the execution manifest under `.synod` as
+logic across unrelated modules. Keep the execution manifest under `.boundline` as
 the bounded runtime contract, but separate human-editable routing preferences
 into TOML config files so the operator path becomes friendlier without changing
 the execution engine’s core manifest schema. The new `docs/configuration.md`

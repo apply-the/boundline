@@ -9,12 +9,12 @@ config precedence so the feature remains independently valuable and executable.
 
 ## Summary
 
-Add a bounded multi-workspace slice that lets Synod register a named cluster of
+Add a bounded multi-workspace slice that lets Boundline register a named cluster of
 member repositories, project one shared cluster identity into session-aware
 flows, aggregate status and inspection output across member workspaces, and
 apply cluster-scoped routing defaults between workspace-local and user-global
 configuration. The implementation keeps the current single-workspace execution
-engine intact, stores cluster metadata under the primary workspace’s `.synod/`
+engine intact, stores cluster metadata under the primary workspace’s `.boundline/`
 directory, reuses existing session and trace stores instead of introducing a
 distributed runtime, and exposes the new behavior through explicit CLI surfaces
 and output renderers.
@@ -23,7 +23,7 @@ and output renderers.
 
 **Language/Version**: Rust 1.95.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`) plus Rust standard library path and filesystem APIs; no new runtime dependencies for the first clustered slice  
-**Storage**: Workspace-local `.synod/session.json` and `.synod/traces/` remain authoritative per repository, existing workspace `.synod/config.toml` and user-global config remain in place, and a new primary-workspace `.synod/cluster.toml` stores cluster membership and cluster-scoped defaults  
+**Storage**: Workspace-local `.boundline/session.json` and `.boundline/traces/` remain authoritative per repository, existing workspace `.boundline/config.toml` and user-global config remain in place, and a new primary-workspace `.boundline/cluster.toml` stores cluster membership and cluster-scoped defaults  
 **Testing**: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, focused unit tests for cluster validation and precedence, focused integration tests for cluster CLI/session/status flows, and focused contract tests for cluster CLI/config surfaces  
 **Target Platform**: macOS and Linux developer workstations, Linux CI, and assistant-driven repository sessions in VS Code  
 **Project Type**: Single Rust CLI crate with file-backed state and explicit CLI output surfaces  
@@ -37,10 +37,10 @@ and output renderers.
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- Delivery identity: PASS. The feature directly improves bounded delivery across related repositories by turning multi-workspace work from manual coordination into explicit Synod orchestration state. See Summary and Technical Context.
+- Delivery identity: PASS. The feature directly improves bounded delivery across related repositories by turning multi-workspace work from manual coordination into explicit Boundline orchestration state. See Summary and Technical Context.
 - Delivery-first scope: PASS. The plan prioritizes cluster bootstrap, session projection, status/inspection, and config resolution before documentation polish or future automation. See Summary and Project Structure.
 - Bounded execution: PASS. Cluster commands have explicit start conditions, explicit invalid-member and malformed-config terminal states, and no hidden retries or background work. See Technical Context and research decisions.
-- Stateful execution: PASS. The slice persists cluster metadata in `.synod/cluster.toml` and reads or projects existing session and trace state from member workspaces instead of discarding context. See Technical Context and data model.
+- Stateful execution: PASS. The slice persists cluster metadata in `.boundline/cluster.toml` and reads or projects existing session and trace state from member workspaces instead of discarding context. See Technical Context and data model.
 - Mutable planning: PASS. The feature does not replace the existing planner; it prepares bounded clustered context that later planning can consume while leaving future automatic cross-repository plan mutation deferred. See Summary and Scope Boundaries.
 - Sequential-first design: PASS. Cluster init, status, inspect, and config mutation each run as one explicit command with sequential member aggregation. See Technical Context.
 - Tool-agent symmetry: PASS. Cluster behavior is expressed through CLI commands, persisted files, and explicit output rather than hidden heuristics. See contracts and quickstart.

@@ -176,10 +176,33 @@ fn push_context_projection_lines(
 
 pub fn render_diagnostics(report: &DiagnosticsReport) -> String {
     let readiness = if report.ready { "ready" } else { "not ready" };
+    let subject = match report.subject {
+        crate::cli::diagnostics::DiagnosticsSubject::Workspace => format!(
+            "workspace {}",
+            report.workspace_ref.as_deref().unwrap_or("<unknown-workspace>")
+        ),
+        crate::cli::diagnostics::DiagnosticsSubject::Install => format!(
+            "installation {}",
+            report.installation_ref.as_deref().unwrap_or("<current-machine>")
+        ),
+    };
     let mut lines = vec![
-        format!("doctor: {readiness} for workspace {}", report.workspace_ref),
+        format!("doctor: {readiness} for {subject}"),
         format!("assistant_hint: Diagnostic output format is optimized for chat parsing."),
     ];
+
+    if let Some(boundline_version) = &report.boundline_version {
+        lines.push(format!("boundline_version: {boundline_version}"));
+    }
+    if let Some(supported_canon_version) = &report.supported_canon_version {
+        lines.push(format!("supported_canon_version: {supported_canon_version}"));
+    }
+    if let Some(companion_state) = report.companion_state {
+        lines.push(format!("companion_state: {companion_state}"));
+    }
+    if !report.channel_candidates.is_empty() {
+        lines.push(format!("channel_candidates: {}", report.channel_candidates.join(", ")));
+    }
 
     for check in &report.checks {
         let status = match check.status {
@@ -873,7 +896,7 @@ pub fn render_inspect_failure(
         lines.push(format!("workspace_ref: {workspace_ref}"));
     }
 
-    lines.push("next_command: /synod-inspect".to_string());
+    lines.push("next_command: /boundline-inspect".to_string());
     lines.push(format!("corrected_command: {corrected_command}"));
     lines.join("\n")
 }
@@ -1256,12 +1279,12 @@ pub fn render_session_error(action: &str, message: &str, next_command: Option<&s
 
 pub const fn next_command_after_run(status: TaskStatus) -> &'static str {
     match status {
-        TaskStatus::Succeeded => "/synod-status",
+        TaskStatus::Succeeded => "/boundline-status",
         TaskStatus::Planned
         | TaskStatus::Running
         | TaskStatus::Failed
         | TaskStatus::Exhausted
-        | TaskStatus::Aborted => "/synod-next",
+        | TaskStatus::Aborted => "/boundline-next",
     }
 }
 
@@ -1302,7 +1325,7 @@ fn adaptive_exhaustion_reason_summary(state: &serde_json::Map<String, Value>) ->
 }
 
 pub const fn next_command_after_inspect(_: TaskStatus) -> &'static str {
-    "/synod-next"
+    "/boundline-next"
 }
 
 pub fn trace_execution_condition_text(summary: &TraceSummaryView) -> String {
@@ -1842,12 +1865,12 @@ fn run_trace_route_owner(trace: &ExecutionTrace) -> &'static str {
 
 fn workspace_from_trace_ref(trace_ref: &Path) -> Option<std::path::PathBuf> {
     let traces_dir = trace_ref.parent()?;
-    let synod_dir = traces_dir.parent()?;
-    if traces_dir.file_name()? != "traces" || synod_dir.file_name()? != ".synod" {
+    let boundline_dir = traces_dir.parent()?;
+    if traces_dir.file_name()? != "traces" || boundline_dir.file_name()? != ".boundline" {
         return None;
     }
 
-    synod_dir.parent().map(Path::to_path_buf)
+    boundline_dir.parent().map(Path::to_path_buf)
 }
 
 fn workspace_routing_projection(workspace: &Path) -> Option<String> {
@@ -2231,7 +2254,13 @@ mod tests {
     #[test]
     fn command_name_covers_every_developer_subcommand() {
         let commands = [
-            (DeveloperCommand::Doctor { workspace: "/tmp/workspace".into() }, "doctor"),
+            (
+                DeveloperCommand::Doctor {
+                    workspace: Some("/tmp/workspace".into()),
+                    install: false,
+                },
+                "doctor",
+            ),
             (DeveloperCommand::Start { workspace: None, cluster: None }, "start"),
             (
                 DeveloperCommand::Capture {
@@ -2345,10 +2374,10 @@ mod tests {
                 serde_json::Map::new(),
             ),
             plan_revision: 0,
-            trace_location: "/tmp/workspace/.synod/traces/task-output.json".to_string(),
+            trace_location: "/tmp/workspace/.boundline/traces/task-output.json".to_string(),
         };
 
-        let text = render_run_trace("run", Some(&trace), &response, "/synod-next");
+        let text = render_run_trace("run", Some(&trace), &response, "/boundline-next");
 
         assert!(text.contains("stage replan after unknown-step: replan scheduled"), "{text}");
         assert!(text.contains("stage unknown-stage failed: stage failed"), "{text}");
@@ -2357,7 +2386,7 @@ mod tests {
     #[test]
     fn render_trace_summary_labels_flow_stage_and_stage_failure_events() {
         let summary = TraceSummaryView {
-            trace_ref: "/tmp/workspace/.synod/traces/task-output.json".to_string(),
+            trace_ref: "/tmp/workspace/.boundline/traces/task-output.json".to_string(),
             goal: "Render trace summary".to_string(),
             negotiation_goal_summary: None,
             negotiation_resolution: None,
@@ -2421,7 +2450,7 @@ mod tests {
             duration: None,
         };
 
-        let text = render_trace_summary(&summary, "latest-workspace-trace", "/synod-next");
+        let text = render_trace_summary(&summary, "latest-workspace-trace", "/boundline-next");
 
         assert!(text.contains("flow: bug-fix @ investigate"), "{text}");
         assert!(text.contains("stage: investigate -> implement"), "{text}");
@@ -2530,7 +2559,7 @@ mod tests {
                 evidence_summary: "claude lacks continuation support for implementation"
                     .to_string(),
             }),
-            next_command: Some("synod status".to_string()),
+            next_command: Some("boundline status".to_string()),
             explanation: "delegated continuity is now authoritative".to_string(),
             ..SessionStatusView::default()
         };
@@ -2596,10 +2625,10 @@ mod tests {
                 serde_json::Map::new(),
             ),
             plan_revision: 0,
-            trace_location: "/tmp/workspace/.synod/traces/task-review-output.json".to_string(),
+            trace_location: "/tmp/workspace/.boundline/traces/task-review-output.json".to_string(),
         };
 
-        let text = render_run_trace("run", Some(&trace), &response, "/synod-next");
+        let text = render_run_trace("run", Some(&trace), &response, "/boundline-next");
 
         assert!(text.contains("review_trigger: pr_ready"), "{text}");
         assert!(text.contains("reviewer safety (Safety) approve: No blockers"), "{text}");
@@ -2647,10 +2676,10 @@ mod tests {
                 serde_json::Map::new(),
             ),
             plan_revision: 0,
-            trace_location: "/tmp/workspace/.synod/traces/task-canon-output.json".to_string(),
+            trace_location: "/tmp/workspace/.boundline/traces/task-canon-output.json".to_string(),
         };
 
-        let text = render_run_trace("run", Some(&trace), &response, "/synod-next");
+        let text = render_run_trace("run", Some(&trace), &response, "/boundline-next");
 
         assert!(text.contains("context_summary: Canon verification packet [stale]"), "{text}");
         assert!(text.contains("context_credibility: stale"), "{text}");
@@ -2747,8 +2776,10 @@ mod tests {
                 "await_approval".to_string(),
                 "block_stage".to_string(),
             ]),
-            governance_next_action: Some("wait for approval and rerun synod status".to_string()),
-            next_command: Some("synod step".to_string()),
+            governance_next_action: Some(
+                "wait for approval and rerun boundline status".to_string(),
+            ),
+            next_command: Some("boundline step".to_string()),
             explanation: "review is in progress".to_string(),
         };
 
@@ -2779,7 +2810,7 @@ mod tests {
             "{text}"
         );
         assert!(
-            text.contains("governance_next_action: wait for approval and rerun synod status"),
+            text.contains("governance_next_action: wait for approval and rerun boundline status"),
             "{text}"
         );
     }
@@ -2787,7 +2818,7 @@ mod tests {
     #[test]
     fn render_trace_summary_includes_review_timeline() {
         let summary = TraceSummaryView {
-            trace_ref: "/tmp/workspace/.synod/traces/task-review-output.json".to_string(),
+            trace_ref: "/tmp/workspace/.boundline/traces/task-review-output.json".to_string(),
             goal: "Render trace summary".to_string(),
             negotiation_goal_summary: None,
             negotiation_resolution: None,
@@ -2820,7 +2851,9 @@ mod tests {
                 "governance_selected: bug-fix:implement -> canon".to_string(),
                 "governance_awaiting_approval: bug-fix:implement (requested)".to_string(),
             ],
-            governance_next_action: Some("wait for approval and rerun synod status".to_string()),
+            governance_next_action: Some(
+                "wait for approval and rerun boundline status".to_string(),
+            ),
             delegation: None,
             review_timeline: vec![
                 "review_trigger: pr_ready".to_string(),
@@ -2834,11 +2867,11 @@ mod tests {
             duration: Some(42),
         };
 
-        let text = render_trace_summary(&summary, "latest-workspace-trace", "/synod-next");
+        let text = render_trace_summary(&summary, "latest-workspace-trace", "/boundline-next");
 
         assert!(text.contains("governance_selected: bug-fix:implement -> canon"), "{text}");
         assert!(
-            text.contains("governance_next_action: wait for approval and rerun synod status"),
+            text.contains("governance_next_action: wait for approval and rerun boundline status"),
             "{text}"
         );
         assert!(text.contains("review_trigger: pr_ready"), "{text}");
@@ -2848,7 +2881,7 @@ mod tests {
     #[test]
     fn render_trace_summary_surfaces_delegation_projection() {
         let summary = TraceSummaryView {
-            trace_ref: "/tmp/workspace/.synod/traces/task-delegation.json".to_string(),
+            trace_ref: "/tmp/workspace/.boundline/traces/task-delegation.json".to_string(),
             goal: "Render delegation trace summary".to_string(),
             delegation: Some(crate::domain::session::DelegationStatusView {
                 mode: crate::domain::session::DelegationContinuityMode::EscalationRequired,
@@ -2869,7 +2902,7 @@ mod tests {
             ..TraceSummaryView::default()
         };
 
-        let text = render_trace_summary(&summary, "latest-workspace-trace", "/synod-next");
+        let text = render_trace_summary(&summary, "latest-workspace-trace", "/boundline-next");
 
         assert!(text.contains("delegation_mode: escalation_required"), "{text}");
         assert!(text.contains("delegation_packet_id: packet-2"), "{text}");
@@ -2923,10 +2956,10 @@ mod tests {
                 serde_json::Map::new(),
             ),
             plan_revision: 0,
-            trace_location: "/tmp/workspace/.synod/traces/task-context.json".to_string(),
+            trace_location: "/tmp/workspace/.boundline/traces/task-context.json".to_string(),
         };
 
-        let text = render_run_trace("run", Some(&trace), &response, "/synod-next");
+        let text = render_run_trace("run", Some(&trace), &response, "/boundline-next");
 
         assert!(text.contains("context_summary: bounded context from src/lib.rs"), "{text}");
         assert!(text.contains("context_credibility: stale"), "{text}");
@@ -2946,7 +2979,7 @@ mod tests {
     #[test]
     fn render_trace_summary_covers_retry_and_replan_labels() {
         let summary = TraceSummaryView {
-            trace_ref: "/tmp/workspace/.synod/traces/task-output.json".to_string(),
+            trace_ref: "/tmp/workspace/.boundline/traces/task-output.json".to_string(),
             goal: "Render retry labels".to_string(),
             recovery_events: vec![
                 TraceRecoveryEvent {
@@ -2969,7 +3002,7 @@ mod tests {
             ..TraceSummaryView::default()
         };
 
-        let text = render_trace_summary(&summary, "latest-workspace-trace", "/synod-next");
+        let text = render_trace_summary(&summary, "latest-workspace-trace", "/boundline-next");
 
         assert!(text.contains("retry: verify failed"), "{text}");
         assert!(text.contains("replan: replan scheduled"), "{text}");
@@ -2990,7 +3023,7 @@ mod tests {
             latest_attempt_lineage: Some("attempt-2 retried_from attempt-1".to_string()),
             latest_validation_status: Some("failed".to_string()),
             latest_exhaustion_reason: Some("limits exhausted".to_string()),
-            next_command: Some("synod inspect".to_string()),
+            next_command: Some("boundline inspect".to_string()),
             explanation: "session exhausted after bounded retries".to_string(),
             ..SessionStatusView::default()
         };
@@ -3198,7 +3231,7 @@ mod tests {
                 serde_json::Map::new(),
             ),
             plan_revision: 0,
-            trace_location: "/tmp/workspace/.synod/traces/task-run.json".to_string(),
+            trace_location: "/tmp/workspace/.boundline/traces/task-run.json".to_string(),
         });
         assert!(waiting_run.contains("execution_condition: waiting - waiting for approval"));
 
@@ -3217,7 +3250,7 @@ mod tests {
                 serde_json::Map::new(),
             ),
             plan_revision: 0,
-            trace_location: "/tmp/workspace/.synod/traces/task-run.json".to_string(),
+            trace_location: "/tmp/workspace/.boundline/traces/task-run.json".to_string(),
         });
         assert!(
             running_run.contains("execution_condition: running - bounded execution is in progress")

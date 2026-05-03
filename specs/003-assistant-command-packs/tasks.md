@@ -55,20 +55,20 @@ description: "Task list for implementing assistant command packs"
 
 ## Phase 3: User Story 1 - Start a Workflow from Chat (Priority: P1) 🎯 MVP
 
-**Goal**: Let a user start a Synod workflow from chat, gather only missing context, and route cleanly into readiness checking or bounded execution without memorizing CLI syntax.
+**Goal**: Let a user start a Boundline workflow from chat, gather only missing context, and route cleanly into readiness checking or bounded execution without memorizing CLI syntax.
 
-**Independent Test**: Invoke `/synod-start` and `/synod-plan` in a supported assistant surface with and without shell access, then confirm the assistant asks only for missing workspace or goal context, runs or recommends the correct CLI command, and explains the next action clearly.
+**Independent Test**: Invoke `/boundline-start` and `/boundline-plan` in a supported assistant surface with and without shell access, then confirm the assistant asks only for missing workspace or goal context, runs or recommends the correct CLI command, and explains the next action clearly.
 
 ### Tests for User Story 1
 
-- [x] T010 [P] [US1] Extend command-pack coverage for `synod-start` and `synod-plan` across all assistants in `tests/contract/assistant_command_pack_contract.rs`
+- [x] T010 [P] [US1] Extend command-pack coverage for `boundline-start` and `boundline-plan` across all assistants in `tests/contract/assistant_command_pack_contract.rs`
 - [x] T011 [P] [US1] Add start/planning definition assertions in `tests/contract/assistant_command_definition_contract.rs`
 - [x] T012 [P] [US1] Implement shell-enabled and chat-only start/planning scenarios in `tests/integration/assistant_shell_enabled_flow.rs` and `tests/integration/assistant_chat_fallback.rs`
 
 ### Implementation for User Story 1
 
-- [x] T013 [P] [US1] Author Claude and Codex start/planning command files in `assistant/claude/commands/synod-start.md`, `assistant/claude/commands/synod-plan.md`, `assistant/codex/commands/synod-start.md`, and `assistant/codex/commands/synod-plan.md`
-- [x] T014 [P] [US1] Author Copilot start/planning prompt files in `assistant/copilot/prompts/synod-start.prompt.md` and `assistant/copilot/prompts/synod-plan.prompt.md`
+- [x] T013 [P] [US1] Author Claude and Codex start/planning command files in `assistant/claude/commands/boundline-start.md`, `assistant/claude/commands/boundline-plan.md`, `assistant/codex/commands/boundline-start.md`, and `assistant/codex/commands/boundline-plan.md`
+- [x] T014 [P] [US1] Author Copilot start/planning prompt files in `assistant/copilot/prompts/boundline-start.prompt.md` and `assistant/copilot/prompts/boundline-plan.prompt.md`
 - [x] T015 [US1] Document start/planning workflow, missing-input prompts, and run handoff in `assistant/README.md`
 
 **Checkpoint**: User Story 1 is independently functional and delivers the MVP chat-first onboarding path.
@@ -79,18 +79,18 @@ description: "Task list for implementing assistant command packs"
 
 **Goal**: Allow a user to continue an active workflow from chat, execute or guide the next bounded action, and summarize progress, failures, and next steps.
 
-**Independent Test**: Invoke `/synod-run`, `/synod-step`, `/synod-status`, and `/synod-next` in a supported assistant surface, then confirm shell-enabled and chat-only flows both preserve context, surface terminal or recovery cues, and recommend the correct follow-up command.
+**Independent Test**: Invoke `/boundline-run`, `/boundline-step`, `/boundline-status`, and `/boundline-next` in a supported assistant surface, then confirm shell-enabled and chat-only flows both preserve context, surface terminal or recovery cues, and recommend the correct follow-up command.
 
 ### Tests for User Story 2
 
-- [x] T016 [P] [US2] Extend command-pack coverage for `synod-step`, `synod-run`, `synod-status`, and `synod-next` across all assistants in `tests/contract/assistant_command_pack_contract.rs`
+- [x] T016 [P] [US2] Extend command-pack coverage for `boundline-step`, `boundline-run`, `boundline-status`, and `boundline-next` across all assistants in `tests/contract/assistant_command_pack_contract.rs`
 - [x] T017 [P] [US2] Add step/run/status/next definition assertions in `tests/contract/assistant_command_definition_contract.rs`
 - [x] T018 [P] [US2] Implement shell-enabled run/status/next scenarios and non-success chat fallbacks in `tests/integration/assistant_shell_enabled_flow.rs` and `tests/integration/assistant_chat_fallback.rs`
 
 ### Implementation for User Story 2
 
-- [x] T019 [P] [US2] Author Claude and Codex step/run/status/next command files in `assistant/claude/commands/synod-step.md`, `assistant/claude/commands/synod-run.md`, `assistant/claude/commands/synod-status.md`, and `assistant/claude/commands/synod-next.md`, `assistant/codex/commands/synod-step.md`, `assistant/codex/commands/synod-run.md`, `assistant/codex/commands/synod-status.md`, and `assistant/codex/commands/synod-next.md`
-- [x] T020 [P] [US2] Author Copilot step/run/status/next prompt files in `assistant/copilot/prompts/synod-step.prompt.md`, `assistant/copilot/prompts/synod-run.prompt.md`, `assistant/copilot/prompts/synod-status.prompt.md`, and `assistant/copilot/prompts/synod-next.prompt.md`
+- [x] T019 [P] [US2] Author Claude and Codex step/run/status/next command files in `assistant/claude/commands/boundline-step.md`, `assistant/claude/commands/boundline-run.md`, `assistant/claude/commands/boundline-status.md`, and `assistant/claude/commands/boundline-next.md`, `assistant/codex/commands/boundline-step.md`, `assistant/codex/commands/boundline-run.md`, `assistant/codex/commands/boundline-status.md`, and `assistant/codex/commands/boundline-next.md`
+- [x] T020 [P] [US2] Author Copilot step/run/status/next prompt files in `assistant/copilot/prompts/boundline-step.prompt.md`, `assistant/copilot/prompts/boundline-run.prompt.md`, `assistant/copilot/prompts/boundline-status.prompt.md`, and `assistant/copilot/prompts/boundline-next.prompt.md`
 - [x] T021 [US2] Harden run and latest-trace summary cues for assistant routing in `src/cli/output.rs`, `src/cli/run.rs`, and `src/cli/inspect.rs`
 - [x] T022 [US2] Extend workflow continuity and next-step guidance in `assistant/README.md`
 
@@ -102,18 +102,18 @@ description: "Task list for implementing assistant command packs"
 
 **Goal**: Let a user inspect a completed or failed run from chat and understand outcome, recovery signals, and next action without reading raw trace files manually.
 
-**Independent Test**: Generate a run, invoke `/synod-inspect` with either a workspace or explicit trace reference, and confirm the assistant summarizes final status, recovery events, and trace-read failures correctly in both shell-enabled and chat-only modes.
+**Independent Test**: Generate a run, invoke `/boundline-inspect` with either a workspace or explicit trace reference, and confirm the assistant summarizes final status, recovery events, and trace-read failures correctly in both shell-enabled and chat-only modes.
 
 ### Tests for User Story 3
 
-- [x] T023 [P] [US3] Extend command-pack coverage for `synod-inspect` across all assistants in `tests/contract/assistant_command_pack_contract.rs`
+- [x] T023 [P] [US3] Extend command-pack coverage for `boundline-inspect` across all assistants in `tests/contract/assistant_command_pack_contract.rs`
 - [x] T024 [P] [US3] Add inspect definition assertions and trace-read failure expectations in `tests/contract/assistant_command_definition_contract.rs`
 - [x] T025 [P] [US3] Implement shell-enabled and chat-only inspection scenarios in `tests/integration/assistant_shell_enabled_flow.rs` and `tests/integration/assistant_chat_fallback.rs`
 
 ### Implementation for User Story 3
 
-- [x] T026 [P] [US3] Author Claude and Codex inspection command files in `assistant/claude/commands/synod-inspect.md` and `assistant/codex/commands/synod-inspect.md`
-- [x] T027 [P] [US3] Author Copilot inspection prompt file in `assistant/copilot/prompts/synod-inspect.prompt.md`
+- [x] T026 [P] [US3] Author Claude and Codex inspection command files in `assistant/claude/commands/boundline-inspect.md` and `assistant/codex/commands/boundline-inspect.md`
+- [x] T027 [P] [US3] Author Copilot inspection prompt file in `assistant/copilot/prompts/boundline-inspect.prompt.md`
 - [x] T028 [US3] Refine explicit-trace and latest-trace inspection summaries for assistant interpretation in `src/cli/output.rs` and `src/cli/inspect.rs`
 - [x] T029 [US3] Document inspection, trace selection, and trace-read recovery in `assistant/README.md`
 
@@ -128,7 +128,7 @@ description: "Task list for implementing assistant command packs"
 - [x] T030 [P] Update top-level discoverability and installation docs for assistant command packs in `README.md` and `assistant/README.md`
 - [x] T031 [P] Add final cross-pack safety and formatting coverage in `tests/unit/assistant_assets.rs`
 - [x] T032 Synchronize the implemented assistant flows with feature walkthroughs in `specs/003-assistant-command-packs/quickstart.md` and `assistant/README.md`
-- [x] T033 Validate the documented assistant flows against `assistant/claude/commands/synod-start.md`, `assistant/claude/commands/synod-plan.md`, `assistant/claude/commands/synod-step.md`, `assistant/claude/commands/synod-run.md`, `assistant/claude/commands/synod-status.md`, `assistant/claude/commands/synod-next.md`, `assistant/claude/commands/synod-inspect.md`, `assistant/codex/commands/synod-start.md`, `assistant/codex/commands/synod-plan.md`, `assistant/codex/commands/synod-step.md`, `assistant/codex/commands/synod-run.md`, `assistant/codex/commands/synod-status.md`, `assistant/codex/commands/synod-next.md`, `assistant/codex/commands/synod-inspect.md`, `assistant/copilot/prompts/synod-start.prompt.md`, `assistant/copilot/prompts/synod-plan.prompt.md`, `assistant/copilot/prompts/synod-step.prompt.md`, `assistant/copilot/prompts/synod-run.prompt.md`, `assistant/copilot/prompts/synod-status.prompt.md`, `assistant/copilot/prompts/synod-next.prompt.md`, and `assistant/copilot/prompts/synod-inspect.prompt.md`
+- [x] T033 Validate the documented assistant flows against `assistant/claude/commands/boundline-start.md`, `assistant/claude/commands/boundline-plan.md`, `assistant/claude/commands/boundline-step.md`, `assistant/claude/commands/boundline-run.md`, `assistant/claude/commands/boundline-status.md`, `assistant/claude/commands/boundline-next.md`, `assistant/claude/commands/boundline-inspect.md`, `assistant/codex/commands/boundline-start.md`, `assistant/codex/commands/boundline-plan.md`, `assistant/codex/commands/boundline-step.md`, `assistant/codex/commands/boundline-run.md`, `assistant/codex/commands/boundline-status.md`, `assistant/codex/commands/boundline-next.md`, `assistant/codex/commands/boundline-inspect.md`, `assistant/copilot/prompts/boundline-start.prompt.md`, `assistant/copilot/prompts/boundline-plan.prompt.md`, `assistant/copilot/prompts/boundline-step.prompt.md`, `assistant/copilot/prompts/boundline-run.prompt.md`, `assistant/copilot/prompts/boundline-status.prompt.md`, `assistant/copilot/prompts/boundline-next.prompt.md`, and `assistant/copilot/prompts/boundline-inspect.prompt.md`
 
 ---
 
@@ -172,7 +172,7 @@ description: "Task list for implementing assistant command packs"
 
 ```bash
 # Launch US1 validation tasks together:
-Task: "Extend command-pack coverage for synod-start and synod-plan in tests/contract/assistant_command_pack_contract.rs"
+Task: "Extend command-pack coverage for boundline-start and boundline-plan in tests/contract/assistant_command_pack_contract.rs"
 Task: "Add start/planning definition assertions in tests/contract/assistant_command_definition_contract.rs"
 Task: "Implement shell-enabled and chat-only start/planning scenarios in tests/integration/assistant_shell_enabled_flow.rs and tests/integration/assistant_chat_fallback.rs"
 
@@ -185,7 +185,7 @@ Task: "Author Copilot start/planning prompt files in assistant/copilot/prompts/"
 
 ```bash
 # Launch US2 validation tasks together:
-Task: "Extend command-pack coverage for synod-step, synod-run, synod-status, and synod-next in tests/contract/assistant_command_pack_contract.rs"
+Task: "Extend command-pack coverage for boundline-step, boundline-run, boundline-status, and boundline-next in tests/contract/assistant_command_pack_contract.rs"
 Task: "Add step/run/status/next definition assertions in tests/contract/assistant_command_definition_contract.rs"
 Task: "Implement shell-enabled run/status/next scenarios and non-success chat fallbacks in tests/integration/assistant_shell_enabled_flow.rs and tests/integration/assistant_chat_fallback.rs"
 
@@ -198,7 +198,7 @@ Task: "Author Copilot step/run/status/next prompt files in assistant/copilot/pro
 
 ```bash
 # Launch US3 validation tasks together:
-Task: "Extend command-pack coverage for synod-inspect in tests/contract/assistant_command_pack_contract.rs"
+Task: "Extend command-pack coverage for boundline-inspect in tests/contract/assistant_command_pack_contract.rs"
 Task: "Add inspect definition assertions and trace-read failure expectations in tests/contract/assistant_command_definition_contract.rs"
 Task: "Implement shell-enabled and chat-only inspection scenarios in tests/integration/assistant_shell_enabled_flow.rs and tests/integration/assistant_chat_fallback.rs"
 

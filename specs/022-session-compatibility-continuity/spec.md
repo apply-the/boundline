@@ -20,7 +20,7 @@
 
 ### User Story 1 - Continue After An Explicit Compatibility Run (Priority: P1)
 
-A developer who intentionally used the explicit compatibility path can run follow-up commands and immediately see whether Synod expects session-native continuation, trace inspection only, or an explicit non-resumable terminal outcome.
+A developer who intentionally used the explicit compatibility path can run follow-up commands and immediately see whether Boundline expects session-native continuation, trace inspection only, or an explicit non-resumable terminal outcome.
 
 **Why this priority**: This is the main operator gap left after `0.21.0`. Compatibility runs already persist usable traces, but the next command and state ownership story are still too implicit.
 
@@ -28,9 +28,9 @@ A developer who intentionally used the explicit compatibility path can run follo
 
 **Acceptance Scenarios**:
 
-1. **Given** a workspace with an active session-native plan and a later explicit compatibility `run`, **When** the developer executes `status`, **Then** Synod preserves the native session state and also surfaces the latest compatibility follow-up continuity without implying the compatibility run replaced the active session.
-2. **Given** a compatibility run that produced a latest workspace trace but no resumable compatibility session, **When** the developer executes `next`, **Then** Synod reports an inspect-oriented next action instead of implying that `step` or `run` will resume hidden compatibility work.
-3. **Given** a compatibility run that ended in an explicit non-success terminal state, **When** the developer executes `inspect`, **Then** Synod resolves the latest compatibility trace and explains the terminal reason plus the route ownership clearly.
+1. **Given** a workspace with an active session-native plan and a later explicit compatibility `run`, **When** the developer executes `status`, **Then** Boundline preserves the native session state and also surfaces the latest compatibility follow-up continuity without implying the compatibility run replaced the active session.
+2. **Given** a compatibility run that produced a latest workspace trace but no resumable compatibility session, **When** the developer executes `next`, **Then** Boundline reports an inspect-oriented next action instead of implying that `step` or `run` will resume hidden compatibility work.
+3. **Given** a compatibility run that ended in an explicit non-success terminal state, **When** the developer executes `inspect`, **Then** Boundline resolves the latest compatibility trace and explains the terminal reason plus the route ownership clearly.
 
 ---
 
@@ -44,8 +44,8 @@ An operator can compare native and compatibility traces without relearning diffe
 
 **Acceptance Scenarios**:
 
-1. **Given** native and compatibility traces that both include adaptive or governance evidence, **When** the developer inspects them, **Then** Synod uses the same headline and summary vocabulary where the concepts overlap while still preserving explicit route attribution.
-2. **Given** a compatibility run in a workspace with workflow or governance configuration, **When** the developer checks follow-up output, **Then** Synod shows the shared summary fields without implying workflow-owned or Canon-owned orchestration.
+1. **Given** native and compatibility traces that both include adaptive or governance evidence, **When** the developer inspects them, **Then** Boundline uses the same headline and summary vocabulary where the concepts overlap while still preserving explicit route attribution.
+2. **Given** a compatibility run in a workspace with workflow or governance configuration, **When** the developer checks follow-up output, **Then** Boundline shows the shared summary fields without implying workflow-owned or Canon-owned orchestration.
 
 ---
 
@@ -70,7 +70,7 @@ A maintainer can ship the continuity slice with docs, assistant guidance, and re
 
 <!--
   ACTION REQUIRED: Capture execution limits, invalid state transitions, missing context,
-  traceability gaps, and failure-handling boundaries. Synod features are invalid if they
+  traceability gaps, and failure-handling boundaries. Boundline features are invalid if they
   ignore how work stops, fails, or becomes non-credible.
 -->
 
@@ -96,14 +96,14 @@ A maintainer can ship the continuity slice with docs, assistant guidance, and re
 - **FR-005**: System MUST expose the latest compatibility follow-up evidence through bounded summaries that include routing, execution path, terminal or recovery condition, and any available adaptive, review, or governance evidence.
 - **FR-006**: System MUST preserve explicit non-success outcomes when no resumable compatibility continuation exists and MUST NOT invent hidden background progression.
 - **FR-007**: System MUST reuse the same summary vocabulary across native and compatibility traces where adaptive, review, governance, and terminal concepts overlap.
-- **FR-008**: System MUST keep compatibility follow-up bounded to persisted workspace state and traces already produced by Synod rather than introducing open-ended trace search or external reconciliation services.
+- **FR-008**: System MUST keep compatibility follow-up bounded to persisted workspace state and traces already produced by Boundline rather than introducing open-ended trace search or external reconciliation services.
 - **FR-009**: System MUST ship release-aligned maintainer and operator guidance for the continuity slice, including version bump, changed route expectations, and updated follow-up examples.
 
 ### Scope Boundaries *(mandatory)*
 
 <!--
   ACTION REQUIRED: Name the deferred or excluded capabilities explicitly.
-  Synod specs should normally exclude councils and voting unless the roadmap and
+  Boundline specs should normally exclude councils and voting unless the roadmap and
   constitution explicitly prioritize a bounded review slice; they should otherwise
   exclude provider-routing complexity, distributed execution, long-term memory,
   UI/UX work, and deployment pipelines.
@@ -143,6 +143,6 @@ A maintainer can ship the continuity slice with docs, assistant guidance, and re
 -->
 
 - Compatibility execution remains an explicit manifest-backed route in `0.22.0`, even when the same workspace also has session-native state.
-- Existing workspace traces under `.synod/traces/` remain the authoritative persisted evidence for compatibility follow-up; the slice does not introduce a new trace store.
+- Existing workspace traces under `.boundline/traces/` remain the authoritative persisted evidence for compatibility follow-up; the slice does not introduce a new trace store.
 - The highest-value improvement is continuity and inspectability across existing surfaces, not adding new execution power.
 - The slice closes as `0.22.0` and therefore includes version bump, impacted docs, changelog updates, clippy cleanup, formatting, and coverage refresh for modified Rust files.

@@ -2,19 +2,19 @@
 
 ## Purpose
 
-Defines the required behavior, inputs, and user-visible outputs of the session-backed Synod CLI commands introduced by the session model feature.
+Defines the required behavior, inputs, and user-visible outputs of the session-backed Boundline CLI commands introduced by the session model feature.
 
 ## Command Set
 
 | Command | Purpose |
 |---------|---------|
-| `synod start` | Establish a new active session for the current workspace |
-| `synod capture` | Store or replace the current bounded goal in the active session |
-| `synod plan` | Create an executable plan from the active session goal |
-| `synod step` | Execute exactly one next step from the active session |
-| `synod run` | Continue execution until the task reaches a terminal state |
-| `synod status` | Summarize the active session state |
-| `synod next` | Recommend exactly one next valid command for the active session |
+| `boundline start` | Establish a new active session for the current workspace |
+| `boundline capture` | Store or replace the current bounded goal in the active session |
+| `boundline plan` | Create an executable plan from the active session goal |
+| `boundline step` | Execute exactly one next step from the active session |
+| `boundline run` | Continue execution until the task reaches a terminal state |
+| `boundline status` | Summarize the active session state |
+| `boundline next` | Recommend exactly one next valid command for the active session |
 
 ## Required Behavioral Rules
 
@@ -31,9 +31,9 @@ Defines the required behavior, inputs, and user-visible outputs of the session-b
 
 | Situation | Required Result |
 |-----------|-----------------|
-| No active session | Explicit message telling the user to run `synod start` |
-| Session exists without goal | Explicit message telling the user to use `synod capture` |
-| Session exists without plan | Explicit message telling the user to use `synod plan` |
+| No active session | Explicit message telling the user to run `boundline start` |
+| Session exists without goal | Explicit message telling the user to use `boundline capture` |
+| Session exists without plan | Explicit message telling the user to use `boundline plan` |
 | Session is corrupted or unreadable | Explicit recovery message and no hidden fallback |
 | Latest trace reference is missing | Status or next output must surface the mismatch and guide the user to recover deliberately |
 | Terminal session receives more execution commands | Command must fail clearly or require explicit reset rather than silently continuing |

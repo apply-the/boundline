@@ -139,7 +139,7 @@ ActiveSessionRecord
 - `GoalPlan` seeds the initial set of candidate bounded tasks for `RuntimeDecision` selection.
 - `FlowConstraintState` constrains which `RuntimeDecision` families are legal at a given stage.
 - `RoutingOutcome` determines whether the session executes through `RuntimeDecision` or compatibility behavior.
-- `StageBoundaryEvidence` enriches `GoalPlan` derivation and flow or stage transitions without replacing Synod-owned control flow.
+- `StageBoundaryEvidence` enriches `GoalPlan` derivation and flow or stage transitions without replacing Boundline-owned control flow.
 
 ## State Transitions
 

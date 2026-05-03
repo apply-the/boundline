@@ -2,9 +2,9 @@
 
 ## Scenario 1: Initialize a workspace with active domain families
 
-1. Run `synod init --workspace <repo> --domain systems --domain react --assistant copilot`.
+1. Run `boundline init --workspace <repo> --domain systems --domain react --assistant copilot`.
 2. Read the terminal output.
-3. Run `synod config show --workspace <repo> --scope workspace`.
+3. Run `boundline config show --workspace <repo> --scope workspace`.
 
 Expected result: the workspace is initialized, the selected domain families are
 persisted in the local config, and `config show` reports the active workspace
@@ -14,7 +14,7 @@ domain settings.
 
 1. Configure a shared standards layer for a domain family in global config.
 2. Configure a workspace-specific standards overlay for the same family.
-3. Run `synod config show --workspace <repo> --scope effective`.
+3. Run `boundline config show --workspace <repo> --scope effective`.
 
 Expected result: the effective output reports the built-in template plus shared
 and workspace standards in precedence order, with the workspace layer winning
@@ -24,8 +24,8 @@ on conflicts.
 
 1. Use a repository containing both Rust and React code.
 2. Enable the relevant domain families for the workspace.
-3. Run `synod capture --workspace <repo> --goal "fix the React dashboard regression"`.
-4. Run `synod plan --workspace <repo>`.
+3. Run `boundline capture --workspace <repo> --goal "fix the React dashboard regression"`.
+4. Run `boundline plan --workspace <repo>`.
 
 Expected result: the proposed plan keeps the normal bounded planning flow, and
 the context projection names the React-facing domain guidance rather than a
@@ -36,8 +36,8 @@ generic expert story.
 1. Capture and plan a task targeting one stack in a mixed-stack repository.
 2. Change the goal or bounded target so the next plan should focus on another
    stack.
-3. Run `synod plan --workspace <repo>` again.
-4. Read `synod status --workspace <repo>` or `synod inspect --workspace <repo>`.
+3. Run `boundline plan --workspace <repo>` again.
+4. Read `boundline status --workspace <repo>` or `boundline inspect --workspace <repo>`.
 
 Expected result: the applied domain context changes to the newly selected
 family or family combination, and the updated source attribution remains
@@ -47,8 +47,8 @@ visible on normal CLI surfaces.
 
 1. Use a workspace with no active matching domain family for the current goal,
    or bind a required supporting input that is unavailable.
-2. Run `synod capture --workspace <repo> --goal "update the unsupported target"`.
-3. Run `synod plan --workspace <repo>`.
+2. Run `boundline capture --workspace <repo> --goal "update the unsupported target"`.
+3. Run `boundline plan --workspace <repo>`.
 
 Expected result: planning stops explicitly because the bounded context is not
 credible, and the blocked-domain reason is visible in the planning output.
@@ -58,7 +58,7 @@ credible, and the blocked-domain reason is visible in the planning output.
 1. Enable governance for a workspace that already has approved design or
    standards artifacts.
 2. Bind a relevant external context input for a frontend or mobile family.
-3. Run `synod plan --workspace <repo>` and `synod inspect --workspace <repo>`.
+3. Run `boundline plan --workspace <repo>` and `boundline inspect --workspace <repo>`.
 
 Expected result: the bounded context surfaces the governed artifact and bound
 external input as supporting evidence, and the output states whether the input

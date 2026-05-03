@@ -3,13 +3,13 @@
 ## Prerequisites
 
 - Work from the repository root.
-- Use a clean workspace or start with no active `.synod/session.json`.
-- Provide either `.synod/execution.json` or the legacy `.synod/fixture.json` in the target workspace.
-- Run commands through `cargo run --bin synod -- ...` when validating locally.
+- Use a clean workspace or start with no active `.boundline/session.json`.
+- Provide either `.boundline/execution.json` or the legacy `.boundline/fixture.json` in the target workspace.
+- Run commands through `cargo run --bin boundline -- ...` when validating locally.
 
 ## Example execution profile
 
-Create `.synod/execution.json` in a small Rust workspace:
+Create `.boundline/execution.json` in a small Rust workspace:
 
 ```json
 {
@@ -41,13 +41,13 @@ Create `.synod/execution.json` in a small Rust workspace:
 1. Execute a delivery run against the workspace:
 
    ```bash
-   cargo run --bin synod -- run --goal "Fix the failing add test" --workspace <workspace>
+   cargo run --bin boundline -- run --goal "Fix the failing add test" --workspace <workspace>
    ```
 
 2. Inspect the latest trace:
 
    ```bash
-   cargo run --bin synod -- inspect --workspace <workspace>
+   cargo run --bin boundline -- inspect --workspace <workspace>
    ```
 
 Expected outcome:
@@ -62,22 +62,22 @@ Expected outcome:
 1. Start and capture a goal:
 
    ```bash
-   cargo run --bin synod -- start --workspace <workspace>
-   cargo run --bin synod -- capture --workspace <workspace> --goal "Fix the failing add test"
+   cargo run --bin boundline -- start --workspace <workspace>
+   cargo run --bin boundline -- capture --workspace <workspace> --goal "Fix the failing add test"
    ```
 
 2. Plan and run the task:
 
    ```bash
-   cargo run --bin synod -- plan --workspace <workspace>
-   cargo run --bin synod -- run --workspace <workspace>
+   cargo run --bin boundline -- plan --workspace <workspace>
+   cargo run --bin boundline -- run --workspace <workspace>
    ```
 
 3. Inspect status:
 
    ```bash
-   cargo run --bin synod -- status --workspace <workspace>
-   cargo run --bin synod -- next --workspace <workspace>
+   cargo run --bin boundline -- status --workspace <workspace>
+   cargo run --bin boundline -- next --workspace <workspace>
    ```
 
 Expected outcome:

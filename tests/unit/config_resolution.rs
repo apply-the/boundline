@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use synod::domain::configuration::{
+use boundline::domain::configuration::{
     ModelRoute, RoutingConfig, RoutingOverrides, RuntimeKind, ValueSource,
     resolve_effective_routing,
 };

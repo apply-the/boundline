@@ -17,7 +17,7 @@
 
 **Decision**: Scope the first deeper governed-stage slice to `bug-fix:investigate`, keeping later governed `verify` behavior in scope only as the downstream comparison and reuse target.
 
-**Rationale**: `bug-fix:investigate` already has bounded mode support and sits early enough in the flow to prove that governance can happen before verify without changing Synod's execution model.
+**Rationale**: `bug-fix:investigate` already has bounded mode support and sits early enough in the flow to prove that governance can happen before verify without changing Boundline's execution model.
 
 **Alternatives Considered**:
 - Start with `implement`: rejected because it skips the earliest meaningful proof that governance can shape the task before implementation begins.
@@ -27,11 +27,11 @@
 
 **Decision**: Preserve packet reuse through explicit packet reference, readiness, upstream stage key, and binding reason only.
 
-**Rationale**: The repository already has `PacketReuseBinding` and task-context storage for bounded lineage. Extending that visible story is consistent with the constitution and avoids leaking the full Canon artifact tree into Synod's core state.
+**Rationale**: The repository already has `PacketReuseBinding` and task-context storage for bounded lineage. Extending that visible story is consistent with the constitution and avoids leaking the full Canon artifact tree into Boundline's core state.
 
 **Alternatives Considered**:
 - Hide reuse inside runtime-only logic: rejected because operators could not explain why a downstream governed stage reused prior evidence.
-- Expose the full `.canon/` artifact tree: rejected because it widens the public contract and over-couples Synod to Canon internals.
+- Expose the full `.canon/` artifact tree: rejected because it widens the public contract and over-couples Boundline to Canon internals.
 
 ## R4: Refresh approval and packet-readiness state on later commands before allowing progression
 

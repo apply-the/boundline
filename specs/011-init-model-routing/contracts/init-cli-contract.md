@@ -2,16 +2,16 @@
 
 ## Purpose
 
-Define the user-facing contract for bootstrapping a Synod workspace without
+Define the user-facing contract for bootstrapping a Boundline workspace without
 hand-authoring internal JSON and while optionally preparing assistant runtime
 support for the repository.
 
 ## Command Surface
 
-### `synod init`
+### `boundline init`
 
 ```text
-synod init \
+boundline init \
   --workspace <path> \
   [--template <bug-fix|change|delivery>] \
   [--assistant <claude|codex|copilot|gemini>]... \
@@ -23,7 +23,7 @@ synod init \
 ```
 
 - `--workspace` is required.
-- When template or routing flags are omitted, `synod init` may guide the user
+- When template or routing flags are omitted, `boundline init` may guide the user
   interactively or apply documented defaults, but it must still preview the
   resulting changes before writing files.
 - `--assistant` may be repeated to enable one or more supported assistant
@@ -39,7 +39,7 @@ synod init \
 ## Required Behavior
 
 - Init MUST create or update the bounded workspace execution files needed by the
-  normal Synod workflow.
+  normal Boundline workflow.
 - Init MUST detect supported runtime capability before applying routing choices.
 - Init MUST preview all proposed file mutations and identify destructive changes.
 - Init MUST offer repository-local assistant setup only for supported runtimes
@@ -61,8 +61,8 @@ synod init \
 
 ## Compatibility Rules
 
-- Repositories that already use manual `.synod/execution.json` remain valid.
+- Repositories that already use manual `.boundline/execution.json` remain valid.
 - Init must be rerunnable so repositories can adopt new config or assistant
   setup later without deleting their working bounded execution profile.
-- Init output must name the next useful command, such as `synod doctor`,
-  `synod config show`, or `synod start`.
+- Init output must name the next useful command, such as `boundline doctor`,
+  `boundline config show`, or `boundline start`.

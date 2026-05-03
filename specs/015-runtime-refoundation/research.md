@@ -9,7 +9,7 @@
 
 **Decision**: Keep a bounded task draft as the authoritative persisted planning record for the normal runtime path, and treat declarative execution profiles as an explicit compatibility contract rather than the default planning contract.
 
-**Rationale**: The refoundation only changes the product if planning state belongs to the session-native runtime and survives into execution, inspection, and recovery. If declarative profiles remain the implicit source of truth, Synod still behaves like a compatibility engine with extra metadata.
+**Rationale**: The refoundation only changes the product if planning state belongs to the session-native runtime and survives into execution, inspection, and recovery. If declarative profiles remain the implicit source of truth, Boundline still behaves like a compatibility engine with extra metadata.
 
 **Alternatives Considered**:
 - Keep declarative execution profiles as the default plan source and attach session-native state as advisory metadata: rejected because it leaves the legacy control model in charge.
@@ -21,7 +21,7 @@
 
 **Decision**: Choose each next action from live workspace evidence, prior decision results, active flow constraints, and the current bounded task draft, while applying explicit precedence for terminal outcomes: no-actionable-state and exhausted states terminate immediately; failed decisions preserve evidence before bounded recovery or replan is attempted.
 
-**Rationale**: This keeps decision selection adaptive but inspectable. Developers can understand why Synod continued, stopped, or recovered because the runtime uses visible evidence and explicit precedence rules instead of hidden heuristics.
+**Rationale**: This keeps decision selection adaptive but inspectable. Developers can understand why Boundline continued, stopped, or recovered because the runtime uses visible evidence and explicit precedence rules instead of hidden heuristics.
 
 **Alternatives Considered**:
 - Replay static step lists and call them “adaptive”: rejected because it does not change the control model.
@@ -41,7 +41,7 @@
 
 ## R4: Compatibility routing must be explicit and precedence-based
 
-**Question**: How should Synod choose between the session-native path and the compatibility path?
+**Question**: How should Boundline choose between the session-native path and the compatibility path?
 
 **Decision**: Use explicit routing precedence: a persisted session-native bounded task draft takes priority, an explicit operator opt-in can select compatibility mode, declarative execution profiles remain available when no session-native plan exists, and blocked states return remediation instead of silent fallback.
 
@@ -55,12 +55,12 @@
 
 **Question**: What role should Canon play in the refounded runtime?
 
-**Decision**: Use Canon artifacts only as bounded planning inputs and stage-boundary governance evidence. Per-action decision selection remains Synod-owned and must continue to work when Canon artifacts are absent.
+**Decision**: Use Canon artifacts only as bounded planning inputs and stage-boundary governance evidence. Per-action decision selection remains Boundline-owned and must continue to work when Canon artifacts are absent.
 
-**Rationale**: This preserves the separation between orchestration and governance. Synod remains independently testable and executable, while Canon still contributes governed context where it matters.
+**Rationale**: This preserves the separation between orchestration and governance. Boundline remains independently testable and executable, while Canon still contributes governed context where it matters.
 
 **Alternatives Considered**:
-- Make Canon the per-action decision engine: rejected because it collapses Synod’s control plane into an external dependency.
+- Make Canon the per-action decision engine: rejected because it collapses Boundline’s control plane into an external dependency.
 - Ignore Canon artifacts entirely: rejected because the governance boundary still has value and should remain available as evidence.
 
 ## R6: Rollout must include version, docs, templates, and examples in one final pass

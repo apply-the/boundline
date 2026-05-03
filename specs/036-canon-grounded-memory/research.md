@@ -2,7 +2,7 @@
 
 ## Decision 1: Consume Canon 0.39.0 capabilities and mode summaries as bounded reasoning signals
 
-- **Decision**: Extend Synod's Canon-facing reasoning inputs to include the
+- **Decision**: Extend Boundline's Canon-facing reasoning inputs to include the
   stable `canon governance capabilities --json` surface plus the current
   governance run and status summaries, not just packet existence or stage-end
   readiness.
@@ -10,10 +10,10 @@
   readiness vocabulary, compatibility notes, and mode-result summaries such as
   `artifact_packet_summary`, `execution_posture`, and primary-artifact actions.
   Those fields provide bounded evidence about what Canon can support and what a
-  governed packet already says, which is exactly the signal Synod needs during
+  governed packet already says, which is exactly the signal Boundline needs during
   planning and later decision selection.
 - **Alternatives considered**:
-  - Keep relying only on Synod's static `supported_canon_modes_for_stage` table.
+  - Keep relying only on Boundline's static `supported_canon_modes_for_stage` table.
     Rejected because it captures stage policy but not runtime compatibility or
     artifact-summary signals.
   - Re-read raw `.canon/artifacts/**` files on every plan or decision. Rejected
@@ -30,7 +30,7 @@
   stateful surface preserves sequential execution, keeps the new memory in the
   authoritative runtime story, and avoids introducing a second memory store.
 - **Alternatives considered**:
-  - Add a new standalone memory file under `.synod/`. Rejected because it would
+  - Add a new standalone memory file under `.boundline/`. Rejected because it would
     split authority away from the active session and task context.
   - Store compact memory only in traces. Rejected because later planning and
     decision steps need authoritative state before a new trace event exists.
@@ -76,7 +76,7 @@
   trustworthy.
 - **Rationale**: Compaction is only safe when the runtime can say when it has
   compressed too far or when upstream Canon facts changed. Explicit credibility
-  preserves operator trust and prevents Synod from silently reusing outdated
+  preserves operator trust and prevents Boundline from silently reusing outdated
   governed assumptions.
 - **Alternatives considered**:
   - Always refresh Canon state before every later decision. Rejected because it
@@ -84,14 +84,14 @@
   - Ignore staleness until a hard failure occurs. Rejected because that would
     make failure handling less inspectable and more expensive.
 
-## Decision 6: Keep Canon grounding advisory to Synod's authority model, not a replacement for it
+## Decision 6: Keep Canon grounding advisory to Boundline's authority model, not a replacement for it
 
 - **Decision**: Canon-grounded evidence may change planning and decision
-  selection, but Synod's session-native runtime remains the authority that owns
+  selection, but Boundline's session-native runtime remains the authority that owns
   bounded start conditions, stop conditions, routing, and state projection.
 - **Rationale**: The constitution forbids making external systems the hidden
-  owner of Synod control flow. The correct slice is to let Canon materially
-  influence bounded reasoning while Synod still decides when to continue,
+  owner of Boundline control flow. The correct slice is to let Canon materially
+  influence bounded reasoning while Boundline still decides when to continue,
   refresh, replan, or stop.
 - **Alternatives considered**:
   - Delegate native routing authority to Canon when governed evidence exists.
@@ -103,7 +103,7 @@
 ## Decision 7: Close the feature as a release-aligned 0.36.0 macrofeature
 
 - **Decision**: Treat `0.36.0` closeout as part of the feature, including the
-  Synod version bump, Canon compatibility narrative, docs and assistant-pack
+  Boundline version bump, Canon compatibility narrative, docs and assistant-pack
   updates, roadmap closure, and coverage above 95% for modified Rust files.
 - **Rationale**: Canon-grounded reasoning changes operator-visible behavior and
   must ship as one coherent product story rather than as hidden internal wiring.

@@ -24,13 +24,13 @@ A developer can drive a bounded bug-fix task through a governed `investigate` st
 
 **Why this priority**: The current governed path is most visible at verify-stage `security-assessment`. The smallest next delivery gain is to make earlier or intermediate governed stages credible on the same session-owned route.
 
-**Independent Test**: Can be fully tested by running a representative bug-fix session with governance configured for `investigate`, then confirming that Synod governs that stage, persists the governed packet and stage record, and later reuses bounded governance lineage when the same session reaches governed `verify`.
+**Independent Test**: Can be fully tested by running a representative bug-fix session with governance configured for `investigate`, then confirming that Boundline governs that stage, persists the governed packet and stage record, and later reuses bounded governance lineage when the same session reaches governed `verify`.
 
 **Acceptance Scenarios**:
 
-1. **Given** an active bounded bug-fix session whose next configured governed stage is `investigate`, **When** the developer runs or resumes the session, **Then** Synod executes that governed stage on the same session-owned route and records the stage key, selected mode, packet reference, and next action in the active session and trace.
-2. **Given** the same session later reaches governed `verify`, **When** Synod prepares that later governed transition, **Then** it reuses bounded packet context from the earlier governed stage when credible and records the upstream source stage plus binding reason instead of silently discarding lineage.
-3. **Given** a governed stage cannot continue because approval is still pending, the packet is incomplete or rejected, or the required governance runtime is unavailable, **When** the developer runs or resumes the session, **Then** Synod stops in an explicit waiting, blocked, or failed condition before the next delivery stage advances.
+1. **Given** an active bounded bug-fix session whose next configured governed stage is `investigate`, **When** the developer runs or resumes the session, **Then** Boundline executes that governed stage on the same session-owned route and records the stage key, selected mode, packet reference, and next action in the active session and trace.
+2. **Given** the same session later reaches governed `verify`, **When** Boundline prepares that later governed transition, **Then** it reuses bounded packet context from the earlier governed stage when credible and records the upstream source stage plus binding reason instead of silently discarding lineage.
+3. **Given** a governed stage cannot continue because approval is still pending, the packet is incomplete or rejected, or the required governance runtime is unavailable, **When** the developer runs or resumes the session, **Then** Boundline stops in an explicit waiting, blocked, or failed condition before the next delivery stage advances.
 
 ---
 
@@ -44,15 +44,15 @@ An operator can understand what happened at each governed stage transition throu
 
 **Acceptance Scenarios**:
 
-1. **Given** an active session paused at a governed stage with approval pending or newly refreshed governance state, **When** the developer runs `status`, `next`, `run`, or workflow-aware resume/status, **Then** Synod refreshes the approval state before advancing work and reports the updated governance condition plus next command.
-2. **Given** a governed packet reused from an earlier bounded stage, **When** the developer inspects the session or workflow state, **Then** Synod exposes the packet headline, readiness, source stage, and binding reason through the same routing and execution-condition story already used by the session-native runtime.
+1. **Given** an active session paused at a governed stage with approval pending or newly refreshed governance state, **When** the developer runs `status`, `next`, `run`, or workflow-aware resume/status, **Then** Boundline refreshes the approval state before advancing work and reports the updated governance condition plus next command.
+2. **Given** a governed packet reused from an earlier bounded stage, **When** the developer inspects the session or workflow state, **Then** Boundline exposes the packet headline, readiness, source stage, and binding reason through the same routing and execution-condition story already used by the session-native runtime.
 3. **Given** a named workflow is active over the same bounded session, **When** the workflow reaches `run`, `review`, `govern`, or later inspect steps after a governed stage transition, **Then** the workflow surface preserves the same explicit session-native route ownership and governance guidance instead of implying Canon-owned orchestration.
 
 ---
 
 ### User Story 3 - Author And Ship Bounded Governed Depth Clearly (Priority: P3)
 
-A maintainer can author or update bounded governance profiles and release documentation for deeper governed-stage coverage without widening Synod into a generic governance engine.
+A maintainer can author or update bounded governance profiles and release documentation for deeper governed-stage coverage without widening Boundline into a generic governance engine.
 
 **Why this priority**: The slice is only sustainable if maintainers can see which stage transitions are supported, which packet reuse stories are intentional, and which ownership boundaries remain fixed.
 
@@ -60,8 +60,8 @@ A maintainer can author or update bounded governance profiles and release docume
 
 **Acceptance Scenarios**:
 
-1. **Given** a maintainer configures bounded governance for `bug-fix:investigate` ahead of the existing governed `verify` path, **When** they follow the shipped guidance and examples, **Then** Synod accepts the supported configuration and keeps direct session-native plus workflow-aware routing semantics explicit.
-2. **Given** a maintainer configures an unsupported governed stage shape, Canon mode, or hidden background progression expectation, **When** Synod validates or executes that configuration, **Then** it rejects the unsupported behavior explicitly instead of passing it through as unchecked Canon orchestration.
+1. **Given** a maintainer configures bounded governance for `bug-fix:investigate` ahead of the existing governed `verify` path, **When** they follow the shipped guidance and examples, **Then** Boundline accepts the supported configuration and keeps direct session-native plus workflow-aware routing semantics explicit.
+2. **Given** a maintainer configures an unsupported governed stage shape, Canon mode, or hidden background progression expectation, **When** Boundline validates or executes that configuration, **Then** it rejects the unsupported behavior explicitly instead of passing it through as unchecked Canon orchestration.
 
 ---
 
@@ -71,7 +71,7 @@ A maintainer can author or update bounded governance profiles and release docume
 
 <!--
   ACTION REQUIRED: Capture execution limits, invalid state transitions, missing context,
-  traceability gaps, and failure-handling boundaries. Synod features are invalid if they
+  traceability gaps, and failure-handling boundaries. Boundline features are invalid if they
   ignore how work stops, fails, or becomes non-credible.
 -->
 
@@ -107,7 +107,7 @@ A maintainer can author or update bounded governance profiles and release docume
 
 <!--
   ACTION REQUIRED: Name the deferred or excluded capabilities explicitly.
-  Synod specs should normally exclude councils and voting unless the roadmap and
+  Boundline specs should normally exclude councils and voting unless the roadmap and
   constitution explicitly prioritize a bounded review slice; they should otherwise
   exclude provider-routing complexity, distributed execution, long-term memory,
   UI/UX work, and deployment pipelines.
@@ -133,7 +133,7 @@ A maintainer can author or update bounded governance profiles and release docume
 
 ### Measurable Outcomes
 
-- **SC-001**: In representative governed bug-fix scenarios, Synod can execute governed `investigate` before governed `verify` and still keep the session on the same primary route.
+- **SC-001**: In representative governed bug-fix scenarios, Boundline can execute governed `investigate` before governed `verify` and still keep the session on the same primary route.
 - **SC-002**: 100% of representative packet-reuse, approval-pending, packet-rejected, and governance-blocked scenarios stop in an explicit waiting, blocked, failed, or terminal state before downstream work advances.
 - **SC-003**: Developers can identify the active governed stage, selected mode, packet provenance, approval state, and next command from `status`, `next`, `inspect`, or workflow-aware status in under 2 minutes.
 - **SC-004**: Maintainers can configure and validate a representative deeper governed-stage profile, plus find the changed operator guidance, in under 15 minutes without relying on undocumented behavior.
@@ -147,7 +147,7 @@ A maintainer can author or update bounded governance profiles and release docume
   Assumptions must reduce ambiguity without expanding scope.
 -->
 
-- Operators continue to use one active workspace session and rely on `.synod/session.json` plus `.synod/traces/` as the authoritative state and evidence surfaces.
+- Operators continue to use one active workspace session and rely on `.boundline/session.json` plus `.boundline/traces/` as the authoritative state and evidence surfaces.
 - The existing governance model already declares a bounded set of supported governed stages and Canon modes, and this slice should deepen the credible execution story specifically for `bug-fix:investigate` before broadening other stage families.
 - Packet reuse must remain bounded to explicit packet references, readiness metadata, headlines, and binding reasons rather than exposing or depending on the full `.canon/` artifact tree.
 - The slice closes as the next versioned delivery increment and therefore includes release-aligned documentation, changelog, coverage refresh, clippy cleanup, and formatting work.

@@ -1,5 +1,5 @@
-use synod::domain::decision::DecisionType;
-use synod::domain::flow_policy::{FlowPolicy, FlowPolicyError, TransitionCondition};
+use boundline::domain::decision::DecisionType;
+use boundline::domain::flow_policy::{FlowPolicy, FlowPolicyError, TransitionCondition};
 
 #[test]
 fn from_builtin_creates_bug_fix_policy() {

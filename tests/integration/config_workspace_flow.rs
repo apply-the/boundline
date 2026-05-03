@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use uuid::Uuid;
 
-use crate::workspace_fixture::{run_synod_in, terminal_text};
+use crate::workspace_fixture::{run_boundline_in, terminal_text};
 
 fn empty_workspace(prefix: &str) -> PathBuf {
     let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
@@ -11,7 +11,7 @@ fn empty_workspace(prefix: &str) -> PathBuf {
     fs::create_dir_all(workspace.join("tests")).unwrap();
     fs::write(
         workspace.join("Cargo.toml"),
-        "[package]\nname = \"synod-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        "[package]\nname = \"boundline-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
     )
     .unwrap();
     workspace
@@ -19,9 +19,9 @@ fn empty_workspace(prefix: &str) -> PathBuf {
 
 #[test]
 fn config_set_show_and_unset_workspace_slot() {
-    let workspace = empty_workspace("synod-config-workspace");
+    let workspace = empty_workspace("boundline-config-workspace");
 
-    let init = run_synod_in(
+    let init = run_boundline_in(
         &workspace,
         &[
             "init",
@@ -35,7 +35,7 @@ fn config_set_show_and_unset_workspace_slot() {
     );
     assert_eq!(init.status.code(), Some(0), "{}", terminal_text(&init));
 
-    let set = run_synod_in(
+    let set = run_boundline_in(
         &workspace,
         &[
             "config",
@@ -56,7 +56,7 @@ fn config_set_show_and_unset_workspace_slot() {
     assert_eq!(set.status.code(), Some(0), "{set_text}");
     assert!(set_text.contains("config: updated workspace config"), "{set_text}");
 
-    let show = run_synod_in(
+    let show = run_boundline_in(
         &workspace,
         &[
             "config",
@@ -71,7 +71,7 @@ fn config_set_show_and_unset_workspace_slot() {
     assert_eq!(show.status.code(), Some(0), "{show_text}");
     assert!(show_text.contains("planning: codex:gpt-5-codex"), "{show_text}");
 
-    let unset = run_synod_in(
+    let unset = run_boundline_in(
         &workspace,
         &[
             "config",
@@ -87,7 +87,7 @@ fn config_set_show_and_unset_workspace_slot() {
     let unset_text = terminal_text(&unset);
     assert_eq!(unset.status.code(), Some(0), "{unset_text}");
 
-    let show_after = run_synod_in(
+    let show_after = run_boundline_in(
         &workspace,
         &[
             "config",
@@ -105,9 +105,9 @@ fn config_set_show_and_unset_workspace_slot() {
 
 #[test]
 fn config_show_effective_surfaces_assistant_bindings() {
-    let workspace = empty_workspace("synod-config-effective");
+    let workspace = empty_workspace("boundline-config-effective");
 
-    let init = run_synod_in(
+    let init = run_boundline_in(
         &workspace,
         &[
             "init",
@@ -121,7 +121,7 @@ fn config_show_effective_surfaces_assistant_bindings() {
     );
     assert_eq!(init.status.code(), Some(0), "{}", terminal_text(&init));
 
-    let set = run_synod_in(
+    let set = run_boundline_in(
         &workspace,
         &[
             "config",
@@ -140,7 +140,7 @@ fn config_show_effective_surfaces_assistant_bindings() {
     );
     assert_eq!(set.status.code(), Some(0), "{}", terminal_text(&set));
 
-    let show = run_synod_in(
+    let show = run_boundline_in(
         &workspace,
         &[
             "config",
@@ -169,9 +169,9 @@ fn config_show_effective_surfaces_assistant_bindings() {
 
 #[test]
 fn config_show_effective_surfaces_capability_and_effort_projection() {
-    let workspace = empty_workspace("synod-config-capability-effort");
+    let workspace = empty_workspace("boundline-config-capability-effort");
 
-    let init = run_synod_in(
+    let init = run_boundline_in(
         &workspace,
         &[
             "init",
@@ -185,7 +185,7 @@ fn config_show_effective_surfaces_capability_and_effort_projection() {
     );
     assert_eq!(init.status.code(), Some(0), "{}", terminal_text(&init));
 
-    let set_route = run_synod_in(
+    let set_route = run_boundline_in(
         &workspace,
         &[
             "config",
@@ -204,7 +204,7 @@ fn config_show_effective_surfaces_capability_and_effort_projection() {
     );
     assert_eq!(set_route.status.code(), Some(0), "{}", terminal_text(&set_route));
 
-    let set_capability = run_synod_in(
+    let set_capability = run_boundline_in(
         &workspace,
         &[
             "config",
@@ -231,7 +231,7 @@ fn config_show_effective_surfaces_capability_and_effort_projection() {
     );
     assert_eq!(set_capability.status.code(), Some(0), "{}", terminal_text(&set_capability));
 
-    let set_effort = run_synod_in(
+    let set_effort = run_boundline_in(
         &workspace,
         &[
             "config",
@@ -252,7 +252,7 @@ fn config_show_effective_surfaces_capability_and_effort_projection() {
     );
     assert_eq!(set_effort.status.code(), Some(0), "{}", terminal_text(&set_effort));
 
-    let show = run_synod_in(
+    let show = run_boundline_in(
         &workspace,
         &[
             "config",
@@ -289,9 +289,9 @@ fn config_show_effective_surfaces_capability_and_effort_projection() {
 
 #[test]
 fn config_domain_commands_surface_effective_domain_templates() {
-    let workspace = empty_workspace("synod-config-domain");
+    let workspace = empty_workspace("boundline-config-domain");
 
-    let init = run_synod_in(
+    let init = run_boundline_in(
         &workspace,
         &[
             "init",
@@ -305,7 +305,7 @@ fn config_domain_commands_surface_effective_domain_templates() {
     );
     assert_eq!(init.status.code(), Some(0), "{}", terminal_text(&init));
 
-    let set_domain = run_synod_in(
+    let set_domain = run_boundline_in(
         &workspace,
         &[
             "config",
@@ -323,7 +323,7 @@ fn config_domain_commands_surface_effective_domain_templates() {
     );
     assert_eq!(set_domain.status.code(), Some(0), "{}", terminal_text(&set_domain));
 
-    let bind_context = run_synod_in(
+    let bind_context = run_boundline_in(
         &workspace,
         &[
             "config",
@@ -343,7 +343,7 @@ fn config_domain_commands_surface_effective_domain_templates() {
     );
     assert_eq!(bind_context.status.code(), Some(0), "{}", terminal_text(&bind_context));
 
-    let show = run_synod_in(
+    let show = run_boundline_in(
         &workspace,
         &[
             "config",

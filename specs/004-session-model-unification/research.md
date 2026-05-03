@@ -1,9 +1,9 @@
 # Research: Session & Interaction Model Unification
 
-## Decision 1: Persist one workspace-scoped active session at `<workspace>/.synod/session.json`
+## Decision 1: Persist one workspace-scoped active session at `<workspace>/.boundline/session.json`
 
-- **Decision**: Store the active session as a single JSON document at `<workspace>/.synod/session.json`, parallel to the existing trace directory under `<workspace>/.synod/traces/`.
-- **Rationale**: The existing trace store already anchors Synod state under `.synod/` inside the developer workspace. A sibling `session.json` keeps the session local, explicit, and easy to inspect without adding discovery or indexing logic. This aligns with the feature's single-active-session-per-workspace scope.
+- **Decision**: Store the active session as a single JSON document at `<workspace>/.boundline/session.json`, parallel to the existing trace directory under `<workspace>/.boundline/traces/`.
+- **Rationale**: The existing trace store already anchors Boundline state under `.boundline/` inside the developer workspace. A sibling `session.json` keeps the session local, explicit, and easy to inspect without adding discovery or indexing logic. This aligns with the feature's single-active-session-per-workspace scope.
 - **Alternatives considered**:
   - Persist sessions in memory only: rejected because CLI invocations must survive process boundaries.
   - Add a database or external store: rejected because the slice must remain local, file-based, and dependency-light.
@@ -46,7 +46,7 @@
 ## Decision 6: Resolve the workspace from the current directory by default, with optional explicit override
 
 - **Decision**: Session-backed commands operate against the current working directory by default and may allow an explicit workspace override when necessary.
-- **Rationale**: The feature aims to reduce repeated parameter passing and make chat-first workflows natural. Defaulting to the current workspace lets `synod start`, `synod plan`, and follow-up assistant-invoked commands work naturally from the repository root while still leaving room for explicit targeting when a user needs it.
+- **Rationale**: The feature aims to reduce repeated parameter passing and make chat-first workflows natural. Defaulting to the current workspace lets `boundline start`, `boundline plan`, and follow-up assistant-invoked commands work naturally from the repository root while still leaving room for explicit targeting when a user needs it.
 - **Alternatives considered**:
   - Require `--workspace` on every session command: rejected because it preserves the repetitive UX this feature is meant to remove.
   - Infer workspace from the latest trace only: rejected because the session itself must be the authoritative interaction anchor.

@@ -1,11 +1,11 @@
 use std::fs;
 use std::path::PathBuf;
 
-use synod::domain::brief::{
+use boundline::domain::brief::{
     AuthoredBriefBundle, AuthoredBriefResolutionState, BriefIngestionError, InputSourceKind,
     MAX_BRIEF_SOURCES, normalize_inputs,
 };
-use synod::domain::task::ClarificationReasonKind;
+use boundline::domain::task::ClarificationReasonKind;
 use uuid::Uuid;
 
 fn temp_workspace(prefix: &str) -> PathBuf {
@@ -16,14 +16,14 @@ fn temp_workspace(prefix: &str) -> PathBuf {
 
 #[test]
 fn rejects_when_neither_goal_nor_brief_provided() {
-    let workspace = temp_workspace("synod-h-input-empty");
+    let workspace = temp_workspace("boundline-h-input-empty");
     let error = normalize_inputs(&workspace, None, &[]).unwrap_err();
     assert!(matches!(error, BriefIngestionError::NoInputProvided));
 }
 
 #[test]
 fn ingests_direct_text_only_into_bundle_with_no_markdown_sources() {
-    let workspace = temp_workspace("synod-h-input-direct");
+    let workspace = temp_workspace("boundline-h-input-direct");
     let bundle: AuthoredBriefBundle =
         normalize_inputs(&workspace, Some("Fix the failing add test"), &[]).unwrap();
     assert_eq!(bundle.markdown_source_count(), 0);
@@ -35,7 +35,7 @@ fn ingests_direct_text_only_into_bundle_with_no_markdown_sources() {
 
 #[test]
 fn ingests_markdown_brief_and_renders_provenance_header() {
-    let workspace = temp_workspace("synod-h-input-md");
+    let workspace = temp_workspace("boundline-h-input-md");
     let brief = workspace.join("brief.md");
     fs::write(&brief, "# Goal\n\nReplace subtraction with addition\n").unwrap();
 
@@ -52,8 +52,8 @@ fn ingests_markdown_brief_and_renders_provenance_header() {
 
 #[test]
 fn rejects_brief_outside_workspace_with_dedicated_error() {
-    let workspace = temp_workspace("synod-h-input-out-ws");
-    let foreign = temp_workspace("synod-h-input-out-foreign");
+    let workspace = temp_workspace("boundline-h-input-out-ws");
+    let foreign = temp_workspace("boundline-h-input-out-foreign");
     let brief = foreign.join("brief.md");
     fs::write(&brief, "outside\n").unwrap();
     let error = normalize_inputs(&workspace, None, &[brief]).unwrap_err();
@@ -62,7 +62,7 @@ fn rejects_brief_outside_workspace_with_dedicated_error() {
 
 #[test]
 fn rejects_brief_with_unsupported_extension() {
-    let workspace = temp_workspace("synod-h-input-ext");
+    let workspace = temp_workspace("boundline-h-input-ext");
     let brief = workspace.join("notes.txt");
     fs::write(&brief, "nope\n").unwrap();
     let error = normalize_inputs(&workspace, None, &[brief]).unwrap_err();
@@ -71,7 +71,7 @@ fn rejects_brief_with_unsupported_extension() {
 
 #[test]
 fn rejects_more_than_max_brief_sources() {
-    let workspace = temp_workspace("synod-h-input-too-many");
+    let workspace = temp_workspace("boundline-h-input-too-many");
     let mut paths = Vec::new();
     for i in 0..(MAX_BRIEF_SOURCES + 1) {
         let path = workspace.join(format!("brief-{i}.md"));
@@ -87,7 +87,7 @@ fn rejects_more_than_max_brief_sources() {
 
 #[test]
 fn combines_direct_text_and_markdown_brief_in_render_order() {
-    let workspace = temp_workspace("synod-h-input-combo");
+    let workspace = temp_workspace("boundline-h-input-combo");
     let brief = workspace.join("plan.md");
     fs::write(&brief, "Step 1: investigate\nStep 2: fix\n").unwrap();
     let bundle = normalize_inputs(&workspace, Some("Goal: deliver fix"), &[brief]).unwrap();
@@ -98,7 +98,7 @@ fn combines_direct_text_and_markdown_brief_in_render_order() {
 
 #[test]
 fn extracts_markdown_paths_mentioned_in_goal_text() {
-    let workspace = temp_workspace("synod-h-input-referenced");
+    let workspace = temp_workspace("boundline-h-input-referenced");
     fs::create_dir_all(workspace.join("docs")).unwrap();
     let architecture = workspace.join("docs/architecture.md");
     let regression = workspace.join("docs/regression.markdown");
@@ -126,7 +126,7 @@ fn extracts_markdown_paths_mentioned_in_goal_text() {
 
 #[test]
 fn deduplicates_repeated_explicit_brief_paths_by_canonical_workspace_path() {
-    let workspace = temp_workspace("synod-h-input-dedup");
+    let workspace = temp_workspace("boundline-h-input-dedup");
     fs::create_dir_all(workspace.join("docs")).unwrap();
     let brief = workspace.join("docs/brief.md");
     fs::write(&brief, "Shared context\n").unwrap();
@@ -152,7 +152,7 @@ fn deduplicates_repeated_explicit_brief_paths_by_canonical_workspace_path() {
 
 #[test]
 fn flags_unbounded_requests_for_clarification_before_planning() {
-    let workspace = temp_workspace("synod-h-input-clarification");
+    let workspace = temp_workspace("boundline-h-input-clarification");
 
     let bundle = normalize_inputs(
         &workspace,

@@ -9,7 +9,7 @@
 
 ### User Story 1 - Run a standard bug-fix flow (Priority: P1)
 
-As a developer working on a bounded repair task, I want to bind a known delivery flow to the active session so Synod can move through investigation, implementation, and verification in a predictable order.
+As a developer working on a bounded repair task, I want to bind a known delivery flow to the active session so Boundline can move through investigation, implementation, and verification in a predictable order.
 
 **Why this priority**: Bug-fix work is the smallest high-value delivery slice because it exercises stage sequencing, shared session state, and failure handling without requiring broader workflow modeling.
 
@@ -17,15 +17,15 @@ As a developer working on a bounded repair task, I want to bind a known delivery
 
 **Acceptance Scenarios**:
 
-1. **Given** an active session with a captured repair goal and no flow selected, **When** the user selects the bug-fix flow, **Then** Synod records the selected flow, sets the first stage as current, and exposes the session as ready for execution.
-2. **Given** an active session using the bug-fix flow, **When** the current stage completes successfully, **Then** Synod advances to the next stage, preserves prior stage context, and records the transition in inspectable session output.
-3. **Given** an active session using the bug-fix flow, **When** a step inside the implementation or verification stage fails, **Then** Synod keeps execution within the same stage, records the failure, and allows bounded retry or replan without changing the selected flow.
+1. **Given** an active session with a captured repair goal and no flow selected, **When** the user selects the bug-fix flow, **Then** Boundline records the selected flow, sets the first stage as current, and exposes the session as ready for execution.
+2. **Given** an active session using the bug-fix flow, **When** the current stage completes successfully, **Then** Boundline advances to the next stage, preserves prior stage context, and records the transition in inspectable session output.
+3. **Given** an active session using the bug-fix flow, **When** a step inside the implementation or verification stage fails, **Then** Boundline keeps execution within the same stage, records the failure, and allows bounded retry or replan without changing the selected flow.
 
 ---
 
 ### User Story 2 - Run a standard change flow (Priority: P2)
 
-As a developer making a scoped product or maintenance change, I want a lighter-weight delivery flow so Synod can move from change understanding into implementation and verification using the same session model.
+As a developer making a scoped product or maintenance change, I want a lighter-weight delivery flow so Boundline can move from change understanding into implementation and verification using the same session model.
 
 **Why this priority**: Change work is a common path that validates the feature beyond bug fixing while reusing the same stage-tracking primitives.
 
@@ -33,47 +33,47 @@ As a developer making a scoped product or maintenance change, I want a lighter-w
 
 **Acceptance Scenarios**:
 
-1. **Given** an active session with a captured change goal, **When** the user selects the change flow, **Then** Synod binds that flow to the session and initializes stage progress for the change-oriented sequence.
-2. **Given** a session using the change flow, **When** the user requests status or next guidance mid-flow, **Then** Synod reports the active flow, current stage, stage progress, and the next valid action for continuing the flow.
+1. **Given** an active session with a captured change goal, **When** the user selects the change flow, **Then** Boundline binds that flow to the session and initializes stage progress for the change-oriented sequence.
+2. **Given** a session using the change flow, **When** the user requests status or next guidance mid-flow, **Then** Boundline reports the active flow, current stage, stage progress, and the next valid action for continuing the flow.
 
 ---
 
 ### User Story 3 - Run a full delivery flow (Priority: P3)
 
-As a developer tackling a broader engineering request, I want Synod to guide work across requirements, architecture, backlog shaping, and implementation so the session reflects a full delivery path instead of isolated steps.
+As a developer tackling a broader engineering request, I want Boundline to guide work across requirements, architecture, backlog shaping, and implementation so the session reflects a full delivery path instead of isolated steps.
 
 **Why this priority**: This story extends the same deterministic flow model to a longer SDLC path after the core flow infrastructure is proven with smaller slices.
 
-**Independent Test**: Start a session for a broader delivery goal, select the full delivery flow, and confirm Synod can progress stage by stage while keeping stage order deterministic and visible across the entire session.
+**Independent Test**: Start a session for a broader delivery goal, select the full delivery flow, and confirm Boundline can progress stage by stage while keeping stage order deterministic and visible across the entire session.
 
 **Acceptance Scenarios**:
 
-1. **Given** an active session with a broader delivery goal, **When** the user selects the delivery flow, **Then** Synod initializes the full ordered stage sequence and exposes the first stage as current.
-2. **Given** a session in the delivery flow, **When** all stages reach terminal completion, **Then** Synod ends the flow in an explicit completed state and retains an inspectable record of each stage transition.
+1. **Given** an active session with a broader delivery goal, **When** the user selects the delivery flow, **Then** Boundline initializes the full ordered stage sequence and exposes the first stage as current.
+2. **Given** a session in the delivery flow, **When** all stages reach terminal completion, **Then** Boundline ends the flow in an explicit completed state and retains an inspectable record of each stage transition.
 
 ### Edge Cases
 
-- If a user tries to select a flow without an active session, Synod must reject the request with a clear terminal outcome and must not create implicit session state.
-- If a session already has an active flow and the user selects a different flow before completion, Synod must require an explicit reset or replacement path rather than silently overwriting stage history.
-- If the current stage exhausts its configured execution bounds for retry or replan, or cannot produce a credible next step within the current stage, Synod must stop in an explicit failure state while keeping the active stage and failure evidence inspectable.
-- If a previously valid session is missing stage-tracking state, Synod must stop execution, surface the invalid state, and avoid advancing the flow until the session is repaired or restarted.
+- If a user tries to select a flow without an active session, Boundline must reject the request with a clear terminal outcome and must not create implicit session state.
+- If a session already has an active flow and the user selects a different flow before completion, Boundline must require an explicit reset or replacement path rather than silently overwriting stage history.
+- If the current stage exhausts its configured execution bounds for retry or replan, or cannot produce a credible next step within the current stage, Boundline must stop in an explicit failure state while keeping the active stage and failure evidence inspectable.
+- If a previously valid session is missing stage-tracking state, Boundline must stop execution, surface the invalid state, and avoid advancing the flow until the session is repaired or restarted.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: Synod MUST allow a user to bind one predefined delivery flow to the active session for a bounded engineering task.
-- **FR-002**: Synod MUST persist the selected flow, the current stage identifier, and the current stage position within session state.
-- **FR-003**: Synod MUST define each supported flow as a deterministic ordered list of stages that does not change during normal execution.
-- **FR-004**: Synod MUST execute work against the current stage only and MUST advance to the next stage only after the current stage reaches a successful terminal outcome.
-- **FR-005**: Synod MUST keep stage execution on top of the existing session model so previously captured goal, context, plan state, and traces remain available across stage transitions.
-- **FR-006**: Synod MUST allow bounded retry or bounded replanning within the current stage after a failed step without replacing the selected flow or skipping stages.
-- **FR-007**: Synod MUST expose the active flow, current stage, stage progress, and current step progress through status-oriented session output.
-- **FR-008**: Synod MUST provide next-action guidance that reflects the active flow, current stage, and current execution state.
-- **FR-009**: Synod MUST support at least these predefined flows: bug-fix, change, and delivery.
-- **FR-010**: Synod MUST reject invalid flow operations, including selecting a flow without an active session or attempting to advance from an invalid stage state, with explicit user-visible errors.
-- **FR-011**: Synod MUST emit inspectable evidence for flow selection, stage transitions, retries, replans, failures, and terminal outcomes.
-- **FR-012**: Synod MUST preserve existing non-flow session usage so a user can continue to run session commands without selecting a delivery flow.
+- **FR-001**: Boundline MUST allow a user to bind one predefined delivery flow to the active session for a bounded engineering task.
+- **FR-002**: Boundline MUST persist the selected flow, the current stage identifier, and the current stage position within session state.
+- **FR-003**: Boundline MUST define each supported flow as a deterministic ordered list of stages that does not change during normal execution.
+- **FR-004**: Boundline MUST execute work against the current stage only and MUST advance to the next stage only after the current stage reaches a successful terminal outcome.
+- **FR-005**: Boundline MUST keep stage execution on top of the existing session model so previously captured goal, context, plan state, and traces remain available across stage transitions.
+- **FR-006**: Boundline MUST allow bounded retry or bounded replanning within the current stage after a failed step without replacing the selected flow or skipping stages.
+- **FR-007**: Boundline MUST expose the active flow, current stage, stage progress, and current step progress through status-oriented session output.
+- **FR-008**: Boundline MUST provide next-action guidance that reflects the active flow, current stage, and current execution state.
+- **FR-009**: Boundline MUST support at least these predefined flows: bug-fix, change, and delivery.
+- **FR-010**: Boundline MUST reject invalid flow operations, including selecting a flow without an active session or attempting to advance from an invalid stage state, with explicit user-visible errors.
+- **FR-011**: Boundline MUST emit inspectable evidence for flow selection, stage transitions, retries, replans, failures, and terminal outcomes.
+- **FR-012**: Boundline MUST preserve existing non-flow session usage so a user can continue to run session commands without selecting a delivery flow.
 
 ### Scope Boundaries *(mandatory)*
 
@@ -91,9 +91,9 @@ As a developer tackling a broader engineering request, I want Synod to guide wor
 ### Measurable Outcomes
 
 - **SC-001**: In representative validation scenarios for bug-fix, change, and delivery work, 100% of runs with a selected flow start in an explicit first stage and end in an explicit completed or failed terminal state.
-- **SC-002**: In representative validation scenarios, Synod preserves correct stage ordering for every supported flow with zero skipped stages or silent stage replacements.
+- **SC-002**: In representative validation scenarios, Boundline preserves correct stage ordering for every supported flow with zero skipped stages or silent stage replacements.
 - **SC-003**: Developers can determine the active flow, current stage, stage progress, and most recent stage outcome from status or inspect output in under 30 seconds.
-- **SC-004**: When a step fails during a flow validation scenario, Synod keeps recovery within the current stage for 100% of observed retry or replan cases unless the session is explicitly reset.
+- **SC-004**: When a step fails during a flow validation scenario, Boundline keeps recovery within the current stage for 100% of observed retry or replan cases unless the session is explicitly reset.
 - **SC-005**: Existing non-flow session usage remains functional in validation scenarios without requiring a selected flow.
 
 ## Assumptions

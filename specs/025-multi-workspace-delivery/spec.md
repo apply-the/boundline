@@ -10,16 +10,16 @@
 ### User Story 1 - Deliver One Bounded Change Across Repositories (Priority: P1)
 
 An operator can drive one bounded delivery task across multiple repositories in
-the same cluster without manually coordinating separate plans, while Synod
+the same cluster without manually coordinating separate plans, while Boundline
 keeps one explicit orchestration owner for the whole run.
 
 **Why this priority**: The current cluster slice stops at registration,
-inspection, and inherited defaults. Until Synod can plan and mutate across the
+inspection, and inherited defaults. Until Boundline can plan and mutate across the
 member repositories as one bounded delivery story, multi-workspace work still
 depends on operator conventions.
 
 **Independent Test**: Register a cluster with at least two workspaces, start one
-clustered delivery task, execute the bounded run, and verify that Synod records
+clustered delivery task, execute the bounded run, and verify that Boundline records
 one authoritative delivery story that can touch more than one member
 repository without splitting into unrelated orchestration owners.
 
@@ -27,15 +27,15 @@ repository without splitting into unrelated orchestration owners.
 
 1. **Given** a valid cluster whose primary and member workspaces all satisfy the
    bounded workspace checks, **When** the operator starts one multi-workspace
-   delivery task, **Then** Synod plans the work against the cluster context and
+   delivery task, **Then** Boundline plans the work against the cluster context and
    records one authoritative follow-up owner for the overall run.
 2. **Given** a clustered task whose bounded plan requires reading or mutating
-   more than one member workspace, **When** Synod executes the task, **Then** it
+   more than one member workspace, **When** Boundline executes the task, **Then** it
    records which member workspaces participated and keeps the work inside one
    bounded delivery story instead of creating unrelated runs.
 3. **Given** a clustered task reaches a member workspace that is missing
    required context, blocked, or no longer credible for the next bounded step,
-   **When** Synod cannot continue safely, **Then** it stops in an explicit
+   **When** Boundline cannot continue safely, **Then** it stops in an explicit
    non-success state that names the blocking workspace and preserves the
    authoritative follow-up owner.
 
@@ -60,16 +60,16 @@ recommended next action without ambiguity.
 
 1. **Given** a multi-workspace run that succeeded after touching more than one
    member workspace, **When** the operator reads the follow-up surfaces,
-   **Then** Synod makes explicit which cluster and member workspaces
+   **Then** Boundline makes explicit which cluster and member workspaces
    participated and which route still owns the delivery story.
 2. **Given** a multi-workspace run is paused, blocked, or failed in one member
    workspace, **When** the operator checks follow-up status or inspection,
-   **Then** Synod identifies the blocking workspace, the current authority, and
+   **Then** Boundline identifies the blocking workspace, the current authority, and
    the next corrective action without implying that another workspace is
    authoritative.
 3. **Given** the latest authoritative follow-up state is inspect-only rather
    than resumable execution, **When** the operator checks clustered follow-up,
-   **Then** Synod preserves that inspect-only guidance and still names the
+   **Then** Boundline preserves that inspect-only guidance and still names the
    cluster and member workspace context that produced it.
 
 ---

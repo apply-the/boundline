@@ -9,11 +9,11 @@
 cd /tmp/runtime-refoundation-workspace
 cargo init --lib runtime-refoundation-workspace
 
-cargo run --bin synod -- start --workspace .
-cargo run --bin synod -- capture --workspace . --goal "fix the failing add test"
-cargo run --bin synod -- plan --workspace . --flow bug-fix
-cargo run --bin synod -- run --workspace .
-cargo run --bin synod -- inspect --workspace .
+cargo run --bin boundline -- start --workspace .
+cargo run --bin boundline -- capture --workspace . --goal "fix the failing add test"
+cargo run --bin boundline -- plan --workspace . --flow bug-fix
+cargo run --bin boundline -- run --workspace .
+cargo run --bin boundline -- inspect --workspace .
 ```
 
 **Expected**:
@@ -25,10 +25,10 @@ cargo run --bin synod -- inspect --workspace .
 
 ```bash
 cd /tmp/runtime-refoundation-workspace
-cargo run --bin synod -- start --workspace .
-cargo run --bin synod -- capture --workspace . --goal "fix the failing auth test"
-cargo run --bin synod -- plan --workspace .
-cargo run --bin synod -- run --workspace .
+cargo run --bin boundline -- start --workspace .
+cargo run --bin boundline -- capture --workspace . --goal "fix the failing auth test"
+cargo run --bin boundline -- plan --workspace .
+cargo run --bin boundline -- run --workspace .
 ```
 
 **Expected**:
@@ -40,25 +40,25 @@ cargo run --bin synod -- run --workspace .
 
 ```bash
 cd /tmp/runtime-refoundation-workspace
-cargo run --bin synod -- start --workspace .
-cargo run --bin synod -- capture --workspace . --goal "repair the broken parser behavior"
-cargo run --bin synod -- plan --workspace . --no-flow
-cargo run --bin synod -- run --workspace .
-cargo run --bin synod -- status --workspace .
-cargo run --bin synod -- inspect --workspace .
+cargo run --bin boundline -- start --workspace .
+cargo run --bin boundline -- capture --workspace . --goal "repair the broken parser behavior"
+cargo run --bin boundline -- plan --workspace . --no-flow
+cargo run --bin boundline -- run --workspace .
+cargo run --bin boundline -- status --workspace .
+cargo run --bin boundline -- inspect --workspace .
 ```
 
 **Expected**:
 - If a bounded action fails verification, the failed decision remains visible.
 - Recovery or replan behavior references the preserved failure evidence.
-- Terminal output explains whether Synod recovered, exhausted its limits, or stopped because no credible next action remained.
+- Terminal output explains whether Boundline recovered, exhausted its limits, or stopped because no credible next action remained.
 
 ## Scenario 4: Compatibility Mode Remains Explicit
 
 ```bash
 cd /tmp/runtime-refoundation-compat
-mkdir -p .synod
-cat > .synod/execution.json <<'EOF'
+mkdir -p .boundline
+cat > .boundline/execution.json <<'EOF'
 {
   "name": "compat-profile",
   "limits": { "max_steps": 5, "max_retries": 1 },
@@ -66,11 +66,11 @@ cat > .synod/execution.json <<'EOF'
 }
 EOF
 
-cargo run --bin synod -- run --workspace .
+cargo run --bin boundline -- run --workspace .
 ```
 
 **Expected**:
-- Synod uses the compatibility path because declarative execution is the only available route.
+- Boundline uses the compatibility path because declarative execution is the only available route.
 - Status and inspect surfaces make the compatibility route explicit.
 
 ## Scenario 5: Canon Inputs Stay At Planning And Stage Boundaries
@@ -85,14 +85,14 @@ cat > .canon/requirements.md <<'EOF'
 - preserve auditability
 EOF
 
-cargo run --bin synod -- start --workspace .
-cargo run --bin synod -- capture --workspace . --goal "implement a bounded workspace summary"
-cargo run --bin synod -- plan --workspace . --no-flow
+cargo run --bin boundline -- start --workspace .
+cargo run --bin boundline -- capture --workspace . --goal "implement a bounded workspace summary"
+cargo run --bin boundline -- plan --workspace . --no-flow
 ```
 
 **Expected**:
 - Planning may cite Canon artifacts as bounded evidence inputs.
-- Per-action runtime control remains Synod-owned and does not require Canon to choose each next action.
+- Per-action runtime control remains Boundline-owned and does not require Canon to choose each next action.
 
 ## Validation Commands
 

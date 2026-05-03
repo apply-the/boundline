@@ -2,15 +2,15 @@
 
 ## Purpose
 
-Define how Synod exposes Canon-grounded reasoning and compact memory through the
+Define how Boundline exposes Canon-grounded reasoning and compact memory through the
 normal read-side operator surfaces.
 
 ## Covered surfaces
 
-- `synod run`
-- `synod status`
-- `synod next`
-- `synod inspect`
+- `boundline run`
+- `boundline status`
+- `boundline next`
+- `boundline inspect`
 
 ## Required behavior
 

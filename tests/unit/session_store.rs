@@ -1,17 +1,18 @@
 use std::fs;
 use std::path::PathBuf;
 
+use boundline::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
+use boundline::domain::limits::RunLimits;
+use boundline::domain::plan::Plan;
+use boundline::domain::session::{ActiveSessionRecord, SessionStatus};
+use boundline::domain::step::Step;
+use boundline::domain::task::{Task, TaskRunRequest};
 use serde_json::json;
-use synod::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
-use synod::domain::limits::RunLimits;
-use synod::domain::plan::Plan;
-use synod::domain::session::{ActiveSessionRecord, SessionStatus};
-use synod::domain::step::Step;
-use synod::domain::task::{Task, TaskRunRequest};
 use uuid::Uuid;
 
 fn temp_workspace() -> PathBuf {
-    let workspace = std::env::temp_dir().join(format!("synod-session-store-{}", Uuid::new_v4()));
+    let workspace =
+        std::env::temp_dir().join(format!("boundline-session-store-{}", Uuid::new_v4()));
     fs::create_dir_all(&workspace).unwrap();
     workspace
 }
@@ -47,7 +48,7 @@ fn build_record(workspace_ref: &str) -> ActiveSessionRecord {
         active_flow_policy: None,
         latest_status: SessionStatus::Planned,
         latest_terminal_reason: None,
-        latest_trace_ref: Some(format!("{workspace_ref}/.synod/traces/task-1.json")),
+        latest_trace_ref: Some(format!("{workspace_ref}/.boundline/traces/task-1.json")),
         created_at: 10,
         updated_at: 20,
     }
@@ -60,7 +61,7 @@ fn file_session_store_round_trips_a_valid_record() {
     let record = build_record(workspace.to_str().unwrap());
 
     let path = store.persist(&record).unwrap();
-    assert_eq!(path, workspace.join(".synod").join("session.json"));
+    assert_eq!(path, workspace.join(".boundline").join("session.json"));
 
     let loaded = store.load().unwrap().unwrap();
     assert_eq!(loaded, record);
@@ -108,7 +109,7 @@ fn file_session_store_reports_invalid_persisted_records_during_load() {
     let mut record = build_record(workspace.to_str().unwrap());
     record.goal = None;
 
-    let session_path = workspace.join(".synod").join("session.json");
+    let session_path = workspace.join(".boundline").join("session.json");
     fs::create_dir_all(session_path.parent().unwrap()).unwrap();
     fs::write(&session_path, serde_json::to_vec_pretty(&record).unwrap()).unwrap();
 

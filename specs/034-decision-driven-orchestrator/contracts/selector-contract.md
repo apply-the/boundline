@@ -23,5 +23,5 @@ instead of relying on implicit static step order.
 
 ## Failure Contract
 
-- If no credible selector exists, Synod must surface `ask`, `replan`, or an
+- If no credible selector exists, Boundline must surface `ask`, `replan`, or an
   explicit terminal stop instead of silently walking a fallback plan step.

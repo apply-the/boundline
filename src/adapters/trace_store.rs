@@ -22,7 +22,7 @@ impl FileTraceStore {
     }
 
     pub fn for_workspace(workspace_ref: impl AsRef<Path>) -> Self {
-        Self::new(workspace_ref.as_ref().join(".synod").join("traces"))
+        Self::new(workspace_ref.as_ref().join(".boundline").join("traces"))
     }
 
     pub fn root(&self) -> &Path {
@@ -110,7 +110,8 @@ mod tests {
     use crate::domain::trace::{ExecutionTrace, TraceEventType};
 
     fn temp_workspace() -> PathBuf {
-        let workspace = std::env::temp_dir().join(format!("synod-trace-store-{}", Uuid::new_v4()));
+        let workspace =
+            std::env::temp_dir().join(format!("boundline-trace-store-{}", Uuid::new_v4()));
         fs::create_dir_all(&workspace).unwrap();
         workspace
     }
@@ -159,7 +160,7 @@ mod tests {
     #[test]
     fn latest_returns_none_when_the_trace_directory_is_missing() {
         let workspace = temp_workspace();
-        let trace_root = workspace.join(".synod").join("traces");
+        let trace_root = workspace.join(".boundline").join("traces");
         fs::remove_dir_all(&workspace).unwrap();
 
         let store = FileTraceStore::new(trace_root);

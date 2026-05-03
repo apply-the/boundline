@@ -2,6 +2,7 @@ pub mod brief;
 pub mod cluster;
 pub mod configuration;
 pub mod decision;
+pub mod distribution;
 pub mod domain_templates;
 pub mod execution;
 pub mod flow;

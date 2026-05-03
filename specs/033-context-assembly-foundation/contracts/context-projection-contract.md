@@ -2,7 +2,7 @@
 
 ## Goal
 
-Operators can recover context-pack meaning from the existing primary Synod CLI surfaces.
+Operators can recover context-pack meaning from the existing primary Boundline CLI surfaces.
 
 ## Required Surfaces
 

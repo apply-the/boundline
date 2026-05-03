@@ -2,7 +2,7 @@
 
 ## Decision 1: Represent the first-party domain catalog as built-in template definitions plus scoped overlays
 
-- **Decision**: Add one built-in domain-template catalog inside Synod's Rust
+- **Decision**: Add one built-in domain-template catalog inside Boundline's Rust
   domain model and layer operator-managed standards on top of it through the
   existing scoped configuration surfaces.
 - **Rationale**: The feature needs one authoritative product-owned catalog for
@@ -23,12 +23,12 @@
 - **Decision**: Extend the current workspace, cluster, and global config
   hierarchy with per-family domain-template settings that carry enablement,
   scoped standards text, and bound external context inputs.
-- **Rationale**: Synod already resolves configuration across workspace,
+- **Rationale**: Boundline already resolves configuration across workspace,
   cluster, and global scopes, and `config show` already explains effective
   source attribution. Reusing that hierarchy makes shared standards and local
   overrides inspectable without inventing a second persistence model.
 - **Alternatives considered**:
-  - Create a dedicated `.synod/agents/` storage subsystem. Rejected for this
+  - Create a dedicated `.boundline/agents/` storage subsystem. Rejected for this
     slice because it would add a second configuration plane before the product
     has proven the core domain-selection behavior.
   - Limit domain settings to workspace scope only. Rejected because the feature
@@ -53,12 +53,12 @@
 ## Decision 4: Treat Canon-governed artifacts and external context bindings as supporting inputs, not owners of template selection
 
 - **Decision**: Let Canon-governed artifacts and bound external inputs augment
-  the applied domain context as optional or required evidence, but keep Synod
+  the applied domain context as optional or required evidence, but keep Boundline
   responsible for domain-family selection, precedence, and terminal behavior.
 - **Rationale**: Canon and external sources such as design references, design
   systems, token sources, or platform contracts improve bounded delivery only
   when they remain visible supporting inputs rather than hidden control-flow
-  owners. This preserves Synod's product identity and constitution.
+  owners. This preserves Boundline's product identity and constitution.
 - **Alternatives considered**:
   - Make Canon or external context providers decide the active template.
     Rejected because that would violate external-system separation.

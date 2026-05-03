@@ -6,7 +6,7 @@ Define the workspace-local review contract that extends the existing execution p
 
 ## Location
 
-- Embedded under `<workspace>/.synod/execution.json`
+- Embedded under `<workspace>/.boundline/execution.json`
 
 ## Preferred JSON shape
 

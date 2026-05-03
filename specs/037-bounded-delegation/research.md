@@ -2,10 +2,10 @@
 
 ## Decision 1: Extend routing configuration with explicit runtime capability descriptors
 
-- **Decision**: Add a structured runtime capability declaration to Synod's
+- **Decision**: Add a structured runtime capability declaration to Boundline's
   existing routing configuration so slot routing is no longer limited to
   runtime plus model identity.
-- **Rationale**: Synod already persists effective routing and assistant
+- **Rationale**: Boundline already persists effective routing and assistant
   bindings, but it cannot currently express whether a route can resume, support
   validation-oriented follow-through, or credibly own a delegated handoff.
   Declared capability descriptors make blocked continuity predictable before a
@@ -25,7 +25,7 @@
   model routing surface intact.
 - **Rationale**: The useful lesson from Gas Town is not provider theatricality;
   it is that operators need to declare where high-cost reasoning is worthwhile
-  and where lighter effort is acceptable. Slot policy preserves Synod's product
+  and where lighter effort is acceptable. Slot policy preserves Boundline's product
   identity and avoids a second abstraction stack.
 - **Alternatives considered**:
   - Add provider-wide cost tiers detached from slot routing. Rejected because it
@@ -44,7 +44,7 @@
   already the authority for bounded continuity, so extending them preserves one
   runtime story instead of creating an external inbox or separate ledger.
 - **Alternatives considered**:
-  - Create a new mailbox or packet file under `.synod/`. Rejected because it
+  - Create a new mailbox or packet file under `.boundline/`. Rejected because it
     would split continuity authority away from the active session.
   - Store packets only in traces. Rejected because later decisions need current
     authoritative continuity state before a new trace event exists.
@@ -54,7 +54,7 @@
 - **Decision**: Detect stuck delegated continuity from repeated blocked
   attempts, unchanged decisive evidence, unresolved packet reuse, or stale route
   declarations rather than introducing background health checks.
-- **Rationale**: Synod is a bounded sequential runtime, not a daemonized agent
+- **Rationale**: Boundline is a bounded sequential runtime, not a daemonized agent
   manager. Evidence-based stuck detection fits the current execution loop and
   constitution while still making failure and exhaustion explicit.
 - **Alternatives considered**:
@@ -83,7 +83,7 @@
 - **Decision**: The compatibility route may surface delegation and escalation
   language when its traces provide it, but native sessions remain the primary
   operator path and compatibility continuity remains explicitly trace-owned.
-- **Rationale**: Synod already distinguishes native session continuity from
+- **Rationale**: Boundline already distinguishes native session continuity from
   compatibility follow-up. The delegated execution slice should unify vocabulary
   without collapsing those authority boundaries.
 - **Alternatives considered**:

@@ -35,7 +35,7 @@ Represents one assistant-facing workflow command.
 
 | Field | Shape | Required | Notes |
 |-------|-------|----------|-------|
-| `command_name` | Enum | Yes | `synod-start`, `synod-plan`, `synod-step`, `synod-run`, `synod-status`, `synod-next`, or `synod-inspect` |
+| `command_name` | Enum | Yes | `boundline-start`, `boundline-plan`, `boundline-step`, `boundline-run`, `boundline-status`, `boundline-next`, or `boundline-inspect` |
 | `assistant_id` | Enum | Yes | Owning assistant pack |
 | `user_intent` | Non-empty string | Yes | Plain-language outcome the user expects |
 | `required_inputs` | Ordered list of input descriptors | Yes | Includes required and optional fields such as workspace, goal, or trace reference |
@@ -76,7 +76,7 @@ Represents the explicit conversational state carried across assistant commands.
 | Field | Shape | Required | Notes |
 |-------|-------|----------|-------|
 | `workspace_ref` | Path-like string | No | Required before any direct CLI command can run |
-| `goal` | Non-empty string | No | Required before `/synod-run`; may be clarified by `/synod-plan` |
+| `goal` | Non-empty string | No | Required before `/boundline-run`; may be clarified by `/boundline-plan` |
 | `latest_trace_ref` | Path-like string | No | Preferred for explicit inspection when available |
 | `latest_terminal_status` | Enum | No | Latest known terminal outcome from run or inspect results |
 | `last_command_name` | Enum | No | Most recent assistant command executed |

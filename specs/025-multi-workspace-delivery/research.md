@@ -19,7 +19,7 @@ teaching users a second delivery model just to cross repository boundaries.
   split orchestration ownership and duplicate follow-up semantics.
 - Keep cluster support limited to status/inspection only: rejected because it
   leaves multi-repository delivery as a manual convention rather than a bounded
-  Synod capability.
+  Boundline capability.
 
 ## R2: Persist clustered delivery state inside existing local state surfaces
 

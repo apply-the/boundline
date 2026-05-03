@@ -3,48 +3,48 @@
 ## Prerequisites
 
 - Work from the repository root.
-- Start with a workspace that either has no `.synod` directory yet or with a
+- Start with a workspace that either has no `.boundline` directory yet or with a
   workspace you are willing to reconfigure.
-- Use `cargo run --bin synod -- ...` when validating locally.
+- Use `cargo run --bin boundline -- ...` when validating locally.
 - Treat Claude, Codex, Copilot, and Gemini as the only supported runtime names
   in this slice.
 
 ## Scenario 1: Initialize a fresh bug-fix workspace
 
 ```bash
-cargo run --bin synod -- init \
+cargo run --bin boundline -- init \
   --workspace <workspace> \
   --template bug-fix \
   --assistant claude \
   --assistant copilot \
   --yes
 
-cargo run --bin synod -- doctor --workspace <workspace>
+cargo run --bin boundline -- doctor --workspace <workspace>
 ```
 
 Expected outcome:
 
-- Synod creates `.synod/execution.json` and `.synod/config.toml` for the workspace.
+- Boundline creates `.boundline/execution.json` and `.boundline/config.toml` for the workspace.
 - The init summary shows which files were created and which assistant surfaces were enabled.
 - `doctor` reports the workspace as ready for the bounded execution flow.
 
 ## Scenario 2: Set global defaults and override one workspace route
 
 ```bash
-cargo run --bin synod -- config set \
+cargo run --bin boundline -- config set \
   --scope global \
   --slot planning \
   --runtime claude \
   --model sonnet-4
 
-cargo run --bin synod -- config set \
+cargo run --bin boundline -- config set \
   --workspace <workspace> \
   --scope workspace \
   --slot planning \
   --runtime codex \
   --model gpt-5-codex
 
-cargo run --bin synod -- config show \
+cargo run --bin boundline -- config show \
   --workspace <workspace> \
   --scope effective
 ```
@@ -59,50 +59,50 @@ Expected outcome:
 ## Scenario 3: Configure distinct review and adjudication routes
 
 ```bash
-cargo run --bin synod -- config set \
+cargo run --bin boundline -- config set \
   --workspace <workspace> \
   --scope workspace \
   --reviewer safety \
   --runtime copilot \
   --model gpt-5.4
 
-cargo run --bin synod -- config set \
+cargo run --bin boundline -- config set \
   --workspace <workspace> \
   --scope workspace \
   --reviewer maintainability \
   --runtime claude \
   --model sonnet-4
 
-cargo run --bin synod -- config set \
+cargo run --bin boundline -- config set \
   --workspace <workspace> \
   --scope workspace \
   --adjudicator \
   --runtime codex \
   --model gpt-5-codex
 
-cargo run --bin synod -- config show \
+cargo run --bin boundline -- config show \
   --workspace <workspace> \
   --scope effective
 ```
 
 Expected outcome:
 
-- Synod stores separate routing for named reviewer roles and the adjudicator.
+- Boundline stores separate routing for named reviewer roles and the adjudicator.
 - Effective config output shows reviewer-specific routes overriding the review default.
 - The adjudicator route remains distinct from both reviewer roles.
 
 ## Scenario 4: Rerun init safely on an existing workspace
 
 ```bash
-cargo run --bin synod -- init \
+cargo run --bin boundline -- init \
   --workspace <workspace> \
   --template change
 ```
 
 Expected outcome:
 
-- Synod previews which files already exist and what would change.
-- If the rerun would overwrite existing config or assistant assets, Synod asks
+- Boundline previews which files already exist and what would change.
+- If the rerun would overwrite existing config or assistant assets, Boundline asks
   for explicit confirmation or exits without changing the repository.
 - No existing file is silently replaced.
 

@@ -2,7 +2,7 @@
 
 ## ExternalTaskInput
 
-- Purpose: Captures the raw user-facing request before Synod resolves files, deduplicates sources, or blocks for clarification.
+- Purpose: Captures the raw user-facing request before Boundline resolves files, deduplicates sources, or blocks for clarification.
 - Fields:
   - `input_id`: Stable identifier for the captured input attempt.
   - `origin_channel`: `cli` or `assistant`.
@@ -55,7 +55,7 @@
 
 ## ClarificationRecord
 
-- Purpose: Represents one explicit blocking question Synod must resolve before planning or execution can continue.
+- Purpose: Represents one explicit blocking question Boundline must resolve before planning or execution can continue.
 - Fields:
   - `clarification_id`: Stable identifier.
   - `reason_kind`: `missing_context`, `source_conflict`, `missing_source`, `unsupported_source`, or `unbounded_request`.
@@ -86,7 +86,7 @@
 
 ## DerivedTaskDraft
 
-- Purpose: Represents the bounded planning seed Synod derives from the normalized brief bundle before execution begins.
+- Purpose: Represents the bounded planning seed Boundline derives from the normalized brief bundle before execution begins.
 - Fields:
   - `draft_id`: Stable identifier for the derived task attempt.
   - `bundle_id`: Parent `AuthoredBriefBundle` identifier.

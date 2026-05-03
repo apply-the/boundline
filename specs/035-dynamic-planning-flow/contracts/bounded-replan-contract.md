@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define how Synod revises a previously proposed or confirmed plan when evidence
+Define how Boundline revises a previously proposed or confirmed plan when evidence
 changes.
 
 ## Preconditions
@@ -10,7 +10,7 @@ changes.
 - A current goal-plan proposal exists.
 - New evidence exists or the operator explicitly requests replanning.
 
-## `synod plan --replan`
+## `boundline plan --replan`
 
 ### Required behavior
 

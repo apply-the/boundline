@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 
+use boundline::cli::{Cli, DeveloperCommand};
 use clap::Parser;
-use synod::cli::{Cli, DeveloperCommand};
 
 #[test]
 fn capture_accepts_brief_only_invocation_with_multiple_briefs() {
     let cli = Cli::try_parse_from([
-        "synod",
+        "boundline",
         "capture",
         "--workspace",
         "/tmp/ws",
@@ -29,7 +29,7 @@ fn capture_accepts_brief_only_invocation_with_multiple_briefs() {
 #[test]
 fn capture_accepts_goal_with_a_single_brief() {
     let cli = Cli::try_parse_from([
-        "synod",
+        "boundline",
         "capture",
         "--workspace",
         ".",
@@ -50,8 +50,8 @@ fn capture_accepts_goal_with_a_single_brief() {
 
 #[test]
 fn run_accepts_brief_only_invocation() {
-    let cli =
-        Cli::try_parse_from(["synod", "run", "--workspace", ".", "--brief", "brief.md"]).unwrap();
+    let cli = Cli::try_parse_from(["boundline", "run", "--workspace", ".", "--brief", "brief.md"])
+        .unwrap();
     match cli.command {
         DeveloperCommand::Run { goal, brief, .. } => {
             assert!(goal.is_none());
@@ -65,7 +65,7 @@ fn run_accepts_brief_only_invocation() {
 fn capture_without_goal_or_brief_still_parses_clap() {
     // Validation is performed at session level; clap itself accepts the bare invocation
     // because both --goal and --brief are optional.
-    let cli = Cli::try_parse_from(["synod", "capture", "--workspace", "."]).unwrap();
+    let cli = Cli::try_parse_from(["boundline", "capture", "--workspace", "."]).unwrap();
     match cli.command {
         DeveloperCommand::Capture { goal, brief, .. } => {
             assert!(goal.is_none());

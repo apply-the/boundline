@@ -35,9 +35,9 @@
 
 ## Phase 3: User Story 1 - Deliver a bounded code change (Priority: P1) MVP
 
-**Goal**: Let `synod run` and the non-flow session path apply a real workspace change set, run validation, and stop in an explicit terminal state with inspectable evidence.
+**Goal**: Let `boundline run` and the non-flow session path apply a real workspace change set, run validation, and stop in an explicit terminal state with inspectable evidence.
 
-**Independent Test**: Run Synod against a temporary Rust workspace containing `.synod/execution.json`, confirm files are modified, validation passes, and the resulting trace exposes change evidence.
+**Independent Test**: Run Boundline against a temporary Rust workspace containing `.boundline/execution.json`, confirm files are modified, validation passes, and the resulting trace exposes change evidence.
 
 ### Tests for User Story 1
 
@@ -45,7 +45,7 @@
 
 - [x] T009 [P] [US1] Add unit coverage for execution-profile validation and legacy fixture conversion in tests/unit/execution_profile.rs
 - [x] T010 [P] [US1] Add contract coverage for diagnostics and run-command success output in tests/contract/execution_profile_contract.rs and tests/contract/run_command_contract.rs
-- [x] T011 [P] [US1] Add integration coverage for `synod run` applying execution-profile changes and persisting trace evidence in tests/integration/cli_custom_run.rs and tests/integration/fixture_vertical_slice.rs
+- [x] T011 [P] [US1] Add integration coverage for `boundline run` applying execution-profile changes and persisting trace evidence in tests/integration/cli_custom_run.rs and tests/integration/fixture_vertical_slice.rs
 
 ### Implementation for User Story 1
 
@@ -54,7 +54,7 @@
 - [x] T014 [US1] Integrate validation-command execution and succeeded terminal projection in src/cli/run.rs, src/orchestrator/engine.rs, and src/fixture.rs
 - [x] T015 [US1] Surface changed files and latest validation result in status and inspect output in src/domain/session.rs, src/cli/output.rs, and src/cli/inspect.rs
 
-**Checkpoint**: User Story 1 is complete when Synod can deliver a real workspace change with passing validation and inspectable evidence.
+**Checkpoint**: User Story 1 is complete when Boundline can deliver a real workspace change with passing validation and inspectable evidence.
 
 ---
 
@@ -62,7 +62,7 @@
 
 **Goal**: Keep failed validation inside the same bounded delivery run through explicit retry or replan behavior driven by later execution attempts.
 
-**Independent Test**: Execute a profile with multiple attempts where the first validation fails and confirm that Synod records the failure, replans or retries within limits, and either succeeds or reaches an explicit exhausted or failed terminal state.
+**Independent Test**: Execute a profile with multiple attempts where the first validation fails and confirm that Boundline records the failure, replans or retries within limits, and either succeeds or reaches an explicit exhausted or failed terminal state.
 
 ### Tests for User Story 2
 
@@ -156,7 +156,7 @@
 # Build the User Story 1 validation surface together:
 Task: "T009 Add unit coverage for execution-profile validation and legacy fixture conversion in tests/unit/execution_profile.rs"
 Task: "T010 Add contract coverage for diagnostics and run-command success output in tests/contract/execution_profile_contract.rs and tests/contract/run_command_contract.rs"
-Task: "T011 Add integration coverage for `synod run` applying execution-profile changes and persisting trace evidence in tests/integration/cli_custom_run.rs and tests/integration/fixture_vertical_slice.rs"
+Task: "T011 Add integration coverage for `boundline run` applying execution-profile changes and persisting trace evidence in tests/integration/cli_custom_run.rs and tests/integration/fixture_vertical_slice.rs"
 
 # Split parsing and evidence work after tests exist:
 Task: "T012 Implement execution-profile parsing, legacy fallback, and task-request preparation in src/domain/execution.rs and src/fixture.rs"

@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-05-02
-**Feature**: [/Users/rt/workspace/synod/specs/033-context-assembly-foundation/spec.md](/Users/rt/workspace/synod/specs/033-context-assembly-foundation/spec.md)
+**Feature**: [/Users/rt/workspace/boundline/specs/033-context-assembly-foundation/spec.md](/Users/rt/workspace/boundline/specs/033-context-assembly-foundation/spec.md)
 
 ## Content Quality
 

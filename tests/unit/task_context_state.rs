@@ -1,22 +1,22 @@
-use serde_json::{Map, Value, json};
-use synod::domain::cluster::{
+use boundline::domain::cluster::{
     ClusterDeliveryStory, ClusterRouteOwner, ClusterSessionProjection, ClusteredExecutionCondition,
     ClusteredExecutionKind, WorkspaceParticipationKind, WorkspaceParticipationRecord,
 };
-use synod::domain::governance::{
+use boundline::domain::governance::{
     ApprovalState, AutopilotAction, AutopilotDecisionRecord, CanonCapabilitySnapshot,
     CompactedCanonMemory, GovernanceLifecycleState, GovernanceRuntimeKind, GovernedStagePacket,
     GovernedStageRecord, MemoryCredibilityState, PacketReadiness, PacketReuseBinding,
 };
-use synod::domain::limits::RunLimits;
-use synod::domain::step::{ErrorInfo, Recoverability, Step, StepResultSummary};
-use synod::domain::task::{
+use boundline::domain::limits::RunLimits;
+use boundline::domain::step::{ErrorInfo, Recoverability, Step, StepResultSummary};
+use boundline::domain::task::{
     ClarificationReasonKind, ClarificationRecord, ClarificationStatus, DerivedTaskDraft,
 };
-use synod::domain::task_context::{
+use boundline::domain::task_context::{
     LATEST_CANON_CAPABILITY_SNAPSHOT_KEY, LATEST_COMPACTED_CANON_MEMORY_KEY,
     LATEST_GOVERNANCE_STAGE_KEY, TaskContext, TaskContextError,
 };
+use serde_json::{Map, Value, json};
 
 #[test]
 fn task_context_merges_state_patches_and_repairs_nested_buckets() {
@@ -25,7 +25,7 @@ fn task_context_merges_state_patches_and_repairs_nested_buckets() {
 
     let mut context = TaskContext::new(
         "session-context",
-        "/tmp/synod-context",
+        "/tmp/boundline-context",
         RunLimits::default(),
         initial_state,
     );
@@ -43,7 +43,7 @@ fn task_context_merges_state_patches_and_repairs_nested_buckets() {
 
     let mut failed_step = Step::decision("verify", json!({})).unwrap();
     failed_step.mark_failed(
-        synod::domain::step::ErrorInfo::new("retryable", "try again"),
+        boundline::domain::step::ErrorInfo::new("retryable", "try again"),
         Recoverability::Retryable,
     );
     context.set_last_result(StepResultSummary::from_step(&failed_step));
@@ -55,8 +55,12 @@ fn task_context_merges_state_patches_and_repairs_nested_buckets() {
 
 #[test]
 fn task_context_round_trips_governance_state_records() {
-    let mut context =
-        TaskContext::new("session-context", "/tmp/synod-context", RunLimits::default(), Map::new());
+    let mut context = TaskContext::new(
+        "session-context",
+        "/tmp/boundline-context",
+        RunLimits::default(),
+        Map::new(),
+    );
     let record = GovernedStageRecord {
         stage_key: "bug-fix:investigate".to_string(),
         runtime: GovernanceRuntimeKind::Local,
@@ -117,7 +121,7 @@ fn task_context_reports_invalid_governance_state_payloads() {
     initial_state.insert(LATEST_GOVERNANCE_STAGE_KEY.to_string(), json!("broken"));
     let context = TaskContext::new(
         "session-context",
-        "/tmp/synod-context",
+        "/tmp/boundline-context",
         RunLimits::default(),
         initial_state,
     );
@@ -132,8 +136,12 @@ fn task_context_reports_invalid_governance_state_payloads() {
 
 #[test]
 fn task_context_round_trips_canon_snapshot_and_compacted_memory() {
-    let mut context =
-        TaskContext::new("session-context", "/tmp/synod-context", RunLimits::default(), Map::new());
+    let mut context = TaskContext::new(
+        "session-context",
+        "/tmp/boundline-context",
+        RunLimits::default(),
+        Map::new(),
+    );
     let snapshot = CanonCapabilitySnapshot {
         canon_version: "0.39.0".to_string(),
         supported_schema_versions: vec!["2026-02-01".to_string()],
@@ -172,7 +180,7 @@ fn task_context_reports_invalid_canon_memory_payloads() {
     initial_state.insert(LATEST_COMPACTED_CANON_MEMORY_KEY.to_string(), json!("broken"));
     let context = TaskContext::new(
         "session-context",
-        "/tmp/synod-context",
+        "/tmp/boundline-context",
         RunLimits::default(),
         initial_state,
     );
@@ -198,13 +206,13 @@ fn task_context_failure_helpers_cover_workspace_membership_and_error_buckets() {
     initial_state.insert("step_errors".to_string(), Value::String("broken".to_string()));
     let mut context = TaskContext::new(
         "session-context",
-        "/tmp/synod-context",
+        "/tmp/boundline-context",
         RunLimits::default(),
         initial_state,
     );
     let error = ErrorInfo::new("terminal", "boom");
 
-    assert!(context.belongs_to_workspace("/tmp/synod-context"));
+    assert!(context.belongs_to_workspace("/tmp/boundline-context"));
     assert!(!context.belongs_to_workspace("/tmp/other-workspace"));
 
     context.apply_failure_error("verify", &error);
@@ -216,8 +224,12 @@ fn task_context_failure_helpers_cover_workspace_membership_and_error_buckets() {
 
 #[test]
 fn task_context_round_trips_clarification_and_derived_draft_records() {
-    let mut context =
-        TaskContext::new("session-context", "/tmp/synod-context", RunLimits::default(), Map::new());
+    let mut context = TaskContext::new(
+        "session-context",
+        "/tmp/boundline-context",
+        RunLimits::default(),
+        Map::new(),
+    );
     let clarification = ClarificationRecord {
         clarification_id: "clarification-1".to_string(),
         reason_kind: ClarificationReasonKind::UnboundedRequest,
@@ -289,7 +301,7 @@ fn task_context_round_trips_cluster_delivery_story() {
             workspace_ref: "/tmp/cluster-primary".to_string(),
             participation_kind: WorkspaceParticipationKind::Entry,
             order: 0,
-            latest_trace_ref: Some("/tmp/cluster-primary/.synod/traces/task.json".to_string()),
+            latest_trace_ref: Some("/tmp/cluster-primary/.boundline/traces/task.json".to_string()),
             latest_status: Some("succeeded".to_string()),
             headline: "primary workspace executed the entry slice".to_string(),
             terminal_reason: None,

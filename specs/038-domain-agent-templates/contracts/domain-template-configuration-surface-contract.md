@@ -5,7 +5,7 @@
 
 ## Purpose
 
-Define how Synod exposes domain-family activation, standards layering, and
+Define how Boundline exposes domain-family activation, standards layering, and
 effective source attribution through initialization and configuration surfaces.
 
 ## Required Surface

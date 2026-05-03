@@ -14,7 +14,7 @@ surfaces operators already use to understand execution and follow-up state.
 
 **Given** workspace, cluster, global, and built-in routing defaults can all
 contribute to the effective route  
-**When** `cargo run --bin synod -- run --workspace <workspace>` succeeds or
+**When** `cargo run --bin boundline -- run --workspace <workspace>` succeeds or
 stops in a bounded terminal condition  
 **Then** the runtime summary must expose:
 - the active bounded slot or routing headline

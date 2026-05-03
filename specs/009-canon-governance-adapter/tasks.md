@@ -30,15 +30,15 @@
 - [X] T008 Implement governance manifest loading, stage-policy lookup, default-runtime handling, and stage-to-mode whitelist validation in src/domain/execution.rs, src/domain/flow.rs, and src/fixture.rs after the governance domain types in src/domain/governance.rs exist
 - [X] T009 Implement shared governed-attempt lineage, state-patch helpers, and orchestrator persistence hooks in src/orchestrator/governance.rs, src/orchestrator/session_runtime.rs, and src/orchestrator/engine.rs
 
-**Checkpoint**: Foundation ready - governance profiles can be loaded, persisted, traced, and projected through the existing Synod execution lifecycle.
+**Checkpoint**: Foundation ready - governance profiles can be loaded, persisted, traced, and projected through the existing Boundline execution lifecycle.
 
 ---
 
-## Phase 3: User Story 1 - Govern A Synod Stage Through A Local-First Runtime (Priority: P1) 🎯 MVP
+## Phase 3: User Story 1 - Govern A Boundline Stage Through A Local-First Runtime (Priority: P1) 🎯 MVP
 
-**Goal**: Route a built-in stage through one explicit governance runtime, keep Synod in control of the delivery loop, and block visibly when required governance cannot proceed.
+**Goal**: Route a built-in stage through one explicit governance runtime, keep Boundline in control of the delivery loop, and block visibly when required governance cannot proceed.
 
-**Independent Test**: Start a governed built-in flow with Canon unavailable or disabled, verify that Synod selects the local runtime, records explicit governance state, and either continues or stops in a visible governed state without silent ungoverned fallback.
+**Independent Test**: Start a governed built-in flow with Canon unavailable or disabled, verify that Boundline selects the local runtime, records explicit governance state, and either continues or stops in a visible governed state without silent ungoverned fallback.
 
 ### Tests for User Story 1
 
@@ -60,7 +60,7 @@
 
 **Goal**: Open Canon-backed governed runs for meaningful stages, validate packet readiness deterministically, and reuse bounded packets in later stages without exposing unbounded Canon context.
 
-**Independent Test**: Run a Canon-governed stage that produces a reusable packet, verify that Synod records Canon runtime state and packet provenance, and confirm that a later built-in stage consumes the bounded packet instead of rebuilding context from scratch.
+**Independent Test**: Run a Canon-governed stage that produces a reusable packet, verify that Boundline records Canon runtime state and packet provenance, and confirm that a later built-in stage consumes the bounded packet instead of rebuilding context from scratch.
 
 ### Tests for User Story 2
 
@@ -81,9 +81,9 @@
 
 ## Phase 5: User Story 3 - Use Autopilot To Choose A Compliant Governed Path (Priority: P3)
 
-**Goal**: Let Synod choose among bounded compliant governance actions, refresh approval state through existing commands, and block visibly when no compliant governed path remains.
+**Goal**: Let Boundline choose among bounded compliant governance actions, refresh approval state through existing commands, and block visibly when no compliant governed path remains.
 
-**Independent Test**: Run a governance-required stage with autopilot enabled, force a decision point with multiple compliant paths and an approval wait, and verify that Synod records the candidate actions, selected action, approval refresh, or blocked outcome without bypassing governance.
+**Independent Test**: Run a governance-required stage with autopilot enabled, force a decision point with multiple compliant paths and an approval wait, and verify that Boundline records the candidate actions, selected action, approval refresh, or blocked outcome without bypassing governance.
 
 ### Tests for User Story 3
 

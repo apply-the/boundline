@@ -7,35 +7,35 @@ cluster and inspecting its current session and trace state.
 
 ## Command Surface
 
-### `synod cluster init`
+### `boundline cluster init`
 
 ```text
-synod cluster init \
+boundline cluster init \
   --workspace <primary-workspace> \
   --cluster-id <cluster-id> \
   --member <workspace>... 
 ```
 
 - `--workspace` identifies the primary workspace that will own
-  `.synod/cluster.toml`.
+  `.boundline/cluster.toml`.
 - `--member` must be provided at least twice and must include the primary
   workspace.
 - Initialization must validate all members before persisting the cluster.
 
-### `synod cluster status`
+### `boundline cluster status`
 
 ```text
-synod cluster status \
+boundline cluster status \
   --workspace <primary-workspace>
 ```
 
 - Reads the cluster file from the primary workspace.
 - Lists every member workspace and a classified summary of its current state.
 
-### `synod cluster inspect`
+### `boundline cluster inspect`
 
 ```text
-synod cluster inspect \
+boundline cluster inspect \
   --workspace <primary-workspace>
 ```
 
@@ -47,7 +47,7 @@ synod cluster inspect \
 
 - Cluster init MUST canonicalize member paths before validation.
 - Cluster init MUST refuse to save partial membership if any member is invalid,
-  duplicated, or not a Synod workspace.
+  duplicated, or not a Boundline workspace.
 - Cluster status MUST enumerate every member in the saved cluster file.
 - Cluster status MUST classify members explicitly rather than collapsing missing
   or mismatched state into generic success.

@@ -3,7 +3,7 @@
 ## Command Surface
 
 ```text
-synod flow <name>
+boundline flow <name>
 ```
 
 ## Supported Names
@@ -33,14 +33,14 @@ On success, the command must:
 - Render the current session summary.
 - Include the selected flow name.
 - Include the current stage label and stage progress.
-- Recommend the next valid command, normally `synod plan` when a goal is already present.
+- Recommend the next valid command, normally `boundline plan` when a goal is already present.
 
 ## Error Cases
 
 ### Missing active session
 
 - Command fails with a clear message that a session must be started first.
-- Command recommends `synod start`.
+- Command recommends `boundline start`.
 
 ### Unknown flow name
 

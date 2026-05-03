@@ -42,7 +42,7 @@
 
 **Goal**: Make `start -> capture -> plan -> run -> inspect` the primary bounded delivery path driven by live state.
 
-**Independent Test**: Run the full session-native CLI journey on a workspace without a declarative execution profile and verify that Synod persists a bounded task draft, executes bounded decisions from live state, and records explicit terminal reasoning.
+**Independent Test**: Run the full session-native CLI journey on a workspace without a declarative execution profile and verify that Boundline persists a bounded task draft, executes bounded decisions from live state, and records explicit terminal reasoning.
 
 ### Tests for User Story 1
 
@@ -101,7 +101,7 @@
 - [X] T025 [US3] Narrow `fixture.rs` to explicit compatibility helpers and keep compatibility routing visible in `src/fixture.rs` and `src/cli/output.rs`
 - [X] T026 [US3] Restrict Canon participation to planning and stage-boundary evidence in `src/adapters/governance_runtime.rs`, `src/orchestrator/session_runtime.rs`, and `src/cli/inspect.rs`
 
-**Checkpoint**: Compatibility remains available without defining the product, and Canon remains downstream from Synod's per-action runtime logic.
+**Checkpoint**: Compatibility remains available without defining the product, and Canon remains downstream from Boundline's per-action runtime logic.
 
 ---
 

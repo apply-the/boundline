@@ -87,7 +87,7 @@ impl FollowThroughProjection {
                 next_action: view
                     .next_command
                     .clone()
-                    .or_else(|| Some("synod capture --goal <narrower goal>".to_string())),
+                    .or_else(|| Some("boundline capture --goal <narrower goal>".to_string())),
                 stop_reason: view
                     .context_staleness_reason
                     .clone()
@@ -350,7 +350,7 @@ mod tests {
             latest_governance_decision: None,
             latest_governance_candidates: None,
             governance_next_action: None,
-            next_command: Some("synod step".to_string()),
+            next_command: Some("boundline step".to_string()),
             explanation: "current active session state for the workspace".to_string(),
         });
 
@@ -359,7 +359,7 @@ mod tests {
             Some("selected src/lib.rs for the next bounded retry".to_string())
         );
         assert_eq!(projection.evidence_source, Some("session:recovery".to_string()));
-        assert_eq!(projection.next_action, Some("synod step".to_string()));
+        assert_eq!(projection.next_action, Some("boundline step".to_string()));
     }
 
     #[test]
@@ -371,7 +371,7 @@ mod tests {
         let projection = FollowThroughProjection {
             guidance: Some("inspect the authoritative trace".to_string()),
             evidence_source: Some("trace:context_pack".to_string()),
-            next_action: Some("synod inspect".to_string()),
+            next_action: Some("boundline inspect".to_string()),
             stop_reason: Some("stale".to_string()),
         };
 
@@ -381,7 +381,7 @@ mod tests {
             vec![
                 "follow_through_guidance: inspect the authoritative trace".to_string(),
                 "follow_through_evidence_source: trace:context_pack".to_string(),
-                "follow_through_next_action: synod inspect".to_string(),
+                "follow_through_next_action: boundline inspect".to_string(),
                 "follow_through_stop_reason: stale".to_string(),
             ]
         );
@@ -394,13 +394,13 @@ mod tests {
                 continuity_authority: Some(ContinuityAuthority::CompatibilityTrace),
                 compatibility_follow_up: Some(CompatibilityFollowUpView {
                     follow_up_mode: CompatibilityFollowUpMode::InspectOnly,
-                    trace_ref: "/tmp/workspace/.synod/traces/compat.json".to_string(),
+                    trace_ref: "/tmp/workspace/.boundline/traces/compat.json".to_string(),
                     routing_summary: "routing: compatibility (execution_profile)".to_string(),
                     execution_condition:
                         "execution_condition: blocked - inspect the authoritative trace".to_string(),
                     terminal_status: TaskStatus::Failed,
                     terminal_reason: "compatibility run failed".to_string(),
-                    next_command: "synod inspect --workspace /tmp/workspace".to_string(),
+                    next_command: "boundline inspect --workspace /tmp/workspace".to_string(),
                 }),
                 ..SessionStatusView::default()
             },
@@ -433,7 +433,7 @@ mod tests {
         assert_eq!(context_projection.evidence_source, Some("session:context_pack".to_string()));
         assert_eq!(
             context_projection.next_action,
-            Some("synod capture --goal <narrower goal>".to_string())
+            Some("boundline capture --goal <narrower goal>".to_string())
         );
         assert_eq!(context_projection.stop_reason, Some("trace snapshot is stale".to_string()));
     }
@@ -443,9 +443,9 @@ mod tests {
         let governance_projection =
             FollowThroughProjection::from_session_view(&SessionStatusView {
                 governance_next_action: Some(
-                    "wait for approval and rerun synod status".to_string(),
+                    "wait for approval and rerun boundline status".to_string(),
                 ),
-                next_command: Some("synod status".to_string()),
+                next_command: Some("boundline status".to_string()),
                 ..SessionStatusView::default()
             });
         assert_eq!(governance_projection.evidence_source, Some("session:governance".to_string()));
@@ -453,7 +453,7 @@ mod tests {
         let exhaustion_projection =
             FollowThroughProjection::from_session_view(&SessionStatusView {
                 latest_exhaustion_reason: Some("retry limits exhausted".to_string()),
-                next_command: Some("synod inspect".to_string()),
+                next_command: Some("boundline inspect".to_string()),
                 ..SessionStatusView::default()
             });
         assert_eq!(exhaustion_projection.stop_reason, Some("retry limits exhausted".to_string()));
@@ -462,7 +462,7 @@ mod tests {
             latest_selection_reason: Some(
                 "selected src/lib.rs based on failing test evidence".to_string(),
             ),
-            next_command: Some("synod step".to_string()),
+            next_command: Some("boundline step".to_string()),
             ..SessionStatusView::default()
         });
         assert_eq!(
@@ -476,7 +476,7 @@ mod tests {
         let decision_projection = FollowThroughProjection::from_session_view(&SessionStatusView {
             latest_decision_status: Some("failed".to_string()),
             latest_decision_target: Some("src/lib.rs".to_string()),
-            next_command: Some("synod step".to_string()),
+            next_command: Some("boundline step".to_string()),
             ..SessionStatusView::default()
         });
         assert_eq!(
@@ -488,7 +488,7 @@ mod tests {
         );
 
         let lifecycle_projection = FollowThroughProjection::from_session_view(&SessionStatusView {
-            next_command: Some("synod step".to_string()),
+            next_command: Some("boundline step".to_string()),
             ..SessionStatusView::default()
         });
         assert_eq!(lifecycle_projection.evidence_source, Some("session:lifecycle".to_string()));
@@ -509,7 +509,7 @@ mod tests {
                 ),
                 ..TraceSummaryView::default()
             },
-            Some("synod capture --goal <narrower goal>"),
+            Some("boundline capture --goal <narrower goal>"),
         );
         assert_eq!(
             context_projection.guidance,
@@ -520,11 +520,11 @@ mod tests {
         let governance_projection = FollowThroughProjection::from_trace_summary(
             &TraceSummaryView {
                 governance_next_action: Some(
-                    "resolve the governance blocker, then rerun synod step".to_string(),
+                    "resolve the governance blocker, then rerun boundline step".to_string(),
                 ),
                 ..TraceSummaryView::default()
             },
-            Some("synod step"),
+            Some("boundline step"),
         );
         assert_eq!(governance_projection.evidence_source, Some("trace:governance".to_string()));
 
@@ -533,7 +533,7 @@ mod tests {
                 decision_timeline: vec!["decision_status: decision-1 verified".to_string()],
                 ..TraceSummaryView::default()
             },
-            Some("synod step"),
+            Some("boundline step"),
         );
         assert_eq!(
             decision_projection.guidance,
@@ -551,13 +551,13 @@ mod tests {
                 ),
                 ..TraceSummaryView::default()
             },
-            Some("synod inspect"),
+            Some("boundline inspect"),
         );
         assert_eq!(failure_projection.stop_reason, Some("trace failed".to_string()));
 
         let lifecycle_projection = FollowThroughProjection::from_trace_summary(
             &TraceSummaryView::default(),
-            Some("synod inspect"),
+            Some("boundline inspect"),
         );
         assert_eq!(lifecycle_projection.evidence_source, Some("trace:lifecycle".to_string()));
     }
@@ -567,12 +567,12 @@ mod tests {
         let projection =
             FollowThroughProjection::from_compatibility_follow_up(&CompatibilityFollowUpView {
                 follow_up_mode: CompatibilityFollowUpMode::Resumable,
-                trace_ref: "/tmp/workspace/.synod/traces/compat.json".to_string(),
+                trace_ref: "/tmp/workspace/.boundline/traces/compat.json".to_string(),
                 routing_summary: "routing: compatibility (execution_profile)".to_string(),
                 execution_condition: "execution_condition: waiting - inspect trace".to_string(),
                 terminal_status: TaskStatus::Failed,
                 terminal_reason: "compatibility trace failed".to_string(),
-                next_command: "synod inspect --workspace /tmp/workspace".to_string(),
+                next_command: "boundline inspect --workspace /tmp/workspace".to_string(),
             });
 
         assert_eq!(

@@ -2,18 +2,18 @@
 
 ## Purpose
 
-Define the minimum observable behavior of `synod run` when the execution engine is active.
+Define the minimum observable behavior of `boundline run` when the execution engine is active.
 
 ## Invocation
 
 ```bash
-cargo run --bin synod -- run --goal "<goal>" --workspace <workspace>
+cargo run --bin boundline -- run --goal "<goal>" --workspace <workspace>
 ```
 
 or, after a planned session exists:
 
 ```bash
-cargo run --bin synod -- run --workspace <workspace>
+cargo run --bin boundline -- run --workspace <workspace>
 ```
 
 ## Success contract
@@ -25,7 +25,7 @@ The terminal output MUST include, at minimum:
 - `terminal_status: succeeded`
 - `terminal_reason: <reason>`
 - `trace: <absolute trace path>`
-- `next_command: /synod-status` or equivalent post-success guidance
+- `next_command: /boundline-status` or equivalent post-success guidance
 
 If change evidence is available, the output SHOULD also include:
 
@@ -39,7 +39,7 @@ When the run fails or exhausts its limits, the terminal output MUST include:
 - the same `goal`, `trace`, and `terminal_reason` fields
 - `terminal_status: failed` or `terminal_status: exhausted`
 - visible evidence that the latest delivery attempt failed, including either change evidence, validation evidence, or both
-- `next_command: /synod-next` or equivalent recovery guidance
+- `next_command: /boundline-next` or equivalent recovery guidance
 
 ## Exit status contract
 

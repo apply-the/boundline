@@ -1,13 +1,13 @@
-use synod::domain::execution::{
+use boundline::domain::execution::{
     AdaptiveChangeKind, AdaptiveExecutionProfile, ExecutionAttemptDefinition, ExecutionCommand,
     ExecutionFailureMode, WorkspaceChange, WorkspaceExecutionProfile,
 };
-use synod::domain::limits::TerminalCondition;
-use synod::domain::review::{
+use boundline::domain::limits::TerminalCondition;
+use boundline::domain::review::{
     ReviewProfile, ReviewScenario, ReviewTrigger, ReviewerDefinition, ReviewerDisposition,
     ReviewerFinding, VoteRuleDefinition,
 };
-use synod::{Recoverability, RunLimits};
+use boundline::{Recoverability, RunLimits};
 
 fn sample_profile() -> WorkspaceExecutionProfile {
     WorkspaceExecutionProfile {

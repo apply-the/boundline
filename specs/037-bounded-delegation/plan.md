@@ -1,13 +1,13 @@
 # Implementation Plan: Bounded Delegated Execution
 
-**Branch**: `037-bounded-delegation` | **Date**: 2026-05-03 | **Spec**: [/Users/rt/workspace/synod/specs/037-bounded-delegation/spec.md](/Users/rt/workspace/synod/specs/037-bounded-delegation/spec.md)
+**Branch**: `037-bounded-delegation` | **Date**: 2026-05-03 | **Spec**: [/Users/rt/workspace/boundline/specs/037-bounded-delegation/spec.md](/Users/rt/workspace/boundline/specs/037-bounded-delegation/spec.md)
 **Input**: Feature specification from `/specs/037-bounded-delegation/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
 
 ## Summary
 
-Extend Synod's session-native delivery path so routed execution is shaped by
+Extend Boundline's session-native delivery path so routed execution is shaped by
 declared runtime capability profiles and explicit effort policy rather than by
 implicit backend assumptions. Persist bounded handoff and escalation packets in
 existing session-owned state, detect when delegated continuity is stuck or
@@ -21,12 +21,12 @@ coverage for modified Rust files.
 
 **Language/Version**: Rust 1.95.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for this slice  
-**Storage**: Workspace-local `.synod/session.json`, `.synod/config.toml`, optional `.synod/workflows.toml`, persisted traces under `<workspace>/.synod/traces/`, optional `.synod/execution.json`, task-context state embedded in session tasks, and repository-managed docs plus assistant assets  
+**Storage**: Workspace-local `.boundline/session.json`, `.boundline/config.toml`, optional `.boundline/workflows.toml`, persisted traces under `<workspace>/.boundline/traces/`, optional `.boundline/execution.json`, task-context state embedded in session tasks, and repository-managed docs plus assistant assets  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, targeted unit, integration, and contract tests, `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features`, and `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`  
 **Target Platform**: macOS/Linux developer workstations and Linux CI
 **Project Type**: Single Rust CLI/library crate with file-backed session and trace state  
 **Execution Model**: Sequential session-native planning plus bounded observe -> decide -> act -> verify execution where runtime capability and effort policy may redirect continuity into explicit handoff or escalation packets without introducing hidden concurrency  
-**Observability Surface**: Persisted configuration, goal-plan/session/task-context state, decision-oriented traces under `.synod/traces/`, CLI summaries on `config show`, `run`, `status`, `next`, and `inspect`, plus release docs and assistant guidance that explain delegated continuity, packet state, and stuck detection  
+**Observability Surface**: Persisted configuration, goal-plan/session/task-context state, decision-oriented traces under `.boundline/traces/`, CLI summaries on `config show`, `run`, `status`, `next`, and `inspect`, plus release docs and assistant guidance that explain delegated continuity, packet state, and stuck detection  
 **Performance Goals**: Operators should recover the decisive capability rule, active delegation packet, and stuck reason from normal CLI output in under 2 minutes; blocked runs should stop with an explicit bounded reason on first blocked boundary rather than after repeated opaque retries; maintainers should complete release validation for the slice in under 20 minutes  
 **Constraints**: No new top-level runtime, no tmux or mailbox substrate, no distributed or parallel execution, no background workers, no generic long-term memory subsystem, no provider-abstraction refoundation, no Canon-owned control flow, and explicit compatibility follow-up remains subordinate and trace-authoritative  
 **Scale/Scope**: One workspace or registered cluster at a time, bounded by existing session/run limits, with one active delegation continuity story per current bounded goal and explicit packet history for superseded or resolved continuity
@@ -44,7 +44,7 @@ coverage for modified Rust files.
 - **PASS** Sequential-first design: Planning, decision selection, delegation, escalation, supersession, and stuck handling remain one-step-at-a-time state transitions with no concurrency or implicit fan-out. See Technical Context and quickstart.
 - **PASS** Tool-agent symmetry: Delegated reasoning remains visible through explicit route policy, handoff or escalation packets, and bounded next-action selection rather than hidden heuristics. See Summary, research, and contracts.
 - **PASS** Observability and explicit intelligence: Capability selection, effort policy, packet lineage, stuck markers, and supersession reasons are surfaced through traces and existing CLI summaries. See Technical Context, contracts, and quickstart.
-- **PASS** Non-goals and external separation: The slice does not depend on Canon or any external runtime to own Synod control flow and does not reintroduce councils, provider abstraction refoundation, long-term memory, UI work, or deployment pipelines. See Constraints, research, and spec.
+- **PASS** Non-goals and external separation: The slice does not depend on Canon or any external runtime to own Boundline control flow and does not reintroduce councils, provider abstraction refoundation, long-term memory, UI work, or deployment pipelines. See Constraints, research, and spec.
 - **PASS** Minimal slice: The smallest independently valuable capability is making blocked or redirected delivery continuity explicit through one session-owned delegation model informed by declared capability and effort policy. See Summary and research.
 
 ## Project Structure

@@ -8,7 +8,7 @@
 ### Governed Delivery Session
 
 The persisted session-native state for one bounded delivery attempt where
-Synod executes work and Canon may govern stage boundaries.
+Boundline executes work and Canon may govern stage boundaries.
 
 ```text
 GovernedDeliverySession
@@ -26,7 +26,7 @@ GovernedDeliverySession
 ```
 
 **Behavioral rules**:
-- The session remains Synod-owned even when Canon governs one or more stages.
+- The session remains Boundline-owned even when Canon governs one or more stages.
 - `latest_governance_state` must remain visible on the same read-side surfaces
   used for non-governed runs.
 - Terminal success is invalid when `latest_changed_files` is empty or
@@ -34,7 +34,7 @@ GovernedDeliverySession
 
 ### Governed Stage Packet
 
-The Canon-sourced packet or evidence that Synod may reuse across governed
+The Canon-sourced packet or evidence that Boundline may reuse across governed
 stages.
 
 ```text
@@ -57,7 +57,7 @@ GovernedStagePacket
 
 ### Delivery Completion Gate
 
-The minimal set of evidence required before Synod can mark a governed delivery
+The minimal set of evidence required before Boundline can mark a governed delivery
 as successfully completed.
 
 ```text

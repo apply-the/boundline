@@ -5,13 +5,13 @@
 
 ## Summary
 
-Ship repository-managed assistant command packs for Copilot, Codex, and Claude so developers can start, continue, inspect, and route Synod workflows from chat without memorizing long CLI invocations. The plan keeps the existing Rust CLI as the execution and inspection backend, documents assistant-only workflow commands for `start`, `plan`, `step`, `status`, and `next`, and validates the asset set with Rust-based contract and integration tests so assistant packs cannot drift from the CLI behavior they wrap.
+Ship repository-managed assistant command packs for Copilot, Codex, and Claude so developers can start, continue, inspect, and route Boundline workflows from chat without memorizing long CLI invocations. The plan keeps the existing Rust CLI as the execution and inspection backend, documents assistant-only workflow commands for `start`, `plan`, `step`, `status`, and `next`, and validates the asset set with Rust-based contract and integration tests so assistant packs cannot drift from the CLI behavior they wrap.
 
 ## Technical Context
 
 **Language/Version**: Rust 1.95.0, edition 2024 for the existing CLI backend plus repository-managed Markdown prompt assets for assistant command packs  
 **Primary Dependencies**: Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`); no new runtime dependencies for this slice  
-**Storage**: Repository-stored assistant asset files under `assistant/` and existing workspace-local traces under `<workspace>/.synod/traces/` for status and inspection backends  
+**Storage**: Repository-stored assistant asset files under `assistant/` and existing workspace-local traces under `<workspace>/.boundline/traces/` for status and inspection backends  
 **Testing**: `cargo test` with new contract, unit, and integration tests that load assistant assets, verify required command coverage and backend mappings, and exercise shell-enabled plus chat-only fallback flows against the current CLI  
 **Target Platform**: Copilot, Codex, and Claude environments used on macOS and Linux developer workstations, plus Linux CI for formatting, linting, tests, and asset drift validation  
 **Project Type**: Single Rust package with repository-managed assistant command assets layered over an existing local developer CLI  
@@ -25,7 +25,7 @@ Ship repository-managed assistant command packs for Copilot, Codex, and Claude s
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- Delivery identity: PASS. Summary, Technical Context, and contracts keep the feature focused on bounded engineering-task delivery by making existing Synod execution workflows usable from chat rather than introducing a generic assistant platform.
+- Delivery identity: PASS. Summary, Technical Context, and contracts keep the feature focused on bounded engineering-task delivery by making existing Boundline execution workflows usable from chat rather than introducing a generic assistant platform.
 - Delivery-first scope: PASS. Summary, Technical Context, research, and quickstart prioritize starting, running, inspecting, and routing real work ahead of assistant polish or platform-specific niceties.
 - Bounded execution: PASS. Technical Context, research, and the fallback contract keep every direct backend action to one explicit CLI invocation with existing terminal conditions, while assistant-only commands stop after collecting context or recommending a next action.
 - Stateful execution: PASS. Data model and fallback contract make workflow continuity explicit through conversation context fields such as workspace, goal, latest trace, and latest outcome instead of relying on hidden state.
@@ -60,31 +60,31 @@ assistant/
 ├── README.md
 ├── claude/
 │   └── commands/
-│       ├── synod-start.md
-│       ├── synod-plan.md
-│       ├── synod-step.md
-│       ├── synod-run.md
-│       ├── synod-status.md
-│       ├── synod-next.md
-│       └── synod-inspect.md
+│       ├── boundline-start.md
+│       ├── boundline-plan.md
+│       ├── boundline-step.md
+│       ├── boundline-run.md
+│       ├── boundline-status.md
+│       ├── boundline-next.md
+│       └── boundline-inspect.md
 ├── codex/
 │   └── commands/
-│       ├── synod-start.md
-│       ├── synod-plan.md
-│       ├── synod-step.md
-│       ├── synod-run.md
-│       ├── synod-status.md
-│       ├── synod-next.md
-│       └── synod-inspect.md
+│       ├── boundline-start.md
+│       ├── boundline-plan.md
+│       ├── boundline-step.md
+│       ├── boundline-run.md
+│       ├── boundline-status.md
+│       ├── boundline-next.md
+│       └── boundline-inspect.md
 └── copilot/
     └── prompts/
-        ├── synod-start.prompt.md
-        ├── synod-plan.prompt.md
-        ├── synod-step.prompt.md
-        ├── synod-run.prompt.md
-        ├── synod-status.prompt.md
-        ├── synod-next.prompt.md
-        └── synod-inspect.prompt.md
+        ├── boundline-start.prompt.md
+        ├── boundline-plan.prompt.md
+        ├── boundline-step.prompt.md
+        ├── boundline-run.prompt.md
+        ├── boundline-status.prompt.md
+        ├── boundline-next.prompt.md
+        └── boundline-inspect.prompt.md
 
 src/
 ├── cli.rs

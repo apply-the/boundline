@@ -6,24 +6,24 @@
 ## Scenario 1: Replan Adaptive Repair From Validation Hints
 
 ```bash
-cd /tmp/synod-adaptive-repair-depth
-cargo run --bin synod -- run --goal "Recover after adaptive validation points to a different file" --workspace .
-cargo run --bin synod -- status --workspace .
-cargo run --bin synod -- inspect --workspace .
+cd /tmp/boundline-adaptive-repair-depth
+cargo run --bin boundline -- run --goal "Recover after adaptive validation points to a different file" --workspace .
+cargo run --bin boundline -- status --workspace .
+cargo run --bin boundline -- inspect --workspace .
 ```
 
 **Expected**:
 - The first adaptive validation failure produces explicit failure evidence.
-- Synod chooses a materially different bounded adaptive candidate because of that validation evidence.
+- Boundline chooses a materially different bounded adaptive candidate because of that validation evidence.
 - `status` and `inspect` show the updated workspace slice, selection headline, attempt lineage, and terminal or recovery condition.
 
 ## Scenario 2: Keep Route Ownership Explicit In A Workspace With Other Surfaces
 
 ```bash
-cd /tmp/synod-adaptive-repair-depth
-cargo run --bin synod -- workflow list --workspace .
-cargo run --bin synod -- run --goal "Recover after adaptive validation points to a different file" --workspace .
-cargo run --bin synod -- next --workspace .
+cd /tmp/boundline-adaptive-repair-depth
+cargo run --bin boundline -- workflow list --workspace .
+cargo run --bin boundline -- run --goal "Recover after adaptive validation points to a different file" --workspace .
+cargo run --bin boundline -- next --workspace .
 ```
 
 **Expected**:
@@ -34,13 +34,13 @@ cargo run --bin synod -- next --workspace .
 ## Scenario 3: Stop Explicitly When Guidance Cannot Produce A New Candidate
 
 ```bash
-cd /tmp/synod-adaptive-repair-depth
-cargo run --bin synod -- run --goal "Fail after no adaptive candidate remains" --workspace .
-cargo run --bin synod -- inspect --workspace .
+cd /tmp/boundline-adaptive-repair-depth
+cargo run --bin boundline -- run --goal "Fail after no adaptive candidate remains" --workspace .
+cargo run --bin boundline -- inspect --workspace .
 ```
 
 **Expected**:
-- Synod stops in an explicit failed or exhausted terminal state.
+- Boundline stops in an explicit failed or exhausted terminal state.
 - The trace explains that validation guidance did not make any materially different bounded candidate credible.
 - Attempt lineage remains visible even though execution stopped non-successfully.
 

@@ -4,7 +4,7 @@
 
 1. Work from the repository root on branch `004-session-model-unification`.
 2. Have Rust 1.95.0 with `cargo` available.
-3. Use a writable workspace so Synod can persist both `.synod/session.json` and `.synod/traces/`.
+3. Use a writable workspace so Boundline can persist both `.boundline/session.json` and `.boundline/traces/`.
 4. Start from the workspace you want the active session to belong to.
 
 ## Session-Backed CLI Walkthrough
@@ -14,12 +14,12 @@
 Run:
 
 ```bash
-cargo run --bin synod -- start
+cargo run --bin boundline -- start
 ```
 
 Expected outcome:
 
-- Synod creates `.synod/session.json` in the current workspace.
+- Boundline creates `.boundline/session.json` in the current workspace.
 - The session becomes the active interaction state for later commands.
 - No goal or task plan is required yet.
 
@@ -28,12 +28,12 @@ Expected outcome:
 Run:
 
 ```bash
-cargo run --bin synod -- capture --goal "Summarize the current bounded developer flow"
+cargo run --bin boundline -- capture --goal "Summarize the current bounded developer flow"
 ```
 
 Expected outcome:
 
-- Synod stores the goal in the active session.
+- Boundline stores the goal in the active session.
 - Later planning and execution commands no longer require the goal to be re-entered.
 
 ### 3. Create a plan
@@ -41,12 +41,12 @@ Expected outcome:
 Run:
 
 ```bash
-cargo run --bin synod -- plan
+cargo run --bin boundline -- plan
 ```
 
 Expected outcome:
 
-- Synod creates an executable plan for the active session goal.
+- Boundline creates an executable plan for the active session goal.
 - The active session now includes a persisted task snapshot with current execution position at the first executable step.
 
 ### 4. Execute one step at a time
@@ -54,12 +54,12 @@ Expected outcome:
 Run:
 
 ```bash
-cargo run --bin synod -- step
+cargo run --bin boundline -- step
 ```
 
 Expected outcome:
 
-- Synod executes exactly one next step.
+- Boundline executes exactly one next step.
 - The active session updates task context, plan position, latest status, and latest trace reference.
 - If the step fails, retries, or triggers replanning, the active session preserves the latest actionable state.
 
@@ -68,12 +68,12 @@ Expected outcome:
 Run:
 
 ```bash
-cargo run --bin synod -- run
+cargo run --bin boundline -- run
 ```
 
 Expected outcome:
 
-- Synod resumes from the active session task snapshot and continues until success, failure, exhaustion, or abort.
+- Boundline resumes from the active session task snapshot and continues until success, failure, exhaustion, or abort.
 - The session record captures the final state and latest trace reference.
 
 ### 6. Inspect status and the next action
@@ -81,8 +81,8 @@ Expected outcome:
 Run:
 
 ```bash
-cargo run --bin synod -- status
-cargo run --bin synod -- next
+cargo run --bin boundline -- status
+cargo run --bin boundline -- next
 ```
 
 Expected outcome:
@@ -95,20 +95,20 @@ Expected outcome:
 Run:
 
 ```bash
-cargo run --bin synod -- inspect --workspace "$PWD"
+cargo run --bin boundline -- inspect --workspace "$PWD"
 ```
 
 Expected outcome:
 
-- Synod uses the active session's latest trace reference when available.
+- Boundline uses the active session's latest trace reference when available.
 - The output reconstructs step progression, recovery events, and terminal reason.
 
 ## Assistant Walkthrough
 
-1. Start from an assistant command that maps to the active session flow, such as `/synod-start`.
+1. Start from an assistant command that maps to the active session flow, such as `/boundline-start`.
 2. Let the assistant establish or reuse the active session.
-3. Use `/synod-plan`, `/synod-step`, `/synod-run`, `/synod-status`, or `/synod-next` without restating already preserved session context.
-4. Use `/synod-inspect` only when the active session or an explicit prior trace needs detailed inspection.
+3. Use `/boundline-plan`, `/boundline-step`, `/boundline-run`, `/boundline-status`, or `/boundline-next` without restating already preserved session context.
+4. Use `/boundline-inspect` only when the active session or an explicit prior trace needs detailed inspection.
 
 ## Recovery Scenarios
 
@@ -122,7 +122,7 @@ If `plan`, `step`, or `run` is invoked before goal capture, expected output shou
 
 ### Corrupted or stale session
 
-If `.synod/session.json` is unreadable, workspace-mismatched, or points at a missing trace, expected output should surface the exact problem and avoid hidden continuation.
+If `.boundline/session.json` is unreadable, workspace-mismatched, or points at a missing trace, expected output should surface the exact problem and avoid hidden continuation.
 
 ### Terminal session reuse
 

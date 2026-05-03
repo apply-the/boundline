@@ -1,13 +1,13 @@
 use std::path::PathBuf;
 
+use boundline::cli::{Cli, ConfigSubcommand, DeveloperCommand};
+use boundline::domain::configuration::{ConfigShowScope, ConfigWriteScope, RouteSlot, RuntimeKind};
 use clap::Parser;
-use synod::cli::{Cli, ConfigSubcommand, DeveloperCommand};
-use synod::domain::configuration::{ConfigShowScope, ConfigWriteScope, RouteSlot, RuntimeKind};
 
 #[test]
 fn cluster_scope_show_accepts_primary_workspace() {
     let cli = Cli::try_parse_from([
-        "synod",
+        "boundline",
         "config",
         "show",
         "--cluster",
@@ -33,7 +33,7 @@ fn cluster_scope_show_accepts_primary_workspace() {
 #[test]
 fn cluster_scope_set_accepts_cluster_slot_runtime_and_model() {
     let cli = Cli::try_parse_from([
-        "synod",
+        "boundline",
         "config",
         "set",
         "--cluster",

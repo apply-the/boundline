@@ -1,14 +1,14 @@
-# Synod Roadmap
+# Boundline Roadmap
 
-Canon is downstream from Synod in this roadmap: Synod thinks, decides, orchestrates, and executes, while Canon governs meaningful flow stages and persists structured artifacts that Synod can reuse for reasoning.
+Canon is downstream from Boundline in this roadmap: Boundline thinks, decides, orchestrates, and executes, while Canon governs meaningful flow stages and persists structured artifacts that Boundline can reuse for reasoning.
 
 ## Objective
 
-Evolve Synod into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
+Evolve Boundline into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.38.0
+## Current Status: v0.39.0
 
-Synod now has its core session-native orchestration baseline, bounded workflow
+Boundline now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
 continuity between session-native and compatibility follow-up, stronger
 route-summary plus config projection, bounded multi-workspace clustered
@@ -17,7 +17,18 @@ decoupling, guided decision follow-through, evidence-aligned next-command
 selection, credible governed delivery completion, final product-surface
 closure, explicit bounded context assembly, decision-driven bounded action
 selection, evidence-driven dynamic planning, Canon-grounded structured
-memory, and bounded delegated execution in place:
+memory, bounded delegated execution, and a release-aligned distribution
+surface in place:
+
+- Boundline now ships repo-managed Homebrew and winget metadata plus a release
+  workflow that assembles Boundline bundles with a compatible Canon companion
+- `boundline doctor --install` now verifies the installed Boundline version, the
+  documented Canon target, and whether the local pairing is ready, already
+  satisfied, blocked, or repair-needed
+- README and getting-started now lead with a brutal quick path, while the
+  deeper product model moves into a separate advanced architecture layer
+- the Boundline-versus-Canon boundary is now explicit across install docs,
+  assistant guidance, release metadata, roadmap, and changelog
 
 - session-native orchestration remains the primary operator path
 - `capture` now derives one negotiated delivery packet from direct goals, authored briefs, and governance context before planning begins
@@ -28,7 +39,7 @@ memory, and bounded delegated execution in place:
 - default `plan` now persists one proposed goal plan with explicit `goal_plan_state`, `goal_plan_revision`, `planning_rationale`, and `verification_strategy`, and `plan --confirm` now makes that proposal executable on the native route
 - repeated `plan` can now supersede the active proposal revision when evidence changes flow, task targets, or verification strategy materially, while `run`, `status`, `next`, and `inspect` keep the revision lineage and blocking reason explicit
 - `run`, `status`, `next`, and `inspect` now project `context_summary`, `context_credibility`, primary inputs, provenance, and any staleness reason from the active goal plan or authoritative native trace
-- `synod init` can now infer or accept active domain families and seed workspace-local domain template settings, layered standards, and optional external context bindings in `.synod/config.toml`
+- `boundline init` can now infer or accept active domain families and seed workspace-local domain template settings, layered standards, and optional external context bindings in `.boundline/config.toml`
 - planning now stops explicitly when enabled domain templates do not match the bounded target or when a required external context binding is missing or stale
 - `config show`, `plan`, `run`, `status`, `next`, and `inspect` now surface the selected domain family, winning standards source, and supporting-input status through the same bounded context story
 - Canon capability snapshots plus compact Canon-grounded memory now feed context assembly, target selection, verification strategy inference, and explicit bounded stop conditions when governed evidence is stale or contradicted
@@ -38,7 +49,7 @@ memory, and bounded delegated execution in place:
 - `run`, `status`, `next`, and `inspect` now project `negotiation_goal_summary`, `negotiation_resolution`, and `negotiation_acceptance_boundary` across native goal-plan traces and explicit compatibility traces
 - `workflow list`, `workflow run`, `workflow status`, `workflow resume`, and `workflow inspect` still project named workflow state onto the same session, route, trace, and `execution_condition` surfaces
 - Claude, Codex, and Copilot now ship first-class workflow assistant surfaces, while Gemini CLI guidance uses the same workflow-first vocabulary
-- workflows and direct native runs now read as the two primary Synod product entry styles, while explicit compatibility follow-up remains visibly subordinate
+- workflows and direct native runs now read as the two primary Boundline product entry styles, while explicit compatibility follow-up remains visibly subordinate
 - direct session-native commands and explicit compatibility routing remain available when no named workflow is invoked
 - direct `run --goal` now bootstraps the same evidence-driven proposal-plus-confirm planning path before execution instead of shortcutting through keyword-only flow selection
 - Canon remains a bounded stage-boundary governance runtime with governed `bug-fix:investigate` plus later verify-stage `security-assessment` reuse on the same operator surface
@@ -57,23 +68,24 @@ memory, and bounded delegated execution in place:
 - session-native commands still accept `--cluster <primary-workspace>` so one authoritative primary-owned session can plan and deliver a bounded change across registered member repositories
 - clustered `run`, `status`, `next`, and `inspect` still surface authoritative workspace, clustered execution condition, participating workspaces, and any blocking member without implying distributed orchestration ownership
 
-## Roadmap Closure In 0.38.0
+## Roadmap Closure In 0.39.0
 
-The roadmap is no longer an open-ended backlog. `0.38.0` keeps the product
-surface closed and extends the same execution model with explicit
-domain-template guidance, so Synod now presents one coherent operator story
-across CLI, assistants, workflows, routing, capability and effort policy,
-layered domain standards, governed and external context reuse, bounded context
-assembly, evidence-driven proposal selection, governed memory, delegation
-packets, and the runtime loop itself.
+The roadmap is no longer an open-ended backlog. `0.39.0` closes the last named
+macrofeature by carrying the same execution model through installation,
+bundling, update verification, and documentation framing. Boundline now presents
+one coherent operator story across CLI, assistants, workflows, routing,
+capability and effort policy, layered domain standards, governed and external
+context reuse, bounded context assembly, evidence-driven proposal selection,
+governed memory, delegation packets, the runtime loop itself, and the release
+surface users meet before the first run.
 
-The governing rule remains simple: Synod is the product and execution owner.
+The governing rule remains simple: Boundline is the product and execution owner.
 Canon stays a bounded, useful governed runtime inside that same delivery path
 rather than drifting back into a parallel tool story.
 
 ### Ongoing Compatibility Watch
 
-Canon will continue to release versions after `0.38.0`, so Synod keeps one
+Canon will continue to release versions after `0.38.0`, so Boundline keeps one
 explicit maintenance track for compatibility drift on the machine-facing
 governance adapter rather than reopening broad product-scope work:
 
@@ -81,37 +93,34 @@ governance adapter rather than reopening broad product-scope work:
   released `canon governance start|refresh|capabilities --json` `v1` surface;
   the current documented target is Canon `0.39.0`
 - preserve additive-field tolerance and capability-aware checks so intermediate
-  Canon releases do not force unnecessary Synod churn when the `v1` adapter
+  Canon releases do not force unnecessary Boundline churn when the `v1` adapter
   contract remains stable
 - schedule a new roadmap/spec slice only when Canon changes the required wire
   contract, introduces a new adapter schema version, or adds governed behavior
-  that Synod needs for its explicitly modeled bounded stages
-
-### Next Macrofeature Line (039+)
-
-`0.38.0` delivered bounded domain-agent templates on top of the
-evidence-driven `infer -> propose -> confirm` planning baseline. The next
-roadmap line should not decompose back into microfeatures. Future numbered
-specs must stay at the macrofeature level and each one must change Synod's
-operating model, not just a single CLI surface.
+  that Boundline needs for its explicitly modeled bounded stages
 
 Compatibility maintenance for newer Canon releases stays inside the watch above
-unless it becomes contract-breaking. It does not consume the next spec number
-by itself.
+unless it becomes contract-breaking. It does not consume a roadmap slot by
+itself.
 
-### 039 Distribution & Bundling (Upcoming)
+### Delivered in 0.39.0
 
-Synod deployment must become frictionless for the end-user.
-`039-distribution-bundling` focuses on formal distribution channels and reducing toolchain boilerplate.
-- Establish distribution via Homebrew (`brew`) and Windows Package Manager (`winget`).
-- Support bundled installation alongside `canon` latest version to ensure the required governance runtime is available without forcing a secondary installation step.
-- Provide unified update paths for both Synod and Canon.
+- add repo-managed Homebrew and winget metadata plus a release-distribution
+  workflow that produces Boundline bundles carrying the documented Canon companion
+- introduce `boundline doctor --install` so operators can verify the installed
+  Boundline version, Canon support target, and repair state before entering a
+  workspace
+- split the public docs into a brutal quick path and a separate advanced
+  architecture layer while keeping Boundline as the orchestration owner and Canon
+  as the bounded governance companion
+- update assistant guidance, changelog, roadmap, and release metadata together
+  so the distribution story ships as one coherent `0.39.0` surface
 
 ### Delivered in 0.38.0
 
-- infer or accept active domain families during `synod init`, then persist
+- infer or accept active domain families during `boundline init`, then persist
   workspace-local domain-template settings, scoped standards, and optional or
-  required external context bindings in `.synod/config.toml`
+  required external context bindings in `.boundline/config.toml`
 - layer built-in domain guidance with global, cluster, and workspace standards
   using explicit precedence and source attribution on `config show --scope effective`
 - block planning explicitly when enabled domain templates do not match the
@@ -182,7 +191,7 @@ Synod deployment must become frictionless for the end-user.
   reusable Canon artifacts instead of relying on ambient workspace state
 - project `context_summary`, `context_credibility`, primary inputs,
   provenance, and any staleness reason through `plan`, `run`, `status`,
-  `next`, and `inspect` on the primary Synod path
+  `next`, and `inspect` on the primary Boundline path
 - stop planning explicitly when a credible bounded context cannot be built,
   keeping the recovery action and blocked state visible on the same session and
   trace surfaces
@@ -193,15 +202,15 @@ Synod deployment must become frictionless for the end-user.
 
 - unify assistant surfaces, routing slots, workflow entry points, and model
   bindings so Copilot, Codex, Claude, and Gemini guidance map onto the same
-  Synod-owned product story instead of provider-specific command drift
-- keep workflow discovery and follow-through on the same primary Synod path as
+  Boundline-owned product story instead of provider-specific command drift
+- keep workflow discovery and follow-through on the same primary Boundline path as
   direct native execution while preserving `route_owner`, `route_config_projection`,
   and bounded next-command cues
 - keep explicit compatibility usage visibly subordinate instead of letting it
   read like a second primary product path
 - close README, getting-started, configuration, assistant guidance, roadmap,
   contributor guidance, and changelog around the final product identity: users
-  use Synod; Canon is visible but secondary
+  use Boundline; Canon is visible but secondary
 
 ### Delivered in 0.31.0
 
@@ -289,9 +298,9 @@ Synod deployment must become frictionless for the end-user.
 
 ### Delivered in 0.19.0
 
-- `synod workflow list` exposes named workflows, phase chains, summary text, and invocation guidance from `.synod/workflows.toml`
-- `synod workflow run <name>` and `resume` can now carry bounded `review` and `govern` phases to explicit paused, blocked, failed, or completed outcomes on the existing session-native route
-- workflow progress persists in `.synod/session.json` and reuses `.synod/traces/` while direct session-native commands and explicit compatibility routing remain available when no named workflow is invoked
+- `boundline workflow list` exposes named workflows, phase chains, summary text, and invocation guidance from `.boundline/workflows.toml`
+- `boundline workflow run <name>` and `resume` can now carry bounded `review` and `govern` phases to explicit paused, blocked, failed, or completed outcomes on the existing session-native route
+- workflow progress persists in `.boundline/session.json` and reuses `.boundline/traces/` while direct session-native commands and explicit compatibility routing remain available when no named workflow is invoked
 - authored workflow registries now have clearer bounded guidance through optional `summary` and `recommended_when` metadata plus updated operator and assistant docs
 
 Representative workflow registry shape:
@@ -321,7 +330,7 @@ execution_condition = true
 These three features are ordered and intentionally absorb all remaining major
 scope:
 
-1. Synod must deliver real code changes before more platform abstraction work.
+1. Boundline must deliver real code changes before more platform abstraction work.
 2. Canon must prove value inside that real delivery loop, not beside it.
 3. Backend abstraction, assistant decoupling, and UX closure happen only after
   the real execution and governed-delivery story are stable.
@@ -331,7 +340,7 @@ scope:
 ```text
 User / Copilot / Claude
         ↓
-      Synod
+      Boundline
   ┌───────────────┐
   │ Orchestrator  │
   │ Flows         │
@@ -347,4 +356,4 @@ User / Copilot / Claude
 
 ## In One Sentence
 
-Synod is a system that takes a problem and transforms it into working code, orchestrating bounded execution itself while using Canon to govern stage outputs and provide reusable documentation.
+Boundline is a system that takes a problem and transforms it into working code, orchestrating bounded execution itself while using Canon to govern stage outputs and provide reusable documentation.

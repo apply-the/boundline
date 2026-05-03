@@ -7,7 +7,7 @@
 
 **Decision**: Reuse the existing session-native summary model as the canonical projection shape and migrate more workflow, review/governance, and compatibility follow-up meaning onto that shape instead of maintaining separate route-specific summary vocabularies.
 
-**Rationale**: The roadmap explicitly prioritizes making Synod feel like one bounded system with multiple entry paths. Reusing the current summary model preserves existing state authority and reduces duplication at the rendering layer.
+**Rationale**: The roadmap explicitly prioritizes making Boundline feel like one bounded system with multiple entry paths. Reusing the current summary model preserves existing state authority and reduces duplication at the rendering layer.
 
 **Alternatives Considered**:
 - Add a second cross-route summary object just for CLI rendering: rejected because it would duplicate state mapping and increase drift risk.

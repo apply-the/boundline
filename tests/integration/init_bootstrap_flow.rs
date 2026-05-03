@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use uuid::Uuid;
 
-use crate::workspace_fixture::{run_synod_in, terminal_text};
+use crate::workspace_fixture::{run_boundline_in, terminal_text};
 
 fn empty_workspace(prefix: &str) -> PathBuf {
     let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
@@ -11,7 +11,7 @@ fn empty_workspace(prefix: &str) -> PathBuf {
     fs::create_dir_all(workspace.join("tests")).unwrap();
     fs::write(
         workspace.join("Cargo.toml"),
-        "[package]\nname = \"synod-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        "[package]\nname = \"boundline-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
     )
     .unwrap();
     workspace
@@ -19,9 +19,9 @@ fn empty_workspace(prefix: &str) -> PathBuf {
 
 #[test]
 fn init_scaffolds_execution_and_config_files() {
-    let workspace = empty_workspace("synod-init-bootstrap");
+    let workspace = empty_workspace("boundline-init-bootstrap");
 
-    let init = run_synod_in(
+    let init = run_boundline_in(
         &workspace,
         &[
             "init",
@@ -37,10 +37,10 @@ fn init_scaffolds_execution_and_config_files() {
     assert_eq!(init.status.code(), Some(0), "{init_text}");
     assert!(init_text.contains("init: workspace initialized"), "{init_text}");
 
-    assert!(workspace.join(".synod/execution.json").is_file());
-    assert!(workspace.join(".synod/config.toml").is_file());
+    assert!(workspace.join(".boundline/execution.json").is_file());
+    assert!(workspace.join(".boundline/config.toml").is_file());
 
-    let config = fs::read_to_string(workspace.join(".synod/config.toml")).unwrap();
+    let config = fs::read_to_string(workspace.join(".boundline/config.toml")).unwrap();
     assert!(config.contains("assistant_runtimes"));
     assert!(config.contains("copilot"));
     assert!(config.contains("domain_templates"));
@@ -49,9 +49,9 @@ fn init_scaffolds_execution_and_config_files() {
 
 #[test]
 fn init_seeds_explicit_domain_templates_and_bindings() {
-    let workspace = empty_workspace("synod-init-bootstrap-domain");
+    let workspace = empty_workspace("boundline-init-bootstrap-domain");
 
-    let init = run_synod_in(
+    let init = run_boundline_in(
         &workspace,
         &[
             "init",
@@ -73,7 +73,7 @@ fn init_seeds_explicit_domain_templates_and_bindings() {
     assert!(init_text.contains("domain_templates:"), "{init_text}");
     assert!(init_text.contains("- react: enabled=true"), "{init_text}");
 
-    let config = fs::read_to_string(workspace.join(".synod/config.toml")).unwrap();
+    let config = fs::read_to_string(workspace.join(".boundline/config.toml")).unwrap();
     assert!(config.contains("react"));
     assert!(config.contains("follow the shared ui system"));
     assert!(config.contains("mcp:design-system"));

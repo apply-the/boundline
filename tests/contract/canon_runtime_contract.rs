@@ -2,8 +2,10 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
-use synod::{CanonCliRuntime, GovernanceRuntime, GovernanceRuntimeKind, GovernanceRuntimeRequest};
-use synod::{GovernanceBoundedContext, GovernanceRequestKind, SystemContextBinding};
+use boundline::{
+    CanonCliRuntime, GovernanceRuntime, GovernanceRuntimeKind, GovernanceRuntimeRequest,
+};
+use boundline::{GovernanceBoundedContext, GovernanceRequestKind, SystemContextBinding};
 use uuid::Uuid;
 
 fn request() -> GovernanceRuntimeRequest {
@@ -12,9 +14,11 @@ fn request() -> GovernanceRuntimeRequest {
         governance_attempt_id: "canon-contract-attempt".to_string(),
         stage_key: "bug-fix:investigate".to_string(),
         goal: "Investigate a failing change".to_string(),
-        workspace_ref: temp_workspace("synod-governance-contract").to_string_lossy().into_owned(),
+        workspace_ref: temp_workspace("boundline-governance-contract")
+            .to_string_lossy()
+            .into_owned(),
         autopilot: false,
-        mode: Some(synod::CanonMode::Discovery),
+        mode: Some(boundline::CanonMode::Discovery),
         system_context: Some(SystemContextBinding::Existing),
         risk: Some("medium".to_string()),
         zone: Some("engineering".to_string()),
@@ -57,14 +61,14 @@ fn write_canon_stub(prefix: &str, stdout_json: &str) -> PathBuf {
 
 #[test]
 fn canon_runtime_contract_exposes_configuration_and_parses_start_response() {
-    let workspace = temp_workspace("synod-canon-contract");
+    let workspace = temp_workspace("boundline-canon-contract");
     write_workspace_file(
         &workspace,
         ".canon/runs/canon-run-100/discovery.md",
         "# Discovery\n\nCaptured governed evidence for the bug-fix stage.\n",
     );
     let script = write_canon_stub(
-        "synod-canon-contract-command",
+        "boundline-canon-contract-command",
         "{\"status\":\"governed_ready\",\"run_ref\":\"canon-run-100\",\"packet_ref\":\".canon/runs/canon-run-100\",\"expected_document_refs\":[\".canon/runs/canon-run-100/discovery.md\"],\"document_refs\":[\".canon/runs/canon-run-100/discovery.md\"],\"approval_state\":\"not_needed\",\"packet_readiness\":\"reusable\",\"missing_sections\":[],\"headline\":\"discovery packet ready\",\"message\":\"Canon completed the governed discovery run\"}",
     );
     let runtime = CanonCliRuntime::new(script.to_string_lossy().into_owned())
@@ -81,14 +85,14 @@ fn canon_runtime_contract_exposes_configuration_and_parses_start_response() {
     let response = runtime.execute(&request).unwrap();
     let packet = response.packet.expect("packet should be present");
     assert_eq!(response.run_ref.as_deref(), Some("canon-run-100"));
-    assert_eq!(response.status, synod::GovernanceLifecycleState::GovernedReady);
+    assert_eq!(response.status, boundline::GovernanceLifecycleState::GovernedReady);
     assert_eq!(packet.packet_ref, ".canon/runs/canon-run-100");
-    assert_eq!(packet.readiness, synod::PacketReadiness::Reusable);
+    assert_eq!(packet.readiness, boundline::PacketReadiness::Reusable);
 }
 
 #[test]
 fn canon_runtime_contract_sends_refresh_requests_with_lineage_fields() {
-    let workspace = temp_workspace("synod-canon-refresh-contract");
+    let workspace = temp_workspace("boundline-canon-refresh-contract");
     let capture_path = workspace.join("canon-request.json");
     let script_path = workspace.join("canon-refresh-stub.sh");
     fs::write(
@@ -118,7 +122,7 @@ fn canon_runtime_contract_sends_refresh_requests_with_lineage_fields() {
             goal: "Investigate a failing change".to_string(),
             workspace_ref: workspace.to_string_lossy().into_owned(),
             autopilot: true,
-            mode: Some(synod::CanonMode::Discovery),
+            mode: Some(boundline::CanonMode::Discovery),
             system_context: Some(SystemContextBinding::Existing),
             risk: Some("medium".to_string()),
             zone: Some("engineering".to_string()),
@@ -141,20 +145,20 @@ fn canon_runtime_contract_sends_refresh_requests_with_lineage_fields() {
         request_json.contains("\"packet_ref\":\".canon/runs/canon-run-200\""),
         "{request_json}"
     );
-    assert_eq!(response.approval_state, synod::ApprovalState::Granted);
+    assert_eq!(response.approval_state, boundline::ApprovalState::Granted);
     assert_eq!(response.run_ref.as_deref(), Some("canon-run-200"));
 }
 
 #[test]
 fn canon_runtime_contract_marks_scaffold_packets_as_rejected() {
-    let workspace = temp_workspace("synod-canon-rejected-contract");
+    let workspace = temp_workspace("boundline-canon-rejected-contract");
     write_workspace_file(
         &workspace,
         ".canon/runs/canon-run-300/discovery.md",
         "# Discovery\n\nTODO\n",
     );
     let script = write_canon_stub(
-        "synod-canon-rejected-command",
+        "boundline-canon-rejected-command",
         "{\"status\":\"governed_ready\",\"run_ref\":\"canon-run-300\",\"packet_ref\":\".canon/runs/canon-run-300\",\"expected_document_refs\":[\".canon/runs/canon-run-300/discovery.md\"],\"document_refs\":[\".canon/runs/canon-run-300/discovery.md\"],\"approval_state\":\"not_needed\",\"packet_readiness\":\"reusable\",\"missing_sections\":[],\"headline\":\"discovery packet ready\",\"message\":\"Canon completed the governed discovery run\"}",
     );
     let runtime = CanonCliRuntime::new(script.to_string_lossy().into_owned())
@@ -166,13 +170,13 @@ fn canon_runtime_contract_marks_scaffold_packets_as_rejected() {
 
     let response = runtime.execute(&request).unwrap();
     let packet = response.packet.expect("packet should be present");
-    assert_eq!(packet.readiness, synod::PacketReadiness::Rejected);
+    assert_eq!(packet.readiness, boundline::PacketReadiness::Rejected);
     assert_eq!(packet.missing_sections, vec!["substantive_body".to_string()]);
 }
 
 #[test]
 fn canon_runtime_contract_serializes_security_assessment_mode_in_start_requests() {
-    let workspace = temp_workspace("synod-canon-security-start-contract");
+    let workspace = temp_workspace("boundline-canon-security-start-contract");
     let capture_path = workspace.join("canon-security-request.json");
     let script_path = workspace.join("canon-security-stub.sh");
     fs::write(
@@ -197,7 +201,7 @@ fn canon_runtime_contract_serializes_security_assessment_mode_in_start_requests(
     let response = runtime
         .execute(&GovernanceRuntimeRequest {
             stage_key: "bug-fix:verify".to_string(),
-            mode: Some(synod::CanonMode::SecurityAssessment),
+            mode: Some(boundline::CanonMode::SecurityAssessment),
             workspace_ref: workspace.to_string_lossy().into_owned(),
             ..request()
         })
@@ -208,12 +212,12 @@ fn canon_runtime_contract_serializes_security_assessment_mode_in_start_requests(
     assert!(request_json.contains("\"mode\":\"security-assessment\""), "{request_json}");
     let packet = response.packet.expect("packet should be present");
     assert_eq!(packet.packet_ref, ".canon/runs/canon-run-security");
-    assert_eq!(packet.readiness, synod::PacketReadiness::Reusable);
+    assert_eq!(packet.readiness, boundline::PacketReadiness::Reusable);
 }
 
 #[test]
 fn canon_runtime_contract_preserves_security_assessment_refresh_lineage() {
-    let workspace = temp_workspace("synod-canon-security-refresh-contract");
+    let workspace = temp_workspace("boundline-canon-security-refresh-contract");
     let capture_path = workspace.join("canon-security-refresh-request.json");
     let script_path = workspace.join("canon-security-refresh-stub.sh");
     fs::write(
@@ -243,7 +247,7 @@ fn canon_runtime_contract_preserves_security_assessment_refresh_lineage() {
             goal: "Verify the bounded security fix".to_string(),
             workspace_ref: workspace.to_string_lossy().into_owned(),
             autopilot: true,
-            mode: Some(synod::CanonMode::SecurityAssessment),
+            mode: Some(boundline::CanonMode::SecurityAssessment),
             system_context: Some(SystemContextBinding::Existing),
             risk: Some("medium".to_string()),
             zone: Some("engineering".to_string()),
@@ -263,6 +267,6 @@ fn canon_runtime_contract_preserves_security_assessment_refresh_lineage() {
     assert!(request_json.contains("\"request_kind\":\"refresh\""), "{request_json}");
     assert!(request_json.contains("\"mode\":\"security-assessment\""), "{request_json}");
     assert!(request_json.contains("\"run_ref\":\"canon-run-security-refresh\""), "{request_json}");
-    assert_eq!(response.approval_state, synod::ApprovalState::Granted);
+    assert_eq!(response.approval_state, boundline::ApprovalState::Granted);
     assert_eq!(response.run_ref.as_deref(), Some("canon-run-security-refresh"));
 }

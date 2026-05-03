@@ -66,8 +66,8 @@ pub fn collect_workspace_signals(workspace_ref: &Path) -> WorkspaceSignals {
     // Count files (bounded depth)
     signals.file_count = count_files(workspace_ref, 0);
 
-    // Check for synod config
-    signals.has_config = workspace_ref.join(".synod").join("config.toml").exists();
+    // Check for boundline config
+    signals.has_config = workspace_ref.join(".boundline").join("config.toml").exists();
 
     // Check for Canon artifacts
     signals.has_canon = workspace_ref.join(".canon").is_dir();
@@ -1178,7 +1178,7 @@ pub fn build_goal_plan(
 
 #[derive(Debug, Error)]
 pub enum GoalPlannerError {
-    #[error("no goal text provided — run `synod capture` first")]
+    #[error("no goal text provided — run `boundline capture` first")]
     MissingGoal,
     #[error("goal planning stopped because the bounded context is not credible: {summary}")]
     InsufficientContext { summary: String, goal_plan: Box<GoalPlan> },

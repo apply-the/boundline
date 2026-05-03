@@ -9,7 +9,7 @@ meaningful active session state.
 
 - Direct `run --goal` must not silently replace active captured, planned, or
   in-flight delivery state.
-- When active session protection blocks bootstrap, Synod must stop explicitly
+- When active session protection blocks bootstrap, Boundline must stop explicitly
   and tell the operator what action is needed next.
 - Session safety must be preserved without hiding the existing session or
   inventing a merged delivery story.

@@ -3,44 +3,44 @@
 **Feature Branch**: `001-delivery-orchestrator-core`  
 **Created**: 2026-04-23  
 **Status**: Draft  
-**Input**: User description: "Build the first Synod spec around a stateful delivery orchestrator that can coordinate multi-step work, route across agents, manage retries and replanning, and act as the minimal execution brain for later delivery flows."
+**Input**: User description: "Build the first Boundline spec around a stateful delivery orchestrator that can coordinate multi-step work, route across agents, manage retries and replanning, and act as the minimal execution brain for later delivery flows."
 
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Execute Bounded Delivery Work (Priority: P1)
 
-As a developer using Synod, I can submit a bounded engineering objective and have Synod carry it through an ordered sequence of steps until the task succeeds or reaches a credible stop condition.
+As a developer using Boundline, I can submit a bounded engineering objective and have Boundline carry it through an ordered sequence of steps until the task succeeds or reaches a credible stop condition.
 
-**Why this priority**: This is the minimum value of the orchestrator. Without reliable multi-step execution, Synod cannot move beyond isolated agent or tool calls.
+**Why this priority**: This is the minimum value of the orchestrator. Without reliable multi-step execution, Boundline cannot move beyond isolated agent or tool calls.
 
-**Independent Test**: Can be fully tested by running a task with at least three ordered steps and confirming Synod completes the task or terminates it cleanly without manual intervention between steps.
+**Independent Test**: Can be fully tested by running a task with at least three ordered steps and confirming Boundline completes the task or terminates it cleanly without manual intervention between steps.
 
 **Acceptance Scenarios**:
 
-1. **Given** a bounded task with an initial plan containing analysis, change, and verification work, **When** Synod executes the plan, **Then** it runs the steps in order, preserves shared task context between them, and reaches a terminal status.
-2. **Given** a task whose goal is satisfied before the configured limits are reached, **When** the final validating step completes, **Then** Synod stops immediately in a success state and records the outcome in the execution trace.
+1. **Given** a bounded task with an initial plan containing analysis, change, and verification work, **When** Boundline executes the plan, **Then** it runs the steps in order, preserves shared task context between them, and reaches a terminal status.
+2. **Given** a task whose goal is satisfied before the configured limits are reached, **When** the final validating step completes, **Then** Boundline stops immediately in a success state and records the outcome in the execution trace.
 
 ---
 
 ### User Story 2 - Recover From Failed Steps (Priority: P2)
 
-As a Synod maintainer, I can rely on the orchestrator to respond to failed steps with bounded retries or bounded replanning so recoverable problems do not cause immediate task loss.
+As a Boundline maintainer, I can rely on the orchestrator to respond to failed steps with bounded retries or bounded replanning so recoverable problems do not cause immediate task loss.
 
 **Why this priority**: Delivery work encounters failed commands, unusable outputs, and invalidated plans. Controlled recovery is required for the orchestrator to be credible in real workflows.
 
-**Independent Test**: Can be fully tested by running a task where one step fails in a recoverable way and confirming Synod either retries or revises the remaining plan while preserving prior context and history.
+**Independent Test**: Can be fully tested by running a task where one step fails in a recoverable way and confirming Boundline either retries or revises the remaining plan while preserving prior context and history.
 
 **Acceptance Scenarios**:
 
-1. **Given** a task with retry budget remaining, **When** a step fails in a recoverable way, **Then** Synod retries the step or selects a replanning path, and the prior task history remains available to subsequent steps.
-2. **Given** a task whose current plan is no longer viable after new evidence is observed, **When** Synod evaluates the result, **Then** it can replace or extend the remaining plan within configured limits and continue execution from the revised path.
-3. **Given** a task that exhausts its retry or replanning budget, **When** no credible next action remains, **Then** Synod terminates in a non-success terminal state and records why recovery stopped.
+1. **Given** a task with retry budget remaining, **When** a step fails in a recoverable way, **Then** Boundline retries the step or selects a replanning path, and the prior task history remains available to subsequent steps.
+2. **Given** a task whose current plan is no longer viable after new evidence is observed, **When** Boundline evaluates the result, **Then** it can replace or extend the remaining plan within configured limits and continue execution from the revised path.
+3. **Given** a task that exhausts its retry or replanning budget, **When** no credible next action remains, **Then** Boundline terminates in a non-success terminal state and records why recovery stopped.
 
 ---
 
 ### User Story 3 - Inspect Execution History (Priority: P3)
 
-As an operator or platform owner, I can inspect the full execution history of a task so I can understand how Synod progressed, where it failed, and why it stopped.
+As an operator or platform owner, I can inspect the full execution history of a task so I can understand how Boundline progressed, where it failed, and why it stopped.
 
 **Why this priority**: Inspectability is necessary for debugging, trust, and future governance features. Without it, task failures become opaque and hard to improve.
 
@@ -104,10 +104,10 @@ As an operator or platform owner, I can inspect the full execution history of a 
 
 ### Measurable Outcomes
 
-- **SC-001**: In validation scenarios containing at least three ordered steps, Synod completes the task or reaches an explicit terminal status without manual intervention between steps in 100% of runs.
+- **SC-001**: In validation scenarios containing at least three ordered steps, Boundline completes the task or reaches an explicit terminal status without manual intervention between steps in 100% of runs.
 - **SC-002**: In validation scenarios where a later step depends on an earlier result, later steps can access the required prior context in 100% of successful and non-successful runs.
-- **SC-003**: In validation scenarios with recoverable failures, Synod retries or replans within configured limits and reaches a terminal status without exceeding the configured maximum step count in 100% of runs.
-- **SC-004**: In validation scenarios that exhaust step, retry, or replanning limits, Synod stops within one additional decision cycle and records the exhaustion reason in 100% of runs.
+- **SC-003**: In validation scenarios with recoverable failures, Boundline retries or replans within configured limits and reaches a terminal status without exceeding the configured maximum step count in 100% of runs.
+- **SC-004**: In validation scenarios that exhaust step, retry, or replanning limits, Boundline stops within one additional decision cycle and records the exhaustion reason in 100% of runs.
 - **SC-005**: In review exercises using sampled task traces, operators can identify the executed step order, each retry or replanning event, and the final outcome within 5 minutes for at least 90% of sampled runs.
 
 ## Assumptions

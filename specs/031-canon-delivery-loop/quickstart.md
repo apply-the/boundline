@@ -10,11 +10,11 @@ evidence, and explicit stop conditions when delivery is not credible.
 ## 1. Run one governed delivery flow on the primary path
 
 ```bash
-cargo run --bin synod -- run --workspace <workspace> --goal "Fix the failing add test"
+cargo run --bin boundline -- run --workspace <workspace> --goal "Fix the failing add test"
 ```
 
 Expected behavior:
-- Synod stays on the native session path.
+- Boundline stays on the native session path.
 - Canon participates in the governed stage boundaries configured for the flow.
 - The workspace gains a material bounded code diff.
 - Validation passes before the run is allowed to complete.
@@ -22,9 +22,9 @@ Expected behavior:
 ## 2. Inspect the same governed follow-through story
 
 ```bash
-cargo run --bin synod -- status --workspace <workspace>
-cargo run --bin synod -- next --workspace <workspace>
-cargo run --bin synod -- inspect --workspace <workspace>
+cargo run --bin boundline -- status --workspace <workspace>
+cargo run --bin boundline -- next --workspace <workspace>
+cargo run --bin boundline -- inspect --workspace <workspace>
 ```
 
 Expected behavior:
@@ -36,19 +36,19 @@ Expected behavior:
 ## 3. Stop explicitly when governance or delivery evidence blocks completion
 
 ```bash
-cargo run --bin synod -- run --workspace <workspace> --goal "Fix the failing add test"
+cargo run --bin boundline -- run --workspace <workspace> --goal "Fix the failing add test"
 ```
 
 Expected behavior in blocked scenarios:
-- If Canon blocks or awaits approval, Synod stops explicitly and does not claim
+- If Canon blocks or awaits approval, Boundline stops explicitly and does not claim
   success.
-- If no material workspace diff exists, Synod stops explicitly.
-- If validation evidence is missing or not credible, Synod stops explicitly.
+- If no material workspace diff exists, Boundline stops explicitly.
+- If validation evidence is missing or not credible, Boundline stops explicitly.
 
 ## 4. Keep explicit compatibility subordinate
 
 ```bash
-cargo run --bin synod -- run --workspace <workspace> --goal "Fix the failing add test" --compatibility
+cargo run --bin boundline -- run --workspace <workspace> --goal "Fix the failing add test" --compatibility
 ```
 
 Expected behavior:

@@ -1,22 +1,22 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use boundline::adapters::agent::FnAgentAdapter;
+use boundline::adapters::tool::FnToolAdapter;
+use boundline::adapters::trace_store::FileTraceStore;
+use boundline::domain::limits::RunLimits;
+use boundline::domain::plan::Plan;
+use boundline::domain::step::{Step, StepExecutionRequest, StepExecutionResult};
+use boundline::domain::task::{TaskRunRequest, TaskStatus};
+use boundline::orchestrator::engine::Orchestrator;
+use boundline::orchestrator::planner::StaticPlanner;
+use boundline::registry::agent_registry::AgentRegistry;
+use boundline::registry::tool_registry::ToolRegistry;
 use serde_json::json;
-use synod::adapters::agent::FnAgentAdapter;
-use synod::adapters::tool::FnToolAdapter;
-use synod::adapters::trace_store::FileTraceStore;
-use synod::domain::limits::RunLimits;
-use synod::domain::plan::Plan;
-use synod::domain::step::{Step, StepExecutionRequest, StepExecutionResult};
-use synod::domain::task::{TaskRunRequest, TaskStatus};
-use synod::orchestrator::engine::Orchestrator;
-use synod::orchestrator::planner::StaticPlanner;
-use synod::registry::agent_registry::AgentRegistry;
-use synod::registry::tool_registry::ToolRegistry;
 use uuid::Uuid;
 
 fn temp_workspace() -> PathBuf {
-    let path = std::env::temp_dir().join(format!("synod-contract-{}", Uuid::new_v4()));
+    let path = std::env::temp_dir().join(format!("boundline-contract-{}", Uuid::new_v4()));
     fs::create_dir_all(&path).unwrap();
     path
 }

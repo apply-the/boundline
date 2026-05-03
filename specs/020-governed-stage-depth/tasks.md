@@ -17,9 +17,9 @@
 
 **Purpose**: Reserve the release boundary and prepare fixture and harness surfaces for the governed-stage-depth slice
 
-- [ ] T001 Bump crate version to `0.20.0` in `/Users/rt/workspace/synod/Cargo.toml` and `/Users/rt/workspace/synod/Cargo.lock`
-- [ ] T002 Create governed-investigate fixture helpers and Canon stub workspaces in `/Users/rt/workspace/synod/tests/support/workspace_fixture.rs`
-- [ ] T003 Register governed-stage-depth test modules in `/Users/rt/workspace/synod/tests/integration.rs`, `/Users/rt/workspace/synod/tests/contract.rs`, and `/Users/rt/workspace/synod/tests/unit.rs`
+- [ ] T001 Bump crate version to `0.20.0` in `/Users/rt/workspace/boundline/Cargo.toml` and `/Users/rt/workspace/boundline/Cargo.lock`
+- [ ] T002 Create governed-investigate fixture helpers and Canon stub workspaces in `/Users/rt/workspace/boundline/tests/support/workspace_fixture.rs`
+- [ ] T003 Register governed-stage-depth test modules in `/Users/rt/workspace/boundline/tests/integration.rs`, `/Users/rt/workspace/boundline/tests/contract.rs`, and `/Users/rt/workspace/boundline/tests/unit.rs`
 
 ---
 
@@ -29,9 +29,9 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T004 Extend governed-stage runtime handling for the `bug-fix:investigate` to `verify` path in `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs` and `/Users/rt/workspace/synod/src/orchestrator/governance.rs`
-- [ ] T005 [P] Extend session and workflow governance projection helpers for earlier-stage lineage and refresh visibility in `/Users/rt/workspace/synod/src/domain/session.rs`, `/Users/rt/workspace/synod/src/cli/session.rs`, `/Users/rt/workspace/synod/src/cli/output.rs`, `/Users/rt/workspace/synod/src/cli/inspect.rs`, and `/Users/rt/workspace/synod/src/cli/workflow.rs`
-- [ ] T006 [P] Add foundational unit coverage for governed-stage mode mapping, output rendering, and packet-lineage helpers in `/Users/rt/workspace/synod/tests/unit/governance_runtime.rs`, `/Users/rt/workspace/synod/tests/unit/cli_output.rs`, and `/Users/rt/workspace/synod/tests/unit/workflow_session_projection.rs`
+- [ ] T004 Extend governed-stage runtime handling for the `bug-fix:investigate` to `verify` path in `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs` and `/Users/rt/workspace/boundline/src/orchestrator/governance.rs`
+- [ ] T005 [P] Extend session and workflow governance projection helpers for earlier-stage lineage and refresh visibility in `/Users/rt/workspace/boundline/src/domain/session.rs`, `/Users/rt/workspace/boundline/src/cli/session.rs`, `/Users/rt/workspace/boundline/src/cli/output.rs`, `/Users/rt/workspace/boundline/src/cli/inspect.rs`, and `/Users/rt/workspace/boundline/src/cli/workflow.rs`
+- [ ] T006 [P] Add foundational unit coverage for governed-stage mode mapping, output rendering, and packet-lineage helpers in `/Users/rt/workspace/boundline/tests/unit/governance_runtime.rs`, `/Users/rt/workspace/boundline/tests/unit/cli_output.rs`, and `/Users/rt/workspace/boundline/tests/unit/workflow_session_projection.rs`
 
 **Checkpoint**: The runtime and projection layers can represent a governed investigate stage ahead of the existing governed verify story before story-specific scenarios are completed.
 
@@ -45,15 +45,15 @@
 
 ### Tests for User Story 1
 
-- [ ] T007 [P] [US1] Add contract coverage for the governed-stage command surface in `/Users/rt/workspace/synod/tests/contract/governed_stage_command_surface_contract.rs`
-- [ ] T008 [P] [US1] Add integration coverage for a successful governed `bug-fix:investigate` path that later reaches governed verify in `/Users/rt/workspace/synod/tests/integration/governed_stage_depth.rs`
-- [ ] T009 [P] [US1] Add integration coverage for approval-pending and blocked investigate outcomes in `/Users/rt/workspace/synod/tests/integration/governed_stage_depth_blocked.rs`
+- [ ] T007 [P] [US1] Add contract coverage for the governed-stage command surface in `/Users/rt/workspace/boundline/tests/contract/governed_stage_command_surface_contract.rs`
+- [ ] T008 [P] [US1] Add integration coverage for a successful governed `bug-fix:investigate` path that later reaches governed verify in `/Users/rt/workspace/boundline/tests/integration/governed_stage_depth.rs`
+- [ ] T009 [P] [US1] Add integration coverage for approval-pending and blocked investigate outcomes in `/Users/rt/workspace/boundline/tests/integration/governed_stage_depth_blocked.rs`
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] Implement or tighten governed `bug-fix:investigate` execution, halt, and continue behavior in `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs` and `/Users/rt/workspace/synod/src/domain/governance.rs`
-- [ ] T011 [US1] Persist investigate-to-verify packet reuse lineage and blocked reasons in `/Users/rt/workspace/synod/src/orchestrator/governance.rs` and `/Users/rt/workspace/synod/src/domain/session.rs`
-- [ ] T012 [US1] Surface governed investigate stage identity, selected mode, and next-action guidance in `/Users/rt/workspace/synod/src/cli/output.rs`, `/Users/rt/workspace/synod/src/cli/session.rs`, and `/Users/rt/workspace/synod/src/cli/inspect.rs`
+- [ ] T010 [US1] Implement or tighten governed `bug-fix:investigate` execution, halt, and continue behavior in `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs` and `/Users/rt/workspace/boundline/src/domain/governance.rs`
+- [ ] T011 [US1] Persist investigate-to-verify packet reuse lineage and blocked reasons in `/Users/rt/workspace/boundline/src/orchestrator/governance.rs` and `/Users/rt/workspace/boundline/src/domain/session.rs`
+- [ ] T012 [US1] Surface governed investigate stage identity, selected mode, and next-action guidance in `/Users/rt/workspace/boundline/src/cli/output.rs`, `/Users/rt/workspace/boundline/src/cli/session.rs`, and `/Users/rt/workspace/boundline/src/cli/inspect.rs`
 
 **Checkpoint**: A bug-fix session can govern investigate on the direct session-native route, stop explicitly when needed, and carry bounded lineage toward later verify work.
 
@@ -67,15 +67,15 @@
 
 ### Tests for User Story 2
 
-- [ ] T013 [P] [US2] Add contract coverage for governed refresh and lineage visibility in `/Users/rt/workspace/synod/tests/contract/governed_stage_refresh_contract.rs`
-- [ ] T014 [P] [US2] Add integration coverage for investigate-to-verify packet reuse and approval refresh in `/Users/rt/workspace/synod/tests/integration/governed_stage_depth_refresh.rs`
-- [ ] T015 [P] [US2] Add integration coverage for workflow-aware governed-stage projection in `/Users/rt/workspace/synod/tests/integration/governed_stage_depth_workflow.rs`
+- [ ] T013 [P] [US2] Add contract coverage for governed refresh and lineage visibility in `/Users/rt/workspace/boundline/tests/contract/governed_stage_refresh_contract.rs`
+- [ ] T014 [P] [US2] Add integration coverage for investigate-to-verify packet reuse and approval refresh in `/Users/rt/workspace/boundline/tests/integration/governed_stage_depth_refresh.rs`
+- [ ] T015 [P] [US2] Add integration coverage for workflow-aware governed-stage projection in `/Users/rt/workspace/boundline/tests/integration/governed_stage_depth_workflow.rs`
 
 ### Implementation for User Story 2
 
-- [ ] T016 [US2] Extend governance refresh behavior and explicit waiting or blocked guidance on later commands in `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs`, `/Users/rt/workspace/synod/src/cli/session.rs`, and `/Users/rt/workspace/synod/src/cli/output.rs`
-- [ ] T017 [US2] Extend workflow-aware projection of refreshed governance state and packet provenance in `/Users/rt/workspace/synod/src/cli/workflow.rs`, `/Users/rt/workspace/synod/src/cli/output.rs`, and `/Users/rt/workspace/synod/src/domain/session.rs`
-- [ ] T018 [US2] Surface refreshed governance timeline details for inspect output in `/Users/rt/workspace/synod/src/cli/inspect.rs` and `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs`
+- [ ] T016 [US2] Extend governance refresh behavior and explicit waiting or blocked guidance on later commands in `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs`, `/Users/rt/workspace/boundline/src/cli/session.rs`, and `/Users/rt/workspace/boundline/src/cli/output.rs`
+- [ ] T017 [US2] Extend workflow-aware projection of refreshed governance state and packet provenance in `/Users/rt/workspace/boundline/src/cli/workflow.rs`, `/Users/rt/workspace/boundline/src/cli/output.rs`, and `/Users/rt/workspace/boundline/src/domain/session.rs`
+- [ ] T018 [US2] Surface refreshed governance timeline details for inspect output in `/Users/rt/workspace/boundline/src/cli/inspect.rs` and `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs`
 
 **Checkpoint**: Later commands and named workflows refresh governance state before progression and keep packet lineage visible and actionable.
 
@@ -83,19 +83,19 @@
 
 ## Phase 5: User Story 3 - Author And Ship Bounded Governed Depth Clearly (Priority: P3)
 
-**Goal**: Let maintainers configure the deeper governed bug-fix slice and understand the routing boundaries without widening Synod into a generic governance engine.
+**Goal**: Let maintainers configure the deeper governed bug-fix slice and understand the routing boundaries without widening Boundline into a generic governance engine.
 
 **Independent Test**: Follow the shipped guidance to configure governed `bug-fix:investigate`, validate unsupported expectations remain explicit, and confirm docs describe the same direct and workflow-aware route story.
 
 ### Tests for User Story 3
 
-- [ ] T019 [P] [US3] Add contract coverage for governance profile guidance in `/Users/rt/workspace/synod/tests/contract/governance_profile_guidance_contract.rs`
-- [ ] T020 [P] [US3] Add integration coverage that direct session-native and workflow-aware routes remain explicit with deeper governed bug-fix config in `/Users/rt/workspace/synod/tests/integration/governed_stage_depth_route_story.rs`
+- [ ] T019 [P] [US3] Add contract coverage for governance profile guidance in `/Users/rt/workspace/boundline/tests/contract/governance_profile_guidance_contract.rs`
+- [ ] T020 [P] [US3] Add integration coverage that direct session-native and workflow-aware routes remain explicit with deeper governed bug-fix config in `/Users/rt/workspace/boundline/tests/integration/governed_stage_depth_route_story.rs`
 
 ### Implementation for User Story 3
 
-- [ ] T021 [US3] Ship bounded governance profile examples and route-boundary guidance in `/Users/rt/workspace/synod/README.md`, `/Users/rt/workspace/synod/docs/getting-started.md`, `/Users/rt/workspace/synod/docs/configuration.md`, and `/Users/rt/workspace/synod/assistant/README.md`
-- [ ] T022 [US3] Update contributor and roadmap guidance for the governed-stage-depth slice in `/Users/rt/workspace/synod/CONTRIBUTING.md` and `/Users/rt/workspace/synod/ROADMAP.md`
+- [ ] T021 [US3] Ship bounded governance profile examples and route-boundary guidance in `/Users/rt/workspace/boundline/README.md`, `/Users/rt/workspace/boundline/docs/getting-started.md`, `/Users/rt/workspace/boundline/docs/configuration.md`, and `/Users/rt/workspace/boundline/assistant/README.md`
+- [ ] T022 [US3] Update contributor and roadmap guidance for the governed-stage-depth slice in `/Users/rt/workspace/boundline/CONTRIBUTING.md` and `/Users/rt/workspace/boundline/ROADMAP.md`
 
 **Checkpoint**: Maintainers have one coherent authored example for the deeper governed bug-fix slice, and route ownership stays explicit.
 
@@ -105,9 +105,9 @@
 
 **Purpose**: Release alignment, changelog, agent context, and final validation closeout
 
-- [ ] T023 [P] Refresh generated agent context for the governed-stage-depth surface in `/Users/rt/workspace/synod/AGENTS.md`
-- [ ] T024 Update `/Users/rt/workspace/synod/CHANGELOG.md` and any touched governance-related assistant assets under `/Users/rt/workspace/synod/assistant/` to reflect the `0.20.0` governed-stage-depth release
-- [ ] T025 Run coverage-aware release validation for modified Rust files, refresh `/Users/rt/workspace/synod/lcov.info`, resolve remaining `cargo clippy` issues, run `cargo fmt --all`, and finish with clean validation for touched files under `/Users/rt/workspace/synod/src/` and `/Users/rt/workspace/synod/tests/`
+- [ ] T023 [P] Refresh generated agent context for the governed-stage-depth surface in `/Users/rt/workspace/boundline/AGENTS.md`
+- [ ] T024 Update `/Users/rt/workspace/boundline/CHANGELOG.md` and any touched governance-related assistant assets under `/Users/rt/workspace/boundline/assistant/` to reflect the `0.20.0` governed-stage-depth release
+- [ ] T025 Run coverage-aware release validation for modified Rust files, refresh `/Users/rt/workspace/boundline/lcov.info`, resolve remaining `cargo clippy` issues, run `cargo fmt --all`, and finish with clean validation for touched files under `/Users/rt/workspace/boundline/src/` and `/Users/rt/workspace/boundline/tests/`
 
 ---
 

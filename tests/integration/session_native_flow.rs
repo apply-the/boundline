@@ -3,31 +3,31 @@ use std::path::PathBuf;
 
 use uuid::Uuid;
 
-use serde_json::json;
-use synod::FileConfigStore;
-use synod::adapters::agent::FnAgentAdapter;
-use synod::adapters::session_store::{FileSessionStore, SessionStore};
-use synod::adapters::tool::FnToolAdapter;
-use synod::adapters::trace_store::FileTraceStore;
-use synod::cli::inspect::execute_inspect;
-use synod::cli::session::{
+use boundline::FileConfigStore;
+use boundline::adapters::agent::FnAgentAdapter;
+use boundline::adapters::session_store::{FileSessionStore, SessionStore};
+use boundline::adapters::tool::FnToolAdapter;
+use boundline::adapters::trace_store::FileTraceStore;
+use boundline::cli::inspect::execute_inspect;
+use boundline::cli::session::{
     execute_capture, execute_plan, execute_run, execute_start, execute_status,
 };
-use synod::domain::configuration::{
+use boundline::domain::configuration::{
     CapabilityState, ConfigFile, EffortFallbackPolicy, EffortLevel, ModelRoute, RouteSlot,
     RoutingConfig, RuntimeCapabilityProfile, RuntimeKind, SlotEffortPolicy,
 };
-use synod::domain::decision::{ActionSelector, DecisionType};
-use synod::domain::flow_policy::FlowPolicy;
-use synod::domain::goal_plan::{GoalPlan, PlannedTask};
-use synod::domain::session::SessionStatus;
-use synod::domain::step::{ErrorInfo, Recoverability, StepExecutionResult};
-use synod::domain::trace::TraceEventType;
-use synod::orchestrator::decision_loop::{DecisionLoop, LoopTerminal};
-use synod::orchestrator::flow_inference::infer_flow;
-use synod::orchestrator::goal_planner::build_goal_plan;
-use synod::registry::agent_registry::AgentRegistry;
-use synod::registry::tool_registry::ToolRegistry;
+use boundline::domain::decision::{ActionSelector, DecisionType};
+use boundline::domain::flow_policy::FlowPolicy;
+use boundline::domain::goal_plan::{GoalPlan, PlannedTask};
+use boundline::domain::session::SessionStatus;
+use boundline::domain::step::{ErrorInfo, Recoverability, StepExecutionResult};
+use boundline::domain::trace::TraceEventType;
+use boundline::orchestrator::decision_loop::{DecisionLoop, LoopTerminal};
+use boundline::orchestrator::flow_inference::infer_flow;
+use boundline::orchestrator::goal_planner::build_goal_plan;
+use boundline::registry::agent_registry::AgentRegistry;
+use boundline::registry::tool_registry::ToolRegistry;
+use serde_json::json;
 
 use crate::workspace_fixture::temp_fixture_workspace;
 
@@ -316,7 +316,7 @@ fn blocked_native_run_surfaces_delegation_across_status_and_inspect() {
         status.terminal_output
     );
     assert!(
-        status.terminal_output.contains("next_command: synod status"),
+        status.terminal_output.contains("next_command: boundline status"),
         "{}",
         status.terminal_output
     );
@@ -343,7 +343,7 @@ fn blocked_native_run_surfaces_delegation_across_status_and_inspect() {
     let continuity =
         goal_plan.delegation_continuity().expect("delegation continuity should persist");
     assert_eq!(continuity.mode.as_str(), "handoff_required");
-    assert_eq!(continuity.next_command, "synod status");
+    assert_eq!(continuity.next_command, "boundline status");
     assert_eq!(record.latest_status, SessionStatus::Planned);
 }
 
@@ -533,7 +533,7 @@ fn cli_plan_blocks_when_context_pack_is_not_credible() {
     assert!(status.terminal_output.contains("context_credibility: insufficient"));
     assert!(status.terminal_output.contains("context_summary: no credible bounded context"));
     assert!(
-        status.terminal_output.contains("next_command: synod capture --goal <narrower goal>"),
+        status.terminal_output.contains("next_command: boundline capture --goal <narrower goal>"),
         "{}",
         status.terminal_output
     );

@@ -3,7 +3,7 @@
 ## RuntimeCapabilityProfile
 
 - **Purpose**: Declares which routed execution behaviors a runtime can support
-  credibly for Synod's bounded delivery path.
+  credibly for Boundline's bounded delivery path.
 - **Fields**:
   - `runtime`: the declared runtime identity.
   - `supports_continuation`: whether the runtime can own a direct bounded next

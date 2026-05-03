@@ -1,16 +1,16 @@
+use boundline::domain::limits::{RunLimits, TerminalCondition};
+use boundline::domain::plan::Plan;
+use boundline::domain::step::{ErrorInfo, Recoverability, Step, StepExecutionResult};
+use boundline::domain::task::{Task, TaskRunRequest};
+use boundline::orchestrator::recovery::{RecoveryDecision, decide_recovery};
 use serde_json::json;
-use synod::domain::limits::{RunLimits, TerminalCondition};
-use synod::domain::plan::Plan;
-use synod::domain::step::{ErrorInfo, Recoverability, Step, StepExecutionResult};
-use synod::domain::task::{Task, TaskRunRequest};
-use synod::orchestrator::recovery::{RecoveryDecision, decide_recovery};
 
 fn build_task(limits: RunLimits) -> Task {
     let request = TaskRunRequest {
         goal: "Recover a failing step".to_string(),
         input: json!({"ticket": "BUG-5"}),
         session_id: "session-recovery".to_string(),
-        workspace_ref: "/tmp/synod-recovery".to_string(),
+        workspace_ref: "/tmp/boundline-recovery".to_string(),
         limits,
         initial_context: None,
     };

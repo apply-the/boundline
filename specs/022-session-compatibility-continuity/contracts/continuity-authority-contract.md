@@ -5,7 +5,7 @@
 
 ## Purpose
 
-Define how Synod chooses the authoritative follow-up state after explicit compatibility execution.
+Define how Boundline chooses the authoritative follow-up state after explicit compatibility execution.
 
 ## Authority Rules
 

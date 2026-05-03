@@ -17,8 +17,8 @@
 
 **Purpose**: Finalize the 035 feature pack and test harness entry points before runtime changes.
 
-- [x] T001 Confirm and keep synchronized `/Users/rt/workspace/synod/specs/035-dynamic-planning-flow/plan.md`, `/Users/rt/workspace/synod/specs/035-dynamic-planning-flow/research.md`, `/Users/rt/workspace/synod/specs/035-dynamic-planning-flow/data-model.md`, `/Users/rt/workspace/synod/specs/035-dynamic-planning-flow/contracts/`, and `/Users/rt/workspace/synod/specs/035-dynamic-planning-flow/quickstart.md`
-- [x] T002 [P] Add or update top-level test harness references in `/Users/rt/workspace/synod/tests/unit.rs`, `/Users/rt/workspace/synod/tests/contract.rs`, and `/Users/rt/workspace/synod/tests/integration.rs` if 035 introduces new test modules
+- [x] T001 Confirm and keep synchronized `/Users/rt/workspace/boundline/specs/035-dynamic-planning-flow/plan.md`, `/Users/rt/workspace/boundline/specs/035-dynamic-planning-flow/research.md`, `/Users/rt/workspace/boundline/specs/035-dynamic-planning-flow/data-model.md`, `/Users/rt/workspace/boundline/specs/035-dynamic-planning-flow/contracts/`, and `/Users/rt/workspace/boundline/specs/035-dynamic-planning-flow/quickstart.md`
+- [x] T002 [P] Add or update top-level test harness references in `/Users/rt/workspace/boundline/tests/unit.rs`, `/Users/rt/workspace/boundline/tests/contract.rs`, and `/Users/rt/workspace/boundline/tests/integration.rs` if 035 introduces new test modules
 
 ---
 
@@ -28,10 +28,10 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [x] T003 Extend `/Users/rt/workspace/synod/src/domain/goal_plan.rs` with explicit plan proposal state, verification strategy, proposal rationale, revision lineage, and validation rules for proposed, confirmed, and superseded plans
-- [x] T004 [P] Extend `/Users/rt/workspace/synod/src/domain/session.rs` and `/Users/rt/workspace/synod/src/domain/trace.rs` with planning proposal projection fields, confirmation blockers, revision summaries, and inspectable evidence headlines shared by runtime and CLI surfaces
-- [x] T005 [P] Extend `/Users/rt/workspace/synod/src/cli.rs` and `/Users/rt/workspace/synod/src/cli/session.rs` with bounded `plan --confirm` and `plan --replan` command semantics plus operator-visible error handling for missing or invalid proposals
-- [x] T006 [P] Extend `/Users/rt/workspace/synod/tests/unit/goal_plan_model.rs`, `/Users/rt/workspace/synod/tests/unit/session_model.rs`, and `/Users/rt/workspace/synod/tests/unit/session_record.rs` with foundational coverage for proposal state transitions, confirmation blocking, and revision lineage invariants
+- [x] T003 Extend `/Users/rt/workspace/boundline/src/domain/goal_plan.rs` with explicit plan proposal state, verification strategy, proposal rationale, revision lineage, and validation rules for proposed, confirmed, and superseded plans
+- [x] T004 [P] Extend `/Users/rt/workspace/boundline/src/domain/session.rs` and `/Users/rt/workspace/boundline/src/domain/trace.rs` with planning proposal projection fields, confirmation blockers, revision summaries, and inspectable evidence headlines shared by runtime and CLI surfaces
+- [x] T005 [P] Extend `/Users/rt/workspace/boundline/src/cli.rs` and `/Users/rt/workspace/boundline/src/cli/session.rs` with bounded `plan --confirm` and `plan --replan` command semantics plus operator-visible error handling for missing or invalid proposals
+- [x] T006 [P] Extend `/Users/rt/workspace/boundline/tests/unit/goal_plan_model.rs`, `/Users/rt/workspace/boundline/tests/unit/session_model.rs`, and `/Users/rt/workspace/boundline/tests/unit/session_record.rs` with foundational coverage for proposal state transitions, confirmation blocking, and revision lineage invariants
 
 **Checkpoint**: Proposal lifecycle, session projection, and CLI entry semantics exist and can support all user stories.
 
@@ -45,15 +45,15 @@
 
 ### Tests for User Story 1
 
-- [x] T007 [P] [US1] Add contract coverage for evidence-driven proposal payloads in `/Users/rt/workspace/synod/tests/contract/goal_plan_contract.rs`
-- [x] T008 [P] [US1] Add integration coverage for evidence-driven `start -> capture -> plan` behavior in `/Users/rt/workspace/synod/tests/integration/session_native_flow.rs`
-- [x] T009 [P] [US1] Add unit coverage for evidence scoring, target selection, and verification-strategy inference in `/Users/rt/workspace/synod/tests/unit/flow_inference.rs` and `/Users/rt/workspace/synod/tests/unit/goal_planner.rs`
+- [x] T007 [P] [US1] Add contract coverage for evidence-driven proposal payloads in `/Users/rt/workspace/boundline/tests/contract/goal_plan_contract.rs`
+- [x] T008 [P] [US1] Add integration coverage for evidence-driven `start -> capture -> plan` behavior in `/Users/rt/workspace/boundline/tests/integration/session_native_flow.rs`
+- [x] T009 [P] [US1] Add unit coverage for evidence scoring, target selection, and verification-strategy inference in `/Users/rt/workspace/boundline/tests/unit/flow_inference.rs` and `/Users/rt/workspace/boundline/tests/unit/goal_planner.rs`
 
 ### Implementation for User Story 1
 
-- [x] T010 [US1] Replace keyword-first flow inference in `/Users/rt/workspace/synod/src/orchestrator/flow_inference.rs` with evidence scoring derived from context inputs, selected targets, workspace signals, traces, and workflow guardrails
-- [x] T011 [US1] Extend `/Users/rt/workspace/synod/src/orchestrator/goal_planner.rs` to build a planning evidence bundle, infer bounded targets, derive verification strategy, and shape planned tasks from that evidence instead of a static analyze/fix/test sequence
-- [x] T012 [US1] Extend `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs` so `plan_task` persists an unconfirmed proposal or an insufficient-context stop with evidence-backed rationale on the native path
+- [x] T010 [US1] Replace keyword-first flow inference in `/Users/rt/workspace/boundline/src/orchestrator/flow_inference.rs` with evidence scoring derived from context inputs, selected targets, workspace signals, traces, and workflow guardrails
+- [x] T011 [US1] Extend `/Users/rt/workspace/boundline/src/orchestrator/goal_planner.rs` to build a planning evidence bundle, infer bounded targets, derive verification strategy, and shape planned tasks from that evidence instead of a static analyze/fix/test sequence
+- [x] T012 [US1] Extend `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs` so `plan_task` persists an unconfirmed proposal or an insufficient-context stop with evidence-backed rationale on the native path
 
 **Checkpoint**: Native planning now produces an evidence-driven proposal or an explicit bounded stop.
 
@@ -67,15 +67,15 @@
 
 ### Tests for User Story 2
 
-- [x] T013 [P] [US2] Add contract coverage for proposal confirmation and CLI-visible blocking semantics in `/Users/rt/workspace/synod/tests/contract/runtime_refoundation_contract.rs`
-- [x] T014 [P] [US2] Add integration coverage for `plan --confirm`, `status`, `next`, and blocked `run` behavior in `/Users/rt/workspace/synod/tests/integration/session_native_flow.rs`
-- [x] T015 [P] [US2] Add unit coverage for proposal rendering and execution-path projection in `/Users/rt/workspace/synod/tests/unit/runtime_routing.rs`, `/Users/rt/workspace/synod/tests/unit/session_model.rs`, and `/Users/rt/workspace/synod/tests/unit/flow_confirmation.rs`
+- [x] T013 [P] [US2] Add contract coverage for proposal confirmation and CLI-visible blocking semantics in `/Users/rt/workspace/boundline/tests/contract/runtime_refoundation_contract.rs`
+- [x] T014 [P] [US2] Add integration coverage for `plan --confirm`, `status`, `next`, and blocked `run` behavior in `/Users/rt/workspace/boundline/tests/integration/session_native_flow.rs`
+- [x] T015 [P] [US2] Add unit coverage for proposal rendering and execution-path projection in `/Users/rt/workspace/boundline/tests/unit/runtime_routing.rs`, `/Users/rt/workspace/boundline/tests/unit/session_model.rs`, and `/Users/rt/workspace/boundline/tests/unit/flow_confirmation.rs`
 
 ### Implementation for User Story 2
 
-- [x] T016 [US2] Extend `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs` and `/Users/rt/workspace/synod/src/domain/session.rs` so native routing distinguishes proposed, confirmed, insufficient-context, and compatibility-authoritative planning states
-- [x] T017 [US2] Extend `/Users/rt/workspace/synod/src/cli/output.rs`, `/Users/rt/workspace/synod/src/cli/inspect.rs`, and `/Users/rt/workspace/synod/src/cli/session.rs` to render proposal summaries, evidence rationale, verification strategy, and next-command guidance on `plan`, `status`, `next`, `run`, and `inspect`
-- [x] T018 [US2] Extend `/Users/rt/workspace/synod/src/domain/trace.rs` and `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs` so proposal confirmation and blocked-run reasons persist in authoritative trace summaries
+- [x] T016 [US2] Extend `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs` and `/Users/rt/workspace/boundline/src/domain/session.rs` so native routing distinguishes proposed, confirmed, insufficient-context, and compatibility-authoritative planning states
+- [x] T017 [US2] Extend `/Users/rt/workspace/boundline/src/cli/output.rs`, `/Users/rt/workspace/boundline/src/cli/inspect.rs`, and `/Users/rt/workspace/boundline/src/cli/session.rs` to render proposal summaries, evidence rationale, verification strategy, and next-command guidance on `plan`, `status`, `next`, `run`, and `inspect`
+- [x] T018 [US2] Extend `/Users/rt/workspace/boundline/src/domain/trace.rs` and `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs` so proposal confirmation and blocked-run reasons persist in authoritative trace summaries
 
 **Checkpoint**: Operators can inspect and confirm the proposed plan from the normal session-native surfaces.
 
@@ -85,19 +85,19 @@
 
 **Goal**: Allow bounded replanning to revise targets, verification strategy, or flow choice when new evidence invalidates the prior proposal, while preserving rationale and acceptance-boundary visibility.
 
-**Independent Test**: Run representative scenarios where initial analysis or validation invalidates the first proposal and verify that Synod records a bounded new revision instead of silently mutating or continuing the old plan.
+**Independent Test**: Run representative scenarios where initial analysis or validation invalidates the first proposal and verify that Boundline records a bounded new revision instead of silently mutating or continuing the old plan.
 
 ### Tests for User Story 3
 
-- [x] T019 [P] [US3] Add contract coverage for bounded replan revision lineage in `/Users/rt/workspace/synod/tests/contract/goal_plan_contract.rs`
-- [x] T020 [P] [US3] Add integration coverage for bounded replanning and explicit stop behavior in `/Users/rt/workspace/synod/tests/integration/retry_and_replan.rs` and `/Users/rt/workspace/synod/tests/integration/runtime_refoundation_failure.rs`
-- [x] T021 [P] [US3] Add unit coverage for revision supersession, no-op replans, and guardrail conflicts in `/Users/rt/workspace/synod/tests/unit/goal_planner.rs`, `/Users/rt/workspace/synod/tests/unit/runtime_routing.rs`, and `/Users/rt/workspace/synod/tests/unit/session_record.rs`
+- [x] T019 [P] [US3] Add contract coverage for bounded replan revision lineage in `/Users/rt/workspace/boundline/tests/contract/goal_plan_contract.rs`
+- [x] T020 [P] [US3] Add integration coverage for bounded replanning and explicit stop behavior in `/Users/rt/workspace/boundline/tests/integration/retry_and_replan.rs` and `/Users/rt/workspace/boundline/tests/integration/runtime_refoundation_failure.rs`
+- [x] T021 [P] [US3] Add unit coverage for revision supersession, no-op replans, and guardrail conflicts in `/Users/rt/workspace/boundline/tests/unit/goal_planner.rs`, `/Users/rt/workspace/boundline/tests/unit/runtime_routing.rs`, and `/Users/rt/workspace/boundline/tests/unit/session_record.rs`
 
 ### Implementation for User Story 3
 
-- [x] T022 [US3] Extend `/Users/rt/workspace/synod/src/orchestrator/goal_planner.rs` and `/Users/rt/workspace/synod/src/orchestrator/flow_inference.rs` to compare fresh evidence against the active proposal and produce bounded replan revisions or explicit no-credible-plan stops
-- [x] T023 [US3] Extend `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs` and `/Users/rt/workspace/synod/src/domain/goal_plan.rs` to supersede prior revisions, preserve acceptance-boundary continuity, and require reconfirmation before resumed execution
-- [x] T024 [US3] Extend `/Users/rt/workspace/synod/src/cli/output.rs`, `/Users/rt/workspace/synod/src/cli/inspect.rs`, and `/Users/rt/workspace/synod/src/domain/trace.rs` to surface revision lineage, changed fields, explicit stop reasons, and workflow-guardrail conflicts
+- [x] T022 [US3] Extend `/Users/rt/workspace/boundline/src/orchestrator/goal_planner.rs` and `/Users/rt/workspace/boundline/src/orchestrator/flow_inference.rs` to compare fresh evidence against the active proposal and produce bounded replan revisions or explicit no-credible-plan stops
+- [x] T023 [US3] Extend `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs` and `/Users/rt/workspace/boundline/src/domain/goal_plan.rs` to supersede prior revisions, preserve acceptance-boundary continuity, and require reconfirmation before resumed execution
+- [x] T024 [US3] Extend `/Users/rt/workspace/boundline/src/cli/output.rs`, `/Users/rt/workspace/boundline/src/cli/inspect.rs`, and `/Users/rt/workspace/boundline/src/domain/trace.rs` to surface revision lineage, changed fields, explicit stop reasons, and workflow-guardrail conflicts
 
 **Checkpoint**: Replanning is bounded, inspectable, and authoritative.
 
@@ -111,14 +111,14 @@
 
 ### Tests for User Story 4
 
-- [x] T025 [P] [US4] Refresh focused coverage assertions for touched Rust files via `/Users/rt/workspace/synod/lcov.info` and supporting validation commands
+- [x] T025 [P] [US4] Refresh focused coverage assertions for touched Rust files via `/Users/rt/workspace/boundline/lcov.info` and supporting validation commands
 
 ### Implementation for User Story 4
 
-- [x] T026 [US4] Bump crate version to `0.35.0` in `/Users/rt/workspace/synod/Cargo.toml` and `/Users/rt/workspace/synod/Cargo.lock`
-- [x] T027 [US4] Update impacted docs and release narrative in `/Users/rt/workspace/synod/README.md`, `/Users/rt/workspace/synod/docs/`, `/Users/rt/workspace/synod/CONTRIBUTING.md`, `/Users/rt/workspace/synod/CHANGELOG.md`, and `/Users/rt/workspace/synod/AGENTS.md`
-- [x] T028 [US4] Update `/Users/rt/workspace/synod/ROADMAP.md` to mark Spec 035 as delivered and remove it from the remaining future macrofeature line
-- [x] T029 [US4] Update assistant guidance impacted by dynamic planning in `/Users/rt/workspace/synod/assistant/README.md`, `/Users/rt/workspace/synod/assistant/claude/commands/`, `/Users/rt/workspace/synod/assistant/codex/commands/`, and `/Users/rt/workspace/synod/assistant/copilot/prompts/`
+- [x] T026 [US4] Bump crate version to `0.35.0` in `/Users/rt/workspace/boundline/Cargo.toml` and `/Users/rt/workspace/boundline/Cargo.lock`
+- [x] T027 [US4] Update impacted docs and release narrative in `/Users/rt/workspace/boundline/README.md`, `/Users/rt/workspace/boundline/docs/`, `/Users/rt/workspace/boundline/CONTRIBUTING.md`, `/Users/rt/workspace/boundline/CHANGELOG.md`, and `/Users/rt/workspace/boundline/AGENTS.md`
+- [x] T028 [US4] Update `/Users/rt/workspace/boundline/ROADMAP.md` to mark Spec 035 as delivered and remove it from the remaining future macrofeature line
+- [x] T029 [US4] Update assistant guidance impacted by dynamic planning in `/Users/rt/workspace/boundline/assistant/README.md`, `/Users/rt/workspace/boundline/assistant/claude/commands/`, `/Users/rt/workspace/boundline/assistant/codex/commands/`, and `/Users/rt/workspace/boundline/assistant/copilot/prompts/`
 
 **Checkpoint**: Release artifacts describe `0.35.0` consistently.
 
@@ -132,7 +132,7 @@
 - [x] T031 [P] Run lint validation with `cargo clippy --workspace --all-targets --all-features -- -D warnings`
 - [x] T032 Run compile-oriented and broader Rust validation for the slice with `cargo test --no-run --all-targets` and `cargo nextest run --workspace --all-features`
 - [x] T033 Refresh line coverage with `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info` and confirm modified or new Rust files stay above 95%
-- [x] T034 Mark completed tasks in `/Users/rt/workspace/synod/specs/035-dynamic-planning-flow/tasks.md` and capture the final descriptive commit message in the implementation summary
+- [x] T034 Mark completed tasks in `/Users/rt/workspace/boundline/specs/035-dynamic-planning-flow/tasks.md` and capture the final descriptive commit message in the implementation summary
 
 ---
 

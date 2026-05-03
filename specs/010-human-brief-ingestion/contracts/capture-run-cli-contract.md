@@ -2,14 +2,14 @@
 
 ## Purpose
 
-Define the human-facing command contract for starting Synod work from direct text, one or more Markdown briefs, and optional governance intent without requiring users to author internal manifests.
+Define the human-facing command contract for starting Boundline work from direct text, one or more Markdown briefs, and optional governance intent without requiring users to author internal manifests.
 
 ## Command Surface
 
-### `synod capture`
+### `boundline capture`
 
 ```text
-synod capture \
+boundline capture \
   --workspace <path> \
   [--goal <text>] \
   [--brief <path>]... \
@@ -22,12 +22,12 @@ synod capture \
 - At least one of `--goal` or `--brief` is required.
 - `--brief` may be repeated to preserve explicit source order.
 - Governance flags are optional and express business intent, not stage wiring.
-- On success, Synod persists the normalized human input into the active session and returns the next recommended command.
+- On success, Boundline persists the normalized human input into the active session and returns the next recommended command.
 
-### `synod run`
+### `boundline run`
 
 ```text
-synod run \
+boundline run \
   --workspace <path> \
   [--goal <text>] \
   [--brief <path>]... \
@@ -55,8 +55,8 @@ synod run \
 - `capture` fails with invalid invocation if neither `--goal` nor `--brief` is supplied.
 - A brief path that is missing, unreadable, outside the workspace boundary, or not Markdown fails the command before planning begins.
 - Governance business fields must never require the user to supply stage IDs, Canon modes, packet references, or manifest keys.
-- If governance is requested but required business fields are missing, Synod raises a targeted clarification instead of inventing defaults silently.
-- If the accepted input is too broad or conflicting to produce a bounded task, Synod records one explicit clarification and does not continue to planning.
+- If governance is requested but required business fields are missing, Boundline raises a targeted clarification instead of inventing defaults silently.
+- If the accepted input is too broad or conflicting to produce a bounded task, Boundline records one explicit clarification and does not continue to planning.
 
 ## Compatibility Rules
 

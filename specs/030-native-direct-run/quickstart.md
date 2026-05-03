@@ -11,11 +11,11 @@ through the existing CLI surfaces.
 ## 1. Start from one direct native run command
 
 ```bash
-cargo run --bin synod -- run --workspace <workspace> --goal "Fix the failing add test"
+cargo run --bin boundline -- run --workspace <workspace> --goal "Fix the failing add test"
 ```
 
 Expected behavior:
-- Synod bootstraps native session state automatically.
+- Boundline bootstraps native session state automatically.
 - The command reports native routing instead of compatibility routing.
 - The workspace is mutated and validated through the existing bounded native
   route.
@@ -23,9 +23,9 @@ Expected behavior:
 ## 2. Continue from persisted native session state
 
 ```bash
-cargo run --bin synod -- status --workspace <workspace>
-cargo run --bin synod -- next --workspace <workspace>
-cargo run --bin synod -- inspect --workspace <workspace>
+cargo run --bin boundline -- status --workspace <workspace>
+cargo run --bin boundline -- next --workspace <workspace>
+cargo run --bin boundline -- inspect --workspace <workspace>
 ```
 
 Expected behavior:
@@ -36,25 +36,25 @@ Expected behavior:
 ## 3. Keep compatibility execution explicit
 
 ```bash
-cargo run --bin synod -- run --workspace <workspace> --goal "Fix the failing add test" --compatibility
+cargo run --bin boundline -- run --workspace <workspace> --goal "Fix the failing add test" --compatibility
 ```
 
 Expected behavior:
-- Synod uses the explicit compatibility route only because the operator asked
+- Boundline uses the explicit compatibility route only because the operator asked
   for it deliberately.
 - Run, inspect, and follow-up output keep compatibility ownership explicit.
 
 ## 4. Protect active session state
 
 ```bash
-cargo run --bin synod -- start --workspace <workspace>
-cargo run --bin synod -- capture --workspace <workspace> --goal "Fix the failing add test"
-cargo run --bin synod -- run --workspace <workspace> --goal "Ship the checkout change"
+cargo run --bin boundline -- start --workspace <workspace>
+cargo run --bin boundline -- capture --workspace <workspace> --goal "Fix the failing add test"
+cargo run --bin boundline -- run --workspace <workspace> --goal "Ship the checkout change"
 ```
 
 Expected behavior:
 - The last command does not silently overwrite meaningful active session state.
-- Synod stops explicitly and tells the operator whether to continue, inspect, or
+- Boundline stops explicitly and tells the operator whether to continue, inspect, or
   reset the session first.
 
 ## 5. Validate the release story

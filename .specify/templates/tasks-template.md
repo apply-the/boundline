@@ -8,7 +8,7 @@ description: "Task list template for feature implementation"
 **Input**: Design documents from `/specs/[###-feature-name]/`
 **Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
 
-**Tests**: Validation tasks are expected for Synod features. Include them whenever the
+**Tests**: Validation tasks are expected for Boundline features. Include them whenever the
 feature defines executable behavior, failure handling, replanning, or trace guarantees.
 Omit them only when the feature is truly documentation-only. When the feature changes
 runtime routing, governance surfaces, or operator-facing summaries, include coverage for
@@ -27,7 +27,7 @@ inspectable value independently.
 
 ## Path Conventions
 
-- **Default Synod layout**: `src/`, `tests/` at repository root
+- **Default Boundline layout**: `src/`, `tests/` at repository root
 - Adjust paths only when `plan.md` explicitly defines a different structure
 - Do not invent frontend/backend or deployment surfaces unless the Constitution Check justifies them
 

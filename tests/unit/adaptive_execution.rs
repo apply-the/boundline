@@ -1,12 +1,12 @@
-use serde_json::json;
-use synod::domain::execution::ValidationRecord;
-use synod::domain::step::{ErrorInfo, Recoverability, StepExecutionResult};
-use synod::domain::task::Task;
-use synod::fixture::{
+use boundline::domain::execution::ValidationRecord;
+use boundline::domain::step::{ErrorInfo, Recoverability, StepExecutionResult};
+use boundline::domain::task::Task;
+use boundline::fixture::{
     build_fixture_plan_for_goal, build_fixture_runtime, build_task_request,
     load_workspace_execution_profile,
 };
-use synod::orchestrator::planner::Planner;
+use boundline::orchestrator::planner::Planner;
+use serde_json::json;
 
 use crate::workspace_fixture::{
     temp_adaptive_fixture_workspace, temp_adaptive_guided_replanning_workspace,
@@ -15,7 +15,7 @@ use crate::workspace_fixture::{
 
 #[test]
 fn adaptive_profile_builds_a_goal_aware_initial_plan_without_authored_attempts() {
-    let workspace = temp_adaptive_fixture_workspace("synod-adaptive-plan");
+    let workspace = temp_adaptive_fixture_workspace("boundline-adaptive-plan");
     let profile = load_workspace_execution_profile(&workspace).unwrap();
     let plan = build_fixture_plan_for_goal(&workspace, None, "Fix the failing add test").unwrap();
 
@@ -39,7 +39,7 @@ fn adaptive_profile_builds_a_goal_aware_initial_plan_without_authored_attempts()
 
 #[test]
 fn adaptive_profile_generates_a_deterministic_first_candidate_for_replanning() {
-    let workspace = temp_adaptive_replanning_workspace("synod-adaptive-replan-plan");
+    let workspace = temp_adaptive_replanning_workspace("boundline-adaptive-replan-plan");
     let plan =
         build_fixture_plan_for_goal(&workspace, None, "Recover after validation fails").unwrap();
 
@@ -49,7 +49,8 @@ fn adaptive_profile_generates_a_deterministic_first_candidate_for_replanning() {
 
 #[test]
 fn adaptive_replan_uses_latest_validation_record_to_shift_selected_target() {
-    let workspace = temp_adaptive_guided_replanning_workspace("synod-adaptive-guided-replan-plan");
+    let workspace =
+        temp_adaptive_guided_replanning_workspace("boundline-adaptive-guided-replan-plan");
     let runtime = build_fixture_runtime(&workspace).unwrap();
     let request = build_task_request(
         &workspace,
@@ -113,7 +114,8 @@ fn adaptive_replan_uses_latest_validation_record_to_shift_selected_target() {
 
 #[test]
 fn adaptive_profile_can_select_the_ordering_boundary_family() {
-    let workspace = temp_adaptive_ordering_boundary_workspace("synod-adaptive-ordering-boundary");
+    let workspace =
+        temp_adaptive_ordering_boundary_workspace("boundline-adaptive-ordering-boundary");
     let plan =
         build_fixture_plan_for_goal(&workspace, None, "Fix the inclusive threshold boundary")
             .unwrap();

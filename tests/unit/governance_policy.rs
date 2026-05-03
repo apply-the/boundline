@@ -1,22 +1,21 @@
 use std::path::Path;
 
-use serde_json::json;
-use synod::domain::brief::AuthoredBriefResolutionState;
-use synod::domain::flow::FlowStepMetadata;
-use synod::domain::governance::{
+use boundline::domain::brief::AuthoredBriefResolutionState;
+use boundline::domain::flow::FlowStepMetadata;
+use boundline::domain::governance::{
     CanonCapabilitySnapshot, CanonModeSummary, CanonResultActionSummary, CompactedCanonMemory,
     MemoryCredibilityState,
 };
-use synod::domain::limits::RunLimits;
-use synod::domain::task_context::TaskContext;
-use synod::domain::task_context::{
+use boundline::domain::limits::RunLimits;
+use boundline::domain::task_context::TaskContext;
+use boundline::domain::task_context::{
     LATEST_GOVERNANCE_DECISION_KEY, LATEST_GOVERNANCE_PACKET_KEY,
     LATEST_GOVERNANCE_PACKET_REUSE_KEY, LATEST_GOVERNANCE_STAGE_KEY,
 };
-use synod::orchestrator::governance::{
+use boundline::orchestrator::governance::{
     governance_input_documents, overlay_stage_policy_with_intent, requested_governance_intent,
 };
-use synod::{
+use boundline::{
     ApprovalState, AuthoredBriefBundle, AutopilotAction, AutopilotDecisionRecord, CanonMode,
     CanonRuntimeConfig, GovernanceBoundedContext, GovernanceIntent, GovernanceLifecycleState,
     GovernanceProfile, GovernanceRuntimeKind, GovernedStagePacket, GovernedStageRecord,
@@ -26,6 +25,7 @@ use synod::{
     governance_stage_key, governance_state_patch, narrowed_bounded_context,
     select_packet_reuse_binding, selected_stage_policy, supported_canon_modes_for_stage,
 };
+use serde_json::json;
 
 fn sample_record() -> GovernedStageRecord {
     GovernedStageRecord {
@@ -38,7 +38,7 @@ fn sample_record() -> GovernedStageRecord {
         canon_run_ref: None,
         governance_attempt_id: "attempt-1".to_string(),
         previous_governance_attempt_id: None,
-        packet_ref: Some(".synod/governance/bug-fix-investigate/attempt-1".to_string()),
+        packet_ref: Some(".boundline/governance/bug-fix-investigate/attempt-1".to_string()),
         decision_ref: Some("decision-1".to_string()),
         blocked_reason: None,
     }
@@ -265,7 +265,7 @@ fn packet_readiness_defaults_to_incomplete_without_expected_documents() {
 fn governance_state_patch_writes_all_present_entries() {
     let record = sample_record();
     let packet = GovernedStagePacket {
-        packet_ref: ".synod/governance/bug-fix-investigate/attempt-1".to_string(),
+        packet_ref: ".boundline/governance/bug-fix-investigate/attempt-1".to_string(),
         runtime: GovernanceRuntimeKind::Local,
         canon_mode: None,
         expected_document_refs: vec!["packet/brief.md".to_string()],
@@ -650,7 +650,7 @@ fn canon_runtime_config_validation_rejects_blank_command() {
 fn governance_reuse_binding_uses_immediate_upstream_stage_context() {
     let mut context = TaskContext::new(
         "session-governance",
-        "/tmp/synod-governance",
+        "/tmp/boundline-governance",
         RunLimits::default(),
         serde_json::Map::new(),
     );
@@ -706,7 +706,7 @@ fn governance_reuse_binding_uses_immediate_upstream_stage_context() {
 fn governance_reuse_binding_supports_same_stage_rerun() {
     let mut context = TaskContext::new(
         "session-governance",
-        "/tmp/synod-governance",
+        "/tmp/boundline-governance",
         RunLimits::default(),
         serde_json::Map::new(),
     );

@@ -1,13 +1,13 @@
 # Implementation Plan: Expand Multi-Workspace Delivery
 
-**Branch**: `025-multi-workspace-delivery` | **Date**: 2026-05-01 | **Spec**: [/Users/rt/workspace/synod/specs/025-multi-workspace-delivery/spec.md](/Users/rt/workspace/synod/specs/025-multi-workspace-delivery/spec.md)
+**Branch**: `025-multi-workspace-delivery` | **Date**: 2026-05-01 | **Spec**: [/Users/rt/workspace/boundline/specs/025-multi-workspace-delivery/spec.md](/Users/rt/workspace/boundline/specs/025-multi-workspace-delivery/spec.md)
 **Input**: Feature specification from `/specs/025-multi-workspace-delivery/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
 
 ## Summary
 
-Extend Synod's current cluster slice from registration, inspection, and shared
+Extend Boundline's current cluster slice from registration, inspection, and shared
 defaults into one bounded multi-workspace delivery story. The slice keeps the
 session-native operator path primary by adding cluster-aware planning,
 execution, and follow-up under one authoritative orchestration owner, makes
@@ -25,7 +25,7 @@ modified Rust files, clippy cleanup, and formatting.
 
 **Language/Version**: Rust 1.95.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, and collections APIs; no new runtime dependencies planned for this slice  
-**Storage**: Workspace-local `.synod/cluster.toml`, `.synod/session.json`, `.synod/traces/`, `.synod/execution.json`, `.synod/config.toml`, optional `.synod/workflows.toml`, and release-aligned repository docs plus assistant assets  
+**Storage**: Workspace-local `.boundline/cluster.toml`, `.boundline/session.json`, `.boundline/traces/`, `.boundline/execution.json`, `.boundline/config.toml`, optional `.boundline/workflows.toml`, and release-aligned repository docs plus assistant assets  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --no-run --all-targets`, targeted unit, integration, and contract coverage for clustered planning, execution, and follow-up, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, plus repository-standard `cargo nextest run --workspace --all-features` and `cargo deny check licenses advisories bans sources` during release closeout  
 **Target Platform**: macOS/Linux developer workstations and Linux CI
 **Project Type**: Single Rust CLI/library crate with file-backed cluster, session, trace, and config state  
@@ -53,16 +53,16 @@ modified Rust files, clippy cleanup, and formatting.
 
 Mark each line as PASS or FAIL in the completed plan and reference the section that satisfies it.
 
-- **PASS** Delivery identity: The slice directly improves bounded engineering-task delivery by letting one session-native delivery story plan and mutate across clustered repositories without manual handoff between separate runs. See Summary, Technical Context, and [spec.md](/Users/rt/workspace/synod/specs/025-multi-workspace-delivery/spec.md).
+- **PASS** Delivery identity: The slice directly improves bounded engineering-task delivery by letting one session-native delivery story plan and mutate across clustered repositories without manual handoff between separate runs. See Summary, Technical Context, and [spec.md](/Users/rt/workspace/boundline/specs/025-multi-workspace-delivery/spec.md).
 - **PASS** Delivery-first scope: The work is centered on orchestration, execution, follow-up authority, and observability across repositories; polish remains a release-closeout tail, not the slice core. See Summary and Technical Context.
 - **PASS** Primary workflow: Session-native remains the preferred operator path, now deepened with cluster-aware entry and follow-up, while explicit compatibility behavior stays explicit rather than becoming the default cluster runtime. See Summary, Technical Context, research, and quickstart.
 - **PASS** Bounded execution: Clustered runs stay inside existing step and retry limits, stop explicitly on blocked or non-credible member transitions, and do not introduce hidden fan-out or autonomous background work. See Technical Context, research, data model, and quickstart.
 - **PASS** Stateful execution: The design reuses persisted cluster config, session state, task context, and traces to record authoritative ownership and workspace participation across the delivery story. See Summary, Technical Context, and data model.
 - **PASS** Mutable planning: The slice reuses current plan/replan behavior while widening the delivery context to choose and record bounded member-workspace participation inside one story. See Summary, research, and data model.
-- **PASS** Sequential-first design: Only one authoritative owner and one active workspace step remain live at a time; the slice explicitly rejects parallel fan-out, distributed workers, and hidden background loops. See Technical Context, research, and [spec.md](/Users/rt/workspace/synod/specs/025-multi-workspace-delivery/spec.md).
+- **PASS** Sequential-first design: Only one authoritative owner and one active workspace step remain live at a time; the slice explicitly rejects parallel fan-out, distributed workers, and hidden background loops. See Technical Context, research, and [spec.md](/Users/rt/workspace/boundline/specs/025-multi-workspace-delivery/spec.md).
 - **PASS** Tool-agent symmetry: Clustered execution still surfaces explicit planning, action, validation, and follow-up transitions through existing session-native orchestration and trace surfaces rather than inventing a second opaque control path. See Summary, research, quickstart, and contracts.
 - **PASS** Observability and explicit intelligence: Route owner, authoritative workspace context, workspace participation, execution condition, and next-step guidance remain inspectable across cluster-aware command output and traces. See Technical Context, quickstart, and contracts.
-- **PASS** Non-goals and external separation: The plan does not introduce Canon-owned orchestration, provider control planes, distributed execution, long-term memory, or UI work; it reuses bounded local cluster state only. See Constraints, research, and [spec.md](/Users/rt/workspace/synod/specs/025-multi-workspace-delivery/spec.md).
+- **PASS** Non-goals and external separation: The plan does not introduce Canon-owned orchestration, provider control planes, distributed execution, long-term memory, or UI work; it reuses bounded local cluster state only. See Constraints, research, and [spec.md](/Users/rt/workspace/boundline/specs/025-multi-workspace-delivery/spec.md).
 - **PASS** Minimal slice: The smallest independently valuable capability is one bounded cluster delivery story with explicit workspace participation and follow-up authority on top of the existing cluster bootstrap/status/config base. See Summary and research.
 
 ## Project Structure

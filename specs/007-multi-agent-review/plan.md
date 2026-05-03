@@ -5,13 +5,13 @@
 
 ## Summary
 
-Add a bounded review phase on top of the execution engine so Synod can run an explicit council of sequential reviewer agent steps, capture structured findings, apply majority or weighted voting, optionally perform one adjudication step, and surface the resulting review decision through run, status, next, and inspect. The minimal slice extends the existing execution manifest and task lifecycle instead of introducing a new runtime, preserving the current CLI, session store, trace store, and sequential execution model while adding review-specific task state, trace events, and developer-facing documentation. Assistants remain documentation and summary surfaces in this slice rather than runtime reviewers.
+Add a bounded review phase on top of the execution engine so Boundline can run an explicit council of sequential reviewer agent steps, capture structured findings, apply majority or weighted voting, optionally perform one adjudication step, and surface the resulting review decision through run, status, next, and inspect. The minimal slice extends the existing execution manifest and task lifecycle instead of introducing a new runtime, preserving the current CLI, session store, trace store, and sequential execution model while adding review-specific task state, trace events, and developer-facing documentation. Assistants remain documentation and summary surfaces in this slice rather than runtime reviewers.
 
 ## Technical Context
 
 **Language/Version**: Rust 1.95.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`) plus Rust standard library collections; no new runtime dependencies for the initial review slice  
-**Storage**: Workspace-local JSON session record at `<workspace>/.synod/session.json`, persisted execution traces under `<workspace>/.synod/traces/`, and workspace execution manifests under `<workspace>/.synod/execution.json` extended with bounded review configuration  
+**Storage**: Workspace-local JSON session record at `<workspace>/.boundline/session.json`, persisted execution traces under `<workspace>/.boundline/traces/`, and workspace execution manifests under `<workspace>/.boundline/execution.json` extended with bounded review configuration  
 **Testing**: `cargo test --all-targets`, contract and integration coverage for review councils, vote resolution, and inspection output, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, `cargo fmt --check`, and `cargo clippy --workspace --all-targets --all-features -- -D warnings`  
 **Target Platform**: macOS and Linux developer workstations plus Linux CI via the existing GitHub Actions workflows  
 **Project Type**: Single Rust CLI crate with file-backed session and trace persistence plus repository-managed assistant assets  
@@ -25,7 +25,7 @@ Add a bounded review phase on top of the execution engine so Synod can run an ex
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- Delivery identity: PASS. The feature adds explicit quality control for working-code delivery results and directly improves Synod's ability to accept, reject, or escalate generated output.
+- Delivery identity: PASS. The feature adds explicit quality control for working-code delivery results and directly improves Boundline's ability to accept, reject, or escalate generated output.
 - Delivery-first scope: PASS. The plan keeps execution, validation follow-up, and inspectable review decisions ahead of optimization or generalized agent-platform work.
 - Bounded execution: PASS. Review starts only from explicit triggers, runs within bounded reviewer and adjudication limits, and ends in accepted, rejected, escalated, or failed terminal review states.
 - Stateful execution: PASS. Reviewer findings, vote tallies, adjudication outcomes, and trigger reasons are written into task context, session projections, and traces.

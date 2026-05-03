@@ -1,21 +1,21 @@
 use std::path::PathBuf;
 
 use crate::workspace_fixture::{
-    extract_trace_path, run_synod, temp_adaptive_ordering_boundary_workspace,
+    extract_trace_path, run_boundline, temp_adaptive_ordering_boundary_workspace,
     temp_broken_fixture_workspace, temp_fixture_workspace, terminal_text, write_markdown_brief,
 };
-use synod::FileConfigStore;
-use synod::adapters::session_store::{FileSessionStore, SessionStore};
-use synod::adapters::trace_store::{FileTraceStore, TraceStore};
-use synod::cli::inspect::summarize_trace;
-use synod::cli::output::{render_trace_summary, trace_execution_condition_text};
-use synod::cli::session::{execute_capture, execute_plan, execute_run, execute_start};
-use synod::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
+use boundline::FileConfigStore;
+use boundline::adapters::session_store::{FileSessionStore, SessionStore};
+use boundline::adapters::trace_store::{FileTraceStore, TraceStore};
+use boundline::cli::inspect::summarize_trace;
+use boundline::cli::output::{render_trace_summary, trace_execution_condition_text};
+use boundline::cli::session::{execute_capture, execute_plan, execute_run, execute_start};
+use boundline::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
 
 #[test]
 fn trace_summary_preserves_step_order_and_terminal_reason() {
-    let workspace = temp_fixture_workspace("synod-trace-summary");
-    let output = run_synod(&[
+    let workspace = temp_fixture_workspace("boundline-trace-summary");
+    let output = run_boundline(&[
         "run",
         "--goal",
         "Fix the failing add test",
@@ -41,8 +41,8 @@ fn trace_summary_preserves_step_order_and_terminal_reason() {
 
 #[test]
 fn trace_summary_handles_fixture_terminal_failures_without_fake_recovery_events() {
-    let workspace = temp_broken_fixture_workspace("synod-trace-summary-broken");
-    let output = run_synod(&[
+    let workspace = temp_broken_fixture_workspace("boundline-trace-summary-broken");
+    let output = run_boundline(&[
         "run",
         "--goal",
         "Attempt the fixture patch on a broken workspace",
@@ -63,11 +63,11 @@ fn trace_summary_handles_fixture_terminal_failures_without_fake_recovery_events(
 
 #[test]
 fn trace_summary_carries_authored_input_summary_and_source_order() {
-    let workspace = temp_fixture_workspace("synod-trace-summary-human-input");
+    let workspace = temp_fixture_workspace("boundline-trace-summary-human-input");
     write_markdown_brief(&workspace, "docs/explicit.md", "Explicit context\n");
     write_markdown_brief(&workspace, "docs/referenced.md", "Referenced context\n");
 
-    let output = run_synod(&[
+    let output = run_boundline(&[
         "run",
         "--goal",
         "Use docs/referenced.md with the explicit brief",
@@ -99,8 +99,8 @@ fn trace_summary_carries_authored_input_summary_and_source_order() {
 
 #[test]
 fn trace_summary_uses_shared_route_and_execution_condition_vocabulary_for_compatibility_traces() {
-    let workspace = temp_fixture_workspace("synod-trace-summary-shared-vocabulary");
-    let output = run_synod(&[
+    let workspace = temp_fixture_workspace("boundline-trace-summary-shared-vocabulary");
+    let output = run_boundline(&[
         "run",
         "--goal",
         "Fix the failing add test",
@@ -128,8 +128,8 @@ fn trace_summary_uses_shared_route_and_execution_condition_vocabulary_for_compat
 
 #[test]
 fn trace_summary_surfaces_broader_adaptive_family_evidence() {
-    let workspace = temp_adaptive_ordering_boundary_workspace("synod-trace-summary-ordering");
-    let output = run_synod(&[
+    let workspace = temp_adaptive_ordering_boundary_workspace("boundline-trace-summary-ordering");
+    let output = run_boundline(&[
         "run",
         "--goal",
         "Fix the inclusive threshold boundary",
@@ -162,7 +162,7 @@ fn trace_summary_surfaces_broader_adaptive_family_evidence() {
 
 #[test]
 fn trace_summary_projects_route_owner_and_effective_routing_snapshot() {
-    let workspace = temp_fixture_workspace("synod-trace-summary-route-config");
+    let workspace = temp_fixture_workspace("boundline-trace-summary-route-config");
     let config = ConfigFile {
         routing: RoutingConfig {
             review: Some(ModelRoute {
@@ -175,7 +175,7 @@ fn trace_summary_projects_route_owner_and_effective_routing_snapshot() {
     };
     FileConfigStore::for_workspace(&workspace).save_local(&config).unwrap();
 
-    let output = run_synod(&[
+    let output = run_boundline(&[
         "run",
         "--goal",
         "Fix the failing add test",
@@ -188,7 +188,7 @@ fn trace_summary_projects_route_owner_and_effective_routing_snapshot() {
     let store = FileTraceStore::for_workspace(&workspace);
     let trace = store.load(&trace_path).unwrap();
     let summary = summarize_trace(&trace_path, &trace).unwrap();
-    let rendered = render_trace_summary(&summary, "explicit-trace", "/synod-next");
+    let rendered = render_trace_summary(&summary, "explicit-trace", "/boundline-next");
 
     assert!(rendered.contains("route_owner: compatibility"), "{rendered}");
     assert!(
@@ -205,17 +205,17 @@ fn trace_summary_projects_route_owner_and_effective_routing_snapshot() {
     );
     assert!(
         rendered.contains(
-            "follow_through_guidance: authoritative trace state currently points to `/synod-next` as the next bounded action"
+            "follow_through_guidance: authoritative trace state currently points to `/boundline-next` as the next bounded action"
         ),
         "{rendered}"
     );
     assert!(rendered.contains("follow_through_evidence_source: trace:lifecycle"), "{rendered}");
-    assert!(rendered.contains("follow_through_next_action: /synod-next"), "{rendered}");
+    assert!(rendered.contains("follow_through_next_action: /boundline-next"), "{rendered}");
 }
 
 #[test]
 fn trace_summary_surfaces_context_pack_for_native_runs() {
-    let workspace = temp_fixture_workspace("synod-trace-summary-context-pack");
+    let workspace = temp_fixture_workspace("boundline-trace-summary-context-pack");
     std::fs::write(
         workspace.join("Cargo.toml"),
         "[package]\nname = \"trace_summary_context_pack\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
@@ -251,7 +251,7 @@ fn trace_summary_surfaces_context_pack_for_native_runs() {
     let store = FileTraceStore::for_workspace(&workspace);
     let trace = store.load(&trace_path).unwrap();
     let summary = summarize_trace(&trace_path, &trace).unwrap();
-    let rendered = render_trace_summary(&summary, "latest-workspace-trace", "/synod-next");
+    let rendered = render_trace_summary(&summary, "latest-workspace-trace", "/boundline-next");
 
     assert_eq!(summary.context_credibility.as_deref(), Some("credible"));
     assert!(!summary.context_primary_inputs.is_empty());

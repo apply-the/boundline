@@ -6,9 +6,9 @@
 2. Configure routed slots and runtime capability declarations for the workspace.
 3. Configure effort policy for the slots that should prefer lighter or heavier
    reasoning.
-4. Run `synod config show --workspace <repo> --scope effective`.
-5. Run `synod capture --workspace <repo> --goal "<goal>"`.
-6. Run `synod plan --workspace <repo>`.
+4. Run `boundline config show --workspace <repo> --scope effective`.
+5. Run `boundline capture --workspace <repo> --goal "<goal>"`.
+6. Run `boundline plan --workspace <repo>`.
 
 Expected result: the effective configuration reports route capability and effort
 policy, and the proposed plan shows when those declarations changed the bounded
@@ -18,8 +18,8 @@ next action or prevented a direct route from owning execution.
 
 1. Use a workspace whose current route cannot continue a bounded step credibly
    but another declared route can.
-2. Run `synod run --workspace <repo>`.
-3. Read `synod status --workspace <repo>` and `synod next --workspace <repo>`.
+2. Run `boundline run --workspace <repo>`.
+3. Read `boundline status --workspace <repo>` and `boundline next --workspace <repo>`.
 
 Expected result: the run stops on an explicit handoff boundary, the session
 persists an active handoff packet with decisive evidence and a recommended next
@@ -29,8 +29,8 @@ command, and `status` plus `next` show the same continuity story.
 
 1. Use a workspace whose declared routes cannot continue the current bounded
    step inside the configured limits.
-2. Run `synod run --workspace <repo>`.
-3. Read `synod inspect --workspace <repo>`.
+2. Run `boundline run --workspace <repo>`.
+3. Read `boundline inspect --workspace <repo>`.
 
 Expected result: the run stops with an escalation-required continuity state,
 the active packet names the blocking reason and decisive evidence, and `inspect`
@@ -41,8 +41,8 @@ shows that no direct continuation path remained credible.
 1. Produce an active delegation packet from a previous blocked run.
 2. Change the route declaration, add new validation evidence, or replan the
    session.
-3. Run `synod run --workspace <repo>` or `synod plan --workspace <repo> --replan`.
-4. Read `synod status --workspace <repo>` and `synod inspect --workspace <repo>`.
+3. Run `boundline run --workspace <repo>` or `boundline plan --workspace <repo> --replan`.
+4. Read `boundline status --workspace <repo>` and `boundline inspect --workspace <repo>`.
 
 Expected result: the prior packet is resolved or superseded explicitly, the new
 continuity state names why authority changed, and history remains inspectable.
@@ -52,9 +52,9 @@ continuity state names why authority changed, and history remains inspectable.
 1. Produce a blocked delegated continuity state.
 2. Repeat the same continuation attempt until the configured repeated-block
    threshold is reached without new decisive evidence.
-3. Run `synod next --workspace <repo>` and `synod inspect --workspace <repo>`.
+3. Run `boundline next --workspace <repo>` and `boundline inspect --workspace <repo>`.
 
-Expected result: Synod reports a stuck continuity state, recommends a bounded
+Expected result: Boundline reports a stuck continuity state, recommends a bounded
 recovery action such as replan or escalation resolution, and does not keep
 repeating the same blocked action silently.
 

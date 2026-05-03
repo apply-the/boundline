@@ -7,13 +7,13 @@
 
 ```bash
 cd /tmp/session-native-surface
-cargo run --bin synod -- start --workspace .
-cargo run --bin synod -- capture --workspace . --goal "fix the failing add test"
-cargo run --bin synod -- plan --workspace . --flow bug-fix
-cargo run --bin synod -- run --workspace .
-cargo run --bin synod -- status --workspace .
-cargo run --bin synod -- next --workspace .
-cargo run --bin synod -- inspect --workspace .
+cargo run --bin boundline -- start --workspace .
+cargo run --bin boundline -- capture --workspace . --goal "fix the failing add test"
+cargo run --bin boundline -- plan --workspace . --flow bug-fix
+cargo run --bin boundline -- run --workspace .
+cargo run --bin boundline -- status --workspace .
+cargo run --bin boundline -- next --workspace .
+cargo run --bin boundline -- inspect --workspace .
 ```
 
 **Expected**:
@@ -24,9 +24,9 @@ cargo run --bin synod -- inspect --workspace .
 
 ```bash
 cd /tmp/session-native-surface-adaptive
-cargo run --bin synod -- run --workspace . --goal "repair the bounded parser failure"
-cargo run --bin synod -- status --workspace .
-cargo run --bin synod -- inspect --workspace .
+cargo run --bin boundline -- run --workspace . --goal "repair the bounded parser failure"
+cargo run --bin boundline -- status --workspace .
+cargo run --bin boundline -- inspect --workspace .
 ```
 
 **Expected**:
@@ -37,12 +37,12 @@ cargo run --bin synod -- inspect --workspace .
 
 ```bash
 cd /tmp/session-native-surface-governed
-cargo run --bin synod -- start --workspace .
-cargo run --bin synod -- capture --workspace . --goal "ship the governed change"
-cargo run --bin synod -- plan --workspace . --no-flow
-cargo run --bin synod -- run --workspace .
-cargo run --bin synod -- status --workspace .
-cargo run --bin synod -- inspect --workspace .
+cargo run --bin boundline -- start --workspace .
+cargo run --bin boundline -- capture --workspace . --goal "ship the governed change"
+cargo run --bin boundline -- plan --workspace . --no-flow
+cargo run --bin boundline -- run --workspace .
+cargo run --bin boundline -- status --workspace .
+cargo run --bin boundline -- inspect --workspace .
 ```
 
 **Expected**:
@@ -53,8 +53,8 @@ cargo run --bin synod -- inspect --workspace .
 
 ```bash
 cd /tmp/session-native-surface-compat
-cargo run --bin synod -- run --workspace . --goal "fix the failing add test"
-cargo run --bin synod -- inspect --workspace .
+cargo run --bin boundline -- run --workspace . --goal "fix the failing add test"
+cargo run --bin boundline -- inspect --workspace .
 ```
 
 **Expected**:

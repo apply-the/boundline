@@ -14,7 +14,7 @@ route instead of relying on a hard-wired default assistant family.
 
 **Given** the effective route for a bounded slot resolves to `claude`, `codex`,
 or `copilot`  
-**When** Synod renders assistant guidance or binds the backend used for that
+**When** Boundline renders assistant guidance or binds the backend used for that
 slot  
 **Then** the selected assistant family must match the resolved route and keep
 the same CLI command workflow.
@@ -22,7 +22,7 @@ the same CLI command workflow.
 ### 2. Gemini remains an explicit documented fallback in this slice
 
 **Given** the effective route resolves to `gemini`  
-**When** Synod renders assistant guidance for that slot  
+**When** Boundline renders assistant guidance for that slot  
 **Then** the binding must surface `gemini` explicitly and use the repository's
 Gemini CLI guidance as the supported artifact for this release instead of
 silently reverting to a different assistant family.

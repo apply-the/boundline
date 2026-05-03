@@ -88,7 +88,7 @@ pub fn execute_start_with_target(
         exit_status: CommandExitStatus::Succeeded,
         terminal_output: output::render_session_status(&build_status_view(
             &record,
-            Some("synod capture --goal <goal>".to_string()),
+            Some("boundline capture --goal <goal>".to_string()),
             if target.cluster_projection.is_some() {
                 "active clustered session initialized for the current primary workspace"
             } else {
@@ -158,7 +158,7 @@ pub fn execute_capture_with_target(
         exit_status: CommandExitStatus::Succeeded,
         terminal_output: output::render_session_status(&build_status_view(
             &record,
-            Some("synod plan".to_string()),
+            Some("boundline plan".to_string()),
             if target.cluster_projection.is_some() {
                 format!("{summary} for the current clustered delivery session")
             } else {
@@ -358,7 +358,7 @@ pub fn execute_run_with_target(
 
     let trace = runtime.trace_store().load(Path::new(&response.trace_location)).ok();
     let next_command =
-        suggested_next_command(&record).unwrap_or_else(|| "synod inspect".to_string());
+        suggested_next_command(&record).unwrap_or_else(|| "boundline inspect".to_string());
     let routing_prefix = output::render_route_outcome(&routing_outcome(&record));
 
     Ok(SessionCommandReport {
@@ -669,9 +669,15 @@ pub(crate) fn build_status_view_with_follow_up(
             .as_ref()
             .map(|packet| packet.acceptance_boundary.success_headline.clone()),
         cluster_delivery_story: record
-            .active_task
+            .goal_plan
             .as_ref()
-            .and_then(|task| task.context.cluster_delivery_story().ok().flatten()),
+            .and_then(|goal_plan| goal_plan.cluster_delivery_story.clone())
+            .or_else(|| {
+                record
+                    .active_task
+                    .as_ref()
+                    .and_then(|task| task.context.cluster_delivery_story().ok().flatten())
+            }),
         authored_input_summary: record.authored_brief.as_ref().map(|bundle| bundle.summary_text()),
         authored_input_sources: record
             .authored_brief
@@ -973,7 +979,7 @@ fn latest_workspace_compatibility_follow_up(
         execution_condition: output::trace_execution_condition_text(&summary),
         terminal_status: summary.terminal_status,
         terminal_reason: summary.terminal_reason.message.clone(),
-        next_command: format!("synod inspect --workspace {}", workspace.display()),
+        next_command: format!("boundline inspect --workspace {}", workspace.display()),
     }))
 }
 
@@ -1025,7 +1031,7 @@ fn review_headline_from_task(task: &crate::domain::task::Task) -> Option<String>
 
 fn suggested_next_command(record: &ActiveSessionRecord) -> Option<String> {
     if record.authored_brief.as_ref().and_then(|bundle| bundle.clarification.as_ref()).is_some() {
-        return Some("synod capture --goal <narrower goal>".to_string());
+        return Some("boundline capture --goal <narrower goal>".to_string());
     }
 
     if let Some(next_command) = delegation_next_command(record) {
@@ -1035,41 +1041,41 @@ fn suggested_next_command(record: &ActiveSessionRecord) -> Option<String> {
     if record.goal_plan.as_ref().and_then(|goal_plan| goal_plan.context_pack.as_ref()).is_some_and(
         |pack| pack.credibility != crate::domain::goal_plan::ContextPackCredibility::Credible,
     ) {
-        return Some("synod capture --goal <narrower goal>".to_string());
+        return Some("boundline capture --goal <narrower goal>".to_string());
     }
 
     if let Some(task) = record.active_task.as_ref()
         && let Some(governance_state) = task_state_governance_state_text(task)
     {
         match governance_state.as_str() {
-            "awaiting_approval" => return Some("synod status".to_string()),
-            "blocked" | "failed" => return Some("synod inspect".to_string()),
+            "awaiting_approval" => return Some("boundline status".to_string()),
+            "blocked" | "failed" => return Some("boundline inspect".to_string()),
             _ => {}
         }
     }
 
     match record.latest_status {
-        SessionStatus::Initialized => Some("synod capture --goal <goal>".to_string()),
-        SessionStatus::GoalCaptured => Some("synod plan".to_string()),
+        SessionStatus::Initialized => Some("boundline capture --goal <goal>".to_string()),
+        SessionStatus::GoalCaptured => Some("boundline plan".to_string()),
         SessionStatus::Planned => {
             if let Some(goal_plan) = record.goal_plan.as_ref()
                 && goal_plan.requires_confirmation()
             {
-                return Some("synod plan --confirm".to_string());
+                return Some("boundline plan --confirm".to_string());
             }
 
             if record.goal_plan.is_some() && record.active_task.is_none() {
-                return Some("synod run".to_string());
+                return Some("boundline run".to_string());
             }
 
-            Some("synod step".to_string())
+            Some("boundline step".to_string())
         }
-        SessionStatus::Running => Some("synod step".to_string()),
+        SessionStatus::Running => Some("boundline step".to_string()),
         SessionStatus::Succeeded
         | SessionStatus::Failed
         | SessionStatus::Exhausted
-        | SessionStatus::Aborted => Some("synod inspect".to_string()),
-        SessionStatus::Invalid => Some("synod start".to_string()),
+        | SessionStatus::Aborted => Some("boundline inspect".to_string()),
+        SessionStatus::Invalid => Some("boundline start".to_string()),
     }
 }
 
@@ -1194,14 +1200,14 @@ impl SessionCommandError {
             Self::MissingCapturedGoal => "active session has no captured goal".to_string(),
             Self::MissingPlannedTask => "active session has no planned task".to_string(),
             Self::MissingPlanProposal => {
-                "active session has no proposed goal plan; run `synod plan` first".to_string()
+                "active session has no proposed goal plan; run `boundline plan` first".to_string()
             }
             Self::PlanConfirmationRequired { flow_name } => match flow_name.as_deref() {
                 Some(flow_name) => format!(
-                    "active session has a proposed `{flow_name}` plan that must be confirmed before execution; run `synod plan --confirm` to confirm the proposal"
+                    "active session has a proposed `{flow_name}` plan that must be confirmed before execution; run `boundline plan --confirm` to confirm the proposal"
                 ),
                 None => {
-                    "active session has a proposed plan that must be confirmed before execution; run `synod plan --confirm` to confirm the proposal".to_string()
+                    "active session has a proposed plan that must be confirmed before execution; run `boundline plan --confirm` to confirm the proposal".to_string()
                 }
             }
             Self::UnknownFlow { requested, supported } => {
@@ -1240,25 +1246,25 @@ impl SessionCommandError {
         match self {
             Self::MissingActiveSession
             | Self::WorkspaceMismatch { .. }
-            | Self::InvalidActiveSession(_) => Some("synod start".to_string()),
-            Self::MissingCapturedGoal => Some("synod capture --goal <goal>".to_string()),
-            Self::MissingPlannedTask => Some("synod plan".to_string()),
-            Self::MissingPlanProposal => Some("synod plan".to_string()),
-            Self::PlanConfirmationRequired { .. } => Some("synod plan --confirm".to_string()),
-            Self::UnknownFlow { .. } => Some("synod flow bug-fix".to_string()),
-            Self::FlowReplacementRequiresReset { .. } => Some("synod start".to_string()),
-            Self::InvalidFlowState(_) => Some("synod start".to_string()),
+            | Self::InvalidActiveSession(_) => Some("boundline start".to_string()),
+            Self::MissingCapturedGoal => Some("boundline capture --goal <goal>".to_string()),
+            Self::MissingPlannedTask => Some("boundline plan".to_string()),
+            Self::MissingPlanProposal => Some("boundline plan".to_string()),
+            Self::PlanConfirmationRequired { .. } => Some("boundline plan --confirm".to_string()),
+            Self::UnknownFlow { .. } => Some("boundline flow bug-fix".to_string()),
+            Self::FlowReplacementRequiresReset { .. } => Some("boundline start".to_string()),
+            Self::InvalidFlowState(_) => Some("boundline start".to_string()),
             Self::NotImplemented { next_command, .. } => next_command.map(str::to_string),
             Self::ClarificationRequired { .. } => {
-                Some("synod capture --goal <narrower goal>".to_string())
+                Some("boundline capture --goal <narrower goal>".to_string())
             }
             Self::WorkspaceResolution(_)
             | Self::SessionStore(_)
             | Self::SessionRuntime(_)
             | Self::ClusterStore(_) => None,
             Self::TraceSummary(_) => None,
-            Self::BriefIngestion(_) => Some("synod capture --goal <goal>".to_string()),
-            Self::MissingClusterConfig { .. } => Some("synod cluster init --workspace <primary> --cluster-id <id> --member <workspace> --member <workspace>".to_string()),
+            Self::BriefIngestion(_) => Some("boundline capture --goal <goal>".to_string()),
+            Self::MissingClusterConfig { .. } => Some("boundline cluster init --workspace <primary> --cluster-id <id> --member <workspace> --member <workspace>".to_string()),
         }
     }
 }
@@ -1325,12 +1331,12 @@ fn red_to_green_addition() {
         let workspace = temp_workspace(prefix);
         fs::create_dir_all(workspace.join("src")).unwrap();
         fs::create_dir_all(workspace.join("tests")).unwrap();
-        fs::create_dir_all(workspace.join(".synod")).unwrap();
+        fs::create_dir_all(workspace.join(".boundline")).unwrap();
         fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
         fs::write(workspace.join("src/lib.rs"), RED_LIB_RS).unwrap();
         fs::write(workspace.join("tests/red_to_green.rs"), FIXTURE_TEST_RS).unwrap();
         fs::write(
-            workspace.join(".synod/execution.json"),
+            workspace.join(".boundline/execution.json"),
             serde_json::to_string_pretty(&json!({
                 "name": "session-execution",
                 "read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
@@ -1363,12 +1369,12 @@ fn red_to_green_addition() {
         let workspace = temp_workspace(prefix);
         fs::create_dir_all(workspace.join("src")).unwrap();
         fs::create_dir_all(workspace.join("tests")).unwrap();
-        fs::create_dir_all(workspace.join(".synod")).unwrap();
+        fs::create_dir_all(workspace.join(".boundline")).unwrap();
         fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
         fs::write(workspace.join("src/lib.rs"), RED_LIB_RS).unwrap();
         fs::write(workspace.join("tests/red_to_green.rs"), FIXTURE_TEST_RS).unwrap();
         fs::write(
-            workspace.join(".synod/execution.json"),
+            workspace.join(".boundline/execution.json"),
             serde_json::to_string_pretty(&json!({
                 "name": "session-review-execution",
                 "read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
@@ -1464,7 +1470,7 @@ fn red_to_green_addition() {
 
     #[test]
     fn resolve_workspace_and_status_helpers_cover_remaining_branches() {
-        let workspace = temp_workspace("synod-cli-session-resolve");
+        let workspace = temp_workspace("boundline-cli-session-resolve");
         let child = workspace.join("child");
         fs::create_dir_all(&child).unwrap();
 
@@ -1495,7 +1501,7 @@ fn red_to_green_addition() {
                 created_at: 1,
                 updated_at: 1,
             }),
-            Some("synod start".to_string())
+            Some("boundline start".to_string())
         );
     }
 
@@ -1551,21 +1557,21 @@ fn red_to_green_addition() {
             supported: "bug-fix, change, delivery".to_string(),
         };
         let text = render_error("flow", &unknown_flow);
-        assert!(text.contains("synod flow bug-fix"), "{text}");
+        assert!(text.contains("boundline flow bug-fix"), "{text}");
 
         let reset_required = SessionCommandError::FlowReplacementRequiresReset {
             current: "bug-fix".to_string(),
             requested: "delivery".to_string(),
         };
         let text = render_error("flow", &reset_required);
-        assert!(text.contains("synod start"), "{text}");
+        assert!(text.contains("boundline start"), "{text}");
 
         let not_implemented = SessionCommandError::NotImplemented {
             command_name: "next",
-            next_command: Some("synod inspect"),
+            next_command: Some("boundline inspect"),
         };
         let text = render_error("next", &not_implemented);
-        assert!(text.contains("synod inspect"), "{text}");
+        assert!(text.contains("boundline inspect"), "{text}");
 
         let runtime_error =
             SessionCommandError::SessionRuntime(SessionRuntimeError::MissingTraceReference);
@@ -1575,8 +1581,8 @@ fn red_to_green_addition() {
 
     #[test]
     fn clustered_session_commands_resolve_the_primary_workspace_explicitly() {
-        let primary = write_execution_workspace("synod-cli-session-cluster-primary");
-        let secondary = write_execution_workspace("synod-cli-session-cluster-secondary");
+        let primary = write_execution_workspace("boundline-cli-session-cluster-primary");
+        let secondary = write_execution_workspace("boundline-cli-session-cluster-secondary");
         crate::cli::cluster::execute_init(
             &primary,
             "cluster-1",
@@ -1598,7 +1604,7 @@ fn red_to_green_addition() {
 
     #[test]
     fn execute_run_status_and_next_cover_success_paths() {
-        let workspace = write_execution_workspace("synod-cli-session-success");
+        let workspace = write_execution_workspace("boundline-cli-session-success");
 
         assert_eq!(
             execute_start(Some(&workspace)).unwrap().exit_status,
@@ -1650,7 +1656,7 @@ fn red_to_green_addition() {
         let next = execute_next(Some(&workspace)).unwrap();
         assert_eq!(next.exit_status, CommandExitStatus::Succeeded);
         assert!(
-            next.terminal_output.contains("next_command: synod inspect"),
+            next.terminal_output.contains("next_command: boundline inspect"),
             "{}",
             next.terminal_output
         );
@@ -1658,7 +1664,7 @@ fn red_to_green_addition() {
 
     #[test]
     fn execute_run_surfaces_delegation_packet_when_native_route_is_blocked() {
-        let workspace = write_execution_workspace("synod-cli-session-delegation");
+        let workspace = write_execution_workspace("boundline-cli-session-delegation");
         let mut config = ConfigFile {
             version: 1,
             routing: RoutingConfig {
@@ -1741,7 +1747,7 @@ fn red_to_green_addition() {
             run.terminal_output
         );
         assert!(
-            run.terminal_output.contains("next_command: synod status"),
+            run.terminal_output.contains("next_command: boundline status"),
             "{}",
             run.terminal_output
         );
@@ -1749,7 +1755,7 @@ fn red_to_green_addition() {
 
     #[test]
     fn execute_run_status_and_inspect_surface_review_evidence() {
-        let workspace = write_review_execution_workspace("synod-cli-session-review-success");
+        let workspace = write_review_execution_workspace("boundline-cli-session-review-success");
 
         assert_eq!(
             execute_start(Some(&workspace)).unwrap().exit_status,
@@ -1842,7 +1848,7 @@ fn red_to_green_addition() {
 
     #[test]
     fn execute_run_blocks_until_native_plan_is_confirmed() {
-        let workspace = write_execution_workspace("synod-cli-session-flow-confirmation");
+        let workspace = write_execution_workspace("boundline-cli-session-flow-confirmation");
 
         execute_start(Some(&workspace)).unwrap();
         execute_capture(
@@ -1861,7 +1867,7 @@ fn red_to_green_addition() {
         assert!(matches!(error, SessionCommandError::PlanConfirmationRequired { .. }));
 
         let rendered = render_error("run", &error);
-        assert!(rendered.contains("synod plan --confirm"), "{rendered}");
+        assert!(rendered.contains("boundline plan --confirm"), "{rendered}");
 
         let confirmed = execute_plan(Some(&workspace), None, false, true).unwrap();
         assert!(confirmed.terminal_output.contains("execution_path: native_goal_plan"));
@@ -1872,8 +1878,8 @@ fn red_to_green_addition() {
 
     #[test]
     fn compatibility_follow_up_and_review_headline_helpers_cover_remaining_session_cli_branches() {
-        let workspace = temp_workspace("synod-cli-session-compat-follow-up");
-        fs::create_dir_all(workspace.join(".synod")).unwrap();
+        let workspace = temp_workspace("boundline-cli-session-compat-follow-up");
+        fs::create_dir_all(workspace.join(".boundline")).unwrap();
 
         let mut trace = ExecutionTrace::new("task-compat", "session-compat", "Compat trace");
         trace.terminal_status = Some(TaskStatus::Failed);
@@ -1891,7 +1897,7 @@ fn red_to_green_addition() {
         assert!(follow_up.routing_summary.starts_with("routing: compatibility"));
         assert_eq!(
             follow_up.next_command,
-            format!("synod inspect --workspace {}", workspace.display())
+            format!("boundline inspect --workspace {}", workspace.display())
         );
         assert!(
             latest_workspace_compatibility_follow_up(&workspace, Some(&follow_up.trace_ref))
@@ -1899,7 +1905,8 @@ fn red_to_green_addition() {
                 .is_none()
         );
 
-        let execution_workspace = write_execution_workspace("synod-cli-session-review-headline");
+        let execution_workspace =
+            write_execution_workspace("boundline-cli-session-review-headline");
         let request = build_task_request(
             &execution_workspace,
             "Fix the failing add test".to_string(),
@@ -1930,7 +1937,7 @@ fn red_to_green_addition() {
 
     #[test]
     fn status_view_falls_back_to_test_decision_validation_and_evidence_basis() {
-        let workspace = temp_workspace("synod-cli-session-selector-fallback");
+        let workspace = temp_workspace("boundline-cli-session-selector-fallback");
         let mut decision = Decision::new(
             DecisionType::Test,
             "test suite",
@@ -1974,7 +1981,7 @@ fn red_to_green_addition() {
 
         let view = build_status_view_with_follow_up(
             &record,
-            Some("synod inspect".to_string()),
+            Some("boundline inspect".to_string()),
             "inspect the latest decision",
             None,
         );
@@ -1990,7 +1997,7 @@ fn red_to_green_addition() {
 
     #[test]
     fn status_view_projects_task_level_canon_memory_when_goal_plan_is_absent() {
-        let workspace = write_execution_workspace("synod-cli-session-canon-memory");
+        let workspace = write_execution_workspace("boundline-cli-session-canon-memory");
         let request = build_task_request(
             &workspace,
             "Fix the failing add test",
@@ -2045,7 +2052,7 @@ fn red_to_green_addition() {
 
         let view = build_status_view_with_follow_up(
             &record,
-            Some("synod inspect".to_string()),
+            Some("boundline inspect".to_string()),
             "inspect the Canon packet",
             None,
         );
@@ -2114,7 +2121,7 @@ fn red_to_green_addition() {
         };
         assert_eq!(
             suggested_next_command(&base_record),
-            Some("synod capture --goal <narrower goal>".to_string())
+            Some("boundline capture --goal <narrower goal>".to_string())
         );
 
         let mut pending_flow_plan = GoalPlan::new(
@@ -2138,12 +2145,12 @@ fn red_to_green_addition() {
         pending_flow_record.latest_status = SessionStatus::Planned;
         assert_eq!(
             suggested_next_command(&pending_flow_record),
-            Some("synod plan --confirm".to_string())
+            Some("boundline plan --confirm".to_string())
         );
 
         let mut ready_run_record = pending_flow_record.clone();
         ready_run_record.goal_plan.as_mut().unwrap().confirm().unwrap();
-        assert_eq!(suggested_next_command(&ready_run_record), Some("synod run".to_string()));
+        assert_eq!(suggested_next_command(&ready_run_record), Some("boundline run".to_string()));
 
         let clarification_error = SessionCommandError::ClarificationRequired {
             headline: "bounded context required before planning".to_string(),
@@ -2151,7 +2158,7 @@ fn red_to_green_addition() {
         };
         let clarification_text = render_error("plan", &clarification_error);
         assert!(
-            clarification_text.contains("synod capture --goal <narrower goal>"),
+            clarification_text.contains("boundline capture --goal <narrower goal>"),
             "{clarification_text}"
         );
 
@@ -2161,7 +2168,7 @@ fn red_to_green_addition() {
         };
         let cluster_text = render_error("status", &cluster_error);
         assert!(
-            cluster_text.contains("synod cluster init --workspace <primary>"),
+            cluster_text.contains("boundline cluster init --workspace <primary>"),
             "{cluster_text}"
         );
     }

@@ -9,9 +9,9 @@
 cd /tmp/native-loop-workspace
 cargo init --lib native-loop-workspace
 
-cargo run --bin synod -- start --workspace .
-cargo run --bin synod -- capture --workspace . --goal "fix the broken add function"
-cargo run --bin synod -- plan --workspace .
+cargo run --bin boundline -- start --workspace .
+cargo run --bin boundline -- capture --workspace . --goal "fix the broken add function"
+cargo run --bin boundline -- plan --workspace .
 ```
 
 **Expected**:
@@ -23,8 +23,8 @@ cargo run --bin synod -- plan --workspace .
 
 ```bash
 cd /tmp/native-loop-workspace
-cargo run --bin synod -- run --workspace .
-cargo run --bin synod -- inspect --workspace .
+cargo run --bin boundline -- run --workspace .
+cargo run --bin boundline -- inspect --workspace .
 ```
 
 **Expected**:
@@ -36,8 +36,8 @@ cargo run --bin synod -- inspect --workspace .
 
 ```bash
 cd /tmp/fixture-compatible-workspace
-mkdir -p .synod
-cat > .synod/execution.json <<'EOF'
+mkdir -p .boundline
+cat > .boundline/execution.json <<'EOF'
 {
   "name": "fixture-profile",
   "limits": { "max_steps": 5, "max_retries": 1 },
@@ -45,7 +45,7 @@ cat > .synod/execution.json <<'EOF'
 }
 EOF
 
-cargo run --bin synod -- run --workspace .
+cargo run --bin boundline -- run --workspace .
 ```
 
 **Expected**:
@@ -56,10 +56,10 @@ cargo run --bin synod -- run --workspace .
 
 ```bash
 cd /tmp/native-loop-workspace
-cargo run --bin synod -- start --workspace .
-cargo run --bin synod -- capture --workspace . --goal "fix the failing auth test"
-cargo run --bin synod -- plan --workspace .
-cargo run --bin synod -- run --workspace .
+cargo run --bin boundline -- start --workspace .
+cargo run --bin boundline -- capture --workspace . --goal "fix the failing auth test"
+cargo run --bin boundline -- plan --workspace .
+cargo run --bin boundline -- run --workspace .
 ```
 
 **Expected**:

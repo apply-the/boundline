@@ -21,7 +21,7 @@ pub mod session;
 pub mod workflow;
 
 #[derive(Debug, Parser)]
-#[command(name = "synod", about = "Developer CLI for the Synod orchestrator core")]
+#[command(name = "boundline", about = "Local delivery orchestrator for bounded engineering work")]
 pub struct Cli {
     #[command(subcommand)]
     pub command: DeveloperCommand,
@@ -83,8 +83,10 @@ pub enum CommandExitStatus {
 #[derive(Debug, Subcommand)]
 pub enum DeveloperCommand {
     Doctor {
-        #[arg(long)]
-        workspace: PathBuf,
+        #[arg(long, conflicts_with = "install", required_unless_present = "install")]
+        workspace: Option<PathBuf>,
+        #[arg(long, conflicts_with = "workspace")]
+        install: bool,
     },
     Start {
         #[arg(long)]
@@ -192,7 +194,7 @@ pub enum DeveloperCommand {
         /// Assistant runtimes to record in the local workspace config.
         #[arg(long = "assistant")]
         assistant: Vec<RuntimeKind>,
-        /// Domain families to enable during init. When omitted, Synod infers a bounded default from the workspace.
+        /// Domain families to enable during init. When omitted, Boundline infers a bounded default from the workspace.
         #[arg(long = "domain")]
         domain: Vec<DomainFamily>,
         /// Scoped domain standards using FAMILY=TEXT.
@@ -204,7 +206,7 @@ pub enum DeveloperCommand {
         /// Required external context bindings using FAMILY|KIND|REFERENCE.
         #[arg(long = "required-context-binding")]
         required_context_binding: Vec<String>,
-        /// Replace existing Synod files in the workspace.
+        /// Replace existing Boundline files in the workspace.
         #[arg(long)]
         force: bool,
     },
@@ -450,6 +452,7 @@ impl DeveloperCommand {
 pub struct DeveloperCommandSession {
     pub command_name: CommandName,
     pub workspace_ref: Option<String>,
+    pub install_check: bool,
     pub goal: Option<String>,
     pub trace_ref: Option<String>,
     pub started_at: u64,
@@ -461,9 +464,10 @@ pub struct DeveloperCommandSession {
 impl DeveloperCommandSession {
     pub fn from_command(command: &DeveloperCommand) -> Self {
         match command {
-            DeveloperCommand::Doctor { workspace } => Self {
+            DeveloperCommand::Doctor { workspace, install } => Self {
                 command_name: CommandName::Doctor,
-                workspace_ref: Some(workspace.to_string_lossy().into_owned()),
+                workspace_ref: workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
+                install_check: *install,
                 goal: None,
                 trace_ref: None,
                 started_at: current_timestamp_millis(),
@@ -477,6 +481,7 @@ impl DeveloperCommandSession {
                     .as_ref()
                     .or(cluster.as_ref())
                     .map(|path| path.to_string_lossy().into_owned()),
+                install_check: false,
                 goal: None,
                 trace_ref: None,
                 started_at: current_timestamp_millis(),
@@ -499,6 +504,7 @@ impl DeveloperCommandSession {
                     .as_ref()
                     .or(cluster.as_ref())
                     .map(|path| path.to_string_lossy().into_owned()),
+                install_check: false,
                 goal: goal.clone(),
                 trace_ref: None,
                 started_at: current_timestamp_millis(),
@@ -512,6 +518,7 @@ impl DeveloperCommandSession {
                     .as_ref()
                     .or(cluster.as_ref())
                     .map(|path| path.to_string_lossy().into_owned()),
+                install_check: false,
                 goal: Some(name.clone()),
                 trace_ref: None,
                 started_at: current_timestamp_millis(),
@@ -525,6 +532,7 @@ impl DeveloperCommandSession {
                     .as_ref()
                     .or(cluster.as_ref())
                     .map(|path| path.to_string_lossy().into_owned()),
+                install_check: false,
                 goal: None,
                 trace_ref: None,
                 started_at: current_timestamp_millis(),
@@ -538,6 +546,7 @@ impl DeveloperCommandSession {
                     .as_ref()
                     .or(cluster.as_ref())
                     .map(|path| path.to_string_lossy().into_owned()),
+                install_check: false,
                 goal: None,
                 trace_ref: None,
                 started_at: current_timestamp_millis(),
@@ -563,6 +572,7 @@ impl DeveloperCommandSession {
                     workspace.as_ref().or(cluster.as_ref())
                 }
                 .map(|path| path.to_string_lossy().into_owned()),
+                install_check: false,
                 goal: goal.clone(),
                 trace_ref: None,
                 started_at: current_timestamp_millis(),
@@ -581,6 +591,7 @@ impl DeveloperCommandSession {
                         workspace.as_ref().map(|path| path.to_string_lossy().into_owned())
                     }
                 },
+                install_check: false,
                 goal: match command {
                     WorkflowSubcommand::List { .. } => None,
                     WorkflowSubcommand::Run { name, .. } => Some(name.clone()),
@@ -600,6 +611,7 @@ impl DeveloperCommandSession {
                     .as_ref()
                     .or(cluster.as_ref())
                     .map(|path| path.to_string_lossy().into_owned()),
+                install_check: false,
                 goal: None,
                 trace_ref: trace.as_ref().map(|path| path.to_string_lossy().into_owned()),
                 started_at: current_timestamp_millis(),
@@ -613,6 +625,7 @@ impl DeveloperCommandSession {
                     .as_ref()
                     .or(cluster.as_ref())
                     .map(|path| path.to_string_lossy().into_owned()),
+                install_check: false,
                 goal: None,
                 trace_ref: None,
                 started_at: current_timestamp_millis(),
@@ -626,6 +639,7 @@ impl DeveloperCommandSession {
                     .as_ref()
                     .or(cluster.as_ref())
                     .map(|path| path.to_string_lossy().into_owned()),
+                install_check: false,
                 goal: None,
                 trace_ref: None,
                 started_at: current_timestamp_millis(),
@@ -636,6 +650,7 @@ impl DeveloperCommandSession {
             DeveloperCommand::Init { workspace, .. } => Self {
                 command_name: CommandName::Init,
                 workspace_ref: Some(workspace.to_string_lossy().into_owned()),
+                install_check: false,
                 goal: None,
                 trace_ref: None,
                 started_at: current_timestamp_millis(),
@@ -661,6 +676,7 @@ impl DeveloperCommandSession {
                         .or(cluster.as_ref())
                         .map(|path| path.to_string_lossy().into_owned()),
                 },
+                install_check: false,
                 goal: None,
                 trace_ref: None,
                 started_at: current_timestamp_millis(),
@@ -677,6 +693,7 @@ impl DeveloperCommandSession {
                         Some(workspace.to_string_lossy().into_owned())
                     }
                 },
+                install_check: false,
                 goal: None,
                 trace_ref: None,
                 started_at: current_timestamp_millis(),
@@ -691,7 +708,7 @@ impl DeveloperCommandSession {
         match self.command_name {
             CommandName::Doctor => {
                 let workspace = self.workspace_ref.as_deref().unwrap_or_default();
-                if workspace.trim().is_empty() {
+                if !self.install_check && workspace.trim().is_empty() {
                     return Err(CliValidationError::MissingWorkspaceRef(self.command_name));
                 }
             }
@@ -798,8 +815,21 @@ pub fn execute() -> i32 {
 
 fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
     match command {
-        DeveloperCommand::Doctor { workspace } => {
-            let report = diagnostics::diagnose_workspace(workspace);
+        DeveloperCommand::Doctor { workspace, install } => {
+            let report = if *install {
+                diagnostics::diagnose_installation()
+            } else {
+                let Some(workspace) = workspace.as_ref() else {
+                    return DispatchOutcome {
+                        exit_status: CommandExitStatus::InvalidInvocation,
+                        output: output::validation_error_message(
+                            &CliValidationError::MissingWorkspaceRef(CommandName::Doctor),
+                        ),
+                        trace_location: None,
+                    };
+                };
+                diagnostics::diagnose_workspace(workspace)
+            };
             DispatchOutcome {
                 exit_status: if report.ready {
                     CommandExitStatus::Succeeded
@@ -1407,12 +1437,12 @@ fn red_to_green_addition() {
         let workspace = temp_workspace(prefix);
         fs::create_dir_all(workspace.join("src")).unwrap();
         fs::create_dir_all(workspace.join("tests")).unwrap();
-        fs::create_dir_all(workspace.join(".synod")).unwrap();
+        fs::create_dir_all(workspace.join(".boundline")).unwrap();
         fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
         fs::write(workspace.join("src/lib.rs"), RED_LIB_RS).unwrap();
         fs::write(workspace.join("tests/red_to_green.rs"), FIXTURE_TEST_RS).unwrap();
         fs::write(
-            workspace.join(".synod/execution.json"),
+            workspace.join(".boundline/execution.json"),
             serde_json::to_string_pretty(&json!({
                 "name": "dispatch-execution",
                 "read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
@@ -1443,7 +1473,7 @@ fn red_to_green_addition() {
 
     #[test]
     fn dispatch_covers_session_error_paths() {
-        let workspace = temp_workspace("synod-cli-dispatch-error");
+        let workspace = temp_workspace("boundline-cli-dispatch-error");
         let commands = [
             DeveloperCommand::Capture {
                 workspace: Some(workspace.clone()),
@@ -1489,8 +1519,8 @@ fn red_to_green_addition() {
 
     #[test]
     fn dispatch_covers_successful_custom_run_session_run_and_inspect_paths() {
-        let custom_workspace = write_execution_workspace("synod-cli-dispatch-success-custom");
-        let session_workspace = write_execution_workspace("synod-cli-dispatch-success-session");
+        let custom_workspace = write_execution_workspace("boundline-cli-dispatch-success-custom");
+        let session_workspace = write_execution_workspace("boundline-cli-dispatch-success-session");
 
         let custom_run = dispatch(&DeveloperCommand::Run {
             workspace: Some(custom_workspace.clone()),
@@ -1569,7 +1599,7 @@ fn red_to_green_addition() {
         assert_eq!(inspect.exit_status, CommandExitStatus::Succeeded);
         assert!(inspect.output.contains("inspection_target:"), "{}", inspect.output);
 
-        let invalid_workspace = temp_workspace("synod-cli-dispatch-invalid");
+        let invalid_workspace = temp_workspace("boundline-cli-dispatch-invalid");
         let invalid = dispatch(&DeveloperCommand::Run {
             workspace: Some(invalid_workspace),
             cluster: None,
@@ -1598,7 +1628,7 @@ fn red_to_green_addition() {
             assert_eq!(name.to_string(), expected);
         }
 
-        let workspace = temp_workspace("synod-cli-dispatch-coverage");
+        let workspace = temp_workspace("boundline-cli-dispatch-coverage");
         for (command, expected) in [
             (
                 DeveloperCommand::Workflow {
@@ -1659,13 +1689,18 @@ fn red_to_green_addition() {
         let missing_member = workspace.join("missing-member");
         let file_workspace = workspace.join("workspace-file");
         fs::write(&file_workspace, "not a directory").unwrap();
-        let config_workspace = temp_workspace("synod-cli-config-dispatch");
+        let config_workspace = temp_workspace("boundline-cli-config-dispatch");
 
         assert_eq!(
             dispatch(&DeveloperCommand::Doctor {
-                workspace: temp_workspace("synod-cli-doctor-invalid")
+                workspace: Some(temp_workspace("boundline-cli-doctor-invalid")),
+                install: false,
             })
             .exit_status,
+            CommandExitStatus::InvalidInvocation
+        );
+        assert_eq!(
+            dispatch(&DeveloperCommand::Doctor { workspace: None, install: true }).exit_status,
             CommandExitStatus::InvalidInvocation
         );
         assert_eq!(

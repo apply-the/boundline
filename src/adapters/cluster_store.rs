@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use crate::domain::cluster::ClusterConfigFile;
 
-const CLUSTER_CONFIG_RELATIVE: &str = ".synod/cluster.toml";
+const CLUSTER_CONFIG_RELATIVE: &str = ".boundline/cluster.toml";
 
 #[derive(Debug, Clone)]
 pub struct FileClusterStore {
@@ -96,7 +96,7 @@ mod tests {
 
     #[test]
     fn cluster_config_round_trip_works() {
-        let workspace = std::env::temp_dir().join(format!("synod-cluster-{}", Uuid::new_v4()));
+        let workspace = std::env::temp_dir().join(format!("boundline-cluster-{}", Uuid::new_v4()));
         fs::create_dir_all(&workspace).unwrap();
 
         let store = FileClusterStore::for_workspace(&workspace);
@@ -124,7 +124,7 @@ mod tests {
         };
 
         let path = store.save(&config).unwrap();
-        assert!(path.ends_with(".synod/cluster.toml"));
+        assert!(path.ends_with(".boundline/cluster.toml"));
 
         let loaded = store.load().unwrap().unwrap();
         assert_eq!(loaded.cluster.cluster_id, "delivery-a");

@@ -1,13 +1,13 @@
 use crate::workspace_fixture::{
-    extract_trace_path, run_synod, temp_broken_fixture_workspace, temp_fixture_workspace,
+    extract_trace_path, run_boundline, temp_broken_fixture_workspace, temp_fixture_workspace,
     terminal_text,
 };
 use std::fs;
 
 #[test]
 fn inspect_command_reconstructs_step_order_from_a_successful_fixture_trace() {
-    let workspace = temp_fixture_workspace("synod-cli-inspect");
-    let run_output = run_synod(&[
+    let workspace = temp_fixture_workspace("boundline-cli-inspect");
+    let run_output = run_boundline(&[
         "run",
         "--goal",
         "Fix the failing add test",
@@ -16,7 +16,8 @@ fn inspect_command_reconstructs_step_order_from_a_successful_fixture_trace() {
         workspace.to_string_lossy().as_ref(),
     ]);
     let trace_path = extract_trace_path(&terminal_text(&run_output)).expect("trace path");
-    let inspect_output = run_synod(&["inspect", "--trace", trace_path.to_string_lossy().as_ref()]);
+    let inspect_output =
+        run_boundline(&["inspect", "--trace", trace_path.to_string_lossy().as_ref()]);
     let text = terminal_text(&inspect_output);
 
     assert_eq!(inspect_output.status.code(), Some(0), "{text}");
@@ -30,8 +31,8 @@ fn inspect_command_reconstructs_step_order_from_a_successful_fixture_trace() {
 
 #[test]
 fn inspect_command_highlights_non_success_terminal_reasons() {
-    let workspace = temp_broken_fixture_workspace("synod-cli-inspect-broken");
-    let run_output = run_synod(&[
+    let workspace = temp_broken_fixture_workspace("boundline-cli-inspect-broken");
+    let run_output = run_boundline(&[
         "run",
         "--goal",
         "Attempt the fixture patch on a broken workspace",
@@ -40,7 +41,8 @@ fn inspect_command_highlights_non_success_terminal_reasons() {
         workspace.to_string_lossy().as_ref(),
     ]);
     let trace_path = extract_trace_path(&terminal_text(&run_output)).expect("trace path");
-    let inspect_output = run_synod(&["inspect", "--trace", trace_path.to_string_lossy().as_ref()]);
+    let inspect_output =
+        run_boundline(&["inspect", "--trace", trace_path.to_string_lossy().as_ref()]);
     let text = terminal_text(&inspect_output);
 
     assert_eq!(inspect_output.status.code(), Some(1), "{text}");
@@ -50,12 +52,12 @@ fn inspect_command_highlights_non_success_terminal_reasons() {
 
 #[test]
 fn inspect_command_surfaces_authored_input_summary_and_sources() {
-    let workspace = temp_fixture_workspace("synod-cli-inspect-human-input");
+    let workspace = temp_fixture_workspace("boundline-cli-inspect-human-input");
     fs::create_dir_all(workspace.join("docs")).unwrap();
     fs::write(workspace.join("docs/explicit.md"), "Explicit context\n").unwrap();
     fs::write(workspace.join("docs/referenced.md"), "Referenced context\n").unwrap();
 
-    let run_output = run_synod(&[
+    let run_output = run_boundline(&[
         "run",
         "--goal",
         "Use docs/referenced.md alongside the explicit brief",
@@ -66,7 +68,8 @@ fn inspect_command_surfaces_authored_input_summary_and_sources() {
         workspace.to_string_lossy().as_ref(),
     ]);
     let trace_path = extract_trace_path(&terminal_text(&run_output)).expect("trace path");
-    let inspect_output = run_synod(&["inspect", "--trace", trace_path.to_string_lossy().as_ref()]);
+    let inspect_output =
+        run_boundline(&["inspect", "--trace", trace_path.to_string_lossy().as_ref()]);
     let text = terminal_text(&inspect_output);
 
     assert_eq!(inspect_output.status.code(), Some(0), "{text}");

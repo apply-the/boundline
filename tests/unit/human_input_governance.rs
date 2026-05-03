@@ -1,11 +1,11 @@
 use std::fs;
 use std::path::PathBuf;
 
-use synod::domain::brief::{
+use boundline::domain::brief::{
     BriefIngestionError, GovernanceIntent, normalize_governance_intent,
     normalize_inputs_with_governance,
 };
-use synod::domain::governance::GovernanceRuntimeKind;
+use boundline::domain::governance::GovernanceRuntimeKind;
 use uuid::Uuid;
 
 fn temp_workspace(prefix: &str) -> PathBuf {
@@ -54,7 +54,7 @@ fn normalize_governance_intent_marks_request_when_only_business_fields_are_prese
 
 #[test]
 fn normalize_inputs_with_governance_persists_intent_inside_the_bundle() {
-    let workspace = temp_workspace("synod-human-governance-bundle");
+    let workspace = temp_workspace("boundline-human-governance-bundle");
     let intent = normalize_governance_intent(
         Some(GovernanceRuntimeKind::Local),
         Some("low"),

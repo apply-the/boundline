@@ -70,7 +70,7 @@ pub fn render_error(
     error: &InspectCommandError,
 ) -> String {
     if let InspectCommandError::InvalidSession(message) = error {
-        return output::render_session_error("inspect", message, Some("synod start"));
+        return output::render_session_error("inspect", message, Some("boundline start"));
     }
 
     let inspection_target = inspection_target_for(trace, workspace);
@@ -937,10 +937,10 @@ fn inspection_target_for(trace: Option<&Path>, workspace: Option<&Path>) -> Trac
 fn corrected_command(inspection_target: TraceResolutionTarget) -> &'static str {
     match inspection_target {
         TraceResolutionTarget::ExplicitTrace | TraceResolutionTarget::SessionTraceRef => {
-            "cargo run --bin synod -- inspect --trace <trace>"
+            "cargo run --bin boundline -- inspect --trace <trace>"
         }
         TraceResolutionTarget::LatestWorkspaceTrace => {
-            "cargo run --bin synod -- inspect --workspace <workspace>"
+            "cargo run --bin boundline -- inspect --workspace <workspace>"
         }
     }
 }
@@ -1306,7 +1306,7 @@ mod tests {
 
     fn temp_workspace(prefix: &str) -> PathBuf {
         let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
-        fs::create_dir_all(workspace.join(".synod")).unwrap();
+        fs::create_dir_all(workspace.join(".boundline")).unwrap();
         workspace
     }
 
@@ -1386,7 +1386,7 @@ mod tests {
 
     #[test]
     fn resolve_session_trace_ref_maps_invalid_records_to_invalid_session_errors() {
-        let workspace = temp_workspace("synod-inspect-invalid-session");
+        let workspace = temp_workspace("boundline-inspect-invalid-session");
         let invalid_record = ActiveSessionRecord {
             session_id: "session-inspect".to_string(),
             workspace_ref: workspace.to_string_lossy().into_owned(),
@@ -1406,7 +1406,7 @@ mod tests {
             updated_at: 20,
         };
         fs::write(
-            workspace.join(".synod/session.json"),
+            workspace.join(".boundline/session.json"),
             serde_json::to_vec_pretty(&invalid_record).unwrap(),
         )
         .unwrap();
@@ -1429,7 +1429,7 @@ mod tests {
         );
         assert_eq!(
             corrected_command(TraceResolutionTarget::SessionTraceRef),
-            "cargo run --bin synod -- inspect --trace <trace>"
+            "cargo run --bin boundline -- inspect --trace <trace>"
         );
         assert_eq!(success_headline(&json!({}), 2), "succeeded after 2 attempt(s)");
         assert_eq!(failure_headline(&json!({}), 1), "failed after 1 attempt(s)");
@@ -1593,7 +1593,7 @@ mod tests {
         );
         assert_eq!(
             summary.governance_next_action.as_deref(),
-            Some("resolve the governance blocker, then rerun synod step")
+            Some("resolve the governance blocker, then rerun boundline step")
         );
     }
 

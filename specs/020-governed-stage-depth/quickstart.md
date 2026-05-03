@@ -6,27 +6,27 @@
 ## Scenario 1: Govern Investigate Before Verify On The Session-Native Route
 
 ```bash
-cd /tmp/synod-governed-stage-depth
-cargo run --bin synod -- start --workspace .
-cargo run --bin synod -- capture --workspace . --goal "Fix the failing add test"
-cargo run --bin synod -- flow bug-fix --workspace .
-cargo run --bin synod -- plan --workspace .
-cargo run --bin synod -- run --workspace .
-cargo run --bin synod -- status --workspace .
+cd /tmp/boundline-governed-stage-depth
+cargo run --bin boundline -- start --workspace .
+cargo run --bin boundline -- capture --workspace . --goal "Fix the failing add test"
+cargo run --bin boundline -- flow bug-fix --workspace .
+cargo run --bin boundline -- plan --workspace .
+cargo run --bin boundline -- run --workspace .
+cargo run --bin boundline -- status --workspace .
 ```
 
 **Expected**:
-- Synod can govern `bug-fix:investigate` on the same session-owned route before later verify work.
+- Boundline can govern `bug-fix:investigate` on the same session-owned route before later verify work.
 - If governance produces reusable evidence, the session preserves packet reference, readiness, and next action.
 - If investigate governance blocks or waits for approval, `status` reports that state explicitly without advancing hidden work.
 
 ## Scenario 2: Refresh Approval And Resume Governed Progression
 
 ```bash
-cd /tmp/synod-governed-stage-depth
-cargo run --bin synod -- status --workspace .
-cargo run --bin synod -- next --workspace .
-cargo run --bin synod -- run --workspace .
+cd /tmp/boundline-governed-stage-depth
+cargo run --bin boundline -- status --workspace .
+cargo run --bin boundline -- next --workspace .
+cargo run --bin boundline -- run --workspace .
 ```
 
 **Expected**:
@@ -37,10 +37,10 @@ cargo run --bin synod -- run --workspace .
 ## Scenario 3: Project The Same Governed State Through A Named Workflow
 
 ```bash
-cd /tmp/synod-governed-stage-depth
-cargo run --bin synod -- workflow run governed-delivery --workspace . --goal "Fix the failing add test"
-cargo run --bin synod -- workflow status --workspace .
-cargo run --bin synod -- workflow inspect --workspace .
+cd /tmp/boundline-governed-stage-depth
+cargo run --bin boundline -- workflow run governed-delivery --workspace . --goal "Fix the failing add test"
+cargo run --bin boundline -- workflow status --workspace .
+cargo run --bin boundline -- workflow inspect --workspace .
 ```
 
 **Expected**:

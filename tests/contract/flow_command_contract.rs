@@ -2,8 +2,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Output};
 
+use boundline::domain::session::{ActiveSessionRecord, SessionStatus};
 use serde_json::json;
-use synod::domain::session::{ActiveSessionRecord, SessionStatus};
 use uuid::Uuid;
 
 fn run_limits(max_steps: usize, max_retries: usize) -> serde_json::Value {
@@ -46,24 +46,28 @@ fn execution_profile(name: &str, max_steps: usize, max_retries: usize) -> serde_
 }
 
 fn temp_workspace(max_retries: usize) -> PathBuf {
-    let workspace = std::env::temp_dir().join(format!("synod-flow-command-{}", Uuid::new_v4()));
-    fs::create_dir_all(workspace.join(".synod")).unwrap();
+    let workspace = std::env::temp_dir().join(format!("boundline-flow-command-{}", Uuid::new_v4()));
+    fs::create_dir_all(workspace.join(".boundline")).unwrap();
     fs::write(
         workspace.join("Cargo.toml"),
-        "[package]\nname = \"synod-fixture\"\nversion = \"0.4.0\"\nedition = \"2024\"\n",
+        "[package]\nname = \"boundline-fixture\"\nversion = \"0.4.0\"\nedition = \"2024\"\n",
     )
     .unwrap();
     fs::write(workspace.join("fixture-target.txt"), "red\n").unwrap();
     fs::write(
-        workspace.join(".synod").join("execution.json"),
+        workspace.join(".boundline").join("execution.json"),
         serde_json::to_vec_pretty(&execution_profile("flow-command", 6, max_retries)).unwrap(),
     )
     .unwrap();
     workspace
 }
 
-fn run_synod_in(workspace: &std::path::Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_synod")).args(args).current_dir(workspace).output().unwrap()
+fn run_boundline_in(workspace: &std::path::Path, args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_boundline"))
+        .args(args)
+        .current_dir(workspace)
+        .output()
+        .unwrap()
 }
 
 fn terminal_text(output: &Output) -> String {
@@ -75,22 +79,22 @@ fn terminal_text(output: &Output) -> String {
 }
 
 fn load_session_record(workspace: &std::path::Path) -> ActiveSessionRecord {
-    serde_json::from_slice(&fs::read(workspace.join(".synod").join("session.json")).unwrap())
+    serde_json::from_slice(&fs::read(workspace.join(".boundline").join("session.json")).unwrap())
         .unwrap()
 }
 
 #[test]
 fn flow_command_binds_bug_fix_to_the_active_session() {
     let workspace = temp_workspace(0);
-    assert_eq!(run_synod_in(&workspace, &["start"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_synod_in(&workspace, &["capture", "--goal", "Fix the failing checkout flow"])
+        run_boundline_in(&workspace, &["capture", "--goal", "Fix the failing checkout flow"])
             .status
             .code(),
         Some(0)
     );
 
-    let output = run_synod_in(&workspace, &["flow", "bug-fix"]);
+    let output = run_boundline_in(&workspace, &["flow", "bug-fix"]);
     let text = terminal_text(&output);
     assert_eq!(output.status.code(), Some(0), "{text}");
     assert!(text.contains("active_flow: bug-fix"), "{text}");
@@ -109,12 +113,12 @@ fn flow_command_binds_bug_fix_to_the_active_session() {
 #[test]
 fn flow_command_rejects_unknown_flow_names_with_guidance() {
     let workspace = temp_workspace(0);
-    assert_eq!(run_synod_in(&workspace, &["start"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
 
-    let output = run_synod_in(&workspace, &["flow", "unknown-flow"]);
+    let output = run_boundline_in(&workspace, &["flow", "unknown-flow"]);
     let text = terminal_text(&output);
 
     assert_eq!(output.status.code(), Some(1), "{text}");
     assert!(text.contains("unknown flow `unknown-flow`"), "{text}");
-    assert!(text.contains("next_command: synod flow bug-fix"), "{text}");
+    assert!(text.contains("next_command: boundline flow bug-fix"), "{text}");
 }

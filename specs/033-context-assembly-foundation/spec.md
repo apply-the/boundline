@@ -20,11 +20,11 @@
 
 ### User Story 1 - Build A Bounded Context Pack Before Planning (Priority: P1)
 
-An operator can capture a goal and have Synod derive a bounded context pack
+An operator can capture a goal and have Boundline derive a bounded context pack
 before planning so the resulting tasks point to explicit workspace, authored,
 trace, and governed evidence instead of relying on ambient repository state.
 
-**Why this priority**: Without a first-class context pack, Synod still plans
+**Why this priority**: Without a first-class context pack, Boundline still plans
 mostly from keywords and coarse workspace signals, which makes the runtime look
 capable but leaves the planner effectively blind.
 
@@ -37,7 +37,7 @@ for the planned tasks.
 
 1. **Given** a workspace with authored brief input, recent traces, and source
   files related to the goal, **When** the operator runs `capture` followed by
-  `plan`, **Then** Synod creates one bounded context pack that records the
+  `plan`, **Then** Boundline creates one bounded context pack that records the
   relevant files, the evidence sources used to select them, and the summary
   that explains why those inputs matter to the planned work.
 2. **Given** a workspace with reusable Canon artifacts that match the current
@@ -47,7 +47,7 @@ for the planned tasks.
 
 ---
 
-### User Story 2 - Inspect Context Narrowing On The Primary Synod Path (Priority: P2)
+### User Story 2 - Inspect Context Narrowing On The Primary Boundline Path (Priority: P2)
 
 An operator can inspect the primary session-native path and understand which
 files, symbols, traces, authored inputs, and Canon artifacts were selected for
@@ -69,7 +69,7 @@ references from the standard CLI surfaces without opening the full trace file.
   output includes context-pack summary and provenance cues that explain the
   currently authoritative planning inputs.
 2. **Given** an explicit compatibility follow-up path, **When** the operator
-  inspects that path, **Then** Synod keeps compatibility authority explicit
+  inspects that path, **Then** Boundline keeps compatibility authority explicit
   while still projecting the same context-pack vocabulary used on the primary
   session-native path.
 
@@ -78,7 +78,7 @@ references from the standard CLI surfaces without opening the full trace file.
 ### User Story 3 - Stop Explicitly When Credible Context Cannot Be Built (Priority: P3)
 
 An operator sees an explicit non-success planning or follow-through outcome
-when Synod cannot build a credible bounded context pack, instead of receiving a
+when Boundline cannot build a credible bounded context pack, instead of receiving a
 plan that silently falls back to broad repository guesses.
 
 **Why this priority**: Context assembly is only trustworthy if failure to build
@@ -93,11 +93,11 @@ guidance and inspectable failure evidence.
 
 1. **Given** a captured goal whose workspace has no credible relevant files,
   traces, authored evidence, or Canon artifacts for the bounded task,
-  **When** planning runs, **Then** Synod stops explicitly with a non-success
+  **When** planning runs, **Then** Boundline stops explicitly with a non-success
   explanation that the context pack is not credible enough for planning.
 2. **Given** a context pack whose selected evidence becomes stale or conflicts
   with the later bounded task state, **When** the operator runs `next` or
-  `inspect`, **Then** Synod surfaces that the current context guidance is no
+  `inspect`, **Then** Boundline surfaces that the current context guidance is no
   longer credible and points to the bounded recovery action rather than hiding
   the mismatch.
 
@@ -121,7 +121,7 @@ changelog, docs, coverage, clippy, and formatting all align with `0.33.0`.
 
 1. **Given** the `0.33.0` release artifacts, **When** a maintainer follows the
   documented session-native path, **Then** the runtime, roadmap, docs, and
-  changelog all describe bounded context assembly as part of the primary Synod
+  changelog all describe bounded context assembly as part of the primary Boundline
   execution model.
 2. **Given** modified or newly created Rust files for this slice, **When** the
   maintainer runs the release validation suite, **Then** touched Rust coverage
@@ -132,7 +132,7 @@ changelog, docs, coverage, clippy, and formatting all align with `0.33.0`.
 
 <!--
   ACTION REQUIRED: Capture execution limits, invalid state transitions, missing context,
-  traceability gaps, and failure-handling boundaries. Synod features are invalid if they
+  traceability gaps, and failure-handling boundaries. Boundline features are invalid if they
   ignore how work stops, fails, or becomes non-credible.
 -->
 
@@ -190,7 +190,7 @@ changelog, docs, coverage, clippy, and formatting all align with `0.33.0`.
 
 <!--
   ACTION REQUIRED: Name the deferred or excluded capabilities explicitly.
-  Synod specs should normally exclude councils and voting unless the roadmap and
+  Boundline specs should normally exclude councils and voting unless the roadmap and
   constitution explicitly prioritize a bounded review slice; they should otherwise
   exclude provider-routing complexity, distributed execution, long-term memory,
   UI/UX work, and deployment pipelines.
@@ -233,7 +233,7 @@ changelog, docs, coverage, clippy, and formatting all align with `0.33.0`.
 
 - **SC-001**: In representative session-native planning runs, operators can see
   the bounded context inputs and why they were selected in under 2 minutes from
-  standard Synod output.
+  standard Boundline output.
 - **SC-002**: 100% of representative context-assembly validation scenarios end
   in an explicit credible or non-credible state rather than silently planning
   from ambient repository guesses.
@@ -253,7 +253,7 @@ changelog, docs, coverage, clippy, and formatting all align with `0.33.0`.
   Assumptions must reduce ambiguity without expanding scope.
 -->
 
-- Operators continue to use the session-native Synod path as the primary
+- Operators continue to use the session-native Boundline path as the primary
   delivery surface and rely on explicit compatibility only when they opt in.
 - The current repository shape and bounded execution model remain authoritative;
   this feature may improve planning inputs but does not replace the execution

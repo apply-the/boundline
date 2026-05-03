@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Defines the readable inspection output emitted by `synod inspect`.
+Defines the readable inspection output emitted by `boundline inspect`.
 
 ## Summary Shape
 

@@ -6,8 +6,8 @@ Exercise the complete `0.24.0` operator story: aligned route summaries, explicit
 
 ## Prerequisites
 
-- A workspace with session-native state available through `.synod/session.json`.
-- Optional `.synod/workflows.toml` and `.synod/config.toml` to exercise workflow and routing defaults.
+- A workspace with session-native state available through `.boundline/session.json`.
+- Optional `.boundline/workflows.toml` and `.boundline/config.toml` to exercise workflow and routing defaults.
 - At least one explicit compatibility run or persisted compatibility trace to verify inspect-only follow-up.
 - Optional governance-enabled workspace state to observe paused or blocked review/governance summaries.
 
@@ -22,14 +22,14 @@ Exercise the complete `0.24.0` operator story: aligned route summaries, explicit
 ## Example Validation Sequence
 
 ```text
-cargo run --bin synod -- start --goal "Unify route summaries"
-cargo run --bin synod -- workflow run governed-delivery
-cargo run --bin synod -- status
-cargo run --bin synod -- next
-cargo run --bin synod -- inspect
-cargo run --bin synod -- run --workspace . --goal "Compatibility route check"
-cargo run --bin synod -- status
-cargo run --bin synod -- inspect --workspace .
+cargo run --bin boundline -- start --goal "Unify route summaries"
+cargo run --bin boundline -- workflow run governed-delivery
+cargo run --bin boundline -- status
+cargo run --bin boundline -- next
+cargo run --bin boundline -- inspect
+cargo run --bin boundline -- run --workspace . --goal "Compatibility route check"
+cargo run --bin boundline -- status
+cargo run --bin boundline -- inspect --workspace .
 ```
 
 ## Expected CLI Behavior

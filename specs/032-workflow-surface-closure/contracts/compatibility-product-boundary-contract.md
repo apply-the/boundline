@@ -5,17 +5,17 @@
 
 ## Intent
 
-Workflow and direct native execution must read as one primary Synod product
+Workflow and direct native execution must read as one primary Boundline product
 story, while explicit compatibility execution remains a visible subordinate
 route.
 
 ## Scenarios
 
-### 1. Named workflows stay on the primary Synod story
+### 1. Named workflows stay on the primary Boundline story
 
-**Given** an operator starts work through `synod workflow run`  
+**Given** an operator starts work through `boundline workflow run`  
 **When** follow-through output or assistant guidance is rendered  
-**Then** the result must describe a primary Synod workflow on the same
+**Then** the result must describe a primary Boundline workflow on the same
 session-native model used by direct native execution.
 
 ### 2. Compatibility remains explicit and subordinate
@@ -31,7 +31,7 @@ default.
 **Given** governance cues appear during workflow or native follow-through  
 **When** the operator reads assistant guidance or runtime summaries  
 **Then** Canon participation must remain visible as bounded governance inside
-Synod rather than as a competing product surface.
+Boundline rather than as a competing product surface.
 
 ## Acceptance Notes
 

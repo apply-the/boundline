@@ -1,16 +1,16 @@
 use crate::workspace_fixture::{
-    extract_trace_path, run_synod, run_synod_in, temp_fixture_workspace, terminal_text,
+    extract_trace_path, run_boundline, run_boundline_in, temp_fixture_workspace, terminal_text,
     write_markdown_brief,
 };
 
 #[test]
 fn status_surface_reports_compact_authored_input_summary_and_deduplicated_source_order() {
-    let workspace = temp_fixture_workspace("synod-human-session-contract-status");
+    let workspace = temp_fixture_workspace("boundline-human-session-contract-status");
     write_markdown_brief(&workspace, "docs/explicit.md", "Explicit context\n");
     write_markdown_brief(&workspace, "docs/referenced.md", "Referenced context\n");
 
-    assert_eq!(run_synod_in(&workspace, &["start"]).status.code(), Some(0));
-    let capture = run_synod_in(
+    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
+    let capture = run_boundline_in(
         &workspace,
         &[
             "capture",
@@ -24,7 +24,7 @@ fn status_surface_reports_compact_authored_input_summary_and_deduplicated_source
     );
     assert_eq!(capture.status.code(), Some(0), "{}", terminal_text(&capture));
 
-    let status = run_synod_in(&workspace, &["status"]);
+    let status = run_boundline_in(&workspace, &["status"]);
     let text = terminal_text(&status);
     assert_eq!(status.status.code(), Some(0), "{text}");
     assert!(text.contains("authored_input_summary: direct_text + 2 markdown source(s)"), "{text}");
@@ -35,11 +35,11 @@ fn status_surface_reports_compact_authored_input_summary_and_deduplicated_source
 
 #[test]
 fn inspect_surface_reports_authored_input_provenance_for_direct_run() {
-    let workspace = temp_fixture_workspace("synod-human-session-contract-inspect");
+    let workspace = temp_fixture_workspace("boundline-human-session-contract-inspect");
     write_markdown_brief(&workspace, "docs/explicit.md", "Explicit context\n");
     write_markdown_brief(&workspace, "docs/referenced.md", "Referenced context\n");
 
-    let run = run_synod(&[
+    let run = run_boundline(&[
         "run",
         "--workspace",
         workspace.to_string_lossy().as_ref(),
@@ -54,7 +54,7 @@ fn inspect_surface_reports_authored_input_provenance_for_direct_run() {
     assert_eq!(run.status.code(), Some(0), "{}", terminal_text(&run));
     let trace_path = extract_trace_path(&terminal_text(&run)).expect("trace path");
 
-    let inspect = run_synod(&["inspect", "--trace", trace_path.to_string_lossy().as_ref()]);
+    let inspect = run_boundline(&["inspect", "--trace", trace_path.to_string_lossy().as_ref()]);
     let text = terminal_text(&inspect);
     assert_eq!(inspect.status.code(), Some(0), "{text}");
     assert!(text.contains("authored_input_summary: direct_text + 2 markdown source(s)"), "{text}");
@@ -65,9 +65,9 @@ fn inspect_surface_reports_authored_input_provenance_for_direct_run() {
 
 #[test]
 fn inspect_surface_reports_clarification_for_direct_run_blocked_before_planning() {
-    let workspace = temp_fixture_workspace("synod-human-session-contract-clarification");
+    let workspace = temp_fixture_workspace("boundline-human-session-contract-clarification");
 
-    let run = run_synod(&[
+    let run = run_boundline(&[
         "run",
         "--workspace",
         workspace.to_string_lossy().as_ref(),
@@ -80,7 +80,7 @@ fn inspect_surface_reports_clarification_for_direct_run_blocked_before_planning(
     assert!(run_text.contains("clarification_headline: clarification required: narrow the request to one bounded outcome"), "{run_text}");
     let trace_path = extract_trace_path(&run_text).expect("trace path");
 
-    let inspect = run_synod(&["inspect", "--trace", trace_path.to_string_lossy().as_ref()]);
+    let inspect = run_boundline(&["inspect", "--trace", trace_path.to_string_lossy().as_ref()]);
     let text = terminal_text(&inspect);
     assert_eq!(inspect.status.code(), Some(1), "{text}");
     assert!(text.contains("clarification_headline: clarification required: narrow the request to one bounded outcome"), "{text}");

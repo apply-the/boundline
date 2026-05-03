@@ -45,6 +45,6 @@ fn workflow_registry_guidance_contract_keeps_route_relationships_explicit() {
             .contains("bounded named-workflow surface: `workflow list -> workflow run -> workflow"),
         "{assistant}"
     );
-    assert!(assistant.contains("/synod-workflow-list"), "{assistant}");
+    assert!(assistant.contains("/boundline-workflow-list"), "{assistant}");
     assert!(assistant.contains("compatibility remains explicit and subordinate"), "{assistant}");
 }

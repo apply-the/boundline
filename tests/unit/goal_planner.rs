@@ -3,9 +3,9 @@ use std::path::PathBuf;
 
 use uuid::Uuid;
 
-use synod::domain::decision::DecisionType;
-use synod::domain::goal_plan::ContextPackCredibility;
-use synod::orchestrator::goal_planner::{
+use boundline::domain::decision::DecisionType;
+use boundline::domain::goal_plan::ContextPackCredibility;
+use boundline::orchestrator::goal_planner::{
     GoalPlannerError, PlanningContextSources, build_context_pack, build_goal_plan,
     build_goal_plan_with_sources, collect_workspace_signals, derive_tasks, scan_canon_artifacts,
 };
@@ -42,8 +42,8 @@ fn collect_workspace_signals_detects_javascript_project() {
 fn collect_workspace_signals_detects_canon_and_config() {
     let ws = temp_workspace("gp-canon");
     std::fs::create_dir_all(ws.join(".canon")).unwrap();
-    std::fs::create_dir_all(ws.join(".synod")).unwrap();
-    std::fs::write(ws.join(".synod/config.toml"), "").unwrap();
+    std::fs::create_dir_all(ws.join(".boundline")).unwrap();
+    std::fs::write(ws.join(".boundline/config.toml"), "").unwrap();
 
     let signals = collect_workspace_signals(&ws);
     assert!(signals.has_canon);
@@ -228,7 +228,7 @@ fn build_context_pack_uses_authored_sources_and_workspace_files() {
             negotiation_goal_summary: Some("ship the context router slice".to_string()),
             negotiation_resolution: Some("credible".to_string()),
             negotiation_acceptance_boundary: None,
-            latest_trace_ref: Some(".synod/traces/last.json".to_string()),
+            latest_trace_ref: Some(".boundline/traces/last.json".to_string()),
             workflow_progress: None,
             canon_capability_snapshot: None,
             compacted_canon_memory: None,
@@ -238,7 +238,7 @@ fn build_context_pack_uses_authored_sources_and_workspace_files() {
     assert_eq!(pack.credibility, ContextPackCredibility::Credible);
     assert!(pack.selected_targets.iter().any(|item| item == "src/context_router.rs"));
     assert!(pack.inputs.iter().any(|item| item.reference == "Need a bounded context router"));
-    assert!(pack.inputs.iter().any(|item| item.reference == ".synod/traces/last.json"));
+    assert!(pack.inputs.iter().any(|item| item.reference == ".boundline/traces/last.json"));
 }
 
 #[test]

@@ -102,5 +102,5 @@ projected_to_follow_up -> superseded_by_new_resolution
 ```
 
 The model stays intentionally narrow: it adds explicit routing and binding state
-to the existing Synod delivery story without introducing a new runtime,
+to the existing Boundline delivery story without introducing a new runtime,
 provider-gateway layer, or assistant-owned orchestration surface.

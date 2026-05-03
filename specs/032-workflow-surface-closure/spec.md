@@ -3,7 +3,7 @@
 **Feature Branch**: `032-workflow-surface-closure`  
 **Created**: 2026-05-02  
 **Status**: Draft  
-**Input**: User description: "Feature 032 Product Unification And Surface Closure: make named workflow entry points first-class across Claude, Codex, Copilot, and Gemini guidance; unify workflow, session-native, and compatibility follow-through into one Synod-owned product story; keep model and assistant binding inspectable without provider-specific command drift; update release docs, version bump, coverage, clippy, and fmt closeout."
+**Input**: User description: "Feature 032 Product Unification And Surface Closure: make named workflow entry points first-class across Claude, Codex, Copilot, and Gemini guidance; unify workflow, session-native, and compatibility follow-through into one Boundline-owned product story; keep model and assistant binding inspectable without provider-specific command drift; update release docs, version bump, coverage, clippy, and fmt closeout."
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -20,37 +20,37 @@
 
 ### User Story 1 - Start And Continue Workflows Through Unified Assistant Surfaces (Priority: P1)
 
-An operator can use Synod from Claude, Codex, Copilot, or Gemini guidance to
+An operator can use Boundline from Claude, Codex, Copilot, or Gemini guidance to
 discover, start, continue, and inspect a named workflow without dropping to raw
 ad hoc CLI knowledge or learning a provider-specific product story.
 
 **Why this priority**: The workflow layer is already a real entry point in the
 CLI. As long as assistant guidance says "use raw workflow commands manually,"
-Synod still presents multiple overlapping products instead of one coherent
+Boundline still presents multiple overlapping products instead of one coherent
 surface.
 
 **Independent Test**: Register a representative workflow definition, then
 verify that each shipped assistant surface can guide `workflow list`,
 `workflow run`, `workflow status`, `workflow resume`, and `workflow inspect`
-while preserving one bounded Synod-owned follow-through story.
+while preserving one bounded Boundline-owned follow-through story.
 
 **Acceptance Scenarios**:
 
-1. **Given** a workspace with `.synod/workflows.toml`, **When** the operator
+1. **Given** a workspace with `.boundline/workflows.toml`, **When** the operator
   asks an assistant how to begin, **Then** the assistant surface exposes the
-  named workflow entry points as first-class Synod commands instead of telling
+  named workflow entry points as first-class Boundline commands instead of telling
   the operator to fall back to undocumented raw CLI usage.
 2. **Given** an active named workflow that pauses for capture, clarification,
   governance, review, or completion follow-through, **When** the operator asks
   for status or the next step through an assistant surface, **Then** the
-  surfaced guidance stays within the same workflow-aware Synod command set and
+  surfaced guidance stays within the same workflow-aware Boundline command set and
   does not switch to a provider-specific or assistant-owned control plane.
 
 ---
 
 ### User Story 2 - Inspect Workflow Routing And Assistant Binding (Priority: P2)
 
-An operator can inspect a named workflow and understand which Synod route,
+An operator can inspect a named workflow and understand which Boundline route,
 assistant family, and model binding are authoritative for the current step
 without reconstructing that information from config files or provider-specific
 documentation.
@@ -73,7 +73,7 @@ action cues already expected on the session-native surfaces.
   execution path.
 2. **Given** a workflow whose active native route requires an assistant runtime
   outside the declared capability list, **When** the operator starts or resumes
-  that workflow, **Then** Synod stops explicitly with a bounded assistant-
+  that workflow, **Then** Boundline stops explicitly with a bounded assistant-
   binding failure instead of silently switching assistant families or hiding
   the mismatch.
 
@@ -82,7 +82,7 @@ action cues already expected on the session-native surfaces.
 ### User Story 3 - Keep One Primary Product Story Across Workflow And Compatibility Paths (Priority: P3)
 
 An operator can tell that named workflows and direct session-native commands are
-part of the same primary Synod product, while explicit compatibility execution
+part of the same primary Boundline product, while explicit compatibility execution
 remains available only as a subordinate and clearly marked route.
 
 **Why this priority**: If workflow, session-native, and compatibility follow-up
@@ -98,7 +98,7 @@ the main product story while keeping compatibility explicit and subordinate.
 
 1. **Given** a named workflow run and a direct session-native run, **When** the
   operator reads status, next-step, or inspect guidance, **Then** both paths
-  use the same Synod-owned follow-through language and differ only in workflow
+  use the same Boundline-owned follow-through language and differ only in workflow
   identity or phase cues.
 2. **Given** an explicit compatibility run, **When** the operator asks an
   assistant what to do next, **Then** the guidance keeps the compatibility
@@ -111,11 +111,11 @@ the main product story while keeping compatibility explicit and subordinate.
 
 A maintainer can ship `0.32.0` with runtime behavior, assistant guidance, docs,
 roadmap, version metadata, changelog, and validation evidence all describing
-the same final product identity: users use Synod; workflows and direct runs are
+the same final product identity: users use Boundline; workflows and direct runs are
 primary surfaces; Canon stays visible but secondary inside bounded delivery.
 
 **Why this priority**: The slice is not complete if the code changes land but
-the release artifacts still describe Synod as a collection of partially
+the release artifacts still describe Boundline as a collection of partially
 overlapping assistant packs and side routes.
 
 **Independent Test**: Follow the updated workflow-first operator guidance on a
@@ -127,7 +127,7 @@ the shipped story.
 
 1. **Given** the `0.32.0` release artifacts, **When** a maintainer follows the
   documented workflow-first path, **Then** the runtime behavior, assistant
-  guidance, and release narrative all describe the same Synod-owned product
+  guidance, and release narrative all describe the same Boundline-owned product
   surface.
 2. **Given** modified or newly created Rust files for this slice, **When** the
   maintainer runs the release validation suite, **Then** touched Rust coverage
@@ -142,7 +142,7 @@ the shipped story.
 
 <!--
   ACTION REQUIRED: Capture execution limits, invalid state transitions, missing context,
-  traceability gaps, and failure-handling boundaries. Synod features are invalid if they
+  traceability gaps, and failure-handling boundaries. Boundline features are invalid if they
   ignore how work stops, fails, or becomes non-credible.
 -->
 
@@ -186,11 +186,11 @@ the shipped story.
   active route requires an assistant runtime outside declared assistant
   capabilities instead of silently switching providers or continuing with an
   implicit fallback.
-- **FR-007**: System MUST keep Gemini guidance aligned with the same Synod-owned
+- **FR-007**: System MUST keep Gemini guidance aligned with the same Boundline-owned
   workflow and routing story even if Gemini remains CLI-first for this release.
 - **FR-008**: System MUST keep assistant guidance, docs, roadmap, contributor
   guidance, and changelog aligned around the final product identity that users
-  operate Synod first and see Canon only as a bounded governed runtime inside
+  operate Boundline first and see Canon only as a bounded governed runtime inside
   that product.
 - **FR-009**: System MUST include an explicit task for the `0.32.0` version
   bump across versioned release surfaces.
@@ -205,7 +205,7 @@ the shipped story.
 
 <!--
   ACTION REQUIRED: Name the deferred or excluded capabilities explicitly.
-  Synod specs should normally exclude councils and voting unless the roadmap and
+  Boundline specs should normally exclude councils and voting unless the roadmap and
   constitution explicitly prioritize a bounded review slice; they should otherwise
   exclude provider-routing complexity, distributed execution, long-term memory,
   UI/UX work, and deployment pipelines.
@@ -232,7 +232,7 @@ the shipped story.
   model binding, assistant binding, and authority source that explains why a
   workflow step is using a particular execution path.
 - **Product Identity Cue**: the wording and surfaced state that tells the
-  operator whether they are on a primary Synod workflow or session-native path
+  operator whether they are on a primary Boundline workflow or session-native path
   versus an explicit subordinate compatibility path.
 
 ## Success Criteria *(mandatory)*

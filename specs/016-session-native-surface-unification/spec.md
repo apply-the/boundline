@@ -3,7 +3,7 @@
 **Feature Branch**: `016-session-native-surface-unification`  
 **Created**: 2026-04-29  
 **Status**: Draft  
-**Input**: User description: "Refound the remaining Synod operator-facing surfaces so the session-native runtime becomes the single dominant mental model after 015-runtime-refoundation."
+**Input**: User description: "Refound the remaining Boundline operator-facing surfaces so the session-native runtime becomes the single dominant mental model after 015-runtime-refoundation."
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -20,7 +20,7 @@
 
 ### User Story 1 - One Coherent Session View (Priority: P1)
 
-A developer working through Synod's primary workflow can move from planning to execution to inspection without having to reinterpret the product each time. The same session-owned summary explains which route is active, what flow state applies, what the latest bounded decision is, whether the session is running, blocked, waiting, or terminal, and what the next action should be.
+A developer working through Boundline's primary workflow can move from planning to execution to inspection without having to reinterpret the product each time. The same session-owned summary explains which route is active, what flow state applies, what the latest bounded decision is, whether the session is running, blocked, waiting, or terminal, and what the next action should be.
 
 **Why this priority**: If the core operator surfaces still feel like separate products, the runtime refoundation remains incomplete even if the underlying execution model is correct.
 
@@ -29,7 +29,7 @@ A developer working through Synod's primary workflow can move from planning to e
 **Acceptance Scenarios**:
 
 1. **Given** a workspace with a ready bounded task draft and no special review, adaptive, or governance activity, **When** the developer runs work and then checks status and inspection surfaces, **Then** each surface explains the same active route, current flow state, latest decision state, and next recommended action.
-2. **Given** a workspace where execution is blocked because confirmation or other required context is missing, **When** the developer checks the operator surfaces, **Then** Synod reports the blocked state explicitly, preserves the relevant reason, and recommends a concrete next step instead of leaving the developer to infer what is wrong.
+2. **Given** a workspace where execution is blocked because confirmation or other required context is missing, **When** the developer checks the operator surfaces, **Then** Boundline reports the blocked state explicitly, preserves the relevant reason, and recommends a concrete next step instead of leaving the developer to infer what is wrong.
 3. **Given** a session that reaches a non-success terminal state such as exhaustion or no actionable next step, **When** the developer inspects the outcome, **Then** the terminal condition, latest evidence, and follow-up guidance remain visible across the session surfaces.
 
 ---
@@ -45,22 +45,22 @@ A developer using bounded review, adaptive execution, or governed stages still e
 **Acceptance Scenarios**:
 
 1. **Given** a task that triggers review or adaptive behavior, **When** the developer checks `run`, `status`, `next`, or `inspect`, **Then** the review or adaptive details appear as bounded additions to the same session summary rather than as a separate execution story.
-2. **Given** a governed stage that is waiting for approval or otherwise blocked, **When** the developer checks the operator surfaces, **Then** Synod reports the wait or block state as part of the same session-owned summary and provides explicit follow-up guidance.
+2. **Given** a governed stage that is waiting for approval or otherwise blocked, **When** the developer checks the operator surfaces, **Then** Boundline reports the wait or block state as part of the same session-owned summary and provides explicit follow-up guidance.
 
 ---
 
 ### User Story 3 - Explicit Compatibility Path (Priority: P3)
 
-Developers who intentionally use declarative compatibility profiles can continue to do so, but Synod makes that path visibly distinct from the primary session-native workflow. When both a ready session-native plan and compatibility artifacts exist, the session-native path remains authoritative unless the developer explicitly requests compatibility behavior.
+Developers who intentionally use declarative compatibility profiles can continue to do so, but Boundline makes that path visibly distinct from the primary session-native workflow. When both a ready session-native plan and compatibility artifacts exist, the session-native path remains authoritative unless the developer explicitly requests compatibility behavior.
 
-**Why this priority**: Backward-compatible behavior still matters, but the old path cannot remain the hidden default if Synod is supposed to feel session-native first.
+**Why this priority**: Backward-compatible behavior still matters, but the old path cannot remain the hidden default if Boundline is supposed to feel session-native first.
 
 **Independent Test**: Can be fully tested by comparing a compatibility-only run with a workspace that also has a ready session-native plan, then verifying that route choice, precedence, and explanations remain explicit in every operator-facing surface.
 
 **Acceptance Scenarios**:
 
-1. **Given** a workspace that only has a declarative compatibility profile, **When** the developer runs work, **Then** Synod allows the compatibility path and clearly labels it as compatibility behavior.
-2. **Given** a workspace that has both compatibility artifacts and a ready session-native plan, **When** the developer runs work without explicitly choosing compatibility, **Then** Synod follows the session-native path and explains why that route took precedence.
+1. **Given** a workspace that only has a declarative compatibility profile, **When** the developer runs work, **Then** Boundline allows the compatibility path and clearly labels it as compatibility behavior.
+2. **Given** a workspace that has both compatibility artifacts and a ready session-native plan, **When** the developer runs work without explicitly choosing compatibility, **Then** Boundline follows the session-native path and explains why that route took precedence.
 3. **Given** a developer intentionally choosing compatibility behavior, **When** the run completes or stops, **Then** the operator surfaces preserve the compatibility explanation without overwriting the authoritative session-native summary model.
 
 ---
@@ -71,7 +71,7 @@ Developers who intentionally use declarative compatibility profiles can continue
 
 <!--
   ACTION REQUIRED: Capture execution limits, invalid state transitions, missing context,
-  traceability gaps, and failure-handling boundaries. Synod features are invalid if they
+  traceability gaps, and failure-handling boundaries. Boundline features are invalid if they
   ignore how work stops, fails, or becomes non-credible.
 -->
 
@@ -107,7 +107,7 @@ Developers who intentionally use declarative compatibility profiles can continue
 
 <!--
   ACTION REQUIRED: Name the deferred or excluded capabilities explicitly.
-  Synod specs should normally exclude councils and voting unless the roadmap and
+  Boundline specs should normally exclude councils and voting unless the roadmap and
   constitution explicitly prioritize a bounded review slice; they should otherwise
   exclude provider-routing complexity, distributed execution, long-term memory,
   UI/UX work, and deployment pipelines.
@@ -147,7 +147,7 @@ Developers who intentionally use declarative compatibility profiles can continue
   Assumptions must reduce ambiguity without expanding scope.
 -->
 
-- Operators continue to run Synod in local workspaces with one active session per workspace and persisted session and trace state available between commands.
+- Operators continue to run Boundline in local workspaces with one active session per workspace and persisted session and trace state available between commands.
 - Existing bounded review, adaptive, governance, and compatibility capabilities remain available; this slice changes how they are projected and understood, not whether they exist.
 - Declarative compatibility profiles remain a supported explicit input surface for teams that still rely on them.
 - Governed workflows may depend on Canon-backed evidence and approvals at stage boundaries, but core operator understanding must not depend on Canon becoming the per-action runtime controller.

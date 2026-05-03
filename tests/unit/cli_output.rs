@@ -1,46 +1,48 @@
 use std::path::PathBuf;
 
-use serde_json::Map;
-use serde_json::json;
-use synod::FileConfigStore;
-use synod::FileTraceStore;
-use synod::adapters::session_store::SessionStoreError;
-use synod::adapters::trace_store::TraceStore;
-use synod::cli::diagnostics::{DiagnosticsCheck, DiagnosticsReport, DiagnosticsStatus};
-use synod::cli::inspect::{
+use boundline::FileConfigStore;
+use boundline::FileTraceStore;
+use boundline::adapters::session_store::SessionStoreError;
+use boundline::adapters::trace_store::TraceStore;
+use boundline::cli::diagnostics::{
+    DiagnosticsCheck, DiagnosticsReport, DiagnosticsStatus, DiagnosticsSubject,
+};
+use boundline::cli::inspect::{
     InspectCommandError, TraceResolutionTarget, TraceSummaryError, execute_inspect, render_error,
     render_inspection_routing_summary, resolve_trace_path, summarize_trace,
 };
-use synod::cli::output::{
+use boundline::cli::output::{
     CommandExitCode, command_name, next_command_after_inspect, next_command_after_run,
     render_diagnostics, render_goal_plan_flow_state, render_inspect_failure, render_route_outcome,
     render_run_trace, render_session_status, render_trace_summary, validation_error_message,
 };
-use synod::cli::session::{
+use boundline::cli::session::{
     SessionCommandError, execute_next, execute_status, render_error as render_session_error,
 };
-use synod::cli::{
+use boundline::cli::{
     CliValidationError, CommandExitStatus, CommandName, DeveloperCommand, DeveloperCommandSession,
 };
-use synod::domain::cluster::{
+use boundline::domain::cluster::{
     ClusterDeliveryStory, ClusterRouteOwner, ClusteredExecutionCondition, ClusteredExecutionKind,
     WorkspaceParticipationKind, WorkspaceParticipationRecord,
 };
-use synod::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
-use synod::domain::goal_plan::{GoalPlanFlowMode, GoalPlanFlowState};
-use synod::domain::governance::GovernanceRuntimeKind;
-use synod::domain::limits::{RunLimits, TerminalCondition};
-use synod::domain::routing_decision::RoutingDecisionProjection;
-use synod::domain::session::{
+use boundline::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
+use boundline::domain::goal_plan::{GoalPlanFlowMode, GoalPlanFlowState};
+use boundline::domain::governance::GovernanceRuntimeKind;
+use boundline::domain::limits::{RunLimits, TerminalCondition};
+use boundline::domain::routing_decision::RoutingDecisionProjection;
+use boundline::domain::session::{
     RoutingMode, RoutingOutcome, RoutingSource, SessionStatus, SessionStatusView,
 };
-use synod::domain::step::{StepKind, StepStatus};
-use synod::domain::task::{TaskRunResponse, TaskStatus, TerminalReason};
-use synod::domain::task_context::TaskContext;
-use synod::domain::trace::{
+use boundline::domain::step::{StepKind, StepStatus};
+use boundline::domain::task::{TaskRunResponse, TaskStatus, TerminalReason};
+use boundline::domain::task_context::TaskContext;
+use boundline::domain::trace::{
     ExecutionTrace, TraceEvent, TraceEventType, TraceRecoveryEvent, TraceStepSummary,
     TraceSummaryView,
 };
+use serde_json::Map;
+use serde_json::json;
 use uuid::Uuid;
 
 #[test]
@@ -117,6 +119,7 @@ fn inspect_session_requires_trace_or_workspace() {
     let session = DeveloperCommandSession {
         command_name: CommandName::Inspect,
         workspace_ref: None,
+        install_check: false,
         goal: None,
         trace_ref: None,
         started_at: 0,
@@ -135,7 +138,9 @@ fn inspect_session_requires_trace_or_workspace() {
 #[test]
 fn diagnostics_renderer_lists_check_names_and_actions() {
     let report = DiagnosticsReport {
-        workspace_ref: "/tmp/workspace".to_string(),
+        subject: DiagnosticsSubject::Workspace,
+        workspace_ref: Some("/tmp/workspace".to_string()),
+        installation_ref: None,
         checks: vec![
             DiagnosticsCheck {
                 name: "workspace_exists".to_string(),
@@ -151,6 +156,10 @@ fn diagnostics_renderer_lists_check_names_and_actions() {
         ready: false,
         missing_prerequisites: vec!["trace_store".to_string()],
         suggested_actions: vec!["fix the trace directory".to_string()],
+        boundline_version: None,
+        supported_canon_version: None,
+        companion_state: None,
+        channel_candidates: Vec::new(),
     };
 
     let rendered = render_diagnostics(&report);
@@ -164,9 +173,9 @@ fn diagnostics_renderer_lists_check_names_and_actions() {
 
 #[test]
 fn next_command_helpers_match_assistant_routing_expectations() {
-    assert_eq!(next_command_after_run(TaskStatus::Succeeded), "/synod-status");
-    assert_eq!(next_command_after_run(TaskStatus::Failed), "/synod-next");
-    assert_eq!(next_command_after_inspect(TaskStatus::Succeeded), "/synod-next");
+    assert_eq!(next_command_after_run(TaskStatus::Succeeded), "/boundline-status");
+    assert_eq!(next_command_after_run(TaskStatus::Failed), "/boundline-next");
+    assert_eq!(next_command_after_inspect(TaskStatus::Succeeded), "/boundline-next");
 }
 
 #[test]
@@ -176,15 +185,16 @@ fn inspect_failure_renderer_exposes_correction_cues() {
         Some("/tmp/missing-trace.json"),
         None,
         "failed to read the requested trace",
-        "cargo run --bin synod -- inspect --trace <trace>",
+        "cargo run --bin boundline -- inspect --trace <trace>",
     );
 
     assert!(rendered.contains("inspect: trace read failure"));
     assert!(rendered.contains("inspection_target: explicit-trace"));
     assert!(rendered.contains("trace: /tmp/missing-trace.json"));
-    assert!(rendered.contains("next_command: /synod-inspect"));
+    assert!(rendered.contains("next_command: /boundline-inspect"));
     assert!(
-        rendered.contains("corrected_command: cargo run --bin synod -- inspect --trace <trace>")
+        rendered
+            .contains("corrected_command: cargo run --bin boundline -- inspect --trace <trace>")
     );
 }
 
@@ -227,13 +237,13 @@ fn inspect_invalid_session_errors_reuse_session_guidance() {
 
     assert!(rendered.contains("inspect: session error"), "{rendered}");
     assert!(rendered.contains("reason: active session is invalid:"), "{rendered}");
-    assert!(rendered.contains("next_command: synod start"), "{rendered}");
+    assert!(rendered.contains("next_command: boundline start"), "{rendered}");
 }
 
 #[test]
 fn trace_summary_renderer_mentions_steps_recovery_and_terminal_reason() {
     let summary = TraceSummaryView {
-        trace_ref: "/tmp/workspace/.synod/traces/task.json".to_string(),
+        trace_ref: "/tmp/workspace/.boundline/traces/task.json".to_string(),
         goal: "Inspect a recorded run".to_string(),
         negotiation_goal_summary: None,
         negotiation_resolution: None,
@@ -296,7 +306,7 @@ fn trace_summary_renderer_mentions_steps_recovery_and_terminal_reason() {
     );
 
     assert!(rendered.contains("inspection_target: explicit-trace"));
-    assert!(rendered.contains("trace: /tmp/workspace/.synod/traces/task.json"));
+    assert!(rendered.contains("trace: /tmp/workspace/.boundline/traces/task.json"));
     assert!(
         rendered.contains("execution_condition: terminal - goal satisfied after step verify"),
         "{rendered}"
@@ -305,7 +315,7 @@ fn trace_summary_renderer_mentions_steps_recovery_and_terminal_reason() {
     assert!(rendered.contains("step code (agent) succeeded [2 attempt(s)]"));
     assert!(rendered.contains("retry: retrying step code within remaining retry budget"));
     assert!(rendered.contains("terminal_reason: goal satisfied after step verify"));
-    assert!(rendered.contains("next_command: /synod-next"));
+    assert!(rendered.contains("next_command: /boundline-next"));
     assert!(rendered.contains("duration_ms: 42"));
 }
 
@@ -316,18 +326,16 @@ fn inspect_failure_renderer_includes_workspace_ref_when_provided() {
         None,
         Some("/tmp/my-workspace"),
         "failed to read the requested trace",
-        "cargo run --bin synod -- inspect --workspace <workspace>",
+        "cargo run --bin boundline -- inspect --workspace <workspace>",
     );
 
     assert!(rendered.contains("inspect: trace read failure"));
     assert!(rendered.contains("inspection_target: latest-workspace-trace"));
     assert!(rendered.contains("workspace_ref: /tmp/my-workspace"));
-    assert!(rendered.contains("next_command: /synod-inspect"));
-    assert!(
-        rendered.contains(
-            "corrected_command: cargo run --bin synod -- inspect --workspace <workspace>"
-        )
-    );
+    assert!(rendered.contains("next_command: /boundline-inspect"));
+    assert!(rendered.contains(
+        "corrected_command: cargo run --bin boundline -- inspect --workspace <workspace>"
+    ));
 }
 
 #[test]
@@ -336,8 +344,8 @@ fn render_error_with_missing_trace_reference_uses_explicit_trace_correction() {
 
     assert!(rendered.contains("inspect: trace read failure"));
     assert!(rendered.contains("terminal_reason: inspect requires --trace or --workspace"));
-    assert!(rendered.contains("next_command: /synod-inspect"));
-    assert!(rendered.contains("corrected_command: cargo run --bin synod -- inspect --trace"));
+    assert!(rendered.contains("next_command: /boundline-inspect"));
+    assert!(rendered.contains("corrected_command: cargo run --bin boundline -- inspect --trace"));
 }
 
 #[test]
@@ -352,12 +360,10 @@ fn render_error_with_workspace_path_uses_workspace_correction_cues() {
     assert!(rendered.contains("inspection_target: latest-workspace-trace"));
     assert!(rendered.contains("terminal_reason: failed to read the requested trace"));
     assert!(rendered.contains("workspace_ref: /tmp/my-workspace"));
-    assert!(rendered.contains("next_command: /synod-inspect"));
-    assert!(
-        rendered.contains(
-            "corrected_command: cargo run --bin synod -- inspect --workspace <workspace>"
-        )
-    );
+    assert!(rendered.contains("next_command: /boundline-inspect"));
+    assert!(rendered.contains(
+        "corrected_command: cargo run --bin boundline -- inspect --workspace <workspace>"
+    ));
 }
 
 #[test]
@@ -370,7 +376,7 @@ fn render_error_with_summary_failure_uses_summary_terminal_reason() {
 
     assert!(rendered.contains("inspect: trace read failure"));
     assert!(rendered.contains("terminal_reason: failed to summarize the requested trace"));
-    assert!(rendered.contains("next_command: /synod-inspect"));
+    assert!(rendered.contains("next_command: /boundline-inspect"));
 }
 
 fn minimal_trace(task_id: &str) -> ExecutionTrace {
@@ -396,19 +402,19 @@ fn minimal_response(status: TaskStatus, reason_msg: &str) -> TaskRunResponse {
             Map::new(),
         ),
         plan_revision: 1,
-        trace_location: "/tmp/.synod/traces/task-unit.json".to_string(),
+        trace_location: "/tmp/.boundline/traces/task-unit.json".to_string(),
     }
 }
 
 #[test]
 fn render_run_trace_includes_next_command_and_trace_fields() {
     let response = minimal_response(TaskStatus::Succeeded, "goal satisfied");
-    let rendered = render_run_trace("run", None, &response, "/synod-status");
+    let rendered = render_run_trace("run", None, &response, "/boundline-status");
 
     assert!(rendered.contains("execution_condition: terminal - goal satisfied"), "{rendered}");
-    assert!(rendered.contains("next_command: /synod-status"), "{rendered}");
+    assert!(rendered.contains("next_command: /boundline-status"), "{rendered}");
     assert!(rendered.contains("terminal_status: succeeded"), "{rendered}");
-    assert!(rendered.contains("trace: /tmp/.synod/traces/task-unit.json"), "{rendered}");
+    assert!(rendered.contains("trace: /tmp/.boundline/traces/task-unit.json"), "{rendered}");
 }
 
 #[test]
@@ -435,11 +441,11 @@ fn render_run_trace_with_trace_events_includes_retry_and_replan_lines() {
     });
 
     let response = minimal_response(TaskStatus::Succeeded, "done");
-    let rendered = render_run_trace("run", Some(&trace), &response, "/synod-status");
+    let rendered = render_run_trace("run", Some(&trace), &response, "/boundline-status");
 
     assert!(rendered.contains("retry for analyze: transient error, retrying"), "{rendered}");
     assert!(rendered.contains("replan after analyze: goal shifted, replanning"), "{rendered}");
-    assert!(rendered.contains("next_command: /synod-status"), "{rendered}");
+    assert!(rendered.contains("next_command: /boundline-status"), "{rendered}");
 }
 
 #[test]
@@ -465,7 +471,7 @@ fn render_run_trace_surfaces_goal_plan_negotiation_projection() {
     });
 
     let response = minimal_response(TaskStatus::Succeeded, "done");
-    let rendered = render_run_trace("run", Some(&trace), &response, "/synod-status");
+    let rendered = render_run_trace("run", Some(&trace), &response, "/boundline-status");
 
     assert!(
         rendered.contains("negotiation_goal_summary: Stabilize the failing add flow"),
@@ -504,7 +510,7 @@ fn render_run_trace_surfaces_task_started_negotiation_projection() {
     });
 
     let response = minimal_response(TaskStatus::Succeeded, "done");
-    let rendered = render_run_trace("run", Some(&trace), &response, "/synod-status");
+    let rendered = render_run_trace("run", Some(&trace), &response, "/boundline-status");
 
     assert!(
         rendered.contains("negotiation_goal_summary: Stabilize the failing add flow"),
@@ -539,14 +545,14 @@ fn render_run_trace_surfaces_context_projection() {
             "context_primary_inputs": ["src/context_router.rs", "src/lib.rs"],
             "context_provenance": [
                 "workspace_file: src/context_router.rs (selected as a bounded workspace target for the current goal)",
-                "recent_trace: .synod/traces/last.json (reuses the latest persisted trace as bounded historical evidence)"
+                "recent_trace: .boundline/traces/last.json (reuses the latest persisted trace as bounded historical evidence)"
             ]
         }),
         recorded_at: 0,
     });
 
     let response = minimal_response(TaskStatus::Succeeded, "done");
-    let rendered = render_run_trace("run", Some(&trace), &response, "/synod-status");
+    let rendered = render_run_trace("run", Some(&trace), &response, "/boundline-status");
 
     assert!(rendered.contains("context_summary: bounded context from 2 primary input(s)"));
     assert!(rendered.contains("context_credibility: credible"));
@@ -592,7 +598,7 @@ fn render_run_trace_surfaces_security_assessment_packet_provenance() {
     });
 
     let response = minimal_response(TaskStatus::Succeeded, "done");
-    let rendered = render_run_trace("run", Some(&trace), &response, "/synod-status");
+    let rendered = render_run_trace("run", Some(&trace), &response, "/boundline-status");
 
     assert!(
         rendered.contains(
@@ -612,7 +618,7 @@ fn render_run_trace_surfaces_security_assessment_packet_provenance() {
 fn execute_inspect_explicit_trace_covers_inspection_target_and_next_command() {
     use std::fs;
 
-    let dir = std::env::temp_dir().join(format!("synod-unit-inspect-{}", Uuid::new_v4()));
+    let dir = std::env::temp_dir().join(format!("boundline-unit-inspect-{}", Uuid::new_v4()));
     fs::create_dir_all(&dir).unwrap();
 
     let trace = minimal_trace("task-explicit");
@@ -623,14 +629,14 @@ fn execute_inspect_explicit_trace_covers_inspection_target_and_next_command() {
     let output = &report.terminal_output;
 
     assert!(output.contains("inspection_target: explicit-trace"), "{output}");
-    assert!(output.contains("next_command: /synod-next"), "{output}");
+    assert!(output.contains("next_command: /boundline-next"), "{output}");
 }
 
 #[test]
 fn execute_inspect_workspace_covers_latest_workspace_trace_target() {
     use std::fs;
 
-    let workspace = std::env::temp_dir().join(format!("synod-unit-ws-{}", Uuid::new_v4()));
+    let workspace = std::env::temp_dir().join(format!("boundline-unit-ws-{}", Uuid::new_v4()));
     fs::create_dir_all(&workspace).unwrap();
 
     let trace = minimal_trace("task-workspace");
@@ -641,7 +647,7 @@ fn execute_inspect_workspace_covers_latest_workspace_trace_target() {
     let output = &report.terminal_output;
 
     assert!(output.contains("inspection_target: latest-workspace-trace"), "{output}");
-    assert!(output.contains("next_command: /synod-next"), "{output}");
+    assert!(output.contains("next_command: /boundline-next"), "{output}");
 }
 
 #[test]
@@ -649,7 +655,7 @@ fn execute_inspect_surfaces_goal_plan_negotiation_projection() {
     use std::fs;
 
     let dir =
-        std::env::temp_dir().join(format!("synod-unit-inspect-negotiation-{}", Uuid::new_v4()));
+        std::env::temp_dir().join(format!("boundline-unit-inspect-negotiation-{}", Uuid::new_v4()));
     fs::create_dir_all(&dir).unwrap();
 
     let mut trace = minimal_trace("task-negotiation-inspect");
@@ -693,7 +699,8 @@ fn execute_inspect_surfaces_goal_plan_negotiation_projection() {
 fn execute_inspect_surfaces_context_projection() {
     use std::fs;
 
-    let dir = std::env::temp_dir().join(format!("synod-unit-inspect-context-{}", Uuid::new_v4()));
+    let dir =
+        std::env::temp_dir().join(format!("boundline-unit-inspect-context-{}", Uuid::new_v4()));
     fs::create_dir_all(&dir).unwrap();
 
     let mut trace = minimal_trace("task-context-inspect");
@@ -734,7 +741,7 @@ fn execute_inspect_surfaces_task_started_negotiation_projection() {
     use std::fs;
 
     let dir = std::env::temp_dir()
-        .join(format!("synod-unit-inspect-negotiation-compat-{}", Uuid::new_v4()));
+        .join(format!("boundline-unit-inspect-negotiation-compat-{}", Uuid::new_v4()));
     fs::create_dir_all(&dir).unwrap();
 
     let mut trace = minimal_trace("task-negotiation-inspect-compat");
@@ -888,7 +895,7 @@ fn render_session_status_includes_goal_trace_and_next_command() {
         current_step_index: Some(1),
         latest_status: SessionStatus::Running,
         execution_path: Some("native_goal_plan".to_string()),
-        latest_trace_ref: Some("/tmp/session-workspace/.synod/traces/task.json".to_string()),
+        latest_trace_ref: Some("/tmp/session-workspace/.boundline/traces/task.json".to_string()),
         latest_decision_status: None,
         latest_decision_target: None,
         latest_changed_files: None,
@@ -917,7 +924,7 @@ fn render_session_status_includes_goal_trace_and_next_command() {
         latest_governance_decision: None,
         latest_governance_candidates: None,
         governance_next_action: None,
-        next_command: Some("synod next".to_string()),
+        next_command: Some("boundline next".to_string()),
         explanation: "the active session can keep executing from the current step".to_string(),
         ..Default::default()
     };
@@ -929,10 +936,10 @@ fn render_session_status_includes_goal_trace_and_next_command() {
     assert!(rendered.contains("latest_status: running"), "{rendered}");
     assert!(rendered.contains("execution_path: native_goal_plan"), "{rendered}");
     assert!(
-        rendered.contains("latest_trace_ref: /tmp/session-workspace/.synod/traces/task.json"),
+        rendered.contains("latest_trace_ref: /tmp/session-workspace/.boundline/traces/task.json"),
         "{rendered}"
     );
-    assert!(rendered.contains("next_command: synod next"), "{rendered}");
+    assert!(rendered.contains("next_command: boundline next"), "{rendered}");
 }
 
 #[test]
@@ -970,7 +977,7 @@ fn render_session_status_surfaces_security_assessment_projection() {
         current_step_index: Some(2),
         latest_status: SessionStatus::Running,
         execution_path: Some("native_goal_plan".to_string()),
-        latest_trace_ref: Some("/tmp/session-workspace/.synod/traces/task.json".to_string()),
+        latest_trace_ref: Some("/tmp/session-workspace/.boundline/traces/task.json".to_string()),
         latest_decision_status: None,
         latest_decision_target: None,
         latest_changed_files: None,
@@ -1004,7 +1011,7 @@ fn render_session_status_surfaces_security_assessment_projection() {
             "escalate_pr_review".to_string(),
         ]),
         governance_next_action: None,
-        next_command: Some("synod inspect".to_string()),
+        next_command: Some("boundline inspect".to_string()),
         explanation: "governance completed for the current verification stage".to_string(),
         ..Default::default()
     };
@@ -1040,7 +1047,7 @@ fn render_session_status_surfaces_context_projection() {
             "workspace_file: src/context_router.rs (selected as a bounded workspace target for the current goal)"
                 .to_string(),
         ]),
-        next_command: Some("synod run".to_string()),
+        next_command: Some("boundline run".to_string()),
         explanation: "session is ready to execute the bounded plan".to_string(),
         ..Default::default()
     };
@@ -1078,7 +1085,7 @@ fn render_session_status_surfaces_workflow_phase_and_pause_reason() {
         active_workflow: Some("default".to_string()),
         workflow_phase: Some("capture".to_string()),
         workflow_next_action: Some(
-            "synod capture --workspace /tmp/session-workflow --goal <goal>".to_string(),
+            "boundline capture --workspace /tmp/session-workflow --goal <goal>".to_string(),
         ),
         continuity_authority: None,
         compatibility_follow_up: None,
@@ -1136,7 +1143,7 @@ fn render_session_status_surfaces_workflow_phase_and_pause_reason() {
     );
     assert!(
         rendered.contains(
-            "next_command: synod capture --workspace /tmp/session-workflow --goal <goal>"
+            "next_command: boundline capture --workspace /tmp/session-workflow --goal <goal>"
         ),
         "{rendered}"
     );
@@ -1147,10 +1154,11 @@ fn resolve_trace_path_prefers_session_trace_ref_when_available() {
     use std::fs;
 
     let workspace =
-        std::env::temp_dir().join(format!("synod-unit-session-trace-{}", Uuid::new_v4()));
+        std::env::temp_dir().join(format!("boundline-unit-session-trace-{}", Uuid::new_v4()));
     fs::create_dir_all(&workspace).unwrap();
 
-    let explicit_session_trace = workspace.join(".synod").join("traces").join("session-trace.json");
+    let explicit_session_trace =
+        workspace.join(".boundline").join("traces").join("session-trace.json");
     fs::create_dir_all(explicit_session_trace.parent().unwrap()).unwrap();
     let store = FileTraceStore::new(explicit_session_trace.parent().unwrap());
     let trace = minimal_trace("task-session-trace");
@@ -1172,7 +1180,7 @@ fn execute_inspect_with_no_args_returns_missing_trace_reference_error() {
 #[test]
 fn execute_inspect_with_empty_workspace_returns_missing_latest_trace_error() {
     use std::fs;
-    let workspace = std::env::temp_dir().join(format!("synod-unit-empty-{}", Uuid::new_v4()));
+    let workspace = std::env::temp_dir().join(format!("boundline-unit-empty-{}", Uuid::new_v4()));
     fs::create_dir_all(&workspace).unwrap();
 
     let result = execute_inspect(None, Some(&workspace));
@@ -1181,8 +1189,8 @@ fn execute_inspect_with_empty_workspace_returns_missing_latest_trace_error() {
 
 #[test]
 fn summarize_trace_errors_on_unknown_step_kind() {
+    use boundline::domain::trace::TraceEvent;
     use serde_json::json;
-    use synod::domain::trace::TraceEvent;
 
     let mut trace = ExecutionTrace::new("task-badkind", "session", "Bad kind test");
     trace.terminal_status = Some(TaskStatus::Succeeded);
@@ -1203,8 +1211,8 @@ fn summarize_trace_errors_on_unknown_step_kind() {
 
 #[test]
 fn summarize_trace_errors_when_step_kind_payload_is_missing() {
+    use boundline::domain::trace::TraceEvent;
     use serde_json::json;
-    use synod::domain::trace::TraceEvent;
 
     let mut trace = ExecutionTrace::new("task-nokind", "session", "Missing kind test");
     trace.terminal_status = Some(TaskStatus::Succeeded);
@@ -1225,7 +1233,7 @@ fn summarize_trace_errors_when_step_kind_payload_is_missing() {
 
 #[test]
 fn summarize_trace_uses_goal_plan_projection_and_decision_evidence_fallbacks() {
-    use synod::domain::trace::TraceEvent;
+    use boundline::domain::trace::TraceEvent;
 
     let mut trace = ExecutionTrace::new("task-goal-plan", "session", "Decision summary test");
     trace.terminal_status = Some(TaskStatus::Failed);
@@ -1338,7 +1346,7 @@ fn summarize_trace_uses_goal_plan_projection_and_decision_evidence_fallbacks() {
 #[test]
 fn compatibility_trace_without_active_session_surfaces_status_and_next_follow_up() {
     let workspace =
-        std::env::temp_dir().join(format!("synod-unit-compat-status-{}", Uuid::new_v4()));
+        std::env::temp_dir().join(format!("boundline-unit-compat-status-{}", Uuid::new_v4()));
     std::fs::create_dir_all(&workspace).unwrap();
 
     let mut trace = minimal_trace("task-compat-status");
@@ -1369,7 +1377,7 @@ fn compatibility_trace_without_active_session_surfaces_status_and_next_follow_up
         next.terminal_output
     );
     assert!(
-        next.terminal_output.contains("next_command: synod inspect --workspace"),
+        next.terminal_output.contains("next_command: boundline inspect --workspace"),
         "{}",
         next.terminal_output
     );
@@ -1398,7 +1406,7 @@ fn session_error_renderer_covers_trace_summary_and_cluster_config_guidance() {
             .contains("reason: `run` requires a valid cluster config in /tmp/cluster-owner"),
         "{cluster_config}"
     );
-    assert!(cluster_config.contains("next_command: synod cluster init --workspace <primary> --cluster-id <id> --member <workspace> --member <workspace>"), "{cluster_config}");
+    assert!(cluster_config.contains("next_command: boundline cluster init --workspace <primary> --cluster-id <id> --member <workspace> --member <workspace>"), "{cluster_config}");
 
     let session_store = render_session_error(
         "plan",
@@ -1416,16 +1424,22 @@ fn session_error_renderer_covers_trace_summary_and_cluster_config_guidance() {
 
 #[test]
 fn unimplemented_message_formats_the_command_name() {
-    use synod::cli::output::unimplemented_message;
+    use boundline::cli::output::unimplemented_message;
 
-    let msg = unimplemented_message(&DeveloperCommand::Doctor { workspace: PathBuf::from("/tmp") });
+    let msg = unimplemented_message(&DeveloperCommand::Doctor {
+        workspace: Some(PathBuf::from("/tmp")),
+        install: false,
+    });
     assert_eq!(msg, "`doctor` is not implemented yet");
 }
 
 #[test]
 fn command_names_render_for_all_four_subcommands() {
     assert_eq!(
-        command_name(&DeveloperCommand::Doctor { workspace: PathBuf::from("/tmp") }),
+        command_name(&DeveloperCommand::Doctor {
+            workspace: Some(PathBuf::from("/tmp")),
+            install: false,
+        }),
         "doctor"
     );
     assert_eq!(
@@ -1496,7 +1510,7 @@ fn render_trace_summary_handles_all_terminal_status_variants() {
             duration: None,
             ..Default::default()
         };
-        let rendered = render_trace_summary(&summary, "explicit-trace", "/synod-next");
+        let rendered = render_trace_summary(&summary, "explicit-trace", "/boundline-next");
         assert!(
             rendered.contains(&format!("terminal_status: {expected}")),
             "status {status:?}: {rendered}"
@@ -1543,7 +1557,7 @@ fn render_trace_summary_surfaces_route_owner_and_config_projection() {
         ..Default::default()
     };
 
-    let rendered = render_trace_summary(&summary, "explicit-trace", "/synod-next");
+    let rendered = render_trace_summary(&summary, "explicit-trace", "/boundline-next");
 
     assert!(rendered.contains("route_owner: compatibility"), "{rendered}");
     assert!(
@@ -1557,7 +1571,7 @@ fn render_trace_summary_surfaces_route_owner_and_config_projection() {
 #[test]
 fn render_session_status_projects_workspace_routing_defaults() {
     let workspace =
-        std::env::temp_dir().join(format!("synod-route-config-status-{}", Uuid::new_v4()));
+        std::env::temp_dir().join(format!("boundline-route-config-status-{}", Uuid::new_v4()));
     std::fs::create_dir_all(&workspace).unwrap();
 
     let config = ConfigFile {
@@ -1638,7 +1652,7 @@ fn render_session_status_projects_workspace_routing_defaults() {
         latest_governance_decision: None,
         latest_governance_candidates: None,
         governance_next_action: None,
-        next_command: Some("synod capture --goal <goal>".to_string()),
+        next_command: Some("boundline capture --goal <goal>".to_string()),
         explanation: "session is waiting for a goal".to_string(),
         ..Default::default()
     });
@@ -1698,7 +1712,7 @@ fn render_session_status_surfaces_follow_through_guidance() {
         current_step_index: Some(2),
         latest_status: SessionStatus::Running,
         execution_path: Some("native_goal_plan".to_string()),
-        latest_trace_ref: Some("/tmp/workspace/.synod/traces/trace.json".to_string()),
+        latest_trace_ref: Some("/tmp/workspace/.boundline/traces/trace.json".to_string()),
         latest_decision_status: Some("failed".to_string()),
         latest_decision_target: Some("verify-fix-add".to_string()),
         latest_changed_files: None,
@@ -1729,8 +1743,9 @@ fn render_session_status_surfaces_follow_through_guidance() {
         latest_governance_decision: None,
         latest_governance_candidates: None,
         governance_next_action: None,
-        next_command: Some("synod step".to_string()),
-        explanation: "next recommended command for the active session is `synod step`".to_string(),
+        next_command: Some("boundline step".to_string()),
+        explanation: "next recommended command for the active session is `boundline step`"
+            .to_string(),
         ..Default::default()
     });
 
@@ -1740,13 +1755,13 @@ fn render_session_status_surfaces_follow_through_guidance() {
         "{rendered}"
     );
     assert!(rendered.contains("follow_through_evidence_source: session:recovery"), "{rendered}");
-    assert!(rendered.contains("follow_through_next_action: synod step"), "{rendered}");
+    assert!(rendered.contains("follow_through_next_action: boundline step"), "{rendered}");
 }
 
 #[test]
 fn render_trace_summary_projects_workspace_routing_defaults() {
     let workspace =
-        std::env::temp_dir().join(format!("synod-route-config-trace-{}", Uuid::new_v4()));
+        std::env::temp_dir().join(format!("boundline-route-config-trace-{}", Uuid::new_v4()));
     std::fs::create_dir_all(&workspace).unwrap();
 
     let config = ConfigFile {
@@ -1761,7 +1776,7 @@ fn render_trace_summary_projects_workspace_routing_defaults() {
     };
     FileConfigStore::for_workspace(&workspace).save_local(&config).unwrap();
 
-    let trace_ref = workspace.join(".synod").join("traces").join("trace.json");
+    let trace_ref = workspace.join(".boundline").join("traces").join("trace.json");
     let summary = TraceSummaryView {
         trace_ref: trace_ref.to_string_lossy().into_owned(),
         goal: "test".to_string(),
@@ -1798,7 +1813,7 @@ fn render_trace_summary_projects_workspace_routing_defaults() {
         ..Default::default()
     };
 
-    let rendered = render_trace_summary(&summary, "explicit-trace", "/synod-next");
+    let rendered = render_trace_summary(&summary, "explicit-trace", "/boundline-next");
 
     assert!(
         rendered.contains("route_config_projection: workspace_routing: review=claude/reviewer-1"),
@@ -1808,8 +1823,8 @@ fn render_trace_summary_projects_workspace_routing_defaults() {
 
 #[test]
 fn render_trace_summary_prefers_persisted_routing_snapshot_over_current_workspace_config() {
-    let workspace =
-        std::env::temp_dir().join(format!("synod-route-config-trace-snapshot-{}", Uuid::new_v4()));
+    let workspace = std::env::temp_dir()
+        .join(format!("boundline-route-config-trace-snapshot-{}", Uuid::new_v4()));
     std::fs::create_dir_all(&workspace).unwrap();
 
     let current_config = ConfigFile {
@@ -1824,7 +1839,7 @@ fn render_trace_summary_prefers_persisted_routing_snapshot_over_current_workspac
     };
     FileConfigStore::for_workspace(&workspace).save_local(&current_config).unwrap();
 
-    let trace_ref = workspace.join(".synod").join("traces").join("trace.json");
+    let trace_ref = workspace.join(".boundline").join("traces").join("trace.json");
     let mut trace = ExecutionTrace::new("task-1", "session-1", "test");
     trace.terminal_status = Some(TaskStatus::Succeeded);
     trace.terminal_reason =
@@ -1854,7 +1869,7 @@ fn render_trace_summary_prefers_persisted_routing_snapshot_over_current_workspac
     });
 
     let summary = summarize_trace(&trace_ref, &trace).unwrap();
-    let rendered = render_trace_summary(&summary, "explicit-trace", "/synod-next");
+    let rendered = render_trace_summary(&summary, "explicit-trace", "/boundline-next");
 
     assert!(
         rendered.contains(
@@ -1907,7 +1922,7 @@ fn render_trace_summary_surfaces_follow_through_guidance() {
         ..Default::default()
     };
 
-    let rendered = render_trace_summary(&summary, "explicit-trace", "/synod-next");
+    let rendered = render_trace_summary(&summary, "explicit-trace", "/boundline-next");
 
     assert!(
         rendered.contains(
@@ -1916,7 +1931,7 @@ fn render_trace_summary_surfaces_follow_through_guidance() {
         "{rendered}"
     );
     assert!(rendered.contains("follow_through_evidence_source: trace:decision"), "{rendered}");
-    assert!(rendered.contains("follow_through_next_action: /synod-next"), "{rendered}");
+    assert!(rendered.contains("follow_through_next_action: /boundline-next"), "{rendered}");
 }
 
 #[test]
@@ -1965,7 +1980,7 @@ fn render_trace_summary_covers_replan_recovery_label_and_decision_step_kind() {
         ..Default::default()
     };
 
-    let rendered = render_trace_summary(&summary, "latest-workspace-trace", "/synod-next");
+    let rendered = render_trace_summary(&summary, "latest-workspace-trace", "/boundline-next");
 
     assert!(rendered.contains("step decide (decision)"), "{rendered}");
     assert!(rendered.contains("replan: goal shifted"), "{rendered}");
@@ -2009,7 +2024,7 @@ fn render_trace_summary_includes_security_assessment_packet_provenance() {
     });
 
     let summary = summarize_trace(PathBuf::from("/tmp/trace.json"), &trace).unwrap();
-    let rendered = render_trace_summary(&summary, "explicit-trace", "/synod-next");
+    let rendered = render_trace_summary(&summary, "explicit-trace", "/boundline-next");
 
     assert!(
         rendered.contains(
@@ -2073,7 +2088,7 @@ fn render_trace_summary_covers_pending_running_and_skipped_step_statuses() {
             duration: None,
             ..Default::default()
         };
-        let rendered = render_trace_summary(&summary, "explicit-trace", "/synod-next");
+        let rendered = render_trace_summary(&summary, "explicit-trace", "/boundline-next");
         assert!(
             rendered.contains(&format!("(agent) {expected} [1")),
             "status {status:?}: {rendered}"
@@ -2116,7 +2131,7 @@ fn render_session_status_surfaces_cluster_delivery_story() {
         current_step_index: Some(1),
         latest_status: SessionStatus::Failed,
         execution_path: Some("native_goal_plan".to_string()),
-        latest_trace_ref: Some("/tmp/secondary/.synod/traces/task.json".to_string()),
+        latest_trace_ref: Some("/tmp/secondary/.boundline/traces/task.json".to_string()),
         latest_decision_status: None,
         latest_decision_target: None,
         latest_changed_files: None,
@@ -2145,7 +2160,7 @@ fn render_session_status_surfaces_cluster_delivery_story() {
         latest_governance_decision: None,
         latest_governance_candidates: None,
         governance_next_action: None,
-        next_command: Some("synod inspect --cluster /tmp/primary".to_string()),
+        next_command: Some("boundline inspect --cluster /tmp/primary".to_string()),
         explanation: "secondary workspace could not continue the bounded handoff".to_string(),
         ..Default::default()
     });
@@ -2172,7 +2187,7 @@ fn render_session_status_surfaces_cluster_delivery_story() {
 fn render_trace_summary_surfaces_cluster_delivery_story() {
     let rendered = render_trace_summary(
         &TraceSummaryView {
-            trace_ref: "/tmp/secondary/.synod/traces/task.json".to_string(),
+            trace_ref: "/tmp/secondary/.boundline/traces/task.json".to_string(),
             goal: "Ship a clustered fix".to_string(),
             negotiation_goal_summary: None,
             negotiation_resolution: None,
@@ -2212,7 +2227,7 @@ fn render_trace_summary_surfaces_cluster_delivery_story() {
             ..Default::default()
         },
         "explicit-trace",
-        "/synod-next",
+        "/boundline-next",
     );
 
     assert!(rendered.contains("cluster_id: cluster-1"), "{rendered}");
@@ -2233,7 +2248,7 @@ fn sample_cluster_delivery_story() -> ClusterDeliveryStory {
                 workspace_ref: "/tmp/primary".to_string(),
                 participation_kind: WorkspaceParticipationKind::Entry,
                 order: 0,
-                latest_trace_ref: Some("/tmp/primary/.synod/traces/task.json".to_string()),
+                latest_trace_ref: Some("/tmp/primary/.boundline/traces/task.json".to_string()),
                 latest_status: Some("running".to_string()),
                 headline: "primary workspace started the clustered run".to_string(),
                 terminal_reason: None,
@@ -2242,7 +2257,7 @@ fn sample_cluster_delivery_story() -> ClusterDeliveryStory {
                 workspace_ref: "/tmp/secondary".to_string(),
                 participation_kind: WorkspaceParticipationKind::Blocked,
                 order: 1,
-                latest_trace_ref: Some("/tmp/secondary/.synod/traces/task.json".to_string()),
+                latest_trace_ref: Some("/tmp/secondary/.boundline/traces/task.json".to_string()),
                 latest_status: Some("failed".to_string()),
                 headline: "secondary workspace could not continue the bounded handoff".to_string(),
                 terminal_reason: Some(

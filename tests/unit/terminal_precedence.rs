@@ -1,11 +1,11 @@
-use serde_json::json;
-use synod::domain::limits::{RunLimits, TerminalCondition};
-use synod::domain::task::TaskStatus;
-use synod::orchestrator::planner::PlanningError;
-use synod::orchestrator::terminal::{
+use boundline::domain::limits::{RunLimits, TerminalCondition};
+use boundline::domain::task::TaskStatus;
+use boundline::orchestrator::planner::PlanningError;
+use boundline::orchestrator::terminal::{
     build_planning_failure_reason, build_terminal_reason, select_terminal_condition,
     task_status_for_condition,
 };
+use serde_json::json;
 
 #[test]
 fn terminal_precedence_prefers_the_earliest_configured_condition() {

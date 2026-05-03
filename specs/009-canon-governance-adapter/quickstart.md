@@ -3,14 +3,14 @@
 ## Prerequisites
 
 - Work from the repository root.
-- Use a clean workspace or start with no active `.synod/session.json`.
-- Provide `.synod/execution.json` in the target workspace.
+- Use a clean workspace or start with no active `.boundline/session.json`.
+- Provide `.boundline/execution.json` in the target workspace.
 - Install Canon only for the Canon-backed scenarios; the local-first scenario must still work without it.
-- Run commands through `cargo run --bin synod -- ...` when validating locally.
+- Run commands through `cargo run --bin boundline -- ...` when validating locally.
 
 ## Example governed execution profile
 
-Create `.synod/execution.json` in a small Rust workspace:
+Create `.boundline/execution.json` in a small Rust workspace:
 
 ```json
 {
@@ -93,12 +93,12 @@ Create `.synod/execution.json` in a small Rust workspace:
 1. Start a workspace session:
 
    ```bash
-   cargo run --bin synod -- start --workspace <workspace>
-   cargo run --bin synod -- capture --workspace <workspace> --goal "Fix the failing add test"
-   cargo run --bin synod -- flow bug-fix --workspace <workspace>
-   cargo run --bin synod -- plan --workspace <workspace>
-   cargo run --bin synod -- step --workspace <workspace>
-   cargo run --bin synod -- status --workspace <workspace>
+   cargo run --bin boundline -- start --workspace <workspace>
+   cargo run --bin boundline -- capture --workspace <workspace> --goal "Fix the failing add test"
+   cargo run --bin boundline -- flow bug-fix --workspace <workspace>
+   cargo run --bin boundline -- plan --workspace <workspace>
+   cargo run --bin boundline -- step --workspace <workspace>
+   cargo run --bin boundline -- status --workspace <workspace>
    ```
 
 2. Configure the current governed stage for `runtime = local` or make Canon unavailable while the stage is not marked `required`.
@@ -107,7 +107,7 @@ Expected outcome:
 
 - `status` shows `latest_governance_runtime: local`.
 - The governed stage reaches `latest_governance_state: completed` or `governed_ready` without a Canon run reference.
-- Synod continues through the normal local execution path with explicit governance evidence.
+- Boundline continues through the normal local execution path with explicit governance evidence.
 
 ## Scenario 2: Canon-backed governance and packet reuse
 
@@ -116,13 +116,13 @@ Expected outcome:
 3. Inspect the results:
 
    ```bash
-   cargo run --bin synod -- run --workspace <workspace>
-   cargo run --bin synod -- inspect --workspace <workspace>
+   cargo run --bin boundline -- run --workspace <workspace>
+   cargo run --bin boundline -- inspect --workspace <workspace>
    ```
 
 Expected outcome:
 
-- Synod records `latest_governance_runtime: canon` and the selected Canon mode.
+- Boundline records `latest_governance_runtime: canon` and the selected Canon mode.
 - The run or inspect output exposes `latest_governance_run_ref` and `latest_governance_packet_ref`.
 - `status` also exposes `latest_governance_packet_source_stage` and `latest_governance_packet_binding_reason` when a later stage reuses the immediate-upstream governed packet.
 - The governance timeline shows runtime selection, Canon start, and governed completion.
@@ -135,7 +135,7 @@ Expected outcome:
 
 Expected outcome:
 
-- Synod records one explicit autopilot decision for the stage.
+- Boundline records one explicit autopilot decision for the stage.
 - The governed stage enters `latest_governance_state: awaiting_approval` instead of continuing locally.
 - `status` and `inspect` continue to expose `latest_governance_mode`, `latest_governance_run_ref`, and autopilot candidates while approval is still pending.
 - A later `status`, `step`, or `run` invocation refreshes approval state and only resumes the stage after the runtime reports `granted`.
@@ -155,5 +155,5 @@ cargo test --all-targets
 Expected outcome:
 
 - Governance manifest parsing, runtime selection, session projections, trace rendering, and autopilot blocking scenarios all pass.
-- Synod remains executable when Canon is absent.
+- Boundline remains executable when Canon is absent.
 - Canon-backed scenarios surface governed run references and packet readiness explicitly.

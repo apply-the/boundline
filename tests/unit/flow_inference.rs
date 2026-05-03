@@ -1,4 +1,4 @@
-use synod::orchestrator::flow_inference::infer_flow;
+use boundline::orchestrator::flow_inference::infer_flow;
 
 #[test]
 fn bug_fix_keywords_infer_bug_fix_flow() {

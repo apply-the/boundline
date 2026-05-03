@@ -1,12 +1,12 @@
 # Research: Multi-Workspace Orchestration
 
-## Decision 1: Store cluster metadata in the primary workspace under `.synod/cluster.toml`
+## Decision 1: Store cluster metadata in the primary workspace under `.boundline/cluster.toml`
 
-- Decision: Persist cluster identity, primary workspace, member list, and cluster-scoped defaults in a new `.synod/cluster.toml` file located in one designated primary workspace.
-- Rationale: The feature needs one inspectable source of truth for cluster membership and defaults, but it must remain independent from Canon and avoid introducing a new repository-level control plane. Reusing `.synod/` keeps the operator mental model aligned with existing Synod workspace state.
+- Decision: Persist cluster identity, primary workspace, member list, and cluster-scoped defaults in a new `.boundline/cluster.toml` file located in one designated primary workspace.
+- Rationale: The feature needs one inspectable source of truth for cluster membership and defaults, but it must remain independent from Canon and avoid introducing a new repository-level control plane. Reusing `.boundline/` keeps the operator mental model aligned with existing Boundline workspace state.
 - Alternatives considered:
   - Store cluster metadata in every member workspace: rejected because it creates drift and reconciliation problems immediately.
-  - Store cluster metadata under `.canon/`: rejected because the constitution forbids making core Synod behavior depend on Canon surfaces.
+  - Store cluster metadata under `.canon/`: rejected because the constitution forbids making core Boundline behavior depend on Canon surfaces.
   - Store cluster metadata only in memory during one command: rejected because later status, inspect, and config flows need persistent cluster context.
 
 ## Decision 2: Model clustered execution as a projection over existing per-workspace session and trace state
@@ -18,14 +18,14 @@
   - Ignore existing member state and show only cluster metadata: rejected because the feature would not actually improve operator insight.
   - Mirror the full session file into every member workspace: rejected because it adds synchronization complexity without first-slice value.
 
-## Decision 3: Introduce a dedicated `synod cluster` command surface and only extend existing commands where cluster context is required
+## Decision 3: Introduce a dedicated `boundline cluster` command surface and only extend existing commands where cluster context is required
 
-- Decision: Add `synod cluster init|status|inspect` as the explicit operator entry point for cluster behavior, and extend existing session/config flows only where a cluster-aware projection or precedence resolution is required.
+- Decision: Add `boundline cluster init|status|inspect` as the explicit operator entry point for cluster behavior, and extend existing session/config flows only where a cluster-aware projection or precedence resolution is required.
 - Rationale: Cluster behavior is a new operator concern and should not be hidden inside unrelated commands. A dedicated surface also keeps single-workspace commands understandable and bounded.
 - Alternatives considered:
-  - Overload `synod start`, `synod status`, and `synod inspect` with cluster behavior only: rejected because the user would have no clear bootstrap path for cluster membership.
-  - Create a separate binary for clustered orchestration: rejected because the capability belongs inside Synod rather than behind a second tool.
-  - Require manual file editing for cluster setup: rejected because it recreates the usability failure that `synod init` already fixed for single workspaces.
+  - Overload `boundline start`, `boundline status`, and `boundline inspect` with cluster behavior only: rejected because the user would have no clear bootstrap path for cluster membership.
+  - Create a separate binary for clustered orchestration: rejected because the capability belongs inside Boundline rather than behind a second tool.
+  - Require manual file editing for cluster setup: rejected because it recreates the usability failure that `boundline init` already fixed for single workspaces.
 
 ## Decision 4: Insert cluster scope between workspace-local and user-global config precedence
 
