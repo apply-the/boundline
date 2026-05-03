@@ -131,7 +131,7 @@ fn bug_fix_flow_run_reports_failed_decisions_and_trace_guidance() {
 }
 
 #[test]
-fn delivery_flow_runs_all_four_stages_to_completion() {
+fn delivery_flow_preserves_stage_projection_when_native_delivery_change_is_unavailable() {
     let workspace = temp_workspace();
     assert_eq!(run_synod_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
@@ -145,19 +145,21 @@ fn delivery_flow_runs_all_four_stages_to_completion() {
 
     let run_output = run_synod_in(&workspace, &["run"]);
     let run_text = terminal_text(&run_output);
-    assert_eq!(run_output.status.code(), Some(0), "{run_text}");
+    assert_eq!(run_output.status.code(), Some(1), "{run_text}");
+    assert!(run_text.contains("terminal_status: failed"), "{run_text}");
+    assert!(run_text.contains("recovery decision for fixture-target.txt failed"), "{run_text}");
 
     let status_text = terminal_text(&run_synod_in(&workspace, &["status"]));
-    assert!(status_text.contains("latest_status: succeeded"), "{status_text}");
+    assert!(status_text.contains("latest_status: failed"), "{status_text}");
     assert!(status_text.contains("active_flow: delivery"), "{status_text}");
     assert!(status_text.contains("current_stage: requirements"), "{status_text}");
     assert!(status_text.contains("stage_progress: 1/4"), "{status_text}");
 
     let inspect_output = run_synod_in(&workspace, &["inspect", "--workspace", "."]);
     let inspect_text = terminal_text(&inspect_output);
-    assert_eq!(inspect_output.status.code(), Some(0), "{inspect_text}");
+    assert_eq!(inspect_output.status.code(), Some(1), "{inspect_text}");
     assert!(inspect_text.contains("inspection_target: session-trace-ref"), "{inspect_text}");
-    assert!(inspect_text.contains("terminal_status: succeeded"), "{inspect_text}");
+    assert!(inspect_text.contains("terminal_status: failed"), "{inspect_text}");
 }
 
 #[test]

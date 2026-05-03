@@ -30,7 +30,7 @@ fn clustered_delivery_run_names_the_blocking_workspace_when_a_member_cannot_cont
         None,
     )
     .unwrap();
-    execute_plan_with_target(None, Some(&primary), Some("bug-fix"), false).unwrap();
+    execute_plan_with_target(None, Some(&primary), Some("bug-fix"), false, false).unwrap();
 
     let run = execute_run_with_target(None, Some(&primary)).unwrap();
     let status = execute_status_with_target(None, Some(&primary)).unwrap();

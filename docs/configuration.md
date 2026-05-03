@@ -1,9 +1,9 @@
-# Configuration in Synod 0.34.0
+# Configuration in Synod 0.35.0
 
-Synod `0.34.0` keeps a user-friendly setup and routing configuration surface
+Synod `0.35.0` keeps a user-friendly setup and routing configuration surface
 for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
-The `0.34.0` release keeps configuration behavior stable while preserving the
+The `0.35.0` release keeps configuration behavior stable while preserving the
 same governed routing defaults across earlier `bug-fix:investigate` work,
 later verify-stage `security-assessment`, workflow-aware projection of the
 same bounded governance state, continuity-aware read-side follow-up, the
@@ -16,7 +16,10 @@ Context assembly also stays runtime-owned and inspectable rather than
 configuration-driven: planning derives one bounded context pack from workspace
 signals and persisted session evidence, while `run`, `status`, `next`, and
 `inspect` simply project the resulting context summary, credibility, primary
-inputs, provenance, and any staleness reason.
+inputs, provenance, and any staleness reason. The same remains true for the
+new planning lifecycle: default `plan` proposes one bounded evidence-driven
+goal plan, `plan --confirm` confirms it, and neither step introduces a new
+config key or routing slot.
 Decision-driven selector choice is also runtime-owned rather than
 configuration-driven: the native loop can choose `read`, `search`, `modify`,
 `test`, `ask`, or `replan` from current evidence without introducing a new
@@ -39,6 +42,7 @@ ranking, explicit adaptive exhaustion, or negotiation-state overrides.
 
 - `synod init` bootstraps an optional compatibility workspace profile and local config under `.synod/`
 - direct `synod run --goal` is native-first; add `--compatibility` only when the manifest-backed route is intentional
+- default `synod plan` now creates one evidence-driven proposal and `synod plan --confirm` confirms it; planning lifecycle state is session-owned rather than config-owned
 - bounded `bug-fix` and `change` completion now requires both material change evidence and passed validation on the native and governed session path
 - `synod config` manages runtime/model routing defaults for planning, verification, review, and other bounded slots
 - `synod cluster` registers bounded multi-workspace membership and aggregated inspection

@@ -41,7 +41,9 @@ fn build_goal_plan(confirmed: bool) -> GoalPlan {
         confidence_reason: "goal contains keyword 'fix'".to_string(),
         confirmed,
     });
-    goal_plan.confirm().unwrap();
+    if confirmed {
+        goal_plan.confirm().unwrap();
+    }
     goal_plan
 }
 
@@ -68,7 +70,7 @@ fn execution_path_prefers_pending_native_goal_plan_over_fixture_state() {
 
     assert_eq!(
         execution_path_text(&record).as_deref(),
-        Some("native_goal_plan_pending_flow_confirmation")
+        Some("native_goal_plan_pending_plan_confirmation")
     );
 }
 
@@ -122,7 +124,7 @@ fn execution_path_marks_goal_captured_sessions_as_pending_plan() {
 }
 
 #[test]
-fn routing_outcome_blocks_when_flow_confirmation_is_pending() {
+fn routing_outcome_blocks_when_plan_confirmation_is_pending() {
     let record = ActiveSessionRecord {
         session_id: "session-native".to_string(),
         workspace_ref: "/tmp/synod-session-model".to_string(),
@@ -145,11 +147,11 @@ fn routing_outcome_blocks_when_flow_confirmation_is_pending() {
     let outcome = routing_outcome(&record);
     assert_eq!(outcome.mode, RoutingMode::Blocked);
     assert_eq!(outcome.source, RoutingSource::GoalPlan);
-    assert!(outcome.reason.contains("flow confirmation"));
+    assert!(outcome.reason.contains("plan confirmation"));
 }
 
 #[test]
-fn routing_outcome_prefers_native_goal_plan_when_flow_is_confirmed() {
+fn routing_outcome_prefers_native_goal_plan_when_plan_is_confirmed() {
     let record = ActiveSessionRecord {
         session_id: "session-native".to_string(),
         workspace_ref: "/tmp/synod-session-model".to_string(),

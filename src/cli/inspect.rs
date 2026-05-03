@@ -500,7 +500,44 @@ pub fn summarize_trace(
                         .get("goal")
                         .and_then(|value| value.as_str())
                         .unwrap_or(&trace.goal);
-                    goal_plan_summary = Some(format!("{task_count} bounded task(s) for {goal}"));
+                    let state_suffix = event
+                        .payload
+                        .get("goal_plan_state")
+                        .and_then(|value| value.as_str())
+                        .map(|state| {
+                            format!(
+                                " [{state} rev {}]",
+                                event
+                                    .payload
+                                    .get("goal_plan_revision")
+                                    .and_then(|value| value.as_u64())
+                                    .unwrap_or(1)
+                            )
+                        })
+                        .unwrap_or_default();
+                    let flow_suffix = event
+                        .payload
+                        .get("flow_state")
+                        .and_then(|value| value.as_str())
+                        .map(|flow_state| format!(" | flow: {flow_state}"))
+                        .unwrap_or_default();
+                    let verification_suffix = event
+                        .payload
+                        .get("verification_strategy")
+                        .and_then(|value| value.as_str())
+                        .map(|verification_strategy| {
+                            format!(" | verification: {verification_strategy}")
+                        })
+                        .unwrap_or_default();
+                    let rationale_suffix = event
+                        .payload
+                        .get("planning_rationale")
+                        .and_then(|value| value.as_str())
+                        .map(|planning_rationale| format!(" | rationale: {planning_rationale}"))
+                        .unwrap_or_default();
+                    goal_plan_summary = Some(format!(
+                        "{task_count} bounded task(s) for {goal}{state_suffix}{flow_suffix}{verification_suffix}{rationale_suffix}"
+                    ));
                 }
                 if negotiation_goal_summary.is_none() {
                     negotiation_goal_summary = event
@@ -1494,6 +1531,11 @@ mod tests {
             json!({
                 "task_count": 1,
                 "goal": "Inspect trace",
+                "goal_plan_state": "proposed",
+                "goal_plan_revision": 2,
+                "flow_state": "proposed (bug-fix) - evidence suggests bug-fix because selected targets span existing tests and source files",
+                "planning_rationale": "replan revision 2 supersedes revision 1 because flow, verification strategy",
+                "verification_strategy": "run targeted verification against tests/red_to_green.rs",
                 "negotiation_resolution": "credible",
                 "negotiation_acceptance_boundary": "deliver the bounded outcome",
                 "context_summary": "bounded context from src/lib.rs",
@@ -1533,6 +1575,14 @@ mod tests {
         );
         assert_eq!(summary.context_summary.as_deref(), Some("bounded context from src/lib.rs"));
         assert_eq!(summary.context_credibility.as_deref(), Some("stale"));
+        assert!(summary.goal_plan_summary.as_deref().unwrap().contains("[proposed rev 2]"));
+        assert!(
+            summary
+                .goal_plan_summary
+                .as_deref()
+                .unwrap()
+                .contains("verification: run targeted verification against tests/red_to_green.rs")
+        );
         assert_eq!(summary.context_primary_inputs, vec!["src/lib.rs".to_string()]);
         assert_eq!(
             summary.context_provenance,

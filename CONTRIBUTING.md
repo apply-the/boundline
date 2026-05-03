@@ -12,6 +12,7 @@ Synod is a bounded delivery orchestrator. Contributions should keep that bias:
 - keep bounded `bug-fix` and `change` completion credible: do not treat the end of a plan as success unless material change evidence and passed validation are both present, or the CLI reports an explicit stop instead
 - keep negotiated delivery packets, acceptance boundaries, and blocking constraints explicit from capture through follow-up surfaces
 - keep bounded context packs, credibility, and provenance explicit from planning through `run`, `status`, `next`, and `inspect`
+- keep evidence-driven plan proposal state, confirmation boundaries, revision lineage, rationale, and verification strategy explicit from `plan` through `run`, `status`, `next`, and `inspect`
 - keep clustered delivery sequential-first with one authoritative primary workspace session owner
 - keep continuity explicit when a workspace moves from session-native state to compatibility-trace follow-up
 - treat `synod workflow` as a thin bounded layer over the same session-owned runtime, not as a generic workflow engine
@@ -128,6 +129,11 @@ If you change context assembly or plan gating, keep the docs explicit about
 `context_summary`, `context_credibility`, `context_primary_inputs`,
 `context_provenance`, `context_staleness_reason`, and whether planning can
 continue or must stop explicitly.
+
+If you change dynamic planning, keep the docs explicit about
+`goal_plan_state`, `goal_plan_revision`, `planning_rationale`,
+`verification_strategy`, bounded proposal supersession, and when
+`synod plan --confirm` is required before native execution can continue.
 
 If you change clustered delivery behavior, keep the docs explicit about the
 primary workspace remaining authoritative, member-local trace persistence,

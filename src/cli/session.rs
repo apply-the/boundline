@@ -202,8 +202,9 @@ pub fn execute_plan(
     workspace: Option<&Path>,
     requested_flow: Option<&str>,
     no_flow: bool,
+    confirm: bool,
 ) -> Result<SessionCommandReport, SessionCommandError> {
-    execute_plan_with_target(workspace, None, requested_flow, no_flow)
+    execute_plan_with_target(workspace, None, requested_flow, no_flow, confirm)
 }
 
 pub fn execute_plan_with_target(
@@ -211,6 +212,7 @@ pub fn execute_plan_with_target(
     cluster: Option<&Path>,
     requested_flow: Option<&str>,
     no_flow: bool,
+    confirm: bool,
 ) -> Result<SessionCommandReport, SessionCommandError> {
     let target = resolve_session_target(workspace, cluster, "plan")?;
     let workspace = target.owner_workspace;
@@ -221,7 +223,13 @@ pub fn execute_plan_with_target(
         return Err(SessionCommandError::MissingCapturedGoal);
     }
 
-    if let Err(error) = runtime.plan_task(&mut record, requested_flow, no_flow) {
+    let plan_result = if confirm {
+        runtime.confirm_goal_plan(&mut record)
+    } else {
+        runtime.plan_task(&mut record, requested_flow, no_flow)
+    };
+
+    if let Err(error) = plan_result {
         if matches!(&error, SessionRuntimeError::ClarificationRequired { .. }) {
             runtime.persist_session(&record).map_err(map_runtime_error)?;
         }
@@ -557,9 +565,10 @@ fn map_runtime_error(error: SessionRuntimeError) -> SessionCommandError {
             SessionCommandError::ClarificationRequired { headline, prompt }
         }
         SessionRuntimeError::MissingActiveTask => SessionCommandError::MissingPlannedTask,
-        SessionRuntimeError::FlowConfirmationRequired { flow_name } => {
-            SessionCommandError::FlowConfirmationRequired { flow_name }
+        SessionRuntimeError::PlanConfirmationRequired { flow_name } => {
+            SessionCommandError::PlanConfirmationRequired { flow_name }
         }
+        SessionRuntimeError::MissingGoalPlan => SessionCommandError::MissingPlanProposal,
         SessionRuntimeError::UnknownFlow { requested, supported } => {
             SessionCommandError::UnknownFlow { requested, supported }
         }
@@ -690,6 +699,19 @@ pub(crate) fn build_status_view_with_follow_up(
             .goal_plan
             .as_ref()
             .map(|goal_plan| goal_plan.flow_state().summary_text()),
+        goal_plan_state: record
+            .goal_plan
+            .as_ref()
+            .map(|goal_plan| goal_plan.proposal_state_text().to_string()),
+        goal_plan_revision: record.goal_plan.as_ref().map(|goal_plan| goal_plan.proposal_revision),
+        planning_rationale: record
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| goal_plan.planning_rationale.clone()),
+        verification_strategy: record
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| goal_plan.verification_strategy.clone()),
         active_workflow: record.active_workflow_name(),
         workflow_phase: record.active_workflow_phase_text(),
         workflow_next_action: record.active_workflow_next_action(),
@@ -980,10 +1002,9 @@ fn suggested_next_command(record: &ActiveSessionRecord) -> Option<String> {
         SessionStatus::GoalCaptured => Some("synod plan".to_string()),
         SessionStatus::Planned => {
             if let Some(goal_plan) = record.goal_plan.as_ref()
-                && let Some(flow) = goal_plan.flow.as_ref()
-                && !flow.confirmed
+                && goal_plan.requires_confirmation()
             {
-                return Some(format!("synod plan --flow {}", flow.flow_name));
+                return Some("synod plan --confirm".to_string());
             }
 
             if record.goal_plan.is_some() && record.active_task.is_none() {
@@ -1007,16 +1028,30 @@ fn planning_summary(record: &ActiveSessionRecord) -> String {
     };
 
     let task_count = goal_plan.tasks.len();
-    if let Some(flow) = goal_plan.flow.as_ref() {
-        if flow.confirmed {
+    if goal_plan.requires_confirmation() {
+        if let Some(flow) = goal_plan.flow.as_ref() {
             return format!(
-                "planned the active goal into {task_count} bounded goal-plan task(s) with confirmed `{}` flow",
+                "planned the active goal into {task_count} bounded goal-plan task(s); proposed `{}` flow is persisted and awaiting plan confirmation",
                 flow.flow_name
             );
         }
 
+        if goal_plan.flow_skipped {
+            return format!(
+                "planned the active goal into {task_count} bounded goal-plan task(s) with operator-skipped flow constraints; the proposed plan is awaiting confirmation"
+            );
+        }
+
         return format!(
-            "planned the active goal into {task_count} bounded goal-plan task(s); proposed `{}` flow is persisted and awaiting confirmation",
+            "planned the active goal into {task_count} bounded goal-plan task(s); the proposed plan is awaiting confirmation"
+        );
+    }
+
+    if let Some(flow) = goal_plan.flow.as_ref()
+        && flow.confirmed
+    {
+        return format!(
+            "planned the active goal into {task_count} bounded goal-plan task(s) with confirmed `{}` flow",
             flow.flow_name
         );
     }
@@ -1063,10 +1098,10 @@ pub enum SessionCommandError {
     MissingCapturedGoal,
     #[error("active session has no planned task")]
     MissingPlannedTask,
-    #[error(
-        "active session has a proposed `{flow_name}` flow that must be confirmed or skipped before execution"
-    )]
-    FlowConfirmationRequired { flow_name: String },
+    #[error("active session has no proposed goal plan")]
+    MissingPlanProposal,
+    #[error("active session has a proposed plan that must be confirmed before execution")]
+    PlanConfirmationRequired { flow_name: Option<String> },
     #[error("unknown flow `{requested}`; supported flows: {supported}")]
     UnknownFlow { requested: String, supported: String },
     #[error(
@@ -1107,10 +1142,16 @@ impl SessionCommandError {
             }
             Self::MissingCapturedGoal => "active session has no captured goal".to_string(),
             Self::MissingPlannedTask => "active session has no planned task".to_string(),
-            Self::FlowConfirmationRequired { flow_name } => {
-                format!(
-                    "active session has a proposed `{flow_name}` flow that must be confirmed or skipped before execution; run `synod plan --flow {flow_name}` to confirm or `synod plan --no-flow` to skip"
-                )
+            Self::MissingPlanProposal => {
+                "active session has no proposed goal plan; run `synod plan` first".to_string()
+            }
+            Self::PlanConfirmationRequired { flow_name } => match flow_name.as_deref() {
+                Some(flow_name) => format!(
+                    "active session has a proposed `{flow_name}` plan that must be confirmed before execution; run `synod plan --confirm` to confirm the proposal"
+                ),
+                None => {
+                    "active session has a proposed plan that must be confirmed before execution; run `synod plan --confirm` to confirm the proposal".to_string()
+                }
             }
             Self::UnknownFlow { requested, supported } => {
                 format!("unknown flow `{requested}`; supported flows: {supported}")
@@ -1151,9 +1192,8 @@ impl SessionCommandError {
             | Self::InvalidActiveSession(_) => Some("synod start".to_string()),
             Self::MissingCapturedGoal => Some("synod capture --goal <goal>".to_string()),
             Self::MissingPlannedTask => Some("synod plan".to_string()),
-            Self::FlowConfirmationRequired { flow_name } => {
-                Some(format!("synod plan --flow {flow_name}"))
-            }
+            Self::MissingPlanProposal => Some("synod plan".to_string()),
+            Self::PlanConfirmationRequired { .. } => Some("synod plan --confirm".to_string()),
             Self::UnknownFlow { .. } => Some("synod flow bug-fix".to_string()),
             Self::FlowReplacementRequiresReset { .. } => Some("synod start".to_string()),
             Self::InvalidFlowState(_) => Some("synod start".to_string()),
@@ -1521,11 +1561,11 @@ fn red_to_green_addition() {
             CommandExitStatus::Succeeded
         );
         assert_eq!(
-            execute_plan(Some(&workspace), None, false).unwrap().exit_status,
+            execute_plan(Some(&workspace), None, false, false).unwrap().exit_status,
             CommandExitStatus::Succeeded
         );
 
-        let planned = execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
+        let planned = execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
         assert!(
             planned.terminal_output.contains("confirmed `bug-fix` flow"),
             "{}",
@@ -1652,7 +1692,7 @@ fn red_to_green_addition() {
     }
 
     #[test]
-    fn execute_run_blocks_until_native_flow_is_confirmed() {
+    fn execute_run_blocks_until_native_plan_is_confirmed() {
         let workspace = write_execution_workspace("synod-cli-session-flow-confirmation");
 
         execute_start(Some(&workspace)).unwrap();
@@ -1666,13 +1706,19 @@ fn red_to_green_addition() {
             None,
         )
         .unwrap();
-        execute_plan(Some(&workspace), None, false).unwrap();
+        execute_plan(Some(&workspace), None, false, false).unwrap();
 
         let error = execute_run(Some(&workspace)).unwrap_err();
-        assert!(matches!(error, SessionCommandError::FlowConfirmationRequired { .. }));
+        assert!(matches!(error, SessionCommandError::PlanConfirmationRequired { .. }));
 
         let rendered = render_error("run", &error);
-        assert!(rendered.contains("synod plan --flow bug-fix"), "{rendered}");
+        assert!(rendered.contains("synod plan --confirm"), "{rendered}");
+
+        let confirmed = execute_plan(Some(&workspace), None, false, true).unwrap();
+        assert!(confirmed.terminal_output.contains("execution_path: native_goal_plan"));
+
+        let run = execute_run(Some(&workspace)).unwrap();
+        assert_eq!(run.exit_status, CommandExitStatus::Succeeded);
     }
 
     #[test]
@@ -1860,18 +1906,16 @@ fn red_to_green_addition() {
             confidence_reason: "goal contains fix".to_string(),
             confirmed: false,
         });
-        pending_flow_plan.confirm().unwrap();
-
         let mut pending_flow_record = base_record.clone();
         pending_flow_record.goal_plan = Some(pending_flow_plan);
         pending_flow_record.latest_status = SessionStatus::Planned;
         assert_eq!(
             suggested_next_command(&pending_flow_record),
-            Some("synod plan --flow bug-fix".to_string())
+            Some("synod plan --confirm".to_string())
         );
 
         let mut ready_run_record = pending_flow_record.clone();
-        ready_run_record.goal_plan.as_mut().unwrap().flow.as_mut().unwrap().confirmed = true;
+        ready_run_record.goal_plan.as_mut().unwrap().confirm().unwrap();
         assert_eq!(suggested_next_command(&ready_run_record), Some("synod run".to_string()));
 
         let clarification_error = SessionCommandError::ClarificationRequired {

@@ -21,13 +21,14 @@ fn proposed_flow_contract_blocks_run_until_operator_confirms_or_skips() {
         None,
     )
     .unwrap();
-    execute_plan(Some(&workspace), None, false).unwrap();
+    execute_plan(Some(&workspace), None, false, false).unwrap();
 
     let session = FileSessionStore::for_workspace(&workspace).load().unwrap().unwrap();
     assert_eq!(session.goal_plan.as_ref().unwrap().flow_state().mode, GoalPlanFlowMode::Proposed);
     assert!(matches!(
         execute_run(Some(&workspace)).unwrap_err(),
-        SessionCommandError::FlowConfirmationRequired { flow_name } if flow_name == "bug-fix"
+        SessionCommandError::PlanConfirmationRequired { flow_name }
+            if flow_name.as_deref() == Some("bug-fix")
     ));
 }
 
@@ -46,7 +47,7 @@ fn confirmed_flow_contract_persists_explicit_override() {
         None,
     )
     .unwrap();
-    execute_plan(Some(&workspace), Some("change"), false).unwrap();
+    execute_plan(Some(&workspace), Some("change"), false, false).unwrap();
 
     let session = FileSessionStore::for_workspace(&workspace).load().unwrap().unwrap();
     let flow_state = session.goal_plan.as_ref().unwrap().flow_state();
@@ -71,7 +72,7 @@ fn skipped_flow_contract_persists_operator_skip_without_active_policy() {
         None,
     )
     .unwrap();
-    execute_plan(Some(&workspace), None, true).unwrap();
+    execute_plan(Some(&workspace), None, true, false).unwrap();
 
     let session = FileSessionStore::for_workspace(&workspace).load().unwrap().unwrap();
     let flow_state = session.goal_plan.as_ref().unwrap().flow_state();

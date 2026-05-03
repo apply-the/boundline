@@ -3,7 +3,7 @@
 Shared guidance: `assistant/README.md`
 
 ## Intent
-Capture human-authored input and plan the active session into a resumable task.
+Capture human-authored input and plan the active session into a bounded proposal.
 
 ## Required Context
 - `workspace_ref`
@@ -30,8 +30,8 @@ Ask only for the missing workspace or authored input, then provide the matching 
 Tell the user to run them one at a time and paste the outputs before continuing.
 
 ## Output Interpretation
-Summarize the captured goal or `authored_input_summary`, `authored_input_sources`, any requested governance intent, the resulting plan state, any proposed, confirmed, skipped, or absent `flow_state`, any CLI-reported confirm or skip guidance, and the CLI-reported `next_command`.
+Summarize the captured goal or `authored_input_summary`, `authored_input_sources`, any requested governance intent, the resulting plan state, any proposed, confirmed, skipped, or absent `flow_state`, any `goal_plan_state`, `goal_plan_revision`, `planning_rationale`, `verification_strategy`, any CLI-reported confirm or clarification guidance, and the CLI-reported `next_command`.
 
 ## Next-Step Routing
-Prefer the CLI-reported `next_command`; when planning is waiting on flow confirmation or skip, follow that CLI route instead of inventing `/synod-run`.
+Prefer the CLI-reported `next_command`; when planning is waiting on plan confirmation, follow that CLI route instead of inventing `/synod-run`.
 Allowed follow-up commands: `/synod-step`, `/synod-run`, `/synod-plan`, `/synod-start`.

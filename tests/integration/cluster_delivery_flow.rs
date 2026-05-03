@@ -29,7 +29,7 @@ fn clustered_delivery_run_mutates_both_member_workspaces_under_one_session_owner
         None,
     )
     .unwrap();
-    execute_plan_with_target(None, Some(&primary), Some("bug-fix"), false).unwrap();
+    execute_plan_with_target(None, Some(&primary), Some("bug-fix"), false, false).unwrap();
 
     let run = execute_run_with_target(None, Some(&primary)).unwrap();
     let status = execute_status_with_target(None, Some(&primary)).unwrap();

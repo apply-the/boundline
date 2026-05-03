@@ -24,7 +24,7 @@ fn clustered_success_surfaces_name_authority_and_participation() {
         None,
     )
     .unwrap();
-    execute_plan_with_target(None, Some(&primary), Some("bug-fix"), false).unwrap();
+    execute_plan_with_target(None, Some(&primary), Some("bug-fix"), false, false).unwrap();
 
     let run = execute_run_with_target(None, Some(&primary)).unwrap();
     let status = execute_status_with_target(None, Some(&primary)).unwrap();
@@ -56,7 +56,7 @@ fn clustered_failure_surfaces_name_the_blocking_workspace() {
         None,
     )
     .unwrap();
-    execute_plan_with_target(None, Some(&primary), Some("bug-fix"), false).unwrap();
+    execute_plan_with_target(None, Some(&primary), Some("bug-fix"), false, false).unwrap();
 
     let run = execute_run_with_target(None, Some(&primary)).unwrap();
     let status = execute_status_with_target(None, Some(&primary)).unwrap();

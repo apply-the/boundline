@@ -20,6 +20,9 @@ fn new_goal_plan_is_draft_with_generated_id() {
     let plan = GoalPlan::new("Fix the login bug", vec![sample_task("t1")]).unwrap();
     assert!(!plan.plan_id.is_empty());
     assert_eq!(plan.status, GoalPlanStatus::Draft);
+    assert_eq!(plan.proposal_revision, 1);
+    assert!(plan.requires_confirmation());
+    assert_eq!(plan.proposal_state_text(), "proposed");
     assert_eq!(plan.goal_text, "Fix the login bug");
     assert_eq!(plan.tasks.len(), 1);
 }
@@ -86,9 +89,18 @@ fn validation_rejects_task_with_empty_target() {
 
 #[test]
 fn confirm_transitions_draft_to_confirmed() {
-    let mut plan = GoalPlan::new("Goal", vec![sample_task("t1")]).unwrap();
+    let mut plan =
+        GoalPlan::new("Goal", vec![sample_task("t1")]).unwrap().with_flow(InferredFlow {
+            flow_name: "bug-fix".to_string(),
+            confidence_reason: "selected from evidence".to_string(),
+            confirmed: false,
+        });
     assert!(plan.confirm().is_ok());
     assert_eq!(plan.status, GoalPlanStatus::Confirmed);
+    assert_eq!(plan.proposal_state_text(), "confirmed");
+    assert!(!plan.requires_confirmation());
+    assert!(plan.confirmed_at.is_some());
+    assert_eq!(plan.flow.as_ref().map(|flow| flow.confirmed), Some(true));
 }
 
 #[test]
@@ -106,8 +118,11 @@ fn confirm_rejects_non_draft() {
 fn supersede_transitions_confirmed_to_superseded() {
     let mut plan = GoalPlan::new("Goal", vec![sample_task("t1")]).unwrap();
     plan.confirm().unwrap();
-    assert!(plan.supersede().is_ok());
+    assert!(plan.supersede_with(2, "new evidence changed the target family").is_ok());
     assert_eq!(plan.status, GoalPlanStatus::Superseded);
+    assert_eq!(plan.proposal_state_text(), "superseded");
+    assert_eq!(plan.superseded_by_revision, Some(2));
+    assert_eq!(plan.superseded_reason.as_deref(), Some("new evidence changed the target family"));
 }
 
 #[test]
@@ -140,6 +155,24 @@ fn with_flow_sets_inferred_flow() {
     };
     let plan = GoalPlan::new("Goal", vec![sample_task("t1")]).unwrap().with_flow(flow.clone());
     assert_eq!(plan.flow, Some(flow));
+}
+
+#[test]
+fn planning_rationale_and_verification_strategy_helpers_set_fields() {
+    let plan = GoalPlan::new("Goal", vec![sample_task("t1")])
+        .unwrap()
+        .with_planning_rationale("selected src/lib.rs because context and trace evidence agree")
+        .with_verification_strategy("run targeted arithmetic tests for src/lib.rs");
+
+    assert_eq!(
+        plan.planning_rationale.as_deref(),
+        Some("selected src/lib.rs because context and trace evidence agree")
+    );
+    assert_eq!(
+        plan.verification_strategy.as_deref(),
+        Some("run targeted arithmetic tests for src/lib.rs")
+    );
+    assert_eq!(plan.next_revision(), 2);
 }
 
 #[test]

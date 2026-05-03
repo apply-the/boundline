@@ -242,7 +242,8 @@ fn trace_summary_surfaces_context_pack_for_native_runs() {
     execute_start(Some(&workspace)).unwrap();
     execute_capture(Some(&workspace), Some("build a context router"), &[], None, None, None, None)
         .unwrap();
-    execute_plan(Some(&workspace), None, false).unwrap();
+    execute_plan(Some(&workspace), None, false, false).unwrap();
+    execute_plan(Some(&workspace), None, false, true).unwrap();
     execute_run(Some(&workspace)).unwrap();
 
     let record = FileSessionStore::for_workspace(&workspace).load().unwrap().unwrap();

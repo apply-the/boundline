@@ -28,7 +28,7 @@ fn confirmed_goal_plan_takes_precedence_over_execution_profile_for_session_run()
         None,
     )
     .unwrap();
-    execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
+    execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
 
     let run = execute_run(Some(&workspace)).unwrap();
     assert!(run.terminal_output.contains("decision "), "{}", run.terminal_output);
@@ -78,7 +78,7 @@ fn explicit_compatibility_run_is_visible_and_preserves_native_session_state() {
         None,
     )
     .unwrap();
-    execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
+    execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
 
     let before = FileSessionStore::for_workspace(&workspace).load().unwrap().unwrap();
     let report = execute_custom_run(
@@ -174,7 +174,7 @@ fn native_and_compatibility_follow_up_keep_shared_routing_and_execution_conditio
         None,
     )
     .unwrap();
-    execute_plan(Some(&native_workspace), Some("bug-fix"), false).unwrap();
+    execute_plan(Some(&native_workspace), Some("bug-fix"), false, false).unwrap();
 
     let native_run = execute_run(Some(&native_workspace)).unwrap();
     assert!(
@@ -225,7 +225,7 @@ fn status_projects_workspace_routing_defaults_for_native_follow_up() {
         None,
     )
     .unwrap();
-    execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
+    execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
 
     let status = execute_status(Some(&workspace)).unwrap();
     assert!(status.terminal_output.contains("route_owner: native"), "{}", status.terminal_output);
@@ -319,7 +319,7 @@ fn native_inspect_uses_persisted_routing_snapshot_after_config_changes() {
         None,
     )
     .unwrap();
-    execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
+    execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
     execute_run(Some(&workspace)).unwrap();
 
     let trace_ref = FileSessionStore::for_workspace(&workspace)
@@ -382,7 +382,7 @@ fn native_run_rejects_route_runtimes_missing_from_declared_assistant_capabilitie
         None,
     )
     .unwrap();
-    execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
+    execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
 
     let error = execute_run(Some(&workspace)).unwrap_err();
 
@@ -410,7 +410,7 @@ fn canon_artifacts_remain_bounded_evidence_for_native_runs() {
         None,
     )
     .unwrap();
-    execute_plan(Some(&workspace), None, true).unwrap();
+    execute_plan(Some(&workspace), None, true, false).unwrap();
 
     let run = execute_run(Some(&workspace)).unwrap();
     assert!(run.terminal_output.contains("decision "), "{}", run.terminal_output);

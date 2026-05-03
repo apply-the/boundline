@@ -80,8 +80,11 @@ fn inspect_surfaces_route_goal_plan_and_decision_timeline_for_native_run() {
     assert!(inspect_text.contains("decision_timeline:"), "{inspect_text}");
     assert!(inspect_text.contains("selector:"), "{inspect_text}");
     assert!(
-        inspect_text.contains("rationale: Fix: fix the failing add test")
-            || inspect_text.contains("rationale: Analyze workspace for: fix the failing add test"),
+        inspect_text
+            .contains("rationale: Repair bounded implementation for fix the failing add test")
+            || inspect_text.contains(
+                "rationale: Investigate bounded failure evidence for fix the failing add test"
+            ),
         "{inspect_text}"
     );
     assert!(inspect_text.contains("expected_outcome:"), "{inspect_text}");
@@ -118,7 +121,7 @@ fn status_after_native_run_surfaces_latest_persisted_decision_state() {
 }
 
 #[test]
-fn run_guidance_for_proposed_flow_includes_confirm_and_skip_actions() {
+fn run_guidance_for_proposed_plan_includes_confirm_action() {
     let workspace = temp_runtime_refoundation_workspace("runtime-refoundation-proposed-guidance");
 
     assert_eq!(run_synod_in(&workspace, &["start"]).status.code(), Some(0));
@@ -132,9 +135,8 @@ fn run_guidance_for_proposed_flow_includes_confirm_and_skip_actions() {
     let run_text = terminal_text(&run);
 
     assert_eq!(run.status.code(), Some(1), "{run_text}");
-    assert!(run_text.contains("must be confirmed or skipped"), "{run_text}");
-    assert!(run_text.contains("synod plan --flow bug-fix"), "{run_text}");
-    assert!(run_text.contains("synod plan --no-flow"), "{run_text}");
+    assert!(run_text.contains("must be confirmed before execution"), "{run_text}");
+    assert!(run_text.contains("synod plan --confirm"), "{run_text}");
 }
 
 #[test]

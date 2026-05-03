@@ -255,13 +255,29 @@ pub struct GoalPlan {
     #[serde(default)]
     pub workspace_signals: WorkspaceSignals,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub planning_rationale: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verification_strategy: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub flow: Option<InferredFlow>,
     #[serde(default)]
     pub flow_skipped: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow_progress: Option<WorkflowProgressState>,
+    #[serde(default = "default_goal_plan_revision")]
+    pub proposal_revision: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub superseded_by_revision: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub superseded_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confirmed_at: Option<u64>,
     pub created_at: u64,
     pub status: GoalPlanStatus,
+}
+
+const fn default_goal_plan_revision() -> usize {
+    1
 }
 
 impl GoalPlan {
@@ -279,9 +295,15 @@ impl GoalPlan {
             context_pack: None,
             source_evidence: Vec::new(),
             workspace_signals: WorkspaceSignals::default(),
+            planning_rationale: None,
+            verification_strategy: None,
             flow: None,
             flow_skipped: false,
             workflow_progress: None,
+            proposal_revision: default_goal_plan_revision(),
+            superseded_by_revision: None,
+            superseded_reason: None,
+            confirmed_at: None,
             created_at: current_timestamp_millis(),
             status: GoalPlanStatus::Draft,
         };
@@ -307,7 +329,22 @@ impl GoalPlan {
                 .validate()
                 .map_err(|error| GoalPlanError::InvalidWorkflowProgress(error.to_string()))?;
         }
+        if self.proposal_revision == 0 {
+            return Err(GoalPlanError::MissingProposalRevision);
+        }
         Ok(())
+    }
+
+    pub fn requires_confirmation(&self) -> bool {
+        self.status == GoalPlanStatus::Draft
+    }
+
+    pub fn proposal_state_text(&self) -> &'static str {
+        match self.status {
+            GoalPlanStatus::Draft => "proposed",
+            GoalPlanStatus::Confirmed => "confirmed",
+            GoalPlanStatus::Superseded => "superseded",
+        }
     }
 
     pub fn confirm(&mut self) -> Result<(), GoalPlanError> {
@@ -318,6 +355,10 @@ impl GoalPlan {
             });
         }
         self.status = GoalPlanStatus::Confirmed;
+        if let Some(flow) = self.flow.as_mut() {
+            flow.confirmed = true;
+        }
+        self.confirmed_at = Some(current_timestamp_millis());
         Ok(())
     }
 
@@ -332,9 +373,34 @@ impl GoalPlan {
         Ok(())
     }
 
+    pub fn supersede_with(
+        &mut self,
+        superseded_by_revision: usize,
+        reason: impl Into<String>,
+    ) -> Result<(), GoalPlanError> {
+        self.supersede()?;
+        self.superseded_by_revision = Some(superseded_by_revision);
+        self.superseded_reason = Some(reason.into());
+        Ok(())
+    }
+
     pub fn with_signals(mut self, signals: WorkspaceSignals) -> Self {
         self.workspace_signals = signals;
         self
+    }
+
+    pub fn with_planning_rationale(mut self, planning_rationale: impl Into<String>) -> Self {
+        self.planning_rationale = Some(planning_rationale.into());
+        self
+    }
+
+    pub fn with_verification_strategy(mut self, verification_strategy: impl Into<String>) -> Self {
+        self.verification_strategy = Some(verification_strategy.into());
+        self
+    }
+
+    pub fn next_revision(&self) -> usize {
+        self.proposal_revision + 1
     }
 
     pub fn with_flow(mut self, flow: InferredFlow) -> Self {
@@ -447,6 +513,8 @@ pub enum GoalPlanError {
     MissingCredibleContextPrimaryInput,
     #[error("stale context pack must explain why it is stale")]
     MissingContextStalenessReason,
+    #[error("goal plan proposal revision must be at least 1")]
+    MissingProposalRevision,
     #[error("context input reference must not be empty")]
     MissingContextInputReference,
     #[error("context input `{reference}` rationale must not be empty")]
