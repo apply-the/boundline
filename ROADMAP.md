@@ -95,9 +95,30 @@ Compatibility maintenance for newer Canon releases stays inside the watch above
 unless it becomes contract-breaking. It does not consume the next spec number
 by itself.
 
-No numbered `038` macrofeature is active yet. Define the next spec only when it
-materially changes Synod's operating model beyond the delivered `037` bounded
-delegation baseline.
+### 038 Domain Agent Templates (Upcoming)
+
+The next major leap in code generation quality requires domain-specific intelligence.
+`038-domain-agent-templates` introduces an inheritance model for agent templates, separating baseline language/framework expertise from workspace-specific overrides (company guidelines, formatting rules). To deliver this holistically without fragmenting the execution engine, Synod will adopt a data-driven "Command Pack" architecture for domain templates rather than hardcoding per-language workflows.
+
+Planned Domain Experts & Frameworks:
+- **Systems & Systems-adjacent:** Rust, Go, C, C++, Zig
+- **Enterprise & Backend:** Java (Spring Boot), C# (.NET), Python (Django/FastAPI)
+- **Frontend & Fullstack:** TypeScript/JavaScript, React, Next.js, Vue, Angular
+- **Data & Data-Science:** Python (Data/ML stack), SQL
+
+Delivery Strategy (How we support all at once):
+- **Data-Driven Templates:** Language expertise will be encoded as versioned Markdown/YAML "Agent Prompt Packs" distributed with Synod, avoiding runtime engine bloat. 
+- **Inheritance Engine:** A unified engine layer will lazily merge the "Base Template" with local workspace configurations (`.synod/agents/*.md`) during context assembly.
+- **Dynamic Routing & Capabilities:** The orchestrator will parse the bounded context (e.g., recognizing `# Frontend` vs `# Backend` components) and map the correct Domain Expert Template onto the active session task, delegating language-specific standards natively.
+- **Init & Ongoing Customization:** `synod init` will prompt users to select active domains and optionally seed local `rules.md` overrides. These custom rules persist in `.synod/agents/` and can be refined continually to mirror company standards.
+
+### 039 Distribution & Bundling (Upcoming)
+
+Synod deployment must become frictionless for the end-user.
+`039-distribution-bundling` focuses on formal distribution channels and reducing toolchain boilerplate.
+- Establish distribution via Homebrew (`brew`) and Windows Package Manager (`winget`).
+- Support bundled installation alongside `canon` latest version to ensure the required governance runtime is available without forcing a secondary installation step.
+- Provide unified update paths for both Synod and Canon.
 
 ### Delivered in 0.37.0
 
