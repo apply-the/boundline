@@ -10,10 +10,14 @@ use crate::adapters::cluster_store::FileClusterStore;
 use crate::adapters::config_store::FileConfigStore;
 use crate::domain::configuration::{
     RouteSlot, RoutingOverrides, SourcedRoute, SourcedRuntimeCapabilityProfile,
-    SourcedSlotEffortPolicy, ValueSource, resolve_effective_routing,
-    resolve_effective_runtime_capabilities, resolve_effective_slot_effort_policies,
+    SourcedSlotEffortPolicy, ValueSource, resolve_effective_domain_templates,
+    resolve_effective_routing, resolve_effective_runtime_capabilities,
+    resolve_effective_slot_effort_policies,
 };
 use crate::domain::decision::{DecisionType, EvidenceRef};
+use crate::domain::domain_templates::{
+    DomainFamily, ExternalContextBinding, ExternalContextStatus, detect_domain_families,
+};
 use crate::domain::goal_plan::{
     ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan, GoalPlanError,
     InferredFlow, PlannedTask, WorkspaceSignals,
@@ -283,6 +287,209 @@ fn has_specific_workspace_targets(relevant_files: &[String]) -> bool {
     })
 }
 
+struct DomainContextOutcome {
+    summary_clause: String,
+    credibility: ContextPackCredibility,
+    inputs: Vec<ContextInput>,
+    blocking_reason: Option<String>,
+}
+
+fn resolve_effective_domain_templates_for_workspace(
+    workspace_ref: &Path,
+) -> std::collections::BTreeMap<DomainFamily, crate::domain::configuration::ResolvedDomainTemplate>
+{
+    let workspace_routing =
+        FileConfigStore::for_workspace(workspace_ref).local_routing().ok().flatten();
+    let cluster_routing = FileClusterStore::for_workspace(workspace_ref)
+        .load()
+        .ok()
+        .flatten()
+        .map(|config| config.routing);
+    let global_routing = FileConfigStore::global_routing().ok().flatten();
+
+    resolve_effective_domain_templates(
+        workspace_routing.as_ref(),
+        cluster_routing.as_ref(),
+        global_routing.as_ref(),
+    )
+}
+
+fn resolve_domain_context(
+    workspace_ref: &Path,
+    selected_target: Option<&str>,
+) -> Option<DomainContextOutcome> {
+    let effective_templates = resolve_effective_domain_templates_for_workspace(workspace_ref);
+    if effective_templates.is_empty() {
+        return None;
+    }
+
+    let candidate_families = detect_domain_families(workspace_ref, selected_target);
+    let active_families = effective_templates
+        .iter()
+        .filter_map(|(family, template)| template.enabled.then_some(*family))
+        .collect::<Vec<_>>();
+    let selected_families = candidate_families
+        .into_iter()
+        .filter(|family| effective_templates.get(family).is_some_and(|template| template.enabled))
+        .collect::<Vec<_>>();
+    let target_label = selected_target.unwrap_or("workspace");
+
+    if selected_families.is_empty() {
+        let configured = if active_families.is_empty() {
+            "none".to_string()
+        } else {
+            active_families.iter().map(|family| family.as_str()).collect::<Vec<_>>().join(", ")
+        };
+        let reason = format!(
+            "no enabled domain template matched `{target_label}`; configured families: {configured}"
+        );
+        return Some(DomainContextOutcome {
+            summary_clause: format!("domain context unavailable for {target_label}"),
+            credibility: ContextPackCredibility::Insufficient,
+            inputs: vec![ContextInput {
+                kind: ContextInputKind::DomainTemplate,
+                reference: configured,
+                rationale: format!(
+                    "configured active domain templates did not match the bounded target {target_label}"
+                ),
+                source: "domain_template_resolution".to_string(),
+                primary: false,
+            }],
+            blocking_reason: Some(reason),
+        });
+    }
+
+    let mut inputs = Vec::new();
+    let mut required_stale = Vec::new();
+    let mut required_missing = Vec::new();
+    let mut used_count = 0usize;
+    let mut stale_count = 0usize;
+    let mut missing_count = 0usize;
+    let mut standard_sources = Vec::new();
+
+    for family in &selected_families {
+        let template = effective_templates.get(family).expect("selected family should resolve");
+        inputs.push(ContextInput {
+            kind: ContextInputKind::DomainTemplate,
+            reference: family.as_str().to_string(),
+            rationale: format!("selected for bounded target {target_label}"),
+            source: format!("domain_template:{}", value_source_text(template.enablement_source)),
+            primary: false,
+        });
+
+        if let Some(layer) = template.standards_layers.last() {
+            standard_sources.push(format!(
+                "{} [{}]",
+                family.as_str(),
+                value_source_text(layer.source)
+            ));
+        }
+
+        for layer in &template.standards_layers {
+            inputs.push(ContextInput {
+                kind: ContextInputKind::DomainStandard,
+                reference: family.as_str().to_string(),
+                rationale: format!(
+                    "applied {} standards layer for the bounded target {target_label}",
+                    value_source_text(layer.source)
+                ),
+                source: format!("domain_standard:{}", value_source_text(layer.source)),
+                primary: false,
+            });
+        }
+
+        for binding in &template.external_context_bindings {
+            let status = binding.binding.status_for_target(workspace_ref, selected_target);
+            match status {
+                ExternalContextStatus::Used => used_count += 1,
+                ExternalContextStatus::Stale => {
+                    stale_count += 1;
+                    if binding.binding.required {
+                        required_stale.push(binding.binding.reference.clone());
+                    }
+                }
+                ExternalContextStatus::Unavailable => {
+                    missing_count += 1;
+                    if binding.binding.required {
+                        required_missing.push(binding.binding.reference.clone());
+                    }
+                }
+                ExternalContextStatus::Skipped => {}
+            }
+
+            inputs.push(domain_binding_input(
+                binding.binding.clone(),
+                binding.source,
+                status,
+                target_label,
+            ));
+        }
+    }
+
+    let summary_clause = if standard_sources.is_empty() {
+        format!(
+            "domain: {}",
+            selected_families.iter().map(|family| family.as_str()).collect::<Vec<_>>().join(", ")
+        )
+    } else {
+        format!(
+            "domain: {}; standards: {}; external context: used={used_count}, stale={stale_count}, unavailable={missing_count}",
+            selected_families.iter().map(|family| family.as_str()).collect::<Vec<_>>().join(", "),
+            standard_sources.join(", "),
+        )
+    };
+
+    if !required_missing.is_empty() {
+        return Some(DomainContextOutcome {
+            summary_clause,
+            credibility: ContextPackCredibility::Insufficient,
+            inputs,
+            blocking_reason: Some(format!(
+                "required external context unavailable for {target_label}: {}",
+                required_missing.join(", ")
+            )),
+        });
+    }
+    if !required_stale.is_empty() {
+        return Some(DomainContextOutcome {
+            summary_clause,
+            credibility: ContextPackCredibility::Stale,
+            inputs,
+            blocking_reason: Some(format!(
+                "required external context is stale for {target_label}: {}",
+                required_stale.join(", ")
+            )),
+        });
+    }
+
+    Some(DomainContextOutcome {
+        summary_clause,
+        credibility: ContextPackCredibility::Credible,
+        inputs,
+        blocking_reason: None,
+    })
+}
+
+fn domain_binding_input(
+    binding: ExternalContextBinding,
+    source: ValueSource,
+    status: ExternalContextStatus,
+    target_label: &str,
+) -> ContextInput {
+    let requirement = if binding.required { "required" } else { "optional" };
+    ContextInput {
+        kind: ContextInputKind::ExternalContextInput,
+        reference: binding.reference,
+        rationale: format!(
+            "{requirement} {} binding is {} for bounded target {target_label}",
+            binding.kind.as_str(),
+            status.as_str()
+        ),
+        source: format!("external_context:{}", value_source_text(source)),
+        primary: false,
+    }
+}
+
 pub fn build_context_pack(
     goal_text: &str,
     workspace_ref: &Path,
@@ -394,6 +601,21 @@ pub fn build_context_pack(
         });
     }
 
+    let selected_target_for_domain = relevant_files
+        .first()
+        .cloned()
+        .or_else(|| canon_memory_targets.first().cloned())
+        .or_else(|| canon_artifacts.first().cloned())
+        .or_else(|| {
+            let primary = select_primary_target(workspace_ref);
+            (!primary.is_empty()).then_some(primary)
+        });
+    let domain_outcome =
+        resolve_domain_context(workspace_ref, selected_target_for_domain.as_deref());
+    if let Some(domain_outcome) = domain_outcome.as_ref() {
+        inputs.extend(domain_outcome.inputs.iter().cloned());
+    }
+
     let has_credible_context = !relevant_files.is_empty()
         || context_sources.authored_input_summary.is_some()
         || context_sources
@@ -407,26 +629,59 @@ pub fn build_context_pack(
             (memory.credibility != MemoryCredibilityState::Credible)
                 .then(|| memory.reason_code.clone().unwrap_or_else(|| memory.headline.clone()))
         });
-    let credibility = if memory_staleness_reason.is_some() {
-        ContextPackCredibility::Stale
-    } else if has_credible_context {
-        ContextPackCredibility::Credible
-    } else {
+    let credibility = if !has_credible_context
+        || domain_outcome
+            .as_ref()
+            .is_some_and(|outcome| outcome.credibility == ContextPackCredibility::Insufficient)
+    {
         ContextPackCredibility::Insufficient
+    } else if memory_staleness_reason.is_some()
+        || domain_outcome
+            .as_ref()
+            .is_some_and(|outcome| outcome.credibility == ContextPackCredibility::Stale)
+    {
+        ContextPackCredibility::Stale
+    } else {
+        ContextPackCredibility::Credible
     };
-    let summary = if has_credible_context {
-        let base = format!(
+    let mut summary = if has_credible_context {
+        format!(
             "bounded context from {} primary input(s)",
             usize::max(relevant_files.len(), canon_artifacts.len().max(canon_memory_targets.len()))
                 .max(1)
-        );
-        if let Some(memory) = context_sources.compacted_canon_memory.as_ref() {
-            format!("{base}; {}", memory.summary_text())
-        } else {
-            base
-        }
+        )
     } else {
         format!("no credible bounded context found for planning `{}`", goal_text.trim())
+    };
+    if let Some(domain_outcome) = domain_outcome.as_ref() {
+        summary.push_str("; ");
+        summary.push_str(&domain_outcome.summary_clause);
+        if let Some(reason) = domain_outcome.blocking_reason.as_deref()
+            && domain_outcome.credibility != ContextPackCredibility::Credible
+        {
+            summary.push_str("; ");
+            summary.push_str(reason);
+        }
+    }
+    if has_credible_context && let Some(memory) = context_sources.compacted_canon_memory.as_ref() {
+        summary.push_str("; ");
+        summary.push_str(&memory.summary_text());
+    }
+    let staleness_reason = if credibility == ContextPackCredibility::Stale {
+        let mut reasons = Vec::new();
+        if let Some(reason) = memory_staleness_reason.as_ref() {
+            reasons.push(reason.clone());
+        }
+        if let Some(reason) = domain_outcome
+            .as_ref()
+            .filter(|outcome| outcome.credibility == ContextPackCredibility::Stale)
+            .and_then(|outcome| outcome.blocking_reason.clone())
+        {
+            reasons.push(reason);
+        }
+        (!reasons.is_empty()).then(|| reasons.join("; "))
+    } else {
+        None
     };
 
     ContextPack {
@@ -447,7 +702,7 @@ pub fn build_context_pack(
         } else {
             canon_artifacts
         },
-        staleness_reason: memory_staleness_reason,
+        staleness_reason,
     }
 }
 
@@ -933,16 +1188,30 @@ pub enum GoalPlannerError {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::fs;
     use std::path::PathBuf;
 
     use uuid::Uuid;
 
-    use super::{PlanningContextSources, build_context_pack, build_goal_plan_with_sources};
+    use std::thread;
+    use std::time::Duration;
+
+    use super::{
+        PlanningContextSources, build_context_pack, build_goal_plan_with_sources,
+        resolve_domain_context,
+    };
+    use crate::adapters::config_store::FileConfigStore;
+    use crate::domain::configuration::{ConfigFile, RoutingConfig};
+    use crate::domain::domain_templates::{
+        DomainFamily, DomainTemplateSettings, ExternalContextBinding, ExternalContextKind,
+    };
+    use crate::domain::goal_plan::ContextPackCredibility;
     use crate::domain::governance::{
         CanonCapabilitySnapshot, CanonMode, CanonModeSummary, CanonRecommendedActionSummary,
         CanonResultActionSummary, CompactedCanonMemory, MemoryCredibilityState,
     };
+    use crate::orchestrator::goal_planner::GoalPlannerError;
 
     fn temp_workspace(prefix: &str) -> PathBuf {
         let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
@@ -950,6 +1219,12 @@ mod tests {
         fs::write(workspace.join("Cargo.toml"), "[package]\nname='planner'\nversion='0.1.0'\n")
             .unwrap();
         workspace
+    }
+
+    fn save_local_routing(workspace: &std::path::Path, routing: RoutingConfig) {
+        FileConfigStore::for_workspace(workspace)
+            .save_local(&ConfigFile { version: 1, routing })
+            .unwrap();
     }
 
     #[test]
@@ -1113,6 +1388,209 @@ mod tests {
                 .iter()
                 .any(|entry| entry.reference.contains("Canon 0.39.0 capabilities available"))
         );
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn build_goal_plan_with_sources_surfaces_selected_domain_context() {
+        let workspace = temp_workspace("goal-planner-domain-context");
+        fs::write(workspace.join("package.json"), r#"{"dependencies":{"react":"18.0.0"}}"#)
+            .unwrap();
+        fs::create_dir_all(workspace.join("src/components")).unwrap();
+        fs::create_dir_all(workspace.join("design")).unwrap();
+        fs::write(
+            workspace.join("src/components/App.tsx"),
+            "export function App() { return <div />; }\n",
+        )
+        .unwrap();
+        fs::write(workspace.join("design/reference.md"), "button guidance\n").unwrap();
+        save_local_routing(
+            &workspace,
+            RoutingConfig {
+                domain_templates: BTreeMap::from([(
+                    DomainFamily::React,
+                    DomainTemplateSettings {
+                        enabled: Some(true),
+                        standards: Some("workspace react standards".to_string()),
+                        external_context_bindings: vec![ExternalContextBinding {
+                            kind: ExternalContextKind::DesignReference,
+                            reference: "design/reference.md".to_string(),
+                            required: true,
+                            notes: None,
+                        }],
+                    },
+                )]),
+                ..RoutingConfig::default()
+            },
+        );
+
+        let plan = build_goal_plan_with_sources(
+            "update the react component",
+            &workspace,
+            &PlanningContextSources::default(),
+            None,
+        )
+        .unwrap();
+
+        assert!(plan.context_summary().unwrap().contains("domain: react"));
+        assert!(
+            plan.context_provenance_lines()
+                .iter()
+                .any(|line| line.contains("domain_template: react"))
+        );
+        assert!(
+            plan.context_provenance_lines()
+                .iter()
+                .any(|line| line.contains("external_context_input: design/reference.md"))
+        );
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn build_goal_plan_with_sources_blocks_when_required_domain_input_is_missing() {
+        let workspace = temp_workspace("goal-planner-domain-missing-binding");
+        fs::write(workspace.join("package.json"), r#"{"dependencies":{"react":"18.0.0"}}"#)
+            .unwrap();
+        fs::create_dir_all(workspace.join("src/components")).unwrap();
+        fs::write(
+            workspace.join("src/components/App.tsx"),
+            "export function App() { return <div />; }\n",
+        )
+        .unwrap();
+        save_local_routing(
+            &workspace,
+            RoutingConfig {
+                domain_templates: BTreeMap::from([(
+                    DomainFamily::React,
+                    DomainTemplateSettings {
+                        enabled: Some(true),
+                        standards: Some("workspace react standards".to_string()),
+                        external_context_bindings: vec![ExternalContextBinding {
+                            kind: ExternalContextKind::DesignReference,
+                            reference: "design/missing.md".to_string(),
+                            required: true,
+                            notes: None,
+                        }],
+                    },
+                )]),
+                ..RoutingConfig::default()
+            },
+        );
+
+        let error = build_goal_plan_with_sources(
+            "update the react component",
+            &workspace,
+            &PlanningContextSources::default(),
+            None,
+        )
+        .unwrap_err();
+
+        match error {
+            GoalPlannerError::InsufficientContext { summary, goal_plan } => {
+                assert!(summary.contains("required external context unavailable"));
+                assert!(
+                    goal_plan
+                        .context_provenance_lines()
+                        .iter()
+                        .any(|line| line.contains("external_context_input: design/missing.md"))
+                );
+            }
+            other => panic!("unexpected planner error: {other}"),
+        }
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn resolve_domain_context_reports_no_enabled_matching_family() {
+        let workspace = temp_workspace("goal-planner-domain-mismatch");
+        fs::write(workspace.join("package.json"), r#"{"dependencies":{"react":"18.0.0"}}"#)
+            .unwrap();
+        fs::create_dir_all(workspace.join("src/components")).unwrap();
+        fs::write(
+            workspace.join("src/components/App.tsx"),
+            "export function App() { return <div />; }\n",
+        )
+        .unwrap();
+        save_local_routing(
+            &workspace,
+            RoutingConfig {
+                domain_templates: BTreeMap::from([(
+                    DomainFamily::React,
+                    DomainTemplateSettings {
+                        enabled: Some(false),
+                        standards: None,
+                        external_context_bindings: Vec::new(),
+                    },
+                )]),
+                ..RoutingConfig::default()
+            },
+        );
+
+        let outcome = resolve_domain_context(&workspace, Some("src/components/App.tsx")).unwrap();
+
+        assert_eq!(outcome.credibility, ContextPackCredibility::Insufficient);
+        assert!(outcome.summary_clause.contains("domain context unavailable"));
+        assert!(outcome.blocking_reason.as_deref().unwrap().contains("configured families: none"));
+        assert_eq!(outcome.inputs.len(), 1);
+        assert_eq!(outcome.inputs[0].reference, "none");
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn resolve_domain_context_marks_required_binding_as_stale() {
+        let workspace = temp_workspace("goal-planner-domain-stale-binding");
+        fs::write(workspace.join("package.json"), r#"{"dependencies":{"react":"18.0.0"}}"#)
+            .unwrap();
+        fs::create_dir_all(workspace.join("src/components")).unwrap();
+        fs::create_dir_all(workspace.join("design")).unwrap();
+        fs::write(workspace.join("design/reference.md"), "button guidance\n").unwrap();
+        thread::sleep(Duration::from_millis(20));
+        fs::write(
+            workspace.join("src/components/App.tsx"),
+            "export function App() { return <div />; }\n",
+        )
+        .unwrap();
+
+        save_local_routing(
+            &workspace,
+            RoutingConfig {
+                domain_templates: BTreeMap::from([(
+                    DomainFamily::React,
+                    DomainTemplateSettings {
+                        enabled: Some(true),
+                        standards: Some("workspace react standards".to_string()),
+                        external_context_bindings: vec![ExternalContextBinding {
+                            kind: ExternalContextKind::DesignReference,
+                            reference: "design/reference.md".to_string(),
+                            required: true,
+                            notes: None,
+                        }],
+                    },
+                )]),
+                ..RoutingConfig::default()
+            },
+        );
+
+        let outcome = resolve_domain_context(&workspace, Some("src/components/App.tsx")).unwrap();
+
+        assert_eq!(outcome.credibility, ContextPackCredibility::Stale);
+        assert!(outcome.summary_clause.contains("domain: react"));
+        assert!(outcome.summary_clause.contains("stale=1"));
+        assert!(
+            outcome
+                .blocking_reason
+                .as_deref()
+                .unwrap()
+                .contains("required external context is stale")
+        );
+        assert!(outcome.inputs.iter().any(|input| {
+            input.kind == crate::domain::goal_plan::ContextInputKind::ExternalContextInput
+                && input.reference == "design/reference.md"
+        }));
 
         fs::remove_dir_all(workspace).unwrap();
     }

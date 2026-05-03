@@ -6,6 +6,7 @@ use synod::domain::configuration::{
     CapabilityState, ConfigShowScope, ConfigWriteScope, EffortFallbackPolicy, EffortLevel,
     RouteSlot, RuntimeKind,
 };
+use synod::domain::domain_templates::{DomainFamily, ExternalContextKind};
 
 #[test]
 fn config_show_accepts_effective_scope() {
@@ -172,6 +173,89 @@ fn config_set_effort_accepts_slot_level_policy() {
                 assert_eq!(rationale.as_deref(), Some("planning should stay thorough"));
             }
             other => panic!("expected SetEffort, got {other:?}"),
+        },
+        other => panic!("expected Config, got {other:?}"),
+    }
+}
+
+#[test]
+fn config_domain_commands_accept_family_and_binding_fields() {
+    let set_domain = Cli::try_parse_from([
+        "synod",
+        "config",
+        "set-domain",
+        "--scope",
+        "workspace",
+        "--family",
+        "react",
+        "--enable",
+        "--standards",
+        "follow the shared UI system",
+    ])
+    .unwrap();
+    match set_domain.command {
+        DeveloperCommand::Config { command } => match command {
+            ConfigSubcommand::SetDomain {
+                workspace,
+                cluster,
+                scope,
+                family,
+                enable,
+                disable,
+                standards,
+            } => {
+                assert!(workspace.is_none());
+                assert!(cluster.is_none());
+                assert_eq!(scope, ConfigWriteScope::Workspace);
+                assert_eq!(family, DomainFamily::React);
+                assert!(enable);
+                assert!(!disable);
+                assert_eq!(standards.as_deref(), Some("follow the shared UI system"));
+            }
+            other => panic!("expected SetDomain, got {other:?}"),
+        },
+        other => panic!("expected Config, got {other:?}"),
+    }
+
+    let bind_context = Cli::try_parse_from([
+        "synod",
+        "config",
+        "bind-context",
+        "--scope",
+        "workspace",
+        "--family",
+        "react",
+        "--kind",
+        "design-system",
+        "--reference",
+        "mcp:design-system",
+        "--required",
+        "--notes",
+        "shared system",
+    ])
+    .unwrap();
+    match bind_context.command {
+        DeveloperCommand::Config { command } => match command {
+            ConfigSubcommand::BindContext {
+                workspace,
+                cluster,
+                scope,
+                family,
+                kind,
+                reference,
+                required,
+                notes,
+            } => {
+                assert!(workspace.is_none());
+                assert!(cluster.is_none());
+                assert_eq!(scope, ConfigWriteScope::Workspace);
+                assert_eq!(family, DomainFamily::React);
+                assert_eq!(kind, ExternalContextKind::DesignSystem);
+                assert_eq!(reference, "mcp:design-system");
+                assert!(required);
+                assert_eq!(notes.as_deref(), Some("shared system"));
+            }
+            other => panic!("expected BindContext, got {other:?}"),
         },
         other => panic!("expected Config, got {other:?}"),
     }

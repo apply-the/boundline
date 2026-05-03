@@ -19,9 +19,21 @@ recorded workspace version.
 
 Delivered specs:
 
-- None recorded after `0.37.0`
+- None recorded after `0.38.0`
 
 Highlights:
+
+## [0.38.0] - 2026-05-03
+
+Delivered specs:
+
+- `038` - Domain Agent Templates
+
+Highlights:
+
+- Add workspace-, cluster-, and global-scoped domain-template settings so `synod init` can infer or accept active domain families, seed layered standards, and persist optional or required external context bindings in `.synod/config.toml`.
+- Make planning apply the right active domain family for the bounded target, surface the winning standards source and supporting-input status through context summary and provenance, and stop explicitly when enabled domain templates do not match or required domain inputs are missing or stale.
+- Extend `config show`, assistant guidance, roadmap, configuration docs, README, and changelog for the `0.38.0` release while keeping Canon and other external systems as supporting bounded inputs rather than template owners.
 
 ## [0.37.0] - 2026-05-03
 

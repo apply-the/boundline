@@ -1,14 +1,15 @@
-# Configuration in Synod 0.37.0
+# Configuration in Synod 0.38.0
 
-Synod `0.37.0` keeps a user-friendly setup and routing configuration surface
+Synod `0.38.0` keeps a user-friendly setup and routing configuration surface
 for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
-The `0.37.0` release keeps configuration behavior stable while preserving the
+The `0.38.0` release keeps configuration behavior stable while preserving the
 same governed routing defaults across earlier `bug-fix:investigate` work,
 later verify-stage `security-assessment`, workflow-aware projection of the
 same bounded governance state, continuity-aware read-side follow-up, the
 broader bounded adaptive repair slice, the clustered multi-workspace delivery
-path, and the new negotiated delivery projection. Negotiation still does not
+path, the new negotiated delivery projection, and the new domain-template
+surface. Negotiation still does not
 introduce a separate config file or routing key: capture derives acceptance
 boundaries from direct goals, authored briefs, and governance intent, while
 `run`, `status`, `next`, and `inspect` simply project the resulting packet.
@@ -31,6 +32,10 @@ Runtime capability profiles and slot effort policies are the new explicit
 exception: operators can now declare what each assistant family credibly
 supports and how much effort each routed slot should prefer, while the runtime
 continues to own the resulting delegation or stop semantics.
+Domain templates extend that same explicit config surface: operators can now
+declare active domain families, layered standards, and optional or required
+external context bindings per scope, while the runtime still owns target
+selection, credibility checks, and blocked-domain stop conditions.
 Direct `run --goal` now boots the native session path without requiring a
 workspace execution profile, while `run --compatibility --goal ...` remains the
 manifest-backed opt-in.
@@ -48,10 +53,11 @@ ranking, explicit adaptive exhaustion, or negotiation-state overrides.
 ## What changed
 
 - `synod init` bootstraps an optional compatibility workspace profile and local config under `.synod/`
+- `synod init` can also infer or accept active domain families and seed scoped domain-template defaults plus optional external context bindings
 - direct `synod run --goal` is native-first; add `--compatibility` only when the manifest-backed route is intentional
 - default `synod plan` now creates one evidence-driven proposal and `synod plan --confirm` confirms it; planning lifecycle state is session-owned rather than config-owned
 - bounded `bug-fix` and `change` completion now requires both material change evidence and passed validation on the native and governed session path
-- `synod config` manages runtime/model routing defaults, runtime capability profiles, and slot effort policy for planning, implementation, verification, review, and other bounded slots
+- `synod config` manages runtime/model routing defaults, runtime capability profiles, slot effort policy, and domain-template settings for planning, implementation, verification, review, and other bounded slots
 - `synod cluster` registers bounded multi-workspace membership and aggregated inspection
 - negotiated delivery modeling stays session-owned and trace-projected; there is no new negotiation-specific key in `config.toml` or `.synod/execution.json`
 - context-pack assembly and credibility projection stay session-owned and trace-projected; there is no new context-specific key in `config.toml` or `.synod/execution.json`
@@ -65,9 +71,15 @@ ranking, explicit adaptive exhaustion, or negotiation-state overrides.
 - `config show --scope effective` now exposes the resolved slot route, source,
 	assistant binding, declared runtime capability summary, and declared effort
 	policy for each bounded slot
+- `config show --scope effective` now also exposes active domain templates,
+	winning standards layers, and bound external context references with their
+	source authority
 - `run`, `status`, `next`, and `inspect` now surface effective routing plus
 	assistant bindings, and native or compatibility traces persist the route
 	snapshot used during execution
+- `plan`, `run`, `status`, `next`, and `inspect` now surface selected domain
+	family, winning standards source, and any required external-input blocking
+	reason inside the bounded context story
 - `status`, `next`, and `inspect` now also surface guided follow-through fields
 	when persisted session or trace evidence can explain one concrete next
 	bounded action or explicit stop condition
@@ -176,6 +188,18 @@ synod init --workspace <workspace>
 synod doctor --workspace <workspace>
 ```
 
+Optional domain bootstrap:
+
+```bash
+synod init \
+	--workspace <workspace> \
+	--domain systems \
+	--domain react \
+	--domain-standard "react=follow the shared UI system" \
+	--context-binding "react|design-system|mcp:design-system" \
+	--required-context-binding "react|design-reference|design/reference.md"
+```
+
 When init would overwrite existing files, Synod shows a preview and requires
 `--force` to apply destructive updates.
 
@@ -239,12 +263,29 @@ synod config set-capability --workspace <workspace> --scope workspace --runtime 
 synod config set-effort --workspace <workspace> --scope workspace --slot implementation --level high --fallback preserve --rationale "keep implementation on the highest-effort bounded path"
 ```
 
+### Set domain templates
+
+```bash
+synod config set-domain --workspace <workspace> --scope workspace --family react --enable --standards "follow the shared UI system"
+synod config set-domain --cluster <primary-workspace> --scope cluster --family systems --enable
+synod config unset-domain --workspace <workspace> --scope workspace --family react
+```
+
+### Bind external context inputs
+
+```bash
+synod config bind-context --workspace <workspace> --scope workspace --family react --kind design-system --reference mcp:design-system --required
+synod config bind-context --workspace <workspace> --scope workspace --family react --kind design-reference --reference design/reference.md
+synod config unbind-context --workspace <workspace> --scope workspace --family react --kind design-system --reference mcp:design-system
+```
+
 ### Unset values
 
 ```bash
 synod config unset --workspace <workspace> --scope workspace --slot planning
 synod config unset --cluster <primary-workspace> --scope cluster --slot planning
 synod config unset --workspace <workspace> --scope workspace --reviewer safety
+synod config unset-domain --workspace <workspace> --scope workspace --family react
 ```
 
 ## Runtime support

@@ -5,6 +5,10 @@ use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::domain::domain_templates::{
+    DomainFamily, DomainTemplateSettings, ExternalContextBinding,
+};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeKind {
@@ -258,6 +262,8 @@ pub struct RoutingConfig {
     pub runtime_capabilities: BTreeMap<RuntimeKind, RuntimeCapabilityProfile>,
     #[serde(default)]
     pub slot_effort_policies: BTreeMap<RouteSlot, SlotEffortPolicy>,
+    #[serde(default)]
+    pub domain_templates: BTreeMap<DomainFamily, DomainTemplateSettings>,
 }
 
 impl RoutingConfig {
@@ -290,6 +296,12 @@ impl RoutingConfig {
 
         for policy in self.slot_effort_policies.values() {
             policy.validate()?;
+        }
+
+        for settings in self.domain_templates.values() {
+            settings
+                .validate()
+                .map_err(|error| ConfigurationError::InvalidDomainTemplate(error.to_string()))?;
         }
 
         Ok(())
@@ -331,6 +343,18 @@ impl RoutingConfig {
 
     pub fn unset_slot_effort_policy(&mut self, slot: RouteSlot) {
         self.slot_effort_policies.remove(&slot);
+    }
+
+    pub fn set_domain_template_settings(
+        &mut self,
+        family: DomainFamily,
+        settings: DomainTemplateSettings,
+    ) {
+        self.domain_templates.insert(family, settings);
+    }
+
+    pub fn unset_domain_template_settings(&mut self, family: DomainFamily) {
+        self.domain_templates.remove(&family);
     }
 }
 
@@ -387,6 +411,26 @@ pub struct SourcedRuntimeCapabilityProfile {
 pub struct SourcedSlotEffortPolicy {
     pub policy: SlotEffortPolicy,
     pub source: ValueSource,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourcedDomainStandardsLayer {
+    pub text: String,
+    pub source: ValueSource,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourcedExternalContextBinding {
+    pub binding: ExternalContextBinding,
+    pub source: ValueSource,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedDomainTemplate {
+    pub enabled: bool,
+    pub enablement_source: ValueSource,
+    pub standards_layers: Vec<SourcedDomainStandardsLayer>,
+    pub external_context_bindings: Vec<SourcedExternalContextBinding>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -564,6 +608,89 @@ pub fn resolve_effective_slot_effort_policies(
         .collect()
 }
 
+pub fn resolve_effective_domain_templates(
+    workspace: Option<&RoutingConfig>,
+    cluster: Option<&RoutingConfig>,
+    global: Option<&RoutingConfig>,
+) -> BTreeMap<DomainFamily, ResolvedDomainTemplate> {
+    let mut family_ids = BTreeMap::<DomainFamily, ()>::new();
+    for family in workspace
+        .into_iter()
+        .flat_map(|cfg| cfg.domain_templates.keys())
+        .chain(cluster.into_iter().flat_map(|cfg| cfg.domain_templates.keys()))
+        .chain(global.into_iter().flat_map(|cfg| cfg.domain_templates.keys()))
+    {
+        family_ids.insert(*family, ());
+    }
+
+    family_ids
+        .into_keys()
+        .map(|family| {
+            let workspace_settings = workspace.and_then(|cfg| cfg.domain_templates.get(&family));
+            let cluster_settings = cluster.and_then(|cfg| cfg.domain_templates.get(&family));
+            let global_settings = global.and_then(|cfg| cfg.domain_templates.get(&family));
+
+            let (enabled, enablement_source) = if let Some(enabled) =
+                workspace_settings.and_then(|settings| settings.enabled)
+            {
+                (enabled, ValueSource::Workspace)
+            } else if let Some(enabled) = cluster_settings.and_then(|settings| settings.enabled) {
+                (enabled, ValueSource::Cluster)
+            } else if let Some(enabled) = global_settings.and_then(|settings| settings.enabled) {
+                (enabled, ValueSource::Global)
+            } else {
+                (false, ValueSource::BuiltIn)
+            };
+
+            let mut standards_layers = vec![SourcedDomainStandardsLayer {
+                text: family.built_in_summary().to_string(),
+                source: ValueSource::BuiltIn,
+            }];
+            for (settings, source) in [
+                (global_settings, ValueSource::Global),
+                (cluster_settings, ValueSource::Cluster),
+                (workspace_settings, ValueSource::Workspace),
+            ] {
+                if let Some(text) = settings
+                    .and_then(|settings| settings.standards.as_deref())
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                {
+                    standards_layers
+                        .push(SourcedDomainStandardsLayer { text: text.to_string(), source });
+                }
+            }
+
+            let mut external_context_bindings = Vec::new();
+            for (settings, source) in [
+                (global_settings, ValueSource::Global),
+                (cluster_settings, ValueSource::Cluster),
+                (workspace_settings, ValueSource::Workspace),
+            ] {
+                if let Some(settings) = settings {
+                    external_context_bindings.extend(
+                        settings
+                            .external_context_bindings
+                            .iter()
+                            .cloned()
+                            .map(|binding| SourcedExternalContextBinding { binding, source }),
+                    );
+                }
+            }
+
+            (
+                family,
+                ResolvedDomainTemplate {
+                    enabled,
+                    enablement_source,
+                    standards_layers,
+                    external_context_bindings,
+                },
+            )
+        })
+        .collect()
+}
+
 fn resolve_single(
     cli: Option<&ModelRoute>,
     workspace: Option<&ModelRoute>,
@@ -617,16 +744,23 @@ pub enum ConfigurationError {
     InvalidRuntimeCapability(String),
     #[error("invalid slot effort policy: {0}")]
     InvalidSlotEffortPolicy(String),
+    #[error("invalid domain template settings: {0}")]
+    InvalidDomainTemplate(String),
 }
 
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
 
+    use crate::domain::domain_templates::{
+        DomainFamily, DomainTemplateSettings, ExternalContextBinding, ExternalContextKind,
+    };
+
     use super::{
         CapabilityState, ConfigurationError, EffortFallbackPolicy, EffortLevel, ModelRoute,
-        RouteSlot, RoutingConfig, RoutingOverrides, RuntimeCapabilityProfile, RuntimeKind,
-        SlotEffortPolicy, ValueSource, resolve_effective_routing,
+        ResolvedDomainTemplate, RouteSlot, RoutingConfig, RoutingOverrides,
+        RuntimeCapabilityProfile, RuntimeKind, SlotEffortPolicy, ValueSource,
+        resolve_effective_domain_templates, resolve_effective_routing,
         resolve_effective_runtime_capabilities, resolve_effective_slot_effort_policies,
     };
 
@@ -766,6 +900,70 @@ mod tests {
     }
 
     #[test]
+    fn domain_template_settings_reject_blank_standards_text() {
+        let config = RoutingConfig {
+            domain_templates: BTreeMap::from([(
+                DomainFamily::React,
+                DomainTemplateSettings {
+                    enabled: Some(true),
+                    standards: Some("  ".to_string()),
+                    external_context_bindings: Vec::new(),
+                },
+            )]),
+            ..RoutingConfig::default()
+        };
+
+        assert!(matches!(config.validate(), Err(ConfigurationError::InvalidDomainTemplate(_))));
+    }
+
+    #[test]
+    fn resolve_effective_domain_templates_layers_sources_and_bindings() {
+        let global = RoutingConfig {
+            domain_templates: BTreeMap::from([(
+                DomainFamily::React,
+                DomainTemplateSettings {
+                    enabled: Some(true),
+                    standards: Some("global react rules".to_string()),
+                    external_context_bindings: vec![ExternalContextBinding {
+                        kind: ExternalContextKind::DesignSystem,
+                        reference: "mcp:design-system".to_string(),
+                        required: false,
+                        notes: Some("shared".to_string()),
+                    }],
+                },
+            )]),
+            ..RoutingConfig::default()
+        };
+        let workspace = RoutingConfig {
+            domain_templates: BTreeMap::from([(
+                DomainFamily::React,
+                DomainTemplateSettings {
+                    enabled: Some(true),
+                    standards: Some("workspace react rules".to_string()),
+                    external_context_bindings: vec![ExternalContextBinding {
+                        kind: ExternalContextKind::DesignTokens,
+                        reference: "design/tokens.json".to_string(),
+                        required: true,
+                        notes: None,
+                    }],
+                },
+            )]),
+            ..RoutingConfig::default()
+        };
+
+        let resolved = resolve_effective_domain_templates(Some(&workspace), None, Some(&global));
+        let template: &ResolvedDomainTemplate = resolved.get(&DomainFamily::React).unwrap();
+        assert!(template.enabled);
+        assert_eq!(template.enablement_source, ValueSource::Workspace);
+        assert_eq!(template.standards_layers[0].source, ValueSource::BuiltIn);
+        assert_eq!(template.standards_layers[1].source, ValueSource::Global);
+        assert_eq!(template.standards_layers[2].source, ValueSource::Workspace);
+        assert_eq!(template.external_context_bindings.len(), 2);
+        assert_eq!(template.external_context_bindings[0].source, ValueSource::Global);
+        assert_eq!(template.external_context_bindings[1].source, ValueSource::Workspace);
+    }
+
+    #[test]
     fn enum_helpers_and_summary_text_cover_all_variants() {
         assert_eq!(RuntimeKind::Claude.as_str(), "claude");
         assert_eq!(RuntimeKind::Codex.to_string(), "codex");
@@ -789,6 +987,8 @@ mod tests {
 
         assert_eq!(EffortFallbackPolicy::Preserve.to_string(), "preserve");
         assert_eq!(EffortFallbackPolicy::AllowLower.as_str(), "allow_lower");
+        assert_eq!(DomainFamily::Systems.as_str(), "systems");
+        assert_eq!(DomainFamily::React.display_name(), "React");
 
         let profile = RuntimeCapabilityProfile {
             continuation: CapabilityState::Supported,

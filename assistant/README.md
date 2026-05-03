@@ -4,10 +4,10 @@ This directory contains Markdown-based commands to run `synod` from various AI a
 
 The primary delivery surface is session-native: `start -> capture -> plan -> run -> status -> next -> inspect` against `<workspace>/.synod/session.json` and `<workspace>/.synod/traces/`.
 
-In `0.37.0`, workflows and direct runs are primary surfaces of the same Synod
+In `0.38.0`, workflows and direct runs are primary surfaces of the same Synod
 product story, while compatibility remains explicit and subordinate.
 
-In `0.37.0`, direct `run --goal` still bootstraps that native session path by
+In `0.38.0`, direct `run --goal` still bootstraps that native session path by
 default, while `run --compatibility --goal ...` remains the explicit
 execution-profile route. `capture` persists `negotiation_goal_summary`,
 `negotiation_resolution`, and `negotiation_acceptance_boundary` before
@@ -25,6 +25,12 @@ In the same release, native planning also persists `context_summary`,
 `context_credibility`, `context_primary_inputs`, `context_provenance`, and
 `context_staleness_reason` when available. Preserve those values exactly: they
 explain why planning is bounded enough to continue or why it stopped.
+
+In the same release, those context fields can also carry the selected domain
+family, the winning standards source, and any used, stale, unavailable, or
+required external-input status for active domain templates. Preserve that
+domain wording exactly and treat missing or stale required domain inputs as
+real stop conditions rather than optional hints.
 
 In the same release, Canon capability snapshots and compact Canon-grounded
 memory can also populate those context fields and `governance_next_action`
@@ -166,6 +172,10 @@ condition until the CLI points to `synod plan --confirm`.
 When the user asks to tune defaults for planning, verification, or review roles,
 assistants should use `cargo run --bin synod -- config show|set|unset ...`
 instead of asking users to edit config files manually.
+When the user asks to tune domain families, layered standards, or supporting
+external inputs, assistants should use `cargo run --bin synod -- config show`,
+`config set-domain`, `config unset-domain`, `config bind-context`, and
+`config unbind-context` instead of editing `.synod/config.toml` directly.
 
 If the user explicitly selects a built-in flow, assistants should run `cargo run --bin synod -- flow <bug-fix|change|delivery> --workspace <workspace>` after capture and before plan. There is no separate assistant command pack for `flow`; use the raw CLI subcommand directly.
 

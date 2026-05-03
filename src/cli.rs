@@ -6,6 +6,7 @@ use crate::domain::configuration::{
     CapabilityState, ConfigShowScope, ConfigWriteScope, EffortFallbackPolicy, EffortLevel,
     InitTemplate, RouteSlot, RuntimeKind,
 };
+use crate::domain::domain_templates::{DomainFamily, ExternalContextKind};
 use crate::domain::governance::GovernanceRuntimeKind;
 use crate::domain::trace::current_timestamp_millis;
 
@@ -191,6 +192,18 @@ pub enum DeveloperCommand {
         /// Assistant runtimes to record in the local workspace config.
         #[arg(long = "assistant")]
         assistant: Vec<RuntimeKind>,
+        /// Domain families to enable during init. When omitted, Synod infers a bounded default from the workspace.
+        #[arg(long = "domain")]
+        domain: Vec<DomainFamily>,
+        /// Scoped domain standards using FAMILY=TEXT.
+        #[arg(long = "domain-standard")]
+        domain_standard: Vec<String>,
+        /// Optional external context bindings using FAMILY|KIND|REFERENCE.
+        #[arg(long = "context-binding")]
+        context_binding: Vec<String>,
+        /// Required external context bindings using FAMILY|KIND|REFERENCE.
+        #[arg(long = "required-context-binding")]
+        required_context_binding: Vec<String>,
         /// Replace existing Synod files in the workspace.
         #[arg(long)]
         force: bool,
@@ -351,6 +364,64 @@ pub enum ConfigSubcommand {
         scope: ConfigWriteScope,
         #[arg(long)]
         slot: RouteSlot,
+    },
+    SetDomain {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long)]
+        cluster: Option<PathBuf>,
+        #[arg(long)]
+        scope: ConfigWriteScope,
+        #[arg(long)]
+        family: DomainFamily,
+        #[arg(long, conflicts_with = "disable")]
+        enable: bool,
+        #[arg(long, conflicts_with = "enable")]
+        disable: bool,
+        #[arg(long)]
+        standards: Option<String>,
+    },
+    UnsetDomain {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long)]
+        cluster: Option<PathBuf>,
+        #[arg(long)]
+        scope: ConfigWriteScope,
+        #[arg(long)]
+        family: DomainFamily,
+    },
+    BindContext {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long)]
+        cluster: Option<PathBuf>,
+        #[arg(long)]
+        scope: ConfigWriteScope,
+        #[arg(long)]
+        family: DomainFamily,
+        #[arg(long)]
+        kind: ExternalContextKind,
+        #[arg(long)]
+        reference: String,
+        #[arg(long)]
+        required: bool,
+        #[arg(long)]
+        notes: Option<String>,
+    },
+    UnbindContext {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long)]
+        cluster: Option<PathBuf>,
+        #[arg(long)]
+        scope: ConfigWriteScope,
+        #[arg(long)]
+        family: DomainFamily,
+        #[arg(long)]
+        kind: ExternalContextKind,
+        #[arg(long)]
+        reference: String,
     },
 }
 
@@ -581,7 +652,11 @@ impl DeveloperCommandSession {
                     | ConfigSubcommand::Unset { workspace, cluster, .. }
                     | ConfigSubcommand::UnsetCapability { workspace, cluster, .. }
                     | ConfigSubcommand::SetEffort { workspace, cluster, .. }
-                    | ConfigSubcommand::UnsetEffort { workspace, cluster, .. } => workspace
+                    | ConfigSubcommand::UnsetEffort { workspace, cluster, .. }
+                    | ConfigSubcommand::SetDomain { workspace, cluster, .. }
+                    | ConfigSubcommand::UnsetDomain { workspace, cluster, .. }
+                    | ConfigSubcommand::BindContext { workspace, cluster, .. }
+                    | ConfigSubcommand::UnbindContext { workspace, cluster, .. } => workspace
                         .as_ref()
                         .or(cluster.as_ref())
                         .map(|path| path.to_string_lossy().into_owned()),
@@ -1046,8 +1121,26 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                 },
             }
         }
-        DeveloperCommand::Init { workspace, template, assistant, force } => {
-            match init::execute_init(workspace, *template, assistant, *force) {
+        DeveloperCommand::Init {
+            workspace,
+            template,
+            assistant,
+            domain,
+            domain_standard,
+            context_binding,
+            required_context_binding,
+            force,
+        } => {
+            match init::execute_init(init::InitRequest {
+                workspace,
+                template: *template,
+                assistants: assistant,
+                domains: domain,
+                domain_standards: domain_standard,
+                context_bindings: context_binding,
+                required_context_bindings: required_context_binding,
+                force: *force,
+            }) {
                 Ok(report) => DispatchOutcome {
                     exit_status: report.exit_status,
                     output: report.terminal_output,
@@ -1155,6 +1248,65 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                         *slot,
                     )
                 }
+                ConfigSubcommand::SetDomain {
+                    workspace,
+                    cluster,
+                    scope,
+                    family,
+                    enable,
+                    disable,
+                    standards,
+                } => config::execute_set_domain(config::SetDomainRequest {
+                    workspace: workspace.as_deref(),
+                    cluster: cluster.as_deref(),
+                    scope: *scope,
+                    family: *family,
+                    enable: *enable,
+                    disable: *disable,
+                    standards: standards.as_deref(),
+                }),
+                ConfigSubcommand::UnsetDomain { workspace, cluster, scope, family } => {
+                    config::execute_unset_domain(
+                        workspace.as_deref(),
+                        cluster.as_deref(),
+                        *scope,
+                        *family,
+                    )
+                }
+                ConfigSubcommand::BindContext {
+                    workspace,
+                    cluster,
+                    scope,
+                    family,
+                    kind,
+                    reference,
+                    required,
+                    notes,
+                } => config::execute_bind_context(config::BindContextRequest {
+                    workspace: workspace.as_deref(),
+                    cluster: cluster.as_deref(),
+                    scope: *scope,
+                    family: *family,
+                    kind: *kind,
+                    reference,
+                    required: *required,
+                    notes: notes.as_deref(),
+                }),
+                ConfigSubcommand::UnbindContext {
+                    workspace,
+                    cluster,
+                    scope,
+                    family,
+                    kind,
+                    reference,
+                } => config::execute_unbind_context(
+                    workspace.as_deref(),
+                    cluster.as_deref(),
+                    *scope,
+                    *family,
+                    *kind,
+                    reference,
+                ),
             };
 
             match result {
@@ -1229,6 +1381,7 @@ mod tests {
         CapabilityState, ConfigShowScope, ConfigWriteScope, EffortFallbackPolicy, EffortLevel,
         RouteSlot, RuntimeKind,
     };
+    use crate::domain::domain_templates::{DomainFamily, ExternalContextKind};
 
     const FIXTURE_CARGO_TOML: &str = r#"[package]
 name = "dispatch_fixture"
@@ -1474,6 +1627,10 @@ fn red_to_green_addition() {
                     workspace: workspace.clone(),
                     template: None,
                     assistant: Vec::new(),
+                    domain: Vec::new(),
+                    domain_standard: Vec::new(),
+                    context_binding: Vec::new(),
+                    required_context_binding: Vec::new(),
                     force: false,
                 },
                 CommandName::Init,
@@ -1562,6 +1719,10 @@ fn red_to_green_addition() {
             workspace: file_workspace,
             template: None,
             assistant: Vec::new(),
+            domain: Vec::new(),
+            domain_standard: Vec::new(),
+            context_binding: Vec::new(),
+            required_context_binding: Vec::new(),
             force: false,
         });
         assert_eq!(init.exit_status, CommandExitStatus::NonSuccess);
@@ -1636,6 +1797,47 @@ fn red_to_green_addition() {
                     cluster: None,
                     scope: ConfigWriteScope::Workspace,
                     slot: RouteSlot::Planning,
+                },
+            },
+            DeveloperCommand::Config {
+                command: ConfigSubcommand::SetDomain {
+                    workspace: Some(config_workspace.clone()),
+                    cluster: None,
+                    scope: ConfigWriteScope::Workspace,
+                    family: DomainFamily::React,
+                    enable: true,
+                    disable: false,
+                    standards: Some("workspace react rules".to_string()),
+                },
+            },
+            DeveloperCommand::Config {
+                command: ConfigSubcommand::BindContext {
+                    workspace: Some(config_workspace.clone()),
+                    cluster: None,
+                    scope: ConfigWriteScope::Workspace,
+                    family: DomainFamily::React,
+                    kind: ExternalContextKind::DesignSystem,
+                    reference: "mcp:design-system".to_string(),
+                    required: true,
+                    notes: Some("shared system".to_string()),
+                },
+            },
+            DeveloperCommand::Config {
+                command: ConfigSubcommand::UnbindContext {
+                    workspace: Some(config_workspace.clone()),
+                    cluster: None,
+                    scope: ConfigWriteScope::Workspace,
+                    family: DomainFamily::React,
+                    kind: ExternalContextKind::DesignSystem,
+                    reference: "mcp:design-system".to_string(),
+                },
+            },
+            DeveloperCommand::Config {
+                command: ConfigSubcommand::UnsetDomain {
+                    workspace: Some(config_workspace.clone()),
+                    cluster: None,
+                    scope: ConfigWriteScope::Workspace,
+                    family: DomainFamily::React,
                 },
             },
         ] {
