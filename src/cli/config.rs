@@ -8,9 +8,10 @@ use crate::cli::CommandExitStatus;
 use crate::domain::configuration::{
     CapabilityState, ConfigFile, ConfigShowScope, ConfigWriteScope, EffortFallbackPolicy,
     EffortLevel, ModelRoute, RouteSlot, RoutingOverrides, RuntimeCapabilityProfile, RuntimeKind,
-    SlotEffortPolicy, ValueSource, resolve_effective_routing,
+    SlotEffortPolicy, ValueSource, resolve_effective_domain_templates, resolve_effective_routing,
     resolve_effective_runtime_capabilities, resolve_effective_slot_effort_policies,
 };
+use crate::domain::domain_templates::{DomainFamily, ExternalContextBinding, ExternalContextKind};
 use crate::domain::routing_decision::RoutingDecisionProjection;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -54,6 +55,29 @@ pub struct SetEffortRequest<'a> {
     pub level: EffortLevel,
     pub fallback: EffortFallbackPolicy,
     pub rationale: Option<&'a str>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SetDomainRequest<'a> {
+    pub workspace: Option<&'a Path>,
+    pub cluster: Option<&'a Path>,
+    pub scope: ConfigWriteScope,
+    pub family: DomainFamily,
+    pub enable: bool,
+    pub disable: bool,
+    pub standards: Option<&'a str>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct BindContextRequest<'a> {
+    pub workspace: Option<&'a Path>,
+    pub cluster: Option<&'a Path>,
+    pub scope: ConfigWriteScope,
+    pub family: DomainFamily,
+    pub kind: ExternalContextKind,
+    pub reference: &'a str,
+    pub required: bool,
+    pub notes: Option<&'a str>,
 }
 
 pub fn execute_show(
@@ -112,6 +136,11 @@ pub fn execute_show(
                 global.as_ref(),
             );
             let effective_effort = resolve_effective_slot_effort_policies(
+                local.as_ref(),
+                cluster_routing.as_ref(),
+                global.as_ref(),
+            );
+            let effective_domain_templates = resolve_effective_domain_templates(
                 local.as_ref(),
                 cluster_routing.as_ref(),
                 global.as_ref(),
@@ -189,6 +218,8 @@ pub fn execute_show(
                     ));
                 }
             }
+
+            push_effective_domain_template_lines(&mut lines, &effective_domain_templates);
 
             lines.join("\n")
         }
@@ -470,6 +501,229 @@ pub fn execute_unset_effort(
     })
 }
 
+pub fn execute_set_domain(
+    request: SetDomainRequest<'_>,
+) -> Result<ConfigCommandReport, ConfigCommandError> {
+    if request.enable && request.disable {
+        return Err(ConfigCommandError::InvalidDomainMutation(
+            "select only one of --enable or --disable".to_string(),
+        ));
+    }
+    if !request.enable && !request.disable && request.standards.is_none() {
+        return Err(ConfigCommandError::InvalidDomainMutation(
+            "set-domain requires --enable, --disable, or --standards".to_string(),
+        ));
+    }
+
+    if request.scope == ConfigWriteScope::Cluster {
+        let cluster = request.cluster.ok_or(ConfigCommandError::ClusterRequired)?;
+        let store = FileClusterStore::for_workspace(cluster);
+        let mut config = store
+            .load()?
+            .ok_or_else(|| ConfigCommandError::MissingClusterConfig(store.cluster_config_path()))?;
+        apply_set_domain(&mut config.routing, request)?;
+        let path = store.save(&config)?;
+
+        return Ok(ConfigCommandReport {
+            exit_status: CommandExitStatus::Succeeded,
+            terminal_output: format!(
+                "config: updated domain template in cluster config at {}",
+                path.display()
+            ),
+        });
+    }
+
+    let (mut config, location) = load_config_for_scope(request.workspace, request.scope)?;
+    apply_set_domain(&mut config.routing, request)?;
+    save_config_for_scope(request.workspace, request.scope, &config)?;
+
+    Ok(ConfigCommandReport {
+        exit_status: CommandExitStatus::Succeeded,
+        terminal_output: format!("config: updated domain template in {location}"),
+    })
+}
+
+pub fn execute_unset_domain(
+    workspace: Option<&Path>,
+    cluster: Option<&Path>,
+    scope: ConfigWriteScope,
+    family: DomainFamily,
+) -> Result<ConfigCommandReport, ConfigCommandError> {
+    if scope == ConfigWriteScope::Cluster {
+        let cluster = cluster.ok_or(ConfigCommandError::ClusterRequired)?;
+        let store = FileClusterStore::for_workspace(cluster);
+        let mut config = store
+            .load()?
+            .ok_or_else(|| ConfigCommandError::MissingClusterConfig(store.cluster_config_path()))?;
+        config.routing.unset_domain_template_settings(family);
+        let path = store.save(&config)?;
+
+        return Ok(ConfigCommandReport {
+            exit_status: CommandExitStatus::Succeeded,
+            terminal_output: format!(
+                "config: removed domain template from cluster config at {}",
+                path.display()
+            ),
+        });
+    }
+
+    let (mut config, location) = load_config_for_scope(workspace, scope)?;
+    config.routing.unset_domain_template_settings(family);
+    save_config_for_scope(workspace, scope, &config)?;
+
+    Ok(ConfigCommandReport {
+        exit_status: CommandExitStatus::Succeeded,
+        terminal_output: format!("config: removed domain template from {location}"),
+    })
+}
+
+pub fn execute_bind_context(
+    request: BindContextRequest<'_>,
+) -> Result<ConfigCommandReport, ConfigCommandError> {
+    let binding = ExternalContextBinding {
+        kind: request.kind,
+        reference: request.reference.to_string(),
+        required: request.required,
+        notes: request.notes.map(str::to_string),
+    };
+    binding
+        .validate()
+        .map_err(|source| ConfigCommandError::InvalidDomainMutation(source.to_string()))?;
+
+    if request.scope == ConfigWriteScope::Cluster {
+        let cluster = request.cluster.ok_or(ConfigCommandError::ClusterRequired)?;
+        let store = FileClusterStore::for_workspace(cluster);
+        let mut config = store
+            .load()?
+            .ok_or_else(|| ConfigCommandError::MissingClusterConfig(store.cluster_config_path()))?;
+        apply_bind_context(&mut config.routing, request.family, binding)?;
+        let path = store.save(&config)?;
+
+        return Ok(ConfigCommandReport {
+            exit_status: CommandExitStatus::Succeeded,
+            terminal_output: format!(
+                "config: updated external context binding in cluster config at {}",
+                path.display()
+            ),
+        });
+    }
+
+    let (mut config, location) = load_config_for_scope(request.workspace, request.scope)?;
+    apply_bind_context(&mut config.routing, request.family, binding)?;
+    save_config_for_scope(request.workspace, request.scope, &config)?;
+
+    Ok(ConfigCommandReport {
+        exit_status: CommandExitStatus::Succeeded,
+        terminal_output: format!("config: updated external context binding in {location}"),
+    })
+}
+
+pub fn execute_unbind_context(
+    workspace: Option<&Path>,
+    cluster: Option<&Path>,
+    scope: ConfigWriteScope,
+    family: DomainFamily,
+    kind: ExternalContextKind,
+    reference: &str,
+) -> Result<ConfigCommandReport, ConfigCommandError> {
+    if reference.trim().is_empty() {
+        return Err(ConfigCommandError::InvalidDomainMutation(
+            "reference cannot be empty".to_string(),
+        ));
+    }
+
+    if scope == ConfigWriteScope::Cluster {
+        let cluster = cluster.ok_or(ConfigCommandError::ClusterRequired)?;
+        let store = FileClusterStore::for_workspace(cluster);
+        let mut config = store
+            .load()?
+            .ok_or_else(|| ConfigCommandError::MissingClusterConfig(store.cluster_config_path()))?;
+        apply_unbind_context(&mut config.routing, family, kind, reference);
+        let path = store.save(&config)?;
+
+        return Ok(ConfigCommandReport {
+            exit_status: CommandExitStatus::Succeeded,
+            terminal_output: format!(
+                "config: removed external context binding from cluster config at {}",
+                path.display()
+            ),
+        });
+    }
+
+    let (mut config, location) = load_config_for_scope(workspace, scope)?;
+    apply_unbind_context(&mut config.routing, family, kind, reference);
+    save_config_for_scope(workspace, scope, &config)?;
+
+    Ok(ConfigCommandReport {
+        exit_status: CommandExitStatus::Succeeded,
+        terminal_output: format!("config: removed external context binding from {location}"),
+    })
+}
+
+fn apply_set_domain(
+    routing: &mut crate::domain::configuration::RoutingConfig,
+    request: SetDomainRequest<'_>,
+) -> Result<(), ConfigCommandError> {
+    let settings = routing.domain_templates.entry(request.family).or_default();
+    if request.enable {
+        settings.enabled = Some(true);
+    }
+    if request.disable {
+        settings.enabled = Some(false);
+    }
+    if let Some(standards) = request.standards {
+        settings.standards = Some(standards.to_string());
+    }
+    routing
+        .validate()
+        .map_err(|source| ConfigCommandError::InvalidDomainMutation(source.to_string()))
+}
+
+fn apply_bind_context(
+    routing: &mut crate::domain::configuration::RoutingConfig,
+    family: DomainFamily,
+    binding: ExternalContextBinding,
+) -> Result<(), ConfigCommandError> {
+    let settings = routing.domain_templates.entry(family).or_default();
+    settings.enabled.get_or_insert(true);
+
+    if let Some(existing) = settings
+        .external_context_bindings
+        .iter_mut()
+        .find(|existing| existing.kind == binding.kind && existing.reference == binding.reference)
+    {
+        *existing = binding;
+    } else {
+        settings.external_context_bindings.push(binding);
+    }
+
+    routing
+        .validate()
+        .map_err(|source| ConfigCommandError::InvalidDomainMutation(source.to_string()))
+}
+
+fn apply_unbind_context(
+    routing: &mut crate::domain::configuration::RoutingConfig,
+    family: DomainFamily,
+    kind: ExternalContextKind,
+    reference: &str,
+) {
+    let should_remove = if let Some(settings) = routing.domain_templates.get_mut(&family) {
+        settings
+            .external_context_bindings
+            .retain(|binding| !(binding.kind == kind && binding.reference == reference));
+        settings.enabled.is_none()
+            && settings.standards.is_none()
+            && settings.external_context_bindings.is_empty()
+    } else {
+        false
+    };
+
+    if should_remove {
+        routing.domain_templates.remove(&family);
+    }
+}
+
 fn render_scope(scope: &str, config: &ConfigFile) -> String {
     let mut lines = vec![format!("config: {scope}")];
     lines.push(format!(
@@ -548,6 +802,32 @@ fn render_scope(scope: &str, config: &ConfigFile) -> String {
         }
     }
 
+    if config.routing.domain_templates.is_empty() {
+        lines.push("domain_templates: none".to_string());
+    } else {
+        lines.push("domain_templates:".to_string());
+        for (family, settings) in &config.routing.domain_templates {
+            lines.push(format!(
+                "- {}: enabled={}",
+                family.as_str(),
+                domain_enabled_text(settings.enabled)
+            ));
+            if let Some(standards) = settings.standards.as_deref().map(str::trim)
+                && !standards.is_empty()
+            {
+                lines.push(format!("  standards: {standards}"));
+            }
+            if settings.external_context_bindings.is_empty() {
+                lines.push("  external_context_bindings: none".to_string());
+            } else {
+                lines.push("  external_context_bindings:".to_string());
+                for binding in &settings.external_context_bindings {
+                    lines.push(format!("  - {}", binding_text(binding, None)));
+                }
+            }
+        }
+    }
+
     lines.join("\n")
 }
 
@@ -580,6 +860,64 @@ fn source_text(source: ValueSource) -> &'static str {
         ValueSource::Global => "global",
         ValueSource::BuiltIn => "built-in",
     }
+}
+
+fn push_effective_domain_template_lines(
+    lines: &mut Vec<String>,
+    effective_domain_templates: &std::collections::BTreeMap<
+        DomainFamily,
+        crate::domain::configuration::ResolvedDomainTemplate,
+    >,
+) {
+    if effective_domain_templates.is_empty() {
+        lines.push("domain_templates: none".to_string());
+        return;
+    }
+
+    lines.push("domain_templates:".to_string());
+    for (family, template) in effective_domain_templates {
+        lines.push(format!(
+            "- {}: enabled={} [{}]",
+            family.as_str(),
+            template.enabled,
+            source_text(template.enablement_source)
+        ));
+        let layer_sources = template
+            .standards_layers
+            .iter()
+            .map(|layer| source_text(layer.source))
+            .collect::<Vec<_>>()
+            .join(", ");
+        lines.push(format!("  standards_layers: {layer_sources}"));
+        if template.external_context_bindings.is_empty() {
+            lines.push("  external_context_bindings: none".to_string());
+        } else {
+            lines.push("  external_context_bindings:".to_string());
+            for binding in &template.external_context_bindings {
+                lines.push(format!("  - {}", binding_text(&binding.binding, Some(binding.source))));
+            }
+        }
+    }
+}
+
+fn domain_enabled_text(enabled: Option<bool>) -> &'static str {
+    match enabled {
+        Some(true) => "true",
+        Some(false) => "false",
+        None => "inherit",
+    }
+}
+
+fn binding_text(binding: &ExternalContextBinding, source: Option<ValueSource>) -> String {
+    let requirement = if binding.required { "required" } else { "optional" };
+    let mut text = format!("{} {} ({requirement})", binding.kind.as_str(), binding.reference);
+    if let Some(notes) = binding.notes.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+        text.push_str(&format!(", notes={notes}"));
+    }
+    if let Some(source) = source {
+        text.push_str(&format!(" [{}]", source_text(source)));
+    }
+    text
 }
 
 enum MutationTarget {
@@ -662,6 +1000,8 @@ pub enum ConfigCommandError {
     InvalidRoute(String),
     #[error("invalid policy: {0}")]
     InvalidPolicy(String),
+    #[error("invalid domain mutation: {0}")]
+    InvalidDomainMutation(String),
     #[error("config store error: {0}")]
     Store(#[from] ConfigStoreError),
     #[error("cluster store error: {0}")]
@@ -685,6 +1025,7 @@ mod tests {
         ClusterConfigFile, ClusterMemberRegistration, ClusterMemberRole, WorkspaceCluster,
     };
     use crate::domain::configuration::RoutingConfig;
+    use crate::domain::domain_templates::{DomainFamily, ExternalContextKind};
 
     fn temp_workspace(prefix: &str) -> PathBuf {
         let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
@@ -1356,6 +1697,225 @@ mod tests {
                 RouteSlot::Planning,
             ),
             Err(ConfigCommandError::MissingClusterConfig(_))
+        ));
+    }
+
+    #[test]
+    fn domain_template_commands_cover_workspace_mutations_and_effective_rendering() {
+        let workspace = temp_workspace("synod-cli-config-domain");
+
+        let report = execute_set_domain(SetDomainRequest {
+            workspace: Some(workspace.as_path()),
+            cluster: None,
+            scope: ConfigWriteScope::Workspace,
+            family: DomainFamily::React,
+            enable: true,
+            disable: false,
+            standards: Some("workspace react rules"),
+        })
+        .unwrap();
+        assert!(report.terminal_output.contains("updated domain template"));
+
+        execute_bind_context(BindContextRequest {
+            workspace: Some(workspace.as_path()),
+            cluster: None,
+            scope: ConfigWriteScope::Workspace,
+            family: DomainFamily::React,
+            kind: ExternalContextKind::DesignSystem,
+            reference: "mcp:design-system",
+            required: true,
+            notes: Some("shared system"),
+        })
+        .unwrap();
+
+        let local = FileConfigStore::for_workspace(&workspace).load_local().unwrap().unwrap();
+        let settings = local.routing.domain_templates.get(&DomainFamily::React).unwrap();
+        assert_eq!(settings.enabled, Some(true));
+        assert_eq!(settings.standards.as_deref(), Some("workspace react rules"));
+        assert_eq!(settings.external_context_bindings.len(), 1);
+
+        let effective =
+            execute_show(Some(workspace.as_path()), None, Some(ConfigShowScope::Effective))
+                .unwrap();
+        assert!(effective.terminal_output.contains("domain_templates:"));
+        assert!(effective.terminal_output.contains("- react: enabled=true [workspace]"));
+        assert!(effective.terminal_output.contains("standards_layers: built-in, workspace"));
+        assert!(effective.terminal_output.contains(
+            "design_system mcp:design-system (required), notes=shared system [workspace]"
+        ));
+
+        execute_unbind_context(
+            Some(workspace.as_path()),
+            None,
+            ConfigWriteScope::Workspace,
+            DomainFamily::React,
+            ExternalContextKind::DesignSystem,
+            "mcp:design-system",
+        )
+        .unwrap();
+        execute_unset_domain(
+            Some(workspace.as_path()),
+            None,
+            ConfigWriteScope::Workspace,
+            DomainFamily::React,
+        )
+        .unwrap();
+
+        let local = FileConfigStore::for_workspace(&workspace).load_local().unwrap().unwrap();
+        assert!(!local.routing.domain_templates.contains_key(&DomainFamily::React));
+
+        assert!(matches!(
+            execute_set_domain(SetDomainRequest {
+                workspace: Some(workspace.as_path()),
+                cluster: None,
+                scope: ConfigWriteScope::Workspace,
+                family: DomainFamily::React,
+                enable: true,
+                disable: true,
+                standards: None,
+            }),
+            Err(ConfigCommandError::InvalidDomainMutation(_))
+        ));
+    }
+
+    #[test]
+    fn domain_template_commands_cover_cluster_mutations_and_helper_rendering() {
+        let workspace = temp_workspace("synod-cli-config-domain-cluster");
+        let cluster_config = build_cluster_config(&workspace);
+        FileClusterStore::for_workspace(&workspace).save(&cluster_config).unwrap();
+
+        let report = execute_set_domain(SetDomainRequest {
+            workspace: Some(workspace.as_path()),
+            cluster: Some(workspace.as_path()),
+            scope: ConfigWriteScope::Cluster,
+            family: DomainFamily::React,
+            enable: false,
+            disable: true,
+            standards: Some("cluster react rules"),
+        })
+        .unwrap();
+        assert!(report.terminal_output.contains("cluster config"));
+
+        execute_bind_context(BindContextRequest {
+            workspace: Some(workspace.as_path()),
+            cluster: Some(workspace.as_path()),
+            scope: ConfigWriteScope::Cluster,
+            family: DomainFamily::React,
+            kind: ExternalContextKind::DesignTokens,
+            reference: "design/tokens.json",
+            required: false,
+            notes: Some("first"),
+        })
+        .unwrap();
+        execute_bind_context(BindContextRequest {
+            workspace: Some(workspace.as_path()),
+            cluster: Some(workspace.as_path()),
+            scope: ConfigWriteScope::Cluster,
+            family: DomainFamily::React,
+            kind: ExternalContextKind::DesignTokens,
+            reference: "design/tokens.json",
+            required: false,
+            notes: Some("updated"),
+        })
+        .unwrap();
+
+        let cluster = FileClusterStore::for_workspace(&workspace).load().unwrap().unwrap();
+        let settings = cluster.routing.domain_templates.get(&DomainFamily::React).unwrap();
+        assert_eq!(settings.enabled, Some(false));
+        assert_eq!(settings.standards.as_deref(), Some("cluster react rules"));
+        assert_eq!(settings.external_context_bindings.len(), 1);
+        assert_eq!(settings.external_context_bindings[0].notes.as_deref(), Some("updated"));
+
+        let rendered = render_scope(
+            "cluster",
+            &ConfigFile { version: cluster.version, routing: cluster.routing.clone() },
+        );
+        assert!(rendered.contains("- react: enabled=false"));
+        assert!(rendered.contains("standards: cluster react rules"));
+        assert!(rendered.contains("design_tokens design/tokens.json (optional), notes=updated"));
+
+        let helper_rendered = render_scope(
+            "workspace",
+            &ConfigFile {
+                version: 1,
+                routing: RoutingConfig {
+                    domain_templates: BTreeMap::from([(
+                        DomainFamily::Vue,
+                        crate::domain::domain_templates::DomainTemplateSettings {
+                            enabled: None,
+                            standards: Some("shared vue rules".to_string()),
+                            external_context_bindings: Vec::new(),
+                        },
+                    )]),
+                    ..RoutingConfig::default()
+                },
+            },
+        );
+        assert!(helper_rendered.contains("- vue: enabled=inherit"));
+        assert!(helper_rendered.contains("standards: shared vue rules"));
+        assert!(helper_rendered.contains("external_context_bindings: none"));
+
+        let mut effective_lines = Vec::new();
+        push_effective_domain_template_lines(&mut effective_lines, &BTreeMap::new());
+        assert_eq!(effective_lines, vec!["domain_templates: none".to_string()]);
+        assert_eq!(domain_enabled_text(None), "inherit");
+        assert_eq!(domain_enabled_text(Some(false)), "false");
+
+        let binding = ExternalContextBinding {
+            kind: ExternalContextKind::DesignTokens,
+            reference: "design/tokens.json".to_string(),
+            required: false,
+            notes: None,
+        };
+        assert_eq!(binding_text(&binding, None), "design_tokens design/tokens.json (optional)");
+        assert_eq!(
+            binding_text(&binding, Some(ValueSource::Cluster)),
+            "design_tokens design/tokens.json (optional) [cluster]"
+        );
+
+        assert!(matches!(
+            execute_unbind_context(
+                Some(workspace.as_path()),
+                Some(workspace.as_path()),
+                ConfigWriteScope::Cluster,
+                DomainFamily::React,
+                ExternalContextKind::DesignTokens,
+                "   ",
+            ),
+            Err(ConfigCommandError::InvalidDomainMutation(_))
+        ));
+
+        execute_unbind_context(
+            Some(workspace.as_path()),
+            Some(workspace.as_path()),
+            ConfigWriteScope::Cluster,
+            DomainFamily::React,
+            ExternalContextKind::DesignTokens,
+            "design/tokens.json",
+        )
+        .unwrap();
+        execute_unset_domain(
+            Some(workspace.as_path()),
+            Some(workspace.as_path()),
+            ConfigWriteScope::Cluster,
+            DomainFamily::React,
+        )
+        .unwrap();
+
+        let cluster = FileClusterStore::for_workspace(&workspace).load().unwrap().unwrap();
+        assert!(!cluster.routing.domain_templates.contains_key(&DomainFamily::React));
+
+        assert!(matches!(
+            execute_set_domain(SetDomainRequest {
+                workspace: Some(workspace.as_path()),
+                cluster: None,
+                scope: ConfigWriteScope::Workspace,
+                family: DomainFamily::React,
+                enable: false,
+                disable: false,
+                standards: Some("   "),
+            }),
+            Err(ConfigCommandError::InvalidDomainMutation(_))
         ));
     }
 }

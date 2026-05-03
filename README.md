@@ -13,7 +13,7 @@ through the decision loop, and inspect the resulting session state and traces.
 `synod init` remains optional bootstrap, declarative execution profiles remain
 available as an explicit compatibility path, and `synod workflow` adds an
 optional thin named-workflow layer over the same session-owned runtime. In
-`0.37.0`, workflows and direct runs remain the two primary entry styles on
+`0.38.0`, workflows and direct runs remain the two primary entry styles on
 that same Synod-owned runtime, while explicit compatibility follow-up remains a
 subordinate route. Direct `run --goal` remains the native-first entrypoint, but Synod
 now refuses to call bounded `bug-fix` and `change` work complete unless the
@@ -38,10 +38,14 @@ snapshots across the same session and trace story. `status`, `next`, and
 `inspect` now also project `follow_through_guidance`,
 `follow_through_evidence_source`, `follow_through_next_action`, and
 `follow_through_stop_reason` when persisted session or trace evidence can make
-the next bounded action explicit. In `0.37.0`, the same route projection can
+the next bounded action explicit. In `0.38.0`, the same route projection can
 also preserve `runtime_capabilities` and `slot_effort_policies`, while blocked
 native continuation now persists explicit handoff, escalation, resolved, or
 stuck delegation packets instead of stopping behind an opaque route error.
+When a workspace opts into domain templates, the same bounded context story
+also carries the selected domain family, the winning standards source, and any
+required external-input status so domain-specific guidance stays inspectable on
+the same operator path.
 Canon capability snapshots,
 compact Canon-grounded memory, and governed recommended actions also feed that
 same bounded reasoning path, so stale or contradicted governed evidence can
@@ -70,8 +74,8 @@ participating workspaces, and any blocking member explicit.**
 The main surface is the `synod` CLI:
 
 - `doctor` validates that a workspace is ready to run.
-- `init` optionally bootstraps `.synod` workspace files and assistant runtime setup.
-- `config` shows, sets, and unsets routing defaults plus declared runtime capability profiles and slot effort policies.
+- `init` optionally bootstraps `.synod` workspace files, assistant runtime setup, and active domain-template defaults.
+- `config` shows, sets, and unsets routing defaults, declared runtime capability profiles, slot effort policies, and scoped domain-template settings plus external context bindings.
 - `start`, `capture`, `flow`, `plan`, and `step` drive the session workflow, with `capture` deriving one negotiated delivery packet before planning and `plan` assembling one bounded context pack before persisting a proposed or confirmed `GoalPlan`.
 - `run` executes a bounded delivery task end to end, preferring native session planning when a `GoalPlan` exists.
 - `status`, `next`, and `inspect` explain the current session, latest compatibility trace, authoritative follow-up state, explicit `route_owner`, material `route_config_projection`, effective routing, assistant bindings, runtime capability and effort-policy projection, delegation packet state, context-pack summary and credibility, guided follow-through, the active negotiation summary, and cluster authority when a registered cluster owns the run.
@@ -232,6 +236,19 @@ If you want a different starting point later, rerun init with `--force`:
 synod init --workspace <workspace> --force --template delivery
 ```
 
+If you already know the active domain families, standards, or supporting
+inputs for the workspace, seed them during bootstrap:
+
+```bash
+synod init \
+	--workspace <workspace> \
+	--domain systems \
+	--domain react \
+	--domain-standard "react=follow the shared UI system" \
+	--context-binding "react|design-system|mcp:design-system" \
+	--required-context-binding "react|design-reference|design/reference.md"
+```
+
 If you just need another task of the same type, do not rerun init. Start a new
 session, capture the new goal, and run the workflow again.
 
@@ -240,12 +257,15 @@ Optional routing setup:
 ```bash
 synod config set --scope global --slot planning --runtime codex --model gpt-5-codex
 synod config set --workspace <workspace> --scope workspace --reviewer safety --runtime copilot --model gpt-5.4
+synod config set-domain --workspace <workspace> --scope workspace --family react --enable --standards "follow the shared UI system"
+synod config bind-context --workspace <workspace> --scope workspace --family react --kind design-system --reference mcp:design-system --required
 synod config show --workspace <workspace> --scope effective
 ```
 
 The effective view now reports the resolved slot route, its authority source,
-and the assistant binding implied by that route so backend ownership is clear
-before execution starts.
+the assistant binding implied by that route, and any effective domain-template
+guidance so backend ownership plus domain-specific standards are clear before
+execution starts.
 
 Optional clustered setup across two repositories:
 
@@ -311,7 +331,7 @@ What those commands do, in short:
 - `start` initializes the workspace session.
 - `capture` stores human-authored goal and brief input in session state and persists `negotiation_goal_summary`, `negotiation_resolution`, and `negotiation_acceptance_boundary`.
 - `flow` optionally selects `bug-fix`, `change`, or `delivery` ahead of planning.
-- `plan` derives the next bounded `GoalPlan` from captured input plus workspace state only when the negotiated packet is credible, and persists proposal state, inferred flow state, revision, rationale, and verification strategy.
+- `plan` derives the next bounded `GoalPlan` from captured input plus workspace state only when the negotiated packet is credible, the bounded context is explicit enough, and any active domain template still matches the selected target with required inputs available.
 - `plan --confirm` confirms the current proposal so native execution can continue.
 - `run` executes through the native session route whenever a `GoalPlan` exists; governed `bug-fix:investigate` and later verify-stage Canon `security-assessment` can stay on that same route, while declarative `.synod/execution.json` execution remains the explicit compatibility path.
 - `status` reports the current session snapshot with explicit `routing`, `execution_condition`, negotiation summary, next-step guidance, and clustered authority or participation cues when the run spans a registered cluster.
@@ -354,7 +374,7 @@ explicitly:
 synod run --workspace <workspace> --compatibility --goal "Fix the failing add test"
 ```
 
-In `0.37.0`, the explicit compatibility path still carries the negotiated delivery
+In `0.38.0`, the explicit compatibility path still carries the negotiated delivery
 summary into `run` and `inspect` so `negotiation_goal_summary`,
 `negotiation_resolution`, and `negotiation_acceptance_boundary` stay visible
 even when the authoritative follow-up state comes from an explicit
@@ -552,7 +572,7 @@ the current release, see [`docs/adaptive-execution.md`](docs/adaptive-execution.
 For the concrete review configuration and voting rules still available in
 `0.17.0`, see [`docs/review-voting.md`](docs/review-voting.md).
 
-In `0.37.0`, native planning and follow-through can also project
+In `0.38.0`, native planning and follow-through can also project
 `context_summary`, `context_credibility`, `context_primary_inputs`,
 `context_provenance`, and `context_staleness_reason` through `run`, `status`,
 `next`, `inspect`, and the workflow-aware surfaces. The same read-side surfaces
@@ -578,18 +598,25 @@ silently became session-native. Clustered session-native delivery also keeps
 the primary workspace authoritative while surfacing `cluster_route_owner`,
 `cluster_authoritative_workspace`, `cluster_execution_condition`, and any
 blocking member explicitly on the same read-side surfaces.
+When a workspace config declares domain templates, those same read-side
+surfaces now also preserve the selected domain family, winning standards
+source, and any external context status directly inside the context summary and
+provenance lines.
 
 ## Assistant Command Packs
 
 The repository also ships assistant-native command packs for Copilot, Codex,
-and Claude under `assistant/`. In `0.37.0`, those packs continue to include
+and Claude under `assistant/`. In `0.38.0`, those packs continue to include
 first-class workflow discovery and continuation commands, and now preserve the
 same selector-driven guidance plus context-pack summary, proposal state,
 planning rationale, verification strategy, runtime capability plus effort
 projection, delegation packet cues, Canon-grounded memory cues, and credibility
 vocabulary surfaced by native planning, status, next-step, and inspect output.
-Gemini CLI guidance uses the same workflow-first vocabulary. They wrap the
-existing local CLI instead of introducing a second runtime surface.
+They now also preserve domain-template selection, winning standards source,
+and required supporting-input status whenever those fields appear in bounded
+context output. Gemini CLI guidance uses the same workflow-first vocabulary.
+They wrap the existing local CLI instead of introducing a second runtime
+surface.
 
 - Shared installation and workflow guidance lives in `assistant/README.md`.
 - Claude and Codex use slash-style Markdown command files.

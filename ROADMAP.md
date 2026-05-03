@@ -6,7 +6,7 @@ Canon is downstream from Synod in this roadmap: Synod thinks, decides, orchestra
 
 Evolve Synod into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.37.0
+## Current Status: v0.38.0
 
 Synod now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -28,6 +28,9 @@ memory, and bounded delegated execution in place:
 - default `plan` now persists one proposed goal plan with explicit `goal_plan_state`, `goal_plan_revision`, `planning_rationale`, and `verification_strategy`, and `plan --confirm` now makes that proposal executable on the native route
 - repeated `plan` can now supersede the active proposal revision when evidence changes flow, task targets, or verification strategy materially, while `run`, `status`, `next`, and `inspect` keep the revision lineage and blocking reason explicit
 - `run`, `status`, `next`, and `inspect` now project `context_summary`, `context_credibility`, primary inputs, provenance, and any staleness reason from the active goal plan or authoritative native trace
+- `synod init` can now infer or accept active domain families and seed workspace-local domain template settings, layered standards, and optional external context bindings in `.synod/config.toml`
+- planning now stops explicitly when enabled domain templates do not match the bounded target or when a required external context binding is missing or stale
+- `config show`, `plan`, `run`, `status`, `next`, and `inspect` now surface the selected domain family, winning standards source, and supporting-input status through the same bounded context story
 - Canon capability snapshots plus compact Canon-grounded memory now feed context assembly, target selection, verification strategy inference, and explicit bounded stop conditions when governed evidence is stale or contradicted
 - the native runtime now selects explicit bounded next actions such as `read`, `search`, `modify`, `test`, `ask`, and `replan` from persisted decision state and evidence instead of treating decisions as trace-only audit records
 - `status`, `next`, and `inspect` now surface selector-driven guidance, rationale, evidence basis, verification intent, and explicit no-credible-next-step wording from the same persisted decision story
@@ -54,14 +57,15 @@ memory, and bounded delegated execution in place:
 - session-native commands still accept `--cluster <primary-workspace>` so one authoritative primary-owned session can plan and deliver a bounded change across registered member repositories
 - clustered `run`, `status`, `next`, and `inspect` still surface authoritative workspace, clustered execution condition, participating workspaces, and any blocking member without implying distributed orchestration ownership
 
-## Roadmap Closure In 0.37.0
+## Roadmap Closure In 0.38.0
 
-The roadmap is no longer an open-ended backlog. `0.37.0` keeps the product
-surface closed and extends the same execution model with explicit delegated
-continuity, so Synod now presents one coherent operator story across CLI,
-assistants, workflows, routing, capability and effort policy, governance,
-bounded context assembly, evidence-driven proposal selection, governed memory,
-delegation packets, and the runtime loop itself.
+The roadmap is no longer an open-ended backlog. `0.38.0` keeps the product
+surface closed and extends the same execution model with explicit
+domain-template guidance, so Synod now presents one coherent operator story
+across CLI, assistants, workflows, routing, capability and effort policy,
+layered domain standards, governed and external context reuse, bounded context
+assembly, evidence-driven proposal selection, governed memory, delegation
+packets, and the runtime loop itself.
 
 The governing rule remains simple: Synod is the product and execution owner.
 Canon stays a bounded, useful governed runtime inside that same delivery path
@@ -69,7 +73,7 @@ rather than drifting back into a parallel tool story.
 
 ### Ongoing Compatibility Watch
 
-Canon will continue to release versions after `0.37.0`, so Synod keeps one
+Canon will continue to release versions after `0.38.0`, so Synod keeps one
 explicit maintenance track for compatibility drift on the machine-facing
 governance adapter rather than reopening broad product-scope work:
 
@@ -83,34 +87,17 @@ governance adapter rather than reopening broad product-scope work:
   contract, introduces a new adapter schema version, or adds governed behavior
   that Synod needs for its explicitly modeled bounded stages
 
-### Next Macrofeature Line (038+)
+### Next Macrofeature Line (039+)
 
-`0.37.0` delivered bounded delegated execution on top of the evidence-driven
-`infer -> propose -> confirm` planning baseline. The next roadmap line should
-not decompose back into microfeatures. Future numbered specs must stay at the
-macrofeature level and each one must change Synod's operating model, not just
-a single CLI surface.
+`0.38.0` delivered bounded domain-agent templates on top of the
+evidence-driven `infer -> propose -> confirm` planning baseline. The next
+roadmap line should not decompose back into microfeatures. Future numbered
+specs must stay at the macrofeature level and each one must change Synod's
+operating model, not just a single CLI surface.
 
 Compatibility maintenance for newer Canon releases stays inside the watch above
 unless it becomes contract-breaking. It does not consume the next spec number
 by itself.
-
-### 038 Domain Agent Templates (Upcoming)
-
-The next major leap in code generation quality requires domain-specific intelligence.
-`038-domain-agent-templates` introduces an inheritance model for agent templates, separating baseline language/framework expertise from workspace-specific overrides (company guidelines, formatting rules). To deliver this holistically without fragmenting the execution engine, Synod will adopt a data-driven "Command Pack" architecture for domain templates rather than hardcoding per-language workflows.
-
-Planned Domain Experts & Frameworks:
-- **Systems & Systems-adjacent:** Rust, Go, C, C++, Zig
-- **Enterprise & Backend:** Java (Spring Boot), C# (.NET), Python (Django/FastAPI)
-- **Frontend & Fullstack:** TypeScript/JavaScript, React, Next.js, Vue, Angular
-- **Data & Data-Science:** Python (Data/ML stack), SQL
-
-Delivery Strategy (How we support all at once):
-- **Data-Driven Templates:** Language expertise will be encoded as versioned Markdown/YAML "Agent Prompt Packs" distributed with Synod, avoiding runtime engine bloat. 
-- **Inheritance Engine:** A unified engine layer will lazily merge the "Base Template" with local workspace configurations (`.synod/agents/*.md`) during context assembly.
-- **Dynamic Routing & Capabilities:** The orchestrator will parse the bounded context (e.g., recognizing `# Frontend` vs `# Backend` components) and map the correct Domain Expert Template onto the active session task, delegating language-specific standards natively.
-- **Init & Ongoing Customization:** `synod init` will prompt users to select active domains and optionally seed local `rules.md` overrides. These custom rules persist in `.synod/agents/` and can be refined continually to mirror company standards.
 
 ### 039 Distribution & Bundling (Upcoming)
 
@@ -119,6 +106,20 @@ Synod deployment must become frictionless for the end-user.
 - Establish distribution via Homebrew (`brew`) and Windows Package Manager (`winget`).
 - Support bundled installation alongside `canon` latest version to ensure the required governance runtime is available without forcing a secondary installation step.
 - Provide unified update paths for both Synod and Canon.
+
+### Delivered in 0.38.0
+
+- infer or accept active domain families during `synod init`, then persist
+  workspace-local domain-template settings, scoped standards, and optional or
+  required external context bindings in `.synod/config.toml`
+- layer built-in domain guidance with global, cluster, and workspace standards
+  using explicit precedence and source attribution on `config show --scope effective`
+- block planning explicitly when enabled domain templates do not match the
+  bounded target or when a required external context binding is unavailable or
+  stale relative to the selected target
+- project selected domain family, winning standards source, and supporting-input
+  status through `plan`, `run`, `status`, `next`, `inspect`, assistant
+  guidance, roadmap, configuration docs, README, and changelog
 
 ### Delivered in 0.37.0
 

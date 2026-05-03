@@ -286,3 +286,80 @@ fn config_show_effective_surfaces_capability_and_effort_projection() {
         "{show_text}"
     );
 }
+
+#[test]
+fn config_domain_commands_surface_effective_domain_templates() {
+    let workspace = empty_workspace("synod-config-domain");
+
+    let init = run_synod_in(
+        &workspace,
+        &[
+            "init",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--template",
+            "change",
+            "--assistant",
+            "copilot",
+        ],
+    );
+    assert_eq!(init.status.code(), Some(0), "{}", terminal_text(&init));
+
+    let set_domain = run_synod_in(
+        &workspace,
+        &[
+            "config",
+            "set-domain",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--scope",
+            "workspace",
+            "--family",
+            "react",
+            "--enable",
+            "--standards",
+            "follow the shared ui system",
+        ],
+    );
+    assert_eq!(set_domain.status.code(), Some(0), "{}", terminal_text(&set_domain));
+
+    let bind_context = run_synod_in(
+        &workspace,
+        &[
+            "config",
+            "bind-context",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--scope",
+            "workspace",
+            "--family",
+            "react",
+            "--kind",
+            "design-system",
+            "--reference",
+            "mcp:design-system",
+            "--required",
+        ],
+    );
+    assert_eq!(bind_context.status.code(), Some(0), "{}", terminal_text(&bind_context));
+
+    let show = run_synod_in(
+        &workspace,
+        &[
+            "config",
+            "show",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--scope",
+            "effective",
+        ],
+    );
+    let show_text = terminal_text(&show);
+    assert_eq!(show.status.code(), Some(0), "{show_text}");
+    assert!(show_text.contains("domain_templates:"), "{show_text}");
+    assert!(show_text.contains("- react: enabled=true [workspace]"), "{show_text}");
+    assert!(
+        show_text.contains("design_system mcp:design-system (required) [workspace]"),
+        "{show_text}"
+    );
+}
