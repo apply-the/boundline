@@ -77,7 +77,10 @@ boundline doctor --install
 
 The Homebrew tap builds Boundline from the tagged source release and installs
 the pinned Canon companion alongside it so the install diagnostics pairing
-remains explicit.
+remains explicit. That path only works after the matching Boundline release tag
+and pinned Canon tag have been published upstream. If you are validating an
+unreleased branch or the release tags have not landed yet, use the source
+fallback below.
 
 - Windows via winget:
 

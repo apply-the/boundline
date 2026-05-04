@@ -16,6 +16,10 @@ brew tap apply-the/boundline
 brew install boundline
 ```
 
+Use this path only after the matching Boundline release tag and pinned Canon
+tag have been published upstream. If you are validating an unreleased branch or
+the tap has moved ahead of the source tags, use the source fallback instead.
+
 - Windows via winget after the release manifest is published:
 
 ```powershell
