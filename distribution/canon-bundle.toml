@@ -1,10 +1,10 @@
-boundline_version = "0.39.0"
+boundline_version = "0.40.0"
 canon_version = "0.39.0"
 source_fallback = "cargo install --path ."
 
 [channels.homebrew]
 status = "ready_for_publication"
-install_command = "brew install https://raw.githubusercontent.com/apply-the/boundline/v0.39.0/distribution/homebrew/Formula/boundline.rb"
+install_command = "brew install https://raw.githubusercontent.com/apply-the/boundline/v0.40.0/distribution/homebrew/Formula/boundline.rb"
 update_command = "brew upgrade boundline"
 
 [channels.winget]
@@ -15,17 +15,17 @@ update_command = "winget upgrade ApplyThe.Boundline"
 [targets.macos_arm64]
 channel = "homebrew"
 rust_target = "aarch64-apple-darwin"
-bundle_name = "boundline-bundle-0.39.0-macos-arm64.tar.gz"
+bundle_name = "boundline-bundle-0.40.0-macos-arm64.tar.gz"
 canon_asset = "https://github.com/apply-the/canon/releases/download/v0.39.0/canon-0.39.0-macos-arm64.tar.gz"
 
 [targets.macos_x86_64]
 channel = "homebrew"
 rust_target = "x86_64-apple-darwin"
-bundle_name = "boundline-bundle-0.39.0-macos-x86_64.tar.gz"
+bundle_name = "boundline-bundle-0.40.0-macos-x86_64.tar.gz"
 canon_asset = "https://github.com/apply-the/canon/releases/download/v0.39.0/canon-0.39.0-macos-x86_64.tar.gz"
 
 [targets.windows_x86_64]
 channel = "winget"
 rust_target = "x86_64-pc-windows-msvc"
-bundle_name = "boundline-bundle-0.39.0-windows-x86_64.zip"
+bundle_name = "boundline-bundle-0.40.0-windows-x86_64.zip"
 canon_asset = "https://github.com/apply-the/canon/releases/download/v0.39.0/canon-0.39.0-windows-x86_64.zip"

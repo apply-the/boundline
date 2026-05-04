@@ -53,7 +53,7 @@ use crate::fixture::{
 };
 use crate::orchestrator::decision_loop::{DecisionLoop, LoopTerminal};
 use crate::orchestrator::goal_planner::{
-    GoalPlannerError, PlanningContextSources, build_goal_plan_with_sources,
+    AuthoredInputDocument, GoalPlannerError, PlanningContextSources, build_goal_plan_with_sources,
 };
 use crate::orchestrator::governance::{
     GovernanceStepDecision, bounded_governance_context, build_autopilot_decision,
@@ -619,6 +619,23 @@ impl SessionRuntime {
                 .as_ref()
                 .map(|bundle| bundle.ordered_source_labels())
                 .unwrap_or_default(),
+            authored_input_documents: session
+                .authored_brief
+                .as_ref()
+                .map(|bundle| {
+                    bundle
+                        .sources
+                        .iter()
+                        .map(|source| AuthoredInputDocument {
+                            label: source.display_label(),
+                            content: source.content.clone(),
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default(),
+            execution_profile_read_targets: load_workspace_execution_profile(&self.workspace_ref)
+                .map(|profile| profile.read_targets)
+                .unwrap_or_default(),
             negotiation_goal_summary: negotiation_packet
                 .as_ref()
                 .map(|packet| packet.goal_summary.clone()),
@@ -638,6 +655,23 @@ impl SessionRuntime {
                 .active_task
                 .as_ref()
                 .and_then(|task| task.context.latest_compacted_canon_memory().ok().flatten()),
+            latest_changed_files: session
+                .active_task
+                .as_ref()
+                .and_then(|task| task.context.state.get("latest_changed_files"))
+                .and_then(|value| value.as_array())
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|item| item.as_str().map(str::to_string))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default(),
+            latest_validation_status: session
+                .active_task
+                .as_ref()
+                .and_then(|task| task.context.state.get("latest_validation_status"))
+                .and_then(|value| value.as_str().map(str::to_string)),
         }
     }
 
@@ -3085,6 +3119,7 @@ mod tests {
         effective_assistant_runtimes, is_governance_trace_event, session_status_for_task_status,
     };
     use crate::adapters::trace_store::TraceStore;
+    use crate::domain::brief::normalize_inputs;
     use crate::domain::cluster::{ClusterSessionProjection, ClusteredExecutionKind};
     use crate::domain::configuration::{RoutingConfig, RuntimeKind};
     use crate::domain::execution::{
@@ -3227,6 +3262,84 @@ mod tests {
 
     fn context() -> TaskContext {
         TaskContext::new("session-runtime", "/tmp/workspace", RunLimits::default(), Map::new())
+    }
+
+    #[test]
+    fn planning_context_sources_include_authored_documents_and_recent_change_signals() {
+        let workspace = temp_workspace("boundline-runtime-planning-context");
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::create_dir_all(workspace.join("tests")).unwrap();
+        fs::write(workspace.join("src/add.rs"), "pub fn add() -> i32 { 2 }\n").unwrap();
+        fs::write(
+            workspace.join("brief.md"),
+            "Focus on src/add.rs and tests/add.rs before broad scanning.\n",
+        )
+        .unwrap();
+
+        let authored_brief = normalize_inputs(
+            &workspace,
+            Some("Fix the failing add test"),
+            &[PathBuf::from("brief.md")],
+        )
+        .unwrap();
+        let mut task = decision_task(workspace.to_string_lossy().as_ref(), json!({}));
+        task.context.state.insert("latest_changed_files".to_string(), json!(["src/add.rs"]));
+        task.context.state.insert("latest_validation_status".to_string(), json!("failed"));
+
+        let mut session = build_session(&workspace, task);
+        session.goal = Some("Fix the failing add test".to_string());
+        session.authored_brief = Some(authored_brief);
+
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let sources = runtime.planning_context_sources(&session, "Fix the failing add test");
+
+        assert!(
+            sources
+                .authored_input_documents
+                .iter()
+                .any(|document| document.label.contains("brief.md")
+                    && document.content.contains("src/add.rs"))
+        );
+        assert_eq!(sources.latest_changed_files, vec!["src/add.rs".to_string()]);
+        assert_eq!(sources.latest_validation_status.as_deref(), Some("failed"));
+        assert!(sources.authored_input_sources.iter().any(|label| label.contains("brief.md")));
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn planning_context_sources_include_execution_profile_read_targets() {
+        let workspace = write_governed_execution_profile_workspace(
+            "boundline-runtime-execution-profile-targets",
+            vec![ExecutionAttemptDefinition {
+                attempt_id: "fix-add".to_string(),
+                summary: "Replace subtraction with addition".to_string(),
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left - right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+                failure_mode: ExecutionFailureMode::Terminal,
+            }],
+            vec!["src/lib.rs".to_string(), "tests/red_to_green.rs".to_string()],
+            None,
+        );
+
+        let mut session = build_session(
+            &workspace,
+            decision_task(workspace.to_string_lossy().as_ref(), json!({})),
+        );
+        session.goal = Some("Fix the failing add test".to_string());
+
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let sources = runtime.planning_context_sources(&session, "Fix the failing add test");
+
+        assert_eq!(
+            sources.execution_profile_read_targets,
+            vec!["src/lib.rs".to_string(), "tests/red_to_green.rs".to_string()]
+        );
+
+        fs::remove_dir_all(workspace).unwrap();
     }
 
     #[test]

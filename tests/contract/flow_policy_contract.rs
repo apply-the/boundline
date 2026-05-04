@@ -4,7 +4,9 @@ use boundline::cli::session::{
 };
 use boundline::domain::goal_plan::GoalPlanFlowMode;
 
-use crate::runtime_refoundation::temp_runtime_refoundation_workspace;
+use crate::runtime_refoundation::{
+    temp_runtime_refoundation_no_action_workspace, temp_runtime_refoundation_workspace,
+};
 
 #[test]
 fn proposed_flow_contract_blocks_run_until_operator_confirms_or_skips() {
@@ -59,7 +61,7 @@ fn confirmed_flow_contract_persists_explicit_override() {
 
 #[test]
 fn skipped_flow_contract_persists_operator_skip_without_active_policy() {
-    let workspace = temp_runtime_refoundation_workspace("flow-policy-contract-skipped");
+    let workspace = temp_runtime_refoundation_no_action_workspace("flow-policy-contract-skipped");
 
     execute_start(Some(&workspace)).unwrap();
     execute_capture(

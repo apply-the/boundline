@@ -1398,7 +1398,7 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     use serde_json::json;
     use uuid::Uuid;
@@ -1471,6 +1471,16 @@ fn red_to_green_addition() {
         workspace
     }
 
+    fn write_context_brief(workspace: &Path) -> PathBuf {
+        let brief = workspace.join("brief.md");
+        fs::write(
+            &brief,
+            "Investigate src/lib.rs and tests/red_to_green.rs before broad scanning.\n",
+        )
+        .unwrap();
+        brief
+    }
+
     #[test]
     fn dispatch_covers_session_error_paths() {
         let workspace = temp_workspace("boundline-cli-dispatch-error");
@@ -1521,13 +1531,15 @@ fn red_to_green_addition() {
     fn dispatch_covers_successful_custom_run_session_run_and_inspect_paths() {
         let custom_workspace = write_execution_workspace("boundline-cli-dispatch-success-custom");
         let session_workspace = write_execution_workspace("boundline-cli-dispatch-success-session");
+        let custom_brief = write_context_brief(&custom_workspace);
+        let session_brief = write_context_brief(&session_workspace);
 
         let custom_run = dispatch(&DeveloperCommand::Run {
             workspace: Some(custom_workspace.clone()),
             cluster: None,
             goal: Some("Fix the failing add test".to_string()),
             compatibility: false,
-            brief: Vec::new(),
+            brief: vec![custom_brief],
             governance: None,
             risk: None,
             zone: None,
@@ -1547,7 +1559,7 @@ fn red_to_green_addition() {
             workspace: Some(session_workspace.clone()),
             cluster: None,
             goal: Some("Fix the failing add test".to_string()),
-            brief: Vec::new(),
+            brief: vec![session_brief],
             governance: None,
             risk: None,
             zone: None,

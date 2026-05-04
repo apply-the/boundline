@@ -19,9 +19,21 @@ recorded workspace version.
 
 Delivered specs:
 
-- None recorded after `0.39.0`
+- None recorded after `0.40.0`
 
 Highlights:
+
+## [0.40.0] - 2026-05-03
+
+Delivered specs:
+
+- `040` - Context Selection Hardening
+
+Highlights:
+
+- Replace keyword-first context admission in the goal planner with evidence-selected context inputs that can be anchored by authored brief file references, recent changed files after failed validation, bounded source-test cue pairing, and reusable Canon evidence.
+- Keep `context_summary`, `context_credibility`, `context_primary_inputs`, `context_provenance`, and `context_staleness_reason` aligned to the same authoritative context story while making weak or contradictory context an explicit planning stop.
+- Tighten README, getting-started, architecture, assistant guidance, roadmap, and changelog so the first-run quick path is clearer and the Boundline-versus-Canon boundary stays explicit in the `0.40.0` release.
 
 ## [0.39.0] - 2026-05-03
 

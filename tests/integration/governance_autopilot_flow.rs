@@ -269,16 +269,36 @@ fn governance_autopilot_flow_rejects_unsupported_future_canon_mode_configuration
     let workspace =
         temp_canon_security_assessment_workspace("boundline-governance-unsupported-security-mode");
     rewrite_governance_canon_mode(&workspace, "supply-chain-analysis");
-    bootstrap_bug_fix(&workspace);
-
-    let run = run_boundline_in(&workspace, &["run"]);
-    let run_text = terminal_text(&run);
-    assert_ne!(run.status.code(), Some(0), "{run_text}");
-    assert!(run_text.contains("run: session error"), "{run_text}");
-    assert!(
-        run_text.contains("fixture runtime is invalid: workspace execution profile is invalid"),
-        "{run_text}"
+    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
+    assert_eq!(
+        run_boundline_in(&workspace, &["capture", "--goal", "Fix the failing checkout flow"])
+            .status
+            .code(),
+        Some(0)
     );
-    assert!(run_text.contains("unknown variant `supply-chain-analysis`"), "{run_text}");
-    assert!(run_text.contains("security-assessment"), "{run_text}");
+
+    let flow = run_boundline_in(&workspace, &["flow", "bug-fix"]);
+    let flow_text = terminal_text(&flow);
+    if flow.status.code() != Some(0) {
+        assert!(flow_text.contains("session error"), "{flow_text}");
+        assert!(
+            flow_text
+                .contains("fixture runtime is invalid: workspace execution profile is invalid"),
+            "{flow_text}"
+        );
+        assert!(flow_text.contains("unknown variant `supply-chain-analysis`"), "{flow_text}");
+        assert!(flow_text.contains("security-assessment"), "{flow_text}");
+        return;
+    }
+
+    let plan = run_boundline_in(&workspace, &["plan"]);
+    let plan_text = terminal_text(&plan);
+    assert_ne!(plan.status.code(), Some(0), "{plan_text}");
+    assert!(plan_text.contains("session error"), "{plan_text}");
+    assert!(
+        plan_text.contains("fixture runtime is invalid: workspace execution profile is invalid"),
+        "{plan_text}"
+    );
+    assert!(plan_text.contains("unknown variant `supply-chain-analysis`"), "{plan_text}");
+    assert!(plan_text.contains("security-assessment"), "{plan_text}");
 }

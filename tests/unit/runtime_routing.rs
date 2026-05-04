@@ -217,15 +217,16 @@ fn plan_task_uses_authored_brief_as_credible_context_on_empty_workspace() {
         updated_at: 20,
     };
 
-    runtime.plan_task(&mut record, None, false).unwrap();
+    let err = runtime.plan_task(&mut record, None, false).unwrap_err();
 
     let goal_plan = record.goal_plan.as_ref().unwrap();
-    assert_eq!(goal_plan.context_credibility().as_deref(), Some("credible"));
+    assert!(matches!(err, SessionRuntimeError::ClarificationRequired { .. }));
+    assert_eq!(goal_plan.context_credibility().as_deref(), Some("insufficient"));
     assert!(goal_plan.context_primary_inputs().contains(&brief.summary_text()));
     assert!(
         goal_plan.context_provenance_lines().iter().any(|line| line.contains("authored_brief"))
     );
-    assert_eq!(record.latest_status, SessionStatus::Planned);
+    assert_eq!(record.latest_status, SessionStatus::GoalCaptured);
 }
 
 #[test]
@@ -239,8 +240,19 @@ fn repeated_plan_task_revises_goal_plan_when_workspace_evidence_changes() {
     )
     .unwrap();
     std::fs::write(
-        workspace.join("src/lib.rs"),
+        workspace.join("src/dashboard.rs"),
         "pub fn render_dashboard() {}\npub struct DashboardState;",
+    )
+    .unwrap();
+    std::fs::write(
+        workspace.join("brief.md"),
+        "Focus on src/dashboard.rs for the bounded dashboard surface.\n",
+    )
+    .unwrap();
+    let brief = normalize_brief_inputs(
+        &workspace,
+        Some("shape dashboard surface"),
+        &[std::path::PathBuf::from("brief.md")],
     )
     .unwrap();
 
@@ -249,7 +261,7 @@ fn repeated_plan_task_revises_goal_plan_when_workspace_evidence_changes() {
         session_id: "session-runtime-replan".to_string(),
         workspace_ref: workspace.to_string_lossy().into_owned(),
         goal: Some("shape dashboard surface".to_string()),
-        authored_brief: None,
+        authored_brief: Some(brief),
         negotiation_packet: None,
         active_flow: None,
         active_task: None,
@@ -271,8 +283,8 @@ fn repeated_plan_task_revises_goal_plan_when_workspace_evidence_changes() {
 
     std::fs::create_dir_all(workspace.join("tests")).unwrap();
     std::fs::write(
-        workspace.join("tests/red_to_green.rs"),
-        "#[test]\nfn dashboard_regression() { assert!(true); }",
+        workspace.join("tests/dashboard.rs"),
+        "use boundline_runtime_routing_replan::dashboard::render_dashboard;\n#[test]\nfn dashboard_regression() { render_dashboard(); }",
     )
     .unwrap();
 

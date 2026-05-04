@@ -131,8 +131,9 @@ If you change negotiated capture, plan gating, or acceptance-boundary projection
 
 If you change context assembly or plan gating, keep the docs explicit about
 `context_summary`, `context_credibility`, `context_primary_inputs`,
-`context_provenance`, `context_staleness_reason`, and whether planning can
-continue or must stop explicitly.
+`context_provenance`, `context_staleness_reason`, the evidence anchors that
+admit primary inputs, and whether planning can continue or must stop
+explicitly.
 
 If you change dynamic planning, keep the docs explicit about
 `goal_plan_state`, `goal_plan_revision`, `planning_rationale`,

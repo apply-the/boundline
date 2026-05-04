@@ -19,13 +19,21 @@ const MULTIPLY_LIB_RS: &str =
     concat!("pub fn add(left: i32, right: i32) -> i32 {\n", "    left * right\n", "}\n");
 
 const NO_ACTIONABLE_LIB_RS: &str =
-    concat!("pub fn summarize_workspace() -> &'static str {\n", "    \"todo\"\n", "}\n",);
+    concat!("pub fn workspace_summary_output() -> &'static str {\n", "    \"todo\"\n", "}\n",);
 
 const FIXTURE_TEST_RS: &str = concat!(
     "use runtime_refoundation_fixture::add;\n\n",
     "#[test]\n",
     "fn runtime_refoundation_drives_red_to_green() {\n",
     "    assert_eq!(add(2, 2), 4);\n",
+    "}\n",
+);
+
+const NO_ACTIONABLE_TEST_RS: &str = concat!(
+    "use runtime_refoundation_fixture::workspace_summary_output;\n\n",
+    "#[test]\n",
+    "fn workspace_summary_output_is_available() {\n",
+    "    assert_eq!(workspace_summary_output(), \"todo\");\n",
     "}\n",
 );
 
@@ -76,6 +84,9 @@ fn create_runtime_workspace(prefix: &str, source_contents: &str) -> PathBuf {
     fs::write(workspace.join("src/lib.rs"), source_contents).unwrap();
     if source_contents.contains("pub fn add") {
         fs::write(workspace.join("tests/red_to_green.rs"), FIXTURE_TEST_RS).unwrap();
+    } else if source_contents.contains("workspace_summary_output") {
+        fs::write(workspace.join("tests/workspace_summary_output.rs"), NO_ACTIONABLE_TEST_RS)
+            .unwrap();
     }
 
     workspace

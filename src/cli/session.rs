@@ -1365,6 +1365,16 @@ fn red_to_green_addition() {
         workspace
     }
 
+    fn write_context_brief(workspace: &Path) -> PathBuf {
+        let brief = workspace.join("brief.md");
+        fs::write(
+            &brief,
+            "Investigate src/lib.rs and tests/red_to_green.rs before broad scanning.\n",
+        )
+        .unwrap();
+        brief
+    }
+
     fn write_review_execution_workspace(prefix: &str) -> PathBuf {
         let workspace = temp_workspace(prefix);
         fs::create_dir_all(workspace.join("src")).unwrap();
@@ -1605,6 +1615,7 @@ fn red_to_green_addition() {
     #[test]
     fn execute_run_status_and_next_cover_success_paths() {
         let workspace = write_execution_workspace("boundline-cli-session-success");
+        let brief = write_context_brief(&workspace);
 
         assert_eq!(
             execute_start(Some(&workspace)).unwrap().exit_status,
@@ -1614,7 +1625,7 @@ fn red_to_green_addition() {
             execute_capture(
                 Some(&workspace),
                 Some("Fix the failing add test"),
-                &[],
+                std::slice::from_ref(&brief),
                 None,
                 None,
                 None,
@@ -1665,6 +1676,7 @@ fn red_to_green_addition() {
     #[test]
     fn execute_run_surfaces_delegation_packet_when_native_route_is_blocked() {
         let workspace = write_execution_workspace("boundline-cli-session-delegation");
+        let brief = write_context_brief(&workspace);
         let mut config = ConfigFile {
             version: 1,
             routing: RoutingConfig {
@@ -1714,7 +1726,7 @@ fn red_to_green_addition() {
         execute_capture(
             Some(&workspace),
             Some("fix the failing add test"),
-            &[],
+            std::slice::from_ref(&brief),
             None,
             None,
             None,
@@ -1756,6 +1768,7 @@ fn red_to_green_addition() {
     #[test]
     fn execute_run_status_and_inspect_surface_review_evidence() {
         let workspace = write_review_execution_workspace("boundline-cli-session-review-success");
+        let brief = write_context_brief(&workspace);
 
         assert_eq!(
             execute_start(Some(&workspace)).unwrap().exit_status,
@@ -1765,7 +1778,7 @@ fn red_to_green_addition() {
             execute_capture(
                 Some(&workspace),
                 Some("Fix the failing add test and review it"),
-                &[],
+                std::slice::from_ref(&brief),
                 None,
                 None,
                 None,
@@ -1849,12 +1862,13 @@ fn red_to_green_addition() {
     #[test]
     fn execute_run_blocks_until_native_plan_is_confirmed() {
         let workspace = write_execution_workspace("boundline-cli-session-flow-confirmation");
+        let brief = write_context_brief(&workspace);
 
         execute_start(Some(&workspace)).unwrap();
         execute_capture(
             Some(&workspace),
             Some("Fix the failing add test"),
-            &[],
+            std::slice::from_ref(&brief),
             None,
             None,
             None,

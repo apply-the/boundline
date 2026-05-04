@@ -4,7 +4,7 @@ This directory contains Markdown-based commands to run `boundline` from various 
 
 The primary delivery surface is session-native: `start -> capture -> plan -> run -> status -> next -> inspect` against `<workspace>/.boundline/session.json` and `<workspace>/.boundline/traces/`.
 
-In `0.39.0`, assistants should treat installation verification as the first
+In `0.40.0`, assistants should treat installation verification as the first
 boundary in a new environment: prefer the README quick path, run
 `boundline doctor --install` before workspace commands, and only then move into the
 session-native workflow.
@@ -17,10 +17,10 @@ Keep the product boundary explicit in assistant narration:
 	`docs/getting-started.md`; use `docs/architecture.md` only for the second
 	read level.
 
-In `0.39.0`, workflows and direct runs are primary surfaces of the same Boundline
+In `0.40.0`, workflows and direct runs are primary surfaces of the same Boundline
 product story, while compatibility remains explicit and subordinate.
 
-In `0.39.0`, direct `run --goal` still bootstraps that native session path by
+In `0.40.0`, direct `run --goal` still bootstraps that native session path by
 default, while `run --compatibility --goal ...` remains the explicit
 execution-profile route. `capture` persists `negotiation_goal_summary`,
 `negotiation_resolution`, and `negotiation_acceptance_boundary` before
@@ -38,6 +38,10 @@ In the same release, native planning also persists `context_summary`,
 `context_credibility`, `context_primary_inputs`, `context_provenance`, and
 `context_staleness_reason` when available. Preserve those values exactly: they
 explain why planning is bounded enough to continue or why it stopped.
+
+Treat authored brief file refs, recent changed files after failed validation,
+and other explicit evidence anchors as causal reasons the planner selected a
+target. Do not paraphrase them into generic keyword matches.
 
 In the same release, those context fields can also carry the selected domain
 family, the winning standards source, and any used, stale, unavailable, or

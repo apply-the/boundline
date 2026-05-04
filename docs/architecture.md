@@ -54,6 +54,9 @@ Planning in Boundline is evidence-driven:
 - `capture` persists negotiated delivery state from authored goals and optional briefs.
 - `plan` builds one bounded context pack from workspace evidence, authored input,
   recent traces, and any reusable Canon artifacts.
+- authored brief file refs, failing validation paths, recent changed files, and
+  other explicit evidence anchors are causal inputs; broad path similarity is
+  only a bounded tie-breaker.
 - Planning stops explicitly when the negotiation result or bounded context is
   not credible enough to support a real bounded change.
 
@@ -75,7 +78,8 @@ These are product layers over one runtime, not separate products.
 
 ## Distribution And Update Model
 
-The `0.39.0` line adds a repo-managed distribution surface:
+The `0.40.0` release keeps the repo-managed distribution surface introduced in
+`0.39.0` and pairs it with a clearer evidence-first planning story:
 
 - `distribution/canon-bundle.toml` pins the release-aligned Boundline plus Canon pairing.
 - `scripts/sync-distribution-metadata.sh` regenerates the Homebrew formula and winget manifests.

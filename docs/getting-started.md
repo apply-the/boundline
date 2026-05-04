@@ -12,7 +12,7 @@ Use the release-aligned path that matches your machine:
 - macOS via Homebrew formula once the release bundle checksums are published:
 
 ```bash
-brew install https://raw.githubusercontent.com/apply-the/boundline/v0.39.0/distribution/homebrew/Formula/boundline.rb
+brew install https://raw.githubusercontent.com/apply-the/boundline/v0.40.0/distribution/homebrew/Formula/boundline.rb
 ```
 
 - Windows via winget after the release manifest is published:
@@ -78,8 +78,20 @@ boundline status --workspace <workspace>
 boundline inspect --workspace <workspace>
 ```
 
-That is the main product path: `start -> capture -> plan -> run -> status ->
-inspect`.
+That is the main product path: `start -> capture -> plan -> confirm -> run ->
+status -> inspect`.
+
+Read planning output literally before you continue:
+
+- `context_summary` is the bounded context story Boundline thinks it has.
+- `context_credibility` tells you whether the current context is credible, stale, or insufficient.
+- `context_primary_inputs` names the files or artifacts that actually shaped the plan.
+- `context_provenance` explains why those inputs were selected.
+- `context_staleness_reason` tells you why Boundline refused to guess.
+
+If `plan` stops because the context is weak, add a brief that names the right
+files, narrow the goal, or rerun after failing validation produces a better
+evidence anchor.
 
 ## Optional Bootstrap
 
