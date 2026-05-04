@@ -3,11 +3,11 @@ name: sync-homebrew-tap
 on:
   push:
     tags:
-      - "v*"
+      - "*.*.*"
   workflow_dispatch:
     inputs:
       version:
-        description: "Boundline version without the leading v. Defaults to the workspace version or pushed tag."
+        description: "Boundline version. Defaults to the workspace version or pushed tag."
         required: false
 
 permissions:
@@ -24,6 +24,7 @@ jobs:
       boundline_version: ${{ steps.meta.outputs.boundline_version }}
       canon_version: ${{ steps.meta.outputs.canon_version }}
       tap_repository: ${{ steps.meta.outputs.tap_repository }}
+      has_tap_token: ${{ steps.tap_token.outputs.has_tap_token }}
     steps:
       - uses: actions/checkout@v4
       - id: meta
@@ -40,7 +41,7 @@ jobs:
           if [[ -n "${{ github.event.inputs.version }}" ]]; then
             boundline_version="${{ github.event.inputs.version }}"
           elif [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            boundline_version="${GITHUB_REF_NAME#v}"
+            boundline_version="${GITHUB_REF_NAME}"
           else
             boundline_version="$cargo_version"
           fi
@@ -59,10 +60,21 @@ jobs:
           echo "canon_version=$canon_version" >> "$GITHUB_OUTPUT"
           echo "tap_repository=$tap_repository" >> "$GITHUB_OUTPUT"
 
+      - id: tap_token
+        shell: bash
+        env:
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+        run: |
+          if [[ -n "$HOMEBREW_TAP_GITHUB_TOKEN" ]]; then
+            echo "has_tap_token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_tap_token=false" >> "$GITHUB_OUTPUT"
+          fi
+
   sync:
     name: sync-boundline-formula
     needs: prepare
-    if: needs.prepare.outputs.tap_repository != '' && secrets.HOMEBREW_TAP_GITHUB_TOKEN != ''
+    if: needs.prepare.outputs.tap_repository != '' && needs.prepare.outputs.has_tap_token == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -93,7 +105,7 @@ jobs:
           branch: boundline-release-${{ needs.prepare.outputs.boundline_version }}
           title: boundline ${{ needs.prepare.outputs.boundline_version }}
           body: |
-            Update the Boundline Homebrew formula for `v${{ needs.prepare.outputs.boundline_version }}`.
+            Update the Boundline Homebrew formula for `${{ needs.prepare.outputs.boundline_version }}`.
 
             Pinned Canon companion: `${{ needs.prepare.outputs.canon_version }}`.
 

@@ -29,12 +29,13 @@ fn distribution_metadata_keeps_versions_and_bundle_names_aligned() {
     assert!(channel_metadata.contains("tap_repository = \"apply-the/homebrew-boundline\""));
     assert!(channel_metadata.contains("tap_name = \"apply-the/boundline\""));
     assert!(formula.contains("version \"0.41.0\""));
-    assert!(formula.contains("using: :git, tag: \"v0.41.0\""));
+    assert!(formula.contains("using: :git, tag: \"0.41.0\""));
     assert!(formula.contains("resource \"canon-source\""));
-    assert!(formula.contains("tag: \"v0.40.0\""));
+    assert!(formula.contains("tag: \"0.40.0\""));
     assert!(formula.contains("boundline doctor --install"));
     assert!(winget_version.contains("PackageVersion: 0.41.0"));
     assert!(winget_installer.contains("boundline-bundle-0.41.0-windows-x86_64.zip"));
+    assert!(winget_installer.contains("releases/download/0.41.0/"));
     assert!(winget_installer.contains("PortableCommandAlias: canon"));
     assert!(winget_locale.contains("boundline doctor --install"));
 }

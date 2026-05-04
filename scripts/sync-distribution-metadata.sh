@@ -15,7 +15,7 @@ fi
 
 windows_x86_64_sha="${WINDOWS_X86_64_SHA256:-REPLACE_WITH_WINDOWS_X86_64_SHA256}"
 
-tag="v${boundline_version}"
+tag="${boundline_version}"
 homebrew_formula="distribution/homebrew/Formula/boundline.rb"
 winget_root="distribution/winget/manifests/a/ApplyThe/Boundline/${boundline_version}"
 
@@ -36,7 +36,7 @@ class Boundline < Formula
   depends_on "rustup" => :build
 
   resource "canon-source" do
-    url "https://github.com/apply-the/canon", using: :git, tag: "v${canon_version}"
+    url "https://github.com/apply-the/canon", using: :git, tag: "${canon_version}"
   end
 
   def install

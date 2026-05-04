@@ -3,11 +3,11 @@ name: release-windows-distribution
 on:
   push:
     tags:
-      - "v*"
+      - "*.*.*"
   workflow_dispatch:
     inputs:
       release_version:
-        description: "Release version without the leading v. Defaults to Cargo.toml or the pushed tag."
+        description: "Release version. Defaults to Cargo.toml or the pushed tag."
         required: false
 
 permissions:
@@ -33,7 +33,7 @@ jobs:
           if [[ -n "${{ github.event.inputs.release_version }}" ]]; then
             boundline_version="${{ github.event.inputs.release_version }}"
           elif [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            boundline_version="${GITHUB_REF_NAME#v}"
+            boundline_version="${GITHUB_REF_NAME}"
           else
             boundline_version="$(sed -n 's/^version = "\([^"]*\)"$/\1/p' Cargo.toml | head -n 1)"
           fi
@@ -68,7 +68,7 @@ jobs:
           $canonVersion = '${{ needs.prepare.outputs.canon_version }}'
           $bundleName = "boundline-bundle-$boundlineVersion-windows-x86_64.zip"
           $canonArchive = "canon-$canonVersion-windows-x86_64.zip"
-          $canonUrl = "https://github.com/apply-the/canon/releases/download/v$canonVersion/$canonArchive"
+          $canonUrl = "https://github.com/apply-the/canon/releases/download/$canonVersion/$canonArchive"
 
           New-Item -ItemType Directory -Force -Path release-bundle | Out-Null
           Invoke-WebRequest -Uri $canonUrl -OutFile $canonArchive

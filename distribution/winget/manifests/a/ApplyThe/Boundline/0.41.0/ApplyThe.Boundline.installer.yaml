@@ -7,7 +7,7 @@ Commands:
   - canon
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/apply-the/boundline/releases/download/v0.41.0/boundline-bundle-0.41.0-windows-x86_64.zip
+    InstallerUrl: https://github.com/apply-the/boundline/releases/download/0.41.0/boundline-bundle-0.41.0-windows-x86_64.zip
     InstallerSha256: REPLACE_WITH_WINDOWS_X86_64_SHA256
     NestedInstallerFiles:
       - RelativeFilePath: boundline.exe
