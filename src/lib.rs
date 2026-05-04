@@ -1,9 +1,9 @@
-pub mod adapters;
-pub mod cli;
-pub mod domain;
-pub mod fixture;
-pub mod orchestrator;
-pub mod registry;
+pub use boundline_adapters::adapters;
+pub use boundline_adapters::fixture;
+pub use boundline_adapters::orchestrator;
+pub use boundline_adapters::registry;
+pub use boundline_cli::cli;
+pub use boundline_core::domain;
 
 pub use adapters::agent::FnAgentAdapter;
 pub use adapters::config_store::{ConfigStoreError, FileConfigStore};
@@ -12,8 +12,10 @@ pub use adapters::governance_runtime::{
     GovernanceRuntime, GovernanceRuntimeError, GovernanceRuntimeRequest, GovernanceRuntimeResponse,
     LocalGovernanceRuntime, ReusedPacketInput,
 };
+pub use adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
 pub use adapters::tool::FnToolAdapter;
 pub use adapters::trace_store::FileTraceStore;
+pub use boundline_adapters::orchestrator::SessionRuntimeError;
 pub use domain::brief::{
     AuthoredBriefBundle, BriefIngestionError, GovernanceIntent, InputSourceKind,
     InputSourceReference, MAX_BRIEF_BYTES, MAX_BRIEF_SOURCES, normalize_governance_intent,
@@ -41,6 +43,9 @@ pub use domain::execution::{
 };
 pub use domain::flow::{SessionFlowState, built_in_flow, supported_flow_names};
 pub use domain::follow_through::FollowThroughProjection;
+pub use domain::goal_plan::{
+    ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan,
+};
 pub use domain::governance::{
     ApprovalState, AutopilotAction, AutopilotDecisionRecord, CanonMode, CanonRuntimeConfig,
     GovernanceLifecycleState, GovernanceProfile, GovernanceProfileError, GovernanceRuntimeKind,
@@ -79,6 +84,6 @@ pub use orchestrator::governance::{
     selected_stage_policy,
 };
 pub use orchestrator::planner::{Planner, StaticPlanner};
-pub use orchestrator::{Orchestrator, OrchestratorError};
+pub use orchestrator::{Orchestrator, OrchestratorError, SessionRuntime};
 pub use registry::agent_registry::AgentRegistry;
 pub use registry::tool_registry::ToolRegistry;

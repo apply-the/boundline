@@ -765,6 +765,12 @@ pub struct SessionStatusView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_changed_files: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_checkpoint_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_checkpoint_scope: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_checkpoint_restore_command: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_workspace_slice: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_selection_headline: Option<String>,
@@ -867,6 +873,9 @@ impl Default for SessionStatusView {
             latest_decision_status: None,
             latest_decision_target: None,
             latest_changed_files: None,
+            latest_checkpoint_id: None,
+            latest_checkpoint_scope: None,
+            latest_checkpoint_restore_command: None,
             latest_workspace_slice: None,
             latest_selection_headline: None,
             latest_candidate_family: None,
@@ -1811,7 +1820,7 @@ fn trace_within_session_scope(record: &ActiveSessionRecord, trace_ref: &str) -> 
     })
 }
 
-pub(crate) fn task_state_string(task: &Task, key: &str) -> Option<String> {
+pub fn task_state_string(task: &Task, key: &str) -> Option<String> {
     task.context.state.get(key).and_then(|value| value.as_str().map(str::to_string))
 }
 
@@ -1819,7 +1828,7 @@ fn task_state_json<T: DeserializeOwned>(task: &Task, key: &str) -> Option<T> {
     task.context.state.get(key).cloned().and_then(|value| serde_json::from_value(value).ok())
 }
 
-pub(crate) fn task_state_strings(task: &Task, key: &str) -> Option<Vec<String>> {
+pub fn task_state_strings(task: &Task, key: &str) -> Option<Vec<String>> {
     task.context.state.get(key).and_then(|value| {
         value.as_array().map(|items| {
             items.iter().filter_map(|item| item.as_str().map(str::to_string)).collect::<Vec<_>>()
@@ -1827,19 +1836,19 @@ pub(crate) fn task_state_strings(task: &Task, key: &str) -> Option<Vec<String>> 
     })
 }
 
-pub(crate) fn task_state_governed_stage(task: &Task) -> Option<GovernedStageRecord> {
+pub fn task_state_governed_stage(task: &Task) -> Option<GovernedStageRecord> {
     task_state_json(task, LATEST_GOVERNANCE_STAGE_KEY)
 }
 
-pub(crate) fn task_state_governed_packet(task: &Task) -> Option<GovernedStagePacket> {
+pub fn task_state_governed_packet(task: &Task) -> Option<GovernedStagePacket> {
     task_state_json(task, LATEST_GOVERNANCE_PACKET_KEY)
 }
 
-pub(crate) fn task_state_governance_packet_reuse(task: &Task) -> Option<PacketReuseBinding> {
+pub fn task_state_governance_packet_reuse(task: &Task) -> Option<PacketReuseBinding> {
     task_state_json(task, LATEST_GOVERNANCE_PACKET_REUSE_KEY)
 }
 
-pub(crate) fn task_state_governance_decision(task: &Task) -> Option<AutopilotDecisionRecord> {
+pub fn task_state_governance_decision(task: &Task) -> Option<AutopilotDecisionRecord> {
     task_state_json(task, LATEST_GOVERNANCE_DECISION_KEY)
 }
 
@@ -1860,49 +1869,49 @@ fn autopilot_action_text(action: crate::domain::governance::AutopilotAction) -> 
     }
 }
 
-pub(crate) fn task_state_governance_stage_key(task: &Task) -> Option<String> {
+pub fn task_state_governance_stage_key(task: &Task) -> Option<String> {
     task_state_governed_stage(task).map(|record| record.stage_key)
 }
 
-pub(crate) fn task_state_governance_runtime_text(task: &Task) -> Option<String> {
+pub fn task_state_governance_runtime_text(task: &Task) -> Option<String> {
     task_state_governed_stage(task).and_then(|record| encoded_text(&record.runtime))
 }
 
-pub(crate) fn task_state_governance_mode_text(task: &Task) -> Option<String> {
+pub fn task_state_governance_mode_text(task: &Task) -> Option<String> {
     task_state_governed_packet(task)
         .and_then(|packet| packet.canon_mode)
         .and_then(|mode| encoded_text(&mode))
 }
 
-pub(crate) fn task_state_governance_canon_run_ref(task: &Task) -> Option<String> {
+pub fn task_state_governance_canon_run_ref(task: &Task) -> Option<String> {
     task_state_governed_stage(task).and_then(|record| record.canon_run_ref)
 }
 
-pub(crate) fn task_state_governance_state_text(task: &Task) -> Option<String> {
+pub fn task_state_governance_state_text(task: &Task) -> Option<String> {
     task_state_governed_stage(task).and_then(|record| encoded_text(&record.lifecycle_state))
 }
 
-pub(crate) fn task_state_governance_blocked_reason(task: &Task) -> Option<String> {
+pub fn task_state_governance_blocked_reason(task: &Task) -> Option<String> {
     task_state_governed_stage(task)
         .and_then(|record| record.blocked_reason)
         .or_else(|| task_state_canon_memory_staleness_reason(task))
 }
 
-pub(crate) fn task_state_governance_packet_ref(task: &Task) -> Option<String> {
+pub fn task_state_governance_packet_ref(task: &Task) -> Option<String> {
     task_state_governed_packet(task)
         .map(|packet| packet.packet_ref)
         .or_else(|| task_state_governed_stage(task).and_then(|record| record.packet_ref))
 }
 
-pub(crate) fn task_state_governance_packet_source_stage(task: &Task) -> Option<String> {
+pub fn task_state_governance_packet_source_stage(task: &Task) -> Option<String> {
     task_state_governance_packet_reuse(task).map(|binding| binding.upstream_stage_key)
 }
 
-pub(crate) fn task_state_governance_packet_binding_reason(task: &Task) -> Option<String> {
+pub fn task_state_governance_packet_binding_reason(task: &Task) -> Option<String> {
     task_state_governance_packet_reuse(task).map(|binding| binding.binding_reason)
 }
 
-pub(crate) fn governance_packet_provenance_text(
+pub fn governance_packet_provenance_text(
     packet_source_stage: Option<&str>,
     packet_binding_reason: Option<&str>,
 ) -> Option<String> {
@@ -1920,15 +1929,15 @@ pub(crate) fn governance_packet_provenance_text(
     }
 }
 
-pub(crate) fn task_state_governance_approval_text(task: &Task) -> Option<String> {
+pub fn task_state_governance_approval_text(task: &Task) -> Option<String> {
     task_state_governed_stage(task).and_then(|record| encoded_text(&record.approval_state))
 }
 
-pub(crate) fn task_state_governance_decision_headline(task: &Task) -> Option<String> {
+pub fn task_state_governance_decision_headline(task: &Task) -> Option<String> {
     task_state_governance_decision(task).map(|decision| decision.rationale)
 }
 
-pub(crate) fn task_state_governance_candidate_actions(task: &Task) -> Option<Vec<String>> {
+pub fn task_state_governance_candidate_actions(task: &Task) -> Option<Vec<String>> {
     task_state_governance_decision(task)
         .map(|decision| {
             decision
@@ -1949,7 +1958,7 @@ pub(crate) fn task_state_governance_candidate_actions(task: &Task) -> Option<Vec
         })
 }
 
-pub(crate) fn governance_next_action_for_state(governance_state: Option<&str>) -> Option<String> {
+pub fn governance_next_action_for_state(governance_state: Option<&str>) -> Option<String> {
     match governance_state {
         Some("awaiting_approval") => {
             Some("wait for approval and rerun boundline status".to_string())
@@ -1961,7 +1970,7 @@ pub(crate) fn governance_next_action_for_state(governance_state: Option<&str>) -
     }
 }
 
-pub(crate) fn task_state_governance_next_action(task: &Task) -> Option<String> {
+pub fn task_state_governance_next_action(task: &Task) -> Option<String> {
     if let Some(memory) = task_state_compacted_canon_memory(task)
         && let Some(recommended_next_action) = memory.recommended_next_action
     {
@@ -1975,25 +1984,25 @@ pub(crate) fn task_state_governance_next_action(task: &Task) -> Option<String> {
     governance_next_action_for_state(governance_state.as_deref())
 }
 
-pub(crate) fn task_state_compacted_canon_memory(task: &Task) -> Option<CompactedCanonMemory> {
+pub fn task_state_compacted_canon_memory(task: &Task) -> Option<CompactedCanonMemory> {
     task.context.latest_compacted_canon_memory().ok().flatten()
 }
 
-pub(crate) fn task_state_canon_memory_context_summary(task: &Task) -> Option<String> {
+pub fn task_state_canon_memory_context_summary(task: &Task) -> Option<String> {
     task_state_compacted_canon_memory(task)
         .map(|memory| format!("canon memory: {}", memory.summary_text()))
 }
 
-pub(crate) fn task_state_canon_memory_context_credibility(task: &Task) -> Option<String> {
+pub fn task_state_canon_memory_context_credibility(task: &Task) -> Option<String> {
     task_state_compacted_canon_memory(task).map(|memory| memory.credibility.as_str().to_string())
 }
 
-pub(crate) fn task_state_canon_memory_primary_inputs(task: &Task) -> Option<Vec<String>> {
+pub fn task_state_canon_memory_primary_inputs(task: &Task) -> Option<Vec<String>> {
     task_state_compacted_canon_memory(task)
         .and_then(|memory| (!memory.artifact_refs.is_empty()).then_some(memory.artifact_refs))
 }
 
-pub(crate) fn task_state_canon_memory_provenance(task: &Task) -> Option<Vec<String>> {
+pub fn task_state_canon_memory_provenance(task: &Task) -> Option<Vec<String>> {
     task_state_compacted_canon_memory(task).map(|memory| {
         let mut lines =
             vec![format!("canon_memory: {} [{}]", memory.headline, memory.credibility.as_str())];
@@ -2010,14 +2019,14 @@ pub(crate) fn task_state_canon_memory_provenance(task: &Task) -> Option<Vec<Stri
     })
 }
 
-pub(crate) fn task_state_canon_memory_staleness_reason(task: &Task) -> Option<String> {
+pub fn task_state_canon_memory_staleness_reason(task: &Task) -> Option<String> {
     task_state_compacted_canon_memory(task).and_then(|memory| {
         (memory.credibility != crate::domain::governance::MemoryCredibilityState::Credible)
             .then(|| memory.reason_code.unwrap_or(memory.headline))
     })
 }
 
-pub(crate) fn task_state_workspace_slice_summary(task: &Task) -> Option<String> {
+pub fn task_state_workspace_slice_summary(task: &Task) -> Option<String> {
     let slice = task.context.state.get("latest_workspace_slice")?;
     let selected_targets = slice.get("selected_targets")?.as_array()?;
     let targets = selected_targets.iter().filter_map(|item| item.as_str()).collect::<Vec<_>>();
@@ -2025,7 +2034,7 @@ pub(crate) fn task_state_workspace_slice_summary(task: &Task) -> Option<String> 
     if targets.is_empty() { None } else { Some(targets.join(", ")) }
 }
 
-pub(crate) fn task_state_attempt_lineage_summary(task: &Task) -> Option<String> {
+pub fn task_state_attempt_lineage_summary(task: &Task) -> Option<String> {
     let lineage = task.context.state.get("latest_attempt_lineage")?;
     let current = lineage.get("current_attempt_id")?.as_str()?;
     let transition = lineage.get("transition_kind")?.as_str()?;
@@ -2233,6 +2242,9 @@ mod tests {
                 .map(|decision| super::decision_status_text(decision.status).to_string()),
             latest_decision_target: record.decisions.last().map(|decision| decision.target.clone()),
             latest_changed_files: None,
+            latest_checkpoint_id: None,
+            latest_checkpoint_scope: None,
+            latest_checkpoint_restore_command: None,
             latest_workspace_slice: None,
             latest_selection_headline: None,
             latest_candidate_family: None,
@@ -2357,6 +2369,10 @@ mod tests {
         let mut view = build_view(record);
         let task = record.active_task.as_ref().unwrap();
         view.latest_changed_files = task_state_strings(task, "latest_changed_files");
+        view.latest_checkpoint_id = task_state_string(task, "latest_checkpoint_id");
+        view.latest_checkpoint_scope = task_state_string(task, "latest_checkpoint_scope");
+        view.latest_checkpoint_restore_command =
+            task_state_string(task, "latest_checkpoint_restore_command");
         view.latest_workspace_slice = task_state_workspace_slice_summary(task);
         view.clarification_headline =
             record.authored_brief.as_ref().and_then(|bundle| bundle.clarification_headline());

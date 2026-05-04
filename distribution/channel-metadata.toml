@@ -1,0 +1,21 @@
+boundline_version = "0.41.0"
+canon_version = "0.40.0"
+source_fallback = "cargo install --path ."
+
+[channels.homebrew]
+status = "published_via_tap"
+tap_repository = "apply-the/homebrew-boundline"
+tap_name = "apply-the/boundline"
+formula_name = "boundline"
+formula_path = "Formula/boundline.rb"
+install_command = "brew tap apply-the/boundline && brew install boundline"
+update_command = "brew upgrade boundline"
+
+[channels.winget]
+status = "ready_for_publication"
+package_identifier = "ApplyThe.Boundline"
+manifest_root = "distribution/winget/manifests/a/ApplyThe/Boundline/0.41.0"
+install_command = "winget install ApplyThe.Boundline"
+update_command = "winget upgrade ApplyThe.Boundline"
+bundle_name = "boundline-bundle-0.41.0-windows-x86_64.zip"
+canon_asset = "https://github.com/apply-the/canon/releases/download/v0.40.0/canon-0.40.0-windows-x86_64.zip"

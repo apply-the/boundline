@@ -1,4 +1,5 @@
 pub mod brief;
+pub mod checkpoint;
 pub mod cluster;
 pub mod configuration;
 pub mod decision;

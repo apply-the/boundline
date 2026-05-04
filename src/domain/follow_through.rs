@@ -323,6 +323,9 @@ mod tests {
             latest_decision_status: Some("failed".to_string()),
             latest_decision_target: Some("verify-fix-add".to_string()),
             latest_changed_files: None,
+            latest_checkpoint_id: None,
+            latest_checkpoint_scope: None,
+            latest_checkpoint_restore_command: None,
             latest_workspace_slice: None,
             latest_selection_headline: Some(
                 "selected src/lib.rs for the next bounded retry".to_string(),

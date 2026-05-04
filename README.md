@@ -51,6 +51,10 @@ The primary product route stays explicit: `session-native: start a session -> ca
 
 Most users only need the commands above.
 
+When a mutating `run` or `step` stops in a failed or blocked state, preserve the
+reported `latest_checkpoint_*` fields and use `boundline checkpoint list` or the
+printed restore command before making unrelated edits.
+
 ## Read This In Two Layers
 
 - Quick path: this README plus [docs/getting-started.md](docs/getting-started.md)
@@ -66,8 +70,14 @@ advanced execution-profile, or governance detail.
 - macOS via Homebrew:
 
 ```bash
-brew install https://raw.githubusercontent.com/apply-the/boundline/v0.40.0/distribution/homebrew/Formula/boundline.rb
+brew tap apply-the/boundline
+brew install boundline
+boundline doctor --install
 ```
+
+The Homebrew tap builds Boundline from the tagged source release and installs
+the pinned Canon companion alongside it so the install diagnostics pairing
+remains explicit.
 
 - Windows via winget:
 
@@ -122,6 +132,7 @@ Advanced execution-profile workflows are documented outside this README.
 | `boundline plan` | Generate the proposed plan |
 | `boundline plan --confirm` | Approve that plan so execution can continue |
 | `boundline step` | Run one step at a time |
+| `boundline checkpoint list|restore` | Inspect or restore the latest local rollback points |
 | `boundline status` | See the current state and suggested follow-up |
 | `boundline next` | Ask Boundline for the next action |
 | `boundline inspect` | Read the latest trace in more detail |
@@ -135,6 +146,7 @@ Advanced execution-profile workflows are documented outside this README.
 | File | What it is |
 | --- | --- |
 | `.boundline/session.json` | Current session state for the default flow |
+| `.boundline/checkpoints/` | Local rollback manifests captured before mutating `run` and `step` |
 | `.boundline/traces/` | Execution history and inspectable traces |
 | `.boundline/config.toml` | Local routing and domain-template settings |
 
@@ -182,7 +194,7 @@ Boundline is the main tool. Canon is a supporting governed runtime.
 - Boundline owns the operator flow, session state, planning, execution, and validation.
 - Canon only enters when you explicitly want governed stages, approvals, or governed artifacts.
 
-The current release documents Canon `0.39.0` support on the
+The current release documents Canon `0.40.0` support on the
 `canon governance start|refresh|capabilities --json` `v1` adapter surface.
 
 ## Read More

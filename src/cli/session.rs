@@ -787,6 +787,18 @@ pub(crate) fn build_status_view_with_follow_up(
         latest_decision_status: latest_decision
             .map(|decision| decision_status_text(decision.status).to_string()),
         latest_decision_target: latest_decision.map(|decision| decision.target.clone()),
+        latest_checkpoint_id: record
+            .active_task
+            .as_ref()
+            .and_then(|task| task_state_string(task, "latest_checkpoint_id")),
+        latest_checkpoint_scope: record
+            .active_task
+            .as_ref()
+            .and_then(|task| task_state_string(task, "latest_checkpoint_scope")),
+        latest_checkpoint_restore_command: record
+            .active_task
+            .as_ref()
+            .and_then(|task| task_state_string(task, "latest_checkpoint_restore_command")),
         latest_changed_files: record.active_task.as_ref().and_then(|task| {
             task.context.state.get("latest_changed_files").and_then(|value| {
                 value.as_array().map(|items| {
@@ -1034,6 +1046,11 @@ fn suggested_next_command(record: &ActiveSessionRecord) -> Option<String> {
         return Some("boundline capture --goal <narrower goal>".to_string());
     }
 
+    let latest_checkpoint_restore_command = record
+        .active_task
+        .as_ref()
+        .and_then(|task| task_state_string(task, "latest_checkpoint_restore_command"));
+
     if let Some(next_command) = delegation_next_command(record) {
         return Some(next_command);
     }
@@ -1049,7 +1066,12 @@ fn suggested_next_command(record: &ActiveSessionRecord) -> Option<String> {
     {
         match governance_state.as_str() {
             "awaiting_approval" => return Some("boundline status".to_string()),
-            "blocked" | "failed" => return Some("boundline inspect".to_string()),
+            "blocked" | "failed" => {
+                if let Some(restore_command) = latest_checkpoint_restore_command.clone() {
+                    return Some(restore_command);
+                }
+                return Some("boundline inspect".to_string());
+            }
             _ => {}
         }
     }
@@ -1074,7 +1096,9 @@ fn suggested_next_command(record: &ActiveSessionRecord) -> Option<String> {
         SessionStatus::Succeeded
         | SessionStatus::Failed
         | SessionStatus::Exhausted
-        | SessionStatus::Aborted => Some("boundline inspect".to_string()),
+        | SessionStatus::Aborted => {
+            latest_checkpoint_restore_command.or_else(|| Some("boundline inspect".to_string()))
+        }
         SessionStatus::Invalid => Some("boundline start".to_string()),
     }
 }
@@ -2165,6 +2189,36 @@ fn red_to_green_addition() {
         let mut ready_run_record = pending_flow_record.clone();
         ready_run_record.goal_plan.as_mut().unwrap().confirm().unwrap();
         assert_eq!(suggested_next_command(&ready_run_record), Some("boundline run".to_string()));
+
+        let checkpoint_plan = crate::domain::plan::Plan::new(vec![
+            crate::domain::step::Step::tool("verify", "cargo", json!({})).unwrap(),
+        ])
+        .unwrap();
+        let checkpoint_request = crate::domain::task::TaskRunRequest {
+            goal: "Fix the failing add test".to_string(),
+            input: json!({}),
+            session_id: "session-next".to_string(),
+            workspace_ref: "/tmp/workspace".to_string(),
+            limits: crate::domain::limits::RunLimits::default(),
+            initial_context: None,
+        };
+        let mut checkpoint_task =
+            Task::new("task-checkpoint", &checkpoint_request, checkpoint_plan).unwrap();
+        checkpoint_task.context.state.insert(
+            "latest_checkpoint_restore_command".to_string(),
+            json!("boundline checkpoint restore checkpoint-123 --workspace /tmp/workspace"),
+        );
+        let mut failed_checkpoint_record = base_record.clone();
+        failed_checkpoint_record.goal_plan = None;
+        failed_checkpoint_record.active_task = Some(checkpoint_task);
+        failed_checkpoint_record.latest_status = SessionStatus::Failed;
+        assert_eq!(
+            suggested_next_command(&failed_checkpoint_record),
+            Some(
+                "boundline checkpoint restore checkpoint-123 --workspace /tmp/workspace"
+                    .to_string(),
+            )
+        );
 
         let clarification_error = SessionCommandError::ClarificationRequired {
             headline: "bounded context required before planning".to_string(),

@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod checkpoint_store;
 pub mod cluster_store;
 pub mod config_store;
 pub mod governance_runtime;

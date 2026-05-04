@@ -2,7 +2,7 @@
 
 This folder documents Boundline usage from Gemini CLI surfaces.
 
-Gemini remains CLI-first in `0.40.0`, but it follows the same primary Boundline
+Gemini remains CLI-first in `0.41.0`, but it follows the same primary Boundline
 workflow surface used by the other assistants.
 
 compatibility remains an explicit subordinate route.
@@ -46,3 +46,7 @@ When Canon-grounded memory is surfaced through those context fields or through
 `governance_next_action`, preserve the governed artifact refs, credibility, and
 stale-memory wording exactly: those fields can be the authoritative stop
 condition for the next bounded action.
+When `latest_checkpoint_id`, `latest_checkpoint_scope`, or
+`latest_checkpoint_restore_command` appear, preserve them exactly and treat the
+reported restore command as the authoritative rewind path for failed or blocked
+mutating work.

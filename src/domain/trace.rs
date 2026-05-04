@@ -20,6 +20,7 @@ pub fn current_timestamp_millis() -> u64 {
 pub enum TraceEventType {
     TaskStarted,
     FlowSelected,
+    CheckpointCreated,
     StageTransitioned,
     StepStarted,
     StepCompleted,
@@ -157,6 +158,12 @@ pub struct TraceSummaryView {
     pub failure_evidence: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub adaptive_evidence: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_checkpoint_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_checkpoint_scope: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_checkpoint_restore_command: Option<String>,
     pub executed_steps: Vec<TraceStepSummary>,
     pub recovery_events: Vec<TraceRecoveryEvent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -203,6 +210,9 @@ impl Default for TraceSummaryView {
             decision_timeline: Vec::new(),
             failure_evidence: Vec::new(),
             adaptive_evidence: Vec::new(),
+            latest_checkpoint_id: None,
+            latest_checkpoint_scope: None,
+            latest_checkpoint_restore_command: None,
             executed_steps: Vec::new(),
             recovery_events: Vec::new(),
             governance_timeline: Vec::new(),
