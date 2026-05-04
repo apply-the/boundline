@@ -9,10 +9,11 @@ fastest credible path from installation to a bounded Boundline session.
 
 Use the release-aligned path that matches your machine:
 
-- macOS via Homebrew formula once the release bundle checksums are published:
+- macOS via Homebrew tap:
 
 ```bash
-brew install https://raw.githubusercontent.com/apply-the/boundline/v0.40.0/distribution/homebrew/Formula/boundline.rb
+brew tap apply-the/boundline
+brew install boundline
 ```
 
 - Windows via winget after the release manifest is published:
@@ -34,10 +35,6 @@ For updates, stay on the same path:
 - Homebrew: `brew upgrade boundline`
 - winget: `winget upgrade ApplyThe.Boundline`
 - Source fallback: `cargo install --path . --force`
-
-If a bundled channel for the current release is not published yet, use the
-source fallback temporarily and treat the bundled path as not ready rather than
-guessing.
 
 ### 2. Verify The Install
 
@@ -80,6 +77,12 @@ boundline inspect --workspace <workspace>
 
 That is the main product path: `start -> capture -> plan -> confirm -> run ->
 status -> inspect`.
+
+If a mutating `run` or `step` stops in a failed or blocked state, read the
+reported `latest_checkpoint_id`, `latest_checkpoint_scope`, and
+`latest_checkpoint_restore_command` literally. Use `boundline checkpoint list`
+to inspect the captured rollback points and `boundline checkpoint restore <id>`
+only when you intentionally want to rewind the bounded workspace slice.
 
 Read planning output literally before you continue:
 
@@ -173,7 +176,7 @@ Canon is not the product entrypoint. Boundline still owns orchestration, session
 state, planning, execution, and validation. Canon matters only when you enable
 governed routes, governed approvals, or governed artifact capture.
 
-The current Boundline release documents Canon `0.39.0` as the supported CLI target
+The current Boundline release documents Canon `0.40.0` as the supported CLI target
 for the machine-facing `canon governance start|refresh|capabilities --json`
 `v1` adapter surface. Install diagnostics keep that boundary explicit after
 install or upgrade.
@@ -196,6 +199,7 @@ If you need the deeper model rather than the first-run path, continue with:
 | `boundline flow` | Select `bug-fix`, `change`, or `delivery` |
 | `boundline plan` | Build one evidence-driven goal-plan proposal from the active session when the negotiated packet is credible and the assembled context pack is bounded enough to support planning |
 | `boundline step` | Execute one step of the current task |
+| `boundline checkpoint list|restore` | Inspect or restore the local rollback points created before mutating steps |
 | `boundline run` | Execute the current task until completion or operator intervention, or bootstrap the native route directly from `--goal`; add `--compatibility` for manifest-backed execution |
 | `boundline status` | Show the current session snapshot, including negotiated follow-up cues and context-pack credibility |
 | `boundline next` | Show the CLI-reported next action from the active negotiated boundary and current context state |

@@ -19,9 +19,21 @@ recorded workspace version.
 
 Delivered specs:
 
-- None recorded after `0.40.0`
+- None recorded after `0.41.0`
 
 Highlights:
+
+## [0.41.0] - 2026-05-04
+
+Delivered specs:
+
+- `041` - Checkpoint Rewind
+
+Highlights:
+
+- Create one implicit bounded checkpoint before mutating `run` and `step`, persist rollback manifests under `.boundline/checkpoints/`, and keep restore semantics explicit for pre-existing, newly created, deleted, and already-modified files.
+- Add `boundline checkpoint list` and `boundline checkpoint restore <id>` with safe refusal by default, `--force` override, and grouped clustered restore through the primary workspace.
+- Project `latest_checkpoint_id`, `latest_checkpoint_scope`, and `latest_checkpoint_restore_command` through `run`, `status`, `next`, and `inspect`, while refounding the Rust workspace around `boundline-core`, `boundline-adapters`, and `boundline-cli`.
 
 ## [0.40.0] - 2026-05-03
 

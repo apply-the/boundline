@@ -1,6 +1,9 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+use crate::adapters::checkpoint_store::{
+    CheckpointCaptureRequest, CheckpointStoreError, FileCheckpointStore,
+};
 use crate::adapters::governance_runtime::{
     CanonCliRuntime, GovernanceRequestKind, GovernanceRuntime, GovernanceRuntimeRequest,
     LocalGovernanceRuntime,
@@ -13,6 +16,7 @@ use crate::adapters::cluster_store::FileClusterStore;
 use crate::adapters::config_store::FileConfigStore;
 use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
 use crate::adapters::trace_store::{FileTraceStore, TraceStore, TraceStoreError};
+use crate::domain::checkpoint::CheckpointAuthorityScope;
 use crate::domain::cluster::{
     ClusterDeliveryStory, ClusterRouteOwner, ClusterSessionProjection, ClusteredExecutionCondition,
     ClusteredExecutionKind, WorkspaceParticipationKind, WorkspaceParticipationRecord,
@@ -37,7 +41,7 @@ use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::session::{
     ActiveSessionRecord, ContinuityAuthority, DelegationContinuityMode, DelegationContinuityState,
     DelegationPacket, DelegationPacketKind, DelegationPacketState, DelegationStatusView,
-    SessionStatus,
+    SessionCommand, SessionStatus,
 };
 use crate::domain::step::{
     ErrorInfo, ExecutionStatus, Recoverability, Step, StepAttempt, StepExecutionRequest,
@@ -68,6 +72,7 @@ use crate::orchestrator::terminal::{build_terminal_reason, task_status_for_condi
 #[derive(Debug, Clone)]
 pub struct SessionRuntime {
     workspace_ref: PathBuf,
+    checkpoint_store: FileCheckpointStore,
     session_store: FileSessionStore,
     trace_store: FileTraceStore,
 }
@@ -76,6 +81,7 @@ impl SessionRuntime {
     pub fn for_workspace(workspace_ref: impl AsRef<Path>) -> Self {
         let workspace_ref = workspace_ref.as_ref().to_path_buf();
         Self {
+            checkpoint_store: FileCheckpointStore::for_workspace(&workspace_ref),
             session_store: FileSessionStore::for_workspace(&workspace_ref),
             trace_store: FileTraceStore::for_workspace(&workspace_ref),
             workspace_ref,
@@ -88,6 +94,10 @@ impl SessionRuntime {
 
     pub fn session_store(&self) -> &FileSessionStore {
         &self.session_store
+    }
+
+    pub fn checkpoint_store(&self) -> &FileCheckpointStore {
+        &self.checkpoint_store
     }
 
     pub fn trace_store(&self) -> &FileTraceStore {
@@ -467,8 +477,13 @@ impl SessionRuntime {
         {
             self.ensure_flow_selected_compatibility_task(session)?;
         }
+        let checkpoint_projection =
+            self.prepare_checkpoint_for_mutation(session, SessionCommand::Step)?;
         let runtime = self.build_runtime(session)?;
         let _ = self.execute_single_step(session, &runtime)?;
+        if let Some(projection) = checkpoint_projection.as_ref() {
+            self.refresh_checkpoint_projection(projection)?;
+        }
         Ok(())
     }
 
@@ -530,14 +545,23 @@ impl SessionRuntime {
         &self,
         session: &mut ActiveSessionRecord,
     ) -> Result<TaskRunResponse, SessionRuntimeError> {
+        let checkpoint_projection =
+            self.prepare_checkpoint_for_mutation(session, SessionCommand::Run)?;
         if session.goal_plan.is_some() {
-            return self.run_native_goal_plan(session);
+            let response = self.run_native_goal_plan(session, checkpoint_projection.clone())?;
+            if let Some(projection) = checkpoint_projection.as_ref() {
+                self.refresh_checkpoint_projection(projection)?;
+            }
+            return Ok(response);
         }
 
         let runtime = self.build_runtime(session)?;
 
         loop {
             if let Some(response) = self.execute_single_step(session, &runtime)? {
+                if let Some(projection) = checkpoint_projection.as_ref() {
+                    self.refresh_checkpoint_projection(projection)?;
+                }
                 return Ok(response);
             }
         }
@@ -721,6 +745,7 @@ impl SessionRuntime {
     fn run_native_goal_plan(
         &self,
         session: &mut ActiveSessionRecord,
+        checkpoint_projection: Option<CheckpointProjectionState>,
     ) -> Result<TaskRunResponse, SessionRuntimeError> {
         let Some(mut goal_plan) = session.goal_plan.clone() else {
             return Err(SessionRuntimeError::MissingGoalPlan);
@@ -756,6 +781,7 @@ impl SessionRuntime {
                 Vec::new(),
                 trace,
                 NativePersistenceInput {
+                    checkpoint_projection: checkpoint_projection.clone(),
                     terminal_reason: reason,
                     limits: RunLimits::default(),
                     record_terminal_event: true,
@@ -783,6 +809,7 @@ impl SessionRuntime {
                 Vec::new(),
                 trace,
                 NativePersistenceInput {
+                    checkpoint_projection: checkpoint_projection.clone(),
                     terminal_reason: reason,
                     limits: RunLimits::default(),
                     record_terminal_event: true,
@@ -848,6 +875,7 @@ impl SessionRuntime {
             decisions,
             trace,
             NativePersistenceInput {
+                checkpoint_projection,
                 terminal_reason: reason,
                 limits: runtime.profile.limits.clone(),
                 record_terminal_event: false,
@@ -906,9 +934,21 @@ impl SessionRuntime {
             payload.insert("terminal_status".to_string(), json!(terminal_status));
             payload.insert("terminal_reason".to_string(), json!(terminal_reason.clone()));
         }
+        if let Some(checkpoint_projection) = input.checkpoint_projection.as_ref() {
+            trace.record_event(
+                TraceEventType::CheckpointCreated,
+                None,
+                goal_plan.proposal_revision,
+                checkpoint_event_payload(checkpoint_projection),
+            );
+        }
         trace.finalize(terminal_status, terminal_reason.clone());
         let trace_location = self.persist_trace(&mut trace)?;
-        let final_context = self.build_native_task_context(session, input.limits, &goal_plan)?;
+        let mut final_context =
+            self.build_native_task_context(session, input.limits, &goal_plan)?;
+        if let Some(checkpoint_projection) = input.checkpoint_projection.as_ref() {
+            apply_checkpoint_projection_to_context(&mut final_context, checkpoint_projection);
+        }
         let task_id = goal_plan.plan_id.clone();
         let plan_revision = goal_plan.proposal_revision;
         let projected_task = match input.projected_task {
@@ -1688,6 +1728,20 @@ impl SessionRuntime {
         session.latest_terminal_reason = None;
 
         let mut trace = self.load_or_create_trace(session, &task)?;
+        if let Some(checkpoint_projection) = checkpoint_projection_from_context(&task.context)
+            && !trace.events.iter().any(|event| {
+                event.event_type == TraceEventType::CheckpointCreated
+                    && event.payload.get("checkpoint_id").and_then(Value::as_str)
+                        == Some(checkpoint_projection.checkpoint_id.as_str())
+            })
+        {
+            trace.record_event(
+                TraceEventType::CheckpointCreated,
+                None,
+                task.plan.revision,
+                checkpoint_event_payload(&checkpoint_projection),
+            );
+        }
         let response = self.advance_task(session, &mut task, &mut trace, runtime)?;
         session.active_task = Some(task);
 
@@ -2964,6 +3018,274 @@ impl SessionRuntime {
     }
 }
 
+const LATEST_CHECKPOINT_ID_KEY: &str = "latest_checkpoint_id";
+const LATEST_CHECKPOINT_SCOPE_KEY: &str = "latest_checkpoint_scope";
+const LATEST_CHECKPOINT_RESTORE_COMMAND_KEY: &str = "latest_checkpoint_restore_command";
+const LATEST_CHECKPOINT_WORKSPACES_KEY: &str = "latest_checkpoint_workspace_refs";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CheckpointCaptureScope {
+    workspace_ref: String,
+    authority_scope: CheckpointAuthorityScope,
+    candidate_paths: Vec<String>,
+    already_modified_paths: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CheckpointProjectionState {
+    checkpoint_id: String,
+    scope: String,
+    restore_command: String,
+    workspace_refs: Vec<String>,
+}
+
+fn checkpoint_event_payload(projection: &CheckpointProjectionState) -> Value {
+    json!({
+        "checkpoint_id": projection.checkpoint_id,
+        "checkpoint_scope": projection.scope,
+        "checkpoint_restore_command": projection.restore_command,
+        "checkpoint_workspace_refs": projection.workspace_refs,
+    })
+}
+
+fn apply_checkpoint_projection_to_context(
+    context: &mut TaskContext,
+    projection: &CheckpointProjectionState,
+) {
+    context.state.insert(LATEST_CHECKPOINT_ID_KEY.to_string(), json!(projection.checkpoint_id));
+    context.state.insert(LATEST_CHECKPOINT_SCOPE_KEY.to_string(), json!(projection.scope));
+    context.state.insert(
+        LATEST_CHECKPOINT_RESTORE_COMMAND_KEY.to_string(),
+        json!(projection.restore_command),
+    );
+    context
+        .state
+        .insert(LATEST_CHECKPOINT_WORKSPACES_KEY.to_string(), json!(projection.workspace_refs));
+}
+
+fn checkpoint_projection_from_context(context: &TaskContext) -> Option<CheckpointProjectionState> {
+    let checkpoint_id = context.state.get(LATEST_CHECKPOINT_ID_KEY)?.as_str()?.to_string();
+    let scope = context.state.get(LATEST_CHECKPOINT_SCOPE_KEY)?.as_str()?.to_string();
+    let restore_command =
+        context.state.get(LATEST_CHECKPOINT_RESTORE_COMMAND_KEY)?.as_str()?.to_string();
+    let workspace_refs = context
+        .state
+        .get(LATEST_CHECKPOINT_WORKSPACES_KEY)
+        .and_then(Value::as_array)
+        .map(|items| {
+            items.iter().filter_map(|item| item.as_str().map(str::to_string)).collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    Some(CheckpointProjectionState { checkpoint_id, scope, restore_command, workspace_refs })
+}
+
+impl SessionRuntime {
+    fn prepare_checkpoint_for_mutation(
+        &self,
+        session: &mut ActiveSessionRecord,
+        trigger_command: SessionCommand,
+    ) -> Result<Option<CheckpointProjectionState>, SessionRuntimeError> {
+        let scopes = self.checkpoint_capture_scopes(session)?;
+        if scopes.is_empty() {
+            return Ok(None);
+        }
+
+        let group_id =
+            (scopes.len() > 1).then(|| format!("checkpoint-group-{}", current_timestamp_millis()));
+        let restore_id = group_id
+            .clone()
+            .unwrap_or_else(|| format!("checkpoint-{}", current_timestamp_millis()));
+        let restore_command = if scopes.len() > 1 {
+            format!(
+                "boundline checkpoint restore {restore_id} --cluster {}",
+                self.workspace_ref.display()
+            )
+        } else {
+            format!(
+                "boundline checkpoint restore {restore_id} --workspace {}",
+                self.workspace_ref.display()
+            )
+        };
+
+        let task_id = session
+            .active_task
+            .as_ref()
+            .map(|task| task.id.clone())
+            .or_else(|| session.goal_plan.as_ref().map(|goal_plan| goal_plan.plan_id.clone()));
+        let step_id = session
+            .active_task
+            .as_ref()
+            .and_then(|task| task.plan.current_step().map(|step| step.id.clone()));
+
+        for (index, scope) in scopes.iter().enumerate() {
+            let checkpoint_id = group_id
+                .clone()
+                .map(|group_id| format!("{group_id}-{index}"))
+                .unwrap_or_else(|| restore_id.clone());
+            FileCheckpointStore::for_workspace(Path::new(&scope.workspace_ref))
+                .capture(CheckpointCaptureRequest {
+                    checkpoint_id,
+                    group_id: group_id.clone(),
+                    workspace_ref: scope.workspace_ref.clone(),
+                    authority_scope: scope.authority_scope,
+                    trigger_command,
+                    session_id: Some(session.session_id.clone()),
+                    task_id: task_id.clone(),
+                    step_id: step_id.clone(),
+                    candidate_paths: scope.candidate_paths.clone(),
+                    already_modified_paths: scope.already_modified_paths.clone(),
+                })
+                .map_err(SessionRuntimeError::CheckpointStore)?;
+        }
+
+        let projection = CheckpointProjectionState {
+            checkpoint_id: restore_id,
+            scope: if scopes.len() > 1 {
+                "cluster".to_string()
+            } else {
+                scopes
+                    .first()
+                    .map(|scope| scope.authority_scope.as_str().to_string())
+                    .unwrap_or_else(|| "workspace".to_string())
+            },
+            restore_command,
+            workspace_refs: scopes.iter().map(|scope| scope.workspace_ref.clone()).collect(),
+        };
+
+        if let Some(task) = session.active_task.as_mut() {
+            apply_checkpoint_projection_to_context(&mut task.context, &projection);
+        }
+
+        Ok(Some(projection))
+    }
+
+    fn refresh_checkpoint_projection(
+        &self,
+        projection: &CheckpointProjectionState,
+    ) -> Result<(), SessionRuntimeError> {
+        if projection.workspace_refs.len() > 1 {
+            for workspace_ref in &projection.workspace_refs {
+                let store = FileCheckpointStore::for_workspace(Path::new(workspace_ref));
+                for manifest in store
+                    .load_group(&projection.checkpoint_id)
+                    .map_err(SessionRuntimeError::CheckpointStore)?
+                {
+                    store
+                        .refresh_observed_state(&manifest.checkpoint_id)
+                        .map_err(SessionRuntimeError::CheckpointStore)?;
+                }
+            }
+        } else if let Some(workspace_ref) = projection.workspace_refs.first() {
+            FileCheckpointStore::for_workspace(Path::new(workspace_ref))
+                .refresh_observed_state(&projection.checkpoint_id)
+                .map_err(SessionRuntimeError::CheckpointStore)?;
+        }
+
+        Ok(())
+    }
+
+    fn checkpoint_capture_scopes(
+        &self,
+        session: &ActiveSessionRecord,
+    ) -> Result<Vec<CheckpointCaptureScope>, SessionRuntimeError> {
+        let cluster_projection = session
+            .active_task
+            .as_ref()
+            .and_then(|task| task.context.cluster_session_projection().ok().flatten())
+            .or_else(|| {
+                session
+                    .goal_plan
+                    .as_ref()
+                    .and_then(|goal_plan| goal_plan.cluster_session_projection.clone())
+            });
+
+        if let Some(cluster_projection) = cluster_projection {
+            let mut scopes = Vec::new();
+            scopes.push(self.build_checkpoint_scope(
+                &cluster_projection.primary_workspace_ref,
+                CheckpointAuthorityScope::ClusterPrimary,
+                session,
+            )?);
+            for member_workspace in &cluster_projection.member_workspace_refs {
+                if member_workspace == &cluster_projection.primary_workspace_ref {
+                    continue;
+                }
+                let scope = self.build_checkpoint_scope(
+                    member_workspace,
+                    CheckpointAuthorityScope::ClusterMember,
+                    session,
+                )?;
+                if !scope.candidate_paths.is_empty() {
+                    scopes.push(scope);
+                }
+            }
+            return Ok(scopes
+                .into_iter()
+                .filter(|scope| !scope.candidate_paths.is_empty())
+                .collect());
+        }
+
+        let scope = self.build_checkpoint_scope(
+            &self.workspace_ref.to_string_lossy(),
+            CheckpointAuthorityScope::Workspace,
+            session,
+        )?;
+        Ok((!scope.candidate_paths.is_empty()).then_some(scope).into_iter().collect())
+    }
+
+    fn build_checkpoint_scope(
+        &self,
+        workspace_ref: &str,
+        authority_scope: CheckpointAuthorityScope,
+        session: &ActiveSessionRecord,
+    ) -> Result<CheckpointCaptureScope, SessionRuntimeError> {
+        let workspace = Path::new(workspace_ref);
+        let mut candidate_paths = load_workspace_execution_profile(workspace)
+            .map(|profile| {
+                profile
+                    .attempts
+                    .into_iter()
+                    .flat_map(|attempt| attempt.changes.into_iter().map(|change| change.path))
+                    .collect::<Vec<_>>()
+            })
+            .or_else(|error| match error {
+                FixtureRuntimeError::MissingExecutionProfile(_) => Ok(Vec::new()),
+                other => Err(SessionRuntimeError::FixtureRuntime(other)),
+            })?;
+
+        let already_modified_paths = session
+            .active_task
+            .as_ref()
+            .and_then(|task| {
+                (task.context.workspace_ref == workspace_ref)
+                    .then(|| task.context.state.get("latest_changed_files"))
+                    .flatten()
+            })
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| item.as_str().map(str::to_string))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        if candidate_paths.is_empty() {
+            candidate_paths = already_modified_paths.clone();
+        }
+
+        candidate_paths.sort();
+        candidate_paths.dedup();
+
+        Ok(CheckpointCaptureScope {
+            workspace_ref: workspace_ref.to_string(),
+            authority_scope,
+            candidate_paths,
+            already_modified_paths,
+        })
+    }
+}
+
 fn effective_assistant_runtimes(
     workspace: Option<&RoutingConfig>,
     cluster: Option<&RoutingConfig>,
@@ -2986,6 +3308,7 @@ fn effective_assistant_runtimes(
 }
 
 struct NativePersistenceInput {
+    checkpoint_projection: Option<CheckpointProjectionState>,
     terminal_reason: TerminalReason,
     limits: RunLimits,
     record_terminal_event: bool,
@@ -3053,6 +3376,8 @@ pub enum SessionRuntimeError {
     SessionStore(#[from] SessionStoreError),
     #[error("trace store operation failed: {0}")]
     TraceStore(#[from] TraceStoreError),
+    #[error("checkpoint store operation failed: {0}")]
+    CheckpointStore(#[from] CheckpointStoreError),
     #[error("active session has no captured goal")]
     MissingGoal,
     #[error(
@@ -3118,6 +3443,7 @@ mod tests {
         SessionRuntime, cluster_task_status_text, cluster_workspace_is_blocked,
         effective_assistant_runtimes, is_governance_trace_event, session_status_for_task_status,
     };
+    use crate::adapters::checkpoint_store::FileCheckpointStore;
     use crate::adapters::trace_store::TraceStore;
     use crate::domain::brief::normalize_inputs;
     use crate::domain::cluster::{ClusterSessionProjection, ClusteredExecutionKind};
@@ -3137,7 +3463,7 @@ mod tests {
     use crate::domain::plan::Plan;
     use crate::domain::session::{
         ActiveSessionRecord, ContinuityAuthority, DelegationContinuityMode,
-        DelegationContinuityState, SessionStatus,
+        DelegationContinuityState, SessionCommand, SessionStatus,
     };
     use crate::domain::step::{ExecutionStatus, Recoverability, Step, StepStatus};
     use crate::domain::task::{Task, TaskRunRequest, TaskStatus, TerminalReason};
@@ -4107,6 +4433,7 @@ mod tests {
                 Vec::new(),
                 trace,
                 super::NativePersistenceInput {
+                    checkpoint_projection: None,
                     terminal_reason: TerminalReason::new(
                         TerminalCondition::GoalSatisfied,
                         "cluster goal satisfied",
@@ -4565,5 +4892,128 @@ mod tests {
                 .message
                 .contains("requires an explicit Canon mode")
         );
+    }
+
+    #[test]
+    fn prepare_checkpoint_for_mutation_records_workspace_projection_on_task_context() {
+        let workspace = write_execution_profile_workspace(
+            "boundline-runtime-checkpoint-workspace",
+            vec![ExecutionAttemptDefinition {
+                attempt_id: "fix-add".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left - right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+        );
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::write(workspace.join("src/lib.rs"), "left - right").unwrap();
+
+        let task = decision_task(&workspace.to_string_lossy(), json!({"decision": "checkpoint"}));
+        let mut session = build_session(&workspace, task);
+        let runtime = SessionRuntime::for_workspace(&workspace);
+
+        let projection = runtime
+            .prepare_checkpoint_for_mutation(&mut session, SessionCommand::Step)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(projection.scope, "workspace");
+        assert_eq!(projection.workspace_refs, vec![workspace.to_string_lossy().into_owned()]);
+        assert_eq!(
+            session
+                .active_task
+                .as_ref()
+                .unwrap()
+                .context
+                .state
+                .get("latest_checkpoint_id")
+                .and_then(|value| value.as_str()),
+            Some(projection.checkpoint_id.as_str())
+        );
+
+        fs::write(workspace.join("src/lib.rs"), "left + right").unwrap();
+        runtime.refresh_checkpoint_projection(&projection).unwrap();
+
+        let manifest = runtime.checkpoint_store().load(&projection.checkpoint_id).unwrap().unwrap();
+        assert_ne!(
+            manifest.captured_files[0].captured_fingerprint,
+            manifest.captured_files[0].observed_after_capture_fingerprint
+        );
+    }
+
+    #[test]
+    fn prepare_checkpoint_for_mutation_creates_grouped_cluster_checkpoints() {
+        let primary = write_execution_profile_workspace(
+            "boundline-runtime-checkpoint-primary",
+            vec![ExecutionAttemptDefinition {
+                attempt_id: "fix-primary".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "before".to_string(),
+                    replace: "after".to_string(),
+                }],
+            }],
+        );
+        let member = write_execution_profile_workspace(
+            "boundline-runtime-checkpoint-member",
+            vec![ExecutionAttemptDefinition {
+                attempt_id: "fix-member".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/member.rs".to_string(),
+                    find: "before".to_string(),
+                    replace: "after".to_string(),
+                }],
+            }],
+        );
+        fs::create_dir_all(primary.join("src")).unwrap();
+        fs::create_dir_all(member.join("src")).unwrap();
+        fs::write(primary.join("src/lib.rs"), "before").unwrap();
+        fs::write(member.join("src/member.rs"), "before").unwrap();
+
+        let mut task =
+            decision_task(&primary.to_string_lossy(), json!({"decision": "cluster-checkpoint"}));
+        task.context
+            .set_cluster_session_projection(&ClusterSessionProjection {
+                cluster_id: "cluster-a".to_string(),
+                primary_workspace_ref: primary.to_string_lossy().into_owned(),
+                member_workspace_refs: vec![
+                    primary.to_string_lossy().into_owned(),
+                    member.to_string_lossy().into_owned(),
+                ],
+                started_from_command: "run".to_string(),
+                updated_at: 1,
+            })
+            .unwrap();
+        let mut session = build_session(&primary, task);
+        let runtime = SessionRuntime::for_workspace(&primary);
+
+        let projection = runtime
+            .prepare_checkpoint_for_mutation(&mut session, SessionCommand::Run)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(projection.scope, "cluster");
+        assert_eq!(projection.workspace_refs.len(), 2);
+
+        fs::write(primary.join("src/lib.rs"), "after").unwrap();
+        fs::write(member.join("src/member.rs"), "after").unwrap();
+        runtime.refresh_checkpoint_projection(&projection).unwrap();
+
+        let primary_manifests = FileCheckpointStore::for_workspace(&primary)
+            .load_group(&projection.checkpoint_id)
+            .unwrap();
+        let member_manifests = FileCheckpointStore::for_workspace(&member)
+            .load_group(&projection.checkpoint_id)
+            .unwrap();
+        assert_eq!(primary_manifests.len(), 1);
+        assert_eq!(member_manifests.len(), 1);
     }
 }

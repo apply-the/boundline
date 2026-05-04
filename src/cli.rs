@@ -10,15 +10,9 @@ use crate::domain::domain_templates::{DomainFamily, ExternalContextKind};
 use crate::domain::governance::GovernanceRuntimeKind;
 use crate::domain::trace::current_timestamp_millis;
 
-pub mod cluster;
-pub mod config;
-pub mod diagnostics;
-pub mod init;
-pub mod inspect;
-pub mod output;
-pub mod run;
-pub mod session;
-pub mod workflow;
+use super::{
+    checkpoint, cluster, config, diagnostics, init, inspect, output, run, session, workflow,
+};
 
 #[derive(Debug, Parser)]
 #[command(name = "boundline", about = "Local delivery orchestrator for bounded engineering work")]
@@ -30,6 +24,7 @@ pub struct Cli {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CommandName {
     Doctor,
+    Checkpoint,
     Run,
     Workflow,
     Inspect,
@@ -49,6 +44,7 @@ impl CommandName {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Doctor => "doctor",
+            Self::Checkpoint => "checkpoint",
             Self::Run => "run",
             Self::Workflow => "workflow",
             Self::Inspect => "inspect",
@@ -164,6 +160,10 @@ pub enum DeveloperCommand {
         #[command(subcommand)]
         command: WorkflowSubcommand,
     },
+    Checkpoint {
+        #[command(subcommand)]
+        command: CheckpointSubcommand,
+    },
     Inspect {
         #[arg(long)]
         trace: Option<PathBuf>,
@@ -244,6 +244,25 @@ pub enum WorkflowSubcommand {
     Inspect {
         #[arg(long)]
         workspace: Option<PathBuf>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum CheckpointSubcommand {
+    List {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long)]
+        cluster: Option<PathBuf>,
+    },
+    Restore {
+        checkpoint_id: String,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long)]
+        cluster: Option<PathBuf>,
+        #[arg(long)]
+        force: bool,
     },
 }
 
@@ -431,6 +450,7 @@ impl DeveloperCommand {
     pub const fn name(&self) -> CommandName {
         match self {
             Self::Doctor { .. } => CommandName::Doctor,
+            Self::Checkpoint { .. } => CommandName::Checkpoint,
             Self::Start { .. } => CommandName::Start,
             Self::Capture { .. } => CommandName::Capture,
             Self::Flow { .. } => CommandName::Flow,
@@ -481,6 +501,23 @@ impl DeveloperCommandSession {
                     .as_ref()
                     .or(cluster.as_ref())
                     .map(|path| path.to_string_lossy().into_owned()),
+                install_check: false,
+                goal: None,
+                trace_ref: None,
+                started_at: current_timestamp_millis(),
+                completed_at: None,
+                exit_status: None,
+                trace_location: None,
+            },
+            DeveloperCommand::Checkpoint { command } => Self {
+                command_name: CommandName::Checkpoint,
+                workspace_ref: match command {
+                    CheckpointSubcommand::List { workspace, cluster }
+                    | CheckpointSubcommand::Restore { workspace, cluster, .. } => workspace
+                        .as_ref()
+                        .or(cluster.as_ref())
+                        .map(|path| path.to_string_lossy().into_owned()),
+                },
                 install_check: false,
                 goal: None,
                 trace_ref: None,
@@ -729,6 +766,7 @@ impl DeveloperCommandSession {
                 }
             }
             CommandName::Start
+            | CommandName::Checkpoint
             | CommandName::Capture
             | CommandName::Flow
             | CommandName::Plan
@@ -997,6 +1035,41 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                     Err(error) => DispatchOutcome {
                         exit_status: CommandExitStatus::NonSuccess,
                         output: format!("workflow error: {error}"),
+                        trace_location: None,
+                    },
+                }
+            }
+        },
+        DeveloperCommand::Checkpoint { command } => match command {
+            CheckpointSubcommand::List { workspace, cluster } => {
+                match checkpoint::execute_list(workspace.as_deref(), cluster.as_deref()) {
+                    Ok(report) => DispatchOutcome {
+                        exit_status: report.exit_status,
+                        output: report.terminal_output,
+                        trace_location: None,
+                    },
+                    Err(error) => DispatchOutcome {
+                        exit_status: CommandExitStatus::NonSuccess,
+                        output: format!("checkpoint error: {error}"),
+                        trace_location: None,
+                    },
+                }
+            }
+            CheckpointSubcommand::Restore { checkpoint_id, workspace, cluster, force } => {
+                match checkpoint::execute_restore(
+                    checkpoint_id,
+                    workspace.as_deref(),
+                    cluster.as_deref(),
+                    *force,
+                ) {
+                    Ok(report) => DispatchOutcome {
+                        exit_status: report.exit_status,
+                        output: report.terminal_output,
+                        trace_location: None,
+                    },
+                    Err(error) => DispatchOutcome {
+                        exit_status: CommandExitStatus::NonSuccess,
+                        output: format!("checkpoint error: {error}"),
                         trace_location: None,
                     },
                 }
@@ -1404,8 +1477,8 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        ClusterSubcommand, CommandExitStatus, CommandName, ConfigSubcommand, DeveloperCommand,
-        WorkflowSubcommand, dispatch,
+        CheckpointSubcommand, ClusterSubcommand, CommandExitStatus, CommandName, ConfigSubcommand,
+        DeveloperCommand, DeveloperCommandSession, WorkflowSubcommand, dispatch,
     };
     use crate::domain::configuration::{
         CapabilityState, ConfigShowScope, ConfigWriteScope, EffortFallbackPolicy, EffortLevel,
@@ -1630,6 +1703,7 @@ fn red_to_green_addition() {
     #[test]
     fn command_names_and_dispatch_cover_remaining_command_variants() {
         for (name, expected) in [
+            (CommandName::Checkpoint, "checkpoint"),
             (CommandName::Workflow, "workflow"),
             (CommandName::Inspect, "inspect"),
             (CommandName::Init, "init"),
@@ -1642,6 +1716,15 @@ fn red_to_green_addition() {
 
         let workspace = temp_workspace("boundline-cli-dispatch-coverage");
         for (command, expected) in [
+            (
+                DeveloperCommand::Checkpoint {
+                    command: CheckpointSubcommand::List {
+                        workspace: Some(workspace.clone()),
+                        cluster: None,
+                    },
+                },
+                CommandName::Checkpoint,
+            ),
             (
                 DeveloperCommand::Workflow {
                     command: WorkflowSubcommand::List { workspace: Some(workspace.clone()) },
@@ -1702,6 +1785,24 @@ fn red_to_green_addition() {
         let file_workspace = workspace.join("workspace-file");
         fs::write(&file_workspace, "not a directory").unwrap();
         let config_workspace = temp_workspace("boundline-cli-config-dispatch");
+
+        let checkpoint_session =
+            DeveloperCommandSession::from_command(&DeveloperCommand::Checkpoint {
+                command: CheckpointSubcommand::List {
+                    workspace: Some(workspace.clone()),
+                    cluster: None,
+                },
+            });
+        assert!(checkpoint_session.validate().is_ok());
+
+        let checkpoint = dispatch(&DeveloperCommand::Checkpoint {
+            command: CheckpointSubcommand::List {
+                workspace: Some(workspace.clone()),
+                cluster: None,
+            },
+        });
+        assert_eq!(checkpoint.exit_status, CommandExitStatus::Succeeded);
+        assert!(checkpoint.output.contains("checkpoint_scope: workspace"), "{}", checkpoint.output);
 
         assert_eq!(
             dispatch(&DeveloperCommand::Doctor {

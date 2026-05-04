@@ -9,7 +9,7 @@ use crate::workspace_fixture::terminal_text;
 
 #[test]
 fn doctor_install_output_includes_version_pairing_and_channel_fields() {
-    let canon_dir = fake_canon_directory("0.39.0");
+    let canon_dir = fake_canon_directory("0.40.0");
     let output = Command::new(env!("CARGO_BIN_EXE_boundline"))
         .args(["doctor", "--install"])
         .env("PATH", &canon_dir)
@@ -20,7 +20,7 @@ fn doctor_install_output_includes_version_pairing_and_channel_fields() {
 
     assert_eq!(output.status.code(), Some(0), "{text}");
     assert!(text.contains("boundline_version:"), "{text}");
-    assert!(text.contains("supported_canon_version: 0.39.0"), "{text}");
+    assert!(text.contains("supported_canon_version: 0.40.0"), "{text}");
     assert!(text.contains("companion_state: already_satisfied"), "{text}");
     assert!(text.contains("channel_candidates:"), "{text}");
 }

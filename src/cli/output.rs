@@ -26,6 +26,16 @@ use crate::domain::step::{StepKind, StepStatus};
 use crate::domain::task::{TaskRunResponse, TaskStatus};
 use crate::domain::trace::{ExecutionTrace, TraceEventType, TraceSummaryView};
 
+fn checkpoint_projection_from_state(
+    state: &serde_json::Map<String, Value>,
+) -> (Option<String>, Option<String>, Option<String>) {
+    (
+        state.get("latest_checkpoint_id").and_then(Value::as_str).map(str::to_string),
+        state.get("latest_checkpoint_scope").and_then(Value::as_str).map(str::to_string),
+        state.get("latest_checkpoint_restore_command").and_then(Value::as_str).map(str::to_string),
+    )
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CommandExitCode {
     Success,
@@ -61,6 +71,7 @@ pub fn unimplemented_message(command: &DeveloperCommand) -> String {
 pub fn command_name(command: &DeveloperCommand) -> &'static str {
     match command {
         DeveloperCommand::Doctor { .. } => "doctor",
+        DeveloperCommand::Checkpoint { .. } => "checkpoint",
         DeveloperCommand::Start { .. } => "start",
         DeveloperCommand::Capture { .. } => "capture",
         DeveloperCommand::Flow { .. } => "flow",
@@ -492,6 +503,19 @@ pub fn render_run_trace(
                         .unwrap_or("unknown-stage");
                     lines.push(format!("flow {flow_name} selected at {stage_id}"));
                 }
+                TraceEventType::CheckpointCreated => {
+                    let checkpoint_id = event
+                        .payload
+                        .get("checkpoint_id")
+                        .and_then(Value::as_str)
+                        .unwrap_or("unknown-checkpoint");
+                    let checkpoint_scope = event
+                        .payload
+                        .get("checkpoint_scope")
+                        .and_then(Value::as_str)
+                        .unwrap_or("workspace");
+                    lines.push(format!("checkpoint {checkpoint_id} created ({checkpoint_scope})"));
+                }
                 TraceEventType::StageTransitioned => {
                     let from_stage = event
                         .payload
@@ -682,6 +706,20 @@ pub fn render_run_trace(
         lines.push(format!("adaptive_exhaustion: {exhaustion_reason}"));
     }
 
+    let (latest_checkpoint_id, latest_checkpoint_scope, latest_checkpoint_restore_command) =
+        checkpoint_projection_from_state(&response.final_context.state);
+    if let Some(latest_checkpoint_id) = latest_checkpoint_id {
+        lines.push(format!("latest_checkpoint_id: {latest_checkpoint_id}"));
+    }
+    if let Some(latest_checkpoint_scope) = latest_checkpoint_scope {
+        lines.push(format!("latest_checkpoint_scope: {latest_checkpoint_scope}"));
+    }
+    if let Some(latest_checkpoint_restore_command) = latest_checkpoint_restore_command {
+        lines.push(format!(
+            "latest_checkpoint_restore_command: {latest_checkpoint_restore_command}"
+        ));
+    }
+
     if let Ok(Some(cluster_story)) = response.final_context.cluster_delivery_story() {
         lines.extend(render_cluster_story_lines(&cluster_story));
     }
@@ -806,6 +844,20 @@ pub fn render_trace_summary(
     if !summary.adaptive_evidence.is_empty() {
         lines.push("adaptive_evidence:".to_string());
         lines.extend(summary.adaptive_evidence.iter().cloned());
+    }
+
+    if let Some(latest_checkpoint_id) = &summary.latest_checkpoint_id {
+        lines.push(format!("latest_checkpoint_id: {latest_checkpoint_id}"));
+    }
+
+    if let Some(latest_checkpoint_scope) = &summary.latest_checkpoint_scope {
+        lines.push(format!("latest_checkpoint_scope: {latest_checkpoint_scope}"));
+    }
+
+    if let Some(latest_checkpoint_restore_command) = &summary.latest_checkpoint_restore_command {
+        lines.push(format!(
+            "latest_checkpoint_restore_command: {latest_checkpoint_restore_command}"
+        ));
     }
 
     for step in &summary.executed_steps {
@@ -1112,6 +1164,20 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
         && !latest_changed_files.is_empty()
     {
         lines.push(format!("latest_changed_files: {}", latest_changed_files.join(", ")));
+    }
+
+    if let Some(latest_checkpoint_id) = &view.latest_checkpoint_id {
+        lines.push(format!("latest_checkpoint_id: {latest_checkpoint_id}"));
+    }
+
+    if let Some(latest_checkpoint_scope) = &view.latest_checkpoint_scope {
+        lines.push(format!("latest_checkpoint_scope: {latest_checkpoint_scope}"));
+    }
+
+    if let Some(latest_checkpoint_restore_command) = &view.latest_checkpoint_restore_command {
+        lines.push(format!(
+            "latest_checkpoint_restore_command: {latest_checkpoint_restore_command}"
+        ));
     }
 
     if let Some(latest_workspace_slice) = &view.latest_workspace_slice {
@@ -2240,7 +2306,7 @@ mod tests {
         render_session_status, render_trace_summary, review_event_line, reviewer_event_line,
         session_execution_condition_parts, trace_execution_condition_parts,
     };
-    use crate::cli::{ClusterSubcommand, ConfigSubcommand, DeveloperCommand};
+    use crate::cli::{CheckpointSubcommand, ClusterSubcommand, ConfigSubcommand, DeveloperCommand};
     use crate::domain::limits::{RunLimits, TerminalCondition};
     use crate::domain::routing_decision::RoutingDecisionProjection;
     use crate::domain::session::{ContinuityAuthority, SessionStatus, SessionStatusView};
@@ -2317,6 +2383,12 @@ mod tests {
                     },
                 },
                 "workflow",
+            ),
+            (
+                DeveloperCommand::Checkpoint {
+                    command: CheckpointSubcommand::List { workspace: None, cluster: None },
+                },
+                "checkpoint",
             ),
             (DeveloperCommand::Inspect { trace: None, workspace: None, cluster: None }, "inspect"),
             (DeveloperCommand::Status { workspace: None, cluster: None }, "status"),
@@ -2413,6 +2485,9 @@ mod tests {
             decision_timeline: Vec::new(),
             failure_evidence: Vec::new(),
             adaptive_evidence: Vec::new(),
+            latest_checkpoint_id: None,
+            latest_checkpoint_scope: None,
+            latest_checkpoint_restore_command: None,
             executed_steps: vec![TraceStepSummary {
                 step_id: "verify".to_string(),
                 step_kind: StepKind::Tool,
@@ -2506,6 +2581,9 @@ mod tests {
             latest_decision_status: None,
             latest_decision_target: None,
             latest_changed_files: Some(Vec::new()),
+            latest_checkpoint_id: None,
+            latest_checkpoint_scope: None,
+            latest_checkpoint_restore_command: None,
             latest_workspace_slice: None,
             latest_selection_headline: None,
             latest_candidate_family: None,
@@ -2745,6 +2823,9 @@ mod tests {
             latest_decision_status: None,
             latest_decision_target: None,
             latest_changed_files: None,
+            latest_checkpoint_id: None,
+            latest_checkpoint_scope: None,
+            latest_checkpoint_restore_command: None,
             latest_workspace_slice: None,
             latest_selection_headline: None,
             latest_candidate_family: None,
@@ -2845,6 +2926,9 @@ mod tests {
             decision_timeline: Vec::new(),
             failure_evidence: Vec::new(),
             adaptive_evidence: Vec::new(),
+            latest_checkpoint_id: None,
+            latest_checkpoint_scope: None,
+            latest_checkpoint_restore_command: None,
             executed_steps: vec![],
             recovery_events: vec![],
             governance_timeline: vec![
@@ -3043,6 +3127,107 @@ mod tests {
         assert!(text.contains("latest_validation_status: failed"), "{text}");
         assert!(text.contains("latest_exhaustion_reason: limits exhausted"), "{text}");
         assert!(text.contains("execution_condition: terminal - limits exhausted"), "{text}");
+    }
+
+    #[test]
+    fn output_surfaces_latest_checkpoint_projection_lines() {
+        let mut trace = ExecutionTrace::new(
+            "task-checkpoint",
+            "session-checkpoint",
+            "Render checkpoint output",
+        );
+        trace.record_event(
+            TraceEventType::CheckpointCreated,
+            None,
+            0,
+            json!({
+                "checkpoint_id": "checkpoint-123",
+                "checkpoint_scope": "workspace",
+                "checkpoint_restore_command": "boundline checkpoint restore checkpoint-123 --workspace /tmp/workspace"
+            }),
+        );
+        trace.terminal_status = Some(TaskStatus::Failed);
+        trace.terminal_reason = Some(TerminalReason::new(
+            TerminalCondition::UnrecoverableError,
+            "checkpoint required",
+            None,
+        ));
+        trace.ended_at = Some(trace.started_at + 1);
+
+        let mut final_state = serde_json::Map::new();
+        final_state.insert("latest_checkpoint_id".to_string(), json!("checkpoint-123"));
+        final_state.insert("latest_checkpoint_scope".to_string(), json!("workspace"));
+        final_state.insert(
+            "latest_checkpoint_restore_command".to_string(),
+            json!("boundline checkpoint restore checkpoint-123 --workspace /tmp/workspace"),
+        );
+        let response = TaskRunResponse {
+            task_id: "task-checkpoint".to_string(),
+            terminal_status: TaskStatus::Failed,
+            terminal_reason: TerminalReason::new(
+                TerminalCondition::UnrecoverableError,
+                "checkpoint required",
+                None,
+            ),
+            final_context: TaskContext::new(
+                "session-checkpoint",
+                "/tmp/workspace",
+                RunLimits::default(),
+                final_state,
+            ),
+            plan_revision: 0,
+            trace_location: "/tmp/workspace/.boundline/traces/task-checkpoint.json".to_string(),
+        };
+
+        let run_text = render_run_trace("run", Some(&trace), &response, "/boundline-next");
+        assert!(run_text.contains("checkpoint checkpoint-123 created (workspace)"), "{run_text}");
+        assert!(run_text.contains("latest_checkpoint_id: checkpoint-123"), "{run_text}");
+        assert!(run_text.contains("latest_checkpoint_scope: workspace"), "{run_text}");
+        assert!(
+            run_text.contains(
+                "latest_checkpoint_restore_command: boundline checkpoint restore checkpoint-123 --workspace /tmp/workspace"
+            ),
+            "{run_text}"
+        );
+
+        let session_text = render_session_status(&SessionStatusView {
+            session_id: "session-checkpoint".to_string(),
+            workspace_ref: "/tmp/workspace".to_string(),
+            latest_checkpoint_id: Some("checkpoint-123".to_string()),
+            latest_checkpoint_scope: Some("workspace".to_string()),
+            latest_checkpoint_restore_command: Some(
+                "boundline checkpoint restore checkpoint-123 --workspace /tmp/workspace"
+                    .to_string(),
+            ),
+            explanation: "checkpoint available".to_string(),
+            ..SessionStatusView::default()
+        });
+        assert!(session_text.contains("latest_checkpoint_id: checkpoint-123"), "{session_text}");
+        assert!(session_text.contains("latest_checkpoint_scope: workspace"), "{session_text}");
+
+        let trace_text = render_trace_summary(
+            &TraceSummaryView {
+                trace_ref: "/tmp/workspace/.boundline/traces/task-checkpoint.json".to_string(),
+                goal: "Render checkpoint output".to_string(),
+                latest_checkpoint_id: Some("checkpoint-123".to_string()),
+                latest_checkpoint_scope: Some("workspace".to_string()),
+                latest_checkpoint_restore_command: Some(
+                    "boundline checkpoint restore checkpoint-123 --workspace /tmp/workspace"
+                        .to_string(),
+                ),
+                terminal_status: TaskStatus::Failed,
+                terminal_reason: TerminalReason::new(
+                    TerminalCondition::UnrecoverableError,
+                    "checkpoint required",
+                    None,
+                ),
+                ..TraceSummaryView::default()
+            },
+            "latest-workspace-trace",
+            "/boundline-next",
+        );
+        assert!(trace_text.contains("latest_checkpoint_id: checkpoint-123"), "{trace_text}");
+        assert!(trace_text.contains("latest_checkpoint_scope: workspace"), "{trace_text}");
     }
 
     #[test]

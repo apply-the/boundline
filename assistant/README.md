@@ -4,7 +4,7 @@ This directory contains Markdown-based commands to run `boundline` from various 
 
 The primary delivery surface is session-native: `start -> capture -> plan -> run -> status -> next -> inspect` against `<workspace>/.boundline/session.json` and `<workspace>/.boundline/traces/`.
 
-In `0.40.0`, assistants should treat installation verification as the first
+In `0.41.0`, assistants should treat installation verification as the first
 boundary in a new environment: prefer the README quick path, run
 `boundline doctor --install` before workspace commands, and only then move into the
 session-native workflow.
@@ -17,10 +17,10 @@ Keep the product boundary explicit in assistant narration:
 	`docs/getting-started.md`; use `docs/architecture.md` only for the second
 	read level.
 
-In `0.40.0`, workflows and direct runs are primary surfaces of the same Boundline
+In `0.41.0`, workflows and direct runs are primary surfaces of the same Boundline
 product story, while compatibility remains explicit and subordinate.
 
-In `0.40.0`, direct `run --goal` still bootstraps that native session path by
+In `0.41.0`, direct `run --goal` still bootstraps that native session path by
 default, while `run --compatibility --goal ...` remains the explicit
 execution-profile route. `capture` persists `negotiation_goal_summary`,
 `negotiation_resolution`, and `negotiation_acceptance_boundary` before
@@ -115,6 +115,12 @@ switching ownership to a member workspace. Preserve `cluster_route_owner`,
 `cluster_authoritative_workspace`, `cluster_execution_condition`,
 `cluster_participating_workspaces`, and `cluster_blocking_workspace` when those
 fields appear in CLI output.
+
+In the same release, mutating `run` and `step` create local rollback manifests.
+Preserve `latest_checkpoint_id`, `latest_checkpoint_scope`, and
+`latest_checkpoint_restore_command` exactly when they appear on `run`, `status`,
+`next`, or `inspect`, and prefer the reported restore command over generic
+restart advice when a bounded change is blocked or failed.
 
 Clustered session-native delivery uses the same CLI surface through the primary
 workspace:

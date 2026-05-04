@@ -9,7 +9,7 @@ use crate::workspace_fixture::terminal_text;
 
 #[test]
 fn doctor_install_reports_a_ready_install_when_canon_matches() {
-    let canon_dir = fake_canon_directory("0.39.0");
+    let canon_dir = fake_canon_directory("0.40.0");
     let output = Command::new(env!("CARGO_BIN_EXE_boundline"))
         .args(["doctor", "--install"])
         .env("PATH", &canon_dir)

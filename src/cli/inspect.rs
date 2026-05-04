@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use serde_json::Value;
 use thiserror::Error;
 
 use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
@@ -140,6 +141,9 @@ pub fn summarize_trace(
     let mut decision_timeline: Vec<String> = Vec::new();
     let mut failure_evidence: Vec<String> = Vec::new();
     let mut adaptive_evidence: Vec<String> = Vec::new();
+    let mut latest_checkpoint_id: Option<String> = None;
+    let mut latest_checkpoint_scope: Option<String> = None;
+    let mut latest_checkpoint_restore_command: Option<String> = None;
     let mut latest_governance_state: Option<String> = None;
     let mut delegation: Option<crate::domain::session::DelegationStatusView> = None;
     let mut saw_native_routing_signal = false;
@@ -340,6 +344,26 @@ pub fn summarize_trace(
                     .and_then(|value| serde_json::from_value(value).ok());
             }
             TraceEventType::ReviewerStarted => {}
+            TraceEventType::CheckpointCreated => {
+                latest_checkpoint_id = event
+                    .payload
+                    .get("checkpoint_id")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .or(latest_checkpoint_id);
+                latest_checkpoint_scope = event
+                    .payload
+                    .get("checkpoint_scope")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .or(latest_checkpoint_scope);
+                latest_checkpoint_restore_command = event
+                    .payload
+                    .get("checkpoint_restore_command")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .or(latest_checkpoint_restore_command);
+            }
             TraceEventType::FlowSelected => {
                 recovery_events.push(TraceRecoveryEvent {
                     event_type: event.event_type,
@@ -761,6 +785,9 @@ pub fn summarize_trace(
         decision_timeline,
         failure_evidence,
         adaptive_evidence,
+        latest_checkpoint_id,
+        latest_checkpoint_scope,
+        latest_checkpoint_restore_command,
         executed_steps,
         recovery_events,
         governance_timeline,
@@ -1382,6 +1409,30 @@ mod tests {
         assert_eq!(delegation.packet_id.as_deref(), Some("packet-1"));
         assert_eq!(delegation.target_owner.as_deref(), Some("codex"));
         assert!(delegation.headline.contains("handoff required"));
+    }
+
+    #[test]
+    fn summarize_trace_surfaces_checkpoint_projection() {
+        let mut trace = terminal_trace();
+        trace.record_event(
+            TraceEventType::CheckpointCreated,
+            None,
+            1,
+            json!({
+                "checkpoint_id": "checkpoint-123",
+                "checkpoint_scope": "workspace",
+                "checkpoint_restore_command": "boundline checkpoint restore checkpoint-123 --workspace /tmp/workspace"
+            }),
+        );
+
+        let summary = summarize_trace("/tmp/trace.json", &trace).unwrap();
+
+        assert_eq!(summary.latest_checkpoint_id.as_deref(), Some("checkpoint-123"));
+        assert_eq!(summary.latest_checkpoint_scope.as_deref(), Some("workspace"));
+        assert_eq!(
+            summary.latest_checkpoint_restore_command.as_deref(),
+            Some("boundline checkpoint restore checkpoint-123 --workspace /tmp/workspace")
+        );
     }
 
     #[test]
