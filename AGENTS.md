@@ -61,6 +61,7 @@ Auto-generated from all feature plans. Last updated: 2026-05-03
 - Workspace-local `.boundline/config.toml`, cluster-local `.boundline/cluster.toml`, user-global config at `$XDG_CONFIG_HOME/boundline/config.toml` or `$HOME/.config/boundline/config.toml`, persisted session and trace state under `.boundline/session.json` and `.boundline/traces/`, optional `.boundline/execution.json`, and repository docs plus assistant assets (038-domain-agent-templates)
 - Rust 1.95.0, edition 2024 for the CLI plus repository-managed shell scripts, YAML manifests, and GitHub Actions workflows for release packaging + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`; no new Rust runtime dependencies planned for the first slice (039-distribution-bundling)
 - Existing workspace-local `.boundline/session.json`, `.boundline/traces/`, optional `.boundline/execution.json`, plus new repository-managed distribution metadata under `distribution/` and release automation in `.github/workflows/` (039-distribution-bundling)
+- Workspace-local `.boundline/session.json`, persisted traces under `<workspace>/.boundline/traces/`, optional `.boundline/config.toml`, optional `.boundline/workflows.toml`, optional `.boundline/execution.json`, optional `.canon/` artifacts, and repository-managed docs plus assistant assets (040-context-selection-hardening)
 
 - Rust 1.95.0, edition 2024 + Rust standard library plus `serde`, `serde_json`, `thiserror`, `tracing`, and `uuid` for structured state, trace serialization, error handling, instrumentation, and stable identifiers (001-delivery-orchestrator-core)
 
@@ -89,9 +90,9 @@ Crate versioning follows Semantic Versioning.
 Before 1.0.0, breaking changes MAY occur in minor versions.
 
 ## Recent Changes
+- 040-context-selection-hardening: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, and collections APIs; no new runtime dependencies planned for this slice
 - 039-distribution-bundling: Added Rust 1.95.0, edition 2024 for the CLI plus repository-managed shell scripts, YAML manifests, and GitHub Actions workflows for release packaging + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`; no new Rust runtime dependencies planned for the first slice
 - 038-domain-agent-templates: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, and collections APIs; no new runtime dependencies planned for this slice
-- 037-bounded-delegation: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for this slice
 
 
 <!-- MANUAL ADDITIONS START -->

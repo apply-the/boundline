@@ -2,7 +2,7 @@
 
 This folder documents Boundline usage from Gemini CLI surfaces.
 
-Gemini remains CLI-first in `0.39.0`, but it follows the same primary Boundline
+Gemini remains CLI-first in `0.40.0`, but it follows the same primary Boundline
 workflow surface used by the other assistants.
 
 compatibility remains an explicit subordinate route.

@@ -6,7 +6,7 @@ Canon is downstream from Boundline in this roadmap: Boundline thinks, decides, o
 
 Evolve Boundline into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.39.0
+## Current Status: v0.40.0
 
 Boundline now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -18,7 +18,8 @@ selection, credible governed delivery completion, final product-surface
 closure, explicit bounded context assembly, decision-driven bounded action
 selection, evidence-driven dynamic planning, Canon-grounded structured
 memory, bounded delegated execution, and a release-aligned distribution
-surface in place:
+surface in place, with context selection now hardened around explicit evidence
+anchors instead of keyword-first file scoring:
 
 - Boundline now ships repo-managed Homebrew and winget metadata plus a release
   workflow that assembles Boundline bundles with a compatible Canon companion
@@ -35,6 +36,8 @@ surface in place:
 - `plan` now stops early when `negotiation_resolution` is not yet credible instead of silently inventing a bounded change
 - `plan` now also assembles one explicit bounded context pack from relevant workspace files, authored input, recent traces, negotiated delivery state, and reusable Canon artifacts before proposing a goal plan
 - planning now stops explicitly when that context pack is insufficient or stale instead of relying on ambient workspace state
+- planning now admits primary workspace context from explicit evidence such as authored brief file refs, recent changed files after failed validation, and bounded source/test pairing cues instead of trusting keyword-ranked repository paths alone
+- weak, stale, or contradictory context now stops planning explicitly rather than silently degrading to an ambient repository guess
 - native planning now infers flow, targets, and verification strategy from scored workspace and session evidence instead of relying primarily on goal keywords
 - default `plan` now persists one proposed goal plan with explicit `goal_plan_state`, `goal_plan_revision`, `planning_rationale`, and `verification_strategy`, and `plan --confirm` now makes that proposal executable on the native route
 - repeated `plan` can now supersede the active proposal revision when evidence changes flow, task targets, or verification strategy materially, while `run`, `status`, `next`, and `inspect` keep the revision lineage and blocking reason explicit
@@ -68,20 +71,106 @@ surface in place:
 - session-native commands still accept `--cluster <primary-workspace>` so one authoritative primary-owned session can plan and deliver a bounded change across registered member repositories
 - clustered `run`, `status`, `next`, and `inspect` still surface authoritative workspace, clustered execution condition, participating workspaces, and any blocking member without implying distributed orchestration ownership
 
-## Roadmap Closure In 0.39.0
+## Post-0.40.0 Roadmap
 
-The roadmap is no longer an open-ended backlog. `0.39.0` closes the last named
-macrofeature by carrying the same execution model through installation,
-bundling, update verification, and documentation framing. Boundline now presents
-one coherent operator story across CLI, assistants, workflows, routing,
-capability and effort policy, layered domain standards, governed and external
-context reuse, bounded context assembly, evidence-driven proposal selection,
-governed memory, delegation packets, the runtime loop itself, and the release
-surface users meet before the first run.
+`0.40.0` hardens context selection and makes planning stops more trustworthy,
+but Boundline still needs one safety-focused near-term macrofeature before it
+should deepen autonomous mutation on real repositories: reversible workspace
+checkpoints. That remaining slice still includes the deferred Rust workspace
+refoundation so safety, persistence, and CLI boundaries stop accumulating in a
+single crate.
 
-The governing rule remains simple: Boundline is the product and execution owner.
-Canon stays a bounded, useful governed runtime inside that same delivery path
-rather than drifting back into a parallel tool story.
+The governing rule remains simple: Boundline is still the product and execution
+owner. Canon stays a bounded, useful governed runtime inside that same delivery
+path rather than drifting back into a parallel tool story.
+
+### Program Rules
+
+- the Rust workspace migration remains enabling work for the next safety slice;
+  it is not a standalone cleanup pass
+- Git remains useful but optional; checkpoint and rewind must work in dirty
+  repositories and in workspaces that are not under version control
+- existing primary commands and assistant packs must keep working from the repo
+  root even after the crate layout changes
+- Canon remains downstream and optional except where governed artifacts are
+  already explicitly modeled in the current delivery flow
+
+### Planned in 0.41.0
+
+**Spec**: `041-checkpoint-rewind`
+
+This release remains the next priority because Boundline can now decide and
+plan more credibly, but mutating repositories without local rollback is still a
+safety gap. The same slice is also the right forcing function for migrating the
+project to Rust workspaces so filesystem mutation, state persistence, and CLI
+wiring stop accumulating inside one crate.
+
+Rust workspace refoundation for this slice:
+
+- convert the repository root `Cargo.toml` into a virtual workspace entrypoint
+  with `resolver = "3"`, shared workspace metadata, shared dependencies, and
+  explicit members, matching the Rust workspace structure already used in Canon
+- split the current single crate into at least three members with clear
+  boundaries that map to the current module seams
+- `crates/boundline-core` owns domain models, orchestration, planning,
+  checkpoint metadata, workflow state, and trace projection logic
+- `crates/boundline-adapters` owns filesystem-backed stores, local and Canon
+  governance runtimes, tool and agent adapters, checkpoint persistence, and
+  other process or I/O edges
+- `crates/boundline-cli` owns Clap parsing, command dispatch, operator-facing
+  output, and the shipped `boundline` binary
+- keep the repo-root commands stable so `cargo run --bin boundline -- ...`,
+  `cargo test --workspace`, and assistant command packs continue to work from
+  the workspace root
+
+Checkpoint and rewind scope for this slice:
+
+- create one implicit checkpoint before any bounded `run` or `step` action that
+  can modify files inside a target workspace or cluster member workspace
+- persist checkpoints under `.boundline/checkpoints/` with a manifest that ties
+  each snapshot to the triggering command, session or cluster authority,
+  relevant task or step identity, timestamp, and captured file list
+- record whether each captured path was pre-existing, newly created, deleted,
+  or already modified by the active session so restore semantics stay explicit
+- capture Boundline-owned state files when the same step mutates them, but keep
+  trace history append-only by recording restore events instead of deleting
+  post-checkpoint traces
+- surface `boundline checkpoint list` and `boundline checkpoint restore <id>` as
+  the initial operator commands using the same `--workspace` and
+  `--cluster <primary-workspace>` scoping model as the existing session-native
+  commands; restore should default to safe refusal when it would overwrite
+  unrelated newer edits and require an explicit override to do so
+- surface the latest checkpoint identity and suggested restore command through
+  `run`, `status`, `next`, and `inspect` whenever a mutating step fails or
+  leaves the workspace in a blocked state
+- make clustered execution explicit by storing per-member snapshots locally and
+  linking them under one primary-workspace checkpoint group so restore does not
+  silently desynchronize a cluster session
+
+Release constraints for this slice:
+
+- out of scope: Git-backed rollback, remote checkpoint storage, user-named
+  arbitrary snapshots, snapshotting `.git/` or build outputs, and restoring
+  files outside declared workspace roots
+- update README, roadmap, assistant packs, contributor docs, and validation
+  guidance together so the safety story ships as one coherent operator surface
+- validate with focused unit coverage around checkpoint manifests and restore
+  conflict rules plus integration scenarios for mutating `step`, `run`, and
+  clustered workspaces
+
+### Delivered in 0.40.0
+
+- replace keyword-first context selection with evidence-selected primary inputs
+  so planning can use authored brief file refs, recent changed files after
+  failed validation, and bounded source/test pairing cues instead of relying on
+  path scoring alone
+- keep `context_summary`, `context_credibility`, `context_primary_inputs`,
+  `context_provenance`, and `context_staleness_reason` aligned to the same
+  authoritative planning story while turning weak or contradictory context into
+  an explicit stop condition
+- tighten README, getting-started, architecture, assistant guidance, roadmap,
+  and changelog so the first-run quick path is clearer and the Boundline-versus-
+  Canon boundary stays explicit for the `0.40.0` release
 
 ### Ongoing Compatibility Watch
 

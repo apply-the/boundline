@@ -5,7 +5,8 @@ use uuid::Uuid;
 
 use boundline::domain::goal_plan::GoalPlanStatus;
 use boundline::orchestrator::goal_planner::{
-    GoalPlannerError, PlanningContextSources, build_goal_plan, build_goal_plan_with_sources,
+    AuthoredInputDocument, GoalPlannerError, PlanningContextSources, build_goal_plan,
+    build_goal_plan_with_sources,
 };
 
 fn temp_workspace(prefix: &str) -> PathBuf {
@@ -26,7 +27,20 @@ fn goal_plan_contract_produces_non_empty_tasks_from_workspace() {
     std::fs::create_dir(ws.join("tests")).unwrap();
     std::fs::write(ws.join("tests/basic.rs"), "#[test] fn it_works() {}").unwrap();
 
-    let plan = build_goal_plan("implement a new feature", &ws).unwrap();
+    let plan = build_goal_plan_with_sources(
+        "implement a new feature",
+        &ws,
+        &PlanningContextSources {
+            authored_input_documents: vec![AuthoredInputDocument {
+                label: "brief.md".to_string(),
+                content: "Focus on src/lib.rs and tests/basic.rs for the bounded change"
+                    .to_string(),
+            }],
+            ..PlanningContextSources::default()
+        },
+        None,
+    )
+    .unwrap();
 
     assert_eq!(plan.status, GoalPlanStatus::Draft);
     assert!(!plan.tasks.is_empty());

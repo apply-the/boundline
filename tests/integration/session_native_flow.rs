@@ -201,8 +201,11 @@ fn session_native_full_flow_produces_decisions_and_trace() {
     fs::create_dir_all(ws.join("src")).unwrap();
     fs::write(ws.join("src/lib.rs"), "pub fn add(a: i32, b: i32) -> i32 { a + b }").unwrap();
     fs::create_dir(ws.join("tests")).unwrap();
-    fs::write(ws.join("tests/basic.rs"), "#[test] fn it_works() { assert_eq!(2 + 2, 4); }")
-        .unwrap();
+    fs::write(
+        ws.join("tests/basic.rs"),
+        "use test::add;\n#[test] fn it_works() { assert_eq!(add(2, 2), 4); }",
+    )
+    .unwrap();
 
     // Step 1: Build goal plan from workspace
     let goal = "fix the broken add function";
@@ -458,9 +461,15 @@ fn cli_plan_persists_goal_plan_and_proposed_flow_before_confirmation() {
     )
     .unwrap();
     fs::create_dir_all(ws.join("src")).unwrap();
+    fs::create_dir_all(ws.join("tests")).unwrap();
     fs::write(
         ws.join("src/lib.rs"),
         "pub fn add(left: i32, right: i32) -> i32 {\n    left - right\n}\n",
+    )
+    .unwrap();
+    fs::write(
+        ws.join("tests/addition.rs"),
+        "#[test]\nfn red_to_green_addition() {\n    assert_eq!(snf_cli_plan_proposed::add(2, 2), 4);\n}\n",
     )
     .unwrap();
 
@@ -565,10 +574,20 @@ fn session_native_cli_surfaces_context_projection_on_status_run_and_inspect() {
         "#[test]\nfn it_works() { assert_eq!(snf_cli_context_projection::add(2, 2), 4); }\n",
     )
     .unwrap();
+    let brief = ws.join("brief.md");
+    fs::write(&brief, "Focus on src/context_router.rs for the bounded change.\n").unwrap();
 
     execute_start(Some(&ws)).unwrap();
-    execute_capture(Some(&ws), Some("build a context router"), &[], None, None, None, None)
-        .unwrap();
+    execute_capture(
+        Some(&ws),
+        Some("build a context router"),
+        std::slice::from_ref(&brief),
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
     execute_plan(Some(&ws), None, false, false).unwrap();
     execute_plan(Some(&ws), None, false, true).unwrap();
 
@@ -607,8 +626,17 @@ fn cli_plan_supports_explicit_no_flow_for_native_session() {
     )
     .unwrap();
     fs::create_dir_all(ws.join("src")).unwrap();
-    fs::write(ws.join("src/lib.rs"), "pub fn summarize() -> &'static str {\n    \"todo\"\n}\n")
-        .unwrap();
+    fs::create_dir_all(ws.join("tests")).unwrap();
+    fs::write(
+        ws.join("src/lib.rs"),
+        "pub fn workspace_summary_output() -> &'static str {\n    \"todo\"\n}\n",
+    )
+    .unwrap();
+    fs::write(
+        ws.join("tests/workspace_summary_output.rs"),
+        "#[test]\nfn workspace_summary_output_is_available() {\n    assert_eq!(snf_cli_plan_no_flow::workspace_summary_output(), \"todo\");\n}\n",
+    )
+    .unwrap();
 
     execute_start(Some(&ws)).unwrap();
     execute_capture(

@@ -1,4 +1,6 @@
-use crate::runtime_refoundation::temp_runtime_refoundation_workspace;
+use crate::runtime_refoundation::{
+    temp_runtime_refoundation_no_action_workspace, temp_runtime_refoundation_workspace,
+};
 use crate::workspace_fixture::run_boundline_in;
 use crate::workspace_fixture::terminal_text;
 
@@ -168,7 +170,7 @@ fn status_surfaces_confirmed_and_skipped_flow_states() {
     assert!(confirmed_text.contains("flow_state: confirmed (change)"), "{confirmed_text}");
 
     let skipped_workspace =
-        temp_runtime_refoundation_workspace("runtime-refoundation-skipped-flow-state");
+        temp_runtime_refoundation_no_action_workspace("runtime-refoundation-skipped-flow-state");
 
     assert_eq!(run_boundline_in(&skipped_workspace, &["start"]).status.code(), Some(0));
     assert_eq!(

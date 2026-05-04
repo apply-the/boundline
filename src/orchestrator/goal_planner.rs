@@ -1,5 +1,6 @@
 //! Goal-derived planning from workspace state (feature 013).
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
@@ -32,11 +33,35 @@ use crate::orchestrator::flow_inference::{FlowInferenceContext, infer_flow_from_
 const MAX_SCAN_DEPTH: usize = 4;
 const MAX_CONTEXT_FILES: usize = 5;
 const MAX_SYMBOL_HINTS: usize = 3;
+const GOAL_CUE_STOP_WORDS: &[&str] = &[
+    "fix",
+    "bug",
+    "broken",
+    "failing",
+    "failed",
+    "test",
+    "tests",
+    "change",
+    "update",
+    "implement",
+    "repair",
+    "issue",
+    "work",
+    "goal",
+];
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AuthoredInputDocument {
+    pub label: String,
+    pub content: String,
+}
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PlanningContextSources {
     pub authored_input_summary: Option<String>,
     pub authored_input_sources: Vec<String>,
+    pub authored_input_documents: Vec<AuthoredInputDocument>,
+    pub execution_profile_read_targets: Vec<String>,
     pub negotiation_goal_summary: Option<String>,
     pub negotiation_resolution: Option<String>,
     pub negotiation_acceptance_boundary: Option<String>,
@@ -44,6 +69,8 @@ pub struct PlanningContextSources {
     pub workflow_progress: Option<WorkflowProgressState>,
     pub canon_capability_snapshot: Option<CanonCapabilitySnapshot>,
     pub compacted_canon_memory: Option<CompactedCanonMemory>,
+    pub latest_changed_files: Vec<String>,
+    pub latest_validation_status: Option<String>,
 }
 
 /// Collect workspace signals from the given workspace root.
@@ -146,52 +173,280 @@ fn goal_keywords(goal_text: &str) -> Vec<String> {
     keywords
 }
 
-fn file_relevance_score(path: &str, keywords: &[String]) -> usize {
-    let lower = path.to_lowercase();
-    let mut score = 0;
-    for keyword in keywords {
-        if lower.contains(keyword) {
-            score += 3;
-        }
-    }
-    if lower.starts_with("src/") {
-        score += 2;
-    }
-    if lower.ends_with(".rs") {
-        score += 1;
-    }
-    score
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
+enum ContextEvidenceStrength {
+    #[default]
+    Supporting,
+    Strong,
 }
 
-fn select_relevant_workspace_files(workspace_ref: &Path, goal_text: &str) -> Vec<String> {
-    let keywords = goal_keywords(goal_text);
+#[derive(Debug, Clone, Default)]
+struct ContextCandidate {
+    reference: String,
+    rationale_fragments: BTreeSet<String>,
+    sources: BTreeSet<String>,
+    primary: bool,
+    strength: ContextEvidenceStrength,
+    priority: usize,
+}
+
+fn collect_workspace_file_refs(workspace_ref: &Path) -> Vec<String> {
     let mut files = Vec::new();
     collect_workspace_files(workspace_ref, workspace_ref, 0, &mut files);
+    files
+}
 
-    let mut scored = files
+fn goal_signal_keywords(goal_text: &str) -> Vec<String> {
+    goal_keywords(goal_text)
         .into_iter()
-        .map(|path| {
-            let score = file_relevance_score(&path, &keywords);
-            (path, score)
+        .filter(|keyword| !GOAL_CUE_STOP_WORDS.contains(&keyword.as_str()))
+        .collect()
+}
+
+fn file_name_lower(path: &str) -> Option<String> {
+    Path::new(path).file_name().map(|name| name.to_string_lossy().to_lowercase())
+}
+
+fn normalized_file_stem(path: &str) -> Option<String> {
+    let file_name = Path::new(path).file_stem()?.to_string_lossy().to_lowercase();
+    let stripped = file_name
+        .strip_suffix("_test")
+        .or_else(|| file_name.strip_prefix("test_"))
+        .unwrap_or(&file_name);
+    Some(stripped.to_string())
+}
+
+fn file_matches_goal_cue(path: &str, cue: &str) -> bool {
+    let cue = cue.to_lowercase();
+    file_name_lower(path).is_some_and(|file_name| file_name.contains(&cue))
+        || normalized_file_stem(path).is_some_and(|stem| stem == cue || stem.contains(&cue))
+}
+
+fn file_contents_match_goal_cue(workspace_ref: &Path, path: &str, cue: &str) -> bool {
+    let Ok(contents) = fs::read_to_string(workspace_ref.join(path)) else {
+        return false;
+    };
+    contents
+        .split(|ch: char| !ch.is_ascii_alphanumeric())
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .any(|part| part.eq_ignore_ascii_case(cue))
+}
+
+fn workspace_file_matches_goal_cue(workspace_ref: &Path, path: &str, cue: &str) -> bool {
+    file_matches_goal_cue(path, cue) || file_contents_match_goal_cue(workspace_ref, path, cue)
+}
+
+fn insert_context_candidate(
+    candidates: &mut BTreeMap<String, ContextCandidate>,
+    reference: String,
+    rationale: String,
+    source: String,
+    primary: bool,
+    strength: ContextEvidenceStrength,
+    priority: usize,
+) {
+    let entry = candidates
+        .entry(reference.clone())
+        .or_insert_with(|| ContextCandidate { reference, ..ContextCandidate::default() });
+    entry.rationale_fragments.insert(rationale);
+    entry.sources.insert(source);
+    entry.primary |= primary;
+    entry.priority = entry.priority.max(priority);
+    if strength > entry.strength {
+        entry.strength = strength;
+    }
+}
+
+fn extract_explicit_workspace_refs(workspace_files: &[String], text: &str) -> Vec<String> {
+    let lowered = text.to_lowercase();
+    workspace_files
+        .iter()
+        .filter(|path| {
+            lowered.contains(&path.to_lowercase())
+                || file_name_lower(path).is_some_and(|file_name| lowered.contains(&file_name))
         })
-        .collect::<Vec<_>>();
-    scored.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(&right.0)));
+        .cloned()
+        .collect()
+}
 
-    let mut selected = scored
-        .into_iter()
-        .filter(|(_, score)| *score > 0)
-        .map(|(path, _)| path)
-        .take(MAX_CONTEXT_FILES)
-        .collect::<Vec<_>>();
+fn related_workspace_files(workspace_files: &[String], anchor: &str) -> Vec<String> {
+    let Some(anchor_stem) = normalized_file_stem(anchor) else {
+        return Vec::new();
+    };
+    workspace_files
+        .iter()
+        .filter(|path| {
+            path.starts_with("tests/")
+                || path.starts_with("test/")
+                || path.starts_with("spec/")
+                || path.starts_with("src/")
+        })
+        .filter(|path| normalized_file_stem(path).is_some_and(|stem| stem == anchor_stem))
+        .cloned()
+        .collect()
+}
 
-    if selected.is_empty() {
-        let primary = select_primary_target(workspace_ref);
-        if !primary.is_empty() && workspace_ref.join(&primary).is_file() {
-            selected.push(primary);
+fn select_relevant_workspace_inputs(
+    workspace_ref: &Path,
+    goal_text: &str,
+    context_sources: &PlanningContextSources,
+) -> Vec<ContextInput> {
+    let workspace_files = collect_workspace_file_refs(workspace_ref);
+    let mut candidates: BTreeMap<String, ContextCandidate> = BTreeMap::new();
+
+    for file_ref in extract_explicit_workspace_refs(&workspace_files, goal_text) {
+        insert_context_candidate(
+            &mut candidates,
+            file_ref,
+            "explicitly referenced in the captured goal".to_string(),
+            "goal_text".to_string(),
+            true,
+            ContextEvidenceStrength::Strong,
+            120,
+        );
+    }
+
+    for document in &context_sources.authored_input_documents {
+        for file_ref in extract_explicit_workspace_refs(&workspace_files, &document.content) {
+            insert_context_candidate(
+                &mut candidates,
+                file_ref,
+                format!("explicitly referenced by authored input {}", document.label),
+                format!("authored_input_document:{}", document.label),
+                true,
+                ContextEvidenceStrength::Strong,
+                110,
+            );
         }
     }
 
+    for read_target in &context_sources.execution_profile_read_targets {
+        if workspace_ref.join(read_target).is_file() {
+            insert_context_candidate(
+                &mut candidates,
+                read_target.clone(),
+                "declared in the workspace execution profile read_targets".to_string(),
+                "execution_profile_read_targets".to_string(),
+                true,
+                ContextEvidenceStrength::Strong,
+                108,
+            );
+        }
+    }
+
+    let validation_failed = context_sources.latest_validation_status.as_deref() == Some("failed");
+    for changed_file in &context_sources.latest_changed_files {
+        if workspace_ref.join(changed_file).is_file() {
+            insert_context_candidate(
+                &mut candidates,
+                changed_file.clone(),
+                if validation_failed {
+                    "recently changed before the latest failed validation".to_string()
+                } else {
+                    "recently changed in the active session".to_string()
+                },
+                "latest_changed_files".to_string(),
+                true,
+                ContextEvidenceStrength::Strong,
+                105,
+            );
+
+            if validation_failed {
+                for related in related_workspace_files(&workspace_files, changed_file)
+                    .into_iter()
+                    .filter(|related| related != changed_file)
+                {
+                    let related_is_test =
+                        related.starts_with("tests/") || related.starts_with("test/");
+                    insert_context_candidate(
+                        &mut candidates,
+                        related,
+                        format!(
+                            "paired with recently changed file {} after failed validation",
+                            changed_file
+                        ),
+                        format!("latest_validation_pair:{}", changed_file),
+                        related_is_test,
+                        ContextEvidenceStrength::Supporting,
+                        90,
+                    );
+                }
+            }
+        }
+    }
+
+    for cue in goal_signal_keywords(goal_text) {
+        let source_matches = workspace_files
+            .iter()
+            .filter(|path| {
+                path.starts_with("src/")
+                    && workspace_file_matches_goal_cue(workspace_ref, path, &cue)
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        let test_matches = workspace_files
+            .iter()
+            .filter(|path| {
+                (path.starts_with("tests/")
+                    || path.starts_with("test/")
+                    || path.starts_with("spec/"))
+                    && workspace_file_matches_goal_cue(workspace_ref, path, &cue)
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+
+        if source_matches.len() == 1 && test_matches.len() == 1 {
+            let source_match = source_matches.first().expect("source match should exist");
+            let test_match = test_matches.first().expect("test match should exist");
+            insert_context_candidate(
+                &mut candidates,
+                source_match.clone(),
+                format!(
+                    "paired source target resolved goal cue `{}` across workspace evidence",
+                    cue
+                ),
+                format!("goal_cue_pair:{}", cue),
+                true,
+                ContextEvidenceStrength::Strong,
+                80,
+            );
+            insert_context_candidate(
+                &mut candidates,
+                test_match.clone(),
+                format!(
+                    "paired failing-test target resolved goal cue `{}` across workspace evidence",
+                    cue
+                ),
+                format!("goal_cue_pair:{}", cue),
+                true,
+                ContextEvidenceStrength::Strong,
+                80,
+            );
+        }
+    }
+
+    let mut selected = candidates.into_values().collect::<Vec<_>>();
+    selected.sort_by(|left, right| {
+        right
+            .strength
+            .cmp(&left.strength)
+            .then_with(|| right.primary.cmp(&left.primary))
+            .then_with(|| right.priority.cmp(&left.priority))
+            .then_with(|| left.reference.cmp(&right.reference))
+    });
+
     selected
+        .into_iter()
+        .take(MAX_CONTEXT_FILES)
+        .map(|candidate| ContextInput {
+            kind: ContextInputKind::WorkspaceFile,
+            reference: candidate.reference,
+            rationale: candidate.rationale_fragments.into_iter().collect::<Vec<_>>().join("; "),
+            source: candidate.sources.into_iter().collect::<Vec<_>>().join(", "),
+            primary: candidate.primary,
+        })
+        .collect()
 }
 
 fn extract_symbol_hints(
@@ -495,7 +750,10 @@ pub fn build_context_pack(
     workspace_ref: &Path,
     context_sources: &PlanningContextSources,
 ) -> ContextPack {
-    let relevant_files = select_relevant_workspace_files(workspace_ref, goal_text);
+    let workspace_inputs =
+        select_relevant_workspace_inputs(workspace_ref, goal_text, context_sources);
+    let relevant_files =
+        workspace_inputs.iter().map(|input| input.reference.clone()).collect::<Vec<_>>();
     let symbol_hints = extract_symbol_hints(workspace_ref, &relevant_files, goal_text);
     let canon_artifacts = selected_canon_artifacts(workspace_ref, goal_text);
     let canon_memory_targets = context_sources
@@ -506,15 +764,7 @@ pub fn build_context_pack(
 
     let mut inputs = Vec::new();
 
-    for file_ref in &relevant_files {
-        inputs.push(ContextInput {
-            kind: ContextInputKind::WorkspaceFile,
-            reference: file_ref.clone(),
-            rationale: "selected as a bounded workspace target for the current goal".to_string(),
-            source: "workspace_scan".to_string(),
-            primary: true,
-        });
-    }
+    inputs.extend(workspace_inputs);
 
     for symbol_hint in symbol_hints {
         inputs.push(ContextInput {
@@ -533,7 +783,7 @@ pub fn build_context_pack(
             reference: summary.clone(),
             rationale: "captures the operator-authored task framing".to_string(),
             source: "authored_input_summary".to_string(),
-            primary: relevant_files.is_empty(),
+            primary: relevant_files.is_empty() && canon_artifacts.is_empty(),
         });
     }
 
@@ -617,13 +867,15 @@ pub fn build_context_pack(
     }
 
     let has_credible_context = !relevant_files.is_empty()
-        || context_sources.authored_input_summary.is_some()
         || context_sources
             .compacted_canon_memory
             .as_ref()
             .is_some_and(|memory| memory.credibility == MemoryCredibilityState::Credible)
         || !canon_artifacts.is_empty()
-        || context_sources.latest_trace_ref.is_some();
+        || context_sources
+            .latest_changed_files
+            .iter()
+            .any(|path| workspace_ref.join(path).is_file());
     let memory_staleness_reason =
         context_sources.compacted_canon_memory.as_ref().and_then(|memory| {
             (memory.credibility != MemoryCredibilityState::Credible)
@@ -1198,8 +1450,8 @@ mod tests {
     use std::time::Duration;
 
     use super::{
-        PlanningContextSources, build_context_pack, build_goal_plan_with_sources,
-        resolve_domain_context,
+        AuthoredInputDocument, PlanningContextSources, build_context_pack,
+        build_goal_plan_with_sources, resolve_domain_context,
     };
     use crate::adapters::config_store::FileConfigStore;
     use crate::domain::configuration::{ConfigFile, RoutingConfig};
@@ -1228,12 +1480,20 @@ mod tests {
     }
 
     #[test]
-    fn build_context_pack_marks_non_credible_canon_memory_as_stale() {
+    fn build_context_pack_marks_stale_canon_memory_as_stale_when_other_context_exists() {
         let workspace = temp_workspace("goal-planner-stale-memory");
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::write(
+            workspace.join("src/lib.rs"),
+            "pub fn add(left: i32, right: i32) -> i32 { left - right }",
+        )
+        .unwrap();
+
         let context_pack = build_context_pack(
             "investigate governed change",
             &workspace,
             &PlanningContextSources {
+                latest_changed_files: vec!["src/lib.rs".to_string()],
                 compacted_canon_memory: Some(CompactedCanonMemory {
                     headline: "Canon verification memory is stale".to_string(),
                     credibility: MemoryCredibilityState::Stale,
@@ -1256,6 +1516,7 @@ mod tests {
             crate::domain::goal_plan::ContextPackCredibility::Stale
         );
         assert_eq!(context_pack.staleness_reason.as_deref(), Some("stale_packet"));
+        assert!(context_pack.selected_targets.contains(&"src/lib.rs".to_string()));
 
         fs::remove_dir_all(workspace).unwrap();
     }
@@ -1428,7 +1689,15 @@ mod tests {
         let plan = build_goal_plan_with_sources(
             "update the react component",
             &workspace,
-            &PlanningContextSources::default(),
+            &PlanningContextSources {
+                authored_input_documents: vec![AuthoredInputDocument {
+                    label: "attached_markdown: brief.md".to_string(),
+                    content: "Update src/components/App.tsx using design/reference.md.".to_string(),
+                }],
+                authored_input_summary: Some("1 markdown source(s)".to_string()),
+                authored_input_sources: vec!["attached_markdown: brief.md".to_string()],
+                ..PlanningContextSources::default()
+            },
             None,
         )
         .unwrap();
@@ -1444,6 +1713,160 @@ mod tests {
                 .iter()
                 .any(|line| line.contains("external_context_input: design/reference.md"))
         );
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn build_context_pack_uses_authored_input_file_refs_as_primary_inputs() {
+        let workspace = temp_workspace("goal-planner-authored-file-refs");
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::create_dir_all(workspace.join("tests")).unwrap();
+        fs::write(workspace.join("src/add.rs"), "pub fn add() -> i32 { 2 }").unwrap();
+        fs::write(workspace.join("tests/add.rs"), "#[test]\nfn add_test() {}\n").unwrap();
+
+        let context_pack = build_context_pack(
+            "fix the failing add test",
+            &workspace,
+            &PlanningContextSources {
+                authored_input_documents: vec![AuthoredInputDocument {
+                    label: "attached_markdown: brief.md".to_string(),
+                    content: "Investigate src/add.rs and tests/add.rs first.".to_string(),
+                }],
+                authored_input_summary: Some("1 markdown source(s)".to_string()),
+                authored_input_sources: vec!["attached_markdown: brief.md".to_string()],
+                ..PlanningContextSources::default()
+            },
+        );
+
+        assert_eq!(context_pack.credibility, ContextPackCredibility::Credible);
+        assert_eq!(
+            context_pack.selected_targets,
+            vec!["src/add.rs".to_string(), "tests/add.rs".to_string()]
+        );
+        assert!(context_pack.inputs.iter().any(|input| {
+            input.kind == crate::domain::goal_plan::ContextInputKind::WorkspaceFile
+                && input.reference == "src/add.rs"
+                && input.rationale.contains("attached_markdown: brief.md")
+        }));
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn build_context_pack_uses_execution_profile_read_targets_as_explicit_inputs() {
+        let workspace = temp_workspace("goal-planner-execution-profile-targets");
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::create_dir_all(workspace.join("tests")).unwrap();
+        fs::write(workspace.join("src/lib.rs"), "pub fn add() -> i32 { 2 }").unwrap();
+        fs::write(workspace.join("tests/red_to_green.rs"), "#[test]\nfn red_to_green() {}\n")
+            .unwrap();
+
+        let context_pack = build_context_pack(
+            "fix the failing add test",
+            &workspace,
+            &PlanningContextSources {
+                execution_profile_read_targets: vec![
+                    "src/lib.rs".to_string(),
+                    "tests/red_to_green.rs".to_string(),
+                ],
+                ..PlanningContextSources::default()
+            },
+        );
+
+        assert_eq!(context_pack.credibility, ContextPackCredibility::Credible);
+        assert!(context_pack.selected_targets.contains(&"src/lib.rs".to_string()));
+        assert!(context_pack.selected_targets.contains(&"tests/red_to_green.rs".to_string()));
+        assert!(context_pack.inputs.iter().any(|input| {
+            input.reference == "src/lib.rs"
+                && input.source.contains("execution_profile_read_targets")
+        }));
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn build_context_pack_uses_unique_source_test_pair_from_file_contents() {
+        let workspace = temp_workspace("goal-planner-content-pair");
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::create_dir_all(workspace.join("tests")).unwrap();
+        fs::write(
+            workspace.join("src/lib.rs"),
+            "pub fn add(left: i32, right: i32) -> i32 { left - right }\n",
+        )
+        .unwrap();
+        fs::write(
+            workspace.join("tests/red_to_green.rs"),
+            "use fixture::add;\n#[test]\nfn red_to_green() { assert_eq!(add(2, 2), 4); }\n",
+        )
+        .unwrap();
+
+        let context_pack = build_context_pack(
+            "fix the failing add test",
+            &workspace,
+            &PlanningContextSources::default(),
+        );
+
+        assert_eq!(context_pack.credibility, ContextPackCredibility::Credible);
+        assert!(context_pack.selected_targets.contains(&"src/lib.rs".to_string()));
+        assert!(context_pack.selected_targets.contains(&"tests/red_to_green.rs".to_string()));
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn build_goal_plan_with_sources_rejects_weak_keyword_only_context() {
+        let workspace = temp_workspace("goal-planner-weak-keywords");
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::write(workspace.join("src/add.rs"), "pub fn add() -> i32 { 2 }").unwrap();
+
+        let error = build_goal_plan_with_sources(
+            "fix add behavior",
+            &workspace,
+            &PlanningContextSources::default(),
+            None,
+        )
+        .unwrap_err();
+
+        match error {
+            GoalPlannerError::InsufficientContext { summary, goal_plan } => {
+                assert!(summary.contains("bounded context"));
+                assert_eq!(
+                    goal_plan.context_pack.as_ref().map(|pack| pack.credibility),
+                    Some(ContextPackCredibility::Insufficient)
+                );
+                assert!(goal_plan.context_primary_inputs().is_empty());
+            }
+            other => panic!("unexpected planner error: {other}"),
+        }
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn build_context_pack_uses_recent_changed_files_after_failed_validation() {
+        let workspace = temp_workspace("goal-planner-recent-changes");
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::create_dir_all(workspace.join("tests")).unwrap();
+        fs::write(workspace.join("src/add.rs"), "pub fn add() -> i32 { 2 }").unwrap();
+        fs::write(workspace.join("tests/add.rs"), "#[test]\nfn add_test() {}\n").unwrap();
+
+        let context_pack = build_context_pack(
+            "fix the failing add test",
+            &workspace,
+            &PlanningContextSources {
+                latest_changed_files: vec!["src/add.rs".to_string()],
+                latest_validation_status: Some("failed".to_string()),
+                ..PlanningContextSources::default()
+            },
+        );
+
+        assert_eq!(context_pack.credibility, ContextPackCredibility::Credible);
+        assert!(context_pack.selected_targets.contains(&"src/add.rs".to_string()));
+        assert!(context_pack.selected_targets.contains(&"tests/add.rs".to_string()));
+        assert!(context_pack.inputs.iter().any(|input| {
+            input.reference == "src/add.rs" && input.rationale.contains("failed validation")
+        }));
 
         fs::remove_dir_all(workspace).unwrap();
     }

@@ -6,8 +6,9 @@ use uuid::Uuid;
 use boundline::domain::decision::DecisionType;
 use boundline::domain::goal_plan::ContextPackCredibility;
 use boundline::orchestrator::goal_planner::{
-    GoalPlannerError, PlanningContextSources, build_context_pack, build_goal_plan,
-    build_goal_plan_with_sources, collect_workspace_signals, derive_tasks, scan_canon_artifacts,
+    AuthoredInputDocument, GoalPlannerError, PlanningContextSources, build_context_pack,
+    build_goal_plan, build_goal_plan_with_sources, collect_workspace_signals, derive_tasks,
+    scan_canon_artifacts,
 };
 
 fn temp_workspace(prefix: &str) -> PathBuf {
@@ -150,9 +151,26 @@ fn scan_canon_artifacts_returns_empty_when_no_canon_dir() {
 fn build_goal_plan_produces_valid_plan() {
     let ws = temp_workspace("gp-build");
     std::fs::write(ws.join("Cargo.toml"), "[package]").unwrap();
+    std::fs::create_dir_all(ws.join("src")).unwrap();
     std::fs::create_dir(ws.join("tests")).unwrap();
+    std::fs::write(ws.join("src/lib.rs"), "pub fn render_feature() {}\n").unwrap();
+    std::fs::write(ws.join("tests/basic.rs"), "#[test]\nfn it_works() {}\n").unwrap();
 
-    let plan = build_goal_plan("implement a feature", &ws).unwrap();
+    let plan = build_goal_plan_with_sources(
+        "implement a feature",
+        &ws,
+        &PlanningContextSources {
+            authored_input_documents: vec![AuthoredInputDocument {
+                label: "brief.md".to_string(),
+                content: "Focus on src/lib.rs for the bounded feature work.".to_string(),
+            }],
+            authored_input_summary: Some("Need the feature target".to_string()),
+            authored_input_sources: vec!["brief.md".to_string()],
+            ..PlanningContextSources::default()
+        },
+        None,
+    )
+    .unwrap();
     assert_eq!(plan.goal_text, "implement a feature");
     assert!(!plan.tasks.is_empty());
     assert!(plan.workspace_signals.language.is_some());
@@ -225,6 +243,11 @@ fn build_context_pack_uses_authored_sources_and_workspace_files() {
         &PlanningContextSources {
             authored_input_summary: Some("Need a bounded context router".to_string()),
             authored_input_sources: vec!["brief.md".to_string()],
+            authored_input_documents: vec![AuthoredInputDocument {
+                label: "brief.md".to_string(),
+                content: "Focus on src/context_router.rs for the bounded router work.".to_string(),
+            }],
+            execution_profile_read_targets: Vec::new(),
             negotiation_goal_summary: Some("ship the context router slice".to_string()),
             negotiation_resolution: Some("credible".to_string()),
             negotiation_acceptance_boundary: None,
@@ -232,6 +255,8 @@ fn build_context_pack_uses_authored_sources_and_workspace_files() {
             workflow_progress: None,
             canon_capability_snapshot: None,
             compacted_canon_memory: None,
+            latest_changed_files: Vec::new(),
+            latest_validation_status: None,
         },
     );
 
@@ -286,7 +311,23 @@ fn build_goal_plan_inferrs_bug_fix_from_source_and_test_evidence_without_bug_key
     )
     .unwrap();
 
-    let plan = build_goal_plan("investigate arithmetic path", &ws).unwrap();
+    let plan = build_goal_plan_with_sources(
+        "investigate arithmetic path",
+        &ws,
+        &PlanningContextSources {
+            authored_input_documents: vec![AuthoredInputDocument {
+                label: "brief.md".to_string(),
+                content:
+                    "Inspect src/lib.rs and tests/red_to_green.rs for the bounded arithmetic issue."
+                        .to_string(),
+            }],
+            authored_input_summary: Some("Need the arithmetic source and test".to_string()),
+            authored_input_sources: vec!["brief.md".to_string()],
+            ..PlanningContextSources::default()
+        },
+        None,
+    )
+    .unwrap();
 
     assert_eq!(plan.flow.as_ref().map(|flow| flow.flow_name.as_str()), Some("bug-fix"));
     assert!(
@@ -315,7 +356,21 @@ fn build_goal_plan_inferrs_change_from_source_focused_evidence_without_bug_keywo
     )
     .unwrap();
 
-    let plan = build_goal_plan("shape dashboard surface", &ws).unwrap();
+    let plan = build_goal_plan_with_sources(
+        "shape dashboard surface",
+        &ws,
+        &PlanningContextSources {
+            authored_input_documents: vec![AuthoredInputDocument {
+                label: "brief.md".to_string(),
+                content: "Shape src/dashboard.rs for the bounded dashboard surface.".to_string(),
+            }],
+            authored_input_summary: Some("Need the dashboard surface".to_string()),
+            authored_input_sources: vec!["brief.md".to_string()],
+            ..PlanningContextSources::default()
+        },
+        None,
+    )
+    .unwrap();
 
     assert_eq!(plan.flow.as_ref().map(|flow| flow.flow_name.as_str()), Some("change"));
     assert!(
