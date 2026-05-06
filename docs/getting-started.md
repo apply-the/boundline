@@ -69,6 +69,26 @@ surfaces Boundline needs for traces and any optional execution profile bootstrap
 
 ### 4. Start One Bounded Session
 
+For Canon-default governed work, initialize workspace-local preferences before
+the first run:
+
+```bash
+boundline init \
+  --workspace <workspace> \
+  --canon-mode-selection auto-confirm \
+  --risk medium \
+  --zone engineering \
+  --owner platform \
+  --assistant codex \
+  --route planning=codex:gpt-5-codex \
+  --route implementation=codex:gpt-5-codex
+```
+
+`manual` requires an explicit `--mode <canon-mode>`, `auto-confirm` lets
+Boundline infer a mode and ask before proceeding, and `auto` proceeds when the
+confidence is high enough. All settings are written under
+`<workspace>/.boundline/config.toml`; no global Canon preferences are used.
+
 ```bash
 boundline start --workspace <workspace>
 boundline capture --workspace <workspace> --goal "Fix the failing add test"
@@ -78,6 +98,17 @@ boundline run --workspace <workspace>
 boundline status --workspace <workspace>
 boundline inspect --workspace <workspace>
 ```
+
+The direct path can ingest authored documents and forward them to Canon:
+
+```bash
+boundline run --workspace <workspace> \
+  --goal "Shape onboarding requirements" \
+  --brief docs/prd.md \
+  --brief docs/architecture.md
+```
+
+Use `--no-canon` only when you intentionally want the local governance route.
 
 That is the main product path: `start -> capture -> plan -> confirm -> run ->
 status -> inspect`.

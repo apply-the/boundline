@@ -140,6 +140,27 @@ status -> workflow resume -> workflow inspect`. Those commands reuse the same se
 story instead of opening a second runtime, including governed `bug-fix:investigate`
 approval waits, blocked outcomes, and later packet reuse toward governed verify.
 
+Canon is default for governed mode shorthand. When the user names one Canon mode,
+assistants may use `/boundline-run <mode>` or the direct alias for that mode; both
+map to `boundline run --mode <mode>` and must preserve `governance_runtime`,
+`mode_selection_preference`, `selected_mode`, `approval_state`, and
+`next_action` from CLI output. Supported aliases are `/boundline-requirements`,
+`/boundline-discovery`, `/boundline-system-shaping`, `/boundline-architecture`,
+`/boundline-backlog`, `/boundline-change`, `/boundline-implementation`,
+`/boundline-refactor`, `/boundline-review`, `/boundline-verification`,
+`/boundline-incident`, `/boundline-security-assessment`,
+`/boundline-system-assessment`, `/boundline-migration`, and
+`/boundline-supply-chain-analysis`.
+
+Canon-default setup and config commands are also first-class assistant surfaces:
+`/boundline-init` maps to `boundline init`, `/boundline-doctor` maps to
+`boundline doctor --install`, `/boundline-config-show` maps to
+`boundline config show --scope workspace`, `/boundline-config-set-canon` maps to
+`boundline config set-canon --mode-selection <manual|auto-confirm|auto>`, and
+`/boundline-capture` maps to `boundline capture --goal ... --brief ...`.
+Assistants should collect missing chat answers first, then run or provide the
+same CLI commands without asking operators to edit manifests manually.
+
 ## Directory Structure
 - **Claude**: `claude/commands/`
 - **Codex**: `codex/commands/`

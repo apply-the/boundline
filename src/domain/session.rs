@@ -12,8 +12,8 @@ use crate::domain::flow::SessionFlowState;
 use crate::domain::flow_policy::FlowPolicy;
 use crate::domain::goal_plan::GoalPlan;
 use crate::domain::governance::{
-    AutopilotDecisionRecord, CompactedCanonMemory, GovernedStagePacket, GovernedStageRecord,
-    PacketReuseBinding,
+    AutopilotDecisionRecord, CompactedCanonMemory, GovernedSessionLifecycle, GovernedStagePacket,
+    GovernedStageRecord, PacketReuseBinding,
 };
 use crate::domain::negotiation::NegotiatedDeliveryPacket;
 use crate::domain::task::{Task, TaskPersistenceError, TaskStatus, TerminalReason};
@@ -83,6 +83,8 @@ pub struct ActiveSessionRecord {
     pub latest_trace_ref: Option<String>,
     pub created_at: u64,
     pub updated_at: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub governance_lifecycle: Option<GovernedSessionLifecycle>,
 }
 
 impl ActiveSessionRecord {
@@ -820,6 +822,14 @@ pub struct SessionStatusView {
     pub latest_governance_candidates: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub governance_next_action: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub governance_lifecycle_runtime: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub governance_lifecycle_opt_out: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub governance_lifecycle_mode_selection: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub governance_lifecycle_selected_mode: Option<String>,
     pub next_command: Option<String>,
     pub explanation: String,
 }
@@ -901,6 +911,10 @@ impl Default for SessionStatusView {
             latest_governance_decision: None,
             latest_governance_candidates: None,
             governance_next_action: None,
+            governance_lifecycle_runtime: None,
+            governance_lifecycle_opt_out: None,
+            governance_lifecycle_mode_selection: None,
+            governance_lifecycle_selected_mode: None,
             next_command: None,
             explanation: String::new(),
         }
@@ -2151,6 +2165,7 @@ mod tests {
             latest_trace_ref: Some(format!("{workspace_ref}/.boundline/traces/task-1.json")),
             created_at: 10,
             updated_at: 20,
+            governance_lifecycle: None,
         }
     }
 
@@ -2270,6 +2285,10 @@ mod tests {
             latest_governance_decision: None,
             latest_governance_candidates: None,
             governance_next_action: None,
+            governance_lifecycle_runtime: None,
+            governance_lifecycle_opt_out: None,
+            governance_lifecycle_mode_selection: None,
+            governance_lifecycle_selected_mode: None,
             next_command: Some("boundline step".to_string()),
             explanation: "view is consistent".to_string(),
         }

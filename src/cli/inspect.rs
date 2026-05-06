@@ -1455,6 +1455,7 @@ mod tests {
             latest_trace_ref: None,
             created_at: 10,
             updated_at: 20,
+            governance_lifecycle: None,
         };
         fs::write(
             workspace.join(".boundline/session.json"),

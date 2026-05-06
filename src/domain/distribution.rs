@@ -4,6 +4,8 @@ use std::process::Command;
 
 use serde::{Deserialize, Serialize};
 
+use crate::domain::governance::{CANONICAL_MODES, CanonCapabilitySnapshot, CanonMode};
+
 pub const SUPPORTED_CANON_VERSION: &str = "0.40.0";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -56,7 +58,21 @@ impl fmt::Display for CompanionState {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CanonSurfaceVerification {
+    pub canon_path: PathBuf,
+    pub version_compatible: bool,
+    pub operations_verified: bool,
+    pub missing_operations: Vec<String>,
+    pub modes_verified: bool,
+    pub missing_modes: Vec<CanonMode>,
+    pub unsupported_modes: Vec<String>,
+    pub capability_snapshot: Option<CanonCapabilitySnapshot>,
+    pub ready: bool,
+    pub repair_actions: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CanonInstallStatus {
     pub state: CompanionState,
     pub version: Option<String>,
@@ -64,6 +80,7 @@ pub struct CanonInstallStatus {
     pub bundled_with_boundline: bool,
     pub message: String,
     pub suggested_actions: Vec<String>,
+    pub surface_verification: Option<CanonSurfaceVerification>,
 }
 
 pub fn supported_distribution_channels() -> Vec<DistributionChannel> {
@@ -77,6 +94,77 @@ pub fn supported_distribution_channels() -> Vec<DistributionChannel> {
 
 pub fn evaluate_canon_install(executable_path: &Path) -> CanonInstallStatus {
     canon_install_status_from_discovery(discover_canon_binary(executable_path))
+}
+
+/// Verify the Canon governance surface from a capability snapshot.
+///
+/// Checks that the Canon binary reports the required governance operations
+/// (`start`, `refresh`) and all 15 canonical modes. Returns a
+/// `CanonSurfaceVerification` describing readiness, gaps, and repair actions.
+pub fn verify_canon_surface(
+    canon_path: &Path,
+    snapshot: &CanonCapabilitySnapshot,
+) -> CanonSurfaceVerification {
+    let required_operations = ["start", "refresh"];
+    let missing_operations: Vec<String> = required_operations
+        .iter()
+        .filter(|op| !snapshot.operations.iter().any(|s| s == **op))
+        .map(|op| op.to_string())
+        .collect();
+    let operations_verified = missing_operations.is_empty();
+
+    let missing_modes: Vec<CanonMode> = CANONICAL_MODES
+        .iter()
+        .copied()
+        .filter(|mode| !snapshot.supported_modes.contains(mode))
+        .collect();
+    let modes_verified = missing_modes.is_empty();
+
+    let unsupported_modes: Vec<String> = snapshot
+        .supported_modes
+        .iter()
+        .filter(|mode| !CANONICAL_MODES.contains(mode))
+        .map(|mode| format!("{:?}", mode))
+        .collect();
+
+    let version_compatible = snapshot.canon_version == SUPPORTED_CANON_VERSION;
+
+    let ready = version_compatible && operations_verified && modes_verified;
+
+    let mut repair_actions = Vec::new();
+    if !version_compatible {
+        repair_actions.push(format!(
+            "Canon version {} does not match supported version {SUPPORTED_CANON_VERSION}; upgrade or reinstall Boundline",
+            snapshot.canon_version
+        ));
+    }
+    if !operations_verified {
+        repair_actions.push(format!(
+            "Canon binary is missing governance operations: {}; upgrade Canon to {SUPPORTED_CANON_VERSION}",
+            missing_operations.join(", ")
+        ));
+    }
+    if !modes_verified {
+        let mode_names: Vec<&str> =
+            missing_modes.iter().map(|m| m.primary_document_name()).collect();
+        repair_actions.push(format!(
+            "Canon binary is missing canonical modes: {}; upgrade Canon to {SUPPORTED_CANON_VERSION}",
+            mode_names.join(", ")
+        ));
+    }
+
+    CanonSurfaceVerification {
+        canon_path: canon_path.to_path_buf(),
+        version_compatible,
+        operations_verified,
+        missing_operations,
+        modes_verified,
+        missing_modes,
+        unsupported_modes,
+        capability_snapshot: Some(snapshot.clone()),
+        ready,
+        repair_actions,
+    }
 }
 
 #[cfg(test)]
@@ -98,26 +186,60 @@ fn canon_install_status_from_discovery(discovered: Option<(PathBuf, bool)>) -> C
                 "Canon {SUPPORTED_CANON_VERSION} was not found beside Boundline or on PATH"
             ),
             suggested_actions: repair_actions(),
+            surface_verification: None,
         };
     };
 
     match read_canon_version(&canon_path) {
-        Some(version) if version == SUPPORTED_CANON_VERSION => CanonInstallStatus {
-            state: if bundled_with_boundline {
-                CompanionState::Ready
+        Some(version) if version == SUPPORTED_CANON_VERSION => {
+            let surface_verification = query_canon_capabilities(&canon_path)
+                .map(|snapshot| verify_canon_surface(&canon_path, &snapshot));
+            let surface_ready = surface_verification.as_ref().is_some_and(|surface| surface.ready);
+            let mut suggested_actions = Vec::new();
+            if let Some(surface) = surface_verification.as_ref() {
+                suggested_actions.extend(surface.repair_actions.clone());
             } else {
-                CompanionState::AlreadySatisfied
-            },
-            version: Some(version.clone()),
-            location: Some(canon_path.clone()),
-            bundled_with_boundline,
-            message: if bundled_with_boundline {
-                format!("Bundled Canon {version} is available at {}", canon_path.display())
+                suggested_actions.push(format!(
+                    "Canon at {} did not report governance capabilities; upgrade Canon to {SUPPORTED_CANON_VERSION}",
+                    canon_path.display()
+                ));
+            }
+            let state = if surface_ready {
+                if bundled_with_boundline {
+                    CompanionState::Ready
+                } else {
+                    CompanionState::AlreadySatisfied
+                }
             } else {
-                format!("Canon {version} is already available on PATH at {}", canon_path.display())
-            },
-            suggested_actions: Vec::new(),
-        },
+                CompanionState::RepairNeeded
+            };
+            CanonInstallStatus {
+                state,
+                version: Some(version.clone()),
+                location: Some(canon_path.clone()),
+                bundled_with_boundline,
+                message: if surface_ready {
+                    if bundled_with_boundline {
+                        format!(
+                            "Bundled Canon {version} is available at {} with verified governance surface",
+                            canon_path.display()
+                        )
+                    } else {
+                        format!(
+                            "Canon {version} is already available on PATH at {} with verified governance surface",
+                            canon_path.display()
+                        )
+                    }
+                } else {
+                    format!(
+                        "Canon {version} at {} does not expose the required governance surface",
+                        canon_path.display()
+                    )
+                },
+                suggested_actions: if surface_ready { Vec::new() } else { suggested_actions },
+                surface_verification,
+            }
+        }
         Some(version) => CanonInstallStatus {
             state: CompanionState::RepairNeeded,
             version: Some(version.clone()),
@@ -128,6 +250,7 @@ fn canon_install_status_from_discovery(discovered: Option<(PathBuf, bool)>) -> C
                 canon_path.display()
             ),
             suggested_actions: repair_actions(),
+            surface_verification: None,
         },
         None => CanonInstallStatus {
             state: CompanionState::Blocked,
@@ -142,6 +265,7 @@ fn canon_install_status_from_discovery(discovered: Option<(PathBuf, bool)>) -> C
                 "run `{} --version` manually and reinstall or upgrade Boundline if the reported Canon version is not {SUPPORTED_CANON_VERSION}",
                 canon_path.display()
             )],
+            surface_verification: None,
         },
     }
 }
@@ -202,6 +326,19 @@ fn read_canon_version(command_path: &Path) -> Option<String> {
     extract_semver_token(&combined)
 }
 
+fn query_canon_capabilities(command_path: &Path) -> Option<CanonCapabilitySnapshot> {
+    let output = Command::new(command_path)
+        .arg("governance")
+        .arg("capabilities")
+        .arg("--json")
+        .output()
+        .ok()?;
+    if !output.status.success() || output.stdout.is_empty() {
+        return None;
+    }
+    serde_json::from_slice(&output.stdout).ok()
+}
+
 fn extract_semver_token(output: &str) -> Option<String> {
     output
         .split_whitespace()
@@ -250,7 +387,40 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
 
         let command_path = directory.join("canon");
-        fs::write(&command_path, format!("#!/bin/sh\necho '{version_output}'\n")).unwrap();
+        let capabilities = serde_json::json!({
+            "canon_version": SUPPORTED_CANON_VERSION,
+            "supported_schema_versions": ["2026-02-01"],
+            "operations": ["start", "refresh", "capabilities"],
+            "supported_modes": [
+                "requirements",
+                "discovery",
+                "system-shaping",
+                "architecture",
+                "backlog",
+                "change",
+                "implementation",
+                "refactor",
+                "review",
+                "verification",
+                "incident",
+                "security-assessment",
+                "system-assessment",
+                "migration",
+                "supply-chain-analysis"
+            ],
+            "status_values": ["governed_ready", "awaiting_approval", "blocked"],
+            "approval_state_values": ["not_needed", "requested", "granted"],
+            "packet_readiness_values": ["reusable", "pending", "incomplete"],
+            "compatibility_notes": ["stable-json"]
+        });
+        fs::write(
+            &command_path,
+            format!(
+                "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '{version_output}'\n  exit 0\nfi\nif [ \"$1\" = \"governance\" ] && [ \"$2\" = \"capabilities\" ]; then\n  printf '%s' '{}'\n  exit 0\nfi\nexit 1\n",
+                capabilities
+            ),
+        )
+        .unwrap();
         let mut permissions = fs::metadata(&command_path).unwrap().permissions();
         permissions.set_mode(0o755);
         fs::set_permissions(&command_path, permissions).unwrap();

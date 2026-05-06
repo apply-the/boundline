@@ -78,10 +78,12 @@ pub use domain::workflow::{
 };
 pub use orchestrator::governance::{
     GovernanceStatePatchError, GovernanceStateSelectionError, GovernanceStepDecision,
-    bounded_governance_context, bounded_reused_packets, build_autopilot_decision,
-    escalation_target_stage_key, governance_stage_key, governance_state_patch,
-    narrowed_bounded_context, runtime_command_available, select_packet_reuse_binding,
-    selected_stage_policy,
+    append_governed_document_to_lifecycle, bounded_governance_context, bounded_reused_packets,
+    build_autopilot_decision, clarification_prompt_from_response,
+    enrich_bounded_context_with_accumulated, escalation_target_stage_key, governance_stage_key,
+    governance_state_patch, governed_document_ref_from_response, is_awaiting_approval_response,
+    lifecycle_requires_refresh, narrowed_bounded_context, runtime_command_available,
+    select_packet_reuse_binding, selected_stage_policy, set_lifecycle_awaiting_approval,
 };
 pub use orchestrator::planner::{Planner, StaticPlanner};
 pub use orchestrator::{Orchestrator, OrchestratorError, SessionRuntime};

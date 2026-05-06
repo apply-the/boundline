@@ -269,3 +269,95 @@ fn assistant_command_packs_expose_session_native_backend_mappings() {
         }
     }
 }
+
+#[test]
+fn assistant_command_packs_expose_canon_default_mode_aliases() {
+    let modes = [
+        "requirements",
+        "discovery",
+        "system-shaping",
+        "architecture",
+        "backlog",
+        "change",
+        "implementation",
+        "refactor",
+        "review",
+        "verification",
+        "incident",
+        "security-assessment",
+        "system-assessment",
+        "migration",
+        "supply-chain-analysis",
+    ];
+
+    let run_assets = [
+        "assistant/copilot/prompts/boundline-run.prompt.md",
+        "assistant/codex/commands/boundline-run.md",
+        "assistant/claude/commands/boundline-run.md",
+        "assistant/gemini/README.md",
+    ];
+    for path in run_assets {
+        let content = read_asset(path);
+        assert!(content.contains("boundline run --mode <mode>"), "{path} missing mode shorthand");
+        assert!(content.contains("Canon-default"), "{path} missing Canon-default wording");
+        assert!(
+            !content.contains("--governance canon"),
+            "{path} should not require explicit Canon governance"
+        );
+    }
+
+    for mode in modes {
+        let path = format!("assistant/copilot/prompts/boundline-{mode}.prompt.md");
+        let content = read_asset(&path);
+        assert!(content.contains(&format!("/boundline-{mode}")), "{path} missing alias command");
+        assert!(
+            content.contains(&format!("boundline run --mode {mode}")),
+            "{path} missing canonical CLI mapping"
+        );
+        assert!(content.contains("governance_runtime"), "{path} missing lifecycle fields");
+        assert!(content.contains("mode_selection_preference"), "{path} missing lifecycle fields");
+        assert!(content.contains("selected_mode"), "{path} missing lifecycle fields");
+        assert!(content.contains("approval_state"), "{path} missing lifecycle fields");
+        assert!(content.contains("next_action"), "{path} missing lifecycle fields");
+    }
+}
+
+#[test]
+fn copilot_prompts_preserve_canon_default_cli_boundaries() {
+    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let prompt_root = manifest_dir.join("assistant/copilot/prompts");
+
+    for entry in std::fs::read_dir(&prompt_root)
+        .unwrap_or_else(|error| panic!("failed to read {}: {error}", prompt_root.display()))
+    {
+        let path = entry.unwrap().path();
+        if path.extension().and_then(|value| value.to_str()) != Some("md") {
+            continue;
+        }
+        let content = std::fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", path.display()));
+        assert!(
+            !content.contains("--governance canon"),
+            "{} should not require explicit Canon governance",
+            path.display()
+        );
+        assert!(
+            !content.contains("edit manifest") && !content.contains("manual manifest"),
+            "{} should not instruct manual manifest editing as the primary path",
+            path.display()
+        );
+    }
+
+    for command in [
+        "boundline-init",
+        "boundline-doctor",
+        "boundline-config-show",
+        "boundline-config-set-canon",
+        "boundline-capture",
+        "boundline-run",
+    ] {
+        let path = format!("assistant/copilot/prompts/{command}.prompt.md");
+        let content = read_asset(&path);
+        assert!(content.contains("boundline "), "{path} should map back to the Boundline CLI");
+    }
+}

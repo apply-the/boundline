@@ -93,6 +93,72 @@ fn diagnose_installation_from_current_exe(
             {
                 suggested_actions.extend(canon_status.suggested_actions.clone());
             }
+            if let Some(location) = canon_status.location.as_ref() {
+                checks.push(DiagnosticsCheck {
+                    name: "canon_path".to_string(),
+                    status: DiagnosticsStatus::Passed,
+                    message: format!("authoritative Canon binary path: {}", location.display()),
+                });
+            } else {
+                checks.push(DiagnosticsCheck {
+                    name: "canon_path".to_string(),
+                    status: DiagnosticsStatus::Failed,
+                    message: "Canon binary path could not be resolved".to_string(),
+                });
+            }
+            if let Some(surface) = canon_status.surface_verification.as_ref() {
+                checks.push(DiagnosticsCheck {
+                    name: "canon_governance_surface".to_string(),
+                    status: if surface.operations_verified {
+                        DiagnosticsStatus::Passed
+                    } else {
+                        DiagnosticsStatus::Failed
+                    },
+                    message: if surface.operations_verified {
+                        "Canon governance operations are available".to_string()
+                    } else {
+                        format!(
+                            "Canon governance operations missing: {}",
+                            surface.missing_operations.join(", ")
+                        )
+                    },
+                });
+                checks.push(DiagnosticsCheck {
+                    name: "canon_modes".to_string(),
+                    status: if surface.modes_verified {
+                        DiagnosticsStatus::Passed
+                    } else {
+                        DiagnosticsStatus::Failed
+                    },
+                    message: if surface.modes_verified {
+                        "Canon exposes all canonical modes".to_string()
+                    } else {
+                        format!(
+                            "Canon modes missing: {}",
+                            surface
+                                .missing_modes
+                                .iter()
+                                .map(|mode| mode
+                                    .primary_document_name()
+                                    .trim_end_matches(".md")
+                                    .to_string())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )
+                    },
+                });
+            } else {
+                checks.push(DiagnosticsCheck {
+                    name: "canon_governance_surface".to_string(),
+                    status: DiagnosticsStatus::Failed,
+                    message: "Canon governance capabilities could not be queried".to_string(),
+                });
+                checks.push(DiagnosticsCheck {
+                    name: "canon_modes".to_string(),
+                    status: DiagnosticsStatus::Failed,
+                    message: "Canon mode capabilities could not be queried".to_string(),
+                });
+            }
             checks.push(DiagnosticsCheck {
                 name: "canon_companion".to_string(),
                 status: if matches!(

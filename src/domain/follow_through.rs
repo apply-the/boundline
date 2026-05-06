@@ -353,6 +353,10 @@ mod tests {
             latest_governance_decision: None,
             latest_governance_candidates: None,
             governance_next_action: None,
+            governance_lifecycle_runtime: None,
+            governance_lifecycle_opt_out: None,
+            governance_lifecycle_mode_selection: None,
+            governance_lifecycle_selected_mode: None,
             next_command: Some("boundline step".to_string()),
             explanation: "current active session state for the workspace".to_string(),
         });

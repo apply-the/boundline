@@ -67,6 +67,7 @@ fn session_record_round_trips_and_status_values_serialize() {
         ),
         created_at: 10,
         updated_at: 20,
+        governance_lifecycle: None,
     };
 
     record.validate().unwrap();
@@ -177,6 +178,7 @@ fn session_record_validation_rejects_workspace_mismatches_and_external_traces() 
         ),
         created_at: 10,
         updated_at: 20,
+        governance_lifecycle: None,
     };
 
     assert_eq!(
@@ -222,6 +224,7 @@ fn session_record_validation_allows_cluster_member_tasks_when_projection_is_pres
         ),
         created_at: 10,
         updated_at: 20,
+        governance_lifecycle: None,
     };
 
     record.validate().unwrap();
@@ -258,6 +261,7 @@ fn terminal_session_requires_terminal_reason_and_consistent_view() {
         ),
         created_at: 10,
         updated_at: 20,
+        governance_lifecycle: None,
     };
 
     assert_eq!(
@@ -285,6 +289,7 @@ fn goal_captured_sessions_require_a_goal_but_invalid_sessions_can_clear_context(
         latest_trace_ref: None,
         created_at: 10,
         updated_at: 20,
+        governance_lifecycle: None,
     };
 
     assert_eq!(
@@ -321,6 +326,7 @@ fn invalid_flow_state_is_rejected_by_session_validation() {
         latest_trace_ref: None,
         created_at: 10,
         updated_at: 20,
+        governance_lifecycle: None,
     };
 
     assert!(matches!(record.validate().unwrap_err(), SessionValidationError::InvalidFlowState(_)));
@@ -355,6 +361,7 @@ fn goal_captured_status_view_can_project_clarification_fields_from_authored_brie
         latest_trace_ref: None,
         created_at: 10,
         updated_at: 20,
+        governance_lifecycle: None,
     };
 
     let view = SessionStatusView {
@@ -448,6 +455,7 @@ fn planned_session_with_goal_plan_and_no_active_task_is_valid() {
         latest_trace_ref: None,
         created_at: 10,
         updated_at: 20,
+        governance_lifecycle: None,
     };
 
     record.validate().unwrap();

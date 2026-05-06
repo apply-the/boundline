@@ -157,6 +157,7 @@ mod tests {
                 planning: Some(ModelRoute { runtime: RuntimeKind::Claude, model: " ".to_string() }),
                 ..RoutingConfig::default()
             },
+            canon: None,
         };
 
         let error = store.save_local(&cfg).unwrap_err();

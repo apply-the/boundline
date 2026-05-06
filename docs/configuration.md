@@ -94,6 +94,44 @@ ranking, explicit adaptive exhaustion, or negotiation-state overrides.
 - User-global: `$XDG_CONFIG_HOME/boundline/config.toml`
 - User-global fallback: `$HOME/.config/boundline/config.toml`
 
+## Canon Workspace Preferences
+
+Canon-default behavior is workspace-local. `boundline init` can write the
+`[canon]` section directly:
+
+```bash
+boundline init \
+  --workspace <workspace> \
+  --canon-mode-selection auto-confirm \
+  --risk medium \
+  --zone engineering \
+  --owner platform \
+  --assistant copilot \
+  --route planning=copilot:gpt-4o
+```
+
+The resulting config stores:
+
+```toml
+[canon]
+mode_selection = "auto-confirm"
+default_risk = "medium"
+default_zone = "engineering"
+default_owner = "platform"
+```
+
+Change the preference later with:
+
+```bash
+boundline config set-canon --workspace <workspace> --mode-selection auto
+boundline config show --workspace <workspace> --scope workspace
+```
+
+Valid mode-selection values are `manual`, `auto-confirm`, and `auto`. The
+setting controls whether `boundline run --mode <canon-mode>` is required, whether
+Boundline asks before using an inferred mode, or whether it can proceed when its
+mode inference is high confidence.
+
 Workflow definitions are separate from routing config:
 
 - Workspace-local workflow registry: `<workspace>/.boundline/workflows.toml`

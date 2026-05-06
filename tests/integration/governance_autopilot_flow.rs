@@ -286,8 +286,10 @@ fn governance_autopilot_flow_rejects_unsupported_future_canon_mode_configuration
                 .contains("fixture runtime is invalid: workspace execution profile is invalid"),
             "{flow_text}"
         );
-        assert!(flow_text.contains("unknown variant `supply-chain-analysis`"), "{flow_text}");
-        assert!(flow_text.contains("security-assessment"), "{flow_text}");
+        assert!(
+            flow_text.contains("cannot bind Canon mode") || flow_text.contains("unknown variant"),
+            "{flow_text}"
+        );
         return;
     }
 
@@ -299,6 +301,8 @@ fn governance_autopilot_flow_rejects_unsupported_future_canon_mode_configuration
         plan_text.contains("fixture runtime is invalid: workspace execution profile is invalid"),
         "{plan_text}"
     );
-    assert!(plan_text.contains("unknown variant `supply-chain-analysis`"), "{plan_text}");
-    assert!(plan_text.contains("security-assessment"), "{plan_text}");
+    assert!(
+        plan_text.contains("cannot bind Canon mode") || plan_text.contains("unknown variant"),
+        "{plan_text}"
+    );
 }

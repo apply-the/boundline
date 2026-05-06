@@ -19,9 +19,19 @@ recorded workspace version.
 
 Delivered specs:
 
-- None recorded after `0.41.0`
+- `042` - Native Canon CLI Surface
 
 Highlights:
+
+- Make Canon the default governed route for Canon-ready workspaces, add
+  workspace-local Canon mode-selection preferences, and support explicit
+  `--no-canon` opt-out.
+- Add all canonical Canon modes to the CLI/chat surface, forward authored briefs
+  into Canon `input_documents`, preserve governed packet context across stages,
+  and surface incomplete Canon packets as clarification prompts.
+- Extend `boundline init`, `config set-canon`, `doctor --install`, docs, and
+  assistant command packs so CLI and chat workflows use the same Canon-default
+  commands.
 
 ## [0.41.0] - 2026-05-04
 

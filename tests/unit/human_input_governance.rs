@@ -32,6 +32,8 @@ fn normalize_governance_intent_preserves_explicit_canon_business_fields() {
             risk: Some("high".to_string()),
             zone: Some("payments".to_string()),
             owner: Some("platform".to_string()),
+            explicit_mode: None,
+            explicit_no_canon: false,
         })
     );
 }
@@ -48,6 +50,8 @@ fn normalize_governance_intent_marks_request_when_only_business_fields_are_prese
             risk: Some("medium".to_string()),
             zone: Some("core".to_string()),
             owner: None,
+            explicit_mode: None,
+            explicit_no_canon: false,
         })
     );
 }

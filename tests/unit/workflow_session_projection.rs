@@ -49,6 +49,7 @@ fn build_record() -> ActiveSessionRecord {
         latest_trace_ref: None,
         created_at: 10,
         updated_at: 20,
+        governance_lifecycle: None,
     }
 }
 
@@ -189,6 +190,7 @@ fn session_status_view_accepts_session_owned_workflow_progress_without_goal_plan
         latest_trace_ref: None,
         created_at: 10,
         updated_at: 20,
+        governance_lifecycle: None,
     };
 
     let view = build_view(&record);

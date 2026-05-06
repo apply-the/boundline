@@ -254,6 +254,7 @@ fn blocked_native_run_surfaces_delegation_across_status_and_inspect() {
             assistant_runtimes: vec![RuntimeKind::Codex],
             ..RoutingConfig::default()
         },
+        canon: None,
     };
     config.routing.slot_effort_policies.insert(
         RouteSlot::Implementation,

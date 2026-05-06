@@ -6,12 +6,14 @@ use crate::adapters::cluster_store::{ClusterStoreError, FileClusterStore};
 use crate::adapters::config_store::{ConfigStoreError, FileConfigStore};
 use crate::cli::CommandExitStatus;
 use crate::domain::configuration::{
-    CapabilityState, ConfigFile, ConfigShowScope, ConfigWriteScope, EffortFallbackPolicy,
-    EffortLevel, ModelRoute, RouteSlot, RoutingOverrides, RuntimeCapabilityProfile, RuntimeKind,
-    SlotEffortPolicy, ValueSource, resolve_effective_domain_templates, resolve_effective_routing,
+    CanonPreferences, CapabilityState, ConfigFile, ConfigShowScope, ConfigWriteScope,
+    EffortFallbackPolicy, EffortLevel, ModelRoute, RouteSlot, RoutingOverrides,
+    RuntimeCapabilityProfile, RuntimeKind, SlotEffortPolicy, ValueSource,
+    resolve_effective_domain_templates, resolve_effective_routing,
     resolve_effective_runtime_capabilities, resolve_effective_slot_effort_policies,
 };
 use crate::domain::domain_templates::{DomainFamily, ExternalContextBinding, ExternalContextKind};
+use crate::domain::governance::CanonModeSelectionPreference;
 use crate::domain::routing_decision::RoutingDecisionProjection;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -103,7 +105,8 @@ pub fn execute_show(
             let config = store.load()?.ok_or_else(|| {
                 ConfigCommandError::MissingClusterConfig(store.cluster_config_path())
             })?;
-            let scope_view = ConfigFile { version: config.version, routing: config.routing };
+            let scope_view =
+                ConfigFile { version: config.version, routing: config.routing, canon: None };
             render_scope("cluster", &scope_view)
         }
         ConfigShowScope::Effective => {
@@ -281,6 +284,34 @@ pub fn execute_set(
     Ok(ConfigCommandReport {
         exit_status: CommandExitStatus::Succeeded,
         terminal_output: format!("config: updated {location}"),
+    })
+}
+
+pub fn execute_set_canon(
+    workspace: Option<&Path>,
+    mode_selection: CanonModeSelectionPreference,
+) -> Result<ConfigCommandReport, ConfigCommandError> {
+    let workspace = workspace.ok_or(ConfigCommandError::WorkspaceRequired)?;
+    let store = FileConfigStore::for_workspace(workspace);
+    let mut config = store.load_local()?.unwrap_or_default();
+    let mut canon = config.canon.unwrap_or(CanonPreferences {
+        mode_selection,
+        default_risk: None,
+        default_zone: None,
+        default_owner: None,
+        default_system_context: None,
+    });
+    canon.mode_selection = mode_selection;
+    config.canon = Some(canon);
+    let path = store.save_local(&config)?;
+
+    Ok(ConfigCommandReport {
+        exit_status: CommandExitStatus::Succeeded,
+        terminal_output: format!(
+            "config: updated Canon preferences in workspace config at {}\nmode_selection: {}",
+            path.display(),
+            mode_selection
+        ),
     })
 }
 
@@ -828,6 +859,22 @@ fn render_scope(scope: &str, config: &ConfigFile) -> String {
         }
     }
 
+    if let Some(canon) = config.canon.as_ref() {
+        lines.push("canon:".to_string());
+        lines.push(format!("  mode_selection: {}", canon.mode_selection));
+        if let Some(risk) = canon.default_risk.as_deref() {
+            lines.push(format!("  default_risk: {risk}"));
+        }
+        if let Some(zone) = canon.default_zone.as_deref() {
+            lines.push(format!("  default_zone: {zone}"));
+        }
+        if let Some(owner) = canon.default_owner.as_deref() {
+            lines.push(format!("  default_owner: {owner}"));
+        }
+    } else {
+        lines.push("canon: none".to_string());
+    }
+
     lines.join("\n")
 }
 
@@ -1002,6 +1049,8 @@ pub enum ConfigCommandError {
     InvalidPolicy(String),
     #[error("invalid domain mutation: {0}")]
     InvalidDomainMutation(String),
+    #[error("workspace resolution error: {0}")]
+    WorkspaceResolution(String),
     #[error("config store error: {0}")]
     Store(#[from] ConfigStoreError),
     #[error("cluster store error: {0}")]
@@ -1170,6 +1219,7 @@ mod tests {
                 }),
                 ..RoutingConfig::default()
             },
+            canon: None,
         };
 
         let saved_path =
@@ -1248,6 +1298,7 @@ mod tests {
                 assistant_runtimes: vec![RuntimeKind::Codex, RuntimeKind::Copilot],
                 ..RoutingConfig::default()
             },
+            canon: None,
         };
         FileConfigStore::for_workspace(&workspace).save_local(&local_config).unwrap();
 
@@ -1829,7 +1880,7 @@ mod tests {
 
         let rendered = render_scope(
             "cluster",
-            &ConfigFile { version: cluster.version, routing: cluster.routing.clone() },
+            &ConfigFile { version: cluster.version, routing: cluster.routing.clone(), canon: None },
         );
         assert!(rendered.contains("- react: enabled=false"));
         assert!(rendered.contains("standards: cluster react rules"));
@@ -1850,6 +1901,7 @@ mod tests {
                     )]),
                     ..RoutingConfig::default()
                 },
+                canon: None,
             },
         );
         assert!(helper_rendered.contains("- vue: enabled=inherit"));

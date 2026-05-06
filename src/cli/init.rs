@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 
 use serde_json::json;
@@ -7,11 +8,14 @@ use thiserror::Error;
 
 use crate::adapters::config_store::{ConfigStoreError, FileConfigStore};
 use crate::cli::CommandExitStatus;
-use crate::domain::configuration::{InitTemplate, RuntimeKind};
+use crate::domain::configuration::{
+    CanonPreferences, InitTemplate, ModelRoute, RouteSlot, RuntimeKind,
+};
 use crate::domain::domain_templates::{
     DomainFamily, DomainTemplateSettings, ExternalContextBinding, ExternalContextKind,
     detect_domain_families,
 };
+use crate::domain::governance::CanonModeSelectionPreference;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InitCommandReport {
@@ -24,10 +28,15 @@ pub struct InitRequest<'a> {
     pub workspace: &'a Path,
     pub template: Option<InitTemplate>,
     pub assistants: &'a [RuntimeKind],
+    pub routes: &'a [String],
     pub domains: &'a [DomainFamily],
     pub domain_standards: &'a [String],
     pub context_bindings: &'a [String],
     pub required_context_bindings: &'a [String],
+    pub canon_mode_selection: Option<CanonModeSelectionPreference>,
+    pub risk: Option<&'a str>,
+    pub zone: Option<&'a str>,
+    pub owner: Option<&'a str>,
     pub force: bool,
 }
 
@@ -83,20 +92,66 @@ pub fn execute_init(request: InitRequest<'_>) -> Result<InitCommandReport, InitC
         });
     }
 
+    let guided_answers = if request.canon_mode_selection.is_none() && io::stdin().is_terminal() {
+        Some(collect_guided_init_answers()?)
+    } else {
+        None
+    };
+    let effective_canon_mode_selection = request
+        .canon_mode_selection
+        .or_else(|| guided_answers.as_ref().map(|answers| answers.canon_mode_selection));
+    let effective_assistants = if request.assistants.is_empty() {
+        guided_answers.as_ref().map(|answers| answers.assistants.clone()).unwrap_or_default()
+    } else {
+        request.assistants.to_vec()
+    };
+    let mut effective_routes = request
+        .routes
+        .iter()
+        .map(|raw_route| parse_model_route(raw_route))
+        .collect::<Result<Vec<_>, _>>()?;
+    if effective_routes.is_empty()
+        && let Some(answers) = guided_answers.as_ref()
+    {
+        effective_routes = answers.routes.clone();
+    }
+
     if let Some(parent) = execution_path.parent() {
         fs::create_dir_all(parent)
             .map_err(|source| InitCommandError::WriteFile { path: parent.to_path_buf(), source })?;
     }
 
-    let execution = execution_template(template);
-    fs::write(
-        &execution_path,
-        serde_json::to_string_pretty(&execution).expect("execution template should serialize"),
-    )
-    .map_err(|source| InitCommandError::WriteFile { path: execution_path.clone(), source })?;
-
     let mut local = store.load_local()?.unwrap_or_default();
-    local.routing.assistant_runtimes = request.assistants.to_vec();
+    local.routing.assistant_runtimes = effective_assistants.clone();
+    for (slot, route) in effective_routes {
+        local.routing.set_slot(slot, route);
+    }
+    if effective_canon_mode_selection.is_some()
+        || request.risk.is_some()
+        || request.zone.is_some()
+        || request.owner.is_some()
+    {
+        let mut canon = local.canon.unwrap_or(CanonPreferences {
+            mode_selection: effective_canon_mode_selection.unwrap_or_default(),
+            default_risk: None,
+            default_zone: None,
+            default_owner: None,
+            default_system_context: None,
+        });
+        if let Some(mode_selection) = effective_canon_mode_selection {
+            canon.mode_selection = mode_selection;
+        }
+        if let Some(risk) = request.risk.map(str::trim).filter(|value| !value.is_empty()) {
+            canon.default_risk = Some(risk.to_string());
+        }
+        if let Some(zone) = request.zone.map(str::trim).filter(|value| !value.is_empty()) {
+            canon.default_zone = Some(zone.to_string());
+        }
+        if let Some(owner) = request.owner.map(str::trim).filter(|value| !value.is_empty()) {
+            canon.default_owner = Some(owner.to_string());
+        }
+        local.canon = Some(canon);
+    }
     apply_requested_domain_templates(
         &mut local.routing.domain_templates,
         requested_domain_templates,
@@ -105,10 +160,17 @@ pub fn execute_init(request: InitRequest<'_>) -> Result<InitCommandReport, InitC
         .routing
         .validate()
         .map_err(|source| InitCommandError::InvalidDomainTemplate(source.to_string()))?;
+
+    let execution = execution_template(template, local.canon.as_ref());
+    fs::write(
+        &execution_path,
+        serde_json::to_string_pretty(&execution).expect("execution template should serialize"),
+    )
+    .map_err(|source| InitCommandError::WriteFile { path: execution_path.clone(), source })?;
+
     store.save_local(&local)?;
 
-    let capabilities = request
-        .assistants
+    let capabilities = effective_assistants
         .iter()
         .map(|runtime| format!("- {}: {}", runtime.as_str(), runtime_capability_line(*runtime)))
         .collect::<Vec<_>>();
@@ -123,6 +185,10 @@ pub fn execute_init(request: InitRequest<'_>) -> Result<InitCommandReport, InitC
     if !capabilities.is_empty() {
         lines.push("runtime_capabilities:".to_string());
         lines.extend(capabilities);
+    }
+
+    if let Some(canon) = local.canon.as_ref() {
+        lines.push(format!("canon_mode_selection: {}", canon.mode_selection));
     }
 
     if local.routing.domain_templates.is_empty() {
@@ -233,6 +299,109 @@ fn parse_domain_standard(raw: &str) -> Result<(DomainFamily, String), InitComman
     Ok((family, standards.to_string()))
 }
 
+fn parse_model_route(raw: &str) -> Result<(RouteSlot, ModelRoute), InitCommandError> {
+    let (slot_raw, route_raw) = raw.split_once('=').ok_or_else(|| {
+        InitCommandError::InvalidDomainArgument(
+            "model routes must use SLOT=RUNTIME:MODEL".to_string(),
+        )
+    })?;
+    let (runtime_raw, model_raw) = route_raw.split_once(':').ok_or_else(|| {
+        InitCommandError::InvalidDomainArgument(
+            "model routes must use SLOT=RUNTIME:MODEL".to_string(),
+        )
+    })?;
+    let slot = parse_route_slot(slot_raw)?;
+    let runtime = parse_runtime_kind(runtime_raw)?;
+    let route = ModelRoute { runtime, model: model_raw.trim().to_string() };
+    route
+        .validate()
+        .map_err(|source| InitCommandError::InvalidDomainArgument(source.to_string()))?;
+    Ok((slot, route))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct GuidedInitAnswers {
+    canon_mode_selection: CanonModeSelectionPreference,
+    assistants: Vec<RuntimeKind>,
+    routes: Vec<(RouteSlot, ModelRoute)>,
+}
+
+fn collect_guided_init_answers() -> Result<GuidedInitAnswers, InitCommandError> {
+    let mode =
+        prompt_line("Canon mode-selection [manual|auto-confirm|auto] (default: auto-confirm): ")?;
+    let canon_mode_selection = parse_canon_mode_selection(if mode.trim().is_empty() {
+        "auto-confirm"
+    } else {
+        mode.trim()
+    })?;
+
+    let assistants =
+        prompt_line("Assistant surfaces comma-separated [codex,copilot,claude,gemini]: ")?;
+    let assistants = parse_guided_assistants(&assistants)?;
+
+    let routes = prompt_line("Model routes comma-separated SLOT=RUNTIME:MODEL: ")?;
+    let routes = parse_guided_routes(&routes)?;
+
+    Ok(GuidedInitAnswers { canon_mode_selection, assistants, routes })
+}
+
+fn prompt_line(prompt: &str) -> Result<String, InitCommandError> {
+    print!("{prompt}");
+    io::stdout()
+        .flush()
+        .map_err(|error| InitCommandError::InvalidDomainArgument(error.to_string()))?;
+    let mut line = String::new();
+    io::stdin()
+        .read_line(&mut line)
+        .map_err(|error| InitCommandError::InvalidDomainArgument(error.to_string()))?;
+    Ok(line.trim().to_string())
+}
+
+fn parse_guided_assistants(raw: &str) -> Result<Vec<RuntimeKind>, InitCommandError> {
+    raw.split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(parse_runtime_kind)
+        .collect()
+}
+
+fn parse_guided_routes(raw: &str) -> Result<Vec<(RouteSlot, ModelRoute)>, InitCommandError> {
+    raw.split(',').map(str::trim).filter(|value| !value.is_empty()).map(parse_model_route).collect()
+}
+
+fn parse_canon_mode_selection(raw: &str) -> Result<CanonModeSelectionPreference, InitCommandError> {
+    match raw.trim() {
+        "manual" => Ok(CanonModeSelectionPreference::Manual),
+        "auto-confirm" => Ok(CanonModeSelectionPreference::AutoConfirm),
+        "auto" => Ok(CanonModeSelectionPreference::Auto),
+        other => Err(InitCommandError::InvalidDomainArgument(format!(
+            "unknown Canon mode-selection `{other}`"
+        ))),
+    }
+}
+
+fn parse_route_slot(raw: &str) -> Result<RouteSlot, InitCommandError> {
+    match raw.trim() {
+        "planning" => Ok(RouteSlot::Planning),
+        "implementation" => Ok(RouteSlot::Implementation),
+        "verification" => Ok(RouteSlot::Verification),
+        "review" => Ok(RouteSlot::Review),
+        other => {
+            Err(InitCommandError::InvalidDomainArgument(format!("unknown route slot `{other}`")))
+        }
+    }
+}
+
+fn parse_runtime_kind(raw: &str) -> Result<RuntimeKind, InitCommandError> {
+    match raw.trim() {
+        "claude" => Ok(RuntimeKind::Claude),
+        "codex" => Ok(RuntimeKind::Codex),
+        "copilot" => Ok(RuntimeKind::Copilot),
+        "gemini" => Ok(RuntimeKind::Gemini),
+        other => Err(InitCommandError::InvalidDomainArgument(format!("unknown runtime `{other}`"))),
+    }
+}
+
 fn parse_context_binding(
     raw: &str,
     required: bool,
@@ -314,7 +483,10 @@ fn upsert_binding(bindings: &mut Vec<ExternalContextBinding>, binding: ExternalC
     }
 }
 
-fn execution_template(template: InitTemplate) -> serde_json::Value {
+fn execution_template(
+    template: InitTemplate,
+    canon: Option<&CanonPreferences>,
+) -> serde_json::Value {
     let (name, attempt_id, summary) = match template {
         InitTemplate::BugFix => ("init-bug-fix", "apply-bug-fix", "Apply a bounded bug fix"),
         InitTemplate::Change => ("init-change", "apply-change", "Apply a bounded change"),
@@ -323,7 +495,7 @@ fn execution_template(template: InitTemplate) -> serde_json::Value {
         }
     };
 
-    json!({
+    let mut execution = json!({
         "name": name,
         "read_targets": ["src/", "tests/"],
         "validation_command": {
@@ -344,7 +516,46 @@ fn execution_template(template: InitTemplate) -> serde_json::Value {
                 ]
             }
         ]
-    })
+    });
+
+    if let Some(canon) = canon
+        && let (Some(default_risk), Some(default_zone), Some(default_owner)) = (
+            canon.default_risk.as_deref(),
+            canon.default_zone.as_deref(),
+            canon.default_owner.as_deref(),
+        )
+    {
+        let (flow_name, stage_id, canon_mode) = match template {
+            InitTemplate::BugFix => ("bug-fix", "investigate", "discovery"),
+            InitTemplate::Change => ("change", "understand-change", "change"),
+            InitTemplate::Delivery => ("delivery", "requirements", "requirements"),
+        };
+        execution["governance"] = json!({
+            "default_runtime": "canon",
+            "canon": {
+                "command": "canon",
+                "default_owner": default_owner,
+                "default_risk": default_risk,
+                "default_zone": default_zone,
+                "default_system_context": "existing"
+            },
+            "stages": [{
+                "flow_name": flow_name,
+                "stage_id": stage_id,
+                "enabled": true,
+                "required": true,
+                "autopilot": false,
+                "runtime": "canon",
+                "canon_mode": canon_mode,
+                "system_context": "existing",
+                "risk": default_risk,
+                "zone": default_zone,
+                "owner": default_owner
+            }]
+        });
+    }
+
+    execution
 }
 
 fn template_label(template: InitTemplate) -> &'static str {
@@ -406,16 +617,18 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        InitRequest, command_in_path, execute_init, execution_template, parse_context_binding,
-        parse_domain_family, parse_domain_standard, parse_external_context_kind, template_label,
+        InitRequest, command_in_path, execute_init, execution_template, parse_canon_mode_selection,
+        parse_context_binding, parse_domain_family, parse_domain_standard,
+        parse_external_context_kind, parse_guided_assistants, parse_guided_routes, template_label,
         upsert_binding,
     };
     use crate::adapters::config_store::FileConfigStore;
     use crate::cli::CommandExitStatus;
-    use crate::domain::configuration::{InitTemplate, RuntimeKind};
+    use crate::domain::configuration::{CanonPreferences, InitTemplate, RuntimeKind};
     use crate::domain::domain_templates::{
         DomainFamily, ExternalContextBinding, ExternalContextKind,
     };
+    use crate::domain::governance::CanonModeSelectionPreference;
 
     fn temp_workspace(prefix: &str) -> PathBuf {
         let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
@@ -434,10 +647,15 @@ mod tests {
             workspace: &workspace,
             template: None,
             assistants: &[RuntimeKind::Codex],
+            routes: &[],
             domains: &[],
             domain_standards: &["react=workspace react rules".to_string()],
             context_bindings: &["react|design_system|mcp:design-system".to_string()],
             required_context_bindings: &["react|design_reference|design/reference.md".to_string()],
+            canon_mode_selection: None,
+            risk: None,
+            zone: None,
+            owner: None,
             force: true,
         })
         .unwrap();
@@ -462,10 +680,15 @@ mod tests {
             workspace: &workspace,
             template: None,
             assistants: &[],
+            routes: &[],
             domains: &[],
             domain_standards: &[],
             context_bindings: &["react|design_system".to_string()],
             required_context_bindings: &[],
+            canon_mode_selection: None,
+            risk: None,
+            zone: None,
+            owner: None,
             force: true,
         })
         .unwrap_err();
@@ -484,10 +707,15 @@ mod tests {
             workspace: &workspace,
             template: Some(InitTemplate::Delivery),
             assistants: &[],
+            routes: &[],
             domains: &[],
             domain_standards: &[],
             context_bindings: &[],
             required_context_bindings: &[],
+            canon_mode_selection: None,
+            risk: None,
+            zone: None,
+            owner: None,
             force: false,
         })
         .unwrap();
@@ -507,10 +735,15 @@ mod tests {
             workspace: &workspace,
             template: Some(InitTemplate::Change),
             assistants: &[],
+            routes: &[],
             domains: &[],
             domain_standards: &[],
             context_bindings: &[],
             required_context_bindings: &[],
+            canon_mode_selection: None,
+            risk: None,
+            zone: None,
+            owner: None,
             force: true,
         })
         .unwrap();
@@ -531,6 +764,19 @@ mod tests {
         assert_eq!(standards, "follow ui rules");
         assert!(parse_domain_standard("react=").is_err());
         assert!(parse_domain_standard("react").is_err());
+        assert_eq!(
+            parse_canon_mode_selection("auto-confirm").unwrap(),
+            crate::domain::governance::CanonModeSelectionPreference::AutoConfirm
+        );
+        assert_eq!(
+            parse_guided_assistants("codex, copilot").unwrap(),
+            vec![RuntimeKind::Codex, RuntimeKind::Copilot]
+        );
+        let routes = parse_guided_routes("planning=codex:gpt-5-codex").unwrap();
+        assert_eq!(routes.len(), 1);
+        assert_eq!(routes[0].0, crate::domain::configuration::RouteSlot::Planning);
+        assert_eq!(routes[0].1.runtime, RuntimeKind::Codex);
+        assert_eq!(routes[0].1.model, "gpt-5-codex");
 
         assert_eq!(parse_domain_family("jvm-service").unwrap(), DomainFamily::JvmService);
         assert_eq!(parse_domain_family("dotnet_service").unwrap(), DomainFamily::DotNetService);
@@ -606,10 +852,21 @@ mod tests {
         assert_eq!(template_label(InitTemplate::Change), "change");
         assert_eq!(template_label(InitTemplate::Delivery), "delivery");
 
-        let delivery_template = execution_template(InitTemplate::Delivery);
+        let delivery_template = execution_template(InitTemplate::Delivery, None);
         assert_eq!(delivery_template["name"], "init-delivery");
-        let change_template = execution_template(InitTemplate::Change);
+        let change_template = execution_template(InitTemplate::Change, None);
         assert_eq!(change_template["attempts"][0]["attempt_id"], "apply-change");
+
+        let canon = CanonPreferences {
+            mode_selection: CanonModeSelectionPreference::AutoConfirm,
+            default_risk: Some("medium".to_string()),
+            default_zone: Some("engineering".to_string()),
+            default_owner: Some("platform".to_string()),
+            default_system_context: None,
+        };
+        let governed_delivery = execution_template(InitTemplate::Delivery, Some(&canon));
+        assert_eq!(governed_delivery["governance"]["default_runtime"], "canon");
+        assert_eq!(governed_delivery["governance"]["stages"][0]["canon_mode"], "requirements");
 
         assert!(super::runtime_available(RuntimeKind::Copilot));
         let _ = super::runtime_available(RuntimeKind::Claude);

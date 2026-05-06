@@ -114,6 +114,7 @@ fn session_runtime_resolve_routing_outcome_blocks_pending_plan_confirmation() {
         latest_trace_ref: None,
         created_at: 10,
         updated_at: 20,
+        governance_lifecycle: None,
     };
 
     let outcome = runtime.resolve_routing_outcome(&record).unwrap();
@@ -145,6 +146,7 @@ fn session_runtime_resolve_routing_outcome_uses_compatibility_when_only_task_exi
         latest_trace_ref: None,
         created_at: 10,
         updated_at: 20,
+        governance_lifecycle: None,
     };
 
     let outcome = runtime.resolve_routing_outcome(&record).unwrap();
@@ -175,6 +177,7 @@ fn plan_task_blocks_when_context_pack_is_not_credible() {
         latest_trace_ref: None,
         created_at: 10,
         updated_at: 20,
+        governance_lifecycle: None,
     };
 
     let err = runtime.plan_task(&mut record, None, false).unwrap_err();
@@ -215,6 +218,7 @@ fn plan_task_uses_authored_brief_as_credible_context_on_empty_workspace() {
         latest_trace_ref: None,
         created_at: 10,
         updated_at: 20,
+        governance_lifecycle: None,
     };
 
     let err = runtime.plan_task(&mut record, None, false).unwrap_err();
@@ -274,6 +278,7 @@ fn repeated_plan_task_revises_goal_plan_when_workspace_evidence_changes() {
         latest_trace_ref: None,
         created_at: 10,
         updated_at: 20,
+        governance_lifecycle: None,
     };
 
     runtime.plan_task(&mut record, None, false).unwrap();
@@ -341,6 +346,7 @@ fn plan_task_blocks_on_negotiation_and_authored_brief_clarifications() {
         latest_trace_ref: None,
         created_at: 10,
         updated_at: 20,
+        governance_lifecycle: None,
     };
 
     let negotiation_error = runtime.plan_task(&mut negotiation_record, None, false).unwrap_err();
@@ -395,6 +401,7 @@ fn plan_task_blocks_on_negotiation_and_authored_brief_clarifications() {
         latest_trace_ref: None,
         created_at: 10,
         updated_at: 20,
+        governance_lifecycle: None,
     };
 
     let authored_brief_error =

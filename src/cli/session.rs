@@ -80,6 +80,7 @@ pub fn execute_start_with_target(
         latest_trace_ref: None,
         created_at: now,
         updated_at: now,
+        governance_lifecycle: None,
     };
 
     FileSessionStore::for_workspace(&workspace).persist(&record)?;
@@ -950,6 +951,23 @@ pub(crate) fn build_status_view_with_follow_up(
             .active_task
             .as_ref()
             .and_then(task_state_governance_next_action),
+        governance_lifecycle_runtime: record
+            .governance_lifecycle
+            .as_ref()
+            .map(|lc| format!("{}", lc.governance_runtime)),
+        governance_lifecycle_opt_out: record
+            .governance_lifecycle
+            .as_ref()
+            .filter(|lc| lc.explicit_opt_out)
+            .map(|lc| lc.explicit_opt_out),
+        governance_lifecycle_mode_selection: record
+            .governance_lifecycle
+            .as_ref()
+            .map(|lc| format!("{}", lc.mode_selection_preference)),
+        governance_lifecycle_selected_mode: record
+            .governance_lifecycle
+            .as_ref()
+            .and_then(|lc| lc.selected_mode.map(|m| format!("{m:?}").to_lowercase())),
         next_command,
         explanation: explanation.into(),
     }
@@ -1534,6 +1552,7 @@ fn red_to_green_addition() {
                 latest_trace_ref: None,
                 created_at: 1,
                 updated_at: 1,
+                governance_lifecycle: None,
             }),
             Some("boundline start".to_string())
         );
@@ -1711,6 +1730,7 @@ fn red_to_green_addition() {
                 assistant_runtimes: vec![RuntimeKind::Codex],
                 ..RoutingConfig::default()
             },
+            canon: None,
         };
         config.routing.slot_effort_policies.insert(
             RouteSlot::Implementation,
@@ -2015,6 +2035,7 @@ fn red_to_green_addition() {
             latest_trace_ref: None,
             created_at: 1,
             updated_at: 1,
+            governance_lifecycle: None,
         };
 
         let view = build_status_view_with_follow_up(
@@ -2086,6 +2107,7 @@ fn red_to_green_addition() {
             latest_trace_ref: None,
             created_at: 1,
             updated_at: 1,
+            governance_lifecycle: None,
         };
 
         let view = build_status_view_with_follow_up(
@@ -2156,6 +2178,7 @@ fn red_to_green_addition() {
             latest_trace_ref: None,
             created_at: 1,
             updated_at: 1,
+            governance_lifecycle: None,
         };
         assert_eq!(
             suggested_next_command(&base_record),

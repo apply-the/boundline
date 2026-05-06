@@ -18,6 +18,8 @@ pub mod run;
 pub mod session;
 #[path = "../../../src/cli/workflow.rs"]
 pub mod workflow;
+#[path = "../../../src/cli/workspace.rs"]
+pub mod workspace;
 
 #[path = "../../../src/cli.rs"]
 mod cli_impl;

@@ -100,6 +100,18 @@ pub fn governance_input_documents(task_input: &Value) -> Vec<GovernanceInputDocu
         documents.push(GovernanceInputDocument { kind: kind.to_string(), path });
     }
 
+    // T040: Include clarification answers as input documents.
+    if let Some(clarification) = bundle
+        .clarification
+        .as_ref()
+        .filter(|c| c.status == crate::domain::task::ClarificationStatus::Answered)
+    {
+        documents.push(GovernanceInputDocument {
+            kind: "clarification-answer".to_string(),
+            path: format!("clarification-{}", clarification.clarification_id),
+        });
+    }
+
     documents
 }
 
@@ -192,6 +204,136 @@ pub fn bounded_governance_context(
         },
         packet_reuse,
     ))
+}
+
+/// T041: Enrich a bounded governance context with reused_packets from
+/// `GovernedSessionLifecycle.accumulated_context` entries not already present.
+pub fn enrich_bounded_context_with_accumulated(
+    bounded_context: &mut GovernanceBoundedContext,
+    accumulated_context: &[crate::domain::governance::GovernedDocumentRef],
+) {
+    use std::collections::HashSet;
+    let existing_refs: HashSet<String> =
+        bounded_context.reused_packets.iter().map(|p| p.packet_ref.clone()).collect();
+
+    for doc_ref in accumulated_context {
+        if doc_ref.readiness != PacketReadiness::Reusable {
+            continue;
+        }
+        if existing_refs.contains(&doc_ref.packet_ref) {
+            continue;
+        }
+        bounded_context.reused_packets.push(ReusedPacketInput {
+            stage_key: doc_ref.stage_key.clone(),
+            packet_ref: doc_ref.packet_ref.clone(),
+            headline: format!("governed {:?} from {}", doc_ref.canon_mode, doc_ref.stage_key),
+        });
+    }
+}
+
+/// T042: Create a `GovernedDocumentRef` from a Canon governance response.
+///
+/// Returns `Some` when the response contains a reusable packet; otherwise `None`.
+pub fn governed_document_ref_from_response(
+    stage_key: &str,
+    canon_mode: CanonMode,
+    response: &GovernanceRuntimeResponse,
+) -> Option<crate::domain::governance::GovernedDocumentRef> {
+    let packet = response.packet.as_ref()?;
+    if packet.readiness != PacketReadiness::Reusable {
+        return None;
+    }
+    Some(crate::domain::governance::GovernedDocumentRef {
+        stage_key: stage_key.to_string(),
+        canon_mode,
+        packet_ref: packet.packet_ref.clone(),
+        document_path: packet.document_refs.first().cloned(),
+        readiness: packet.readiness,
+    })
+}
+
+/// T042: Append a governed document reference to the session's governance lifecycle.
+///
+/// No-op if the session has no lifecycle or the doc_ref is `None`.
+pub fn append_governed_document_to_lifecycle(
+    session: &mut crate::domain::session::ActiveSessionRecord,
+    doc_ref: Option<crate::domain::governance::GovernedDocumentRef>,
+) {
+    let Some(doc_ref) = doc_ref else { return };
+    let Some(lifecycle) = session.governance_lifecycle.as_mut() else { return };
+    lifecycle.accumulated_context.push(doc_ref);
+}
+
+/// T043: Extract a clarification prompt from a Canon response with non-success state.
+///
+/// Returns `Some(prompt_text)` when the Canon response indicates incomplete
+/// input or pending mode selection that the operator should resolve.
+pub fn clarification_prompt_from_response(response: &GovernanceRuntimeResponse) -> Option<String> {
+    match response.status {
+        GovernanceLifecycleState::PendingSelection => {
+            Some(format!("Canon requires mode selection: {}", response.message))
+        }
+        GovernanceLifecycleState::Incomplete => {
+            let missing_sections = response
+                .packet
+                .as_ref()
+                .map(|p| &p.missing_sections)
+                .filter(|sections| !sections.is_empty());
+
+            Some(match missing_sections {
+                Some(sections) => format!(
+                    "Canon document is incomplete. Missing sections: {}. {}",
+                    sections.join(", "),
+                    response.message
+                ),
+                None => format!("Canon document is incomplete. {}", response.message),
+            })
+        }
+        GovernanceLifecycleState::Blocked | GovernanceLifecycleState::Failed => {
+            let missing_sections = response
+                .packet
+                .as_ref()
+                .filter(|p| p.readiness == PacketReadiness::Incomplete)
+                .map(|p| &p.missing_sections)
+                .filter(|sections| !sections.is_empty());
+
+            missing_sections.map(|sections| {
+                format!(
+                    "Canon document is incomplete. Missing sections: {}. {}",
+                    sections.join(", "),
+                    response.message
+                )
+            })
+        }
+        _ => None,
+    }
+}
+
+/// T044: Determine if a Canon response indicates awaiting approval.
+///
+/// Returns `true` when the session lifecycle should be updated to reflect
+/// an approval-pending state.
+pub fn is_awaiting_approval_response(response: &GovernanceRuntimeResponse) -> bool {
+    response.status == GovernanceLifecycleState::AwaitingApproval
+}
+
+/// T044: Update session governance lifecycle to approval-pending state.
+pub fn set_lifecycle_awaiting_approval(
+    session: &mut crate::domain::session::ActiveSessionRecord,
+    response: &GovernanceRuntimeResponse,
+) {
+    let Some(lifecycle) = session.governance_lifecycle.as_mut() else { return };
+    lifecycle.terminal_reason = Some(format!("awaiting approval: {}", response.message));
+}
+
+/// T045: Determine if a session lifecycle is in awaiting-approval state
+/// and should use `refresh` instead of `start`.
+pub fn lifecycle_requires_refresh(session: &crate::domain::session::ActiveSessionRecord) -> bool {
+    session
+        .governance_lifecycle
+        .as_ref()
+        .and_then(|lifecycle| lifecycle.terminal_reason.as_deref())
+        .is_some_and(|reason| reason.starts_with("awaiting approval"))
 }
 
 pub fn runtime_command_available(command: &str) -> bool {
@@ -625,6 +767,53 @@ pub enum GovernanceStepDecision<T> {
     Terminal(T),
 }
 
+use crate::domain::governance::CanonModeSelectionPreference;
+
+/// Result of mode-selection gate evaluation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ModeSelectionOutcome {
+    /// Mode was explicitly provided by the operator.
+    ExplicitMode(CanonMode),
+    /// Mode inferred from evidence; confirmation recommended.
+    InferredMode { mode: CanonMode, confirmation_prompt: String },
+    /// Mode inferred and auto-accepted.
+    AutoSelectedMode(CanonMode),
+    /// No mode could be determined; manual selection required.
+    PendingSelection { message: String },
+}
+
+/// Evaluate the mode-selection gate based on preference and explicit mode.
+///
+/// - `Manual` + no explicit mode → `PendingSelection`
+/// - `AutoConfirm` + no explicit mode → `InferredMode` (placeholder; real inference TBD)
+/// - `Auto` + no explicit mode → `AutoSelectedMode` (placeholder; real inference TBD)
+/// - Any preference + explicit mode → `ExplicitMode`
+pub fn evaluate_mode_selection_gate(
+    preference: CanonModeSelectionPreference,
+    explicit_mode: Option<CanonMode>,
+) -> ModeSelectionOutcome {
+    if let Some(mode) = explicit_mode {
+        return ModeSelectionOutcome::ExplicitMode(mode);
+    }
+
+    match preference {
+        CanonModeSelectionPreference::Manual => ModeSelectionOutcome::PendingSelection {
+            message: "Canon mode-selection is manual; specify --mode <mode>".to_string(),
+        },
+        CanonModeSelectionPreference::AutoConfirm => {
+            // Placeholder: real inference from evidence would happen here.
+            ModeSelectionOutcome::InferredMode {
+                mode: CanonMode::Change,
+                confirmation_prompt: "Inferred Canon mode: change. Confirm with --mode change or specify a different mode.".to_string(),
+            }
+        }
+        CanonModeSelectionPreference::Auto => {
+            // Placeholder: real inference from evidence would happen here.
+            ModeSelectionOutcome::AutoSelectedMode(CanonMode::Change)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde::Serialize;
@@ -809,5 +998,46 @@ mod tests {
         assert!(
             matches!(error, GovernanceStateSelectionError::TaskContext(message) if message.contains("latest_governance_stage"))
         );
+    }
+
+    #[test]
+    fn mode_selection_gate_explicit_mode_overrides_preference() {
+        use super::{ModeSelectionOutcome, evaluate_mode_selection_gate};
+        use crate::domain::governance::{CanonMode, CanonModeSelectionPreference};
+
+        let outcome = evaluate_mode_selection_gate(
+            CanonModeSelectionPreference::Manual,
+            Some(CanonMode::Requirements),
+        );
+        assert_eq!(outcome, ModeSelectionOutcome::ExplicitMode(CanonMode::Requirements));
+    }
+
+    #[test]
+    fn mode_selection_gate_manual_without_mode_returns_pending() {
+        use super::{ModeSelectionOutcome, evaluate_mode_selection_gate};
+        use crate::domain::governance::CanonModeSelectionPreference;
+
+        let outcome = evaluate_mode_selection_gate(CanonModeSelectionPreference::Manual, None);
+        assert!(
+            matches!(outcome, ModeSelectionOutcome::PendingSelection { message } if message.contains("--mode"))
+        );
+    }
+
+    #[test]
+    fn mode_selection_gate_auto_confirm_returns_inferred() {
+        use super::{ModeSelectionOutcome, evaluate_mode_selection_gate};
+        use crate::domain::governance::CanonModeSelectionPreference;
+
+        let outcome = evaluate_mode_selection_gate(CanonModeSelectionPreference::AutoConfirm, None);
+        assert!(matches!(outcome, ModeSelectionOutcome::InferredMode { .. }));
+    }
+
+    #[test]
+    fn mode_selection_gate_auto_returns_auto_selected() {
+        use super::{ModeSelectionOutcome, evaluate_mode_selection_gate};
+        use crate::domain::governance::CanonModeSelectionPreference;
+
+        let outcome = evaluate_mode_selection_gate(CanonModeSelectionPreference::Auto, None);
+        assert!(matches!(outcome, ModeSelectionOutcome::AutoSelectedMode(_)));
     }
 }
