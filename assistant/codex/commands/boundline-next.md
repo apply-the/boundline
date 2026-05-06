@@ -9,7 +9,7 @@ Boundline owns orchestration; Canon is only the optional governed companion.
 ## Intent
 Ask Boundline for the next recommended session command.
 
-Compatibility follow-up means the user previously chose `boundline run --compatibility ...`; plain direct `run --goal` is native-first in `0.41.0`.
+Compatibility follow-up means the user previously chose `boundline run --compatibility ...`; plain direct `run --goal` is native-first in `0.42.0`.
 
 ## Required Context
 - `workspace_ref`

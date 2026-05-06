@@ -67,18 +67,16 @@ jobs:
           $boundlineVersion = '${{ needs.prepare.outputs.boundline_version }}'
           $canonVersion = '${{ needs.prepare.outputs.canon_version }}'
           $bundleName = "boundline-bundle-$boundlineVersion-windows-x86_64.zip"
-          $canonArchive = "canon-$canonVersion-windows-x86_64.zip"
-          $canonUrl = "https://github.com/apply-the/canon/releases/download/$canonVersion/$canonArchive"
 
           New-Item -ItemType Directory -Force -Path release-bundle | Out-Null
-          Invoke-WebRequest -Uri $canonUrl -OutFile $canonArchive
-          Expand-Archive -Path $canonArchive -DestinationPath canon-expand -Force
+          git clone --depth 1 --branch "$canonVersion" https://github.com/apply-the/canon canon-source
+          cargo build --locked --release --package canon-cli --bin canon --target x86_64-pc-windows-msvc --manifest-path canon-source/Cargo.toml --target-dir canon-source/target
           Copy-Item "target/x86_64-pc-windows-msvc/release/boundline.exe" "release-bundle/boundline.exe"
-          $canonBinary = Get-ChildItem -Path canon-expand -Filter canon.exe -Recurse | Select-Object -First 1
-          if (-not $canonBinary) {
-            throw "canon.exe not found in $canonArchive"
+          $canonBinary = "canon-source/target/x86_64-pc-windows-msvc/release/canon.exe"
+          if (-not (Test-Path $canonBinary)) {
+            throw "canon.exe not found after building Canon $canonVersion from source"
           }
-          Copy-Item $canonBinary.FullName "release-bundle/canon.exe"
+          Copy-Item $canonBinary "release-bundle/canon.exe"
           Compress-Archive -Path release-bundle/* -DestinationPath $bundleName -Force
       - uses: actions/upload-artifact@v4
         with:

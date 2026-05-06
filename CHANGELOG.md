@@ -17,6 +17,8 @@ recorded workspace version.
 
 ## [Unreleased]
 
+## [0.42.0] - 2026-05-06
+
 Delivered specs:
 
 - `042` - Native Canon CLI Surface

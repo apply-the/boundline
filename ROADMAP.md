@@ -6,7 +6,7 @@ Canon is downstream from Boundline in this roadmap: Boundline thinks, decides, o
 
 Evolve Boundline into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.41.0
+## Current Status: v0.42.0
 
 Boundline now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -18,8 +18,18 @@ selection, credible governed delivery completion, final product-surface
 closure, explicit bounded context assembly, decision-driven bounded action
 selection, evidence-driven dynamic planning, Canon-grounded structured
 memory, bounded delegated execution, and a release-aligned distribution
-surface in place, with context selection now hardened around explicit evidence
-anchors instead of keyword-first file scoring:
+surface in place, with Canon-default governed setup, runtime selection, and
+assistant-surface alignment now carried through the same primary workflow:
+
+- Canon-ready workspaces now default `boundline run --goal` to the governed
+  Canon runtime, with explicit `--mode` selection and `--no-canon` opt-out
+- `boundline init`, `config show`, and `config set-canon` now keep Canon
+  mode-selection preferences and workspace-local governance defaults visible on
+  the same primary operator surface
+- `boundline doctor --install` now verifies the actual Canon governance
+  surface, including operations, supported modes, and authoritative binary path
+- Copilot, Codex, Claude, and Gemini command packs now expose the same
+  Canon-default workflow and mode aliases as the CLI
 
 - Boundline now ships repo-managed Homebrew and winget metadata plus a release
   workflow that assembles Boundline bundles with a compatible Canon companion
@@ -78,13 +88,13 @@ anchors instead of keyword-first file scoring:
 - session-native commands still accept `--cluster <primary-workspace>` so one authoritative primary-owned session can plan and deliver a bounded change across registered member repositories
 - clustered `run`, `status`, `next`, and `inspect` still surface authoritative workspace, clustered execution condition, participating workspaces, and any blocking member without implying distributed orchestration ownership
 
-## Post-0.41.0 Roadmap
+## Post-0.42.0 Roadmap
 
-`0.41.0` closes the immediate rollback and crate-boundary work that remained
-after the context-selection hardening release. Boundline now has local
-reversible checkpoints, explicit restore commands, and a workspace-aware crate
-layout, so the near-term roadmap is open rather than carrying one last
-mandatory safety slice.
+`0.42.0` closes the Canon-default governed-surface release. Boundline now has
+guided Canon setup, Canon-ready default governed runs, real surface
+verification, explicit governed follow-through states, and assistant command
+packs aligned to the same primary workflow, so the near-term roadmap is open
+rather than carrying this operator-facing surface work as unfinished follow-up.
 
 The governing rule remains simple: Boundline is still the product and execution
 owner. Canon stays a bounded, useful governed runtime inside that same delivery
@@ -100,6 +110,18 @@ path rather than drifting back into a parallel tool story.
   root even after the crate layout changes
 - Canon remains downstream and optional except where governed artifacts are
   already explicitly modeled in the current delivery flow
+
+### Delivered in 0.42.0
+
+- default `run --goal` to Canon on Canon-ready workspaces while keeping
+  `--no-canon` and explicit `--mode <mode>` operator-controlled
+- assemble authored briefs, clarification answers, and bounded reused packet
+  context into Canon-ready request payloads across governed stages
+- extend `boundline init`, `config show`, `config set-canon`, and
+  `doctor --install` so Canon mode-selection and surface verification stay on
+  the same workspace-local operator path
+- align Copilot, Codex, Claude, and Gemini command packs to the same
+  Canon-default CLI workflow without manual manifest editing guidance
 
 ### Delivered in 0.41.0
 

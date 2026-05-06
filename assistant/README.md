@@ -4,7 +4,7 @@ This directory contains Markdown-based commands to run `boundline` from various 
 
 The primary delivery surface is session-native: `start -> capture -> plan -> run -> status -> next -> inspect` against `<workspace>/.boundline/session.json` and `<workspace>/.boundline/traces/`.
 
-In `0.41.0`, assistants should treat installation verification as the first
+In `0.42.0`, assistants should treat installation verification as the first
 boundary in a new environment: prefer the README quick path, run
 `boundline doctor --install` before workspace commands, and only then move into the
 session-native workflow.
@@ -17,10 +17,10 @@ Keep the product boundary explicit in assistant narration:
 	`docs/getting-started.md`; use `docs/architecture.md` only for the second
 	read level.
 
-In `0.41.0`, workflows and direct runs are primary surfaces of the same Boundline
+In `0.42.0`, workflows and direct runs are primary surfaces of the same Boundline
 product story, while compatibility remains explicit and subordinate.
 
-In `0.41.0`, direct `run --goal` still bootstraps that native session path by
+In `0.42.0`, direct `run --goal` still bootstraps that native session path by
 default, while `run --compatibility --goal ...` remains the explicit
 execution-profile route. `capture` persists `negotiation_goal_summary`,
 `negotiation_resolution`, and `negotiation_acceptance_boundary` before

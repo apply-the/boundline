@@ -78,15 +78,17 @@ These are product layers over one runtime, not separate products.
 
 ## Distribution And Update Model
 
-The `0.41.0` release keeps the repo-managed distribution surface introduced in
-`0.39.0`, carries the same Boundline-plus-Canon pairing metadata, and now adds
-local reversible checkpoints to the same primary operator surface:
+The `0.42.0` release keeps the repo-managed distribution surface introduced in
+`0.39.0`, carries the same Boundline-plus-Canon pairing metadata, and now makes
+Canon-ready setup, verification, and governed runs part of the same primary
+operator surface:
 
 - `distribution/channel-metadata.toml` pins the release-aligned Boundline plus Canon pairing and the tap-facing Homebrew channel metadata.
 - `scripts/sync-distribution-metadata.sh` regenerates the tap-ready Homebrew formula and the winget manifests.
 - `.github/workflows/sync-homebrew-tap.yml` syncs the generated Homebrew formula into `apply-the/homebrew-boundline`.
 - `.github/workflows/release-windows-distribution.yml` builds the Windows release bundle that still carries both `boundline` and `canon` for the winget package surface.
 - `boundline doctor --install` verifies the installed Boundline version, the supported Canon target, and the current pairing state.
+- `boundline init`, `config show`, `config set-canon`, and the assistant command packs keep Canon mode-selection and governed entry guidance aligned with the CLI.
 - `.boundline/checkpoints/` keeps local rollback manifests for mutating `run` and `step` without making Git a prerequisite.
 
 The supported pairing states are explicit:
