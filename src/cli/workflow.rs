@@ -741,6 +741,7 @@ fn initialize_session(workspace: &Path) -> ActiveSessionRecord {
         latest_trace_ref: None,
         created_at: now,
         updated_at: now,
+        governance_lifecycle: None,
     }
 }
 
@@ -1152,6 +1153,8 @@ mod tests {
                 risk: Some("medium".to_string()),
                 zone: Some("delivery".to_string()),
                 owner: Some("boundline".to_string()),
+                explicit_mode: None,
+                explicit_no_canon: false,
             }),
             resolution_state: AuthoredBriefResolutionState::Ready,
             clarification: None,

@@ -51,6 +51,7 @@ fn build_record(workspace_ref: &str) -> ActiveSessionRecord {
         latest_trace_ref: Some(format!("{workspace_ref}/.boundline/traces/task-1.json")),
         created_at: 10,
         updated_at: 20,
+        governance_lifecycle: None,
     }
 }
 

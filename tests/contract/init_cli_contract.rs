@@ -27,20 +27,56 @@ fn init_accepts_template_and_assistant_runtimes() {
             workspace,
             template,
             assistant,
+            route,
             domain,
             domain_standard,
             context_binding,
             required_context_binding,
+            canon_mode_selection,
+            risk,
+            zone,
+            owner,
             force,
         } => {
             assert_eq!(workspace, PathBuf::from("/tmp/ws"));
             assert_eq!(template, Some(InitTemplate::Delivery));
             assert_eq!(assistant, vec![RuntimeKind::Codex, RuntimeKind::Gemini]);
+            assert!(route.is_empty());
             assert!(domain.is_empty());
             assert!(domain_standard.is_empty());
             assert!(context_binding.is_empty());
             assert!(required_context_binding.is_empty());
+            assert_eq!(canon_mode_selection, None);
+            assert_eq!(risk, None);
+            assert_eq!(zone, None);
+            assert_eq!(owner, None);
             assert!(force);
+        }
+        other => panic!("expected Init, got {other:?}"),
+    }
+}
+
+#[test]
+fn init_accepts_canon_preferences_and_model_routes() {
+    let cli = Cli::try_parse_from([
+        "boundline",
+        "init",
+        "--workspace",
+        "/tmp/ws",
+        "--canon-mode-selection",
+        "auto-confirm",
+        "--assistant",
+        "copilot",
+        "--route",
+        "planning=copilot:gpt-4o",
+    ])
+    .unwrap();
+
+    match cli.command {
+        DeveloperCommand::Init { assistant, route, canon_mode_selection, .. } => {
+            assert_eq!(assistant, vec![RuntimeKind::Copilot]);
+            assert_eq!(route, vec!["planning=copilot:gpt-4o".to_string()]);
+            assert_eq!(canon_mode_selection.unwrap().to_string(), "auto-confirm");
         }
         other => panic!("expected Init, got {other:?}"),
     }
@@ -71,15 +107,21 @@ fn init_accepts_domain_templates_standards_and_bindings() {
             workspace,
             template,
             assistant,
+            route,
             domain,
             domain_standard,
             context_binding,
             required_context_binding,
+            canon_mode_selection,
+            risk,
+            zone,
+            owner,
             force,
         } => {
             assert_eq!(workspace, PathBuf::from("/tmp/ws"));
             assert_eq!(template, None);
             assert!(assistant.is_empty());
+            assert!(route.is_empty());
             assert_eq!(domain, vec![DomainFamily::Systems, DomainFamily::React]);
             assert_eq!(domain_standard, vec!["react=follow the shared UI system".to_string()]);
             assert_eq!(context_binding, vec!["react|design_system|mcp:design-system".to_string()]);
@@ -87,6 +129,10 @@ fn init_accepts_domain_templates_standards_and_bindings() {
                 required_context_binding,
                 vec!["react|design_reference|design/reference.md".to_string()]
             );
+            assert_eq!(canon_mode_selection, None);
+            assert_eq!(risk, None);
+            assert_eq!(zone, None);
+            assert_eq!(owner, None);
             assert!(!force);
         }
         other => panic!("expected Init, got {other:?}"),
@@ -102,19 +148,29 @@ fn init_accepts_workspace_without_template() {
             workspace,
             template,
             assistant,
+            route,
             domain,
             domain_standard,
             context_binding,
             required_context_binding,
+            canon_mode_selection,
+            risk,
+            zone,
+            owner,
             force,
         } => {
             assert_eq!(workspace, PathBuf::from("/tmp/ws"));
             assert_eq!(template, None);
             assert!(assistant.is_empty());
+            assert!(route.is_empty());
             assert!(domain.is_empty());
             assert!(domain_standard.is_empty());
             assert!(context_binding.is_empty());
             assert!(required_context_binding.is_empty());
+            assert_eq!(canon_mode_selection, None);
+            assert_eq!(risk, None);
+            assert_eq!(zone, None);
+            assert_eq!(owner, None);
             assert!(!force);
         }
         other => panic!("expected Init, got {other:?}"),

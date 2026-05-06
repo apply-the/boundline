@@ -60,10 +60,12 @@ use crate::orchestrator::goal_planner::{
     AuthoredInputDocument, GoalPlannerError, PlanningContextSources, build_goal_plan_with_sources,
 };
 use crate::orchestrator::governance::{
-    GovernanceStepDecision, bounded_governance_context, build_autopilot_decision,
-    compacted_canon_memory_for_block, compacted_canon_memory_from_response, governance_stage_key,
-    governance_state_patch, overlay_stage_policy_with_intent, requested_governance_intent,
-    runtime_command_available, selected_stage_policy,
+    GovernanceStepDecision, append_governed_document_to_lifecycle, bounded_governance_context,
+    build_autopilot_decision, clarification_prompt_from_response, compacted_canon_memory_for_block,
+    compacted_canon_memory_from_response, enrich_bounded_context_with_accumulated,
+    governance_input_documents, governance_stage_key, governance_state_patch,
+    governed_document_ref_from_response, overlay_stage_policy_with_intent,
+    requested_governance_intent, runtime_command_available, selected_stage_policy,
 };
 use crate::orchestrator::recovery::{RecoveryDecision, decide_recovery};
 use crate::orchestrator::review_trace::{record_review_step_completed, record_review_step_started};
@@ -2145,9 +2147,16 @@ impl SessionRuntime {
                 .filter(|record| record.stage_key == stage_key)
                 .map(|record| record.governance_attempt_id.clone())
         };
-        let (bounded_context, packet_reuse) =
+        let (mut bounded_context, packet_reuse) =
             bounded_governance_context(&task.context, metadata, &runtime.profile.read_targets)
                 .map_err(|error| SessionRuntimeError::GovernancePatch(error.to_string()))?;
+        if let Some(lifecycle) = session.governance_lifecycle.as_ref() {
+            enrich_bounded_context_with_accumulated(
+                &mut bounded_context,
+                &lifecycle.accumulated_context,
+            );
+        }
+        let input_documents = governance_input_documents(&task.input);
 
         let requested_runtime = policy.effective_runtime(governance.default_runtime);
         let canon_available = governance
@@ -2280,7 +2289,7 @@ impl SessionRuntime {
                     .and_then(|record| record.packet_ref.clone())
                     .or_else(|| existing_packet.as_ref().map(|packet| packet.packet_ref.clone())),
                 bounded_context,
-                input_documents: Vec::new(),
+                input_documents,
             };
             trace.record_event(
                 TraceEventType::GovernanceStarted,
@@ -2356,7 +2365,7 @@ impl SessionRuntime {
                 .and_then(|record| record.packet_ref.clone())
                 .or_else(|| existing_packet.as_ref().map(|packet| packet.packet_ref.clone())),
             bounded_context,
-            input_documents: Vec::new(),
+            input_documents,
         };
 
         trace.record_event(
@@ -2451,6 +2460,40 @@ impl SessionRuntime {
         decision: Option<crate::domain::governance::AutopilotDecisionRecord>,
         response: crate::adapters::governance_runtime::GovernanceRuntimeResponse,
     ) -> Result<GovernanceStepDecision<TaskRunResponse>, SessionRuntimeError> {
+        if let Some(prompt) = clarification_prompt_from_response(&response) {
+            trace.record_event(
+                TraceEventType::GovernanceBlocked,
+                Some(step.id.clone()),
+                task.plan.revision,
+                json!({
+                    "stage_key": stage_key,
+                    "runtime": runtime_kind,
+                    "reason": prompt,
+                    "packet_ref": response.packet.as_ref().map(|packet| packet.packet_ref.clone()),
+                    "missing_sections": response
+                        .packet
+                        .as_ref()
+                        .map(|packet| packet.missing_sections.clone())
+                        .unwrap_or_default(),
+                    "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
+                    "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
+                }),
+            );
+            let trace_location = self.persist_trace(trace)?;
+            session.latest_status = SessionStatus::Running;
+            session.latest_terminal_reason = None;
+            session.latest_trace_ref = Some(trace_location);
+            session.updated_at = current_timestamp_millis();
+            return Err(SessionRuntimeError::ClarificationRequired {
+                headline: response
+                    .packet
+                    .as_ref()
+                    .map(|packet| packet.headline.clone())
+                    .unwrap_or_else(|| "Canon clarification required".to_string()),
+                prompt,
+            });
+        }
+
         let packet_rejected = response.packet.as_ref().is_some_and(|packet| {
             matches!(packet.readiness, PacketReadiness::Incomplete | PacketReadiness::Rejected)
         });
@@ -2550,6 +2593,16 @@ impl SessionRuntime {
                 session.latest_terminal_reason = None;
                 session.latest_trace_ref = Some(trace_location);
                 session.updated_at = current_timestamp_millis();
+                if let Some(canon_mode) = response
+                    .packet
+                    .as_ref()
+                    .and_then(|packet| packet.canon_mode)
+                    .or_else(|| decision.as_ref().and_then(|decision| decision.selected_mode))
+                {
+                    let doc_ref =
+                        governed_document_ref_from_response(&stage_key, canon_mode, &response);
+                    append_governed_document_to_lifecycle(session, doc_ref);
+                }
                 if matches!(request_kind, GovernanceRequestKind::Refresh) {
                     Ok(GovernanceStepDecision::Halt)
                 } else {
@@ -3550,6 +3603,7 @@ mod tests {
             latest_trace_ref: None,
             created_at: 10,
             updated_at: 10,
+            governance_lifecycle: None,
         }
     }
 
@@ -3851,6 +3905,7 @@ mod tests {
             latest_trace_ref: None,
             created_at: 10,
             updated_at: 10,
+            governance_lifecycle: None,
         };
 
         let created = runtime.load_or_create_trace(&mut session, &task).unwrap();
@@ -3928,6 +3983,7 @@ mod tests {
             latest_trace_ref: Some("trace.json".to_string()),
             created_at: 10,
             updated_at: 10,
+            governance_lifecycle: None,
         };
 
         assert!(matches!(
@@ -4158,6 +4214,7 @@ mod tests {
             latest_trace_ref: None,
             created_at: 10,
             updated_at: 10,
+            governance_lifecycle: None,
         };
 
         runtime.execute_next_step(&mut session).unwrap();
@@ -4215,6 +4272,7 @@ mod tests {
             latest_trace_ref: None,
             created_at: 10,
             updated_at: 10,
+            governance_lifecycle: None,
         };
 
         let response = runtime.run_to_terminal(&mut session).unwrap();
@@ -4283,6 +4341,7 @@ mod tests {
             latest_trace_ref: None,
             created_at: 10,
             updated_at: 10,
+            governance_lifecycle: None,
         };
 
         runtime.capture_goal(&mut session, "Drive governed bug fix").unwrap();
@@ -4424,6 +4483,7 @@ mod tests {
             latest_trace_ref: None,
             created_at: 10,
             updated_at: 10,
+            governance_lifecycle: None,
         };
         let trace = ExecutionTrace::new("task-cluster", "session-runtime", "cluster goal");
         let response = runtime
@@ -4589,6 +4649,7 @@ mod tests {
             latest_trace_ref: None,
             created_at: 10,
             updated_at: 10,
+            governance_lifecycle: None,
         };
         session
             .active_task
@@ -4702,6 +4763,7 @@ mod tests {
             latest_trace_ref: None,
             created_at: 10,
             updated_at: 10,
+            governance_lifecycle: None,
         };
 
         runtime.capture_goal(&mut session, "Drive governed bug fix").unwrap();
@@ -4761,6 +4823,7 @@ mod tests {
             latest_trace_ref: None,
             created_at: 10,
             updated_at: 10,
+            governance_lifecycle: None,
         };
         let policy = StageGovernancePolicy {
             flow_name: "bug-fix".to_string(),
@@ -4877,6 +4940,7 @@ mod tests {
             latest_trace_ref: None,
             created_at: 10,
             updated_at: 10,
+            governance_lifecycle: None,
         };
         runtime_missing_mode
             .capture_goal(&mut missing_mode_session, "Drive governed bug fix")

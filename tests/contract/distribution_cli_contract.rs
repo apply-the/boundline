@@ -30,7 +30,15 @@ fn fake_canon_directory(version: &str) -> PathBuf {
         std::env::temp_dir().join(format!("boundline-distribution-contract-{}", Uuid::new_v4()));
     fs::create_dir_all(&directory).unwrap();
     let canon = directory.join("canon");
-    fs::write(&canon, format!("#!/bin/sh\nprintf 'canon version {version}\\n'\n")).unwrap();
+    let capabilities = r#"{"canon_version":"0.40.0","supported_schema_versions":["2026-02-01"],"operations":["start","refresh","capabilities"],"supported_modes":["requirements","discovery","system-shaping","architecture","backlog","change","implementation","refactor","review","verification","incident","security-assessment","system-assessment","migration","supply-chain-analysis"],"status_values":["governed_ready"],"approval_state_values":["not_needed"],"packet_readiness_values":["reusable"],"compatibility_notes":["stable-json"]}"#;
+    fs::write(
+        &canon,
+        format!(
+            "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  printf 'canon version {version}\\n'\n  exit 0\nfi\nif [ \"$1\" = \"governance\" ] && [ \"$2\" = \"capabilities\" ]; then\n  printf '%s' '{}'\n  exit 0\nfi\nexit 1\n",
+            capabilities
+        ),
+    )
+    .unwrap();
     let mut permissions = fs::metadata(&canon).unwrap().permissions();
     permissions.set_mode(0o755);
     fs::set_permissions(&canon, permissions).unwrap();

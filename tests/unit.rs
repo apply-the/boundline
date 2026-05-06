@@ -132,3 +132,9 @@ mod workflow_definition;
 
 #[path = "unit/workflow_session_projection.rs"]
 mod workflow_session_projection;
+
+#[path = "unit/canon_native_cli.rs"]
+mod canon_native_cli;
+
+#[path = "unit/workspace_resolution.rs"]
+mod workspace_resolution;

@@ -94,6 +94,7 @@ fn build_planned_record(workspace_ref: &str) -> ActiveSessionRecord {
         latest_trace_ref: Some(format!("{workspace_ref}/.boundline/traces/task.json")),
         created_at: 10,
         updated_at: 20,
+        governance_lifecycle: None,
     }
 }
 
@@ -201,6 +202,7 @@ fn build_started_session(workspace: &Path) -> ActiveSessionRecord {
         latest_trace_ref: None,
         created_at: now,
         updated_at: now,
+        governance_lifecycle: None,
     }
 }
 
@@ -335,6 +337,8 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
             risk: None,
             zone: None,
             owner: None,
+            mode: None,
+            no_canon: false,
         },
         DeveloperCommand::Inspect {
             trace: Some(trace.clone()),
@@ -357,6 +361,7 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
     let invalid_doctor = DeveloperCommandSession {
         command_name: CommandName::Doctor,
         workspace_ref: Some(" ".to_string()),
+        requires_workspace_ref: false,
         install_check: false,
         goal: None,
         trace_ref: None,
@@ -392,19 +397,38 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
     });
     assert_eq!(invalid_flow.validate().unwrap_err(), CliValidationError::MissingFlowName);
 
-    let invalid_run_workspace = DeveloperCommandSession::from_command(&DeveloperCommand::Run {
-        workspace: None,
-        cluster: None,
-        goal: Some("ship".to_string()),
-        compatibility: false,
-        brief: Vec::new(),
-        governance: None,
-        risk: None,
-        zone: None,
-        owner: None,
-    });
+    let direct_run_without_workspace =
+        DeveloperCommandSession::from_command(&DeveloperCommand::Run {
+            workspace: None,
+            cluster: None,
+            goal: Some("ship".to_string()),
+            compatibility: false,
+            brief: Vec::new(),
+            governance: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            mode: None,
+            no_canon: false,
+        });
+    assert!(direct_run_without_workspace.validate().is_ok());
+
+    let invalid_compatibility_run_workspace =
+        DeveloperCommandSession::from_command(&DeveloperCommand::Run {
+            workspace: None,
+            cluster: None,
+            goal: Some("ship".to_string()),
+            compatibility: true,
+            brief: Vec::new(),
+            governance: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            mode: None,
+            no_canon: false,
+        });
     assert_eq!(
-        invalid_run_workspace.validate().unwrap_err(),
+        invalid_compatibility_run_workspace.validate().unwrap_err(),
         CliValidationError::MissingWorkspaceRef(CommandName::Run)
     );
 
@@ -418,6 +442,8 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
         risk: None,
         zone: None,
         owner: None,
+        mode: None,
+        no_canon: false,
     });
     assert_eq!(
         invalid_run_goal.validate().unwrap_err(),
@@ -656,6 +682,8 @@ fn native_direct_run_reuses_existing_initialized_session() {
         None,
         None,
         None,
+        None,
+        false,
     )
     .unwrap();
 
@@ -676,6 +704,8 @@ fn native_direct_run_surfaces_clarification_without_planning() {
         None,
         None,
         None,
+        None,
+        false,
     )
     .unwrap();
 
@@ -700,6 +730,8 @@ fn native_direct_run_rejects_meaningful_active_session_state() {
         None,
         None,
         None,
+        None,
+        false,
     )
     .unwrap_err();
 

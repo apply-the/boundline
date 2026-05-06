@@ -1,6 +1,6 @@
 # boundline Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-05-04
+Auto-generated from all feature plans. Last updated: 2026-05-05
 
 ## Active Technologies
 - Rust 1.95.0, edition 2024 + Existing runtime dependencies (`serde`, `serde_json`, `thiserror`, `tracing`, `uuid`) plus `clap` 4.x for a stable subcommand-based CLI surface (002-developer-ux-orchestrator)
@@ -64,6 +64,8 @@ Auto-generated from all feature plans. Last updated: 2026-05-04
 - Workspace-local `.boundline/session.json`, persisted traces under `<workspace>/.boundline/traces/`, optional `.boundline/config.toml`, optional `.boundline/workflows.toml`, optional `.boundline/execution.json`, optional `.canon/` artifacts, and repository-managed docs plus assistant assets (040-context-selection-hardening)
 - Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`; no new non-standard runtime dependency is required for checkpoint persistence (041-checkpoint-rewind)
 - Workspace-local `.boundline/session.json`, `.boundline/traces/`, `.boundline/config.toml`, `.boundline/cluster.toml`, optional `.boundline/execution.json`, optional `.canon/` artifacts, and new workspace-local `.boundline/checkpoints/` manifests plus captured file payloads (041-checkpoint-rewind)
+- Rust 1.95.0, edition 2024 + `clap` 4.x, `serde` 1.x, `serde_json` 1.x, `thiserror` 2.x, `tracing` 0.1, `uuid` 1.x, `toml` 0.8; Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies (042-native-canon-cli)
+- Workspace-local `.boundline/session.json`, `.boundline/config.toml`, `.boundline/traces/`, optional `.boundline/execution.json`, optional `.canon/` governed artifacts (042-native-canon-cli)
 
 - Rust 1.95.0, edition 2024 + Rust standard library plus `serde`, `serde_json`, `thiserror`, `tracing`, and `uuid` for structured state, trace serialization, error handling, instrumentation, and stable identifiers (001-delivery-orchestrator-core)
 
@@ -92,9 +94,9 @@ Crate versioning follows Semantic Versioning.
 Before 1.0.0, breaking changes MAY occur in minor versions.
 
 ## Recent Changes
+- 042-native-canon-cli: Added Rust 1.95.0, edition 2024 + `clap` 4.x, `serde` 1.x, `serde_json` 1.x, `thiserror` 2.x, `tracing` 0.1, `uuid` 1.x, `toml` 0.8; Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies
 - 041-checkpoint-rewind: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`; no new non-standard runtime dependency is required for checkpoint persistence
 - 040-context-selection-hardening: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, and collections APIs; no new runtime dependencies planned for this slice
-- 039-distribution-bundling: Added Rust 1.95.0, edition 2024 for the CLI plus repository-managed shell scripts, YAML manifests, and GitHub Actions workflows for release packaging + Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`; no new Rust runtime dependencies planned for the first slice
 
 
 <!-- MANUAL ADDITIONS START -->

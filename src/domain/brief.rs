@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::domain::governance::GovernanceRuntimeKind;
+use crate::domain::governance::{CanonMode, GovernanceRuntimeKind};
 use crate::domain::task::{
     ClarificationReasonKind, ClarificationRecord, ClarificationStatus, DerivedTaskDraft,
 };
@@ -149,6 +149,10 @@ pub struct GovernanceIntent {
     pub zone: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub owner: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub explicit_mode: Option<CanonMode>,
+    #[serde(default)]
+    pub explicit_no_canon: bool,
 }
 
 /// Provenance entry for a single normalized input source.
@@ -367,7 +371,15 @@ pub fn normalize_governance_intent(
         }
     }
 
-    Ok(Some(GovernanceIntent { requested: true, runtime_preference, risk, zone, owner }))
+    Ok(Some(GovernanceIntent {
+        requested: true,
+        runtime_preference,
+        risk,
+        zone,
+        owner,
+        explicit_mode: None,
+        explicit_no_canon: false,
+    }))
 }
 
 fn trimmed_field(value: Option<&str>) -> Option<String> {

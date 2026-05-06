@@ -104,6 +104,54 @@ fn config_set_show_and_unset_workspace_slot() {
 }
 
 #[test]
+fn config_set_canon_updates_workspace_mode_selection() {
+    let workspace = empty_workspace("boundline-config-canon");
+
+    let init = run_boundline_in(
+        &workspace,
+        &[
+            "init",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--canon-mode-selection",
+            "auto-confirm",
+        ],
+    );
+    assert_eq!(init.status.code(), Some(0), "{}", terminal_text(&init));
+
+    let set = run_boundline_in(
+        &workspace,
+        &[
+            "config",
+            "set-canon",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--mode-selection",
+            "auto",
+        ],
+    );
+    let set_text = terminal_text(&set);
+    assert_eq!(set.status.code(), Some(0), "{set_text}");
+    assert!(set_text.contains("config: updated Canon preferences"), "{set_text}");
+
+    let show = run_boundline_in(
+        &workspace,
+        &[
+            "config",
+            "show",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--scope",
+            "workspace",
+        ],
+    );
+    let show_text = terminal_text(&show);
+    assert_eq!(show.status.code(), Some(0), "{show_text}");
+    assert!(show_text.contains("canon:"), "{show_text}");
+    assert!(show_text.contains("mode_selection: auto"), "{show_text}");
+}
+
+#[test]
 fn config_show_effective_surfaces_assistant_bindings() {
     let workspace = empty_workspace("boundline-config-effective");
 

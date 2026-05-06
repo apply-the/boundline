@@ -103,6 +103,8 @@ fn native_direct_run_contract_refuses_to_replace_meaningful_active_session_state
         None,
         None,
         None,
+        None,
+        false,
     )
     .unwrap_err();
 

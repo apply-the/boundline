@@ -48,6 +48,73 @@ fn init_scaffolds_execution_and_config_files() {
 }
 
 #[test]
+fn init_writes_canon_preferences_when_flags_are_supplied() {
+    let workspace = empty_workspace("boundline-init-canon");
+
+    let init = run_boundline_in(
+        &workspace,
+        &[
+            "init",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--canon-mode-selection",
+            "auto-confirm",
+            "--risk",
+            "medium",
+            "--zone",
+            "engineering",
+            "--owner",
+            "platform",
+        ],
+    );
+    let init_text = terminal_text(&init);
+    assert_eq!(init.status.code(), Some(0), "{init_text}");
+    assert!(init_text.contains("canon_mode_selection: auto-confirm"), "{init_text}");
+
+    let config = fs::read_to_string(workspace.join(".boundline/config.toml")).unwrap();
+    assert!(config.contains("[canon]"), "{config}");
+    assert!(config.contains("mode_selection = \"auto-confirm\""), "{config}");
+    assert!(config.contains("default_risk = \"medium\""), "{config}");
+    assert!(config.contains("default_zone = \"engineering\""), "{config}");
+    assert!(config.contains("default_owner = \"platform\""), "{config}");
+}
+
+#[test]
+fn init_writes_canon_preferences_and_model_routes_when_flags_are_supplied() {
+    let workspace = empty_workspace("boundline-init-canon-routes");
+
+    let init = run_boundline_in(
+        &workspace,
+        &[
+            "init",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--canon-mode-selection",
+            "auto-confirm",
+            "--assistant",
+            "copilot",
+            "--route",
+            "planning=copilot:gpt-4o",
+            "--route",
+            "implementation=codex:gpt-5-codex",
+        ],
+    );
+    let init_text = terminal_text(&init);
+    assert_eq!(init.status.code(), Some(0), "{init_text}");
+
+    let config = fs::read_to_string(workspace.join(".boundline/config.toml")).unwrap();
+    assert!(config.contains("[canon]"), "{config}");
+    assert!(config.contains("mode_selection = \"auto-confirm\""), "{config}");
+    assert!(config.contains("assistant_runtimes = [\"copilot\"]"), "{config}");
+    assert!(config.contains("[routing.planning]"), "{config}");
+    assert!(config.contains("runtime = \"copilot\""), "{config}");
+    assert!(config.contains("model = \"gpt-4o\""), "{config}");
+    assert!(config.contains("[routing.implementation]"), "{config}");
+    assert!(config.contains("runtime = \"codex\""), "{config}");
+    assert!(config.contains("model = \"gpt-5-codex\""), "{config}");
+}
+
+#[test]
 fn init_seeds_explicit_domain_templates_and_bindings() {
     let workspace = empty_workspace("boundline-init-bootstrap-domain");
 

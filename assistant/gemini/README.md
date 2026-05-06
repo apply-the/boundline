@@ -17,14 +17,28 @@ cargo run --bin boundline -- workflow run <name> --workspace <workspace>
 cargo run --bin boundline -- workflow status --workspace <workspace>
 cargo run --bin boundline -- workflow resume --workspace <workspace>
 cargo run --bin boundline -- workflow inspect --workspace <workspace>
-cargo run --bin boundline -- init --workspace <workspace> --template bug-fix
-cargo run --bin boundline -- doctor --workspace <workspace>
+cargo run --bin boundline -- init --workspace <workspace> --canon-mode-selection auto-confirm --assistant gemini --route planning=gemini:<model>
+cargo run --bin boundline -- doctor --install
+cargo run --bin boundline -- config show --workspace <workspace> --scope workspace
+cargo run --bin boundline -- config set-canon --workspace <workspace> --mode-selection auto-confirm
 cargo run --bin boundline -- start --workspace <workspace>
 cargo run --bin boundline -- capture --workspace <workspace> --goal "<goal>"
 cargo run --bin boundline -- plan --workspace <workspace>
 cargo run --bin boundline -- plan --workspace <workspace> --confirm
 cargo run --bin boundline -- run --workspace <workspace>
 ```
+
+Canon-default mode shorthand uses `boundline run --mode <mode>`. For example,
+`/boundline-run requirements` maps to `boundline run --mode requirements`, and
+mode aliases such as `/boundline-requirements` use the same mapping. Preserve
+`governance_runtime`, `mode_selection_preference`, `selected_mode`,
+`approval_state`, and `next_action` from CLI output.
+
+Gemini command equivalents for the repository-managed chat surface are:
+`/boundline-init`, `/boundline-doctor`, `/boundline-config-show`,
+`/boundline-config-set-canon`, `/boundline-capture`, `/boundline-run`, and all
+mode aliases `/boundline-<mode>`. Use the same CLI mapping as the Claude, Codex,
+and Copilot packs.
 
 Use `boundline config show|set|unset` for routing changes rather than manual file
 editing. If a workspace declares `assistant_runtimes` and the active

@@ -93,6 +93,8 @@ fn sample_governance_intent(runtime_preference: Option<GovernanceRuntimeKind>) -
         risk: Some("high".to_string()),
         zone: Some("payments".to_string()),
         owner: Some("platform".to_string()),
+        explicit_mode: None,
+        explicit_no_canon: false,
     }
 }
 
@@ -420,7 +422,7 @@ fn governance_profile_validation_rejects_missing_canon_configuration_and_forbidd
 
 #[test]
 fn governance_profile_deserialization_rejects_future_canon_modes_outside_the_current_slice() {
-    let error = serde_json::from_value::<GovernanceProfile>(json!({
+    let profile = serde_json::from_value::<GovernanceProfile>(json!({
         "default_runtime": "canon",
         "canon": {
             "command": "canon",
@@ -445,11 +447,11 @@ fn governance_profile_deserialization_rejects_future_canon_modes_outside_the_cur
             }
         ]
     }))
-    .unwrap_err();
+    .unwrap();
 
+    let error = profile.validate().unwrap_err();
     let message = error.to_string();
-    assert!(message.contains("unknown variant `supply-chain-analysis`"), "{message}");
-    assert!(message.contains("security-assessment"), "{message}");
+    assert!(message.contains("cannot bind Canon mode"), "{message}");
 }
 
 #[test]
@@ -553,19 +555,33 @@ fn supported_canon_modes_include_expected_stage_whitelist_entries() {
         ("delivery", "architecture", vec![CanonMode::Architecture]),
         ("delivery", "backlog", vec![CanonMode::Backlog]),
         ("delivery", "implementation", vec![CanonMode::Implementation]),
-        ("change", "understand-change", vec![CanonMode::Change]),
-        ("change", "implement", vec![CanonMode::Implementation]),
+        ("change", "understand-change", vec![CanonMode::Change, CanonMode::Discovery]),
+        ("change", "implement", vec![CanonMode::Implementation, CanonMode::Refactor]),
         (
             "change",
             "verify",
-            vec![CanonMode::SecurityAssessment, CanonMode::Verification, CanonMode::PrReview],
+            vec![
+                CanonMode::SecurityAssessment,
+                CanonMode::Verification,
+                CanonMode::Review,
+                CanonMode::PrReview,
+            ],
         ),
-        ("bug-fix", "investigate", vec![CanonMode::Discovery, CanonMode::Change]),
-        ("bug-fix", "implement", vec![CanonMode::Implementation]),
+        (
+            "bug-fix",
+            "investigate",
+            vec![CanonMode::Discovery, CanonMode::Change, CanonMode::Incident],
+        ),
+        ("bug-fix", "implement", vec![CanonMode::Implementation, CanonMode::Refactor]),
         (
             "bug-fix",
             "verify",
-            vec![CanonMode::SecurityAssessment, CanonMode::Verification, CanonMode::PrReview],
+            vec![
+                CanonMode::SecurityAssessment,
+                CanonMode::Verification,
+                CanonMode::Review,
+                CanonMode::PrReview,
+            ],
         ),
     ];
 
@@ -618,7 +634,12 @@ fn autopilot_selects_security_assessment_first_for_verification_stage() {
     assert_eq!(decision.selected_mode, Some(CanonMode::SecurityAssessment));
     assert_eq!(
         decision.candidate_modes,
-        vec![CanonMode::SecurityAssessment, CanonMode::Verification, CanonMode::PrReview,]
+        vec![
+            CanonMode::SecurityAssessment,
+            CanonMode::Verification,
+            CanonMode::Review,
+            CanonMode::PrReview,
+        ]
     );
 }
 

@@ -8,6 +8,7 @@ use thiserror::Error;
 use crate::domain::domain_templates::{
     DomainFamily, DomainTemplateSettings, ExternalContextBinding,
 };
+use crate::domain::governance::CanonModeSelectionPreference;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "snake_case")]
@@ -359,16 +360,32 @@ impl RoutingConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CanonPreferences {
+    #[serde(default)]
+    pub mode_selection: CanonModeSelectionPreference,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_risk: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_zone: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_owner: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_system_context: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConfigFile {
     #[serde(default = "default_version")]
     pub version: u32,
     #[serde(default)]
     pub routing: RoutingConfig,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canon: Option<CanonPreferences>,
 }
 
 impl Default for ConfigFile {
     fn default() -> Self {
-        Self { version: default_version(), routing: RoutingConfig::default() }
+        Self { version: default_version(), routing: RoutingConfig::default(), canon: None }
     }
 }
 

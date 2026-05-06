@@ -73,6 +73,8 @@ fn command_names_render_from_subcommands() {
         risk: None,
         zone: None,
         owner: None,
+        mode: None,
+        no_canon: false,
     };
     assert_eq!(command_name(&command), "run");
     assert_eq!(command.name(), CommandName::Run);
@@ -90,6 +92,8 @@ fn run_session_requires_a_non_empty_goal() {
         risk: None,
         zone: None,
         owner: None,
+        mode: None,
+        no_canon: false,
     };
     let session = DeveloperCommandSession::from_command(&command);
 
@@ -108,6 +112,8 @@ fn run_without_legacy_flags_is_valid_for_session_native_execution() {
         risk: None,
         zone: None,
         owner: None,
+        mode: None,
+        no_canon: false,
     };
     let session = DeveloperCommandSession::from_command(&command);
 
@@ -119,6 +125,7 @@ fn inspect_session_requires_trace_or_workspace() {
     let session = DeveloperCommandSession {
         command_name: CommandName::Inspect,
         workspace_ref: None,
+        requires_workspace_ref: false,
         install_check: false,
         goal: None,
         trace_ref: None,
@@ -1453,6 +1460,8 @@ fn command_names_render_for_all_four_subcommands() {
             risk: None,
             zone: None,
             owner: None,
+            mode: None,
+            no_canon: false,
         }),
         "run"
     );

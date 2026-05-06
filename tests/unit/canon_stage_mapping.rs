@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use boundline::{
     CanonMode, GovernanceRuntimeKind, StageGovernancePolicy, autopilot_action_text,
     candidate_canon_modes, resolved_canon_mode, supported_canon_modes_for_stage,
@@ -40,27 +42,37 @@ fn first_slice_canon_stage_mapping_matches_supported_flows() {
     );
     assert_eq!(
         supported_canon_modes_for_stage("change", "understand-change"),
-        &[CanonMode::Change]
+        &[CanonMode::Change, CanonMode::Discovery]
     );
     assert_eq!(
         supported_canon_modes_for_stage("change", "implement"),
-        &[CanonMode::Implementation]
+        &[CanonMode::Implementation, CanonMode::Refactor]
     );
     assert_eq!(
         supported_canon_modes_for_stage("change", "verify"),
-        &[CanonMode::SecurityAssessment, CanonMode::Verification, CanonMode::PrReview,]
+        &[
+            CanonMode::SecurityAssessment,
+            CanonMode::Verification,
+            CanonMode::Review,
+            CanonMode::PrReview,
+        ]
     );
     assert_eq!(
         supported_canon_modes_for_stage("bug-fix", "investigate"),
-        &[CanonMode::Discovery, CanonMode::Change]
+        &[CanonMode::Discovery, CanonMode::Change, CanonMode::Incident]
     );
     assert_eq!(
         supported_canon_modes_for_stage("bug-fix", "implement"),
-        &[CanonMode::Implementation]
+        &[CanonMode::Implementation, CanonMode::Refactor]
     );
     assert_eq!(
         supported_canon_modes_for_stage("bug-fix", "verify"),
-        &[CanonMode::SecurityAssessment, CanonMode::Verification, CanonMode::PrReview,]
+        &[
+            CanonMode::SecurityAssessment,
+            CanonMode::Verification,
+            CanonMode::Review,
+            CanonMode::PrReview,
+        ]
     );
     assert!(supported_canon_modes_for_stage("bug-fix", "missing").is_empty());
 }
@@ -80,12 +92,38 @@ fn canon_mode_wire_format_matches_canon_and_accepts_legacy_snake_case() {
 }
 
 #[test]
+fn expanded_canon_modes_round_trip_and_map_to_primary_documents() {
+    let expectations = [
+        (CanonMode::SystemShaping, "system-shaping", "system-shaping.md"),
+        (CanonMode::Refactor, "refactor", "refactor.md"),
+        (CanonMode::Review, "review", "review.md"),
+        (CanonMode::Incident, "incident", "incident.md"),
+        (CanonMode::SystemAssessment, "system-assessment", "system-assessment.md"),
+        (CanonMode::Migration, "migration", "migration.md"),
+        (CanonMode::SupplyChainAnalysis, "supply-chain-analysis", "supply-chain-analysis.md"),
+    ];
+
+    for (mode, wire, primary_document) in expectations {
+        assert_eq!(mode.to_string(), wire);
+        assert_eq!(CanonMode::from_str(wire).unwrap(), mode);
+        assert_eq!(serde_json::to_string(&mode).unwrap(), format!("\"{wire}\""));
+        assert_eq!(serde_json::from_str::<CanonMode>(&format!("\"{wire}\"")).unwrap(), mode);
+        assert_eq!(mode.primary_document_name(), primary_document);
+    }
+}
+
+#[test]
 fn canon_stage_mapping_prefers_security_assessment_for_verify_stage_autopilot_candidates() {
     let policy = canon_policy("verify", Some(GovernanceRuntimeKind::Canon), None);
 
     assert_eq!(
         candidate_canon_modes(&policy, GovernanceRuntimeKind::Local),
-        vec![CanonMode::SecurityAssessment, CanonMode::Verification, CanonMode::PrReview,]
+        vec![
+            CanonMode::SecurityAssessment,
+            CanonMode::Verification,
+            CanonMode::Review,
+            CanonMode::PrReview,
+        ]
     );
     assert_eq!(resolved_canon_mode(&policy, GovernanceRuntimeKind::Local), None);
 }
@@ -96,7 +134,7 @@ fn canon_stage_mapping_derives_candidates_from_stage_support_order() {
 
     assert_eq!(
         candidate_canon_modes(&policy, GovernanceRuntimeKind::Local),
-        vec![CanonMode::Discovery, CanonMode::Change]
+        vec![CanonMode::Discovery, CanonMode::Change, CanonMode::Incident]
     );
     assert_eq!(resolved_canon_mode(&policy, GovernanceRuntimeKind::Local), None);
 }

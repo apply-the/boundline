@@ -48,6 +48,8 @@ fn native_direct_run_stays_native_even_when_execution_profile_exists() {
         None,
         None,
         None,
+        None,
+        false,
     )
     .unwrap();
 

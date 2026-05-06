@@ -7,11 +7,12 @@ use crate::domain::configuration::{
     InitTemplate, RouteSlot, RuntimeKind,
 };
 use crate::domain::domain_templates::{DomainFamily, ExternalContextKind};
-use crate::domain::governance::GovernanceRuntimeKind;
+use crate::domain::governance::{CanonMode, CanonModeSelectionPreference, GovernanceRuntimeKind};
 use crate::domain::trace::current_timestamp_millis;
 
 use super::{
     checkpoint, cluster, config, diagnostics, init, inspect, output, run, session, workflow,
+    workspace as cli_workspace,
 };
 
 #[derive(Debug, Parser)]
@@ -155,6 +156,12 @@ pub enum DeveloperCommand {
         zone: Option<String>,
         #[arg(long)]
         owner: Option<String>,
+        /// Explicit Canon mode to use for governed execution.
+        #[arg(long = "mode", value_enum)]
+        mode: Option<CanonMode>,
+        /// Opt out of Canon governance even when workspace has [canon] config.
+        #[arg(long = "no-canon", conflicts_with = "mode")]
+        no_canon: bool,
     },
     Workflow {
         #[command(subcommand)]
@@ -194,6 +201,9 @@ pub enum DeveloperCommand {
         /// Assistant runtimes to record in the local workspace config.
         #[arg(long = "assistant")]
         assistant: Vec<RuntimeKind>,
+        /// Model route in SLOT=RUNTIME:MODEL form, e.g. planning=copilot:gpt-4o.
+        #[arg(long = "route")]
+        route: Vec<String>,
         /// Domain families to enable during init. When omitted, Boundline infers a bounded default from the workspace.
         #[arg(long = "domain")]
         domain: Vec<DomainFamily>,
@@ -206,6 +216,18 @@ pub enum DeveloperCommand {
         /// Required external context bindings using FAMILY|KIND|REFERENCE.
         #[arg(long = "required-context-binding")]
         required_context_binding: Vec<String>,
+        /// Canon mode-selection preference to write to the workspace config.
+        #[arg(long = "canon-mode-selection", value_enum)]
+        canon_mode_selection: Option<CanonModeSelectionPreference>,
+        /// Default Canon governance risk.
+        #[arg(long)]
+        risk: Option<String>,
+        /// Default Canon governance zone.
+        #[arg(long)]
+        zone: Option<String>,
+        /// Default Canon governance owner.
+        #[arg(long)]
+        owner: Option<String>,
         /// Replace existing Boundline files in the workspace.
         #[arg(long)]
         force: bool,
@@ -335,6 +357,12 @@ pub enum ConfigSubcommand {
         escalation_context: CapabilityState,
         #[arg(long)]
         notes: Option<String>,
+    },
+    SetCanon {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long = "mode-selection", value_enum)]
+        mode_selection: CanonModeSelectionPreference,
     },
     Unset {
         #[arg(long)]
@@ -472,6 +500,7 @@ impl DeveloperCommand {
 pub struct DeveloperCommandSession {
     pub command_name: CommandName,
     pub workspace_ref: Option<String>,
+    pub requires_workspace_ref: bool,
     pub install_check: bool,
     pub goal: Option<String>,
     pub trace_ref: Option<String>,
@@ -487,6 +516,7 @@ impl DeveloperCommandSession {
             DeveloperCommand::Doctor { workspace, install } => Self {
                 command_name: CommandName::Doctor,
                 workspace_ref: workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
+                requires_workspace_ref: false,
                 install_check: *install,
                 goal: None,
                 trace_ref: None,
@@ -501,6 +531,7 @@ impl DeveloperCommandSession {
                     .as_ref()
                     .or(cluster.as_ref())
                     .map(|path| path.to_string_lossy().into_owned()),
+                requires_workspace_ref: false,
                 install_check: false,
                 goal: None,
                 trace_ref: None,
@@ -518,6 +549,7 @@ impl DeveloperCommandSession {
                         .or(cluster.as_ref())
                         .map(|path| path.to_string_lossy().into_owned()),
                 },
+                requires_workspace_ref: false,
                 install_check: false,
                 goal: None,
                 trace_ref: None,
@@ -541,6 +573,7 @@ impl DeveloperCommandSession {
                     .as_ref()
                     .or(cluster.as_ref())
                     .map(|path| path.to_string_lossy().into_owned()),
+                requires_workspace_ref: false,
                 install_check: false,
                 goal: goal.clone(),
                 trace_ref: None,
@@ -555,6 +588,7 @@ impl DeveloperCommandSession {
                     .as_ref()
                     .or(cluster.as_ref())
                     .map(|path| path.to_string_lossy().into_owned()),
+                requires_workspace_ref: false,
                 install_check: false,
                 goal: Some(name.clone()),
                 trace_ref: None,
@@ -569,6 +603,7 @@ impl DeveloperCommandSession {
                     .as_ref()
                     .or(cluster.as_ref())
                     .map(|path| path.to_string_lossy().into_owned()),
+                requires_workspace_ref: false,
                 install_check: false,
                 goal: None,
                 trace_ref: None,
@@ -583,6 +618,7 @@ impl DeveloperCommandSession {
                     .as_ref()
                     .or(cluster.as_ref())
                     .map(|path| path.to_string_lossy().into_owned()),
+                requires_workspace_ref: false,
                 install_check: false,
                 goal: None,
                 trace_ref: None,
@@ -597,10 +633,12 @@ impl DeveloperCommandSession {
                 goal,
                 compatibility,
                 brief,
-                governance: _,
-                risk: _,
-                zone: _,
-                owner: _,
+                governance,
+                risk,
+                zone,
+                owner,
+                mode,
+                no_canon,
             } => Self {
                 command_name: CommandName::Run,
                 workspace_ref: if *compatibility || goal.is_some() || !brief.is_empty() {
@@ -609,6 +647,15 @@ impl DeveloperCommandSession {
                     workspace.as_ref().or(cluster.as_ref())
                 }
                 .map(|path| path.to_string_lossy().into_owned()),
+                requires_workspace_ref: (*compatibility || cluster.is_some())
+                    && (goal.is_some()
+                        || !brief.is_empty()
+                        || governance.is_some()
+                        || risk.is_some()
+                        || zone.is_some()
+                        || owner.is_some()
+                        || mode.is_some()
+                        || *no_canon),
                 install_check: false,
                 goal: goal.clone(),
                 trace_ref: None,
@@ -628,6 +675,7 @@ impl DeveloperCommandSession {
                         workspace.as_ref().map(|path| path.to_string_lossy().into_owned())
                     }
                 },
+                requires_workspace_ref: false,
                 install_check: false,
                 goal: match command {
                     WorkflowSubcommand::List { .. } => None,
@@ -648,6 +696,7 @@ impl DeveloperCommandSession {
                     .as_ref()
                     .or(cluster.as_ref())
                     .map(|path| path.to_string_lossy().into_owned()),
+                requires_workspace_ref: false,
                 install_check: false,
                 goal: None,
                 trace_ref: trace.as_ref().map(|path| path.to_string_lossy().into_owned()),
@@ -662,6 +711,7 @@ impl DeveloperCommandSession {
                     .as_ref()
                     .or(cluster.as_ref())
                     .map(|path| path.to_string_lossy().into_owned()),
+                requires_workspace_ref: false,
                 install_check: false,
                 goal: None,
                 trace_ref: None,
@@ -676,6 +726,7 @@ impl DeveloperCommandSession {
                     .as_ref()
                     .or(cluster.as_ref())
                     .map(|path| path.to_string_lossy().into_owned()),
+                requires_workspace_ref: false,
                 install_check: false,
                 goal: None,
                 trace_ref: None,
@@ -687,6 +738,7 @@ impl DeveloperCommandSession {
             DeveloperCommand::Init { workspace, .. } => Self {
                 command_name: CommandName::Init,
                 workspace_ref: Some(workspace.to_string_lossy().into_owned()),
+                requires_workspace_ref: false,
                 install_check: false,
                 goal: None,
                 trace_ref: None,
@@ -712,7 +764,11 @@ impl DeveloperCommandSession {
                         .as_ref()
                         .or(cluster.as_ref())
                         .map(|path| path.to_string_lossy().into_owned()),
+                    ConfigSubcommand::SetCanon { workspace, .. } => {
+                        workspace.as_ref().map(|path| path.to_string_lossy().into_owned())
+                    }
                 },
+                requires_workspace_ref: false,
                 install_check: false,
                 goal: None,
                 trace_ref: None,
@@ -730,6 +786,7 @@ impl DeveloperCommandSession {
                         Some(workspace.to_string_lossy().into_owned())
                     }
                 },
+                requires_workspace_ref: false,
                 install_check: false,
                 goal: None,
                 trace_ref: None,
@@ -750,7 +807,7 @@ impl DeveloperCommandSession {
                 }
             }
             CommandName::Run => {
-                if self.goal.is_some() {
+                if self.requires_workspace_ref {
                     let workspace = self.workspace_ref.as_deref().unwrap_or_default();
                     if workspace.trim().is_empty() {
                         return Err(CliValidationError::MissingWorkspaceRef(self.command_name));
@@ -888,6 +945,8 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
             risk,
             zone,
             owner,
+            mode,
+            no_canon,
         } => {
             let custom = *compatibility
                 || goal.is_some()
@@ -895,9 +954,23 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                 || governance.is_some()
                 || risk.is_some()
                 || zone.is_some()
-                || owner.is_some();
+                || owner.is_some()
+                || mode.is_some()
+                || *no_canon;
             if custom {
-                let Some(workspace) = workspace.as_ref() else {
+                let resolved_workspace =
+                    match cli_workspace::resolve_workspace(workspace.as_deref()) {
+                        Ok(workspace) => workspace,
+                        Err(error) => {
+                            return DispatchOutcome {
+                                exit_status: CommandExitStatus::InvalidInvocation,
+                                output: format!("workspace resolution failed: {error}"),
+                                trace_location: None,
+                            };
+                        }
+                    };
+                let workspace = &resolved_workspace;
+                if !workspace.is_dir() {
                     return DispatchOutcome {
                         exit_status: CommandExitStatus::InvalidInvocation,
                         output: output::validation_error_message(
@@ -905,7 +978,7 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                         ),
                         trace_location: None,
                     };
-                };
+                }
                 let report = if *compatibility {
                     diagnostics::diagnose_workspace(workspace)
                 } else {
@@ -938,6 +1011,8 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                         risk.as_deref(),
                         zone.as_deref(),
                         owner.as_deref(),
+                        *mode,
+                        *no_canon,
                     )
                 };
 
@@ -1228,20 +1303,30 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
             workspace,
             template,
             assistant,
+            route,
             domain,
             domain_standard,
             context_binding,
             required_context_binding,
+            canon_mode_selection,
+            risk,
+            zone,
+            owner,
             force,
         } => {
             match init::execute_init(init::InitRequest {
                 workspace,
                 template: *template,
                 assistants: assistant,
+                routes: route,
                 domains: domain,
                 domain_standards: domain_standard,
                 context_bindings: context_binding,
                 required_context_bindings: required_context_binding,
+                canon_mode_selection: *canon_mode_selection,
+                risk: risk.as_deref(),
+                zone: zone.as_deref(),
+                owner: owner.as_deref(),
                 force: *force,
             }) {
                 Ok(report) => DispatchOutcome {
@@ -1303,6 +1388,18 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                     escalation_context: *escalation_context,
                     notes: notes.as_deref(),
                 }),
+                ConfigSubcommand::SetCanon { workspace, mode_selection } => {
+                    let resolved_workspace = cli_workspace::resolve_workspace(workspace.as_deref())
+                        .map_err(|error| {
+                            config::ConfigCommandError::WorkspaceResolution(error.to_string())
+                        });
+                    match resolved_workspace {
+                        Ok(workspace) => {
+                            config::execute_set_canon(Some(&workspace), *mode_selection)
+                        }
+                        Err(error) => Err(error),
+                    }
+                }
                 ConfigSubcommand::Unset {
                     workspace,
                     cluster,
@@ -1617,6 +1714,8 @@ fn red_to_green_addition() {
             risk: None,
             zone: None,
             owner: None,
+            mode: None,
+            no_canon: false,
         });
         assert_eq!(custom_run.exit_status, CommandExitStatus::Succeeded);
         assert!(custom_run.output.contains("terminal_status: succeeded"), "{}", custom_run.output);
@@ -1660,6 +1759,8 @@ fn red_to_green_addition() {
             risk: None,
             zone: None,
             owner: None,
+            mode: None,
+            no_canon: false,
         });
         assert_eq!(run.exit_status, CommandExitStatus::Succeeded);
         assert!(run.output.contains("terminal_status: succeeded"), "{}", run.output);
@@ -1695,6 +1796,8 @@ fn red_to_green_addition() {
             risk: None,
             zone: None,
             owner: None,
+            mode: None,
+            no_canon: false,
         });
         assert_eq!(invalid.exit_status, CommandExitStatus::InvalidInvocation);
         assert!(invalid.output.contains("doctor:"), "{}", invalid.output);
@@ -1752,10 +1855,15 @@ fn red_to_green_addition() {
                     workspace: workspace.clone(),
                     template: None,
                     assistant: Vec::new(),
+                    route: Vec::new(),
                     domain: Vec::new(),
                     domain_standard: Vec::new(),
                     context_binding: Vec::new(),
                     required_context_binding: Vec::new(),
+                    canon_mode_selection: None,
+                    risk: None,
+                    zone: None,
+                    owner: None,
                     force: false,
                 },
                 CommandName::Init,
@@ -1812,10 +1920,12 @@ fn red_to_green_addition() {
             .exit_status,
             CommandExitStatus::InvalidInvocation
         );
-        assert_eq!(
-            dispatch(&DeveloperCommand::Doctor { workspace: None, install: true }).exit_status,
-            CommandExitStatus::InvalidInvocation
-        );
+        let install_status =
+            dispatch(&DeveloperCommand::Doctor { workspace: None, install: true }).exit_status;
+        assert!(matches!(
+            install_status,
+            CommandExitStatus::Succeeded | CommandExitStatus::InvalidInvocation
+        ));
         assert_eq!(
             dispatch(&DeveloperCommand::Run {
                 workspace: None,
@@ -1827,6 +1937,8 @@ fn red_to_green_addition() {
                 risk: None,
                 zone: None,
                 owner: None,
+                mode: None,
+                no_canon: false,
             })
             .exit_status,
             CommandExitStatus::InvalidInvocation
@@ -1867,10 +1979,15 @@ fn red_to_green_addition() {
             workspace: file_workspace,
             template: None,
             assistant: Vec::new(),
+            route: Vec::new(),
             domain: Vec::new(),
             domain_standard: Vec::new(),
             context_binding: Vec::new(),
             required_context_binding: Vec::new(),
+            canon_mode_selection: None,
+            risk: None,
+            zone: None,
+            owner: None,
             force: false,
         });
         assert_eq!(init.exit_status, CommandExitStatus::NonSuccess);

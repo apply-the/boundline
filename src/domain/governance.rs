@@ -25,6 +25,25 @@ impl std::fmt::Display for GovernanceRuntimeKind {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
+pub enum CanonModeSelectionPreference {
+    Manual,
+    #[default]
+    AutoConfirm,
+    Auto,
+}
+
+impl std::fmt::Display for CanonModeSelectionPreference {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Manual => f.write_str("manual"),
+            Self::AutoConfirm => f.write_str("auto-confirm"),
+            Self::Auto => f.write_str("auto"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SystemContextBinding {
@@ -32,33 +51,73 @@ pub enum SystemContextBinding {
     Existing,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, clap::ValueEnum,
+)]
 #[serde(rename_all = "kebab-case")]
 pub enum CanonMode {
     Requirements,
+    Discovery,
+    #[serde(alias = "system_shaping")]
+    SystemShaping,
     Architecture,
     Backlog,
     Change,
-    Discovery,
     Implementation,
+    Refactor,
+    Review,
     Verification,
+    Incident,
     #[serde(alias = "security_assessment")]
     SecurityAssessment,
+    #[serde(alias = "system_assessment")]
+    SystemAssessment,
+    Migration,
+    #[serde(alias = "supply_chain_analysis")]
+    SupplyChainAnalysis,
     #[serde(alias = "pr_review")]
     PrReview,
 }
 
 impl CanonMode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Requirements => "requirements",
+            Self::Discovery => "discovery",
+            Self::SystemShaping => "system-shaping",
+            Self::Architecture => "architecture",
+            Self::Backlog => "backlog",
+            Self::Change => "change",
+            Self::Implementation => "implementation",
+            Self::Refactor => "refactor",
+            Self::Review => "review",
+            Self::Verification => "verification",
+            Self::Incident => "incident",
+            Self::SecurityAssessment => "security-assessment",
+            Self::SystemAssessment => "system-assessment",
+            Self::Migration => "migration",
+            Self::SupplyChainAnalysis => "supply-chain-analysis",
+            Self::PrReview => "pr-review",
+        }
+    }
+
     pub const fn primary_document_name(self) -> &'static str {
         match self {
             Self::Requirements => "requirements.md",
+            Self::Discovery => "discovery.md",
+            Self::SystemShaping => "system-shaping.md",
             Self::Architecture => "architecture.md",
             Self::Backlog => "backlog.md",
             Self::Change => "change.md",
-            Self::Discovery => "discovery.md",
             Self::Implementation => "implementation.md",
+            Self::Refactor => "refactor.md",
+            Self::Review => "review.md",
             Self::Verification => "verification.md",
+            Self::Incident => "incident.md",
             Self::SecurityAssessment => "security-assessment.md",
+            Self::SystemAssessment => "system-assessment.md",
+            Self::Migration => "migration.md",
+            Self::SupplyChainAnalysis => "supply-chain-analysis.md",
             Self::PrReview => "pr-review.md",
         }
     }
@@ -69,8 +128,14 @@ impl CanonMode {
             Self::Backlog
                 | Self::Change
                 | Self::Implementation
+                | Self::Refactor
+                | Self::Review
                 | Self::Verification
+                | Self::Incident
                 | Self::SecurityAssessment
+                | Self::SystemAssessment
+                | Self::Migration
+                | Self::SupplyChainAnalysis
                 | Self::PrReview
         )
     }
@@ -80,18 +145,78 @@ impl CanonMode {
     }
 }
 
+impl std::fmt::Display for CanonMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl std::str::FromStr for CanonMode {
+    type Err = String;
+
+    fn from_str(raw: &str) -> Result<Self, Self::Err> {
+        match raw.trim().replace('_', "-").as_str() {
+            "requirements" => Ok(Self::Requirements),
+            "discovery" => Ok(Self::Discovery),
+            "system-shaping" => Ok(Self::SystemShaping),
+            "architecture" => Ok(Self::Architecture),
+            "backlog" => Ok(Self::Backlog),
+            "change" => Ok(Self::Change),
+            "implementation" => Ok(Self::Implementation),
+            "refactor" => Ok(Self::Refactor),
+            "review" => Ok(Self::Review),
+            "verification" => Ok(Self::Verification),
+            "incident" => Ok(Self::Incident),
+            "security-assessment" => Ok(Self::SecurityAssessment),
+            "system-assessment" => Ok(Self::SystemAssessment),
+            "migration" => Ok(Self::Migration),
+            "supply-chain-analysis" => Ok(Self::SupplyChainAnalysis),
+            "pr-review" => Ok(Self::PrReview),
+            other => Err(format!("unknown Canon mode `{other}`")),
+        }
+    }
+}
+
+/// The 15 canonical Canon modes, excluding legacy `PrReview`.
+pub const CANONICAL_MODES: [CanonMode; 15] = [
+    CanonMode::Requirements,
+    CanonMode::Discovery,
+    CanonMode::SystemShaping,
+    CanonMode::Architecture,
+    CanonMode::Backlog,
+    CanonMode::Change,
+    CanonMode::Implementation,
+    CanonMode::Refactor,
+    CanonMode::Review,
+    CanonMode::Verification,
+    CanonMode::Incident,
+    CanonMode::SecurityAssessment,
+    CanonMode::SystemAssessment,
+    CanonMode::Migration,
+    CanonMode::SupplyChainAnalysis,
+];
+
 const DELIVERY_REQUIREMENTS_MODES: [CanonMode; 1] = [CanonMode::Requirements];
 const DELIVERY_ARCHITECTURE_MODES: [CanonMode; 1] = [CanonMode::Architecture];
 const DELIVERY_BACKLOG_MODES: [CanonMode; 1] = [CanonMode::Backlog];
 const DELIVERY_IMPLEMENTATION_MODES: [CanonMode; 1] = [CanonMode::Implementation];
-const CHANGE_UNDERSTAND_MODES: [CanonMode; 1] = [CanonMode::Change];
-const CHANGE_IMPLEMENT_MODES: [CanonMode; 1] = [CanonMode::Implementation];
-const CHANGE_VERIFY_MODES: [CanonMode; 3] =
-    [CanonMode::SecurityAssessment, CanonMode::Verification, CanonMode::PrReview];
-const BUG_FIX_INVESTIGATE_MODES: [CanonMode; 2] = [CanonMode::Discovery, CanonMode::Change];
-const BUG_FIX_IMPLEMENT_MODES: [CanonMode; 1] = [CanonMode::Implementation];
-const BUG_FIX_VERIFY_MODES: [CanonMode; 3] =
-    [CanonMode::SecurityAssessment, CanonMode::Verification, CanonMode::PrReview];
+const CHANGE_UNDERSTAND_MODES: [CanonMode; 2] = [CanonMode::Change, CanonMode::Discovery];
+const CHANGE_IMPLEMENT_MODES: [CanonMode; 2] = [CanonMode::Implementation, CanonMode::Refactor];
+const CHANGE_VERIFY_MODES: [CanonMode; 4] = [
+    CanonMode::SecurityAssessment,
+    CanonMode::Verification,
+    CanonMode::Review,
+    CanonMode::PrReview,
+];
+const BUG_FIX_INVESTIGATE_MODES: [CanonMode; 3] =
+    [CanonMode::Discovery, CanonMode::Change, CanonMode::Incident];
+const BUG_FIX_IMPLEMENT_MODES: [CanonMode; 2] = [CanonMode::Implementation, CanonMode::Refactor];
+const BUG_FIX_VERIFY_MODES: [CanonMode; 4] = [
+    CanonMode::SecurityAssessment,
+    CanonMode::Verification,
+    CanonMode::Review,
+    CanonMode::PrReview,
+];
 const NO_CANON_MODES: [CanonMode; 0] = [];
 
 pub fn supported_canon_modes_for_stage(flow_name: &str, stage_id: &str) -> &'static [CanonMode] {
@@ -339,6 +464,7 @@ pub enum GovernanceLifecycleState {
     GovernedReady,
     AwaitingApproval,
     Blocked,
+    Incomplete,
     Completed,
     Failed,
 }
@@ -700,6 +826,37 @@ pub struct GovernedStageRecord {
     pub decision_ref: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blocked_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GovernedDocumentRef {
+    pub stage_key: String,
+    pub canon_mode: CanonMode,
+    pub packet_ref: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub document_path: Option<String>,
+    pub readiness: PacketReadiness,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GovernedSessionLifecycle {
+    pub governance_runtime: GovernanceRuntimeKind,
+    #[serde(default)]
+    pub explicit_opt_out: bool,
+    #[serde(default)]
+    pub mode_selection_preference: CanonModeSelectionPreference,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_mode: Option<CanonMode>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub selected_mode_sequence: Vec<CanonMode>,
+    #[serde(default)]
+    pub current_stage_index: usize,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stage_records: Vec<GovernedStageRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub accumulated_context: Vec<GovernedDocumentRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal_reason: Option<String>,
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]

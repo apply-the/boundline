@@ -4,6 +4,7 @@ use serde_json::json;
 use thiserror::Error;
 use uuid::Uuid;
 
+use crate::adapters::config_store::FileConfigStore;
 use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
 use crate::adapters::trace_store::{FileTraceStore, TraceStore};
 use crate::cli::CommandExitStatus;
@@ -12,7 +13,10 @@ use crate::cli::session::{self, SessionCommandError};
 use crate::domain::brief::{
     BriefIngestionError, normalize_governance_intent, normalize_inputs_with_governance,
 };
-use crate::domain::governance::GovernanceRuntimeKind;
+use crate::domain::distribution::evaluate_canon_install;
+use crate::domain::governance::{
+    CanonMode, CanonModeSelectionPreference, GovernanceRuntimeKind, GovernedSessionLifecycle,
+};
 use crate::domain::limits::TerminalCondition;
 use crate::domain::session::{
     ActiveSessionRecord, RoutingMode, RoutingOutcome, RoutingSource, SessionStatus,
@@ -20,7 +24,10 @@ use crate::domain::session::{
 use crate::domain::task::{TaskRunResponse, TaskStatus, TerminalReason};
 use crate::domain::task_context::TaskContext;
 use crate::domain::trace::{ExecutionTrace, TraceEventType};
-use crate::fixture::{FixtureRuntimeError, build_fixture_runtime, build_task_request};
+use crate::fixture::{
+    FixtureRuntimeError, build_fixture_runtime, build_task_request,
+    load_workspace_execution_profile,
+};
 use crate::orchestrator::engine::{Orchestrator, OrchestratorError};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,6 +37,7 @@ pub struct RunCommandReport {
     pub trace_location: Option<String>,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn execute_native_direct_run(
     workspace: &Path,
     goal: Option<&str>,
@@ -38,12 +46,76 @@ pub fn execute_native_direct_run(
     risk: Option<&str>,
     zone: Option<&str>,
     owner: Option<&str>,
+    mode: Option<CanonMode>,
+    no_canon: bool,
 ) -> Result<RunCommandReport, RunCommandError> {
     ensure_native_direct_run_can_bootstrap(workspace)?;
 
+    // Resolve effective governance runtime and apply config defaults.
+    let resolution = resolve_canon_default_governance(workspace, governance, mode, no_canon)?;
+
+    let effective_risk = risk.or(resolution.default_risk.as_deref());
+    let effective_zone = zone.or(resolution.default_zone.as_deref());
+    let effective_owner = owner.or(resolution.default_owner.as_deref());
+
     session::execute_start(Some(workspace)).map_err(RunCommandError::SessionCommand)?;
-    session::execute_capture(Some(workspace), goal, briefs, governance, risk, zone, owner)
-        .map_err(RunCommandError::SessionCommand)?;
+    session::execute_capture(
+        Some(workspace),
+        goal,
+        briefs,
+        resolution.governance,
+        effective_risk,
+        effective_zone,
+        effective_owner,
+    )
+    .map_err(RunCommandError::SessionCommand)?;
+
+    if resolution.governance == Some(GovernanceRuntimeKind::Canon)
+        && load_workspace_execution_profile(workspace)
+            .is_ok_and(|profile| profile.governance.is_some())
+    {
+        session::execute_flow(Some(workspace), native_direct_run_flow_for_mode(mode))
+            .map_err(RunCommandError::SessionCommand)?;
+    }
+
+    // T032: Create GovernedSessionLifecycle when Canon governance is selected.
+    if resolution.governance == Some(GovernanceRuntimeKind::Canon) {
+        let mode_selection = resolution.mode_selection_preference.unwrap_or_default();
+        let lifecycle = GovernedSessionLifecycle {
+            governance_runtime: GovernanceRuntimeKind::Canon,
+            explicit_opt_out: false,
+            mode_selection_preference: mode_selection,
+            selected_mode: mode,
+            selected_mode_sequence: mode.into_iter().collect(),
+            current_stage_index: 0,
+            stage_records: Vec::new(),
+            accumulated_context: Vec::new(),
+            terminal_reason: None,
+        };
+        let session_store = FileSessionStore::for_workspace(workspace);
+        if let Ok(Some(mut record)) = session_store.load() {
+            record.governance_lifecycle = Some(lifecycle);
+            let _ = session_store.persist(&record);
+        }
+    } else if no_canon {
+        // Record explicit opt-out in session lifecycle.
+        let lifecycle = GovernedSessionLifecycle {
+            governance_runtime: GovernanceRuntimeKind::Local,
+            explicit_opt_out: true,
+            mode_selection_preference: CanonModeSelectionPreference::default(),
+            selected_mode: None,
+            selected_mode_sequence: Vec::new(),
+            current_stage_index: 0,
+            stage_records: Vec::new(),
+            accumulated_context: Vec::new(),
+            terminal_reason: None,
+        };
+        let session_store = FileSessionStore::for_workspace(workspace);
+        if let Ok(Some(mut record)) = session_store.load() {
+            record.governance_lifecycle = Some(lifecycle);
+            let _ = session_store.persist(&record);
+        }
+    }
 
     let session_store = FileSessionStore::for_workspace(workspace);
     let record = session_store
@@ -77,6 +149,19 @@ pub fn execute_native_direct_run(
         terminal_output: report.terminal_output,
         trace_location,
     })
+}
+
+fn native_direct_run_flow_for_mode(mode: Option<CanonMode>) -> &'static str {
+    match mode {
+        Some(
+            CanonMode::Requirements
+            | CanonMode::Architecture
+            | CanonMode::Backlog
+            | CanonMode::SystemShaping,
+        ) => "delivery",
+        Some(CanonMode::Change | CanonMode::Migration | CanonMode::SupplyChainAnalysis) => "change",
+        _ => "bug-fix",
+    }
 }
 
 pub fn execute_custom_run(
@@ -209,6 +294,120 @@ pub enum RunCommandError {
     TraceStore(#[from] crate::adapters::trace_store::TraceStoreError),
     #[error("failed to run the orchestrator vertical slice: {0}")]
     Orchestrator(#[from] OrchestratorError),
+    #[error(
+        "Canon governance surface is not ready: {repair_actions}\n\nRun `boundline doctor --install` to resolve."
+    )]
+    CanonSurfaceNotReady { repair_actions: String },
+}
+
+/// Result of Canon-default governance resolution.
+struct CanonGovernanceResolution {
+    governance: Option<GovernanceRuntimeKind>,
+    default_risk: Option<String>,
+    default_zone: Option<String>,
+    default_owner: Option<String>,
+    mode_selection_preference: Option<CanonModeSelectionPreference>,
+}
+
+/// Resolve the effective governance runtime based on workspace config and CLI flags.
+///
+/// Priority:
+/// 1. `--no-canon` → Local
+/// 2. Explicit `--governance` flag → use as-is
+/// 3. Workspace `[canon]` config present → Canon (after surface verification)
+/// 4. Explicit `--mode` without workspace `[canon]` config → Canon (after surface verification)
+/// 5. No `[canon]` config and no mode → Local (backward compatibility)
+fn resolve_canon_default_governance(
+    workspace: &Path,
+    governance: Option<GovernanceRuntimeKind>,
+    mode: Option<CanonMode>,
+    no_canon: bool,
+) -> Result<CanonGovernanceResolution, RunCommandError> {
+    // --no-canon always forces Local.
+    if no_canon {
+        return Ok(CanonGovernanceResolution {
+            governance: Some(GovernanceRuntimeKind::Local),
+            default_risk: None,
+            default_zone: None,
+            default_owner: None,
+            mode_selection_preference: None,
+        });
+    }
+
+    let config_store = FileConfigStore::for_workspace(workspace);
+    let config = config_store.load_local().ok().flatten();
+    let canon_prefs = config.and_then(|c| c.canon);
+
+    // Explicit --governance flag takes priority.
+    if let Some(governance) = governance {
+        if governance == GovernanceRuntimeKind::Canon {
+            verify_canon_surface_ready()?;
+        }
+        return Ok(CanonGovernanceResolution {
+            governance: Some(governance),
+            default_risk: canon_prefs.as_ref().and_then(|prefs| prefs.default_risk.clone()),
+            default_zone: canon_prefs.as_ref().and_then(|prefs| prefs.default_zone.clone()),
+            default_owner: canon_prefs.as_ref().and_then(|prefs| prefs.default_owner.clone()),
+            mode_selection_preference: canon_prefs.as_ref().map(|prefs| prefs.mode_selection),
+        });
+    }
+
+    match canon_prefs {
+        Some(canon_prefs) => {
+            // Workspace has [canon] config — Canon is the default runtime.
+            verify_canon_surface_ready()?;
+            Ok(CanonGovernanceResolution {
+                governance: Some(GovernanceRuntimeKind::Canon),
+                default_risk: canon_prefs.default_risk,
+                default_zone: canon_prefs.default_zone,
+                default_owner: canon_prefs.default_owner,
+                mode_selection_preference: Some(canon_prefs.mode_selection),
+            })
+        }
+        None => {
+            if mode.is_some() {
+                verify_canon_surface_ready()?;
+                return Ok(CanonGovernanceResolution {
+                    governance: Some(GovernanceRuntimeKind::Canon),
+                    default_risk: Some("medium".to_string()),
+                    default_zone: Some("engineering".to_string()),
+                    default_owner: Some("platform".to_string()),
+                    mode_selection_preference: Some(CanonModeSelectionPreference::default()),
+                });
+            }
+            // No [canon] config — backward-compatible local governance.
+            Ok(CanonGovernanceResolution {
+                governance: None,
+                default_risk: None,
+                default_zone: None,
+                default_owner: None,
+                mode_selection_preference: None,
+            })
+        }
+    }
+}
+
+fn verify_canon_surface_ready() -> Result<(), RunCommandError> {
+    let current_exe = std::env::current_exe().map_err(|error| RunCommandError::CanonSurfaceNotReady {
+        repair_actions: format!(
+            "Boundline could not determine the current executable before checking Canon: {error}"
+        ),
+    })?;
+    let status = evaluate_canon_install(&current_exe);
+    let ready = status.surface_verification.as_ref().is_some_and(|surface| surface.ready);
+    if ready {
+        return Ok(());
+    }
+
+    let repair_actions = status
+        .surface_verification
+        .as_ref()
+        .map(|surface| surface.repair_actions.clone())
+        .filter(|actions| !actions.is_empty())
+        .unwrap_or(status.suggested_actions);
+    let repair_actions =
+        if repair_actions.is_empty() { status.message } else { repair_actions.join("; ") };
+    Err(RunCommandError::CanonSurfaceNotReady { repair_actions })
 }
 
 fn compatibility_terminal_output(body: String) -> String {

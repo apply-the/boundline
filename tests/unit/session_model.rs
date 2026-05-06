@@ -66,6 +66,7 @@ fn execution_path_prefers_pending_native_goal_plan_over_fixture_state() {
         latest_trace_ref: None,
         created_at: 10,
         updated_at: 20,
+        governance_lifecycle: None,
     };
 
     assert_eq!(
@@ -94,6 +95,7 @@ fn execution_path_uses_fixture_compatibility_when_only_task_state_exists() {
         latest_trace_ref: Some(format!("{workspace_ref}/.boundline/traces/task-1.json")),
         created_at: 10,
         updated_at: 20,
+        governance_lifecycle: None,
     };
 
     assert_eq!(execution_path_text(&record).as_deref(), Some("fixture_compatibility"));
@@ -118,6 +120,7 @@ fn execution_path_marks_goal_captured_sessions_as_pending_plan() {
         latest_trace_ref: None,
         created_at: 10,
         updated_at: 20,
+        governance_lifecycle: None,
     };
 
     assert_eq!(execution_path_text(&record).as_deref(), Some("native_session_pending_plan"));
@@ -142,6 +145,7 @@ fn routing_outcome_blocks_when_plan_confirmation_is_pending() {
         latest_trace_ref: None,
         created_at: 10,
         updated_at: 20,
+        governance_lifecycle: None,
     };
 
     let outcome = routing_outcome(&record);
@@ -169,6 +173,7 @@ fn routing_outcome_prefers_native_goal_plan_when_plan_is_confirmed() {
         latest_trace_ref: None,
         created_at: 10,
         updated_at: 20,
+        governance_lifecycle: None,
     };
 
     let outcome = routing_outcome(&record);
