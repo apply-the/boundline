@@ -10,6 +10,8 @@ fn release_surface_closes_on_0_44_0_without_an_upcoming_044_entry() {
     let windows_release_workflow =
         fs::read_to_string(repo_root.join(".github/workflows/release-windows-distribution.yml"))
             .unwrap();
+    let homebrew_tap_workflow =
+        fs::read_to_string(repo_root.join(".github/workflows/sync-homebrew-tap.yml")).unwrap();
 
     assert!(cargo_toml.contains("version = \"0.44.0\""));
     assert!(changelog.contains("## [0.44.0] - 2026-05-07"));
@@ -22,6 +24,62 @@ fn release_surface_closes_on_0_44_0_without_an_upcoming_044_entry() {
     assert!(windows_release_workflow.contains(
         "cargo build --locked --release --package canon-cli --bin canon --target x86_64-pc-windows-msvc --manifest-path canon-source/Cargo.toml --target-dir canon-source/target"
     ));
+    assert!(homebrew_tap_workflow.contains("workflow_dispatch:"));
+    assert!(homebrew_tap_workflow.contains("branches:\n      - main"));
+    assert!(homebrew_tap_workflow.contains("tags:\n      - \"*.*.*\""));
+    assert!(homebrew_tap_workflow.contains("paths:\n      - \"Cargo.toml\""));
+    assert!(
+        homebrew_tap_workflow.contains("distribution/channel-metadata.toml"),
+        "{homebrew_tap_workflow}"
+    );
+    assert!(
+        homebrew_tap_workflow.contains("distribution/homebrew/Formula/boundline.rb"),
+        "{homebrew_tap_workflow}"
+    );
+    assert!(
+        homebrew_tap_workflow.contains("scripts/release/sync-homebrew-tap.sh"),
+        "{homebrew_tap_workflow}"
+    );
+    assert!(homebrew_tap_workflow.contains("id: sync_formula"), "{homebrew_tap_workflow}");
+    assert!(
+        homebrew_tap_workflow.contains("if: steps.sync_formula.outputs.status != 'noop'"),
+        "{homebrew_tap_workflow}"
+    );
+    assert!(homebrew_tap_workflow.contains("ref: main"), "{homebrew_tap_workflow}");
+    assert!(
+        homebrew_tap_workflow.contains("git config user.name \"github-actions[bot]\""),
+        "{homebrew_tap_workflow}"
+    );
+    assert!(
+        homebrew_tap_workflow.contains("git add Formula/boundline.rb"),
+        "{homebrew_tap_workflow}"
+    );
+    assert!(
+        homebrew_tap_workflow.contains("git commit -m \"boundline ${BOUNDLINE_VERSION}\""),
+        "{homebrew_tap_workflow}"
+    );
+    assert!(homebrew_tap_workflow.contains("git push origin HEAD:main"), "{homebrew_tap_workflow}");
+    assert!(
+        homebrew_tap_workflow
+            .contains("Expected ${FORMULA_PATH} to change before pushing Boundline"),
+        "{homebrew_tap_workflow}"
+    );
+    assert!(
+        homebrew_tap_workflow
+            .contains("Add it as a repository or organization secret available to this repo"),
+        "{homebrew_tap_workflow}"
+    );
+    assert!(
+        homebrew_tap_workflow.contains("contents:write access to ${TAP_REPOSITORY}"),
+        "{homebrew_tap_workflow}"
+    );
+    assert!(
+        homebrew_tap_workflow.contains("permission to push to its main branch"),
+        "{homebrew_tap_workflow}"
+    );
+    assert!(!homebrew_tap_workflow.contains("has_tap_token"));
+    assert!(!homebrew_tap_workflow.contains("pull-request-number"));
+    assert!(!homebrew_tap_workflow.contains("create-pull-request@v7"));
     assert!(
         !windows_release_workflow
             .contains("Invoke-WebRequest -Uri $canonUrl -OutFile $canonArchive")
