@@ -2,7 +2,7 @@ use std::fs;
 use std::path::Path;
 
 #[test]
-fn release_surface_closes_on_0_43_0_without_an_upcoming_043_entry() {
+fn release_surface_closes_on_0_44_0_without_an_upcoming_044_entry() {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let cargo_toml = fs::read_to_string(repo_root.join("Cargo.toml")).unwrap();
     let changelog = fs::read_to_string(repo_root.join("CHANGELOG.md")).unwrap();
@@ -11,11 +11,11 @@ fn release_surface_closes_on_0_43_0_without_an_upcoming_043_entry() {
         fs::read_to_string(repo_root.join(".github/workflows/release-windows-distribution.yml"))
             .unwrap();
 
-    assert!(cargo_toml.contains("version = \"0.43.0\""));
-    assert!(changelog.contains("## [0.43.0] - 2026-05-07"));
-    assert!(changelog.contains("043` - Stack-Neutral Workspace Entry"));
-    assert!(roadmap.contains("## Current Status: v0.43.0"));
-    assert!(roadmap.contains("### Delivered in 0.43.0"));
+    assert!(cargo_toml.contains("version = \"0.44.0\""));
+    assert!(changelog.contains("## [0.44.0] - 2026-05-07"));
+    assert!(changelog.contains("044` - CLI Init UX"));
+    assert!(roadmap.contains("## Current Status: v0.44.0"));
+    assert!(roadmap.contains("### Delivered in 0.44.0"));
     assert!(windows_release_workflow.contains(
         "git clone --depth 1 --branch \"$canonVersion\" https://github.com/apply-the/canon canon-source"
     ));
@@ -26,5 +26,5 @@ fn release_surface_closes_on_0_43_0_without_an_upcoming_043_entry() {
         !windows_release_workflow
             .contains("Invoke-WebRequest -Uri $canonUrl -OutFile $canonArchive")
     );
-    assert!(!roadmap.contains("043-stack-neutral-init"));
+    assert!(!roadmap.contains("044-cli-init-ux"));
 }

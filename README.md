@@ -56,11 +56,16 @@ goal and repository evidence are too weak to choose a credible stack, planning
 stops with an explicit clarification instead of guessing.
 
 `boundline init --assistant claude|copilot|codex|gemini` seeds deterministic
-route defaults for the selected assistant and reports which slots were seeded.
-If a selected runtime is unavailable for the missing defaults, init either
-falls back to another selected available assistant and marks that fallback in
-the `seeded_route_defaults` output, or stops explicitly when no selected
-assistant can credibly fill the remaining slots.
+route defaults for the selected assistant and reports the result in the
+`route_setup` section, including any fallback provenance and the
+`inspect_or_edit` follow-up command. In guided mode, the route prompt now lists
+supported slots inline, explains that blank input is allowed when assistant
+defaults can seed the missing slots, and shows a valid
+`SLOT=RUNTIME:MODEL` example such as `planning=copilot:gpt-5.4`. If a selected
+runtime is unavailable for the missing defaults, init either falls back to
+another selected available assistant and marks that fallback in `route_setup`,
+or stops explicitly when no selected assistant can credibly fill the remaining
+slots.
 When domain families or repository cues are credible, init also applies
 merge-only hygiene defaults such as `.gitignore` and `.dockerignore` entries
 without removing existing local lines, including legacy ESLint ignores and

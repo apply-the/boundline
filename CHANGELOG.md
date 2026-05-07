@@ -17,6 +17,24 @@ recorded workspace version.
 
 ## [Unreleased]
 
+## [0.44.0] - 2026-05-07
+
+Delivered specs:
+
+- `044` - CLI Init UX
+
+Highlights:
+
+- Make guided `boundline init` self-sufficient by surfacing supported assistant
+  values, supported route slots, valid `SLOT=RUNTIME:MODEL` examples, and
+  blank-input/default behavior directly in prompts and `init --help`.
+- Turn init routing failures and overwrite previews into more actionable,
+  example-backed recovery guidance while keeping workspace mutation bounded and
+  explicit.
+- Group `init` and `doctor` operator output into clearer summary, route,
+  assistant-setup, check, and action sections, then align docs and assistant
+  guidance to the same first-run story.
+
 ## [0.43.0] - 2026-05-07
 
 Delivered specs:

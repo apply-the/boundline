@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use serde_json::json;
 use thiserror::Error;
 
+use super::assistant_assets::{AssistantAsset, AssistantSurface, assets_for_assistants};
 use crate::adapters::config_store::{ConfigStoreError, FileConfigStore};
 use crate::cli::CommandExitStatus;
 use crate::domain::configuration::{
@@ -18,6 +19,8 @@ use crate::domain::domain_templates::{
 };
 use crate::domain::governance::CanonModeSelectionPreference;
 use crate::domain::workspace_hygiene::{merge_hygiene_content, plan_hygiene_defaults};
+
+const INIT_ROUTE_EXAMPLE: &str = "planning=copilot:gpt-5.4";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InitCommandReport {
@@ -68,6 +71,29 @@ pub fn execute_init(request: InitRequest<'_>) -> Result<InitCommandReport, InitC
     let execution_path = workspace.join(".boundline/execution.json");
     let local_config_path = store.local_config_path();
 
+    let guided_answers = if io::stdin().is_terminal()
+        && (request.canon_mode_selection.is_none()
+            || request.assistants.is_empty()
+            || request.routes.is_empty())
+    {
+        Some(collect_guided_init_answers(
+            request.canon_mode_selection.is_none(),
+            request.assistants.is_empty(),
+            request.routes.is_empty(),
+        )?)
+    } else {
+        None
+    };
+    let effective_canon_mode_selection = request
+        .canon_mode_selection
+        .or_else(|| guided_answers.as_ref().and_then(|answers| answers.canon_mode_selection));
+    let effective_assistants = if request.assistants.is_empty() {
+        guided_answers.as_ref().map(|answers| answers.assistants.clone()).unwrap_or_default()
+    } else {
+        request.assistants.to_vec()
+    };
+    let assistant_assets = assets_for_assistants(&effective_assistants);
+
     let mut planned = Vec::new();
     let execution_exists = execution_path.is_file();
     let config_exists = local_config_path.is_file();
@@ -88,32 +114,34 @@ pub fn execute_init(request: InitRequest<'_>) -> Result<InitCommandReport, InitC
         planned.push(format!("- seed {} domain template(s)", requested_domain_templates.len()));
     }
 
-    if (execution_exists || config_exists) && !request.force {
+    if assistant_assets.is_empty() {
+        planned.push("- skip assistant command-pack scaffolding".to_string());
+    } else {
+        planned.extend(plan_assistant_setup(workspace, &assistant_assets));
+    }
+
+    let assistant_assets_exist =
+        assistant_assets.iter().any(|asset| workspace.join(asset.relative_path).exists());
+
+    if (execution_exists || config_exists || assistant_assets_exist) && !request.force {
+        let inspect_command = init_inspect_command(workspace);
         let mut lines = vec![
             "init: preview only - existing Boundline files would be updated".to_string(),
-            "use --force to apply updates to existing files".to_string(),
             format!("template: {}", template_label(template)),
+            "why_stopped:".to_string(),
+            "- existing .boundline files or assistant assets are already present".to_string(),
+            "- rerun the same command with --force to apply updates".to_string(),
+            "planned_changes:".to_string(),
         ];
         lines.extend(planned);
+        lines.push("next_steps:".to_string());
+        lines.push("- rerun the same command with --force".to_string());
+        lines.push(format!("- inspect current config: {inspect_command}"));
         return Ok(InitCommandReport {
             exit_status: CommandExitStatus::NonSuccess,
             terminal_output: lines.join("\n"),
         });
     }
-
-    let guided_answers = if request.canon_mode_selection.is_none() && io::stdin().is_terminal() {
-        Some(collect_guided_init_answers()?)
-    } else {
-        None
-    };
-    let effective_canon_mode_selection = request
-        .canon_mode_selection
-        .or_else(|| guided_answers.as_ref().map(|answers| answers.canon_mode_selection));
-    let effective_assistants = if request.assistants.is_empty() {
-        guided_answers.as_ref().map(|answers| answers.assistants.clone()).unwrap_or_default()
-    } else {
-        request.assistants.to_vec()
-    };
     let explicit_routes = request
         .routes
         .iter()
@@ -198,11 +226,14 @@ pub fn execute_init(request: InitRequest<'_>) -> Result<InitCommandReport, InitC
     .map_err(|source| InitCommandError::WriteFile { path: execution_path.clone(), source })?;
 
     store.save_local(&local)?;
+    let assistant_actions = apply_assistant_assets(workspace, &assistant_assets)?;
 
     let capabilities = effective_assistants
         .iter()
         .map(|runtime| format!("- {}: {}", runtime.as_str(), runtime_capability_line(*runtime)))
         .collect::<Vec<_>>();
+    let inspect_command = init_inspect_command(workspace);
+    let doctor_command = init_doctor_command(workspace);
 
     let mut lines = vec![
         "init: workspace initialized".to_string(),
@@ -216,8 +247,23 @@ pub fn execute_init(request: InitRequest<'_>) -> Result<InitCommandReport, InitC
         lines.extend(capabilities);
     }
 
-    if !seeded_routes.is_empty() {
-        lines.push("seeded_route_defaults:".to_string());
+    let explicit_route_lines =
+        explicit_routes.iter().chain(guided_routes.iter()).collect::<Vec<_>>();
+    lines.push("route_setup:".to_string());
+    if effective_assistants.is_empty() {
+        lines.push(
+            "- assistant_defaults: none selected; no assistant-seeded workspace routes were recorded"
+                .to_string(),
+        );
+    } else {
+        lines.push(format!("- assistant_defaults: {}", format_runtime_list(&effective_assistants)));
+    }
+    if seeded_routes.is_empty() && explicit_route_lines.is_empty() {
+        lines.push(
+            "- workspace-local routes: none recorded; add --assistant or --route later to pin workspace-specific defaults"
+                .to_string(),
+        );
+    } else {
         lines.extend(seeded_routes.iter().map(|selection| {
             let provenance = match selection.fallback_from_unavailable {
                 Some(runtime) => {
@@ -226,25 +272,36 @@ pub fn execute_init(request: InitRequest<'_>) -> Result<InitCommandReport, InitC
                 None => "assistant-default".to_string(),
             };
             format!(
-                "- {}: {}:{} [{provenance}]",
+                "- seeded {}: {}:{} [{provenance}]",
                 selection.slot.as_str(),
                 selection.route.runtime,
                 selection.route.model
             )
         }));
-    }
-
-    let explicit_route_lines =
-        explicit_routes.iter().chain(guided_routes.iter()).collect::<Vec<_>>();
-    if !explicit_route_lines.is_empty() {
-        lines.push("explicit_route_overrides:".to_string());
-        lines.extend(explicit_route_lines.into_iter().map(|(slot, route)| {
-            format!("- {}: {}:{} [explicit]", slot.as_str(), route.runtime, route.model)
+        lines.extend(explicit_route_lines.iter().map(|(slot, route)| {
+            format!("- explicit {}: {}:{} [explicit]", slot.as_str(), route.runtime, route.model)
         }));
     }
+    lines.push(format!("- inspect_or_edit: {inspect_command}"));
 
     if let Some(canon) = local.canon.as_ref() {
         lines.push(format!("canon_mode_selection: {}", canon.mode_selection));
+    }
+
+    if assistant_actions.is_empty() {
+        lines.push("assistant_setup: none".to_string());
+    } else {
+        lines.push("assistant_setup:".to_string());
+        lines.extend(assistant_actions.iter().map(|action| {
+            format!(
+                "- {}: {} created={} updated={} unchanged={}",
+                action.surface.plan_label(),
+                action.status,
+                action.created_files,
+                action.updated_files,
+                action.unchanged_files
+            )
+        }));
     }
 
     if local.routing.domain_templates.is_empty() {
@@ -292,7 +349,9 @@ pub fn execute_init(request: InitRequest<'_>) -> Result<InitCommandReport, InitC
         }));
     }
 
-    lines.push("next: boundline doctor --workspace <workspace>".to_string());
+    lines.push("next_steps:".to_string());
+    lines.push(format!("- inspect effective config: {inspect_command}"));
+    lines.push(format!("- verify workspace: {doctor_command}"));
 
     Ok(InitCommandReport {
         exit_status: CommandExitStatus::Succeeded,
@@ -369,6 +428,98 @@ struct HygieneInitAction {
     added_patterns: usize,
     preserved_custom_lines: usize,
     sources: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AssistantInitAction {
+    surface: AssistantSurface,
+    status: &'static str,
+    created_files: usize,
+    updated_files: usize,
+    unchanged_files: usize,
+}
+
+fn plan_assistant_setup(workspace: &Path, assistant_assets: &[&AssistantAsset]) -> Vec<String> {
+    let mut grouped = BTreeMap::<AssistantSurface, Vec<&AssistantAsset>>::new();
+    for asset in assistant_assets {
+        let asset = *asset;
+        grouped.entry(asset.surface).or_default().push(asset);
+    }
+
+    grouped
+        .into_iter()
+        .map(|(surface, assets)| {
+            let action = if assets.iter().any(|asset| workspace.join(asset.relative_path).exists())
+            {
+                "refresh"
+            } else {
+                "scaffold"
+            };
+            format!("- {action} {} ({} file(s))", surface.plan_label(), assets.len())
+        })
+        .collect()
+}
+
+fn apply_assistant_assets(
+    workspace: &Path,
+    assistant_assets: &[&AssistantAsset],
+) -> Result<Vec<AssistantInitAction>, InitCommandError> {
+    let mut grouped = BTreeMap::<AssistantSurface, AssistantInitAction>::new();
+
+    for asset in assistant_assets {
+        let asset = *asset;
+        let target = workspace.join(asset.relative_path);
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent).map_err(|source| InitCommandError::WriteFile {
+                path: parent.to_path_buf(),
+                source,
+            })?;
+        }
+
+        let file_status = if target.is_file() {
+            let existing = fs::read_to_string(&target)
+                .map_err(|source| InitCommandError::ReadFile { path: target.clone(), source })?;
+            if existing == asset.contents {
+                "unchanged"
+            } else {
+                fs::write(&target, asset.contents).map_err(|source| {
+                    InitCommandError::WriteFile { path: target.clone(), source }
+                })?;
+                "updated"
+            }
+        } else {
+            fs::write(&target, asset.contents)
+                .map_err(|source| InitCommandError::WriteFile { path: target.clone(), source })?;
+            "created"
+        };
+
+        let entry = grouped.entry(asset.surface).or_insert(AssistantInitAction {
+            surface: asset.surface,
+            status: "unchanged",
+            created_files: 0,
+            updated_files: 0,
+            unchanged_files: 0,
+        });
+        match file_status {
+            "created" => entry.created_files += 1,
+            "updated" => entry.updated_files += 1,
+            _ => entry.unchanged_files += 1,
+        }
+    }
+
+    let mut actions = grouped.into_values().collect::<Vec<_>>();
+    for action in &mut actions {
+        action.status = if action.updated_files > 0
+            || (action.created_files > 0 && action.unchanged_files > 0)
+        {
+            "updated"
+        } else if action.created_files > 0 {
+            "created"
+        } else {
+            "unchanged"
+        };
+    }
+    Ok(actions)
 }
 
 fn apply_workspace_hygiene_defaults(
@@ -462,6 +613,7 @@ fn resolve_seeded_routes(
         return Err(InitCommandError::NoAvailableAssistantDefaults {
             assistants: format_runtime_list(assistants),
             slots: format_slot_list(&missing_slots),
+            example: INIT_ROUTE_EXAMPLE,
         });
     }
 
@@ -492,6 +644,54 @@ fn format_slot_list(slots: &[RouteSlot]) -> String {
     slots.iter().map(|slot| slot.as_str()).collect::<Vec<_>>().join(", ")
 }
 
+fn supported_runtime_choices() -> String {
+    format_runtime_list(&[
+        RuntimeKind::Claude,
+        RuntimeKind::Codex,
+        RuntimeKind::Copilot,
+        RuntimeKind::Gemini,
+    ])
+}
+
+fn supported_route_slots() -> String {
+    format_slot_list(&required_init_route_slots())
+}
+
+fn init_inspect_command(workspace: &Path) -> String {
+    format!("boundline config show --workspace {}", workspace.display())
+}
+
+fn init_doctor_command(workspace: &Path) -> String {
+    format!("boundline doctor --workspace {}", workspace.display())
+}
+
+fn guided_canon_mode_prompt() -> String {
+    "Canon mode-selection [manual|auto-confirm|auto]\n  Default: auto-confirm\n  Choose how Canon approval is requested for governed stages.\n> ".to_string()
+}
+
+fn guided_assistant_prompt() -> String {
+    format!(
+        "Assistant surfaces [{}], comma-separated\n  Leave blank to skip repository-local assistant packs and assistant-seeded routes.\n  Example: copilot,codex\n> ",
+        supported_runtime_choices()
+    )
+}
+
+fn guided_route_prompt() -> String {
+    format!(
+        "Model routes [{}], comma-separated as SLOT=RUNTIME:MODEL\n  Optional: leave blank to let selected assistants seed missing slots.\n  Example: {}\n> ",
+        supported_route_slots(),
+        INIT_ROUTE_EXAMPLE
+    )
+}
+
+fn invalid_route_shape_message(raw: &str) -> String {
+    format!(
+        "model route `{raw}` must use SLOT=RUNTIME:MODEL with slots {}. Example: {}",
+        supported_route_slots(),
+        INIT_ROUTE_EXAMPLE
+    )
+}
+
 fn parse_domain_standard(raw: &str) -> Result<(DomainFamily, String), InitCommandError> {
     let (family, standards) = raw.split_once('=').ok_or_else(|| {
         InitCommandError::InvalidDomainArgument("domain standards must use FAMILY=TEXT".to_string())
@@ -507,16 +707,12 @@ fn parse_domain_standard(raw: &str) -> Result<(DomainFamily, String), InitComman
 }
 
 fn parse_model_route(raw: &str) -> Result<(RouteSlot, ModelRoute), InitCommandError> {
-    let (slot_raw, route_raw) = raw.split_once('=').ok_or_else(|| {
-        InitCommandError::InvalidDomainArgument(
-            "model routes must use SLOT=RUNTIME:MODEL".to_string(),
-        )
-    })?;
-    let (runtime_raw, model_raw) = route_raw.split_once(':').ok_or_else(|| {
-        InitCommandError::InvalidDomainArgument(
-            "model routes must use SLOT=RUNTIME:MODEL".to_string(),
-        )
-    })?;
+    let (slot_raw, route_raw) = raw
+        .split_once('=')
+        .ok_or_else(|| InitCommandError::InvalidDomainArgument(invalid_route_shape_message(raw)))?;
+    let (runtime_raw, model_raw) = route_raw
+        .split_once(':')
+        .ok_or_else(|| InitCommandError::InvalidDomainArgument(invalid_route_shape_message(raw)))?;
     let slot = parse_route_slot(slot_raw)?;
     let runtime = parse_runtime_kind(runtime_raw)?;
     let route = ModelRoute { runtime, model: model_raw.trim().to_string() };
@@ -528,26 +724,40 @@ fn parse_model_route(raw: &str) -> Result<(RouteSlot, ModelRoute), InitCommandEr
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct GuidedInitAnswers {
-    canon_mode_selection: CanonModeSelectionPreference,
+    canon_mode_selection: Option<CanonModeSelectionPreference>,
     assistants: Vec<RuntimeKind>,
     routes: Vec<(RouteSlot, ModelRoute)>,
 }
 
-fn collect_guided_init_answers() -> Result<GuidedInitAnswers, InitCommandError> {
-    let mode =
-        prompt_line("Canon mode-selection [manual|auto-confirm|auto] (default: auto-confirm): ")?;
-    let canon_mode_selection = parse_canon_mode_selection(if mode.trim().is_empty() {
-        "auto-confirm"
+fn collect_guided_init_answers(
+    prompt_for_canon_mode: bool,
+    prompt_for_assistants: bool,
+    prompt_for_routes: bool,
+) -> Result<GuidedInitAnswers, InitCommandError> {
+    let canon_mode_selection = if prompt_for_canon_mode {
+        let mode = prompt_line(&guided_canon_mode_prompt())?;
+        Some(parse_canon_mode_selection(if mode.trim().is_empty() {
+            "auto-confirm"
+        } else {
+            mode.trim()
+        })?)
     } else {
-        mode.trim()
-    })?;
+        None
+    };
 
-    let assistants =
-        prompt_line("Assistant surfaces comma-separated [codex,copilot,claude,gemini]: ")?;
-    let assistants = parse_guided_assistants(&assistants)?;
+    let assistants = if prompt_for_assistants {
+        let assistants = prompt_line(&guided_assistant_prompt())?;
+        parse_guided_assistants(&assistants)?
+    } else {
+        Vec::new()
+    };
 
-    let routes = prompt_line("Model routes comma-separated SLOT=RUNTIME:MODEL: ")?;
-    let routes = parse_guided_routes(&routes)?;
+    let routes = if prompt_for_routes {
+        let routes = prompt_line(&guided_route_prompt())?;
+        parse_guided_routes(&routes)?
+    } else {
+        Vec::new()
+    };
 
     Ok(GuidedInitAnswers { canon_mode_selection, assistants, routes })
 }
@@ -582,7 +792,7 @@ fn parse_canon_mode_selection(raw: &str) -> Result<CanonModeSelectionPreference,
         "auto-confirm" => Ok(CanonModeSelectionPreference::AutoConfirm),
         "auto" => Ok(CanonModeSelectionPreference::Auto),
         other => Err(InitCommandError::InvalidDomainArgument(format!(
-            "unknown Canon mode-selection `{other}`"
+            "Canon mode-selection `{other}` is not supported; use manual, auto-confirm, or auto"
         ))),
     }
 }
@@ -593,9 +803,10 @@ fn parse_route_slot(raw: &str) -> Result<RouteSlot, InitCommandError> {
         "implementation" => Ok(RouteSlot::Implementation),
         "verification" => Ok(RouteSlot::Verification),
         "review" => Ok(RouteSlot::Review),
-        other => {
-            Err(InitCommandError::InvalidDomainArgument(format!("unknown route slot `{other}`")))
-        }
+        other => Err(InitCommandError::InvalidDomainArgument(format!(
+            "route slot `{other}` is not supported; use {}",
+            supported_route_slots()
+        ))),
     }
 }
 
@@ -605,7 +816,10 @@ fn parse_runtime_kind(raw: &str) -> Result<RuntimeKind, InitCommandError> {
         "codex" => Ok(RuntimeKind::Codex),
         "copilot" => Ok(RuntimeKind::Copilot),
         "gemini" => Ok(RuntimeKind::Gemini),
-        other => Err(InitCommandError::InvalidDomainArgument(format!("unknown runtime `{other}`"))),
+        other => Err(InitCommandError::InvalidDomainArgument(format!(
+            "runtime `{other}` is not supported; use {}",
+            supported_runtime_choices()
+        ))),
     }
 }
 
@@ -813,9 +1027,9 @@ pub enum InitCommandError {
     #[error("failed to persist config: {0}")]
     ConfigStore(#[from] ConfigStoreError),
     #[error(
-        "no available assistant defaults remain for slots {slots}; selected assistants {assistants} are missing from PATH or extension surface. Install one of them, add an available assistant, or pass explicit --route overrides for the missing slots"
+        "no available assistant defaults remain for slots {slots}; selected assistants {assistants} are missing from PATH or extension surface. Install one of them, choose an available assistant, or rerun with explicit --route overrides such as --route {example}"
     )]
-    NoAvailableAssistantDefaults { assistants: String, slots: String },
+    NoAvailableAssistantDefaults { assistants: String, slots: String, example: &'static str },
     #[error("invalid domain argument: {0}")]
     InvalidDomainArgument(String),
     #[error("invalid domain template settings: {0}")]
@@ -832,9 +1046,11 @@ mod tests {
 
     use super::{
         InitRequest, command_in_path, execute_init, execution_template, format_runtime_list,
-        format_slot_list, parse_canon_mode_selection, parse_context_binding, parse_domain_family,
+        format_slot_list, guided_assistant_prompt, guided_canon_mode_prompt, guided_route_prompt,
+        parse_canon_mode_selection, parse_context_binding, parse_domain_family,
         parse_domain_standard, parse_external_context_kind, parse_guided_assistants,
-        parse_guided_routes, resolve_seeded_routes, template_label, upsert_binding,
+        parse_guided_routes, parse_model_route, resolve_seeded_routes, supported_route_slots,
+        supported_runtime_choices, template_label, upsert_binding,
     };
     use crate::adapters::config_store::FileConfigStore;
     use crate::cli::CommandExitStatus;
@@ -937,8 +1153,9 @@ mod tests {
         assert_eq!(report.exit_status, CommandExitStatus::NonSuccess);
         assert!(report.terminal_output.contains("init: preview only"));
         assert!(report.terminal_output.contains("template: delivery"));
+        assert!(report.terminal_output.contains("planned_changes:"));
         assert!(report.terminal_output.contains("- update"));
-        assert!(report.terminal_output.contains("- leave domain templates unseeded"));
+        assert!(report.terminal_output.contains("next_steps:"));
     }
 
     #[test]
@@ -992,9 +1209,17 @@ mod tests {
         })
         .unwrap();
 
-        assert!(report.terminal_output.contains("seeded_route_defaults:"));
-        assert!(report.terminal_output.contains("planning: copilot:gpt-5.4 [assistant-default]"));
-        assert!(report.terminal_output.contains("review: copilot:gpt-5.4 [assistant-default]"));
+        assert!(report.terminal_output.contains("route_setup:"));
+        assert!(report.terminal_output.contains("assistant_defaults: copilot"));
+        assert!(
+            report.terminal_output.contains("seeded planning: copilot:gpt-5.4 [assistant-default]")
+        );
+        assert!(
+            report.terminal_output.contains("seeded review: copilot:gpt-5.4 [assistant-default]")
+        );
+        assert!(
+            report.terminal_output.contains("inspect_or_edit: boundline config show --workspace")
+        );
 
         let saved = FileConfigStore::for_workspace(&workspace).load_local().unwrap().unwrap();
         assert_eq!(saved.routing.planning.unwrap().runtime, RuntimeKind::Copilot);
@@ -1025,10 +1250,12 @@ mod tests {
         })
         .unwrap();
 
-        assert!(report.terminal_output.contains("explicit_route_overrides:"));
-        assert!(report.terminal_output.contains("planning: copilot:gpt-4o [explicit]"));
+        assert!(report.terminal_output.contains("route_setup:"));
+        assert!(report.terminal_output.contains("explicit planning: copilot:gpt-4o [explicit]"));
         assert!(
-            report.terminal_output.contains("verification: copilot:gpt-5.4 [assistant-default]")
+            report
+                .terminal_output
+                .contains("seeded verification: copilot:gpt-5.4 [assistant-default]")
         );
 
         let saved = FileConfigStore::for_workspace(&workspace).load_local().unwrap().unwrap();
@@ -1039,6 +1266,22 @@ mod tests {
 
     #[test]
     fn parsing_helpers_cover_variants_errors_and_binding_upserts() {
+        let canon_prompt = guided_canon_mode_prompt();
+        assert!(canon_prompt.contains("manual|auto-confirm|auto"));
+        assert!(canon_prompt.contains("Default: auto-confirm"));
+
+        let assistant_prompt = guided_assistant_prompt();
+        assert!(assistant_prompt.contains("Assistant surfaces [claude, codex, copilot, gemini]"));
+        assert!(assistant_prompt.contains("Leave blank to skip repository-local assistant packs"));
+
+        let route_prompt = guided_route_prompt();
+        assert!(route_prompt.contains(&supported_route_slots()));
+        assert!(
+            route_prompt
+                .contains("Optional: leave blank to let selected assistants seed missing slots")
+        );
+        assert!(route_prompt.contains("planning=copilot:gpt-5.4"));
+
         let (family, standards) = parse_domain_standard("react= follow ui rules").unwrap();
         assert_eq!(family, DomainFamily::React);
         assert_eq!(standards, "follow ui rules");
@@ -1057,6 +1300,24 @@ mod tests {
         assert_eq!(routes[0].0, crate::domain::configuration::RouteSlot::Planning);
         assert_eq!(routes[0].1.runtime, RuntimeKind::Codex);
         assert_eq!(routes[0].1.model, "gpt-5-codex");
+        assert!(
+            parse_model_route("planning-codex-gpt-5-codex")
+                .unwrap_err()
+                .to_string()
+                .contains("SLOT=RUNTIME:MODEL")
+        );
+        assert!(
+            parse_model_route("plan=codex:gpt-5-codex")
+                .unwrap_err()
+                .to_string()
+                .contains(&supported_route_slots())
+        );
+        assert!(
+            parse_guided_assistants("cursor")
+                .unwrap_err()
+                .to_string()
+                .contains(&supported_runtime_choices())
+        );
 
         assert_eq!(parse_domain_family("jvm-service").unwrap(), DomainFamily::JvmService);
         assert_eq!(parse_domain_family("dotnet_service").unwrap(), DomainFamily::DotNetService);
@@ -1153,6 +1414,7 @@ mod tests {
 
         assert!(error.to_string().contains("no available assistant defaults remain"));
         assert!(error.to_string().contains("planning, implementation, verification, review"));
+        assert!(error.to_string().contains("--route planning=copilot:gpt-5.4"));
     }
 
     #[test]

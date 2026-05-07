@@ -8,6 +8,10 @@ fn doctor_reports_a_ready_workspace_and_actionable_checks() {
 
     assert_eq!(output.status.code(), Some(0), "{text}");
     assert!(text.contains("ready"), "{text}");
+    assert!(text.contains("summary:"), "{text}");
+    assert!(text.contains("checks:"), "{text}");
     assert!(text.contains("workspace_execution_profile"), "{text}");
     assert!(text.contains("trace_store"), "{text}");
+    assert!(text.contains("actions:"), "{text}");
+    assert!(text.contains("boundline start --workspace"), "{text}");
 }
