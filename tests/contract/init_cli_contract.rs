@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use boundline::cli::{Cli, DeveloperCommand};
 use boundline::domain::configuration::{InitTemplate, RuntimeKind};
 use boundline::domain::domain_templates::DomainFamily;
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 
 #[test]
 fn init_accepts_template_and_assistant_runtimes() {
@@ -175,4 +175,23 @@ fn init_accepts_workspace_without_template() {
         }
         other => panic!("expected Init, got {other:?}"),
     }
+}
+
+#[test]
+fn init_help_explains_supported_assistants_route_shape_and_defaults() {
+    let mut command = Cli::command();
+    let init = command.find_subcommand_mut("init").expect("init subcommand should exist");
+    let mut help = Vec::new();
+    init.write_long_help(&mut help).unwrap();
+    let help = String::from_utf8(help).unwrap();
+
+    assert!(help.contains("assistant packs, and default routing"), "{help}");
+    assert!(help.contains("claude, codex, copilot, gemini"), "{help}");
+    assert!(help.contains("SLOT=RUNTIME:MODEL"), "{help}");
+    assert!(help.contains("planning, implementation, verification, review"), "{help}");
+    assert!(help.contains("planning=copilot:gpt-5.4"), "{help}");
+    assert!(
+        help.contains("leave guided routes blank to let selected assistants seed defaults"),
+        "{help}"
+    );
 }

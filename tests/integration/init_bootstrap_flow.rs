@@ -36,15 +36,47 @@ fn init_scaffolds_execution_and_config_files() {
     let init_text = terminal_text(&init);
     assert_eq!(init.status.code(), Some(0), "{init_text}");
     assert!(init_text.contains("init: workspace initialized"), "{init_text}");
+    assert!(init_text.contains("route_setup:"), "{init_text}");
+    assert!(init_text.contains("assistant_setup:"), "{init_text}");
+    assert!(init_text.contains("next_steps:"), "{init_text}");
+    assert!(
+        init_text.contains("inspect effective config: boundline config show --workspace"),
+        "{init_text}"
+    );
 
     assert!(workspace.join(".boundline/execution.json").is_file());
     assert!(workspace.join(".boundline/config.toml").is_file());
+    assert!(workspace.join("assistant/README.md").is_file());
+    assert!(workspace.join("assistant/copilot/prompts/boundline-start.prompt.md").is_file());
 
     let config = fs::read_to_string(workspace.join(".boundline/config.toml")).unwrap();
     assert!(config.contains("assistant_runtimes"));
     assert!(config.contains("copilot"));
     assert!(config.contains("domain_templates"));
     assert!(config.contains("systems"));
+}
+
+#[test]
+fn init_previews_existing_assistant_assets_without_force() {
+    let workspace = empty_workspace("boundline-init-assistant-preview");
+    fs::create_dir_all(workspace.join("assistant/copilot/prompts")).unwrap();
+    fs::write(
+        workspace.join("assistant/copilot/prompts/boundline-start.prompt.md"),
+        "outdated command pack",
+    )
+    .unwrap();
+
+    let init = run_boundline_in(
+        &workspace,
+        &["init", "--workspace", workspace.to_string_lossy().as_ref(), "--assistant", "copilot"],
+    );
+    let init_text = terminal_text(&init);
+
+    assert_ne!(init.status.code(), Some(0), "{init_text}");
+    assert!(init_text.contains("preview only"), "{init_text}");
+    assert!(init_text.contains("planned_changes:"), "{init_text}");
+    assert!(init_text.contains("next_steps:"), "{init_text}");
+    assert!(init_text.contains("refresh Copilot prompt pack"), "{init_text}");
 }
 
 #[test]
@@ -57,8 +89,12 @@ fn init_auto_seeds_routes_from_selected_assistant() {
     );
     let init_text = terminal_text(&init);
     assert_eq!(init.status.code(), Some(0), "{init_text}");
-    assert!(init_text.contains("seeded_route_defaults:"), "{init_text}");
-    assert!(init_text.contains("planning: copilot:gpt-5.4 [assistant-default]"), "{init_text}");
+    assert!(init_text.contains("route_setup:"), "{init_text}");
+    assert!(init_text.contains("assistant_defaults: copilot"), "{init_text}");
+    assert!(
+        init_text.contains("seeded planning: copilot:gpt-5.4 [assistant-default]"),
+        "{init_text}"
+    );
 
     let config = fs::read_to_string(workspace.join(".boundline/config.toml")).unwrap();
     assert!(config.contains("assistant_runtimes = [\"copilot\"]"), "{config}");
@@ -89,7 +125,7 @@ fn init_falls_back_to_available_selected_assistant_when_preferred_runtime_is_una
     assert_eq!(init.status.code(), Some(0), "{init_text}");
     assert!(
         init_text.contains(
-            "planning: copilot:gpt-5.4 [assistant-default fallback-from=codex-unavailable]"
+            "seeded planning: copilot:gpt-5.4 [assistant-default fallback-from=codex-unavailable]"
         ),
         "{init_text}"
     );
@@ -118,7 +154,7 @@ fn init_stops_when_selected_assistant_defaults_are_unavailable() {
         init_text.contains("init error: no available assistant defaults remain"),
         "{init_text}"
     );
-    assert!(init_text.contains("pass explicit --route overrides"), "{init_text}");
+    assert!(init_text.contains("--route planning=copilot:gpt-5.4"), "{init_text}");
 }
 
 #[test]
@@ -139,13 +175,67 @@ fn init_keeps_explicit_route_and_seeds_remaining_slots() {
     );
     let init_text = terminal_text(&init);
     assert_eq!(init.status.code(), Some(0), "{init_text}");
-    assert!(init_text.contains("explicit_route_overrides:"), "{init_text}");
-    assert!(init_text.contains("planning: copilot:gpt-4o [explicit]"), "{init_text}");
-    assert!(init_text.contains("verification: copilot:gpt-5.4 [assistant-default]"), "{init_text}");
+    assert!(init_text.contains("route_setup:"), "{init_text}");
+    assert!(init_text.contains("explicit planning: copilot:gpt-4o [explicit]"), "{init_text}");
+    assert!(
+        init_text.contains("seeded verification: copilot:gpt-5.4 [assistant-default]"),
+        "{init_text}"
+    );
+    assert!(
+        init_text.contains("inspect_or_edit: boundline config show --workspace"),
+        "{init_text}"
+    );
 
     let config = fs::read_to_string(workspace.join(".boundline/config.toml")).unwrap();
     assert!(config.contains("model = \"gpt-4o\""), "{config}");
     assert!(config.contains("model = \"gpt-5.4\""), "{config}");
+}
+
+#[test]
+fn init_reports_when_no_workspace_local_routes_are_recorded() {
+    let workspace = empty_workspace("boundline-init-no-local-routes");
+
+    let init = run_boundline_in(
+        &workspace,
+        &["init", "--workspace", workspace.to_string_lossy().as_ref()],
+    );
+    let init_text = terminal_text(&init);
+
+    assert_eq!(init.status.code(), Some(0), "{init_text}");
+    assert!(init_text.contains("route_setup:"), "{init_text}");
+    assert!(
+        init_text.contains(
+            "workspace-local routes: none recorded; add --assistant or --route later to pin workspace-specific defaults"
+        ),
+        "{init_text}"
+    );
+    assert!(init_text.contains("next_steps:"), "{init_text}");
+}
+
+#[test]
+fn init_rejects_malformed_route_with_actionable_example_and_no_mutation() {
+    let workspace = empty_workspace("boundline-init-malformed-route");
+
+    let init = run_boundline_in(
+        &workspace,
+        &[
+            "init",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--assistant",
+            "copilot",
+            "--route",
+            "planning-copilot-gpt-4o",
+        ],
+    );
+    let init_text = terminal_text(&init);
+
+    assert_ne!(init.status.code(), Some(0), "{init_text}");
+    assert!(init_text.contains("init error:"), "{init_text}");
+    assert!(init_text.contains("SLOT=RUNTIME:MODEL"), "{init_text}");
+    assert!(init_text.contains("planning=copilot:gpt-5.4"), "{init_text}");
+    assert!(!workspace.join(".boundline/config.toml").exists(), "{init_text}");
+    assert!(!workspace.join(".boundline/execution.json").exists(), "{init_text}");
 }
 
 #[test]

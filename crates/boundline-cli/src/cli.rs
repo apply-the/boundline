@@ -1,3 +1,5 @@
+#[path = "../../../src/cli/assistant_assets.rs"]
+pub mod assistant_assets;
 #[path = "../../../src/cli/checkpoint.rs"]
 pub mod checkpoint;
 #[path = "../../../src/cli/cluster.rs"]

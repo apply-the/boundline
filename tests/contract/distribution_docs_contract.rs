@@ -11,16 +11,19 @@ fn docs_split_quick_path_and_advanced_architecture_explicitly() {
 
     assert!(readme.contains("## Quick Path Brutale"));
     assert!(readme.contains("boundline doctor --install"));
+    assert!(readme.contains("planning=copilot:gpt-5.4"));
     assert!(readme.contains("docs/architecture.md"));
 
     assert!(getting_started.contains("## Quick Path Brutale"));
     assert!(getting_started.contains("## When Canon Matters"));
     assert!(getting_started.contains("boundline doctor --install"));
+    assert!(getting_started.contains("boundline config show --workspace <workspace>"));
 
     assert!(architecture.contains("## Boundline Versus Canon"));
     assert!(architecture.contains("## Distribution And Update Model"));
 
     assert!(assistant.contains("boundline doctor --install"));
+    assert!(assistant.contains("route_setup"));
     assert!(assistant.contains("docs/architecture.md"));
     assert!(assistant.contains("Canon is the optional governed companion runtime"));
 }

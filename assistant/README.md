@@ -4,7 +4,7 @@ This directory contains Markdown-based commands to run `boundline` from various 
 
 The primary delivery surface is session-native: `start -> capture -> plan -> run -> status -> next -> inspect` against `<workspace>/.boundline/session.json` and `<workspace>/.boundline/traces/`.
 
-In `0.43.0`, assistants should treat installation verification as the first
+In `0.44.0`, assistants should treat installation verification as the first
 boundary in a new environment: prefer the README quick path, run
 `boundline doctor --install` before workspace commands, and only then move into the
 session-native workflow.
@@ -17,10 +17,10 @@ Keep the product boundary explicit in assistant narration:
 	`docs/getting-started.md`; use `docs/architecture.md` only for the second
 	read level.
 
-In `0.43.0`, workflows and direct runs are primary surfaces of the same Boundline
+In `0.44.0`, workflows and direct runs are primary surfaces of the same Boundline
 product story, while compatibility remains explicit and subordinate.
 
-In `0.43.0`, direct `run --goal` still bootstraps that native session path by
+In `0.44.0`, direct `run --goal` still bootstraps that native session path by
 default, while `run --compatibility --goal ...` remains the explicit
 execution-profile route. `capture` persists `negotiation_goal_summary`,
 `negotiation_resolution`, and `negotiation_acceptance_boundary` before
@@ -61,7 +61,9 @@ those values exactly: they explain whether the current proposal is still
 waiting for confirmation, what changed across revisions, and how Boundline expects
 to validate the bounded plan.
 
-`boundline init` still scaffolds `<workspace>/.boundline/execution.json` plus local routing config, but that manifest is now an explicit compatibility/bootstrap surface rather than the default product story. When operators pass `--assistant claude|copilot|codex|gemini`, preserve the reported `seeded_route_defaults`, including any `fallback-from=<runtime>-unavailable` wording, and any explicit route overrides. When init reports `workspace_hygiene`, preserve created, updated, unchanged, skipped, and provenance wording exactly; those lines explain which bounded ignore defaults were applied without overwriting local rules.
+`boundline init` still scaffolds `<workspace>/.boundline/execution.json` plus local routing config, but that manifest is now an explicit compatibility/bootstrap surface rather than the default product story. When operators pass `--assistant claude|copilot|codex|gemini`, preserve the reported `route_setup`, including seeded routes, explicit overrides, `inspect_or_edit`, and any `fallback-from=<runtime>-unavailable` wording. When init reports `assistant_setup`, `workspace_hygiene`, or `next_steps`, preserve created, updated, unchanged, skipped, provenance, and follow-up wording exactly; those lines explain which bounded assistant and hygiene defaults were applied without overwriting local rules.
+
+In the same release, `boundline doctor` now groups output into `summary`, `checks`, and `actions`. Preserve those section labels and follow-up commands exactly instead of paraphrasing them away, because they are now the first-run recovery surface for install and workspace readiness.
 
 When a user asks for direct `run --goal`, assistants should prefer the native
 route by default. Add `--compatibility` only when the user explicitly wants the

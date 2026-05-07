@@ -1,9 +1,9 @@
-# Configuration in Boundline 0.39.0
+# Configuration in Boundline 0.44.0
 
-Boundline `0.39.0` keeps a user-friendly setup and routing configuration surface
+Boundline `0.44.0` keeps a user-friendly setup and routing configuration surface
 for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
-The `0.39.0` release keeps configuration behavior stable while preserving the
+The `0.44.0` release keeps configuration behavior stable while preserving the
 same governed routing defaults across earlier `bug-fix:investigate` work,
 later verify-stage `security-assessment`, workflow-aware projection of the
 same bounded governance state, continuity-aware read-side follow-up, the
@@ -242,13 +242,18 @@ boundline init \
 Assistant bootstrap accepts Claude, Copilot, Codex, and Gemini. If no explicit
 `--route` values are supplied, init seeds planning, implementation,
 verification, and review from the selected assistant's maintained default model
-catalog and reports the seeded slots. Explicit routes remain authoritative for
-their slots, and missing slots are still backfilled from assistant defaults.
-When a selected runtime cannot provide the missing defaults on the current
-machine, init falls back to another selected available assistant and marks the
-seeded line with `fallback-from=<runtime>-unavailable`; if no selected runtime
-can fill the remaining slots, init stops with an actionable error instead of
-persisting broken defaults.
+catalog and reports the result in `route_setup`, including seeded slots,
+explicit overrides, and `inspect_or_edit: boundline config show --workspace ...`.
+Explicit routes remain authoritative for their slots, and missing slots are
+still backfilled from assistant defaults. Guided init now lists supported slots
+inline, explains that blank input is allowed when assistant defaults can seed
+the remaining slots, and shows a valid example such as
+`planning=copilot:gpt-5.4`. When a selected runtime cannot provide the missing
+defaults on the current machine, init falls back to another selected available
+assistant and marks the seeded line with
+`fallback-from=<runtime>-unavailable`; if no selected runtime can fill the
+remaining slots, init stops with an actionable error instead of persisting
+broken defaults.
 
 Domain bootstrap can also seed bounded hygiene defaults. Boundline writes
 merge-only ignore entries when selected domain families or repository cues make

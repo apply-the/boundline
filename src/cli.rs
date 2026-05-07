@@ -191,6 +191,10 @@ pub enum DeveloperCommand {
         #[arg(long)]
         cluster: Option<PathBuf>,
     },
+    #[command(
+        about = "Bootstrap Boundline files, assistant packs, and default routing for a workspace",
+        after_long_help = "Guided mode tips:\n  - leave --assistant unset to skip repository-local assistant packs\n  - leave guided routes blank to let selected assistants seed defaults for planning, implementation, verification, and review\n\nExamples:\n  boundline init --workspace . --assistant copilot\n  boundline init --workspace . --assistant copilot --route planning=copilot:gpt-5.4\n  boundline init --workspace . --assistant codex --assistant copilot --route review=claude:sonnet-4"
+    )]
     Init {
         /// Workspace directory to bootstrap.
         #[arg(long)]
@@ -198,10 +202,10 @@ pub enum DeveloperCommand {
         /// Optional starting template for the generated execution profile. Defaults to bug-fix.
         #[arg(long)]
         template: Option<InitTemplate>,
-        /// Assistant runtimes to record in the local workspace config.
+        /// Assistant runtimes to record in the local workspace config and use for seeded defaults. Supported values: claude, codex, copilot, gemini.
         #[arg(long = "assistant")]
         assistant: Vec<RuntimeKind>,
-        /// Model route in SLOT=RUNTIME:MODEL form, e.g. planning=copilot:gpt-4o.
+        /// Model route in SLOT=RUNTIME:MODEL form. Supported slots: planning, implementation, verification, review. Example: planning=copilot:gpt-5.4. Leave blank in guided mode to let selected assistants seed defaults.
         #[arg(long = "route")]
         route: Vec<String>,
         /// Domain families to enable during init. When omitted, Boundline infers a bounded default from the workspace.

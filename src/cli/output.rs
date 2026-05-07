@@ -1,3 +1,4 @@
+use std::io::{self, IsTerminal};
 use std::path::Path;
 
 use crate::adapters::cluster_store::FileClusterStore;
@@ -185,6 +186,49 @@ fn push_context_projection_lines(
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OutputPresentation {
+    Plain,
+    Rich,
+}
+
+fn stdout_presentation() -> OutputPresentation {
+    if io::stdout().is_terminal() { OutputPresentation::Rich } else { OutputPresentation::Plain }
+}
+
+fn push_output_section(
+    lines: &mut Vec<String>,
+    presentation: OutputPresentation,
+    title: &str,
+    section_lines: Vec<String>,
+) {
+    if section_lines.is_empty() {
+        return;
+    }
+
+    if matches!(presentation, OutputPresentation::Rich) && !lines.is_empty() {
+        lines.push(String::new());
+    }
+    lines.push(format!("{title}:"));
+    lines.extend(section_lines);
+}
+
+fn diagnostic_follow_up_actions(report: &DiagnosticsReport) -> Vec<String> {
+    if !report.ready {
+        return Vec::new();
+    }
+
+    match report.subject {
+        crate::cli::diagnostics::DiagnosticsSubject::Workspace => vec![format!(
+            "- start a session: boundline start --workspace {}",
+            report.workspace_ref.as_deref().unwrap_or("<workspace>")
+        )],
+        crate::cli::diagnostics::DiagnosticsSubject::Install => {
+            vec!["- verify a workspace next: boundline doctor --workspace <workspace>".to_string()]
+        }
+    }
+}
+
 pub fn render_diagnostics(report: &DiagnosticsReport) -> String {
     let readiness = if report.ready { "ready" } else { "not ready" };
     let subject = match report.subject {
@@ -197,38 +241,46 @@ pub fn render_diagnostics(report: &DiagnosticsReport) -> String {
             report.installation_ref.as_deref().unwrap_or("<current-machine>")
         ),
     };
-    let mut lines = vec![
-        format!("doctor: {readiness} for {subject}"),
-        format!("assistant_hint: Diagnostic output format is optimized for chat parsing."),
+    let presentation = stdout_presentation();
+    let mut lines = vec![format!("doctor: {readiness} for {subject}")];
+    let mut summary_lines = vec![
+        "- assistant_hint: Diagnostic output format is optimized for chat parsing.".to_string(),
     ];
 
     if let Some(boundline_version) = &report.boundline_version {
-        lines.push(format!("boundline_version: {boundline_version}"));
+        summary_lines.push(format!("- boundline_version: {boundline_version}"));
     }
     if let Some(supported_canon_version) = &report.supported_canon_version {
-        lines.push(format!("supported_canon_version: {supported_canon_version}"));
+        summary_lines.push(format!("- supported_canon_version: {supported_canon_version}"));
     }
     if let Some(companion_state) = report.companion_state {
-        lines.push(format!("companion_state: {companion_state}"));
+        summary_lines.push(format!("- companion_state: {companion_state}"));
     }
     if !report.channel_candidates.is_empty() {
-        lines.push(format!("channel_candidates: {}", report.channel_candidates.join(", ")));
+        summary_lines
+            .push(format!("- channel_candidates: {}", report.channel_candidates.join(", ")));
     }
+    push_output_section(&mut lines, presentation, "summary", summary_lines);
 
-    for check in &report.checks {
-        let status = match check.status {
-            DiagnosticsStatus::Passed => "passed",
-            DiagnosticsStatus::Failed => "failed",
-        };
-        lines.push(format!("- {}: {} - {}", check.name, status, check.message));
-    }
+    let check_lines = report
+        .checks
+        .iter()
+        .map(|check| {
+            let status = match check.status {
+                DiagnosticsStatus::Passed => "passed",
+                DiagnosticsStatus::Failed => "failed",
+            };
+            format!("- {}: {} - {}", check.name, status, check.message)
+        })
+        .collect::<Vec<_>>();
+    push_output_section(&mut lines, presentation, "checks", check_lines);
 
-    if !report.suggested_actions.is_empty() {
-        lines.push("actions:".to_string());
-        for action in &report.suggested_actions {
-            lines.push(format!("- {action}"));
-        }
+    let mut action_lines =
+        report.suggested_actions.iter().map(|action| format!("- {action}")).collect::<Vec<_>>();
+    if action_lines.is_empty() {
+        action_lines = diagnostic_follow_up_actions(report);
     }
+    push_output_section(&mut lines, presentation, "actions", action_lines);
 
     lines.join("\n")
 }

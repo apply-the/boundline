@@ -150,6 +150,13 @@ planning, implementation, verification, and review routes with deterministic
 model defaults unless you supply explicit `--route SLOT=RUNTIME:MODEL`
 overrides.
 
+If you use guided `boundline init --workspace <workspace>` without flags, the
+prompts now list supported assistants and supported route slots directly in the
+terminal, explain when blank input is allowed, and show a valid route example
+such as `planning=copilot:gpt-5.4`. Successful init output reports the result
+under `route_setup`, `assistant_setup`, and `next_steps`, including the follow-up
+inspection command `boundline config show --workspace <workspace>`.
+
 If you need domain defaults at bootstrap time, seed them explicitly:
 
 ```bash

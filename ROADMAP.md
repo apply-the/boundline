@@ -6,7 +6,7 @@ Canon is downstream from Boundline in this roadmap: Boundline thinks, decides, o
 
 Evolve Boundline into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.43.0
+## Current Status: v0.44.0
 
 Boundline now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -21,7 +21,19 @@ memory, bounded delegated execution, and a release-aligned distribution
 surface in place, with Canon-default governed setup, runtime selection, and
 assistant-surface alignment now carried through the same primary workflow. The
 operator entry path is now stack-neutral for empty, non-Rust, and mixed
-repositories:
+repositories, with a clearer first-run CLI UX:
+
+- guided `boundline init` now explains supported assistants, supported route
+  slots, blank/default behavior, and a valid `SLOT=RUNTIME:MODEL` example
+  directly in the terminal and in `init --help`
+- init success and preview output now group route setup, assistant scaffolding,
+  and next-step guidance around `boundline config show --workspace ...` and
+  `boundline doctor --workspace ...`
+- `boundline doctor` now groups summary, checks, and actions so first-run
+  readiness output is easier to scan without losing plain-text semantics
+
+- the prior stack-neutral workspace-entry release is preserved underneath that
+  UX layer:
 
 - generic workspace diagnostics and direct native `run --goal` no longer
   require `Cargo.toml` before Boundline can capture and plan a bounded task
@@ -99,17 +111,26 @@ repositories:
 - session-native commands still accept `--cluster <primary-workspace>` so one authoritative primary-owned session can plan and deliver a bounded change across registered member repositories
 - clustered `run`, `status`, `next`, and `inspect` still surface authoritative workspace, clustered execution condition, participating workspaces, and any blocking member without implying distributed orchestration ownership
 
-## Post-0.43.0 Roadmap
+## Post-0.44.0 Roadmap
 
-`0.43.0` closes the stack-neutral workspace-entry release. Boundline now has
-guided Canon setup, Canon-ready default governed runs, real surface
-verification, explicit governed follow-through states, assistant command packs
-aligned to the same primary workflow, and a stack-neutral init/readiness surface
-for the supported domain catalog.
+`0.44.0` closes the guided init and clearer first-run messaging release.
+Boundline now has guided Canon setup, Canon-ready default governed runs, real
+surface verification, explicit governed follow-through states, assistant
+command packs aligned to the same primary workflow, a stack-neutral
+init/readiness surface for the supported domain catalog, and a clearer first
+operator pass through `init` and `doctor`.
 
 The governing rule remains simple: Boundline is still the product and execution
 owner. Canon stays a bounded, useful governed runtime inside that same delivery
 path rather than drifting back into a parallel tool story.
+
+### Delivered in 0.44.0
+
+- made guided `boundline init` and `init --help` self-sufficient for assistant
+  selection, route syntax, defaults, and follow-up inspection
+- made init validation and preview output more actionable with example-backed
+  route recovery and explicit overwrite guidance
+- grouped init and doctor output into clearer summary/check/action sections
 
 ### Delivered in 0.43.0
 

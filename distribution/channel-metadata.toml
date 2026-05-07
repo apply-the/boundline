@@ -1,4 +1,6 @@
-boundline_version = "0.43.0"
+boundline_version = "0.44.0"
+# canon_version is fetched dynamically from the latest git tag at release time;
+# this field is kept as a last-known-good fallback for offline/air-gapped runs.
 canon_version = "0.40.0"
 source_fallback = "cargo install --path ."
 
@@ -14,8 +16,8 @@ update_command = "brew upgrade boundline"
 [channels.winget]
 status = "ready_for_publication"
 package_identifier = "ApplyThe.Boundline"
-manifest_root = "distribution/winget/manifests/a/ApplyThe/Boundline/0.43.0"
+manifest_root = "distribution/winget/manifests/a/ApplyThe/Boundline/0.44.0"
 install_command = "winget install ApplyThe.Boundline"
 update_command = "winget upgrade ApplyThe.Boundline"
-bundle_name = "boundline-bundle-0.43.0-windows-x86_64.zip"
+bundle_name = "boundline-bundle-0.44.0-windows-x86_64.zip"
 canon_asset = "https://github.com/apply-the/canon/releases/download/0.40.0/canon-0.40.0-windows-x86_64.zip"

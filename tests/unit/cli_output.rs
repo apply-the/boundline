@@ -172,6 +172,8 @@ fn diagnostics_renderer_lists_check_names_and_actions() {
     let rendered = render_diagnostics(&report);
 
     assert!(rendered.contains("doctor: not ready"));
+    assert!(rendered.contains("summary:"));
+    assert!(rendered.contains("checks:"));
     assert!(rendered.contains("workspace_exists"));
     assert!(rendered.contains("trace_store"));
     assert!(rendered.contains("actions:"));
