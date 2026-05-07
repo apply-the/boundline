@@ -1179,6 +1179,86 @@ mod tests {
             Err(ConfigurationError::InvalidReviewerRole(message))
                 if message.contains("role id cannot be empty")
         ));
+
+        let policy = SlotEffortPolicy {
+            level: EffortLevel::Low,
+            fallback: EffortFallbackPolicy::AllowLower,
+            rationale: None,
+        };
+        routing.set_slot_effort_policy(RouteSlot::Planning, policy.clone());
+        assert_eq!(routing.slot_effort_policies.get(&RouteSlot::Planning), Some(&policy));
+        routing.unset_slot_effort_policy(RouteSlot::Planning);
+        assert!(!routing.slot_effort_policies.contains_key(&RouteSlot::Planning));
+
+        let settings = DomainTemplateSettings {
+            enabled: Some(true),
+            standards: Some("keep it clean".to_string()),
+            external_context_bindings: Vec::new(),
+        };
+        routing.set_domain_template_settings(DomainFamily::React, settings.clone());
+        assert_eq!(routing.domain_templates.get(&DomainFamily::React), Some(&settings));
+        routing.unset_domain_template_settings(DomainFamily::React);
+        assert!(!routing.domain_templates.contains_key(&DomainFamily::React));
+    }
+
+    #[test]
+    fn seeded_routes_for_assistants_returns_empty_map_when_no_assistants_given() {
+        let routes = seeded_routes_for_assistants(&[]);
+        assert!(routes.is_empty());
+    }
+
+    #[test]
+    fn resolve_effective_domain_templates_uses_global_and_cluster_enabled_flags() {
+        let global = RoutingConfig {
+            domain_templates: BTreeMap::from([(
+                DomainFamily::React,
+                DomainTemplateSettings {
+                    enabled: Some(true),
+                    standards: Some("global react rules".to_string()),
+                    external_context_bindings: Vec::new(),
+                },
+            )]),
+            ..RoutingConfig::default()
+        };
+        let cluster = RoutingConfig {
+            domain_templates: BTreeMap::from([(
+                DomainFamily::Vue,
+                DomainTemplateSettings {
+                    enabled: Some(true),
+                    standards: None,
+                    external_context_bindings: Vec::new(),
+                },
+            )]),
+            ..RoutingConfig::default()
+        };
+
+        let resolved = resolve_effective_domain_templates(None, Some(&cluster), Some(&global));
+
+        let react = resolved.get(&DomainFamily::React).unwrap();
+        assert!(react.enabled);
+        assert_eq!(react.enablement_source, ValueSource::Global);
+        assert!(react.standards_layers.iter().any(|l| l.text.contains("global react rules")));
+
+        let vue = resolved.get(&DomainFamily::Vue).unwrap();
+        assert!(vue.enabled);
+        assert_eq!(vue.enablement_source, ValueSource::Cluster);
+
+        // Family with enabled=None in all layers → falls through to BuiltIn default (false)
+        let workspace = RoutingConfig {
+            domain_templates: BTreeMap::from([(
+                DomainFamily::Angular,
+                DomainTemplateSettings {
+                    enabled: None,
+                    standards: None,
+                    external_context_bindings: Vec::new(),
+                },
+            )]),
+            ..RoutingConfig::default()
+        };
+        let resolved2 = resolve_effective_domain_templates(Some(&workspace), None, None);
+        let angular = resolved2.get(&DomainFamily::Angular).unwrap();
+        assert!(!angular.enabled);
+        assert_eq!(angular.enablement_source, ValueSource::BuiltIn);
     }
 
     #[test]

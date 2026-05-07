@@ -860,13 +860,13 @@ mod tests {
         let report = execute_init(InitRequest {
             workspace: &workspace,
             template: None,
-            assistants: &[RuntimeKind::Codex],
+            assistants: &[RuntimeKind::Copilot],
             routes: &[],
             domains: &[],
             domain_standards: &["react=workspace react rules".to_string()],
             context_bindings: &["react|design_system|mcp:design-system".to_string()],
             required_context_bindings: &["react|design_reference|design/reference.md".to_string()],
-            canon_mode_selection: None,
+            canon_mode_selection: Some(CanonModeSelectionPreference::AutoConfirm),
             risk: None,
             zone: None,
             owner: None,
@@ -954,7 +954,7 @@ mod tests {
             domain_standards: &[],
             context_bindings: &[],
             required_context_bindings: &[],
-            canon_mode_selection: None,
+            canon_mode_selection: Some(CanonModeSelectionPreference::AutoConfirm),
             risk: None,
             zone: None,
             owner: None,
@@ -978,13 +978,13 @@ mod tests {
         let report = execute_init(InitRequest {
             workspace: &workspace,
             template: None,
-            assistants: &[RuntimeKind::Claude],
+            assistants: &[RuntimeKind::Copilot],
             routes: &[],
             domains: &[],
             domain_standards: &[],
             context_bindings: &[],
             required_context_bindings: &[],
-            canon_mode_selection: None,
+            canon_mode_selection: Some(CanonModeSelectionPreference::AutoConfirm),
             risk: None,
             zone: None,
             owner: None,
@@ -993,14 +993,14 @@ mod tests {
         .unwrap();
 
         assert!(report.terminal_output.contains("seeded_route_defaults:"));
-        assert!(report.terminal_output.contains("planning: claude:sonnet-4 [assistant-default]"));
-        assert!(report.terminal_output.contains("review: claude:sonnet-4 [assistant-default]"));
+        assert!(report.terminal_output.contains("planning: copilot:gpt-5.4 [assistant-default]"));
+        assert!(report.terminal_output.contains("review: copilot:gpt-5.4 [assistant-default]"));
 
         let saved = FileConfigStore::for_workspace(&workspace).load_local().unwrap().unwrap();
-        assert_eq!(saved.routing.planning.unwrap().runtime, RuntimeKind::Claude);
-        assert_eq!(saved.routing.implementation.unwrap().model, "sonnet-4");
-        assert_eq!(saved.routing.verification.unwrap().runtime, RuntimeKind::Claude);
-        assert_eq!(saved.routing.review.unwrap().runtime, RuntimeKind::Claude);
+        assert_eq!(saved.routing.planning.unwrap().runtime, RuntimeKind::Copilot);
+        assert_eq!(saved.routing.implementation.unwrap().model, "gpt-5.4");
+        assert_eq!(saved.routing.verification.unwrap().runtime, RuntimeKind::Copilot);
+        assert_eq!(saved.routing.review.unwrap().runtime, RuntimeKind::Copilot);
     }
 
     #[test]
@@ -1017,7 +1017,7 @@ mod tests {
             domain_standards: &[],
             context_bindings: &[],
             required_context_bindings: &[],
-            canon_mode_selection: None,
+            canon_mode_selection: Some(CanonModeSelectionPreference::AutoConfirm),
             risk: None,
             zone: None,
             owner: None,
@@ -1172,6 +1172,74 @@ mod tests {
         assert!(seeded.is_empty());
         assert_eq!(format_runtime_list(&[RuntimeKind::Codex]), "codex");
         assert_eq!(format_slot_list(&[RouteSlot::Planning, RouteSlot::Review]), "planning, review");
+    }
+
+    #[test]
+    fn execute_init_reports_hygiene_unchanged_when_files_already_contain_patterns() {
+        let workspace = temp_workspace("boundline-init-hygiene-unchanged");
+        fs::create_dir_all(workspace.join(".git")).unwrap();
+        fs::write(
+            workspace.join(".gitignore"),
+            "# Boundline universal defaults\n.boundline/traces/\n.boundline/checkpoints/\n",
+        )
+        .unwrap();
+
+        let report = execute_init(InitRequest {
+            workspace: &workspace,
+            template: None,
+            assistants: &[RuntimeKind::Copilot],
+            routes: &[],
+            domains: &[],
+            domain_standards: &[],
+            context_bindings: &[],
+            required_context_bindings: &[],
+            canon_mode_selection: Some(CanonModeSelectionPreference::AutoConfirm),
+            risk: None,
+            zone: None,
+            owner: None,
+            force: true,
+        })
+        .unwrap();
+
+        assert!(
+            report.terminal_output.contains(".gitignore: unchanged"),
+            "{}",
+            report.terminal_output
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn execute_init_returns_read_file_error_when_hygiene_file_is_unreadable() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let workspace = temp_workspace("boundline-init-hygiene-unreadable");
+        fs::create_dir_all(workspace.join(".git")).unwrap();
+        let gitignore = workspace.join(".gitignore");
+        fs::write(&gitignore, "custom/\n").unwrap();
+        fs::set_permissions(&gitignore, fs::Permissions::from_mode(0o000)).unwrap();
+
+        let result = execute_init(InitRequest {
+            workspace: &workspace,
+            template: None,
+            assistants: &[RuntimeKind::Copilot],
+            routes: &[],
+            domains: &[],
+            domain_standards: &[],
+            context_bindings: &[],
+            required_context_bindings: &[],
+            canon_mode_selection: Some(CanonModeSelectionPreference::AutoConfirm),
+            risk: None,
+            zone: None,
+            owner: None,
+            force: true,
+        });
+
+        // Restore permissions so temp dir cleanup can succeed
+        fs::set_permissions(&gitignore, fs::Permissions::from_mode(0o644)).unwrap();
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("failed to read file"));
     }
 
     #[test]

@@ -40,7 +40,7 @@ fn init_reports_seeded_routes_and_hygiene_actions() {
             "--workspace",
             workspace.to_string_lossy().as_ref(),
             "--assistant",
-            "codex",
+            "copilot",
             "--domain",
             "react",
         ],

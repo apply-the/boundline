@@ -355,4 +355,108 @@ mod tests {
         assert!(merged.content.contains(".boundline/traces/"));
         assert_eq!(merged.added_patterns, vec![".boundline/traces/"]);
     }
+
+    #[test]
+    fn plans_docker_defaults_with_node_and_python_cues() {
+        let workspace =
+            std::env::temp_dir().join(format!("boundline-hygiene-docker-{}", Uuid::new_v4()));
+        fs::create_dir_all(&workspace).unwrap();
+        fs::write(workspace.join("Dockerfile"), "FROM python:3.12\n").unwrap();
+        fs::write(workspace.join("package.json"), "{}\n").unwrap();
+        fs::write(workspace.join("pyproject.toml"), "[project]\nname=\"x\"\n").unwrap();
+
+        let plans = plan_hygiene_defaults(&workspace, &BTreeSet::new());
+        let dockerignore = plans.iter().find(|plan| plan.path == ".dockerignore").unwrap();
+        let pack = dockerignore.packs.iter().find(|p| p.provenance == "tool:docker").unwrap();
+
+        assert!(pack.patterns.contains(&"node_modules/"));
+        assert!(pack.patterns.contains(&"__pycache__/"));
+        assert!(pack.patterns.contains(&".venv/"));
+    }
+
+    #[test]
+    fn plans_prettier_defaults_when_prettierrc_is_present() {
+        let workspace =
+            std::env::temp_dir().join(format!("boundline-hygiene-prettier-{}", Uuid::new_v4()));
+        fs::create_dir_all(&workspace).unwrap();
+        fs::write(workspace.join(".prettierrc"), "{}\n").unwrap();
+
+        let plans = plan_hygiene_defaults(&workspace, &BTreeSet::new());
+        let prettierignore = plans.iter().find(|plan| plan.path == ".prettierignore").unwrap();
+        let pack = prettierignore.packs.iter().find(|p| p.provenance == "tool:prettier").unwrap();
+
+        assert!(pack.patterns.contains(&"dist/"));
+        assert!(pack.patterns.contains(&"build/"));
+    }
+
+    #[test]
+    fn plans_terraform_defaults_when_tf_files_are_present() {
+        let workspace =
+            std::env::temp_dir().join(format!("boundline-hygiene-terraform-{}", Uuid::new_v4()));
+        fs::create_dir_all(&workspace).unwrap();
+        fs::write(workspace.join("main.tf"), "# terraform\n").unwrap();
+
+        let plans = plan_hygiene_defaults(&workspace, &BTreeSet::new());
+        let terraformignore = plans.iter().find(|plan| plan.path == ".terraformignore").unwrap();
+        let pack = terraformignore.packs.iter().find(|p| p.provenance == "tool:terraform").unwrap();
+
+        assert!(pack.patterns.contains(&".terraform/"));
+        assert!(pack.patterns.contains(&"*.tfstate"));
+    }
+
+    #[test]
+    fn plans_helm_defaults_when_chart_yaml_is_present() {
+        let workspace =
+            std::env::temp_dir().join(format!("boundline-hygiene-helm-{}", Uuid::new_v4()));
+        fs::create_dir_all(&workspace).unwrap();
+        fs::write(workspace.join("Chart.yaml"), "apiVersion: v2\nname: myapp\n").unwrap();
+
+        let plans = plan_hygiene_defaults(&workspace, &BTreeSet::new());
+        let helmignore = plans.iter().find(|plan| plan.path == ".helmignore").unwrap();
+        let pack = helmignore.packs.iter().find(|p| p.provenance == "tool:helm").unwrap();
+
+        assert!(pack.patterns.contains(&"*.tgz"));
+    }
+
+    #[test]
+    fn plans_remaining_domain_gitignore_packs() {
+        let workspace =
+            std::env::temp_dir().join(format!("boundline-hygiene-domains-{}", Uuid::new_v4()));
+        fs::create_dir_all(workspace.join(".git")).unwrap();
+
+        let domains = [
+            DomainFamily::Systems,
+            DomainFamily::PythonService,
+            DomainFamily::JvmService,
+            DomainFamily::DotNetService,
+            DomainFamily::Ruby,
+            DomainFamily::Php,
+            DomainFamily::Mobile,
+            DomainFamily::Data,
+        ]
+        .into_iter()
+        .collect();
+
+        let plans = plan_hygiene_defaults(&workspace, &domains);
+        let gitignore = plans.iter().find(|plan| plan.path == ".gitignore").unwrap();
+
+        assert!(gitignore.packs.iter().any(|p| p.provenance == "domain:systems"));
+        assert!(gitignore.packs.iter().any(|p| p.provenance == "domain:python_service"));
+        assert!(gitignore.packs.iter().any(|p| p.provenance == "domain:jvm_service"));
+        assert!(gitignore.packs.iter().any(|p| p.provenance == "domain:dotnet_service"));
+        assert!(gitignore.packs.iter().any(|p| p.provenance == "domain:ruby"));
+        assert!(gitignore.packs.iter().any(|p| p.provenance == "domain:php"));
+        assert!(gitignore.packs.iter().any(|p| p.provenance == "domain:mobile"));
+        assert!(gitignore.packs.iter().any(|p| p.provenance == "domain:data"));
+
+        let jvm = gitignore.packs.iter().find(|p| p.provenance == "domain:jvm_service").unwrap();
+        assert!(jvm.patterns.contains(&".gradle/"));
+        let dotnet =
+            gitignore.packs.iter().find(|p| p.provenance == "domain:dotnet_service").unwrap();
+        assert!(dotnet.patterns.contains(&"obj/"));
+        let ruby = gitignore.packs.iter().find(|p| p.provenance == "domain:ruby").unwrap();
+        assert!(ruby.patterns.contains(&".bundle/"));
+        let data = gitignore.packs.iter().find(|p| p.provenance == "domain:data").unwrap();
+        assert!(data.patterns.contains(&".ipynb_checkpoints/"));
+    }
 }

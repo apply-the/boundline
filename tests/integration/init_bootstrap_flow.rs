@@ -53,21 +53,18 @@ fn init_auto_seeds_routes_from_selected_assistant() {
 
     let init = run_boundline_in(
         &workspace,
-        &["init", "--workspace", workspace.to_string_lossy().as_ref(), "--assistant", "gemini"],
+        &["init", "--workspace", workspace.to_string_lossy().as_ref(), "--assistant", "copilot"],
     );
     let init_text = terminal_text(&init);
     assert_eq!(init.status.code(), Some(0), "{init_text}");
     assert!(init_text.contains("seeded_route_defaults:"), "{init_text}");
-    assert!(
-        init_text.contains("planning: gemini:gemini-2.5-pro [assistant-default]"),
-        "{init_text}"
-    );
+    assert!(init_text.contains("planning: copilot:gpt-5.4 [assistant-default]"), "{init_text}");
 
     let config = fs::read_to_string(workspace.join(".boundline/config.toml")).unwrap();
-    assert!(config.contains("assistant_runtimes = [\"gemini\"]"), "{config}");
+    assert!(config.contains("assistant_runtimes = [\"copilot\"]"), "{config}");
     assert!(config.contains("[routing.planning]"), "{config}");
-    assert!(config.contains("runtime = \"gemini\""), "{config}");
-    assert!(config.contains("model = \"gemini-2.5-pro\""), "{config}");
+    assert!(config.contains("runtime = \"copilot\""), "{config}");
+    assert!(config.contains("model = \"gpt-5.4\""), "{config}");
 }
 
 #[test]
@@ -269,7 +266,7 @@ fn init_seeds_domain_hygiene_defaults_without_overwriting_custom_rules() {
             "--domain",
             "react",
             "--assistant",
-            "codex",
+            "copilot",
         ],
     );
     let init_text = terminal_text(&init);
