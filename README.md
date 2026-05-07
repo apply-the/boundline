@@ -19,6 +19,7 @@ something useful:
 
 ```bash
 cd <workspace>
+boundline init --workspace . --assistant codex
 boundline doctor --workspace .
 boundline run --workspace . --goal "Fix the failing add test"
 boundline status --workspace .
@@ -48,6 +49,22 @@ Plain English version of that flow:
 - `status` and `inspect` tell you what happened.
 
 The primary product route stays explicit: `session-native: start a session -> capture a goal -> plan -> confirm -> run -> status -> inspect`.
+
+Workspaces are stack-neutral on the native route. Empty, Python, Node, web, and
+mixed repositories do not need a `Cargo.toml` just to start. If the captured
+goal and repository evidence are too weak to choose a credible stack, planning
+stops with an explicit clarification instead of guessing.
+
+`boundline init --assistant claude|copilot|codex|gemini` seeds deterministic
+route defaults for the selected assistant and reports which slots were seeded.
+If a selected runtime is unavailable for the missing defaults, init either
+falls back to another selected available assistant and marks that fallback in
+the `seeded_route_defaults` output, or stops explicitly when no selected
+assistant can credibly fill the remaining slots.
+When domain families or repository cues are credible, init also applies
+merge-only hygiene defaults such as `.gitignore` and `.dockerignore` entries
+without removing existing local lines, including legacy ESLint ignores and
+bounded Kubernetes-related exclusions when the repository cues justify them.
 
 Most users only need the commands above.
 
@@ -139,7 +156,7 @@ Advanced execution-profile workflows are documented outside this README.
 | `boundline status` | See the current state and suggested follow-up |
 | `boundline next` | Ask Boundline for the next action |
 | `boundline inspect` | Read the latest trace in more detail |
-| `boundline init` | Scaffold optional `.boundline` files and assistant setup |
+| `boundline init` | Scaffold optional `.boundline` files, assistant defaults, and bounded hygiene setup |
 | `boundline config` | Inspect or change routing and domain defaults |
 | `boundline workflow ...` | Run a named workflow defined by the repo |
 | `boundline cluster ...` | Set up or inspect a multi-repo cluster |

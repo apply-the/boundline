@@ -85,6 +85,9 @@ mod human_input_governance_contract;
 #[path = "contract/init_cli_contract.rs"]
 mod init_cli_contract;
 
+#[path = "contract/stack_neutral_init_contract.rs"]
+mod stack_neutral_init_contract;
+
 #[path = "contract/config_cli_contract.rs"]
 mod config_cli_contract;
 

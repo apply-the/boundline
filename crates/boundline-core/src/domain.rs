@@ -48,3 +48,5 @@ pub mod tool_result;
 pub mod trace;
 #[path = "../../../src/domain/workflow.rs"]
 pub mod workflow;
+#[path = "../../../src/domain/workspace_hygiene.rs"]
+pub mod workspace_hygiene;

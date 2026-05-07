@@ -231,12 +231,34 @@ Optional domain bootstrap:
 ```bash
 boundline init \
 	--workspace <workspace> \
+	--assistant codex \
 	--domain systems \
 	--domain react \
 	--domain-standard "react=follow the shared UI system" \
 	--context-binding "react|design-system|mcp:design-system" \
 	--required-context-binding "react|design-reference|design/reference.md"
 ```
+
+Assistant bootstrap accepts Claude, Copilot, Codex, and Gemini. If no explicit
+`--route` values are supplied, init seeds planning, implementation,
+verification, and review from the selected assistant's maintained default model
+catalog and reports the seeded slots. Explicit routes remain authoritative for
+their slots, and missing slots are still backfilled from assistant defaults.
+When a selected runtime cannot provide the missing defaults on the current
+machine, init falls back to another selected available assistant and marks the
+seeded line with `fallback-from=<runtime>-unavailable`; if no selected runtime
+can fill the remaining slots, init stops with an actionable error instead of
+persisting broken defaults.
+
+Domain bootstrap can also seed bounded hygiene defaults. Boundline writes
+merge-only ignore entries when selected domain families or repository cues make
+them credible: universal Git patterns, technology patterns for active domain
+families, and tool-specific files such as `.dockerignore`, `.prettierignore`,
+`.eslintignore`, `.terraformignore`, or `.helmignore` only when those tools are
+present. Legacy ESLint workspaces can receive a merge-only `.eslintignore`, and
+Kubernetes cues such as `kustomization.yaml` or `k8s/` append bounded
+Kubernetes-related exclusions to `.gitignore`. Existing operator-authored lines
+are preserved.
 
 When init would overwrite existing files, Boundline shows a preview and requires
 `--force` to apply destructive updates.

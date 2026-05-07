@@ -6,7 +6,7 @@ Canon is downstream from Boundline in this roadmap: Boundline thinks, decides, o
 
 Evolve Boundline into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.42.0
+## Current Status: v0.43.0
 
 Boundline now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -19,7 +19,18 @@ closure, explicit bounded context assembly, decision-driven bounded action
 selection, evidence-driven dynamic planning, Canon-grounded structured
 memory, bounded delegated execution, and a release-aligned distribution
 surface in place, with Canon-default governed setup, runtime selection, and
-assistant-surface alignment now carried through the same primary workflow:
+assistant-surface alignment now carried through the same primary workflow. The
+operator entry path is now stack-neutral for empty, non-Rust, and mixed
+repositories:
+
+- generic workspace diagnostics and direct native `run --goal` no longer
+  require `Cargo.toml` before Boundline can capture and plan a bounded task
+- `boundline init --assistant claude|copilot|codex|gemini` now seeds
+  deterministic default model routes for planning, implementation,
+  verification, and review unless a slot is explicitly overridden
+- selected domain families and credible repository cues now drive merge-only
+  `.gitignore`, `.dockerignore`, and related tool ignore defaults while
+  preserving local rules
 
 - Canon-ready workspaces now default `boundline run --goal` to the governed
   Canon runtime, with explicit `--mode` selection and `--no-canon` opt-out
@@ -88,17 +99,30 @@ assistant-surface alignment now carried through the same primary workflow:
 - session-native commands still accept `--cluster <primary-workspace>` so one authoritative primary-owned session can plan and deliver a bounded change across registered member repositories
 - clustered `run`, `status`, `next`, and `inspect` still surface authoritative workspace, clustered execution condition, participating workspaces, and any blocking member without implying distributed orchestration ownership
 
-## Post-0.42.0 Roadmap
+## Post-0.43.0 Roadmap
 
-`0.42.0` closes the Canon-default governed-surface release. Boundline now has
+`0.43.0` closes the stack-neutral workspace-entry release. Boundline now has
 guided Canon setup, Canon-ready default governed runs, real surface
-verification, explicit governed follow-through states, and assistant command
-packs aligned to the same primary workflow, so the near-term roadmap is open
-rather than carrying this operator-facing surface work as unfinished follow-up.
+verification, explicit governed follow-through states, assistant command packs
+aligned to the same primary workflow, and a stack-neutral init/readiness surface
+for the supported domain catalog.
 
 The governing rule remains simple: Boundline is still the product and execution
 owner. Canon stays a bounded, useful governed runtime inside that same delivery
 path rather than drifting back into a parallel tool story.
+
+### Delivered in 0.43.0
+
+- removed Rust-specific repository-root assumptions from generic workspace
+  readiness checks and native direct-run bootstrap
+- let empty and non-Rust repositories enter through the same primary native
+  path, with planning credibility handled by captured goals, briefs, and
+  bounded repository evidence instead of a stack-specific manifest
+- seeded assistant-specific default routes during init for Claude, Copilot,
+  Codex, and Gemini while preserving explicit route overrides
+- added bounded, merge-only hygiene defaults for universal, domain-family, and
+  tool-specific ignore files when selected domains or repository cues justify
+  them
 
 ### Program Rules
 
@@ -106,6 +130,10 @@ path rather than drifting back into a parallel tool story.
   is not a general snapshot system
 - Git remains useful but optional; checkpoint and rewind must work in dirty
   repositories and in workspaces that are not under version control
+- generic workspace readiness, session bootstrap, and planning entry must stay
+  stack-neutral until bounded evidence or explicit operator input selects a
+  supported domain family; Rust-specific assumptions only belong on Rust-owned
+  paths
 - existing primary commands and assistant packs must keep working from the repo
   root even after the crate layout changes
 - Canon remains downstream and optional except where governed artifacts are

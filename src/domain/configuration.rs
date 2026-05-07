@@ -359,6 +359,44 @@ impl RoutingConfig {
     }
 }
 
+pub fn assistant_default_model_route(runtime: RuntimeKind) -> ModelRoute {
+    match runtime {
+        RuntimeKind::Claude => ModelRoute { runtime, model: "sonnet-4".to_string() },
+        RuntimeKind::Codex => ModelRoute { runtime, model: "gpt-5-codex".to_string() },
+        RuntimeKind::Copilot => ModelRoute { runtime, model: "gpt-5.4".to_string() },
+        RuntimeKind::Gemini => ModelRoute { runtime, model: "gemini-2.5-pro".to_string() },
+    }
+}
+
+pub fn built_in_default_route(slot: RouteSlot) -> ModelRoute {
+    let defaults = built_in_defaults();
+    match slot {
+        RouteSlot::Planning => defaults.planning,
+        RouteSlot::Implementation => defaults.implementation,
+        RouteSlot::Verification => defaults.verification,
+        RouteSlot::Review => defaults.review,
+    }
+}
+
+pub fn seeded_routes_for_assistants(assistants: &[RuntimeKind]) -> BTreeMap<RouteSlot, ModelRoute> {
+    let Some(fallback_runtime) = assistants.first().copied() else {
+        return BTreeMap::new();
+    };
+
+    [RouteSlot::Planning, RouteSlot::Implementation, RouteSlot::Verification, RouteSlot::Review]
+        .into_iter()
+        .map(|slot| {
+            let preferred = built_in_default_route(slot);
+            let route = if assistants.contains(&preferred.runtime) {
+                preferred
+            } else {
+                assistant_default_model_route(fallback_runtime)
+            };
+            (slot, route)
+        })
+        .collect()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CanonPreferences {
     #[serde(default)]
@@ -777,9 +815,32 @@ mod tests {
         CapabilityState, ConfigurationError, EffortFallbackPolicy, EffortLevel, ModelRoute,
         ResolvedDomainTemplate, RouteSlot, RoutingConfig, RoutingOverrides,
         RuntimeCapabilityProfile, RuntimeKind, SlotEffortPolicy, ValueSource,
-        resolve_effective_domain_templates, resolve_effective_routing,
-        resolve_effective_runtime_capabilities, resolve_effective_slot_effort_policies,
+        assistant_default_model_route, resolve_effective_domain_templates,
+        resolve_effective_routing, resolve_effective_runtime_capabilities,
+        resolve_effective_slot_effort_policies, seeded_routes_for_assistants,
     };
+
+    #[test]
+    fn assistant_default_routes_match_built_in_runtime_catalog() {
+        assert_eq!(assistant_default_model_route(RuntimeKind::Codex).model, "gpt-5-codex");
+        assert_eq!(assistant_default_model_route(RuntimeKind::Copilot).model, "gpt-5.4");
+        assert_eq!(assistant_default_model_route(RuntimeKind::Claude).model, "sonnet-4");
+        assert_eq!(assistant_default_model_route(RuntimeKind::Gemini).model, "gemini-2.5-pro");
+    }
+
+    #[test]
+    fn seeded_routes_prefer_selected_built_in_runtime_and_fallback_to_first_assistant() {
+        let seeded = seeded_routes_for_assistants(&[RuntimeKind::Copilot, RuntimeKind::Claude]);
+        assert_eq!(seeded.get(&RouteSlot::Planning).unwrap().runtime, RuntimeKind::Copilot);
+        assert_eq!(seeded.get(&RouteSlot::Planning).unwrap().model, "gpt-5.4");
+        assert_eq!(seeded.get(&RouteSlot::Implementation).unwrap().runtime, RuntimeKind::Copilot);
+        assert_eq!(seeded.get(&RouteSlot::Verification).unwrap().runtime, RuntimeKind::Copilot);
+        assert_eq!(seeded.get(&RouteSlot::Review).unwrap().runtime, RuntimeKind::Claude);
+
+        let single = seeded_routes_for_assistants(&[RuntimeKind::Gemini]);
+        assert!(single.values().all(|route| route.runtime == RuntimeKind::Gemini));
+        assert!(single.values().all(|route| route.model == "gemini-2.5-pro"));
+    }
 
     #[test]
     fn cli_precedence_wins_over_workspace_and_global() {
@@ -1118,6 +1179,86 @@ mod tests {
             Err(ConfigurationError::InvalidReviewerRole(message))
                 if message.contains("role id cannot be empty")
         ));
+
+        let policy = SlotEffortPolicy {
+            level: EffortLevel::Low,
+            fallback: EffortFallbackPolicy::AllowLower,
+            rationale: None,
+        };
+        routing.set_slot_effort_policy(RouteSlot::Planning, policy.clone());
+        assert_eq!(routing.slot_effort_policies.get(&RouteSlot::Planning), Some(&policy));
+        routing.unset_slot_effort_policy(RouteSlot::Planning);
+        assert!(!routing.slot_effort_policies.contains_key(&RouteSlot::Planning));
+
+        let settings = DomainTemplateSettings {
+            enabled: Some(true),
+            standards: Some("keep it clean".to_string()),
+            external_context_bindings: Vec::new(),
+        };
+        routing.set_domain_template_settings(DomainFamily::React, settings.clone());
+        assert_eq!(routing.domain_templates.get(&DomainFamily::React), Some(&settings));
+        routing.unset_domain_template_settings(DomainFamily::React);
+        assert!(!routing.domain_templates.contains_key(&DomainFamily::React));
+    }
+
+    #[test]
+    fn seeded_routes_for_assistants_returns_empty_map_when_no_assistants_given() {
+        let routes = seeded_routes_for_assistants(&[]);
+        assert!(routes.is_empty());
+    }
+
+    #[test]
+    fn resolve_effective_domain_templates_uses_global_and_cluster_enabled_flags() {
+        let global = RoutingConfig {
+            domain_templates: BTreeMap::from([(
+                DomainFamily::React,
+                DomainTemplateSettings {
+                    enabled: Some(true),
+                    standards: Some("global react rules".to_string()),
+                    external_context_bindings: Vec::new(),
+                },
+            )]),
+            ..RoutingConfig::default()
+        };
+        let cluster = RoutingConfig {
+            domain_templates: BTreeMap::from([(
+                DomainFamily::Vue,
+                DomainTemplateSettings {
+                    enabled: Some(true),
+                    standards: None,
+                    external_context_bindings: Vec::new(),
+                },
+            )]),
+            ..RoutingConfig::default()
+        };
+
+        let resolved = resolve_effective_domain_templates(None, Some(&cluster), Some(&global));
+
+        let react = resolved.get(&DomainFamily::React).unwrap();
+        assert!(react.enabled);
+        assert_eq!(react.enablement_source, ValueSource::Global);
+        assert!(react.standards_layers.iter().any(|l| l.text.contains("global react rules")));
+
+        let vue = resolved.get(&DomainFamily::Vue).unwrap();
+        assert!(vue.enabled);
+        assert_eq!(vue.enablement_source, ValueSource::Cluster);
+
+        // Family with enabled=None in all layers → falls through to BuiltIn default (false)
+        let workspace = RoutingConfig {
+            domain_templates: BTreeMap::from([(
+                DomainFamily::Angular,
+                DomainTemplateSettings {
+                    enabled: None,
+                    standards: None,
+                    external_context_bindings: Vec::new(),
+                },
+            )]),
+            ..RoutingConfig::default()
+        };
+        let resolved2 = resolve_effective_domain_templates(Some(&workspace), None, None);
+        let angular = resolved2.get(&DomainFamily::Angular).unwrap();
+        assert!(!angular.enabled);
+        assert_eq!(angular.enablement_source, ValueSource::BuiltIn);
     }
 
     #[test]
