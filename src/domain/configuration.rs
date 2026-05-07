@@ -359,6 +359,44 @@ impl RoutingConfig {
     }
 }
 
+pub fn assistant_default_model_route(runtime: RuntimeKind) -> ModelRoute {
+    match runtime {
+        RuntimeKind::Claude => ModelRoute { runtime, model: "sonnet-4".to_string() },
+        RuntimeKind::Codex => ModelRoute { runtime, model: "gpt-5-codex".to_string() },
+        RuntimeKind::Copilot => ModelRoute { runtime, model: "gpt-5.4".to_string() },
+        RuntimeKind::Gemini => ModelRoute { runtime, model: "gemini-2.5-pro".to_string() },
+    }
+}
+
+pub fn built_in_default_route(slot: RouteSlot) -> ModelRoute {
+    let defaults = built_in_defaults();
+    match slot {
+        RouteSlot::Planning => defaults.planning,
+        RouteSlot::Implementation => defaults.implementation,
+        RouteSlot::Verification => defaults.verification,
+        RouteSlot::Review => defaults.review,
+    }
+}
+
+pub fn seeded_routes_for_assistants(assistants: &[RuntimeKind]) -> BTreeMap<RouteSlot, ModelRoute> {
+    let Some(fallback_runtime) = assistants.first().copied() else {
+        return BTreeMap::new();
+    };
+
+    [RouteSlot::Planning, RouteSlot::Implementation, RouteSlot::Verification, RouteSlot::Review]
+        .into_iter()
+        .map(|slot| {
+            let preferred = built_in_default_route(slot);
+            let route = if assistants.contains(&preferred.runtime) {
+                preferred
+            } else {
+                assistant_default_model_route(fallback_runtime)
+            };
+            (slot, route)
+        })
+        .collect()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CanonPreferences {
     #[serde(default)]
@@ -777,9 +815,32 @@ mod tests {
         CapabilityState, ConfigurationError, EffortFallbackPolicy, EffortLevel, ModelRoute,
         ResolvedDomainTemplate, RouteSlot, RoutingConfig, RoutingOverrides,
         RuntimeCapabilityProfile, RuntimeKind, SlotEffortPolicy, ValueSource,
-        resolve_effective_domain_templates, resolve_effective_routing,
-        resolve_effective_runtime_capabilities, resolve_effective_slot_effort_policies,
+        assistant_default_model_route, resolve_effective_domain_templates,
+        resolve_effective_routing, resolve_effective_runtime_capabilities,
+        resolve_effective_slot_effort_policies, seeded_routes_for_assistants,
     };
+
+    #[test]
+    fn assistant_default_routes_match_built_in_runtime_catalog() {
+        assert_eq!(assistant_default_model_route(RuntimeKind::Codex).model, "gpt-5-codex");
+        assert_eq!(assistant_default_model_route(RuntimeKind::Copilot).model, "gpt-5.4");
+        assert_eq!(assistant_default_model_route(RuntimeKind::Claude).model, "sonnet-4");
+        assert_eq!(assistant_default_model_route(RuntimeKind::Gemini).model, "gemini-2.5-pro");
+    }
+
+    #[test]
+    fn seeded_routes_prefer_selected_built_in_runtime_and_fallback_to_first_assistant() {
+        let seeded = seeded_routes_for_assistants(&[RuntimeKind::Copilot, RuntimeKind::Claude]);
+        assert_eq!(seeded.get(&RouteSlot::Planning).unwrap().runtime, RuntimeKind::Copilot);
+        assert_eq!(seeded.get(&RouteSlot::Planning).unwrap().model, "gpt-5.4");
+        assert_eq!(seeded.get(&RouteSlot::Implementation).unwrap().runtime, RuntimeKind::Copilot);
+        assert_eq!(seeded.get(&RouteSlot::Verification).unwrap().runtime, RuntimeKind::Copilot);
+        assert_eq!(seeded.get(&RouteSlot::Review).unwrap().runtime, RuntimeKind::Claude);
+
+        let single = seeded_routes_for_assistants(&[RuntimeKind::Gemini]);
+        assert!(single.values().all(|route| route.runtime == RuntimeKind::Gemini));
+        assert!(single.values().all(|route| route.model == "gemini-2.5-pro"));
+    }
 
     #[test]
     fn cli_precedence_wins_over_workspace_and_global() {

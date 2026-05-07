@@ -249,21 +249,6 @@ fn diagnose_workspace_with_profile_requirement(
         }
     });
 
-    let repository_root = workspace_exists && workspace.join("Cargo.toml").is_file();
-    checks.push(if repository_root {
-        DiagnosticsCheck {
-            name: "repository_root".to_string(),
-            status: DiagnosticsStatus::Passed,
-            message: "workspace contains the Boundline Cargo manifest".to_string(),
-        }
-    } else {
-        DiagnosticsCheck {
-            name: "repository_root".to_string(),
-            status: DiagnosticsStatus::Failed,
-            message: "run the command from the repository root containing Cargo.toml".to_string(),
-        }
-    });
-
     let workspace_writable = if workspace_exists {
         fs::metadata(workspace).map(|metadata| !metadata.permissions().readonly()).unwrap_or(false)
     } else {
@@ -459,6 +444,34 @@ mod tests {
         workspace
     }
 
+    fn temp_stack_neutral_workspace() -> PathBuf {
+        let workspace =
+            std::env::temp_dir().join(format!("boundline-neutral-diagnostics-{}", Uuid::new_v4()));
+        fs::create_dir_all(&workspace).unwrap();
+        fs::create_dir_all(workspace.join(".boundline")).unwrap();
+        fs::write(
+            workspace.join(".boundline").join("execution.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "name": "diagnostics-execution",
+                "read_targets": ["README.md"],
+                "validation_command": {"program": "echo", "args": ["ok"]},
+                "attempts": [
+                    {
+                        "attempt_id": "workspace-bootstrap",
+                        "summary": "Prepare an empty workspace for planning",
+                        "failure_mode": "terminal",
+                        "changes": [
+                            {"path": "README.md", "find": "before", "replace": "after"}
+                        ]
+                    }
+                ]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        workspace
+    }
+
     #[test]
     fn diagnostics_report_marks_a_writable_workspace_as_ready() {
         let workspace = temp_workspace();
@@ -468,6 +481,15 @@ mod tests {
         assert_eq!(report.subject, DiagnosticsSubject::Workspace);
         assert!(report.missing_prerequisites.is_empty());
         assert!(report.checks.iter().all(|check| check.status == DiagnosticsStatus::Passed));
+    }
+
+    #[test]
+    fn diagnostics_report_accepts_stack_neutral_workspace_with_profile() {
+        let workspace = temp_stack_neutral_workspace();
+        let report = diagnose_workspace(&workspace);
+
+        assert!(report.ready, "{report:#?}");
+        assert!(!report.missing_prerequisites.contains(&"repository_root".to_string()));
     }
 
     #[test]

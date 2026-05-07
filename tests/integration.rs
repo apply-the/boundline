@@ -76,6 +76,9 @@ mod human_input_governance_flow;
 #[path = "integration/init_bootstrap_flow.rs"]
 mod init_bootstrap_flow;
 
+#[path = "integration/stack_neutral_workspace_flow.rs"]
+mod stack_neutral_workspace_flow;
+
 #[path = "integration/config_workspace_flow.rs"]
 mod config_workspace_flow;
 

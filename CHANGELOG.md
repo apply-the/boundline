@@ -17,6 +17,25 @@ recorded workspace version.
 
 ## [Unreleased]
 
+## [0.43.0] - 2026-05-07
+
+Delivered specs:
+
+- `043` - Stack-Neutral Workspace Entry
+
+Highlights:
+
+- Make generic workspace diagnostics and native direct-run bootstrap
+  stack-neutral so empty and non-Rust repositories can enter the primary
+  session-native path without adding a `Cargo.toml`.
+- Let `boundline init --assistant claude|copilot|codex|gemini` seed
+  deterministic planning, implementation, verification, and review routes from
+  the maintained assistant default-model catalog while preserving explicit
+  route overrides.
+- Add bounded workspace hygiene defaults that merge universal, domain-family,
+  and tool-specific ignore patterns only when selected domains or repository
+  cues make them credible.
+
 ## [0.42.0] - 2026-05-06
 
 Delivered specs:

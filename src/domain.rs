@@ -23,3 +23,4 @@ pub mod task_context;
 pub mod tool_result;
 pub mod trace;
 pub mod workflow;
+pub mod workspace_hygiene;

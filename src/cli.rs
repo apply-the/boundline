@@ -1800,7 +1800,7 @@ fn red_to_green_addition() {
             no_canon: false,
         });
         assert_eq!(invalid.exit_status, CommandExitStatus::InvalidInvocation);
-        assert!(invalid.output.contains("doctor:"), "{}", invalid.output);
+        assert!(invalid.output.contains("bounded context required"), "{}", invalid.output);
     }
 
     #[test]

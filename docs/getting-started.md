@@ -134,15 +134,21 @@ evidence anchor.
 ## Optional Bootstrap
 
 Use `init` only when you want Boundline to scaffold local compatibility/bootstrap
-files, assistant setup, or domain-template defaults before the first session:
+files, assistant setup, route defaults, or domain-template hygiene before the
+first session:
 
 ```bash
-boundline init --workspace <workspace>
+boundline init --workspace <workspace> --assistant codex
 ```
 
 `--template` is optional. The built-in starting templates are `bug-fix`,
 `change`, and `delivery`. They seed the generated compatibility execution
 profile only; they do not replace the session-native workflow.
+
+`--assistant claude|copilot|codex|gemini` records the assistant family and fills
+planning, implementation, verification, and review routes with deterministic
+model defaults unless you supply explicit `--route SLOT=RUNTIME:MODEL`
+overrides.
 
 If you need domain defaults at bootstrap time, seed them explicitly:
 
@@ -154,6 +160,12 @@ boundline init \
   --domain-standard "react=follow the shared UI system" \
   --context-binding "react|design-system|mcp:design-system"
 ```
+
+When the selected domains or repository files make the stack credible, init
+also performs merge-only hygiene updates. A Git workspace receives universal
+`.gitignore` entries plus relevant technology patterns, and Docker, Prettier,
+ESLint, Terraform, and Helm ignore files are touched only when matching cues are
+present. Existing custom lines are preserved.
 
 ## Optional Routing Setup
 
@@ -225,7 +237,7 @@ If you need the deeper model rather than the first-run path, continue with:
 
 | Command | What it is for |
 | --- | --- |
-| `boundline init` | Bootstrap optional compatibility `.boundline` workspace files and assistant setup |
+| `boundline init` | Bootstrap optional compatibility `.boundline` workspace files, assistant defaults, and bounded hygiene setup |
 | `boundline config show|set|unset` | Inspect or edit routing defaults at global/workspace scope |
 | `boundline cluster init|status|inspect` | Register a bounded multi-workspace cluster and inspect member state |
 | `boundline doctor` | Verify the installed Boundline plus Canon pairing or validate a workspace before running |

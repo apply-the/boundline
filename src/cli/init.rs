@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
@@ -9,18 +9,27 @@ use thiserror::Error;
 use crate::adapters::config_store::{ConfigStoreError, FileConfigStore};
 use crate::cli::CommandExitStatus;
 use crate::domain::configuration::{
-    CanonPreferences, InitTemplate, ModelRoute, RouteSlot, RuntimeKind,
+    CanonPreferences, InitTemplate, ModelRoute, RouteSlot, RuntimeKind, built_in_default_route,
+    seeded_routes_for_assistants,
 };
 use crate::domain::domain_templates::{
     DomainFamily, DomainTemplateSettings, ExternalContextBinding, ExternalContextKind,
     detect_domain_families,
 };
 use crate::domain::governance::CanonModeSelectionPreference;
+use crate::domain::workspace_hygiene::{merge_hygiene_content, plan_hygiene_defaults};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InitCommandReport {
     pub exit_status: CommandExitStatus,
     pub terminal_output: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SeededRouteSelection {
+    slot: RouteSlot,
+    route: ModelRoute,
+    fallback_from_unavailable: Option<RuntimeKind>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -105,16 +114,25 @@ pub fn execute_init(request: InitRequest<'_>) -> Result<InitCommandReport, InitC
     } else {
         request.assistants.to_vec()
     };
-    let mut effective_routes = request
+    let explicit_routes = request
         .routes
         .iter()
         .map(|raw_route| parse_model_route(raw_route))
         .collect::<Result<Vec<_>, _>>()?;
-    if effective_routes.is_empty()
+    let guided_routes = if explicit_routes.is_empty()
         && let Some(answers) = guided_answers.as_ref()
     {
-        effective_routes = answers.routes.clone();
-    }
+        answers.routes.clone()
+    } else {
+        Vec::new()
+    };
+    let mut effective_routes =
+        if explicit_routes.is_empty() { guided_routes.clone() } else { explicit_routes.clone() };
+    let explicit_slots = effective_routes.iter().map(|(slot, _)| *slot).collect::<BTreeSet<_>>();
+    let seeded_routes =
+        resolve_seeded_routes(&effective_assistants, &explicit_slots, runtime_available)?;
+    effective_routes
+        .extend(seeded_routes.iter().map(|selection| (selection.slot, selection.route.clone())));
 
     if let Some(parent) = execution_path.parent() {
         fs::create_dir_all(parent)
@@ -123,8 +141,8 @@ pub fn execute_init(request: InitRequest<'_>) -> Result<InitCommandReport, InitC
 
     let mut local = store.load_local()?.unwrap_or_default();
     local.routing.assistant_runtimes = effective_assistants.clone();
-    for (slot, route) in effective_routes {
-        local.routing.set_slot(slot, route);
+    for (slot, route) in &effective_routes {
+        local.routing.set_slot(*slot, route.clone());
     }
     if effective_canon_mode_selection.is_some()
         || request.risk.is_some()
@@ -160,6 +178,17 @@ pub fn execute_init(request: InitRequest<'_>) -> Result<InitCommandReport, InitC
         .routing
         .validate()
         .map_err(|source| InitCommandError::InvalidDomainTemplate(source.to_string()))?;
+    let active_domains = local
+        .routing
+        .domain_templates
+        .iter()
+        .filter_map(
+            |(family, settings)| {
+                if settings.enabled.unwrap_or(false) { Some(*family) } else { None }
+            },
+        )
+        .collect::<BTreeSet<_>>();
+    let hygiene_actions = apply_workspace_hygiene_defaults(workspace, &active_domains)?;
 
     let execution = execution_template(template, local.canon.as_ref());
     fs::write(
@@ -185,6 +214,33 @@ pub fn execute_init(request: InitRequest<'_>) -> Result<InitCommandReport, InitC
     if !capabilities.is_empty() {
         lines.push("runtime_capabilities:".to_string());
         lines.extend(capabilities);
+    }
+
+    if !seeded_routes.is_empty() {
+        lines.push("seeded_route_defaults:".to_string());
+        lines.extend(seeded_routes.iter().map(|selection| {
+            let provenance = match selection.fallback_from_unavailable {
+                Some(runtime) => {
+                    format!("assistant-default fallback-from={runtime}-unavailable")
+                }
+                None => "assistant-default".to_string(),
+            };
+            format!(
+                "- {}: {}:{} [{provenance}]",
+                selection.slot.as_str(),
+                selection.route.runtime,
+                selection.route.model
+            )
+        }));
+    }
+
+    let explicit_route_lines =
+        explicit_routes.iter().chain(guided_routes.iter()).collect::<Vec<_>>();
+    if !explicit_route_lines.is_empty() {
+        lines.push("explicit_route_overrides:".to_string());
+        lines.extend(explicit_route_lines.into_iter().map(|(slot, route)| {
+            format!("- {}: {}:{} [explicit]", slot.as_str(), route.runtime, route.model)
+        }));
     }
 
     if let Some(canon) = local.canon.as_ref() {
@@ -213,6 +269,27 @@ pub fn execute_init(request: InitRequest<'_>) -> Result<InitCommandReport, InitC
                 ));
             }
         }
+    }
+
+    if hygiene_actions.is_empty() {
+        lines.push("workspace_hygiene: none".to_string());
+    } else {
+        lines.push("workspace_hygiene:".to_string());
+        lines.extend(hygiene_actions.iter().map(|action| {
+            let sources = if action.sources.is_empty() {
+                "none".to_string()
+            } else {
+                action.sources.join(",")
+            };
+            format!(
+                "- {}: {} added={} preserved={} sources={}",
+                action.path,
+                action.status,
+                action.added_patterns,
+                action.preserved_custom_lines,
+                sources
+            )
+        }));
     }
 
     lines.push("next: boundline doctor --workspace <workspace>".to_string());
@@ -283,6 +360,136 @@ fn apply_requested_domain_templates(
             upsert_binding(&mut target.external_context_bindings, binding);
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct HygieneInitAction {
+    path: String,
+    status: &'static str,
+    added_patterns: usize,
+    preserved_custom_lines: usize,
+    sources: Vec<String>,
+}
+
+fn apply_workspace_hygiene_defaults(
+    workspace: &Path,
+    domains: &BTreeSet<DomainFamily>,
+) -> Result<Vec<HygieneInitAction>, InitCommandError> {
+    let mut actions = Vec::new();
+    let mut planned_paths = BTreeSet::new();
+
+    for plan in plan_hygiene_defaults(workspace, domains) {
+        planned_paths.insert(plan.path.to_string());
+        let target = workspace.join(plan.path);
+        let existing =
+            if target.is_file() {
+                Some(fs::read_to_string(&target).map_err(|source| InitCommandError::ReadFile {
+                    path: target.clone(),
+                    source,
+                })?)
+            } else {
+                None
+            };
+        let existed = existing.is_some();
+        let merged = merge_hygiene_content(existing.as_deref(), &plan);
+        let status = if !existed {
+            fs::write(&target, &merged.content)
+                .map_err(|source| InitCommandError::WriteFile { path: target.clone(), source })?;
+            "created"
+        } else if merged.added_patterns.is_empty() {
+            "unchanged"
+        } else {
+            fs::write(&target, &merged.content)
+                .map_err(|source| InitCommandError::WriteFile { path: target.clone(), source })?;
+            "updated"
+        };
+
+        actions.push(HygieneInitAction {
+            path: plan.path.to_string(),
+            status,
+            added_patterns: merged.added_patterns.len(),
+            preserved_custom_lines: merged.preserved_custom_lines,
+            sources: plan.packs.into_iter().map(|pack| pack.provenance).collect(),
+        });
+    }
+
+    for path in [
+        ".gitignore",
+        ".dockerignore",
+        ".eslintignore",
+        ".prettierignore",
+        ".terraformignore",
+        ".helmignore",
+    ] {
+        if !planned_paths.contains(path) {
+            actions.push(HygieneInitAction {
+                path: path.to_string(),
+                status: "skipped",
+                added_patterns: 0,
+                preserved_custom_lines: 0,
+                sources: vec!["not-relevant".to_string()],
+            });
+        }
+    }
+
+    Ok(actions)
+}
+
+fn resolve_seeded_routes(
+    assistants: &[RuntimeKind],
+    explicit_slots: &BTreeSet<RouteSlot>,
+    availability: impl Fn(RuntimeKind) -> bool,
+) -> Result<Vec<SeededRouteSelection>, InitCommandError> {
+    let missing_slots = required_init_route_slots()
+        .into_iter()
+        .filter(|slot| !explicit_slots.contains(slot))
+        .collect::<Vec<_>>();
+    if missing_slots.is_empty() || assistants.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut available_assistants = Vec::new();
+    let mut unavailable_assistants = BTreeSet::new();
+    for runtime in assistants.iter().copied() {
+        if availability(runtime) {
+            available_assistants.push(runtime);
+        } else {
+            unavailable_assistants.insert(runtime);
+        }
+    }
+
+    if available_assistants.is_empty() {
+        return Err(InitCommandError::NoAvailableAssistantDefaults {
+            assistants: format_runtime_list(assistants),
+            slots: format_slot_list(&missing_slots),
+        });
+    }
+
+    let seeded = seeded_routes_for_assistants(&available_assistants);
+    Ok(missing_slots
+        .into_iter()
+        .filter_map(|slot| {
+            seeded.get(&slot).cloned().map(|route| SeededRouteSelection {
+                slot,
+                route,
+                fallback_from_unavailable: unavailable_assistants
+                    .contains(&built_in_default_route(slot).runtime)
+                    .then_some(built_in_default_route(slot).runtime),
+            })
+        })
+        .collect())
+}
+
+fn required_init_route_slots() -> [RouteSlot; 4] {
+    [RouteSlot::Planning, RouteSlot::Implementation, RouteSlot::Verification, RouteSlot::Review]
+}
+
+fn format_runtime_list(runtimes: &[RuntimeKind]) -> String {
+    runtimes.iter().map(|runtime| runtime.as_str()).collect::<Vec<_>>().join(", ")
+}
+
+fn format_slot_list(slots: &[RouteSlot]) -> String {
+    slots.iter().map(|slot| slot.as_str()).collect::<Vec<_>>().join(", ")
 }
 
 fn parse_domain_standard(raw: &str) -> Result<(DomainFamily, String), InitCommandError> {
@@ -601,8 +808,14 @@ pub enum InitCommandError {
     CreateWorkspace { path: PathBuf, source: std::io::Error },
     #[error("failed to write file {path}: {source}")]
     WriteFile { path: PathBuf, source: std::io::Error },
+    #[error("failed to read file {path}: {source}")]
+    ReadFile { path: PathBuf, source: std::io::Error },
     #[error("failed to persist config: {0}")]
     ConfigStore(#[from] ConfigStoreError),
+    #[error(
+        "no available assistant defaults remain for slots {slots}; selected assistants {assistants} are missing from PATH or extension surface. Install one of them, add an available assistant, or pass explicit --route overrides for the missing slots"
+    )]
+    NoAvailableAssistantDefaults { assistants: String, slots: String },
     #[error("invalid domain argument: {0}")]
     InvalidDomainArgument(String),
     #[error("invalid domain template settings: {0}")]
@@ -611,20 +824,21 @@ pub enum InitCommandError {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
     use std::fs;
     use std::path::PathBuf;
 
     use uuid::Uuid;
 
     use super::{
-        InitRequest, command_in_path, execute_init, execution_template, parse_canon_mode_selection,
-        parse_context_binding, parse_domain_family, parse_domain_standard,
-        parse_external_context_kind, parse_guided_assistants, parse_guided_routes, template_label,
-        upsert_binding,
+        InitRequest, command_in_path, execute_init, execution_template, format_runtime_list,
+        format_slot_list, parse_canon_mode_selection, parse_context_binding, parse_domain_family,
+        parse_domain_standard, parse_external_context_kind, parse_guided_assistants,
+        parse_guided_routes, resolve_seeded_routes, template_label, upsert_binding,
     };
     use crate::adapters::config_store::FileConfigStore;
     use crate::cli::CommandExitStatus;
-    use crate::domain::configuration::{CanonPreferences, InitTemplate, RuntimeKind};
+    use crate::domain::configuration::{CanonPreferences, InitTemplate, RouteSlot, RuntimeKind};
     use crate::domain::domain_templates::{
         DomainFamily, ExternalContextBinding, ExternalContextKind,
     };
@@ -758,6 +972,72 @@ mod tests {
     }
 
     #[test]
+    fn execute_init_seeds_missing_routes_from_selected_assistant_defaults() {
+        let workspace = temp_workspace("boundline-init-default-routes");
+
+        let report = execute_init(InitRequest {
+            workspace: &workspace,
+            template: None,
+            assistants: &[RuntimeKind::Claude],
+            routes: &[],
+            domains: &[],
+            domain_standards: &[],
+            context_bindings: &[],
+            required_context_bindings: &[],
+            canon_mode_selection: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            force: true,
+        })
+        .unwrap();
+
+        assert!(report.terminal_output.contains("seeded_route_defaults:"));
+        assert!(report.terminal_output.contains("planning: claude:sonnet-4 [assistant-default]"));
+        assert!(report.terminal_output.contains("review: claude:sonnet-4 [assistant-default]"));
+
+        let saved = FileConfigStore::for_workspace(&workspace).load_local().unwrap().unwrap();
+        assert_eq!(saved.routing.planning.unwrap().runtime, RuntimeKind::Claude);
+        assert_eq!(saved.routing.implementation.unwrap().model, "sonnet-4");
+        assert_eq!(saved.routing.verification.unwrap().runtime, RuntimeKind::Claude);
+        assert_eq!(saved.routing.review.unwrap().runtime, RuntimeKind::Claude);
+    }
+
+    #[test]
+    fn execute_init_preserves_explicit_routes_while_seeding_remaining_slots() {
+        let workspace = temp_workspace("boundline-init-partial-routes");
+        let explicit = ["planning=copilot:gpt-4o".to_string()];
+
+        let report = execute_init(InitRequest {
+            workspace: &workspace,
+            template: None,
+            assistants: &[RuntimeKind::Copilot],
+            routes: &explicit,
+            domains: &[],
+            domain_standards: &[],
+            context_bindings: &[],
+            required_context_bindings: &[],
+            canon_mode_selection: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            force: true,
+        })
+        .unwrap();
+
+        assert!(report.terminal_output.contains("explicit_route_overrides:"));
+        assert!(report.terminal_output.contains("planning: copilot:gpt-4o [explicit]"));
+        assert!(
+            report.terminal_output.contains("verification: copilot:gpt-5.4 [assistant-default]")
+        );
+
+        let saved = FileConfigStore::for_workspace(&workspace).load_local().unwrap().unwrap();
+        assert_eq!(saved.routing.planning.unwrap().model, "gpt-4o");
+        assert_eq!(saved.routing.implementation.unwrap().model, "gpt-5.4");
+        assert_eq!(saved.routing.review.unwrap().model, "gpt-5.4");
+    }
+
+    #[test]
     fn parsing_helpers_cover_variants_errors_and_binding_upserts() {
         let (family, standards) = parse_domain_standard("react= follow ui rules").unwrap();
         assert_eq!(family, DomainFamily::React);
@@ -844,6 +1124,54 @@ mod tests {
         assert_eq!(bindings.len(), 2);
         assert!(bindings[0].required);
         assert_eq!(bindings[0].notes.as_deref(), Some("new"));
+    }
+
+    #[test]
+    fn resolve_seeded_routes_marks_fallbacks_when_selected_preferred_runtime_is_unavailable() {
+        let seeded = resolve_seeded_routes(
+            &[RuntimeKind::Codex, RuntimeKind::Copilot],
+            &BTreeSet::new(),
+            |runtime| runtime == RuntimeKind::Copilot,
+        )
+        .unwrap();
+
+        let planning =
+            seeded.iter().find(|selection| selection.slot == RouteSlot::Planning).unwrap();
+        assert_eq!(planning.route.runtime, RuntimeKind::Copilot);
+        assert_eq!(planning.fallback_from_unavailable, Some(RuntimeKind::Codex));
+
+        let verification =
+            seeded.iter().find(|selection| selection.slot == RouteSlot::Verification).unwrap();
+        assert_eq!(verification.route.runtime, RuntimeKind::Copilot);
+        assert_eq!(verification.fallback_from_unavailable, None);
+    }
+
+    #[test]
+    fn resolve_seeded_routes_errors_when_no_selected_runtime_can_fill_missing_slots() {
+        let error =
+            resolve_seeded_routes(&[RuntimeKind::Codex], &BTreeSet::new(), |_| false).unwrap_err();
+
+        assert!(error.to_string().contains("no available assistant defaults remain"));
+        assert!(error.to_string().contains("planning, implementation, verification, review"));
+    }
+
+    #[test]
+    fn resolve_seeded_routes_allows_unavailable_assistants_when_explicit_routes_cover_every_slot() {
+        let explicit_slots = [
+            RouteSlot::Planning,
+            RouteSlot::Implementation,
+            RouteSlot::Verification,
+            RouteSlot::Review,
+        ]
+        .into_iter()
+        .collect();
+
+        let seeded =
+            resolve_seeded_routes(&[RuntimeKind::Codex], &explicit_slots, |_| false).unwrap();
+
+        assert!(seeded.is_empty());
+        assert_eq!(format_runtime_list(&[RuntimeKind::Codex]), "codex");
+        assert_eq!(format_slot_list(&[RouteSlot::Planning, RouteSlot::Review]), "planning, review");
     }
 
     #[test]

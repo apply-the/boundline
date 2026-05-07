@@ -14,6 +14,22 @@ const FIXTURE_CARGO_TOML: &str = concat!(
     "edition = \"2024\"\n",
 );
 
+const FIXTURE_PYPROJECT_TOML: &str = concat!(
+    "[project]\n",
+    "name = \"boundline-fixture\"\n",
+    "version = \"0.1.0\"\n",
+    "requires-python = \">=3.11\"\n",
+);
+
+const FIXTURE_PYTHON_MAIN: &str =
+    concat!("def add(left: int, right: int) -> int:\n", "    return left - right\n",);
+
+const FIXTURE_PYTHON_TEST: &str = concat!(
+    "from src.main import add\n\n",
+    "def test_add() -> None:\n",
+    "    assert add(2, 2) == 4\n",
+);
+
 const RED_LIB_RS: &str =
     concat!("pub fn add(left: i32, right: i32) -> i32 {\n", "    left - right\n", "}\n",);
 
@@ -145,6 +161,22 @@ pub fn temp_fixture_workspace(prefix: &str) -> PathBuf {
             "left + right",
         )],
     )
+}
+
+pub fn temp_empty_workspace(prefix: &str) -> PathBuf {
+    let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+    fs::create_dir_all(&workspace).unwrap();
+    workspace
+}
+
+pub fn temp_python_workspace(prefix: &str) -> PathBuf {
+    let workspace = temp_empty_workspace(prefix);
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::create_dir_all(workspace.join("tests")).unwrap();
+    fs::write(workspace.join("pyproject.toml"), FIXTURE_PYPROJECT_TOML).unwrap();
+    fs::write(workspace.join("src/main.py"), FIXTURE_PYTHON_MAIN).unwrap();
+    fs::write(workspace.join("tests/test_main.py"), FIXTURE_PYTHON_TEST).unwrap();
+    workspace
 }
 
 pub fn temp_cluster_workspaces(prefix: &str) -> (PathBuf, PathBuf) {
@@ -308,6 +340,15 @@ pub fn run_boundline_in(workspace: &Path, args: &[&str]) -> Output {
         .current_dir(workspace)
         .output()
         .unwrap()
+}
+
+pub fn run_boundline_in_with_env(workspace: &Path, args: &[&str], envs: &[(&str, &str)]) -> Output {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_boundline"));
+    command.args(args).current_dir(workspace);
+    for (key, value) in envs {
+        command.env(key, value);
+    }
+    command.output().unwrap()
 }
 
 pub fn write_markdown_brief(

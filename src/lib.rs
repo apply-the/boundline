@@ -76,6 +76,10 @@ pub use domain::workflow::{
     WorkflowDefinitionError, WorkflowDiscoveryEntry, WorkflowGoalSource, WorkflowLifecycleState,
     WorkflowOutputPreferences, WorkflowPhase, WorkflowProgressState, WorkflowRegistry,
 };
+pub use domain::workspace_hygiene::{
+    HygieneFilePlan, HygieneMergeResult, HygienePatternPack, merge_hygiene_content,
+    plan_hygiene_defaults,
+};
 pub use orchestrator::governance::{
     GovernanceStatePatchError, GovernanceStateSelectionError, GovernanceStepDecision,
     append_governed_document_to_lifecycle, bounded_governance_context, bounded_reused_packets,
