@@ -1,4 +1,6 @@
 boundline_version = "0.43.0"
+# canon_version is fetched dynamically from the latest git tag at release time;
+# this field is kept as a last-known-good fallback for offline/air-gapped runs.
 canon_version = "0.40.0"
 source_fallback = "cargo install --path ."
 
