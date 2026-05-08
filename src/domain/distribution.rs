@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::governance::{CANONICAL_MODES, CanonCapabilitySnapshot, CanonMode};
 
-pub const SUPPORTED_CANON_VERSION: &str = "0.40.0";
+pub const SUPPORTED_CANON_VERSION: &str = "0.41.0";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -430,7 +430,7 @@ mod tests {
     #[test]
     fn extract_semver_token_finds_a_canon_version() {
         assert_eq!(
-            extract_semver_token("canon version 0.40.0 (stable)"),
+            extract_semver_token("canon version 0.41.0 (stable)"),
             Some(SUPPORTED_CANON_VERSION.to_string())
         );
     }

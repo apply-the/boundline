@@ -6,7 +6,7 @@ Canon is downstream from Boundline in this roadmap: Boundline thinks, decides, o
 
 Evolve Boundline into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.44.0
+## Current Status: v0.45.0
 
 Boundline now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -111,18 +111,30 @@ repositories, with a clearer first-run CLI UX:
 - session-native commands still accept `--cluster <primary-workspace>` so one authoritative primary-owned session can plan and deliver a bounded change across registered member repositories
 - clustered `run`, `status`, `next`, and `inspect` still surface authoritative workspace, clustered execution condition, participating workspaces, and any blocking member without implying distributed orchestration ownership
 
-## Post-0.44.0 Roadmap
+## Post-0.45.0 Roadmap
 
-`0.44.0` closes the guided init and clearer first-run messaging release.
-Boundline now has guided Canon setup, Canon-ready default governed runs, real
-surface verification, explicit governed follow-through states, assistant
-command packs aligned to the same primary workflow, a stack-neutral
-init/readiness surface for the supported domain catalog, and a clearer first
-operator pass through `init` and `doctor`.
+`0.45.0` carries the guided init and clearer first-run messaging release
+forward while updating the supported Canon companion target and tightening the
+distribution automation around the same operator story. Boundline now has
+guided Canon setup, Canon-ready default governed runs, real surface
+verification, explicit governed follow-through states, assistant command packs
+aligned to the same primary workflow, a stack-neutral init/readiness surface
+for the supported domain catalog, a clearer first operator pass through `init`
+and `doctor`, and direct Homebrew tap propagation from the managed release
+surface.
 
 The governing rule remains simple: Boundline is still the product and execution
 owner. Canon stays a bounded, useful governed runtime inside that same delivery
 path rather than drifting back into a parallel tool story.
+
+### Delivered in 0.45.0
+
+- adopted Canon `0.41.0` as the documented supported companion version across
+  doctor/install output, distribution metadata, and governed runtime evidence
+- switched the `homebrew-boundline` sync flow from PR creation to direct
+  authenticated pushes to `main` using the repo-managed tap token
+- aligned release metadata, generated package artifacts, and contract tests to
+  the `0.45.0` distribution surface
 
 ### Delivered in 0.44.0
 
@@ -212,7 +224,7 @@ governance adapter rather than reopening broad product-scope work:
 
 - revalidate the documented Canon compatibility target against the latest
   released `canon governance start|refresh|capabilities --json` `v1` surface;
-  the current documented target is Canon `0.40.0`
+  the current documented target is Canon `0.41.0`
 - preserve additive-field tolerance and capability-aware checks so intermediate
   Canon releases do not force unnecessary Boundline churn when the `v1` adapter
   contract remains stable

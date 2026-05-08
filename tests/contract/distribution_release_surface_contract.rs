@@ -2,7 +2,7 @@ use std::fs;
 use std::path::Path;
 
 #[test]
-fn release_surface_closes_on_0_44_0_without_an_upcoming_044_entry() {
+fn release_surface_closes_on_0_45_0_without_an_upcoming_045_entry() {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let cargo_toml = fs::read_to_string(repo_root.join("Cargo.toml")).unwrap();
     let changelog = fs::read_to_string(repo_root.join("CHANGELOG.md")).unwrap();
@@ -13,11 +13,11 @@ fn release_surface_closes_on_0_44_0_without_an_upcoming_044_entry() {
     let homebrew_tap_workflow =
         fs::read_to_string(repo_root.join(".github/workflows/sync-homebrew-tap.yml")).unwrap();
 
-    assert!(cargo_toml.contains("version = \"0.44.0\""));
-    assert!(changelog.contains("## [0.44.0] - 2026-05-07"));
-    assert!(changelog.contains("044` - CLI Init UX"));
-    assert!(roadmap.contains("## Current Status: v0.44.0"));
-    assert!(roadmap.contains("### Delivered in 0.44.0"));
+    assert!(cargo_toml.contains("version = \"0.45.0\""));
+    assert!(changelog.contains("## [0.45.0] - 2026-05-08"));
+    assert!(changelog.contains("Canon `0.41.0` as the supported Boundline companion"));
+    assert!(roadmap.contains("## Current Status: v0.45.0"));
+    assert!(roadmap.contains("### Delivered in 0.45.0"));
     assert!(windows_release_workflow.contains(
         "git clone --depth 1 --branch \"$canonVersion\" https://github.com/apply-the/canon canon-source"
     ));

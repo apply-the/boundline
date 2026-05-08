@@ -17,6 +17,18 @@ recorded workspace version.
 
 ## [Unreleased]
 
+## [0.45.0] - 2026-05-08
+
+Highlights:
+
+- Adopt Canon `0.41.0` as the supported Boundline companion across install
+  diagnostics, distribution metadata, governed runtime snapshots, and operator
+  guidance.
+- Push Homebrew tap updates directly to `homebrew-boundline/main` from the
+  repo-managed sync workflow instead of staging a separate tap pull request.
+- Align the release surface, generated distribution artifacts, and contract
+  coverage to the same `0.45.0` delivery line.
+
 ## [0.44.0] - 2026-05-07
 
 Delivered specs:

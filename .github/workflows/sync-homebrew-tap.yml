@@ -89,7 +89,7 @@ jobs:
 
       - name: Regenerate distribution metadata
         shell: bash
-        run: bash scripts/sync-distribution-metadata.sh
+        run: bash "$GITHUB_WORKSPACE/scripts/sync-distribution-metadata.sh"
 
       - uses: actions/checkout@v4
         with:
@@ -102,9 +102,9 @@ jobs:
         name: Sync Homebrew formula into tap checkout
         shell: bash
         run: |
-          sync_output="$(bash scripts/release/sync-homebrew-tap.sh \
-            --formula distribution/homebrew/Formula/boundline.rb \
-            --tap-root homebrew-tap)"
+          sync_output="$(bash "$GITHUB_WORKSPACE/scripts/release/sync-homebrew-tap.sh" \
+            --formula "$GITHUB_WORKSPACE/distribution/homebrew/Formula/boundline.rb" \
+            --tap-root "$GITHUB_WORKSPACE/homebrew-tap")"
 
           printf '%s\n' "$sync_output"
 
