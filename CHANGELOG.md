@@ -17,6 +17,24 @@ recorded workspace version.
 
 ## [Unreleased]
 
+## [0.46.0] - 2026-05-09
+
+Delivered specs:
+
+- `045` - Chat-First Runtime
+
+Highlights:
+
+- Add a stable global `--json` host envelope for the session-native lifecycle,
+  `run`, and `inspect` commands while keeping the rendered plain-text output
+  as the default human-facing surface.
+- Let shell-enabled assistant flows consume structured `session_status`,
+  `trace_summary`, and `trace_location` fields directly, then align the Claude,
+  Codex, Copilot, and Gemini guidance to the same structured shell path.
+- Adopt Canon `0.42.0` as the supported Boundline companion across install
+  diagnostics, distribution metadata, governed runtime snapshots, and operator
+  guidance.
+
 ## [0.45.0] - 2026-05-08
 
 Highlights:

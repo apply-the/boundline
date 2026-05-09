@@ -6,7 +6,7 @@ Canon is downstream from Boundline in this roadmap: Boundline thinks, decides, o
 
 Evolve Boundline into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.45.0
+## Current Status: v0.46.0
 
 Boundline now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -22,6 +22,16 @@ surface in place, with Canon-default governed setup, runtime selection, and
 assistant-surface alignment now carried through the same primary workflow. The
 operator entry path is now stack-neutral for empty, non-Rust, and mixed
 repositories, with a clearer first-run CLI UX:
+
+- shell-enabled lifecycle commands plus `run`, `status`, `next`, and `inspect`
+  can now emit one stable host envelope with `command_name`, `exit_status`,
+  `rendered_output`, `session_status`, `trace_summary`, and `trace_location`
+- host-assisted `inspect` can now reuse the current workspace when no explicit
+  trace selector is supplied, keeping the session-native trace follow-up path
+  usable inside chat and other host integrations
+- assistant command packs now prefer the structured shell path so the same
+  persisted session and trace state can flow through Claude, Codex, Copilot,
+  and Gemini without reparsing plain text first
 
 - guided `boundline init` now explains supported assistants, supported route
   slots, blank/default behavior, and a valid `SLOT=RUNTIME:MODEL` example
@@ -111,21 +121,31 @@ repositories, with a clearer first-run CLI UX:
 - session-native commands still accept `--cluster <primary-workspace>` so one authoritative primary-owned session can plan and deliver a bounded change across registered member repositories
 - clustered `run`, `status`, `next`, and `inspect` still surface authoritative workspace, clustered execution condition, participating workspaces, and any blocking member without implying distributed orchestration ownership
 
-## Post-0.45.0 Roadmap
+## Post-0.46.0 Roadmap
 
-`0.45.0` carries the guided init and clearer first-run messaging release
-forward while updating the supported Canon companion target and tightening the
-distribution automation around the same operator story. Boundline now has
-guided Canon setup, Canon-ready default governed runs, real surface
-verification, explicit governed follow-through states, assistant command packs
-aligned to the same primary workflow, a stack-neutral init/readiness surface
-for the supported domain catalog, a clearer first operator pass through `init`
-and `doctor`, and direct Homebrew tap propagation from the managed release
-surface.
+`0.46.0` carries the chat-first structured host-runtime release forward while
+updating the supported Canon companion target and keeping the distribution
+automation aligned to the same operator story. Boundline now has guided Canon
+setup, Canon-ready default governed runs, real surface verification, explicit
+governed follow-through states, assistant command packs aligned to the same
+primary workflow, a stack-neutral init/readiness surface for the supported
+domain catalog, a clearer first operator pass through `init` and `doctor`,
+direct Homebrew tap propagation from the managed release surface, and a stable
+JSON host envelope over the primary session-native lifecycle.
 
 The governing rule remains simple: Boundline is still the product and execution
 owner. Canon stays a bounded, useful governed runtime inside that same delivery
 path rather than drifting back into a parallel tool story.
+
+### Delivered in 0.46.0
+
+- added a stable `--json` host envelope across the session-native lifecycle,
+  `run`, and `inspect` while preserving the existing rendered plain-text output
+- aligned `inspect` and the assistant command packs to the same structured
+  shell-first host flow, including current-workspace fallback for session-owned
+  trace follow-up
+- adopted Canon `0.42.0` as the documented supported companion version across
+  doctor/install output, distribution metadata, and governed runtime evidence
 
 ### Delivered in 0.45.0
 
@@ -224,7 +244,7 @@ governance adapter rather than reopening broad product-scope work:
 
 - revalidate the documented Canon compatibility target against the latest
   released `canon governance start|refresh|capabilities --json` `v1` surface;
-  the current documented target is Canon `0.41.0`
+  the current documented target is Canon `0.42.0`
 - preserve additive-field tolerance and capability-aware checks so intermediate
   Canon releases do not force unnecessary Boundline churn when the `v1` adapter
   contract remains stable

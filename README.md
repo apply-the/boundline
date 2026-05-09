@@ -219,7 +219,7 @@ Boundline is the main tool. Canon is a supporting governed runtime.
 - Boundline owns the operator flow, session state, planning, execution, and validation.
 - Canon only enters when you explicitly want governed stages, approvals, or governed artifacts.
 
-The current release documents Canon `0.41.0` support on the
+The current release documents Canon `0.42.0` support on the
 `canon governance start|refresh|capabilities --json` `v1` adapter surface.
 
 ## Read More

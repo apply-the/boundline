@@ -46,6 +46,9 @@ mod session_record_contract;
 #[path = "contract/session_command_contract.rs"]
 mod session_command_contract;
 
+#[path = "contract/host_command_output_contract.rs"]
+mod host_command_output_contract;
+
 #[path = "contract/assistant_session_continuity_contract.rs"]
 mod assistant_session_continuity_contract;
 

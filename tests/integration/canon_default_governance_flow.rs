@@ -43,11 +43,11 @@ fn write_ready_canon_on_path(prefix: &str) -> PathBuf {
     let _ = fs::remove_dir_all(&bin_dir);
     fs::create_dir_all(&bin_dir).unwrap();
     let canon = bin_dir.join("canon");
-    let capabilities = r#"{"canon_version":"0.41.0","supported_schema_versions":["2026-02-01"],"operations":["start","refresh","capabilities"],"supported_modes":["requirements","discovery","system-shaping","architecture","backlog","change","implementation","refactor","review","verification","incident","security-assessment","system-assessment","migration","supply-chain-analysis"],"status_values":["governed_ready","awaiting_approval","blocked"],"approval_state_values":["not_needed","requested","granted"],"packet_readiness_values":["reusable","pending","incomplete"],"compatibility_notes":["stable-json"]}"#;
+    let capabilities = r#"{"canon_version":"0.42.0","supported_schema_versions":["2026-02-01"],"operations":["start","refresh","capabilities"],"supported_modes":["requirements","discovery","system-shaping","architecture","backlog","change","implementation","refactor","review","verification","incident","security-assessment","system-assessment","migration","supply-chain-analysis"],"status_values":["governed_ready","awaiting_approval","blocked"],"approval_state_values":["not_needed","requested","granted"],"packet_readiness_values":["reusable","pending","incomplete"],"compatibility_notes":["stable-json"]}"#;
     fs::write(
         &canon,
         format!(
-            "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo 'canon version 0.41.0'\n  exit 0\nfi\nif [ \"$1\" = \"governance\" ] && [ \"$2\" = \"capabilities\" ]; then\n  printf '%s' '{}'\n  exit 0\nfi\nexit 1\n",
+            "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo 'canon version 0.42.0'\n  exit 0\nfi\nif [ \"$1\" = \"governance\" ] && [ \"$2\" = \"capabilities\" ]; then\n  printf '%s' '{}'\n  exit 0\nfi\nexit 1\n",
             capabilities
         ),
     )
@@ -67,11 +67,11 @@ fn write_capturing_canon_on_path(prefix: &str, workspace: &Path, response_json: 
     fs::create_dir_all(&bin_dir).unwrap();
     let canon = bin_dir.join("canon");
     let capture_path = workspace.join(".boundline/canon-request.json");
-    let capabilities = r#"{"canon_version":"0.41.0","supported_schema_versions":["2026-02-01"],"operations":["start","refresh","capabilities"],"supported_modes":["requirements","discovery","system-shaping","architecture","backlog","change","implementation","refactor","review","verification","incident","security-assessment","system-assessment","migration","supply-chain-analysis"],"status_values":["governed_ready","awaiting_approval","blocked","pending_selection","incomplete"],"approval_state_values":["not_needed","requested","granted"],"packet_readiness_values":["reusable","pending","incomplete"],"compatibility_notes":["stable-json"]}"#;
+    let capabilities = r#"{"canon_version":"0.42.0","supported_schema_versions":["2026-02-01"],"operations":["start","refresh","capabilities"],"supported_modes":["requirements","discovery","system-shaping","architecture","backlog","change","implementation","refactor","review","verification","incident","security-assessment","system-assessment","migration","supply-chain-analysis"],"status_values":["governed_ready","awaiting_approval","blocked","pending_selection","incomplete"],"approval_state_values":["not_needed","requested","granted"],"packet_readiness_values":["reusable","pending","incomplete"],"compatibility_notes":["stable-json"]}"#;
     fs::write(
         &canon,
         format!(
-            "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo 'canon version 0.41.0'\n  exit 0\nfi\nif [ \"$1\" = \"governance\" ] && [ \"$2\" = \"capabilities\" ]; then\n  printf '%s' '{}'\n  exit 0\nfi\ncat > '{}'\nprintf '%s' '{}'\n",
+            "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo 'canon version 0.42.0'\n  exit 0\nfi\nif [ \"$1\" = \"governance\" ] && [ \"$2\" = \"capabilities\" ]; then\n  printf '%s' '{}'\n  exit 0\nfi\ncat > '{}'\nprintf '%s' '{}'\n",
             capabilities,
             capture_path.display(),
             response_json
@@ -99,11 +99,11 @@ fn write_multi_stage_capturing_canon_on_path(
     let canon = bin_dir.join("canon");
     let capture_prefix = workspace.join(".boundline/canon-request");
     let count_path = workspace.join(".boundline/canon-request-count");
-    let capabilities = r#"{"canon_version":"0.41.0","supported_schema_versions":["2026-02-01"],"operations":["start","refresh","capabilities"],"supported_modes":["requirements","discovery","system-shaping","architecture","backlog","change","implementation","refactor","review","verification","incident","security-assessment","system-assessment","migration","supply-chain-analysis"],"status_values":["governed_ready","awaiting_approval","blocked","pending_selection","incomplete"],"approval_state_values":["not_needed","requested","granted"],"packet_readiness_values":["reusable","pending","incomplete"],"compatibility_notes":["stable-json"]}"#;
+    let capabilities = r#"{"canon_version":"0.42.0","supported_schema_versions":["2026-02-01"],"operations":["start","refresh","capabilities"],"supported_modes":["requirements","discovery","system-shaping","architecture","backlog","change","implementation","refactor","review","verification","incident","security-assessment","system-assessment","migration","supply-chain-analysis"],"status_values":["governed_ready","awaiting_approval","blocked","pending_selection","incomplete"],"approval_state_values":["not_needed","requested","granted"],"packet_readiness_values":["reusable","pending","incomplete"],"compatibility_notes":["stable-json"]}"#;
     fs::write(
         &canon,
         format!(
-            "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo 'canon version 0.41.0'\n  exit 0\nfi\nif [ \"$1\" = \"governance\" ] && [ \"$2\" = \"capabilities\" ]; then\n  printf '%s' '{}'\n  exit 0\nfi\ncount=0\nif [ -f '{}' ]; then\n  count=$(cat '{}')\nfi\ncount=$((count + 1))\necho \"$count\" > '{}'\ncapture='{}-'$count'.json'\ncat > \"$capture\"\nif [ \"$count\" = \"1\" ]; then\n  printf '%s' '{}'\nelse\n  printf '%s' '{}'\nfi\n",
+            "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo 'canon version 0.42.0'\n  exit 0\nfi\nif [ \"$1\" = \"governance\" ] && [ \"$2\" = \"capabilities\" ]; then\n  printf '%s' '{}'\n  exit 0\nfi\ncount=0\nif [ -f '{}' ]; then\n  count=$(cat '{}')\nfi\ncount=$((count + 1))\necho \"$count\" > '{}'\ncapture='{}-'$count'.json'\ncat > \"$capture\"\nif [ \"$count\" = \"1\" ]; then\n  printf '%s' '{}'\nelse\n  printf '%s' '{}'\nfi\n",
             capabilities,
             count_path.display(),
             count_path.display(),

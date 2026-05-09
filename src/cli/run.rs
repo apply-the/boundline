@@ -8,6 +8,7 @@ use crate::adapters::config_store::FileConfigStore;
 use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
 use crate::adapters::trace_store::{FileTraceStore, TraceStore};
 use crate::cli::CommandExitStatus;
+use crate::cli::inspect::summarize_trace;
 use crate::cli::output;
 use crate::cli::session::{self, SessionCommandError};
 use crate::domain::brief::{
@@ -20,21 +21,24 @@ use crate::domain::governance::{
 use crate::domain::limits::TerminalCondition;
 use crate::domain::session::{
     ActiveSessionRecord, RoutingMode, RoutingOutcome, RoutingSource, SessionStatus,
+    SessionStatusView,
 };
 use crate::domain::task::{TaskRunResponse, TaskStatus, TerminalReason};
 use crate::domain::task_context::TaskContext;
-use crate::domain::trace::{ExecutionTrace, TraceEventType};
+use crate::domain::trace::{ExecutionTrace, TraceEventType, TraceSummaryView};
 use crate::fixture::{
     FixtureRuntimeError, build_fixture_runtime, build_task_request,
     load_workspace_execution_profile,
 };
 use crate::orchestrator::engine::{Orchestrator, OrchestratorError};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RunCommandReport {
     pub exit_status: CommandExitStatus,
     pub terminal_output: String,
     pub trace_location: Option<String>,
+    pub session_status: Option<SessionStatusView>,
+    pub trace_summary: Option<TraceSummaryView>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -131,6 +135,8 @@ pub fn execute_native_direct_run(
             exit_status: CommandExitStatus::NonSuccess,
             terminal_output: report.terminal_output,
             trace_location: record.latest_trace_ref.clone(),
+            session_status: report.session_status,
+            trace_summary: report.trace_summary,
         });
     }
 
@@ -148,6 +154,8 @@ pub fn execute_native_direct_run(
         exit_status: report.exit_status,
         terminal_output: report.terminal_output,
         trace_location,
+        session_status: report.session_status,
+        trace_summary: report.trace_summary,
     })
 }
 
@@ -245,10 +253,15 @@ pub fn execute_custom_run(
             &response,
             "/boundline-inspect",
         ));
+        let trace_summary = loaded_trace
+            .as_ref()
+            .and_then(|trace| summarize_trace(Path::new(&trace_location), trace).ok());
         return Ok(RunCommandReport {
             exit_status: CommandExitStatus::NonSuccess,
             terminal_output,
             trace_location: Some(trace_location),
+            session_status: None,
+            trace_summary,
         });
     }
 
@@ -268,11 +281,16 @@ pub fn execute_custom_run(
         &response,
         output::next_command_after_run(response.terminal_status),
     ));
+    let trace_summary = trace
+        .as_ref()
+        .and_then(|trace| summarize_trace(Path::new(&response.trace_location), trace).ok());
 
     Ok(RunCommandReport {
         exit_status,
         terminal_output,
         trace_location: Some(response.trace_location),
+        session_status: None,
+        trace_summary,
     })
 }
 

@@ -14,12 +14,12 @@ Advance the active Boundline session by executing exactly one planned step.
 - Captured goal or active session state; preserve confirmed context instead of asking for it again
 
 ## Shell-Enabled Path
-If the workspace is known, run `cargo run --bin boundline -- step --workspace <workspace>` exactly once. If the workspace or active session is missing, ask only for the missing context or route to `/boundline-start` or `/boundline-plan`.
+If the workspace is known, run `cargo run --bin boundline -- step --workspace <workspace> --json` exactly once. If the workspace or active session is missing, ask only for the missing context or route to `/boundline-start` or `/boundline-plan`.
 
 ## Chat-Only Path
 If shell execution is unavailable, ask only for missing workspace details and then provide this exact copyable command:
 
-`cargo run --bin boundline -- step --workspace <workspace>`
+`cargo run --bin boundline -- step --workspace <workspace> --json`
 
 Wait for pasted output before continuing.
 
