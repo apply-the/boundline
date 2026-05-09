@@ -21,11 +21,14 @@ cargo run --bin boundline -- init --workspace <workspace> --canon-mode-selection
 cargo run --bin boundline -- doctor --install
 cargo run --bin boundline -- config show --workspace <workspace> --scope workspace
 cargo run --bin boundline -- config set-canon --workspace <workspace> --mode-selection auto-confirm
-cargo run --bin boundline -- start --workspace <workspace>
-cargo run --bin boundline -- capture --workspace <workspace> --goal "<goal>"
-cargo run --bin boundline -- plan --workspace <workspace>
-cargo run --bin boundline -- plan --workspace <workspace> --confirm
-cargo run --bin boundline -- run --workspace <workspace>
+cargo run --bin boundline -- start --workspace <workspace> --json
+cargo run --bin boundline -- capture --workspace <workspace> --goal "<goal>" --json
+cargo run --bin boundline -- plan --workspace <workspace> --json
+cargo run --bin boundline -- plan --workspace <workspace> --confirm --json
+cargo run --bin boundline -- run --workspace <workspace> --json
+cargo run --bin boundline -- status --workspace <workspace> --json
+cargo run --bin boundline -- next --workspace <workspace> --json
+cargo run --bin boundline -- inspect --workspace <workspace> --json
 ```
 
 Canon-default mode shorthand uses `boundline run --mode <mode>`. For example,

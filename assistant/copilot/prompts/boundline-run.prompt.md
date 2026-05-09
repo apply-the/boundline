@@ -18,7 +18,7 @@ Resume the active Boundline session through the selected runtime route until it 
 - Captured goal or authored brief in the active session; do not ask for new input when it is already stored
 
 ## Shell-Enabled Path
-If the workspace is known, run `cargo run --bin boundline -- run --workspace <workspace>` exactly once. If the active session has no captured goal or planned task, route to `/boundline-plan` or `/boundline-start` instead of inventing a new run command. If the user explicitly asks for direct manifest-backed compatibility behavior without relying on active session state, route them to the direct compatibility workflow in the shared guidance instead of reinterpreting `/boundline-run`.
+If the workspace is known, run `cargo run --bin boundline -- run --workspace <workspace> --json` exactly once. If the active session has no captured goal or planned task, route to `/boundline-plan` or `/boundline-start` instead of inventing a new run command. If the user explicitly asks for direct manifest-backed compatibility behavior without relying on active session state, route them to the direct compatibility workflow in the shared guidance instead of reinterpreting `/boundline-run`.
 
 ## Canon-Default Mode Shorthand
 Canon-default work uses `boundline run --mode <mode>` when the operator names a Canon mode. `/boundline-run requirements` maps to `boundline run --mode requirements`; mode aliases such as `/boundline-requirements` use the same mapping. Preserve `governance_runtime`, `mode_selection_preference`, `selected_mode`, `approval_state`, and `next_action` from CLI output.
@@ -26,7 +26,7 @@ Canon-default work uses `boundline run --mode <mode>` when the operator names a 
 ## Chat-Only Path
 If shell execution is unavailable, ask only for missing workspace context and then provide this exact copyable command:
 
-`cargo run --bin boundline -- run --workspace <workspace>`
+`cargo run --bin boundline -- run --workspace <workspace> --json`
 
 Wait for the user to paste the output before continuing.
 

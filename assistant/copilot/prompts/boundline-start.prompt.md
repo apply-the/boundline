@@ -18,12 +18,12 @@ Initialize or reinitialize the active Boundline session for a workspace.
 - Broad goal only when it is already known and helps you hand off to `/boundline-plan`
 
 ## Shell-Enabled Path
-If the workspace is known, run `cargo run --bin boundline -- start --workspace <workspace>` exactly once. If the workspace is missing, ask for it before proceeding.
+If the workspace is known, run `cargo run --bin boundline -- start --workspace <workspace> --json` exactly once. If the workspace is missing, ask for it before proceeding.
 
 ## Chat-Only Path
 If shell execution is unavailable, ask only for the workspace and then provide this exact copyable command:
 
-`cargo run --bin boundline -- start --workspace <workspace>`
+`cargo run --bin boundline -- start --workspace <workspace> --json`
 
 Wait for pasted output before continuing.
 

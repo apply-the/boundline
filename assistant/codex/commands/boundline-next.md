@@ -16,12 +16,12 @@ Compatibility follow-up means the user previously chose `boundline run --compati
 - Latest known outcome when already available
 
 ## Shell-Enabled Path
-If the workspace is known, run `cargo run --bin boundline -- next --workspace <workspace>` exactly once and use the reported recommendation.
+If the workspace is known, run `cargo run --bin boundline -- next --workspace <workspace> --json` exactly once and use the reported recommendation.
 
 ## Chat-Only Path
 If shell execution is unavailable, provide this exact copyable command:
 
-`cargo run --bin boundline -- next --workspace <workspace>`
+`cargo run --bin boundline -- next --workspace <workspace> --json`
 
 Wait for pasted output and then recommend exactly one next command.
 

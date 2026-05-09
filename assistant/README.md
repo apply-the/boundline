@@ -4,6 +4,8 @@ This directory contains Markdown-based commands to run `boundline` from various 
 
 The primary delivery surface is session-native: `start -> capture -> plan -> run -> status -> next -> inspect` against `<workspace>/.boundline/session.json` and `<workspace>/.boundline/traces/`.
 
+In `0.46.0`, shell-enabled assistant flows should prefer `--json` for the session-native lifecycle commands plus `run`, `status`, `next`, and `inspect`. Treat `command_name`, `exit_status`, `rendered_output`, `trace_location`, `session_status`, and `trace_summary` as the authoritative host envelope when those fields are present, and use `rendered_output` only as the human-readable companion.
+
 In `0.44.0`, assistants should treat installation verification as the first
 boundary in a new environment: prefer the README quick path, run
 `boundline doctor --install` before workspace commands, and only then move into the
@@ -184,12 +186,12 @@ assuming one hard-wired backend.
 Since an assistant may be executed in a context *without* shell access (e.g., standard chat window), each command must gracefully degrade.
 
 If the shell/terminal is *not* available:
-1. Provide the user with the correct CLI command.
+1. Provide the user with the correct CLI command. For session-native lifecycle commands, `run`, `status`, `next`, and `inspect`, prefer the same command with `--json` so the pasted output stays structured.
 2. Provide a brief explanation of what the command does.
 3. Tell the user to run it manually, wait for it to finish, and paste the output.
 
 If the shell/terminal *is* available:
-1. Run the mapped CLI command directly from the repository root with `cargo run --bin boundline -- ...`.
+1. Run the mapped CLI command directly from the repository root with `cargo run --bin boundline -- ...`. For session-native lifecycle commands, `run`, `status`, `next`, and `inspect`, append `--json` unless the user explicitly asked for plain text.
 2. Do not explain syntax.
 3. Prefer CLI-reported `next_command` or `corrected_command` when present instead of inventing a follow-up.
 

@@ -1584,7 +1584,7 @@ mod tests {
             &workspace,
             &PlanningContextSources {
                 canon_capability_snapshot: Some(CanonCapabilitySnapshot {
-                    canon_version: "0.41.0".to_string(),
+                    canon_version: "0.42.0".to_string(),
                     supported_schema_versions: vec!["2026-02-01".to_string()],
                     operations: vec![
                         "start".to_string(),
@@ -1647,7 +1647,7 @@ mod tests {
             goal_plan
                 .source_evidence
                 .iter()
-                .any(|entry| entry.reference.contains("Canon 0.41.0 capabilities available"))
+                .any(|entry| entry.reference.contains("Canon 0.42.0 capabilities available"))
         );
 
         fs::remove_dir_all(workspace).unwrap();

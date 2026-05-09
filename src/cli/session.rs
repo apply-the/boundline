@@ -35,13 +35,59 @@ use crate::domain::session::{
     task_state_workspace_slice_summary,
 };
 use crate::domain::task::TaskStatus;
-use crate::domain::trace::current_timestamp_millis;
+use crate::domain::trace::{TraceSummaryView, current_timestamp_millis};
 use crate::orchestrator::session_runtime::{SessionRuntime, SessionRuntimeError};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SessionCommandReport {
     pub exit_status: CommandExitStatus,
     pub terminal_output: String,
+    pub trace_location: Option<String>,
+    pub session_status: Option<SessionStatusView>,
+    pub trace_summary: Option<TraceSummaryView>,
+}
+
+fn report_with_session_status(
+    exit_status: CommandExitStatus,
+    view: SessionStatusView,
+) -> SessionCommandReport {
+    let trace_location = view.latest_trace_ref.clone();
+    let terminal_output = output::render_session_status(&view);
+    SessionCommandReport {
+        exit_status,
+        terminal_output,
+        trace_location,
+        session_status: Some(view),
+        trace_summary: None,
+    }
+}
+
+fn report_with_trace_summary(
+    exit_status: CommandExitStatus,
+    terminal_output: String,
+    trace_location: Option<String>,
+    trace_summary: Option<TraceSummaryView>,
+) -> SessionCommandReport {
+    SessionCommandReport {
+        exit_status,
+        terminal_output,
+        trace_location,
+        session_status: None,
+        trace_summary,
+    }
+}
+
+fn report_with_text(
+    exit_status: CommandExitStatus,
+    terminal_output: String,
+) -> SessionCommandReport {
+    SessionCommandReport {
+        exit_status,
+        terminal_output,
+        trace_location: None,
+        session_status: None,
+        trace_summary: None,
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -85,18 +131,17 @@ pub fn execute_start_with_target(
 
     FileSessionStore::for_workspace(&workspace).persist(&record)?;
 
-    Ok(SessionCommandReport {
-        exit_status: CommandExitStatus::Succeeded,
-        terminal_output: output::render_session_status(&build_status_view(
-            &record,
-            Some("boundline capture --goal <goal>".to_string()),
-            if target.cluster_projection.is_some() {
-                "active clustered session initialized for the current primary workspace"
-            } else {
-                "active session initialized for the current workspace"
-            },
-        )),
-    })
+    let view = build_status_view(
+        &record,
+        Some("boundline capture --goal <goal>".to_string()),
+        if target.cluster_projection.is_some() {
+            "active clustered session initialized for the current primary workspace"
+        } else {
+            "active session initialized for the current workspace"
+        },
+    );
+
+    Ok(report_with_session_status(CommandExitStatus::Succeeded, view))
 }
 
 pub fn execute_capture(
@@ -155,18 +200,17 @@ pub fn execute_capture_with_target(
         )
     };
 
-    Ok(SessionCommandReport {
-        exit_status: CommandExitStatus::Succeeded,
-        terminal_output: output::render_session_status(&build_status_view(
-            &record,
-            Some("boundline plan".to_string()),
-            if target.cluster_projection.is_some() {
-                format!("{summary} for the current clustered delivery session")
-            } else {
-                summary
-            },
-        )),
-    })
+    let view = build_status_view(
+        &record,
+        Some("boundline plan".to_string()),
+        if target.cluster_projection.is_some() {
+            format!("{summary} for the current clustered delivery session")
+        } else {
+            summary
+        },
+    );
+
+    Ok(report_with_session_status(CommandExitStatus::Succeeded, view))
 }
 
 pub fn execute_flow(
@@ -189,18 +233,17 @@ pub fn execute_flow_with_target(
     runtime.select_flow(&mut record, name).map_err(map_runtime_error)?;
     runtime.persist_session(&record).map_err(map_runtime_error)?;
 
-    Ok(SessionCommandReport {
-        exit_status: CommandExitStatus::Succeeded,
-        terminal_output: output::render_session_status(&build_status_view(
-            &record,
-            suggested_next_command(&record),
-            if target.cluster_projection.is_some() {
-                format!("selected the `{}` delivery flow for the active clustered session", name)
-            } else {
-                format!("selected the `{}` delivery flow for the active workspace session", name)
-            },
-        )),
-    })
+    let view = build_status_view(
+        &record,
+        suggested_next_command(&record),
+        if target.cluster_projection.is_some() {
+            format!("selected the `{}` delivery flow for the active clustered session", name)
+        } else {
+            format!("selected the `{}` delivery flow for the active workspace session", name)
+        },
+    );
+
+    Ok(report_with_session_status(CommandExitStatus::Succeeded, view))
 }
 
 pub fn execute_plan(
@@ -242,18 +285,17 @@ pub fn execute_plan_with_target(
     }
     runtime.persist_session(&record).map_err(map_runtime_error)?;
 
-    Ok(SessionCommandReport {
-        exit_status: CommandExitStatus::Succeeded,
-        terminal_output: output::render_session_status(&build_status_view(
-            &record,
-            suggested_next_command(&record),
-            if target.cluster_projection.is_some() {
-                format!("{} for the clustered delivery story", planning_summary(&record))
-            } else {
-                planning_summary(&record)
-            },
-        )),
-    })
+    let view = build_status_view(
+        &record,
+        suggested_next_command(&record),
+        if target.cluster_projection.is_some() {
+            format!("{} for the clustered delivery story", planning_summary(&record))
+        } else {
+            planning_summary(&record)
+        },
+    );
+
+    Ok(report_with_session_status(CommandExitStatus::Succeeded, view))
 }
 
 pub fn execute_step(workspace: Option<&Path>) -> Result<SessionCommandReport, SessionCommandError> {
@@ -278,27 +320,24 @@ pub fn execute_step_with_target(
 
     if runtime.refresh_governance_state(&mut record).map_err(map_runtime_error)? {
         runtime.persist_session(&record).map_err(map_runtime_error)?;
-        return Ok(SessionCommandReport {
-            exit_status: exit_status_for_session(record.latest_status),
-            terminal_output: output::render_session_status(&build_status_view(
-                &record,
-                suggested_next_command(&record),
-                "refreshed governance approval state and returned without executing another step",
-            )),
-        });
+        let view = build_status_view(
+            &record,
+            suggested_next_command(&record),
+            "refreshed governance approval state and returned without executing another step",
+        );
+        return Ok(report_with_session_status(exit_status_for_session(record.latest_status), view));
     }
 
     runtime.execute_next_step(&mut record).map_err(map_runtime_error)?;
     runtime.persist_session(&record).map_err(map_runtime_error)?;
 
-    Ok(SessionCommandReport {
-        exit_status: exit_status_for_session(record.latest_status),
-        terminal_output: output::render_session_status(&build_status_view(
-            &record,
-            suggested_next_command(&record),
-            "executed the next planned step and persisted the updated session state",
-        )),
-    })
+    let view = build_status_view(
+        &record,
+        suggested_next_command(&record),
+        "executed the next planned step and persisted the updated session state",
+    );
+
+    Ok(report_with_session_status(exit_status_for_session(record.latest_status), view))
 }
 
 pub fn execute_run(workspace: Option<&Path>) -> Result<SessionCommandReport, SessionCommandError> {
@@ -333,42 +372,47 @@ pub fn execute_run_with_target(
         && runtime.refresh_governance_state(&mut record).map_err(map_runtime_error)?
     {
         runtime.persist_session(&record).map_err(map_runtime_error)?;
-        return Ok(SessionCommandReport {
-            exit_status: exit_status_for_session(record.latest_status),
-            terminal_output: output::render_session_status(&build_status_view(
-                &record,
-                suggested_next_command(&record),
-                "refreshed governance approval state and returned without resuming the governed stage",
-            )),
-        });
+        let view = build_status_view(
+            &record,
+            suggested_next_command(&record),
+            "refreshed governance approval state and returned without resuming the governed stage",
+        );
+        return Ok(report_with_session_status(exit_status_for_session(record.latest_status), view));
     }
 
     let response = runtime.run_to_terminal(&mut record).map_err(map_runtime_error)?;
     runtime.persist_session(&record).map_err(map_runtime_error)?;
 
     if response.terminal_status == TaskStatus::Failed && delegation_status_view(&record).is_some() {
-        return Ok(SessionCommandReport {
-            exit_status: exit_status_for_task(response.terminal_status),
-            terminal_output: output::render_session_status(&build_status_view(
-                &record,
-                suggested_next_command(&record),
-                "run stopped at an explicit delegated continuity boundary and persisted the packet in session-owned state",
-            )),
-        });
+        let view = build_status_view(
+            &record,
+            suggested_next_command(&record),
+            "run stopped at an explicit delegated continuity boundary and persisted the packet in session-owned state",
+        );
+        return Ok(report_with_session_status(
+            exit_status_for_task(response.terminal_status),
+            view,
+        ));
     }
 
     let trace = runtime.trace_store().load(Path::new(&response.trace_location)).ok();
+    let trace_summary = trace
+        .as_ref()
+        .and_then(|trace| summarize_trace(Path::new(&response.trace_location), trace).ok());
     let next_command =
         suggested_next_command(&record).unwrap_or_else(|| "boundline inspect".to_string());
     let routing_prefix = output::render_route_outcome(&routing_outcome(&record));
+    let trace_location = Some(response.trace_location.clone());
 
-    Ok(SessionCommandReport {
-        exit_status: exit_status_for_task(response.terminal_status),
-        terminal_output: format!(
+    Ok(report_with_trace_summary(
+        exit_status_for_task(response.terminal_status),
+        format!(
             "{routing_prefix}\n{}",
             output::render_run_trace("run", trace.as_ref(), &response, &next_command),
         ),
-    })
+        trace_location,
+        trace_summary,
+    ))
 }
 
 pub fn execute_status(
@@ -395,21 +439,19 @@ pub fn execute_status_with_target(
                 record.latest_trace_ref.as_deref(),
             )?;
 
-            Ok(SessionCommandReport {
-                exit_status: CommandExitStatus::Succeeded,
-                terminal_output: output::render_session_status(&build_status_view_with_follow_up(
-                    &record,
-                    suggested_next_command(&record),
-                    if compatibility_follow_up.is_some() {
-                        "current active session state for the workspace; latest compatibility follow-up remains inspect-only"
-                    } else if refreshed {
-                        "refreshed governance approval state for the active workspace session"
-                    } else {
-                        "current active session state for the workspace"
-                    },
-                    compatibility_follow_up,
-                )),
-            })
+            let view = build_status_view_with_follow_up(
+                &record,
+                suggested_next_command(&record),
+                if compatibility_follow_up.is_some() {
+                    "current active session state for the workspace; latest compatibility follow-up remains inspect-only"
+                } else if refreshed {
+                    "refreshed governance approval state for the active workspace session"
+                } else {
+                    "current active session state for the workspace"
+                },
+                compatibility_follow_up,
+            );
+            Ok(report_with_session_status(CommandExitStatus::Succeeded, view))
         }
         Err(SessionCommandError::MissingActiveSession) => {
             let Some(compatibility_follow_up) =
@@ -418,15 +460,15 @@ pub fn execute_status_with_target(
                 return Err(SessionCommandError::MissingActiveSession);
             };
 
-            Ok(SessionCommandReport {
-                exit_status: CommandExitStatus::Succeeded,
-                terminal_output: output::render_compatibility_follow_up_status(
+            Ok(report_with_text(
+                CommandExitStatus::Succeeded,
+                output::render_compatibility_follow_up_status(
                     &workspace.to_string_lossy(),
                     ContinuityAuthority::CompatibilityTrace,
                     &compatibility_follow_up,
                     "no active session exists; latest compatibility trace is the authoritative follow-up state for the workspace",
                 ),
-            })
+            ))
         }
         Err(error) => Err(error),
     }
@@ -453,25 +495,21 @@ pub fn execute_next_with_target(
                 record.latest_trace_ref.as_deref(),
             )?;
 
-            Ok(SessionCommandReport {
-                exit_status: CommandExitStatus::Succeeded,
-                terminal_output: output::render_session_status(&build_status_view_with_follow_up(
-                    &record,
-                    Some(next_command.clone()),
-                    if let Some(follow_up) = &compatibility_follow_up {
-                        format!(
-                            "next recommended command for the active session is `{next_command}`; latest compatibility follow-up remains {} via `{}`",
-                            follow_up.follow_up_mode.as_str(),
-                            follow_up.next_command
-                        )
-                    } else {
-                        format!(
-                            "next recommended command for the active session is `{next_command}`"
-                        )
-                    },
-                    compatibility_follow_up,
-                )),
-            })
+            let view = build_status_view_with_follow_up(
+                &record,
+                Some(next_command.clone()),
+                if let Some(follow_up) = &compatibility_follow_up {
+                    format!(
+                        "next recommended command for the active session is `{next_command}`; latest compatibility follow-up remains {} via `{}`",
+                        follow_up.follow_up_mode.as_str(),
+                        follow_up.next_command
+                    )
+                } else {
+                    format!("next recommended command for the active session is `{next_command}`")
+                },
+                compatibility_follow_up,
+            );
+            Ok(report_with_session_status(CommandExitStatus::Succeeded, view))
         }
         Err(SessionCommandError::MissingActiveSession) => {
             let Some(compatibility_follow_up) =
@@ -480,9 +518,9 @@ pub fn execute_next_with_target(
                 return Err(SessionCommandError::MissingActiveSession);
             };
 
-            Ok(SessionCommandReport {
-                exit_status: CommandExitStatus::Succeeded,
-                terminal_output: output::render_compatibility_follow_up_status(
+            Ok(report_with_text(
+                CommandExitStatus::Succeeded,
+                output::render_compatibility_follow_up_status(
                     &workspace.to_string_lossy(),
                     ContinuityAuthority::CompatibilityTrace,
                     &compatibility_follow_up,
@@ -491,7 +529,7 @@ pub fn execute_next_with_target(
                         compatibility_follow_up.next_command
                     ),
                 ),
-            })
+            ))
         }
         Err(error) => Err(error),
     }
@@ -1991,6 +2029,71 @@ fn red_to_green_addition() {
 
         assert_eq!(requested_governance_runtime_text(GovernanceRuntimeKind::Local), "local");
         assert_eq!(requested_governance_runtime_text(GovernanceRuntimeKind::Canon), "canon");
+    }
+
+    #[test]
+    fn active_session_status_and_next_surface_compatibility_follow_up_without_replacing_session() {
+        let workspace = temp_workspace("boundline-cli-session-active-compat-follow-up");
+
+        execute_start(Some(&workspace)).unwrap();
+
+        let mut trace = ExecutionTrace::new(
+            "task-active-compat",
+            "session-active-compat",
+            "Compatibility trace for active session",
+        );
+        trace.terminal_status = Some(TaskStatus::Failed);
+        trace.terminal_reason = Some(TerminalReason::new(
+            TerminalCondition::UnrecoverableError,
+            "compatibility run failed",
+            None,
+        ));
+        trace.ended_at = Some(trace.started_at + 1);
+        FileTraceStore::for_workspace(&workspace).persist(&trace).unwrap();
+
+        let status = execute_status(Some(&workspace)).unwrap();
+        assert!(
+            status.terminal_output.contains("latest_status: initialized"),
+            "{}",
+            status.terminal_output
+        );
+        assert!(
+            status.terminal_output.contains("continuity_authority: compatibility_trace"),
+            "{}",
+            status.terminal_output
+        );
+        assert!(
+            status.terminal_output.contains("compatibility_follow_up: inspect_only"),
+            "{}",
+            status.terminal_output
+        );
+        assert!(
+            status.terminal_output.contains("latest compatibility follow-up remains inspect-only"),
+            "{}",
+            status.terminal_output
+        );
+
+        let next = execute_next(Some(&workspace)).unwrap();
+        assert!(
+            next.terminal_output.contains("continuity_authority: compatibility_trace"),
+            "{}",
+            next.terminal_output
+        );
+        assert!(
+            next.terminal_output.contains("compatibility_follow_up: inspect_only"),
+            "{}",
+            next.terminal_output
+        );
+        assert!(
+            next.terminal_output.contains("next_command: boundline capture --goal <goal>"),
+            "{}",
+            next.terminal_output
+        );
+        assert!(
+            next.terminal_output.contains("latest compatibility follow-up remains inspect_only"),
+            "{}",
+            next.terminal_output
+        );
     }
 
     #[test]

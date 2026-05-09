@@ -3,6 +3,7 @@ use std::path::Path;
 
 use crate::adapters::cluster_store::FileClusterStore;
 use crate::adapters::config_store::FileConfigStore;
+use serde::Serialize;
 use serde_json::Value;
 
 use crate::cli::diagnostics::{DiagnosticsReport, DiagnosticsStatus};
@@ -63,6 +64,47 @@ impl CommandExitCode {
             CommandExitStatus::TraceReadFailure => Self::TraceReadFailure,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct HostCommandEnvelope {
+    pub command_name: String,
+    pub exit_status: String,
+    pub rendered_output: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trace_location: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_status: Option<SessionStatusView>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trace_summary: Option<TraceSummaryView>,
+}
+
+fn command_exit_status_label(status: CommandExitStatus) -> &'static str {
+    match status {
+        CommandExitStatus::Succeeded => "succeeded",
+        CommandExitStatus::NonSuccess => "non_success",
+        CommandExitStatus::InvalidInvocation => "invalid_invocation",
+        CommandExitStatus::TraceReadFailure => "trace_read_failure",
+    }
+}
+
+pub fn render_host_command_json(
+    command_name: &str,
+    exit_status: CommandExitStatus,
+    rendered_output: &str,
+    trace_location: Option<&str>,
+    session_status: Option<&SessionStatusView>,
+    trace_summary: Option<&TraceSummaryView>,
+) -> String {
+    serde_json::to_string_pretty(&HostCommandEnvelope {
+        command_name: command_name.to_string(),
+        exit_status: command_exit_status_label(exit_status).to_string(),
+        rendered_output: rendered_output.to_string(),
+        trace_location: trace_location.map(str::to_string),
+        session_status: session_status.cloned(),
+        trace_summary: trace_summary.cloned(),
+    })
+    .expect("host command envelope should serialize")
 }
 
 pub fn unimplemented_message(command: &DeveloperCommand) -> String {
@@ -2351,12 +2393,17 @@ fn cluster_member_state_text(state: ClusterMemberState) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
+    use serde_json::{Value, json};
 
     use super::{
-        command_name, governance_event_line, render_run_execution_condition, render_run_trace,
-        render_session_status, render_trace_summary, review_event_line, reviewer_event_line,
+        command_name, governance_event_line, render_diagnostics, render_host_command_json,
+        render_run_execution_condition, render_run_trace, render_session_status,
+        render_trace_summary, review_event_line, reviewer_event_line,
         session_execution_condition_parts, trace_execution_condition_parts,
+    };
+    use crate::cli::CommandExitStatus;
+    use crate::cli::diagnostics::{
+        DiagnosticsCheck, DiagnosticsReport, DiagnosticsStatus, DiagnosticsSubject,
     };
     use crate::cli::{CheckpointSubcommand, ClusterSubcommand, ConfigSubcommand, DeveloperCommand};
     use crate::domain::limits::{RunLimits, TerminalCondition};
@@ -2368,6 +2415,86 @@ mod tests {
     use crate::domain::trace::{
         ExecutionTrace, TraceEventType, TraceRecoveryEvent, TraceStepSummary, TraceSummaryView,
     };
+
+    #[test]
+    fn host_command_json_covers_exit_status_labels_and_optional_payloads() {
+        for (status, label) in [
+            (CommandExitStatus::Succeeded, "succeeded"),
+            (CommandExitStatus::NonSuccess, "non_success"),
+            (CommandExitStatus::InvalidInvocation, "invalid_invocation"),
+            (CommandExitStatus::TraceReadFailure, "trace_read_failure"),
+        ] {
+            let rendered = render_host_command_json("doctor", status, "rendered", None, None, None);
+            let parsed: Value = serde_json::from_str(&rendered).unwrap();
+            assert_eq!(parsed["command_name"], "doctor");
+            assert_eq!(parsed["exit_status"], label);
+            assert_eq!(parsed["rendered_output"], "rendered");
+            assert!(parsed["trace_location"].is_null());
+            assert!(parsed["session_status"].is_null());
+            assert!(parsed["trace_summary"].is_null());
+        }
+
+        let session_status = SessionStatusView {
+            session_id: "session-host-json".to_string(),
+            workspace_ref: "/tmp/workspace".to_string(),
+            latest_status: SessionStatus::Succeeded,
+            explanation: "session completed successfully".to_string(),
+            ..SessionStatusView::default()
+        };
+        let trace_summary = TraceSummaryView {
+            trace_ref: "/tmp/workspace/.boundline/traces/task.json".to_string(),
+            goal: "Render host JSON".to_string(),
+            terminal_status: TaskStatus::Succeeded,
+            terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None),
+            ..TraceSummaryView::default()
+        };
+
+        let rendered = render_host_command_json(
+            "run",
+            CommandExitStatus::Succeeded,
+            "terminal_status: succeeded",
+            Some("/tmp/workspace/.boundline/traces/task.json"),
+            Some(&session_status),
+            Some(&trace_summary),
+        );
+        let parsed: Value = serde_json::from_str(&rendered).unwrap();
+        assert_eq!(parsed["trace_location"], "/tmp/workspace/.boundline/traces/task.json");
+        assert_eq!(parsed["session_status"]["session_id"], "session-host-json");
+        assert_eq!(
+            parsed["trace_summary"]["trace_ref"],
+            "/tmp/workspace/.boundline/traces/task.json"
+        );
+    }
+
+    #[test]
+    fn diagnostics_render_install_follow_up_when_actions_are_missing() {
+        let rendered = render_diagnostics(&DiagnosticsReport {
+            subject: DiagnosticsSubject::Install,
+            workspace_ref: None,
+            installation_ref: None,
+            checks: vec![DiagnosticsCheck {
+                name: "boundline_binary".to_string(),
+                status: DiagnosticsStatus::Passed,
+                message: "install is ready".to_string(),
+            }],
+            ready: true,
+            missing_prerequisites: Vec::new(),
+            suggested_actions: Vec::new(),
+            boundline_version: None,
+            supported_canon_version: None,
+            companion_state: None,
+            channel_candidates: Vec::new(),
+        });
+
+        assert!(
+            rendered.contains("doctor: ready for installation <current-machine>"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("verify a workspace next: boundline doctor --workspace <workspace>"),
+            "{rendered}"
+        );
+    }
 
     #[test]
     fn command_name_covers_every_developer_subcommand() {

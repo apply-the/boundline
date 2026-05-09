@@ -20,10 +20,12 @@ use crate::domain::trace::{
     ExecutionTrace, TraceEventType, TraceRecoveryEvent, TraceStepSummary, TraceSummaryView,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct InspectCommandReport {
     pub exit_status: CommandExitStatus,
     pub terminal_output: String,
+    pub trace_location: Option<String>,
+    pub trace_summary: Option<TraceSummaryView>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,6 +64,8 @@ pub fn execute_inspect(
             inspection_target.as_str(),
             output::next_command_after_inspect(summary.terminal_status),
         ),
+        trace_location: Some(trace_ref.to_string_lossy().into_owned()),
+        trace_summary: Some(summary),
     })
 }
 

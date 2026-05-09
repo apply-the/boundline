@@ -46,6 +46,12 @@ mod assistant_chat_fallback;
 #[path = "integration/session_cli_flow.rs"]
 mod session_cli_flow;
 
+#[path = "integration/host_session_runtime_flow.rs"]
+mod host_session_runtime_flow;
+
+#[path = "integration/host_trace_runtime_flow.rs"]
+mod host_trace_runtime_flow;
+
 #[path = "integration/session_adaptive_flow.rs"]
 mod session_adaptive_flow;
 

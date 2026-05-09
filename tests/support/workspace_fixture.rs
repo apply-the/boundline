@@ -5,6 +5,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
+use serde::de::DeserializeOwned;
 use uuid::Uuid;
 
 const FIXTURE_CARGO_TOML: &str = concat!(
@@ -379,6 +380,16 @@ pub fn terminal_text(output: &Output) -> String {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     )
+}
+
+pub fn stdout_json<T: DeserializeOwned>(output: &Output) -> T {
+    serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
+        panic!(
+            "failed to parse stdout as JSON: {error}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        )
+    })
 }
 
 pub fn extract_trace_path(text: &str) -> Option<PathBuf> {

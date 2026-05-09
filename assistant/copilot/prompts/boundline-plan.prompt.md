@@ -20,20 +20,20 @@ Capture human-authored input and plan the active session into a bounded proposal
 ## Shell-Enabled Path
 If the workspace and at least one authored input source are known, run the matching capture command exactly once, then run plan:
 
-`cargo run --bin boundline -- capture --workspace <workspace> --goal "<goal>"`
-`cargo run --bin boundline -- capture --workspace <workspace> --brief <path> [--brief <path> ...]`
-`cargo run --bin boundline -- capture --workspace <workspace> --goal "<goal>" --brief <path> [--brief <path> ...]`
-`cargo run --bin boundline -- plan --workspace <workspace>`
+`cargo run --bin boundline -- capture --workspace <workspace> --goal "<goal>" --json`
+`cargo run --bin boundline -- capture --workspace <workspace> --brief <path> [--brief <path> ...] --json`
+`cargo run --bin boundline -- capture --workspace <workspace> --goal "<goal>" --brief <path> [--brief <path> ...] --json`
+`cargo run --bin boundline -- plan --workspace <workspace> --json`
 
 Ask only for missing workspace or missing authored input. Reuse confirmed brief paths instead of asking for them again.
 
 ## Chat-Only Path
 Ask only for the missing workspace or authored input, then provide the matching exact copyable capture command followed by plan:
 
-`cargo run --bin boundline -- capture --workspace <workspace> --goal "<goal>"`
-`cargo run --bin boundline -- capture --workspace <workspace> --brief <path> [--brief <path> ...]`
-`cargo run --bin boundline -- capture --workspace <workspace> --goal "<goal>" --brief <path> [--brief <path> ...]`
-`cargo run --bin boundline -- plan --workspace <workspace>`
+`cargo run --bin boundline -- capture --workspace <workspace> --goal "<goal>" --json`
+`cargo run --bin boundline -- capture --workspace <workspace> --brief <path> [--brief <path> ...] --json`
+`cargo run --bin boundline -- capture --workspace <workspace> --goal "<goal>" --brief <path> [--brief <path> ...] --json`
+`cargo run --bin boundline -- plan --workspace <workspace> --json`
 
 Tell the user to run them one at a time and paste the outputs before continuing.
 

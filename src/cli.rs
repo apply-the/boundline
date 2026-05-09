@@ -18,6 +18,13 @@ use super::{
 #[derive(Debug, Parser)]
 #[command(name = "boundline", about = "Local delivery orchestrator for bounded engineering work")]
 pub struct Cli {
+    #[arg(
+        long,
+        global = true,
+        help = "Emit structured JSON host output while preserving the rendered text inside the payload"
+    )]
+    pub json: bool,
+
     #[command(subcommand)]
     pub command: DeveloperCommand,
 }
@@ -891,22 +898,105 @@ struct DispatchOutcome {
     exit_status: CommandExitStatus,
     output: String,
     trace_location: Option<String>,
+    session_status: Option<crate::domain::session::SessionStatusView>,
+    trace_summary: Option<crate::domain::trace::TraceSummaryView>,
+}
+
+impl DispatchOutcome {
+    fn text(
+        exit_status: CommandExitStatus,
+        output: impl Into<String>,
+        trace_location: Option<String>,
+    ) -> Self {
+        Self {
+            exit_status,
+            output: output.into(),
+            trace_location,
+            session_status: None,
+            trace_summary: None,
+        }
+    }
+
+    fn from_session_report(report: session::SessionCommandReport) -> Self {
+        Self {
+            exit_status: report.exit_status,
+            output: report.terminal_output,
+            trace_location: report.trace_location,
+            session_status: report.session_status,
+            trace_summary: report.trace_summary,
+        }
+    }
+
+    fn from_run_report(report: run::RunCommandReport) -> Self {
+        Self {
+            exit_status: report.exit_status,
+            output: report.terminal_output,
+            trace_location: report.trace_location,
+            session_status: report.session_status,
+            trace_summary: report.trace_summary,
+        }
+    }
+
+    fn from_inspect_report(report: inspect::InspectCommandReport) -> Self {
+        Self {
+            exit_status: report.exit_status,
+            output: report.terminal_output,
+            trace_location: report.trace_location,
+            session_status: None,
+            trace_summary: report.trace_summary,
+        }
+    }
 }
 
 pub fn execute() -> i32 {
     let cli = Cli::parse();
     let mut session = DeveloperCommandSession::from_command(&cli.command);
 
+    if let DeveloperCommand::Inspect { trace: None, workspace: None, cluster: None } = &cli.command
+    {
+        session.workspace_ref =
+            std::env::current_dir().ok().map(|path| path.to_string_lossy().into_owned());
+    }
+
     match session.validate() {
         Err(error) => {
+            let rendered = output::validation_error_message(&error);
             let exit_code = session.complete(CommandExitStatus::InvalidInvocation, None);
-            eprintln!("{}", output::validation_error_message(&error));
+            if cli.json {
+                println!(
+                    "{}",
+                    output::render_host_command_json(
+                        cli.command.name().as_str(),
+                        CommandExitStatus::InvalidInvocation,
+                        &rendered,
+                        None,
+                        None,
+                        None,
+                    )
+                );
+            } else {
+                eprintln!("{rendered}");
+            }
             exit_code.code()
         }
         Ok(()) => {
             let outcome = dispatch(&cli.command);
-            let exit_code = session.complete(outcome.exit_status, outcome.trace_location);
-            println!("{}", outcome.output);
+            let exit_code = session.complete(outcome.exit_status, outcome.trace_location.clone());
+            if cli.json {
+                println!(
+                    "{}",
+                    output::render_host_command_json(
+                        cli.command.name().as_str(),
+                        outcome.exit_status,
+                        &outcome.output,
+                        outcome.trace_location.as_deref(),
+                        outcome.session_status.as_ref(),
+                        outcome.trace_summary.as_ref(),
+                    )
+                );
+            } else {
+                println!("{}", outcome.output);
+            }
             exit_code.code()
         }
     }
@@ -919,25 +1009,25 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                 diagnostics::diagnose_installation()
             } else {
                 let Some(workspace) = workspace.as_ref() else {
-                    return DispatchOutcome {
-                        exit_status: CommandExitStatus::InvalidInvocation,
-                        output: output::validation_error_message(
-                            &CliValidationError::MissingWorkspaceRef(CommandName::Doctor),
-                        ),
-                        trace_location: None,
-                    };
+                    return DispatchOutcome::text(
+                        CommandExitStatus::InvalidInvocation,
+                        output::validation_error_message(&CliValidationError::MissingWorkspaceRef(
+                            CommandName::Doctor,
+                        )),
+                        None,
+                    );
                 };
                 diagnostics::diagnose_workspace(workspace)
             };
-            DispatchOutcome {
-                exit_status: if report.ready {
+            DispatchOutcome::text(
+                if report.ready {
                     CommandExitStatus::Succeeded
                 } else {
                     CommandExitStatus::InvalidInvocation
                 },
-                output: output::render_diagnostics(&report),
-                trace_location: None,
-            }
+                output::render_diagnostics(&report),
+                None,
+            )
         }
         DeveloperCommand::Run {
             workspace,
@@ -966,22 +1056,22 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                     match cli_workspace::resolve_workspace(workspace.as_deref()) {
                         Ok(workspace) => workspace,
                         Err(error) => {
-                            return DispatchOutcome {
-                                exit_status: CommandExitStatus::InvalidInvocation,
-                                output: format!("workspace resolution failed: {error}"),
-                                trace_location: None,
-                            };
+                            return DispatchOutcome::text(
+                                CommandExitStatus::InvalidInvocation,
+                                format!("workspace resolution failed: {error}"),
+                                None,
+                            );
                         }
                     };
                 let workspace = &resolved_workspace;
                 if !workspace.is_dir() {
-                    return DispatchOutcome {
-                        exit_status: CommandExitStatus::InvalidInvocation,
-                        output: output::validation_error_message(
-                            &CliValidationError::MissingWorkspaceRef(CommandName::Run),
-                        ),
-                        trace_location: None,
-                    };
+                    return DispatchOutcome::text(
+                        CommandExitStatus::InvalidInvocation,
+                        output::validation_error_message(&CliValidationError::MissingWorkspaceRef(
+                            CommandName::Run,
+                        )),
+                        None,
+                    );
                 }
                 let report = if *compatibility {
                     diagnostics::diagnose_workspace(workspace)
@@ -989,11 +1079,11 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                     diagnostics::diagnose_native_direct_run_workspace(workspace)
                 };
                 if !report.ready {
-                    return DispatchOutcome {
-                        exit_status: CommandExitStatus::InvalidInvocation,
-                        output: output::render_diagnostics(&report),
-                        trace_location: None,
-                    };
+                    return DispatchOutcome::text(
+                        CommandExitStatus::InvalidInvocation,
+                        output::render_diagnostics(&report),
+                        None,
+                    );
                 }
 
                 let result = if *compatibility {
@@ -1021,117 +1111,97 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                 };
 
                 match result {
-                    Ok(report) => DispatchOutcome {
-                        exit_status: report.exit_status,
-                        output: report.terminal_output,
-                        trace_location: report.trace_location,
-                    },
-                    Err(error) => DispatchOutcome {
-                        exit_status: CommandExitStatus::InvalidInvocation,
-                        output: error.to_string(),
-                        trace_location: None,
-                    },
+                    Ok(report) => DispatchOutcome::from_run_report(report),
+                    Err(error) => DispatchOutcome::text(
+                        CommandExitStatus::InvalidInvocation,
+                        error.to_string(),
+                        None,
+                    ),
                 }
             } else {
                 match session::execute_run_with_target(workspace.as_deref(), cluster.as_deref()) {
-                    Ok(report) => DispatchOutcome {
-                        exit_status: report.exit_status,
-                        output: report.terminal_output,
-                        trace_location: None,
-                    },
-                    Err(error) => DispatchOutcome {
-                        exit_status: CommandExitStatus::NonSuccess,
-                        output: session::render_error(command.name().as_str(), &error),
-                        trace_location: None,
-                    },
+                    Ok(report) => DispatchOutcome::from_session_report(report),
+                    Err(error) => DispatchOutcome::text(
+                        CommandExitStatus::NonSuccess,
+                        session::render_error(command.name().as_str(), &error),
+                        None,
+                    ),
                 }
             }
         }
         DeveloperCommand::Workflow { command } => match command {
             WorkflowSubcommand::List { workspace } => {
                 match workflow::execute_list(workspace.as_deref()) {
-                    Ok(report) => DispatchOutcome {
-                        exit_status: report.exit_status,
-                        output: report.terminal_output,
-                        trace_location: None,
-                    },
-                    Err(error) => DispatchOutcome {
-                        exit_status: CommandExitStatus::NonSuccess,
-                        output: format!("workflow error: {error}"),
-                        trace_location: None,
-                    },
+                    Ok(report) => {
+                        DispatchOutcome::text(report.exit_status, report.terminal_output, None)
+                    }
+                    Err(error) => DispatchOutcome::text(
+                        CommandExitStatus::NonSuccess,
+                        format!("workflow error: {error}"),
+                        None,
+                    ),
                 }
             }
             WorkflowSubcommand::Run { name, workspace, goal } => {
                 match workflow::execute_run(workspace.as_deref(), name, goal.as_deref()) {
-                    Ok(report) => DispatchOutcome {
-                        exit_status: report.exit_status,
-                        output: report.terminal_output,
-                        trace_location: None,
-                    },
-                    Err(error) => DispatchOutcome {
-                        exit_status: CommandExitStatus::NonSuccess,
-                        output: format!("workflow error: {error}"),
-                        trace_location: None,
-                    },
+                    Ok(report) => {
+                        DispatchOutcome::text(report.exit_status, report.terminal_output, None)
+                    }
+                    Err(error) => DispatchOutcome::text(
+                        CommandExitStatus::NonSuccess,
+                        format!("workflow error: {error}"),
+                        None,
+                    ),
                 }
             }
             WorkflowSubcommand::Status { workspace } => {
                 match workflow::execute_status(workspace.as_deref()) {
-                    Ok(report) => DispatchOutcome {
-                        exit_status: report.exit_status,
-                        output: report.terminal_output,
-                        trace_location: None,
-                    },
-                    Err(error) => DispatchOutcome {
-                        exit_status: CommandExitStatus::NonSuccess,
-                        output: format!("workflow error: {error}"),
-                        trace_location: None,
-                    },
+                    Ok(report) => {
+                        DispatchOutcome::text(report.exit_status, report.terminal_output, None)
+                    }
+                    Err(error) => DispatchOutcome::text(
+                        CommandExitStatus::NonSuccess,
+                        format!("workflow error: {error}"),
+                        None,
+                    ),
                 }
             }
             WorkflowSubcommand::Resume { workspace } => {
                 match workflow::execute_resume(workspace.as_deref()) {
-                    Ok(report) => DispatchOutcome {
-                        exit_status: report.exit_status,
-                        output: report.terminal_output,
-                        trace_location: None,
-                    },
-                    Err(error) => DispatchOutcome {
-                        exit_status: CommandExitStatus::NonSuccess,
-                        output: format!("workflow error: {error}"),
-                        trace_location: None,
-                    },
+                    Ok(report) => {
+                        DispatchOutcome::text(report.exit_status, report.terminal_output, None)
+                    }
+                    Err(error) => DispatchOutcome::text(
+                        CommandExitStatus::NonSuccess,
+                        format!("workflow error: {error}"),
+                        None,
+                    ),
                 }
             }
             WorkflowSubcommand::Inspect { workspace } => {
                 match workflow::execute_inspect(workspace.as_deref()) {
-                    Ok(report) => DispatchOutcome {
-                        exit_status: report.exit_status,
-                        output: report.terminal_output,
-                        trace_location: None,
-                    },
-                    Err(error) => DispatchOutcome {
-                        exit_status: CommandExitStatus::NonSuccess,
-                        output: format!("workflow error: {error}"),
-                        trace_location: None,
-                    },
+                    Ok(report) => {
+                        DispatchOutcome::text(report.exit_status, report.terminal_output, None)
+                    }
+                    Err(error) => DispatchOutcome::text(
+                        CommandExitStatus::NonSuccess,
+                        format!("workflow error: {error}"),
+                        None,
+                    ),
                 }
             }
         },
         DeveloperCommand::Checkpoint { command } => match command {
             CheckpointSubcommand::List { workspace, cluster } => {
                 match checkpoint::execute_list(workspace.as_deref(), cluster.as_deref()) {
-                    Ok(report) => DispatchOutcome {
-                        exit_status: report.exit_status,
-                        output: report.terminal_output,
-                        trace_location: None,
-                    },
-                    Err(error) => DispatchOutcome {
-                        exit_status: CommandExitStatus::NonSuccess,
-                        output: format!("checkpoint error: {error}"),
-                        trace_location: None,
-                    },
+                    Ok(report) => {
+                        DispatchOutcome::text(report.exit_status, report.terminal_output, None)
+                    }
+                    Err(error) => DispatchOutcome::text(
+                        CommandExitStatus::NonSuccess,
+                        format!("checkpoint error: {error}"),
+                        None,
+                    ),
                 }
             }
             CheckpointSubcommand::Restore { checkpoint_id, workspace, cluster, force } => {
@@ -1141,57 +1211,47 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                     cluster.as_deref(),
                     *force,
                 ) {
-                    Ok(report) => DispatchOutcome {
-                        exit_status: report.exit_status,
-                        output: report.terminal_output,
-                        trace_location: None,
-                    },
-                    Err(error) => DispatchOutcome {
-                        exit_status: CommandExitStatus::NonSuccess,
-                        output: format!("checkpoint error: {error}"),
-                        trace_location: None,
-                    },
+                    Ok(report) => {
+                        DispatchOutcome::text(report.exit_status, report.terminal_output, None)
+                    }
+                    Err(error) => DispatchOutcome::text(
+                        CommandExitStatus::NonSuccess,
+                        format!("checkpoint error: {error}"),
+                        None,
+                    ),
                 }
             }
         },
         DeveloperCommand::Inspect { trace, workspace, cluster } => {
-            match inspect::execute_inspect(
-                trace.as_deref(),
-                workspace.as_deref().or(cluster.as_deref()),
-            ) {
-                Ok(report) => DispatchOutcome {
-                    exit_status: report.exit_status,
-                    output: report.terminal_output,
-                    trace_location: None,
-                },
-                Err(error) => DispatchOutcome {
-                    exit_status: match error {
+            let default_workspace = if trace.is_none() && workspace.is_none() && cluster.is_none() {
+                std::env::current_dir().ok()
+            } else {
+                None
+            };
+            let workspace_ref =
+                workspace.as_deref().or(cluster.as_deref()).or(default_workspace.as_deref());
+            match inspect::execute_inspect(trace.as_deref(), workspace_ref) {
+                Ok(report) => DispatchOutcome::from_inspect_report(report),
+                Err(error) => DispatchOutcome::text(
+                    match error {
                         inspect::InspectCommandError::InvalidSession(_) => {
                             CommandExitStatus::NonSuccess
                         }
                         _ => CommandExitStatus::TraceReadFailure,
                     },
-                    output: inspect::render_error(
-                        trace.as_deref(),
-                        workspace.as_deref().or(cluster.as_deref()),
-                        &error,
-                    ),
-                    trace_location: None,
-                },
+                    inspect::render_error(trace.as_deref(), workspace_ref, &error),
+                    None,
+                ),
             }
         }
         DeveloperCommand::Start { workspace, cluster } => {
             match session::execute_start_with_target(workspace.as_deref(), cluster.as_deref()) {
-                Ok(report) => DispatchOutcome {
-                    exit_status: report.exit_status,
-                    output: report.terminal_output,
-                    trace_location: None,
-                },
-                Err(error) => DispatchOutcome {
-                    exit_status: CommandExitStatus::NonSuccess,
-                    output: session::render_error(command.name().as_str(), &error),
-                    trace_location: None,
-                },
+                Ok(report) => DispatchOutcome::from_session_report(report),
+                Err(error) => DispatchOutcome::text(
+                    CommandExitStatus::NonSuccess,
+                    session::render_error(command.name().as_str(), &error),
+                    None,
+                ),
             }
         }
         DeveloperCommand::Capture {
@@ -1214,31 +1274,23 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                 zone.as_deref(),
                 owner.as_deref(),
             ) {
-                Ok(report) => DispatchOutcome {
-                    exit_status: report.exit_status,
-                    output: report.terminal_output,
-                    trace_location: None,
-                },
-                Err(error) => DispatchOutcome {
-                    exit_status: CommandExitStatus::NonSuccess,
-                    output: session::render_error(command.name().as_str(), &error),
-                    trace_location: None,
-                },
+                Ok(report) => DispatchOutcome::from_session_report(report),
+                Err(error) => DispatchOutcome::text(
+                    CommandExitStatus::NonSuccess,
+                    session::render_error(command.name().as_str(), &error),
+                    None,
+                ),
             }
         }
         DeveloperCommand::Flow { name, workspace, cluster } => {
             match session::execute_flow_with_target(workspace.as_deref(), cluster.as_deref(), name)
             {
-                Ok(report) => DispatchOutcome {
-                    exit_status: report.exit_status,
-                    output: report.terminal_output,
-                    trace_location: None,
-                },
-                Err(error) => DispatchOutcome {
-                    exit_status: CommandExitStatus::NonSuccess,
-                    output: session::render_error(command.name().as_str(), &error),
-                    trace_location: None,
-                },
+                Ok(report) => DispatchOutcome::from_session_report(report),
+                Err(error) => DispatchOutcome::text(
+                    CommandExitStatus::NonSuccess,
+                    session::render_error(command.name().as_str(), &error),
+                    None,
+                ),
             }
         }
         DeveloperCommand::Plan { workspace, cluster, flow, no_flow, confirm } => {
@@ -1249,58 +1301,42 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                 *no_flow,
                 *confirm,
             ) {
-                Ok(report) => DispatchOutcome {
-                    exit_status: report.exit_status,
-                    output: report.terminal_output,
-                    trace_location: None,
-                },
-                Err(error) => DispatchOutcome {
-                    exit_status: CommandExitStatus::NonSuccess,
-                    output: session::render_error(command.name().as_str(), &error),
-                    trace_location: None,
-                },
+                Ok(report) => DispatchOutcome::from_session_report(report),
+                Err(error) => DispatchOutcome::text(
+                    CommandExitStatus::NonSuccess,
+                    session::render_error(command.name().as_str(), &error),
+                    None,
+                ),
             }
         }
         DeveloperCommand::Step { workspace, cluster } => {
             match session::execute_step_with_target(workspace.as_deref(), cluster.as_deref()) {
-                Ok(report) => DispatchOutcome {
-                    exit_status: report.exit_status,
-                    output: report.terminal_output,
-                    trace_location: None,
-                },
-                Err(error) => DispatchOutcome {
-                    exit_status: CommandExitStatus::NonSuccess,
-                    output: session::render_error(command.name().as_str(), &error),
-                    trace_location: None,
-                },
+                Ok(report) => DispatchOutcome::from_session_report(report),
+                Err(error) => DispatchOutcome::text(
+                    CommandExitStatus::NonSuccess,
+                    session::render_error(command.name().as_str(), &error),
+                    None,
+                ),
             }
         }
         DeveloperCommand::Status { workspace, cluster } => {
             match session::execute_status_with_target(workspace.as_deref(), cluster.as_deref()) {
-                Ok(report) => DispatchOutcome {
-                    exit_status: report.exit_status,
-                    output: report.terminal_output,
-                    trace_location: None,
-                },
-                Err(error) => DispatchOutcome {
-                    exit_status: CommandExitStatus::NonSuccess,
-                    output: session::render_error(command.name().as_str(), &error),
-                    trace_location: None,
-                },
+                Ok(report) => DispatchOutcome::from_session_report(report),
+                Err(error) => DispatchOutcome::text(
+                    CommandExitStatus::NonSuccess,
+                    session::render_error(command.name().as_str(), &error),
+                    None,
+                ),
             }
         }
         DeveloperCommand::Next { workspace, cluster } => {
             match session::execute_next_with_target(workspace.as_deref(), cluster.as_deref()) {
-                Ok(report) => DispatchOutcome {
-                    exit_status: report.exit_status,
-                    output: report.terminal_output,
-                    trace_location: None,
-                },
-                Err(error) => DispatchOutcome {
-                    exit_status: CommandExitStatus::NonSuccess,
-                    output: session::render_error(command.name().as_str(), &error),
-                    trace_location: None,
-                },
+                Ok(report) => DispatchOutcome::from_session_report(report),
+                Err(error) => DispatchOutcome::text(
+                    CommandExitStatus::NonSuccess,
+                    session::render_error(command.name().as_str(), &error),
+                    None,
+                ),
             }
         }
         DeveloperCommand::Init {
@@ -1333,16 +1369,14 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                 owner: owner.as_deref(),
                 force: *force,
             }) {
-                Ok(report) => DispatchOutcome {
-                    exit_status: report.exit_status,
-                    output: report.terminal_output,
-                    trace_location: None,
-                },
-                Err(error) => DispatchOutcome {
-                    exit_status: CommandExitStatus::NonSuccess,
-                    output: format!("init error: {error}"),
-                    trace_location: None,
-                },
+                Ok(report) => {
+                    DispatchOutcome::text(report.exit_status, report.terminal_output, None)
+                }
+                Err(error) => DispatchOutcome::text(
+                    CommandExitStatus::NonSuccess,
+                    format!("init error: {error}"),
+                    None,
+                ),
             }
         }
         DeveloperCommand::Config { command } => {
@@ -1514,56 +1548,48 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
             };
 
             match result {
-                Ok(report) => DispatchOutcome {
-                    exit_status: report.exit_status,
-                    output: report.terminal_output,
-                    trace_location: None,
-                },
-                Err(error) => DispatchOutcome {
-                    exit_status: CommandExitStatus::NonSuccess,
-                    output: format!("config error: {error}"),
-                    trace_location: None,
-                },
+                Ok(report) => {
+                    DispatchOutcome::text(report.exit_status, report.terminal_output, None)
+                }
+                Err(error) => DispatchOutcome::text(
+                    CommandExitStatus::NonSuccess,
+                    format!("config error: {error}"),
+                    None,
+                ),
             }
         }
         DeveloperCommand::Cluster { command } => match command {
             ClusterSubcommand::Init { workspace, cluster_id, member } => {
                 match cluster::execute_init(workspace, cluster_id, member) {
-                    Ok(report) => DispatchOutcome {
-                        exit_status: report.exit_status,
-                        output: report.terminal_output,
-                        trace_location: None,
-                    },
-                    Err(error) => DispatchOutcome {
-                        exit_status: CommandExitStatus::NonSuccess,
-                        output: format!("cluster error: {error}"),
-                        trace_location: None,
-                    },
+                    Ok(report) => {
+                        DispatchOutcome::text(report.exit_status, report.terminal_output, None)
+                    }
+                    Err(error) => DispatchOutcome::text(
+                        CommandExitStatus::NonSuccess,
+                        format!("cluster error: {error}"),
+                        None,
+                    ),
                 }
             }
             ClusterSubcommand::Status { workspace } => match cluster::execute_status(workspace) {
-                Ok(report) => DispatchOutcome {
-                    exit_status: report.exit_status,
-                    output: report.terminal_output,
-                    trace_location: None,
-                },
-                Err(error) => DispatchOutcome {
-                    exit_status: CommandExitStatus::NonSuccess,
-                    output: format!("cluster error: {error}"),
-                    trace_location: None,
-                },
+                Ok(report) => {
+                    DispatchOutcome::text(report.exit_status, report.terminal_output, None)
+                }
+                Err(error) => DispatchOutcome::text(
+                    CommandExitStatus::NonSuccess,
+                    format!("cluster error: {error}"),
+                    None,
+                ),
             },
             ClusterSubcommand::Inspect { workspace } => match cluster::execute_inspect(workspace) {
-                Ok(report) => DispatchOutcome {
-                    exit_status: report.exit_status,
-                    output: report.terminal_output,
-                    trace_location: None,
-                },
-                Err(error) => DispatchOutcome {
-                    exit_status: CommandExitStatus::NonSuccess,
-                    output: format!("cluster error: {error}"),
-                    trace_location: None,
-                },
+                Ok(report) => {
+                    DispatchOutcome::text(report.exit_status, report.terminal_output, None)
+                }
+                Err(error) => DispatchOutcome::text(
+                    CommandExitStatus::NonSuccess,
+                    format!("cluster error: {error}"),
+                    None,
+                ),
             },
         },
     }

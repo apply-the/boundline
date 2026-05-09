@@ -20,16 +20,16 @@ If the resolved workspace trace reports compatibility ownership, keep that expli
 - Preserve any confirmed `latest_trace_ref` from prior turns
 
 ## Shell-Enabled Path
-If `trace_ref` is known, run `cargo run --bin boundline -- inspect --trace <trace>`. Otherwise, if `workspace_ref` is known, run `cargo run --bin boundline -- inspect --workspace <workspace>`. Workspace-based inspect may reuse the active session's `latest_trace_ref` before falling back to the latest workspace trace.
+If `trace_ref` is known, run `cargo run --bin boundline -- inspect --trace <trace> --json`. Otherwise, if `workspace_ref` is known, run `cargo run --bin boundline -- inspect --workspace <workspace> --json`. If the assistant is already anchored in the target workspace and neither field is missing, run `cargo run --bin boundline -- inspect --json` exactly once. Workspace-based inspect may reuse the active session's `latest_trace_ref` before falling back to the latest workspace trace.
 
 ## Chat-Only Path
 Ask only for the missing `trace_ref` or `workspace_ref`, then provide one exact copyable command:
 
-`cargo run --bin boundline -- inspect --trace <trace>`
+`cargo run --bin boundline -- inspect --trace <trace> --json`
 
 or
 
-`cargo run --bin boundline -- inspect --workspace <workspace>`
+`cargo run --bin boundline -- inspect --workspace <workspace> --json`
 
 Wait for pasted output before continuing. If workspace-based inspect reports a session error, route to `/boundline-start`. If trace reading fails, ask for a corrected trace reference or workspace and provide the replacement inspect command.
 
