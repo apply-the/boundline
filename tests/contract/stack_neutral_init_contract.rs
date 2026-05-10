@@ -58,7 +58,7 @@ fn init_reports_seeded_routes_and_hygiene_actions() {
     assert_eq!(init.status.code(), Some(0), "{init_text}");
     assert!(init_text.contains("route_setup:"), "{init_text}");
     assert!(
-        init_text.contains("seeded planning: copilot:gpt-5.4 [assistant-default]"),
+        init_text.contains("seeded planning: copilot:gpt-5.5 [assistant-default]"),
         "{init_text}"
     );
     assert!(init_text.contains("workspace_hygiene:"), "{init_text}");
@@ -91,7 +91,7 @@ fn init_reports_assistant_fallback_when_selected_runtime_is_unavailable() {
     assert!(init_text.contains("- codex: missing from PATH or extension surface"), "{init_text}");
     assert!(
         init_text.contains(
-            "seeded planning: copilot:gpt-5.4 [assistant-default fallback-from=codex-unavailable]"
+            "seeded planning: copilot:gpt-5.5 [assistant-default fallback-from=codex-unavailable]"
         ),
         "{init_text}"
     );

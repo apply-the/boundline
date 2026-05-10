@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::path::Path;
 
 use crate::domain::configuration::RuntimeKind;
 
@@ -23,11 +24,41 @@ impl AssistantSurface {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum DocsExportSurface {
+    Canon,
+    AssistantShared,
+    Claude,
+    Codex,
+    Copilot,
+    Gemini,
+}
+
+impl DocsExportSurface {
+    pub const fn plan_label(self) -> &'static str {
+        match self {
+            Self::Canon => "Canon reference docs",
+            Self::AssistantShared => "assistant shared docs",
+            Self::Claude => "Claude command pack docs",
+            Self::Codex => "Codex command pack docs",
+            Self::Copilot => "Copilot prompt pack docs",
+            Self::Gemini => "Gemini CLI docs",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AssistantAsset {
     pub relative_path: &'static str,
     pub contents: &'static str,
     pub surface: AssistantSurface,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DocsExportAsset {
+    pub relative_path: String,
+    pub contents: &'static str,
+    pub surface: DocsExportSurface,
 }
 
 macro_rules! asset {
@@ -41,6 +72,28 @@ macro_rules! asset {
 }
 
 const README_ASSET: AssistantAsset = asset!(AssistantSurface::SharedReadme, "assistant/README.md");
+
+const CANON_DOCS_EXPORT_CONTENT: &str = r#"# Boundline And Canon
+
+Boundline is the primary workspace tool. Canon is optional and only participates
+when you explicitly choose governed execution.
+
+## Where Files Go
+
+- Boundline session state: `.boundline/session.json`
+- Boundline routing and workspace preferences: `.boundline/config.toml`
+- Boundline compatibility execution profile: `.boundline/execution.json`
+- Boundline traces and checkpoints: `.boundline/traces/`, `.boundline/checkpoints/`
+- Canon governed artifacts, when a governed runtime runs: `.canon/runs/<run-ref>/...`
+
+## Session Naming
+
+This file is a stable repo-local reference exported by `boundline init --export-docs`.
+Documentation export is create-only by default. Rerun with `--refresh` to update
+it in place, `--diff` to preview changes without writing, or `--to <path>` to
+export it under another root. This file is not emitted per session, so it does
+not use slugs or timestamps.
+"#;
 
 static CLAUDE_ASSETS: &[AssistantAsset] = &[
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-architecture.md"),
@@ -200,11 +253,70 @@ pub fn assets_for_assistants(assistants: &[RuntimeKind]) -> Vec<&'static Assista
     assets
 }
 
+pub fn docs_assets_for_assistants(assistants: &[RuntimeKind]) -> Vec<DocsExportAsset> {
+    docs_assets_for_assistants_under(assistants, Path::new("docs/boundline"))
+}
+
+pub fn docs_assets_for_assistants_under(
+    assistants: &[RuntimeKind],
+    docs_root: &Path,
+) -> Vec<DocsExportAsset> {
+    let mut assets = vec![DocsExportAsset {
+        relative_path: docs_root.join("canon.md").to_string_lossy().into_owned(),
+        contents: CANON_DOCS_EXPORT_CONTENT,
+        surface: DocsExportSurface::Canon,
+    }];
+
+    if assistants.is_empty() {
+        return assets;
+    }
+
+    let assistant_readme_path = docs_relative_path_for_asset_under(docs_root, &README_ASSET);
+    let mut seen = BTreeSet::from([
+        docs_root.join("canon.md").to_string_lossy().into_owned(),
+        assistant_readme_path.clone(),
+    ]);
+    assets.push(DocsExportAsset {
+        relative_path: assistant_readme_path,
+        contents: README_ASSET.contents,
+        surface: DocsExportSurface::AssistantShared,
+    });
+
+    for runtime in assistants.iter().copied() {
+        for asset in runtime_assets(runtime) {
+            let relative_path = docs_relative_path_for_asset_under(docs_root, asset);
+            if seen.insert(relative_path.clone()) {
+                assets.push(DocsExportAsset {
+                    relative_path,
+                    contents: asset.contents,
+                    surface: docs_surface_for_runtime(runtime),
+                });
+            }
+        }
+    }
+
+    assets
+}
+
 fn runtime_assets(runtime: RuntimeKind) -> &'static [AssistantAsset] {
     match runtime {
         RuntimeKind::Claude => CLAUDE_ASSETS,
         RuntimeKind::Codex => CODEX_ASSETS,
         RuntimeKind::Copilot => COPILOT_ASSETS,
         RuntimeKind::Gemini => GEMINI_ASSETS,
+    }
+}
+
+fn docs_relative_path_for_asset_under(docs_root: &Path, asset: &AssistantAsset) -> String {
+    let suffix = asset.relative_path.strip_prefix("assistant/").unwrap_or(asset.relative_path);
+    docs_root.join("assistant").join(suffix).to_string_lossy().into_owned()
+}
+
+fn docs_surface_for_runtime(runtime: RuntimeKind) -> DocsExportSurface {
+    match runtime {
+        RuntimeKind::Claude => DocsExportSurface::Claude,
+        RuntimeKind::Codex => DocsExportSurface::Codex,
+        RuntimeKind::Copilot => DocsExportSurface::Copilot,
+        RuntimeKind::Gemini => DocsExportSurface::Gemini,
     }
 }

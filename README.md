@@ -66,6 +66,14 @@ runtime is unavailable for the missing defaults, init either falls back to
 another selected available assistant and marks that fallback in `route_setup`,
 or stops explicitly when no selected assistant can credibly fill the remaining
 slots.
+Add `--export-docs` when you want repo-local reference docs under
+`docs/boundline/`: Boundline writes a stable Canon reference plus the selected
+assistant reference files there. Documentation export is create-only by
+default: if target files already exist, Boundline stops and reports the
+conflicting paths. Use `--refresh` to update generated docs in place, `--diff`
+to preview changes without writing, `--to <path>` to export under another
+root, or `--force` for explicit overwrite behavior. Those exported docs are not
+session artifacts, so they do not use slugs or timestamps.
 When domain families or repository cues are credible, init also applies
 merge-only hygiene defaults such as `.gitignore` and `.dockerignore` entries
 without removing existing local lines, including legacy ESLint ignores and
@@ -161,7 +169,7 @@ Advanced execution-profile workflows are documented outside this README.
 | `boundline status` | See the current state and suggested follow-up |
 | `boundline next` | Ask Boundline for the next action |
 | `boundline inspect` | Read the latest trace in more detail |
-| `boundline init` | Scaffold optional `.boundline` files, assistant defaults, and bounded hygiene setup |
+| `boundline init` | Scaffold optional `.boundline` files, assistant defaults, bounded hygiene setup, and optional create-only repo-local reference docs |
 | `boundline config` | Inspect or change routing and domain defaults |
 | `boundline workflow ...` | Run a named workflow defined by the repo |
 | `boundline cluster ...` | Set up or inspect a multi-repo cluster |
@@ -174,6 +182,7 @@ Advanced execution-profile workflows are documented outside this README.
 | `.boundline/checkpoints/` | Local rollback manifests captured before mutating `run` and `step` |
 | `.boundline/traces/` | Execution history and inspectable traces |
 | `.boundline/config.toml` | Local routing and domain-template settings |
+| `docs/boundline/` | Optional repo-local Canon and assistant reference docs exported by `boundline init --export-docs` by default, or another root via `--to` |
 
 ## Common Examples
 
@@ -219,7 +228,7 @@ Boundline is the main tool. Canon is a supporting governed runtime.
 - Boundline owns the operator flow, session state, planning, execution, and validation.
 - Canon only enters when you explicitly want governed stages, approvals, or governed artifacts.
 
-The current release documents Canon `0.43.0` support on the
+The current release documents Canon `0.44.0` support on the
 `canon governance start|refresh|capabilities --json` `v1` adapter surface.
 
 ## Read More

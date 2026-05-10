@@ -79,6 +79,200 @@ fn init_scaffolds_execution_and_config_files() {
 }
 
 #[test]
+fn init_docs_export_is_create_only_by_default_when_targets_exist() {
+    let workspace = empty_workspace("boundline-init-docs-create-only");
+
+    let initial = run_init_in(
+        &workspace,
+        &[
+            "init",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--assistant",
+            "copilot",
+            "--export-docs",
+        ],
+    );
+    let initial_text = terminal_text(&initial);
+    assert_eq!(initial.status.code(), Some(0), "{initial_text}");
+
+    let canon_doc = workspace.join("docs/boundline/canon.md");
+    fs::write(&canon_doc, "stale canon doc\n").unwrap();
+
+    let blocked = run_init_in(
+        &workspace,
+        &[
+            "init",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--assistant",
+            "copilot",
+            "--export-docs",
+        ],
+    );
+    let blocked_text = terminal_text(&blocked);
+
+    assert_ne!(blocked.status.code(), Some(0), "{blocked_text}");
+    assert!(blocked_text.contains("documentation export blocked"), "{blocked_text}");
+    assert!(blocked_text.contains("docs_export_root: docs/boundline"), "{blocked_text}");
+    assert!(blocked_text.contains("--refresh"), "{blocked_text}");
+    assert!(blocked_text.contains("--diff"), "{blocked_text}");
+    assert!(blocked_text.contains("--to <path>"), "{blocked_text}");
+    assert_eq!(fs::read_to_string(&canon_doc).unwrap(), "stale canon doc\n");
+}
+
+#[test]
+fn init_docs_export_diff_reports_changes_without_writing() {
+    let workspace = empty_workspace("boundline-init-docs-diff");
+
+    let initial = run_init_in(
+        &workspace,
+        &[
+            "init",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--assistant",
+            "copilot",
+            "--export-docs",
+        ],
+    );
+    let initial_text = terminal_text(&initial);
+    assert_eq!(initial.status.code(), Some(0), "{initial_text}");
+
+    let canon_doc = workspace.join("docs/boundline/canon.md");
+    fs::write(&canon_doc, "stale canon doc\n").unwrap();
+
+    let diff = run_init_in(
+        &workspace,
+        &[
+            "init",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--assistant",
+            "copilot",
+            "--export-docs",
+            "--diff",
+        ],
+    );
+    let diff_text = terminal_text(&diff);
+
+    assert_eq!(diff.status.code(), Some(0), "{diff_text}");
+    assert!(diff_text.contains("documentation export diff"), "{diff_text}");
+    assert!(diff_text.contains("update docs/boundline/canon.md"), "{diff_text}");
+    assert_eq!(fs::read_to_string(&canon_doc).unwrap(), "stale canon doc\n");
+}
+
+#[test]
+fn init_docs_export_refresh_updates_existing_docs_without_force() {
+    let workspace = empty_workspace("boundline-init-docs-refresh");
+
+    let initial = run_init_in(
+        &workspace,
+        &[
+            "init",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--assistant",
+            "copilot",
+            "--export-docs",
+        ],
+    );
+    let initial_text = terminal_text(&initial);
+    assert_eq!(initial.status.code(), Some(0), "{initial_text}");
+
+    let canon_doc = workspace.join("docs/boundline/canon.md");
+    fs::write(&canon_doc, "stale canon doc\n").unwrap();
+
+    let refresh = run_init_in(
+        &workspace,
+        &[
+            "init",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--assistant",
+            "copilot",
+            "--export-docs",
+            "--refresh",
+        ],
+    );
+    let refresh_text = terminal_text(&refresh);
+
+    assert_eq!(refresh.status.code(), Some(0), "{refresh_text}");
+    assert!(refresh_text.contains("docs_export:"), "{refresh_text}");
+    assert!(
+        refresh_text.contains("Canon reference docs: 0 created, 1 updated, 0 unchanged"),
+        "{refresh_text}"
+    );
+    assert_ne!(fs::read_to_string(&canon_doc).unwrap(), "stale canon doc\n");
+}
+
+#[test]
+fn init_docs_export_to_custom_root_writes_under_requested_directory() {
+    let workspace = empty_workspace("boundline-init-docs-custom-root");
+
+    let init = run_init_in(
+        &workspace,
+        &[
+            "init",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--assistant",
+            "copilot",
+            "--export-docs",
+            "--to",
+            "docs/reference/boundline",
+        ],
+    );
+    let init_text = terminal_text(&init);
+
+    assert_eq!(init.status.code(), Some(0), "{init_text}");
+    assert!(init_text.contains("docs_export:"), "{init_text}");
+    assert!(init_text.contains("root: docs/reference/boundline"), "{init_text}");
+    assert!(workspace.join("docs/reference/boundline/canon.md").is_file());
+    assert!(workspace.join("docs/reference/boundline/assistant/README.md").is_file());
+    assert!(!workspace.join("docs/boundline/canon.md").exists());
+}
+
+#[test]
+fn init_docs_export_to_custom_root_works_after_workspace_is_initialized() {
+    let workspace = empty_workspace("boundline-init-docs-custom-root-rerun");
+
+    let initial = run_init_in(
+        &workspace,
+        &[
+            "init",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--assistant",
+            "copilot",
+            "--export-docs",
+        ],
+    );
+    let initial_text = terminal_text(&initial);
+    assert_eq!(initial.status.code(), Some(0), "{initial_text}");
+
+    let rerun = run_init_in(
+        &workspace,
+        &[
+            "init",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--assistant",
+            "copilot",
+            "--export-docs",
+            "--to",
+            "docs/reference/boundline",
+        ],
+    );
+    let rerun_text = terminal_text(&rerun);
+
+    assert_eq!(rerun.status.code(), Some(0), "{rerun_text}");
+    assert!(rerun_text.contains("root: docs/reference/boundline"), "{rerun_text}");
+    assert!(workspace.join("docs/reference/boundline/canon.md").is_file());
+    assert!(workspace.join("docs/reference/boundline/assistant/README.md").is_file());
+}
+
+#[test]
 fn init_previews_existing_assistant_assets_without_force() {
     let workspace = empty_workspace("boundline-init-assistant-preview");
     fs::create_dir_all(workspace.join("assistant/copilot/prompts")).unwrap();
@@ -114,7 +308,7 @@ fn init_auto_seeds_routes_from_selected_assistant() {
     assert!(init_text.contains("route_setup:"), "{init_text}");
     assert!(init_text.contains("assistant_defaults: copilot"), "{init_text}");
     assert!(
-        init_text.contains("seeded planning: copilot:gpt-5.4 [assistant-default]"),
+        init_text.contains("seeded planning: copilot:gpt-5.5 [assistant-default]"),
         "{init_text}"
     );
 
@@ -122,7 +316,7 @@ fn init_auto_seeds_routes_from_selected_assistant() {
     assert!(config.contains("assistant_runtimes = [\"copilot\"]"), "{config}");
     assert!(config.contains("[routing.planning]"), "{config}");
     assert!(config.contains("runtime = \"copilot\""), "{config}");
-    assert!(config.contains("model = \"gpt-5.4\""), "{config}");
+    assert!(config.contains("model = \"gpt-5.5\""), "{config}");
 }
 
 #[test]
@@ -147,7 +341,7 @@ fn init_falls_back_to_available_selected_assistant_when_preferred_runtime_is_una
     assert_eq!(init.status.code(), Some(0), "{init_text}");
     assert!(
         init_text.contains(
-            "seeded planning: copilot:gpt-5.4 [assistant-default fallback-from=codex-unavailable]"
+            "seeded planning: copilot:gpt-5.5 [assistant-default fallback-from=codex-unavailable]"
         ),
         "{init_text}"
     );
@@ -176,7 +370,7 @@ fn init_stops_when_selected_assistant_defaults_are_unavailable() {
         init_text.contains("init error: no available assistant defaults remain"),
         "{init_text}"
     );
-    assert!(init_text.contains("--route planning=copilot:gpt-5.4"), "{init_text}");
+    assert!(init_text.contains("--route planning=copilot:gpt-5.5"), "{init_text}");
 }
 
 #[test]
@@ -200,7 +394,7 @@ fn init_keeps_explicit_route_and_seeds_remaining_slots() {
     assert!(init_text.contains("route_setup:"), "{init_text}");
     assert!(init_text.contains("explicit planning: copilot:gpt-4o [explicit]"), "{init_text}");
     assert!(
-        init_text.contains("seeded verification: copilot:gpt-5.4 [assistant-default]"),
+        init_text.contains("seeded verification: copilot:gpt-5.5 [assistant-default]"),
         "{init_text}"
     );
     assert!(
@@ -210,7 +404,7 @@ fn init_keeps_explicit_route_and_seeds_remaining_slots() {
 
     let config = fs::read_to_string(workspace.join(".boundline/config.toml")).unwrap();
     assert!(config.contains("model = \"gpt-4o\""), "{config}");
-    assert!(config.contains("model = \"gpt-5.4\""), "{config}");
+    assert!(config.contains("model = \"gpt-5.5\""), "{config}");
 }
 
 #[test]
@@ -253,7 +447,7 @@ fn init_rejects_malformed_route_with_actionable_example_and_no_mutation() {
     assert_ne!(init.status.code(), Some(0), "{init_text}");
     assert!(init_text.contains("init error:"), "{init_text}");
     assert!(init_text.contains("SLOT=RUNTIME:MODEL"), "{init_text}");
-    assert!(init_text.contains("planning=copilot:gpt-5.4"), "{init_text}");
+    assert!(init_text.contains("planning=copilot:gpt-5.5"), "{init_text}");
     assert!(!workspace.join(".boundline/config.toml").exists(), "{init_text}");
     assert!(!workspace.join(".boundline/execution.json").exists(), "{init_text}");
 }

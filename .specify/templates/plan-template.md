@@ -42,6 +42,7 @@
 - Sequential-first design: Confirm one-step-at-a-time execution or justify why the constitution allows an exception.
 - Tool-agent symmetry: Show how reasoning and action remain explicit in the execution model.
 - Observability and explicit intelligence: List trace surfaces, visible decisions, failure signals, and any heuristic behavior that must be exposed.
+- Catalog currency: Confirm current public provider docs were checked, the bundled model catalog was refreshed when needed, and the delta or no-change rationale is linked from the plan.
 - Non-goals and external separation: Confirm the plan does not depend on Canon behavior beyond bounded governance/evidence boundaries or reintroduce deferred scope such as councils or voting outside an explicitly reprioritized, bounded review slice, provider abstraction complexity beyond the approved slice, long-term memory, UI/UX, or deployment pipelines.
 - Minimal slice: Explain the smallest independently valuable capability delivered by this plan.
 

@@ -193,7 +193,7 @@ fn trace_summary_projects_route_owner_and_effective_routing_snapshot() {
     assert!(rendered.contains("route_owner: compatibility"), "{rendered}");
     assert!(
         rendered.contains(
-            "route_config_projection: effective_routing: planning=codex/gpt-5-codex [built-in], implementation=codex/gpt-5-codex [built-in], verification=copilot/gpt-5.4 [built-in], review=claude/reviewer-1 [workspace], adjudication=codex/gpt-5-codex [built-in]"
+            "route_config_projection: effective_routing: planning=codex/gpt-5-codex [built-in], implementation=codex/gpt-5-codex [built-in], verification=copilot/gpt-5.5 [built-in], review=claude/reviewer-1 [workspace], adjudication=codex/gpt-5-codex [built-in]"
         ),
         "{rendered}"
     );

@@ -206,7 +206,7 @@ fn config_show_effective_surfaces_assistant_bindings() {
     assert_eq!(show.status.code(), Some(0), "{show_text}");
     assert!(
         show_text.contains(
-            "effective_routing: planning=codex/gpt-5-codex [workspace], implementation=copilot/gpt-5.4 [workspace]"
+            "effective_routing: planning=codex/gpt-5-codex [workspace], implementation=copilot/gpt-5.5 [workspace]"
         ),
         "{show_text}"
     );
@@ -319,7 +319,7 @@ fn config_show_effective_surfaces_capability_and_effort_projection() {
     assert_eq!(show.status.code(), Some(0), "{show_text}");
     assert!(
         show_text.contains(
-            "effective_routing: planning=copilot/gpt-5.4 [workspace], implementation=claude/sonnet-4 [workspace]"
+            "effective_routing: planning=copilot/gpt-5.5 [workspace], implementation=claude/sonnet-4 [workspace]"
         ),
         "{show_text}"
     );

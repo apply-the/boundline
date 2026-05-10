@@ -46,6 +46,7 @@ fn majority_voting_accepts_and_weighted_voting_rejects_on_blocking() {
                     finding("maintainability", ReviewerDisposition::Approve),
                     finding("release", ReviewerDisposition::Concern),
                 ],
+                None,
             )
             .unwrap();
     assert_eq!(majority.decision, VoteDecision::Accepted);
@@ -62,6 +63,7 @@ fn majority_voting_accepts_and_weighted_voting_rejects_on_blocking() {
                     finding("safety", ReviewerDisposition::Block),
                     finding("maintainability", ReviewerDisposition::Approve),
                 ],
+                None,
             )
             .unwrap();
     assert_eq!(weighted.decision, VoteDecision::Rejected);
@@ -80,6 +82,7 @@ fn voting_requests_adjudication_when_no_threshold_is_met() {
                     finding("maintainability", ReviewerDisposition::Concern),
                     finding("release", ReviewerDisposition::Block),
                 ],
+                None,
             )
             .unwrap();
 
@@ -95,12 +98,13 @@ fn vote_resolution_rejects_unknown_or_duplicate_findings() {
                 finding("safety", ReviewerDisposition::Approve),
                 finding("safety", ReviewerDisposition::Concern),
             ],
+            None,
         )
         .unwrap_err();
     assert_eq!(duplicate, ReviewProfileError::DuplicateFindingReviewer("safety".to_string()));
 
     let unknown = VoteRuleDefinition::default()
-        .resolve(&reviewers(), &[finding("unknown", ReviewerDisposition::Approve)])
+        .resolve(&reviewers(), &[finding("unknown", ReviewerDisposition::Approve)], None)
         .unwrap_err();
     assert_eq!(unknown, ReviewProfileError::UnknownFindingReviewer("unknown".to_string()));
 }

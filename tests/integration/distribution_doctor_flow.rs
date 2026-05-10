@@ -3,6 +3,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::Command;
 
+use boundline::SUPPORTED_CANON_VERSION;
 use uuid::Uuid;
 
 use crate::workspace_fixture::terminal_text;
@@ -15,7 +16,7 @@ const MISSING_MODE_CAPABILITIES: &str =
 
 #[test]
 fn doctor_install_reports_a_ready_install_when_canon_matches() {
-    let canon_dir = fake_canon_directory("0.43.0");
+    let canon_dir = fake_canon_directory(SUPPORTED_CANON_VERSION);
     let output = Command::new(env!("CARGO_BIN_EXE_boundline"))
         .args(["doctor", "--install"])
         .env("PATH", &canon_dir)
@@ -35,8 +36,10 @@ fn doctor_install_reports_a_ready_install_when_canon_matches() {
 
 #[test]
 fn doctor_install_reports_missing_canon_governance_operation() {
-    let canon_dir =
-        fake_canon_directory_with_capabilities("0.43.0", MISSING_OPERATION_CAPABILITIES);
+    let canon_dir = fake_canon_directory_with_capabilities(
+        SUPPORTED_CANON_VERSION,
+        MISSING_OPERATION_CAPABILITIES,
+    );
     let output = Command::new(env!("CARGO_BIN_EXE_boundline"))
         .args(["doctor", "--install"])
         .env("PATH", &canon_dir)
@@ -53,7 +56,8 @@ fn doctor_install_reports_missing_canon_governance_operation() {
 
 #[test]
 fn doctor_install_reports_missing_canon_mode() {
-    let canon_dir = fake_canon_directory_with_capabilities("0.43.0", MISSING_MODE_CAPABILITIES);
+    let canon_dir =
+        fake_canon_directory_with_capabilities(SUPPORTED_CANON_VERSION, MISSING_MODE_CAPABILITIES);
     let output = Command::new(env!("CARGO_BIN_EXE_boundline"))
         .args(["doctor", "--install"])
         .env("PATH", &canon_dir)

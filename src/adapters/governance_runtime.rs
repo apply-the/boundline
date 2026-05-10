@@ -666,7 +666,7 @@ mod tests {
     #[test]
     fn parse_canon_capabilities_reads_supported_surface() {
         let stdout = br#"{
-            "canon_version": "0.43.0",
+            "canon_version": "0.44.0",
             "supported_schema_versions": ["2026-02-01"],
             "operations": ["start", "refresh", "capabilities"],
             "supported_modes": ["discovery", "verification", "pr-review"],
@@ -678,7 +678,7 @@ mod tests {
 
         let snapshot = parse_canon_capabilities(stdout).unwrap();
 
-        assert_eq!(snapshot.canon_version, "0.43.0");
+        assert_eq!(snapshot.canon_version, "0.44.0");
         assert_eq!(snapshot.supported_modes.len(), 3);
         assert!(snapshot.compatibility_notes.contains(&"stable-json".to_string()));
     }
@@ -701,14 +701,14 @@ mod tests {
         let workspace = temp_workspace("canon-capabilities-runtime");
         let script = write_shell_script(
             "canon-capabilities-command",
-            "#!/bin/sh\nprintf '%s' '{\"canon_version\":\"0.43.0\",\"supported_schema_versions\":[\"2026-02-01\"],\"operations\":[\"start\",\"refresh\",\"capabilities\"],\"supported_modes\":[\"verification\"],\"status_values\":[\"governed_ready\"],\"approval_state_values\":[\"not_needed\"],\"packet_readiness_values\":[\"reusable\"],\"compatibility_notes\":[\"stable-json\"]}'\n",
+            "#!/bin/sh\nprintf '%s' '{\"canon_version\":\"0.44.0\",\"supported_schema_versions\":[\"2026-02-01\"],\"operations\":[\"start\",\"refresh\",\"capabilities\"],\"supported_modes\":[\"verification\"],\"status_values\":[\"governed_ready\"],\"approval_state_values\":[\"not_needed\"],\"packet_readiness_values\":[\"reusable\"],\"compatibility_notes\":[\"stable-json\"]}'\n",
         );
 
         let snapshot = query_canon_capabilities(script.to_string_lossy().as_ref(), &workspace)
             .unwrap()
             .expect("snapshot should be parsed");
 
-        assert_eq!(snapshot.canon_version, "0.43.0");
+        assert_eq!(snapshot.canon_version, "0.44.0");
         assert_eq!(snapshot.operations, vec!["start", "refresh", "capabilities"]);
 
         fs::remove_dir_all(workspace).unwrap();

@@ -38,6 +38,10 @@ fn init_accepts_template_and_assistant_runtimes() {
             risk,
             zone,
             owner,
+            export_docs,
+            refresh,
+            diff,
+            to,
             force,
         } => {
             assert_eq!(workspace, PathBuf::from("/tmp/ws"));
@@ -53,6 +57,10 @@ fn init_accepts_template_and_assistant_runtimes() {
             assert_eq!(risk, None);
             assert_eq!(zone, None);
             assert_eq!(owner, None);
+            assert!(!export_docs);
+            assert!(!refresh);
+            assert!(!diff);
+            assert_eq!(to, None);
             assert!(force);
         }
         other => panic!("expected Init, got {other:?}"),
@@ -124,6 +132,10 @@ fn init_accepts_domain_templates_standards_and_bindings() {
             risk,
             zone,
             owner,
+            export_docs,
+            refresh,
+            diff,
+            to,
             force,
         } => {
             assert_eq!(workspace, PathBuf::from("/tmp/ws"));
@@ -142,6 +154,10 @@ fn init_accepts_domain_templates_standards_and_bindings() {
             assert_eq!(risk, None);
             assert_eq!(zone, None);
             assert_eq!(owner, None);
+            assert!(!export_docs);
+            assert!(!refresh);
+            assert!(!diff);
+            assert_eq!(to, None);
             assert!(!force);
         }
         other => panic!("expected Init, got {other:?}"),
@@ -167,6 +183,10 @@ fn init_accepts_workspace_without_template() {
             risk,
             zone,
             owner,
+            export_docs,
+            refresh,
+            diff,
+            to,
             force,
         } => {
             assert_eq!(workspace, PathBuf::from("/tmp/ws"));
@@ -182,7 +202,56 @@ fn init_accepts_workspace_without_template() {
             assert_eq!(risk, None);
             assert_eq!(zone, None);
             assert_eq!(owner, None);
+            assert!(!export_docs);
+            assert!(!refresh);
+            assert!(!diff);
+            assert_eq!(to, None);
             assert!(!force);
+        }
+        other => panic!("expected Init, got {other:?}"),
+    }
+}
+
+#[test]
+fn init_accepts_docs_export_refresh_diff_and_custom_root() {
+    let cli = Cli::try_parse_from([
+        "boundline",
+        "init",
+        "--workspace",
+        "/tmp/ws",
+        "--export-docs",
+        "--refresh",
+        "--to",
+        "docs/reference/boundline",
+    ])
+    .unwrap();
+
+    match cli.command {
+        DeveloperCommand::Init { export_docs, refresh, diff, to, .. } => {
+            assert!(export_docs);
+            assert!(refresh);
+            assert!(!diff);
+            assert_eq!(to, Some(PathBuf::from("docs/reference/boundline")));
+        }
+        other => panic!("expected Init, got {other:?}"),
+    }
+
+    let diff_cli = Cli::try_parse_from([
+        "boundline",
+        "init",
+        "--workspace",
+        "/tmp/ws",
+        "--export-docs",
+        "--diff",
+    ])
+    .unwrap();
+
+    match diff_cli.command {
+        DeveloperCommand::Init { export_docs, refresh, diff, to, .. } => {
+            assert!(export_docs);
+            assert!(!refresh);
+            assert!(diff);
+            assert_eq!(to, None);
         }
         other => panic!("expected Init, got {other:?}"),
     }
@@ -201,6 +270,11 @@ fn init_help_explains_supported_assistants_route_shape_and_defaults() {
     assert!(help.contains("SLOT=RUNTIME:MODEL"), "{help}");
     assert!(help.contains("planning, implementation, verification, review"), "{help}");
     assert!(help.contains("planning=copilot:gpt-5.4"), "{help}");
+    assert!(help.contains("--export-docs"), "{help}");
+    assert!(help.contains("--refresh"), "{help}");
+    assert!(help.contains("--diff"), "{help}");
+    assert!(help.contains("--to <PATH>"), "{help}");
+    assert!(help.contains("create-only by default"), "{help}");
     assert!(
         help.contains("leave guided routes blank to let selected assistants seed defaults"),
         "{help}"

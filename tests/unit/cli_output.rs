@@ -1676,7 +1676,7 @@ fn render_session_status_projects_workspace_routing_defaults() {
     );
     assert!(
         rendered.contains(
-            "effective_routing: planning=codex/gpt-5-codex [workspace], implementation=copilot/gpt-5.4 [workspace], verification=copilot/gpt-5.4 [built-in], review=claude/sonnet-4 [built-in], adjudication=codex/gpt-5-codex [built-in]"
+            "effective_routing: planning=codex/gpt-5-codex [workspace], implementation=copilot/gpt-5.4 [workspace], verification=copilot/gpt-5.5 [built-in], review=claude/sonnet-4.6 [built-in], adjudication=codex/gpt-5-codex [built-in]"
         ),
         "{rendered}"
     );

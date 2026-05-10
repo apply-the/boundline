@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -32,8 +32,9 @@ use crate::domain::limits::RunLimits;
 use crate::domain::negotiation::NegotiatedDeliveryPacket;
 use crate::domain::plan::Plan;
 use crate::domain::review::{
-    ReviewOutcome, ReviewProfile, ReviewTrigger, ReviewerDisposition, ReviewerFinding,
-    ReviewerParticipation, ReviewerParticipationStatus, VoteDecision, VoteResolution,
+    ReviewOutcome, ReviewProfile, ReviewTrigger, ReviewerDefinition, ReviewerDisposition,
+    ReviewerFinding, ReviewerParticipation, ReviewerParticipationStatus, VoteDecision,
+    VoteResolution,
 };
 use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::step::{
@@ -231,6 +232,7 @@ pub fn build_task_request(
 
     if let Some(routing_projection) = workspace_routing_projection(workspace) {
         input.insert("routing_projection".to_string(), json!(routing_projection));
+        initial_context.insert("routing_projection".to_string(), json!(routing_projection));
     }
 
     let negotiation_packet = negotiation_packet.cloned().or_else(|| {
@@ -2560,6 +2562,9 @@ fn review_workspace_fixture(
         );
     };
 
+    let reviewer_effective_routes = review_effective_route_map(review, &request);
+    let reviewer_effective_route = reviewer_effective_routes.get(reviewer_id).cloned();
+
     let mut findings = review_findings_from_state(&request);
     findings.push(finding.clone());
     let mut reviewers = review_reviewer_ids_from_state(&request);
@@ -2571,6 +2576,7 @@ fn review_workspace_fixture(
         reviewer_id: reviewer_id.to_string(),
         status: ReviewerParticipationStatus::Completed,
         reason: None,
+        effective_route: reviewer_effective_route.clone(),
     });
 
     let mut state_patch = Map::new();
@@ -2597,6 +2603,7 @@ fn review_workspace_fixture(
             "reviewer_id": reviewer_id,
             "reviewer_role": reviewer_role,
             "reviewer_source": reviewer_source,
+            "reviewer_effective_route": reviewer_effective_route,
             "finding": finding,
             "adjudication": adjudication,
         }),
@@ -2637,8 +2644,26 @@ fn resolve_review_vote(
     };
 
     let findings = review_findings_from_state(&request);
-    let resolution = match review.vote_rule.resolve(&review.reviewers, &findings) {
+    let effective_routes = review_effective_route_map(review, &request);
+    let resolution = match review.vote_rule.resolve(
+        &review.reviewers,
+        &findings,
+        Some(&effective_routes),
+    ) {
         Ok(resolution) => resolution,
+        Err(
+            error @ (crate::domain::review::ReviewProfileError::MissingEffectiveReviewerRoute(_)
+            | crate::domain::review::ReviewProfileError::DuplicateEffectiveReviewerRoute {
+                ..
+            }),
+        ) => {
+            return review_terminal_failure(
+                "non_independent_review_council",
+                format!("review council is not independent: {error}"),
+                Some(trigger),
+                "review-voter",
+            );
+        }
         Err(error) => {
             return review_terminal_failure(
                 "invalid_review_vote",
@@ -2802,6 +2827,7 @@ fn review_terminal_failure(
             reviewer_id: reviewer_id.to_string(),
             status: ReviewerParticipationStatus::Failed,
             reason: Some(message.clone()),
+            effective_route: None,
         }])
         .unwrap_or(Value::Null),
     );
@@ -2853,6 +2879,114 @@ fn review_participants_from_state(request: &StepExecutionRequest) -> Vec<Reviewe
         .cloned()
         .and_then(|value| serde_json::from_value::<Vec<ReviewerParticipation>>(value).ok())
         .unwrap_or_default()
+}
+
+fn review_effective_route_map(
+    review: &ReviewProfile,
+    request: &StepExecutionRequest,
+) -> BTreeMap<String, String> {
+    let projection_routes = routing_projection_from_request(request)
+        .map(|projection| projection_route_entries(&projection));
+    let mut effective_routes = BTreeMap::new();
+
+    for reviewer in &review.reviewers {
+        let route = projection_routes
+            .as_ref()
+            .and_then(|routes| review_effective_route_from_entries(routes, reviewer))
+            .or_else(|| {
+                reviewer
+                    .source
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(str::to_string)
+            });
+
+        if let Some(route) = route {
+            effective_routes.insert(reviewer.reviewer_id.clone(), route);
+        }
+    }
+
+    effective_routes
+}
+
+fn routing_projection_from_request(
+    request: &StepExecutionRequest,
+) -> Option<RoutingDecisionProjection> {
+    request
+        .task_snapshot
+        .state
+        .get("routing_projection")
+        .and_then(RoutingDecisionProjection::from_value)
+        .or_else(|| {
+            request.input.get("routing_projection").and_then(RoutingDecisionProjection::from_value)
+        })
+}
+
+fn projection_route_entries(projection: &RoutingDecisionProjection) -> BTreeMap<String, String> {
+    projection
+        .effective_routing
+        .iter()
+        .filter_map(|entry| {
+            let (slot, remainder) = entry.split_once('=')?;
+            let route = remainder.split_once(" [").map(|(value, _)| value).unwrap_or(remainder);
+            let slot = slot.trim();
+            let route = route.trim();
+            if slot.is_empty() || route.is_empty() {
+                return None;
+            }
+            Some((slot.to_string(), route.to_string()))
+        })
+        .collect()
+}
+
+fn review_effective_route_from_entries(
+    routes: &BTreeMap<String, String>,
+    reviewer: &ReviewerDefinition,
+) -> Option<String> {
+    for key in reviewer_route_projection_keys(reviewer) {
+        if let Some(route) = routes.get(&key) {
+            return Some(route.clone());
+        }
+    }
+
+    routes.get("review").cloned()
+}
+
+fn reviewer_route_projection_keys(reviewer: &ReviewerDefinition) -> Vec<String> {
+    let mut keys = BTreeSet::new();
+
+    for value in [&reviewer.reviewer_id, &reviewer.role] {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        keys.insert(format!("reviewer:{trimmed}"));
+        let normalized = normalize_reviewer_route_key(trimmed);
+        if !normalized.is_empty() {
+            keys.insert(format!("reviewer:{normalized}"));
+        }
+    }
+
+    keys.into_iter().collect()
+}
+
+fn normalize_reviewer_route_key(value: &str) -> String {
+    let mut normalized = String::new();
+    let mut last_was_separator = false;
+
+    for character in value.chars() {
+        if character.is_ascii_alphanumeric() {
+            normalized.push(character.to_ascii_lowercase());
+            last_was_separator = false;
+        } else if !last_was_separator {
+            normalized.push('-');
+            last_was_separator = true;
+        }
+    }
+
+    normalized.trim_matches('-').to_string()
 }
 
 fn render_vote_summary(resolution: &VoteResolution) -> String {
@@ -3173,6 +3307,8 @@ mod tests {
         result_status_flip_candidates, review_workspace_fixture, run_fixture_command,
         score_adaptive_candidate, verify_workspace_fixture,
     };
+    use crate::adapters::config_store::FileConfigStore;
+    use crate::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
     use crate::domain::execution::{
         AdaptiveChangeKind, AdaptiveExecutionProfile, AttemptTransitionKind, PathScore,
         ValidationGuidance, ValidationGuidanceConfidence, ValidationGuidanceSource,
@@ -3981,6 +4117,35 @@ mod tests {
     }
 
     #[test]
+    fn resolve_review_vote_rejects_non_independent_review_council() {
+        let profile = sample_review_profile(ExecutionCommand {
+            program: "cargo".to_string(),
+            args: vec!["test".to_string(), "--quiet".to_string()],
+        });
+        let mut state = Map::new();
+        state.insert("next_review_trigger".to_string(), json!(ReviewTrigger::PrReady));
+        state.insert(
+            "latest_review_findings".to_string(),
+            serde_json::to_value(profile.review.as_ref().unwrap().scenarios[0].findings.clone())
+                .unwrap(),
+        );
+        state.insert(
+            "routing_projection".to_string(),
+            json!({
+                "effective_routing": [
+                    "review=claude/sonnet-4.6 [workspace]",
+                    "reviewer:safety=claude/sonnet-4.6 [workspace]",
+                    "reviewer:maintainability=claude/sonnet-4.6 [workspace]"
+                ]
+            }),
+        );
+
+        let result = resolve_review_vote(&profile, request_with_state(json!({}), 1, state));
+
+        assert_eq!(result.error.as_ref().unwrap().code, "non_independent_review_council");
+    }
+
+    #[test]
     fn finalize_workspace_review_covers_skip_and_terminal_variants() {
         let no_review = super::finalize_workspace_review(
             &sample_profile(ExecutionCommand {
@@ -4269,6 +4434,63 @@ mod tests {
         assert!(command_output.succeeded());
         assert_eq!(command_output.rendered_command(), "true");
         assert_eq!(command_output.details()["command"], json!("true"));
+    }
+
+    #[test]
+    fn build_task_request_copies_routing_projection_into_initial_context() {
+        let workspace = write_execution_workspace(
+            "boundline-fixture-routing-state",
+            "pub fn add(left: i32, right: i32) -> i32 {\n    left + right\n}\n",
+        );
+        let profile = sample_profile(ExecutionCommand {
+            program: "cargo".to_string(),
+            args: vec!["test".to_string(), "--quiet".to_string()],
+        });
+        fs::write(
+            execution_manifest_path(&workspace),
+            serde_json::to_string_pretty(&profile).unwrap(),
+        )
+        .unwrap();
+        let config = ConfigFile {
+            version: 1,
+            routing: RoutingConfig {
+                review: Some(ModelRoute {
+                    runtime: RuntimeKind::Claude,
+                    model: "sonnet-4.6".to_string(),
+                }),
+                reviewer_roles: std::collections::BTreeMap::from([
+                    (
+                        "safety".to_string(),
+                        ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-5.5".to_string() },
+                    ),
+                    (
+                        "maintainability".to_string(),
+                        ModelRoute {
+                            runtime: RuntimeKind::Claude,
+                            model: "sonnet-4.6".to_string(),
+                        },
+                    ),
+                ]),
+                ..RoutingConfig::default()
+            },
+            canon: None,
+        };
+        FileConfigStore::for_workspace(&workspace).save_local(&config).unwrap();
+
+        let task_request =
+            build_task_request(&workspace, "Fix the workspace", "session-1", None, None).unwrap();
+        let initial_context = task_request.initial_context.as_ref().unwrap();
+        let projection = initial_context.get("routing_projection").unwrap();
+        let effective_routing = projection["effective_routing"].as_array().unwrap();
+
+        assert!(
+            effective_routing
+                .iter()
+                .any(|value| { value.as_str() == Some("review=claude/sonnet-4.6 [workspace]") })
+        );
+        assert!(effective_routing.iter().any(|value| {
+            value.as_str() == Some("reviewer:safety=copilot/gpt-5.5 [workspace]")
+        }));
     }
 
     #[test]

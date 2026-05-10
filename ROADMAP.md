@@ -6,7 +6,7 @@ Canon is downstream from Boundline in this roadmap: Boundline thinks, decides, o
 
 Evolve Boundline into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.47.0
+## Current Status: v0.48.0
 
 Boundline now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -32,6 +32,16 @@ repositories, with a clearer first-run CLI UX:
 - assistant command packs now prefer the structured shell path so the same
   persisted session and trace state can flow through Claude, Codex, Copilot,
   and Gemini without reparsing plain text first
+
+- the bundled assistant catalog now exposes the current mainstream route-
+  capable models for the supported runtimes instead of forcing custom ids for
+  common current choices
+- capture and compatibility input normalization now treat one Markdown path or
+  an ordered Markdown-path array supplied as goal text as file-backed authored
+  input rather than persisting the raw shorthand as direct text
+- review vote resolution now rejects councils that collapse onto the same
+  effective runtime/model route and persists the effective route on recorded
+  review participants
 
 - guided `boundline init` now explains supported assistants, supported route
   slots, blank/default behavior, and a valid `SLOT=RUNTIME:MODEL` example
@@ -136,6 +146,17 @@ JSON host envelope over the primary session-native lifecycle.
 The governing rule remains simple: Boundline is still the product and execution
 owner. Canon stays a bounded, useful governed runtime inside that same delivery
 path rather than drifting back into a parallel tool story.
+
+### Delivered in 0.48.0
+
+- refreshed the bundled assistant model catalog with current mainstream route-
+  capable Copilot, Claude, Codex, and Gemini entries and aligned built-in
+  verification/review defaults to that catalog
+- taught authored-input normalization to treat one Markdown path or ordered
+  Markdown-path arrays entered through prompt-style goal text as file-backed
+  input with preserved provenance and order
+- made review voting require distinct effective reviewer routes before a
+  multi-review council can be counted as independent
 
 ### Delivered in 0.47.0
 

@@ -248,8 +248,9 @@ pub fn normalize_inputs_with_governance(
         direct_text.map(str::trim).filter(|text| !text.is_empty()).map(str::to_string);
     let referenced_paths =
         trimmed_text.as_deref().map(referenced_markdown_paths).unwrap_or_default();
+    let normalized_text = trimmed_text.filter(|text| !looks_like_markdown_reference_set(text));
 
-    if trimmed_text.is_none() && brief_paths.is_empty() && referenced_paths.is_empty() {
+    if normalized_text.is_none() && brief_paths.is_empty() && referenced_paths.is_empty() {
         return Err(BriefIngestionError::NoInputProvided);
     }
 
@@ -262,13 +263,13 @@ pub fn normalize_inputs_with_governance(
     })?;
 
     let mut sources = Vec::with_capacity(
-        brief_paths.len() + referenced_paths.len() + usize::from(trimmed_text.is_some()),
+        brief_paths.len() + referenced_paths.len() + usize::from(normalized_text.is_some()),
     );
     let mut deduplicated_sources = Vec::new();
     let mut precedence = 0usize;
     let mut accepted_workspace_paths = HashSet::new();
 
-    if let Some(text) = trimmed_text.as_ref() {
+    if let Some(text) = normalized_text.as_ref() {
         sources.push(InputSourceReference {
             source_id: format!("direct-{precedence}"),
             kind: InputSourceKind::DirectText,
@@ -314,7 +315,7 @@ pub fn normalize_inputs_with_governance(
     let captured_at = current_timestamp_millis();
     let mut bundle = AuthoredBriefBundle {
         bundle_id,
-        primary_goal_text: trimmed_text,
+        primary_goal_text: normalized_text,
         sources,
         deduplicated_sources,
         governance_intent,
@@ -584,6 +585,24 @@ fn referenced_markdown_paths(text: &str) -> Vec<PathBuf> {
     paths
 }
 
+fn looks_like_markdown_reference_set(text: &str) -> bool {
+    let mut saw_token = false;
+
+    for token in text.split(|character: char| character.is_whitespace() || character == ',') {
+        let trimmed = token.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        saw_token = true;
+        if markdown_reference_from_token(trimmed).is_none() {
+            return false;
+        }
+    }
+
+    saw_token
+}
+
 fn markdown_reference_from_token(token: &str) -> Option<PathBuf> {
     let trimmed = token
         .trim_start_matches(['"', '\'', '(', '[', '{', '<'])
@@ -649,6 +668,52 @@ mod tests {
         let goal = bundle.render_goal_text();
         assert!(goal.contains("## brief.md"));
         assert!(goal.contains("Replace subtraction with addition"));
+    }
+
+    #[test]
+    fn normalizes_path_only_goal_as_referenced_markdown() {
+        let workspace = temp_workspace("boundline-brief-path-goal");
+        let brief = workspace.join("docs").join("prd.md");
+        fs::create_dir_all(brief.parent().unwrap()).unwrap();
+        fs::write(&brief, "# Goal\nShip the change\n").unwrap();
+
+        let bundle = normalize_inputs(&workspace, Some("./docs/prd.md"), &[]).unwrap();
+
+        assert_eq!(bundle.primary_goal_text, None);
+        assert_eq!(bundle.markdown_source_count(), 1);
+        assert_eq!(
+            bundle.ordered_source_labels(),
+            vec!["referenced_markdown: docs/prd.md".to_string()]
+        );
+        assert!(!bundle.render_goal_text().contains("./docs/prd.md"));
+        assert!(bundle.render_goal_text().contains("Ship the change"));
+    }
+
+    #[test]
+    fn normalizes_markdown_reference_array_as_ordered_file_backed_input() {
+        let workspace = temp_workspace("boundline-brief-array-goal");
+        let prd = workspace.join("docs").join("prd.md");
+        let adr = workspace.join("docs").join("adr.md");
+        fs::create_dir_all(prd.parent().unwrap()).unwrap();
+        fs::write(&prd, "# PRD\nPrimary requirements\n").unwrap();
+        fs::write(&adr, "# ADR\nArchitecture tradeoffs\n").unwrap();
+
+        let bundle =
+            normalize_inputs(&workspace, Some("[./docs/prd.md, ./docs/adr.md]"), &[]).unwrap();
+
+        assert_eq!(bundle.primary_goal_text, None);
+        assert_eq!(bundle.markdown_source_count(), 2);
+        assert_eq!(
+            bundle.ordered_source_labels(),
+            vec![
+                "referenced_markdown: docs/prd.md".to_string(),
+                "referenced_markdown: docs/adr.md".to_string(),
+            ]
+        );
+        let rendered = bundle.render_goal_text();
+        assert!(rendered.contains("Primary requirements"));
+        assert!(rendered.contains("Architecture tradeoffs"));
+        assert!(!rendered.contains("[./docs/prd.md, ./docs/adr.md]"));
     }
 
     #[test]

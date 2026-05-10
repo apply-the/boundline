@@ -14,7 +14,10 @@ use serde::Deserialize;
 use serde_json::json;
 use thiserror::Error;
 
-use super::assistant_assets::{AssistantAsset, AssistantSurface, assets_for_assistants};
+use super::assistant_assets::{
+    AssistantAsset, AssistantSurface, DocsExportAsset, DocsExportSurface, assets_for_assistants,
+    docs_assets_for_assistants, docs_assets_for_assistants_under,
+};
 use crate::adapters::config_store::{ConfigStoreError, FileConfigStore};
 use crate::cli::CommandExitStatus;
 use crate::domain::configuration::{
@@ -28,7 +31,7 @@ use crate::domain::domain_templates::{
 use crate::domain::governance::CanonModeSelectionPreference;
 use crate::domain::workspace_hygiene::{merge_hygiene_content, plan_hygiene_defaults};
 
-const INIT_ROUTE_EXAMPLE: &str = "planning=copilot:gpt-5.4";
+const INIT_ROUTE_EXAMPLE: &str = "planning=copilot:gpt-5.5";
 const BUNDLED_MODEL_CATALOG: &str = include_str!("../../assistant/catalog/model-catalog.toml");
 #[cfg(test)]
 const NO_TTY_GUIDANCE: &str =
@@ -280,10 +283,16 @@ pub struct InitRequest<'a> {
     pub risk: Option<&'a str>,
     pub zone: Option<&'a str>,
     pub owner: Option<&'a str>,
+    pub export_docs: bool,
+    pub docs_refresh: bool,
+    pub docs_diff: bool,
+    pub docs_output_dir: Option<&'a Path>,
     pub force: bool,
 }
 
 pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, InitCommandError> {
+    validate_docs_export_options(&request)?;
+
     let workspace = request.workspace;
     fs::create_dir_all(workspace).map_err(|source| InitCommandError::CreateWorkspace {
         path: workspace.to_path_buf(),
@@ -341,56 +350,39 @@ pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, I
     } else {
         request.assistants.to_vec()
     };
+    let export_docs = request.export_docs;
     let assistant_assets = assets_for_assistants(&effective_assistants);
-
-    let mut planned = Vec::new();
-    let execution_exists = execution_path.is_file();
-    let config_exists = local_config_path.is_file();
-
-    planned.push(if execution_exists {
-        format!("- update {}", execution_path.display())
+    let docs_assets = if export_docs {
+        match request.docs_output_dir {
+            Some(docs_root) => docs_assets_for_assistants_under(&effective_assistants, docs_root),
+            None => docs_assets_for_assistants(&effective_assistants),
+        }
     } else {
-        format!("- create {}", execution_path.display())
-    });
-    planned.push(if config_exists {
-        format!("- update {}", local_config_path.display())
-    } else {
-        format!("- create {}", local_config_path.display())
-    });
-    if requested_domain_templates.is_empty() {
-        planned.push("- leave domain templates unseeded".to_string());
-    } else {
-        planned.push(format!("- seed {} domain template(s)", requested_domain_templates.len()));
-    }
+        Vec::new()
+    };
+    let docs_plan = plan_docs_export(workspace, &docs_assets)?;
 
-    if assistant_assets.is_empty() {
-        planned.push("- skip assistant command-pack scaffolding".to_string());
-    } else {
-        planned.extend(plan_assistant_setup(workspace, &assistant_assets));
-    }
-
-    let assistant_assets_exist =
-        assistant_assets.iter().any(|asset| workspace.join(asset.relative_path).exists());
-
-    if (execution_exists || config_exists || assistant_assets_exist) && !request.force {
-        let inspect_command = init_inspect_command(workspace);
-        let mut lines = vec![
-            "init: preview only - existing Boundline files would be updated".to_string(),
-            format!("template: {}", template_label(template)),
-            "why_stopped:".to_string(),
-            "- existing .boundline files or assistant assets are already present".to_string(),
-            "- rerun the same command with --force to apply updates".to_string(),
-            "planned_changes:".to_string(),
-        ];
-        lines.extend(planned);
-        lines.push("next_steps:".to_string());
-        lines.push("- rerun the same command with --force".to_string());
-        lines.push(format!("- inspect current config: {inspect_command}"));
+    if export_docs && request.docs_diff {
         return Ok(InitCommandReport {
-            exit_status: CommandExitStatus::NonSuccess,
-            terminal_output: lines.join("\n"),
+            exit_status: CommandExitStatus::Succeeded,
+            terminal_output: render_docs_export_diff_report(request.docs_output_dir, &docs_plan),
         });
     }
+
+    if export_docs
+        && !request.docs_refresh
+        && !request.force
+        && docs_plan.iter().any(|entry| entry.status != DocsExportFileStatus::Create)
+    {
+        return Ok(InitCommandReport {
+            exit_status: CommandExitStatus::NonSuccess,
+            terminal_output: render_docs_export_conflict_report(
+                request.docs_output_dir,
+                &docs_plan,
+            ),
+        });
+    }
+
     let explicit_routes = request
         .routes
         .iter()
@@ -423,36 +415,8 @@ pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, I
     effective_routes
         .extend(seeded_routes.iter().map(|selection| (selection.slot, selection.route.clone())));
 
-    if let Some(answers) = guided_answers.as_ref() {
-        let summary = render_guided_summary(
-            template,
-            effective_canon_mode_selection,
-            &effective_assistants,
-            &answers.routes,
-            &catalog,
-            &planned,
-        );
-        if !interactor.confirm(&summary, true)? {
-            return Ok(InitCommandReport {
-                exit_status: CommandExitStatus::NonSuccess,
-                terminal_output: render_cancelled_init_report(
-                    workspace,
-                    template,
-                    effective_canon_mode_selection,
-                    &effective_assistants,
-                    &answers.routes,
-                    &catalog,
-                ),
-            });
-        }
-    }
-
-    if let Some(parent) = execution_path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|source| InitCommandError::WriteFile { path: parent.to_path_buf(), source })?;
-    }
-
-    let mut local = store.load_local()?.unwrap_or_default();
+    let existing_local = store.load_local()?;
+    let mut local = existing_local.clone().unwrap_or_default();
     local.routing.assistant_runtimes = effective_assistants.clone();
     for (slot, route) in &effective_routes {
         local.routing.set_slot(*slot, route.clone());
@@ -485,7 +449,7 @@ pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, I
     }
     apply_requested_domain_templates(
         &mut local.routing.domain_templates,
-        requested_domain_templates,
+        requested_domain_templates.clone(),
     );
     local
         .routing
@@ -501,9 +465,94 @@ pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, I
             },
         )
         .collect::<BTreeSet<_>>();
-    let hygiene_actions = apply_workspace_hygiene_defaults(workspace, &active_domains)?;
-
     let execution = execution_template(template, local.canon.as_ref());
+    let execution_status = scaffold_file_status(
+        &execution_path,
+        &serde_json::to_string_pretty(&execution).expect("execution template should serialize"),
+    )?;
+    let config_status = match existing_local.as_ref() {
+        Some(existing) if existing == &local => ScaffoldFileStatus::Unchanged,
+        Some(_) => ScaffoldFileStatus::Update,
+        None => ScaffoldFileStatus::Create,
+    };
+    let assistant_actions_preview = summarize_assistant_assets(workspace, &assistant_assets)?;
+
+    let mut planned = Vec::new();
+    if execution_status != ScaffoldFileStatus::Unchanged {
+        planned.push(format!("- {} {}", execution_status.label(), execution_path.display()));
+    }
+    if config_status != ScaffoldFileStatus::Unchanged {
+        planned.push(format!("- {} {}", config_status.label(), local_config_path.display()));
+    }
+    if requested_domain_templates.is_empty() {
+        planned.push("- leave domain templates unseeded".to_string());
+    } else {
+        planned.push(format!("- seed {} domain template(s)", requested_domain_templates.len()));
+    }
+
+    if assistant_assets.is_empty() {
+        planned.push("- skip assistant command-pack scaffolding".to_string());
+    } else {
+        planned.extend(plan_assistant_setup(&assistant_actions_preview));
+    }
+    if !docs_plan.is_empty() {
+        planned.extend(plan_docs_setup(&docs_plan));
+    }
+
+    let scaffold_updates_pending = execution_status == ScaffoldFileStatus::Update
+        || config_status == ScaffoldFileStatus::Update
+        || assistant_actions_preview.iter().any(|action| action.updated_files > 0);
+
+    if scaffold_updates_pending && !request.force {
+        let inspect_command = init_inspect_command(workspace);
+        let mut lines = vec![
+            "init: preview only - existing Boundline files would be updated".to_string(),
+            format!("template: {}", template_label(template)),
+            "why_stopped:".to_string(),
+            "- existing .boundline files or selected scaffold outputs are already present"
+                .to_string(),
+            "- rerun the same command with --force to apply updates".to_string(),
+            "planned_changes:".to_string(),
+        ];
+        lines.extend(planned);
+        lines.push("next_steps:".to_string());
+        lines.push("- rerun the same command with --force".to_string());
+        lines.push(format!("- inspect current config: {inspect_command}"));
+        return Ok(InitCommandReport {
+            exit_status: CommandExitStatus::NonSuccess,
+            terminal_output: lines.join("\n"),
+        });
+    }
+
+    if let Some(answers) = guided_answers.as_ref() {
+        let summary = render_guided_summary(
+            template,
+            effective_canon_mode_selection,
+            &effective_assistants,
+            &answers.routes,
+            &catalog,
+            &planned,
+        );
+        if !interactor.confirm(&summary, true)? {
+            return Ok(InitCommandReport {
+                exit_status: CommandExitStatus::NonSuccess,
+                terminal_output: render_cancelled_init_report(
+                    workspace,
+                    template,
+                    effective_canon_mode_selection,
+                    &effective_assistants,
+                    &answers.routes,
+                    &catalog,
+                ),
+            });
+        }
+    }
+
+    if let Some(parent) = execution_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|source| InitCommandError::WriteFile { path: parent.to_path_buf(), source })?;
+    }
+    let hygiene_actions = apply_workspace_hygiene_defaults(workspace, &active_domains)?;
     run_init_activity("writing execution profile", interactive_terminal, || {
         fs::write(
             &execution_path,
@@ -518,6 +567,10 @@ pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, I
     let assistant_actions =
         run_init_activity("scaffolding assistant packs", interactive_terminal, || {
             apply_assistant_assets(workspace, &assistant_assets)
+        })?;
+    let docs_actions =
+        run_init_activity("exporting repo-local docs", interactive_terminal, || {
+            apply_docs_plan(workspace, &docs_plan)
         })?;
 
     let capabilities = effective_assistants
@@ -605,6 +658,24 @@ pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, I
                 action.unchanged_files
             )
         }));
+    }
+
+    if export_docs {
+        if docs_actions.is_empty() {
+            lines.push("docs_export: none".to_string());
+        } else {
+            lines.push("docs_export:".to_string());
+            lines.push(format!("- root: {}", docs_export_root_display(request.docs_output_dir)));
+            lines.extend(docs_actions.iter().map(|action| {
+                format!(
+                    "- {}: {} created, {} updated, {} unchanged",
+                    action.surface.plan_label(),
+                    action.created_files,
+                    action.updated_files,
+                    action.unchanged_files
+                )
+            }));
+        }
     }
 
     if local.routing.domain_templates.is_empty() {
@@ -742,25 +813,106 @@ struct AssistantInitAction {
     unchanged_files: usize,
 }
 
-fn plan_assistant_setup(workspace: &Path, assistant_assets: &[&AssistantAsset]) -> Vec<String> {
-    let mut grouped = BTreeMap::<AssistantSurface, Vec<&AssistantAsset>>::new();
-    for asset in assistant_assets {
-        let asset = *asset;
-        grouped.entry(asset.surface).or_default().push(asset);
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ScaffoldFileStatus {
+    Create,
+    Update,
+    Unchanged,
+}
 
-    grouped
-        .into_iter()
-        .map(|(surface, assets)| {
-            let action = if assets.iter().any(|asset| workspace.join(asset.relative_path).exists())
-            {
-                "refresh"
-            } else {
-                "scaffold"
-            };
-            format!("- {action} {} ({} file(s))", surface.plan_label(), assets.len())
+impl ScaffoldFileStatus {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Create => "create",
+            Self::Update => "update",
+            Self::Unchanged => "unchanged",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DocsInitAction {
+    surface: DocsExportSurface,
+    status: &'static str,
+    created_files: usize,
+    updated_files: usize,
+    unchanged_files: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DocsExportFileStatus {
+    Create,
+    Update,
+    Unchanged,
+}
+
+impl DocsExportFileStatus {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Create => "create",
+            Self::Update => "update",
+            Self::Unchanged => "unchanged",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DocsExportPlanEntry {
+    surface: DocsExportSurface,
+    path: String,
+    status: DocsExportFileStatus,
+    contents: &'static str,
+}
+
+fn plan_assistant_setup(assistant_actions: &[AssistantInitAction]) -> Vec<String> {
+    assistant_actions
+        .iter()
+        .filter(|action| action.created_files > 0 || action.updated_files > 0)
+        .map(|action| {
+            let verb = if action.updated_files > 0 { "refresh" } else { "scaffold" };
+            let changed_files = action.created_files + action.updated_files;
+            format!("- {verb} {} ({} file(s))", action.surface.plan_label(), changed_files)
         })
         .collect()
+}
+
+fn summarize_assistant_assets(
+    workspace: &Path,
+    assistant_assets: &[&AssistantAsset],
+) -> Result<Vec<AssistantInitAction>, InitCommandError> {
+    let mut grouped = BTreeMap::<AssistantSurface, AssistantInitAction>::new();
+
+    for asset in assistant_assets {
+        let asset = *asset;
+        let target = workspace.join(asset.relative_path);
+        let file_status = scaffold_file_status(&target, asset.contents)?;
+        let entry = grouped.entry(asset.surface).or_insert(AssistantInitAction {
+            surface: asset.surface,
+            status: "unchanged",
+            created_files: 0,
+            updated_files: 0,
+            unchanged_files: 0,
+        });
+        match file_status {
+            ScaffoldFileStatus::Create => entry.created_files += 1,
+            ScaffoldFileStatus::Update => entry.updated_files += 1,
+            ScaffoldFileStatus::Unchanged => entry.unchanged_files += 1,
+        }
+    }
+
+    let mut actions = grouped.into_values().collect::<Vec<_>>();
+    for action in &mut actions {
+        action.status = if action.updated_files > 0
+            || (action.created_files > 0 && action.unchanged_files > 0)
+        {
+            "updated"
+        } else if action.created_files > 0 {
+            "created"
+        } else {
+            "unchanged"
+        };
+    }
+    Ok(actions)
 }
 
 fn apply_assistant_assets(
@@ -823,6 +975,209 @@ fn apply_assistant_assets(
         };
     }
     Ok(actions)
+}
+
+fn scaffold_file_status(
+    path: &Path,
+    expected_contents: &str,
+) -> Result<ScaffoldFileStatus, InitCommandError> {
+    if !path.is_file() {
+        return Ok(ScaffoldFileStatus::Create);
+    }
+
+    let existing = fs::read_to_string(path)
+        .map_err(|source| InitCommandError::ReadFile { path: path.to_path_buf(), source })?;
+    if existing == expected_contents {
+        Ok(ScaffoldFileStatus::Unchanged)
+    } else {
+        Ok(ScaffoldFileStatus::Update)
+    }
+}
+
+fn docs_target_path(workspace: &Path, export_path: &str) -> PathBuf {
+    let export_path = Path::new(export_path);
+    if export_path.is_absolute() { export_path.to_path_buf() } else { workspace.join(export_path) }
+}
+
+fn plan_docs_export(
+    workspace: &Path,
+    docs_assets: &[DocsExportAsset],
+) -> Result<Vec<DocsExportPlanEntry>, InitCommandError> {
+    let mut plan = Vec::with_capacity(docs_assets.len());
+
+    for asset in docs_assets {
+        let target = docs_target_path(workspace, &asset.relative_path);
+        let status = if target.is_file() {
+            let existing = fs::read_to_string(&target)
+                .map_err(|source| InitCommandError::ReadFile { path: target.clone(), source })?;
+            if existing == asset.contents {
+                DocsExportFileStatus::Unchanged
+            } else {
+                DocsExportFileStatus::Update
+            }
+        } else {
+            DocsExportFileStatus::Create
+        };
+        plan.push(DocsExportPlanEntry {
+            surface: asset.surface,
+            path: asset.relative_path.clone(),
+            status,
+            contents: asset.contents,
+        });
+    }
+
+    Ok(plan)
+}
+
+fn plan_docs_setup(docs_plan: &[DocsExportPlanEntry]) -> Vec<String> {
+    let mut grouped = BTreeMap::<DocsExportSurface, Vec<&DocsExportPlanEntry>>::new();
+    for entry in docs_plan {
+        grouped.entry(entry.surface).or_default().push(entry);
+    }
+
+    grouped
+        .into_iter()
+        .map(|(surface, entries)| {
+            let action = if entries.iter().any(|entry| entry.status != DocsExportFileStatus::Create)
+            {
+                "refresh"
+            } else {
+                "scaffold"
+            };
+            format!("- {action} {} ({} file(s))", surface.plan_label(), entries.len())
+        })
+        .collect()
+}
+
+fn apply_docs_plan(
+    workspace: &Path,
+    docs_plan: &[DocsExportPlanEntry],
+) -> Result<Vec<DocsInitAction>, InitCommandError> {
+    let mut grouped = BTreeMap::<DocsExportSurface, DocsInitAction>::new();
+
+    for entry in docs_plan {
+        let target = docs_target_path(workspace, &entry.path);
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent).map_err(|source| InitCommandError::WriteFile {
+                path: parent.to_path_buf(),
+                source,
+            })?;
+        }
+
+        let file_status = match entry.status {
+            DocsExportFileStatus::Create => {
+                fs::write(&target, entry.contents).map_err(|source| {
+                    InitCommandError::WriteFile { path: target.clone(), source }
+                })?;
+                "created"
+            }
+            DocsExportFileStatus::Update => {
+                fs::write(&target, entry.contents).map_err(|source| {
+                    InitCommandError::WriteFile { path: target.clone(), source }
+                })?;
+                "updated"
+            }
+            DocsExportFileStatus::Unchanged => "unchanged",
+        };
+
+        let action = grouped.entry(entry.surface).or_insert(DocsInitAction {
+            surface: entry.surface,
+            status: "unchanged",
+            created_files: 0,
+            updated_files: 0,
+            unchanged_files: 0,
+        });
+        match file_status {
+            "created" => action.created_files += 1,
+            "updated" => action.updated_files += 1,
+            _ => action.unchanged_files += 1,
+        }
+    }
+
+    let mut actions = grouped.into_values().collect::<Vec<_>>();
+    for action in &mut actions {
+        action.status = if action.updated_files > 0
+            || (action.created_files > 0 && action.unchanged_files > 0)
+        {
+            "updated"
+        } else if action.created_files > 0 {
+            "created"
+        } else {
+            "unchanged"
+        };
+    }
+    Ok(actions)
+}
+
+fn docs_export_root_display(docs_output_dir: Option<&Path>) -> String {
+    docs_output_dir.unwrap_or_else(|| Path::new("docs/boundline")).display().to_string()
+}
+
+fn render_docs_export_conflict_report(
+    docs_output_dir: Option<&Path>,
+    docs_plan: &[DocsExportPlanEntry],
+) -> String {
+    let mut lines = vec![
+        "init: documentation export blocked".to_string(),
+        format!("docs_export_root: {}", docs_export_root_display(docs_output_dir)),
+        "conflicting_paths:".to_string(),
+    ];
+    lines.extend(
+        docs_plan
+            .iter()
+            .filter(|entry| entry.status != DocsExportFileStatus::Create)
+            .map(|entry| format!("- {} ({})", entry.path, entry.status.label())),
+    );
+    lines.push("choose:".to_string());
+    lines.push("- rerun with --refresh to update generated docs in place".to_string());
+    lines.push("- rerun with --diff to preview docs changes without writing".to_string());
+    lines.push("- rerun with --to <path> to export generated docs elsewhere".to_string());
+    lines.push("- rerun with --force to overwrite generated docs without a prompt".to_string());
+    lines.join("\n")
+}
+
+fn render_docs_export_diff_report(
+    docs_output_dir: Option<&Path>,
+    docs_plan: &[DocsExportPlanEntry],
+) -> String {
+    let changed = docs_plan
+        .iter()
+        .filter(|entry| entry.status != DocsExportFileStatus::Unchanged)
+        .collect::<Vec<_>>();
+
+    let mut lines = vec![
+        "init: documentation export diff".to_string(),
+        format!("docs_export_root: {}", docs_export_root_display(docs_output_dir)),
+    ];
+    if changed.is_empty() {
+        lines.push("docs_export_diff: no content changes".to_string());
+    } else {
+        lines.push("docs_export_diff:".to_string());
+        lines.extend(
+            changed.into_iter().map(|entry| format!("- {} {}", entry.status.label(), entry.path)),
+        );
+    }
+    lines.push("next_steps:".to_string());
+    lines.push("- rerun with --export-docs to create any missing generated docs".to_string());
+    lines
+        .push("- rerun with --export-docs --refresh to update existing generated docs".to_string());
+    lines.join("\n")
+}
+
+fn validate_docs_export_options(request: &InitRequest<'_>) -> Result<(), InitCommandError> {
+    if !request.export_docs
+        && (request.docs_refresh || request.docs_diff || request.docs_output_dir.is_some())
+    {
+        return Err(InitCommandError::InvalidDocsExportArgument(
+            "--refresh, --diff, and --to require --export-docs".to_string(),
+        ));
+    }
+    if request.docs_refresh && request.docs_diff {
+        return Err(InitCommandError::InvalidDocsExportArgument(
+            "--refresh and --diff cannot be used together".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 fn apply_workspace_hygiene_defaults(
@@ -1614,6 +1969,8 @@ pub enum InitCommandError {
     InvalidBundledCatalog(String),
     #[error("failed to collect init input: {0}")]
     PromptInteraction(String),
+    #[error("invalid docs export argument: {0}")]
+    InvalidDocsExportArgument(String),
     #[error("invalid domain argument: {0}")]
     InvalidDomainArgument(String),
     #[error("invalid domain template settings: {0}")]
@@ -1625,7 +1982,7 @@ mod tests {
     use std::collections::BTreeSet;
     use std::collections::VecDeque;
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     use uuid::Uuid;
 
@@ -1729,6 +2086,10 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            export_docs: false,
+            docs_refresh: false,
+            docs_diff: false,
+            docs_output_dir: None,
             force: true,
         })
         .unwrap();
@@ -1765,6 +2126,10 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            export_docs: false,
+            docs_refresh: false,
+            docs_diff: false,
+            docs_output_dir: None,
             force: true,
         })
         .unwrap_err();
@@ -1795,6 +2160,10 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            export_docs: false,
+            docs_refresh: false,
+            docs_diff: false,
+            docs_output_dir: None,
             force: false,
         })
         .unwrap();
@@ -1827,6 +2196,10 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            export_docs: false,
+            docs_refresh: false,
+            docs_diff: false,
+            docs_output_dir: None,
             force: true,
         })
         .unwrap();
@@ -1860,6 +2233,10 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            export_docs: false,
+            docs_refresh: false,
+            docs_diff: false,
+            docs_output_dir: None,
             force: true,
         })
         .unwrap();
@@ -1867,10 +2244,10 @@ mod tests {
         assert!(report.terminal_output.contains("route_setup:"));
         assert!(report.terminal_output.contains("assistant_defaults: copilot"));
         assert!(
-            report.terminal_output.contains("seeded planning: copilot:gpt-5.4 [assistant-default]")
+            report.terminal_output.contains("seeded planning: copilot:gpt-5.5 [assistant-default]")
         );
         assert!(
-            report.terminal_output.contains("seeded review: copilot:gpt-5.4 [assistant-default]")
+            report.terminal_output.contains("seeded review: copilot:gpt-5.5 [assistant-default]")
         );
         assert!(
             report.terminal_output.contains("inspect_or_edit: boundline config show --workspace")
@@ -1878,7 +2255,7 @@ mod tests {
 
         let saved = FileConfigStore::for_workspace(&workspace).load_local().unwrap().unwrap();
         assert_eq!(saved.routing.planning.unwrap().runtime, RuntimeKind::Copilot);
-        assert_eq!(saved.routing.implementation.unwrap().model, "gpt-5.4");
+        assert_eq!(saved.routing.implementation.unwrap().model, "gpt-5.5");
         assert_eq!(saved.routing.verification.unwrap().runtime, RuntimeKind::Copilot);
         assert_eq!(saved.routing.review.unwrap().runtime, RuntimeKind::Copilot);
     }
@@ -1904,6 +2281,10 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            export_docs: false,
+            docs_refresh: false,
+            docs_diff: false,
+            docs_output_dir: None,
             force: true,
         })
         .unwrap();
@@ -1913,13 +2294,13 @@ mod tests {
         assert!(
             report
                 .terminal_output
-                .contains("seeded verification: copilot:gpt-5.4 [assistant-default]")
+                .contains("seeded verification: copilot:gpt-5.5 [assistant-default]")
         );
 
         let saved = FileConfigStore::for_workspace(&workspace).load_local().unwrap().unwrap();
         assert_eq!(saved.routing.planning.unwrap().model, "gpt-4o");
-        assert_eq!(saved.routing.implementation.unwrap().model, "gpt-5.4");
-        assert_eq!(saved.routing.review.unwrap().model, "gpt-5.4");
+        assert_eq!(saved.routing.implementation.unwrap().model, "gpt-5.5");
+        assert_eq!(saved.routing.review.unwrap().model, "gpt-5.5");
     }
 
     #[test]
@@ -2037,8 +2418,10 @@ mod tests {
     #[test]
     fn guided_answers_can_choose_custom_models_without_freeform_route_entry() {
         let catalog = BundledModelCatalog::load().unwrap();
+        let claude_custom_model_index =
+            catalog.runtime_entry(RuntimeKind::Claude).map(|entry| entry.models.len()).unwrap();
         let mut interactor = ScriptedInteractor {
-            selects: VecDeque::from(vec![0, 1, 2, 3, 0]),
+            selects: VecDeque::from(vec![0, 1, 2, claude_custom_model_index, 0]),
             multi_selects: VecDeque::from(vec![vec![0]]),
             inputs: VecDeque::from(vec!["gpt-5.4-enterprise".to_string()]),
             confirms: VecDeque::new(),
@@ -2081,6 +2464,10 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            export_docs: false,
+            docs_refresh: false,
+            docs_diff: false,
+            docs_output_dir: None,
             force: true,
         })
         .unwrap_err();
@@ -2115,7 +2502,7 @@ mod tests {
 
         assert!(error.to_string().contains("no available assistant defaults remain"));
         assert!(error.to_string().contains("planning, implementation, verification, review"));
-        assert!(error.to_string().contains("--route planning=copilot:gpt-5.4"));
+        assert!(error.to_string().contains("--route planning=copilot:gpt-5.5"));
     }
 
     #[test]
@@ -2163,6 +2550,10 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            export_docs: false,
+            docs_refresh: false,
+            docs_diff: false,
+            docs_output_dir: None,
             force: true,
         })
         .unwrap();
@@ -2201,6 +2592,10 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            export_docs: false,
+            docs_refresh: false,
+            docs_diff: false,
+            docs_output_dir: None,
             force: true,
         });
 
@@ -2501,7 +2896,9 @@ mod tests {
             })
             .unwrap();
 
-        let initial_plan = super::plan_assistant_setup(&workspace, &assistant_assets);
+        let initial_plan = super::plan_assistant_setup(
+            &super::summarize_assistant_assets(&workspace, &assistant_assets).unwrap(),
+        );
         assert!(initial_plan.iter().all(|line| line.contains("scaffold")), "{initial_plan:?}");
 
         let created = super::apply_assistant_assets(&workspace, &assistant_assets).unwrap();
@@ -2514,8 +2911,10 @@ mod tests {
             assistant_assets.len()
         );
 
-        let refresh_plan = super::plan_assistant_setup(&workspace, &assistant_assets);
-        assert!(refresh_plan.iter().all(|line| line.contains("refresh")), "{refresh_plan:?}");
+        let refresh_plan = super::plan_assistant_setup(
+            &super::summarize_assistant_assets(&workspace, &assistant_assets).unwrap(),
+        );
+        assert!(refresh_plan.is_empty(), "{refresh_plan:?}");
 
         let unchanged = super::apply_assistant_assets(&workspace, &assistant_assets).unwrap();
         assert!(unchanged.iter().all(|action| action.status == "unchanged"), "{unchanged:?}");
@@ -2527,6 +2926,85 @@ mod tests {
 
         fs::write(workspace.join(multi_file_surface_asset.relative_path), "stale").unwrap();
         let updated = super::apply_assistant_assets(&workspace, &assistant_assets).unwrap();
+        assert!(updated.iter().any(|action| action.updated_files > 0), "{updated:?}");
+    }
+
+    #[test]
+    fn docs_export_plan_apply_conflict_diff_and_custom_root() {
+        let workspace = temp_workspace("boundline-init-docs-export-states");
+        let docs_root = Path::new("docs/reference/boundline");
+        let docs_assets =
+            super::docs_assets_for_assistants_under(&[RuntimeKind::Copilot], docs_root);
+        assert!(!docs_assets.is_empty());
+        assert!(
+            docs_assets
+                .iter()
+                .any(|asset| asset.relative_path == "docs/reference/boundline/canon.md")
+        );
+        assert!(
+            docs_assets
+                .iter()
+                .all(|asset| asset.relative_path.starts_with("docs/reference/boundline/"))
+        );
+        assert!(docs_assets.iter().all(|asset| !asset.relative_path.contains("session-")));
+        let multi_file_surface_asset = docs_assets
+            .iter()
+            .find(|candidate| {
+                docs_assets
+                    .iter()
+                    .filter(|asset| asset.surface == candidate.surface)
+                    .nth(1)
+                    .is_some()
+            })
+            .unwrap();
+
+        let initial_plan = super::plan_docs_export(&workspace, &docs_assets).unwrap();
+        let initial_summary = super::plan_docs_setup(&initial_plan);
+        assert!(
+            initial_summary.iter().all(|line| line.contains("scaffold")),
+            "{initial_summary:?}"
+        );
+
+        let created = super::apply_docs_plan(&workspace, &initial_plan).unwrap();
+        assert!(created.iter().all(|action| action.status == "created"), "{created:?}");
+        assert_eq!(
+            created
+                .iter()
+                .map(|action| action.created_files + action.updated_files + action.unchanged_files)
+                .sum::<usize>(),
+            docs_assets.len()
+        );
+
+        let refresh_plan = super::plan_docs_export(&workspace, &docs_assets).unwrap();
+        let refresh_summary = super::plan_docs_setup(&refresh_plan);
+        assert!(refresh_summary.iter().all(|line| line.contains("refresh")), "{refresh_summary:?}");
+
+        let unchanged = super::apply_docs_plan(&workspace, &refresh_plan).unwrap();
+        assert!(unchanged.iter().all(|action| action.status == "unchanged"), "{unchanged:?}");
+
+        fs::remove_file(workspace.join(&multi_file_surface_asset.relative_path)).unwrap();
+        let recreated = super::apply_docs_plan(
+            &workspace,
+            &super::plan_docs_export(&workspace, &docs_assets).unwrap(),
+        )
+        .unwrap();
+        assert!(recreated.iter().any(|action| action.status == "updated"), "{recreated:?}");
+        assert_eq!(recreated.iter().map(|action| action.created_files).sum::<usize>(), 1);
+
+        fs::write(workspace.join(&multi_file_surface_asset.relative_path), "stale").unwrap();
+        let update_plan = super::plan_docs_export(&workspace, &docs_assets).unwrap();
+        let conflict_report =
+            super::render_docs_export_conflict_report(Some(docs_root), &update_plan);
+        assert!(conflict_report.contains("documentation export blocked"), "{conflict_report}");
+        assert!(conflict_report.contains("--refresh"), "{conflict_report}");
+        assert!(conflict_report.contains("--diff"), "{conflict_report}");
+        assert!(conflict_report.contains("--to <path>"), "{conflict_report}");
+        let diff_report = super::render_docs_export_diff_report(Some(docs_root), &update_plan);
+        assert!(
+            diff_report.contains("update docs/reference/boundline/assistant/"),
+            "{diff_report}"
+        );
+        let updated = super::apply_docs_plan(&workspace, &update_plan).unwrap();
         assert!(updated.iter().any(|action| action.updated_files > 0), "{updated:?}");
     }
 
@@ -2705,6 +3183,10 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            export_docs: false,
+            docs_refresh: false,
+            docs_diff: false,
+            docs_output_dir: None,
             force: true,
         })
         .unwrap();
@@ -2731,6 +3213,11 @@ mod tests {
 
         let prompt_err = super::InitCommandError::PromptInteraction("user cancelled".to_string());
         assert!(prompt_err.to_string().contains("collect init input"), "{}", prompt_err);
+
+        let docs_arg = super::InitCommandError::InvalidDocsExportArgument(
+            "requires --export-docs".to_string(),
+        );
+        assert!(docs_arg.to_string().contains("docs export argument"), "{}", docs_arg);
     }
 
     #[test]
@@ -2777,6 +3264,10 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            export_docs: false,
+            docs_refresh: false,
+            docs_diff: false,
+            docs_output_dir: None,
             force: true,
         })
         .unwrap();
@@ -2820,6 +3311,10 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            export_docs: false,
+            docs_refresh: false,
+            docs_diff: false,
+            docs_output_dir: None,
             force: true,
         })
         .unwrap();

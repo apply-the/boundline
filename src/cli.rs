@@ -204,7 +204,7 @@ pub enum DeveloperCommand {
     },
     #[command(
         about = "Bootstrap Boundline files, assistant packs, and default routing for a workspace",
-        after_long_help = "Guided mode tips:\n  - leave --assistant unset to skip repository-local assistant packs\n  - leave guided routes blank to let selected assistants seed defaults for planning, implementation, verification, and review\n\nExamples:\n  boundline init --workspace . --assistant copilot\n  boundline init --workspace . --assistant copilot --route planning=copilot:gpt-5.4\n  boundline init --workspace . --assistant codex --assistant copilot --route review=claude:sonnet-4"
+        after_long_help = "Guided mode tips:\n  - leave --assistant unset to skip repository-local assistant packs\n  - leave guided routes blank to let selected assistants seed defaults for planning, implementation, verification, and review\n\nDocs export policy:\n  - --export-docs is create-only by default; existing target files stop the command\n  - use --refresh to update generated docs in place\n  - use --diff to preview docs changes without writing\n  - use --to <path> to export generated docs under another root\n\nExamples:\n  boundline init --workspace . --assistant copilot\n  boundline init --workspace . --assistant copilot --route planning=copilot:gpt-5.4\n  boundline init --workspace . --assistant codex --assistant copilot --route review=claude:sonnet-4\n  boundline init --workspace . --export-docs\n  boundline init --workspace . --export-docs --refresh\n  boundline init --workspace . --export-docs --to docs/reference/boundline"
     )]
     Init {
         /// Workspace directory to bootstrap.
@@ -246,6 +246,18 @@ pub enum DeveloperCommand {
         /// Default Canon governance owner.
         #[arg(long)]
         owner: Option<String>,
+        /// Export stable repo-local Canon and assistant reference docs under docs/boundline/.
+        #[arg(long = "export-docs")]
+        export_docs: bool,
+        /// Refresh generated repo-local docs in place.
+        #[arg(long, requires = "export_docs", conflicts_with = "diff")]
+        refresh: bool,
+        /// Show generated repo-local docs changes without writing files.
+        #[arg(long, requires = "export_docs", conflicts_with = "refresh")]
+        diff: bool,
+        /// Export generated repo-local docs under a custom root instead of docs/boundline/.
+        #[arg(long = "to", value_name = "PATH", requires = "export_docs")]
+        to: Option<PathBuf>,
         /// Replace existing Boundline files in the workspace.
         #[arg(long)]
         force: bool,
@@ -1360,6 +1372,10 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
             risk,
             zone,
             owner,
+            export_docs,
+            refresh,
+            diff,
+            to,
             force,
         } => {
             match init::execute_init(init::InitRequest {
@@ -1378,6 +1394,10 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                 risk: risk.as_deref(),
                 zone: zone.as_deref(),
                 owner: owner.as_deref(),
+                export_docs: *export_docs,
+                docs_refresh: *refresh,
+                docs_diff: *diff,
+                docs_output_dir: to.as_deref(),
                 force: *force,
             }) {
                 Ok(report) => {
@@ -1907,6 +1927,10 @@ fn red_to_green_addition() {
                     risk: None,
                     zone: None,
                     owner: None,
+                    export_docs: false,
+                    refresh: false,
+                    diff: false,
+                    to: None,
                     force: false,
                 },
                 CommandName::Init,
@@ -2032,6 +2056,10 @@ fn red_to_green_addition() {
             risk: None,
             zone: None,
             owner: None,
+            export_docs: false,
+            refresh: false,
+            diff: false,
+            to: None,
             force: false,
         });
         assert_eq!(init.exit_status, CommandExitStatus::NonSuccess);
@@ -2053,10 +2081,16 @@ fn red_to_green_addition() {
             risk: None,
             zone: None,
             owner: None,
+            export_docs: true,
+            refresh: false,
+            diff: false,
+            to: None,
             force: true,
         });
         assert_eq!(init_ok.exit_status, CommandExitStatus::Succeeded, "{}", init_ok.output);
         assert!(init_ok.output.contains("init: workspace initialized"), "{}", init_ok.output);
+        assert!(init_ok.output.contains("docs_export:"), "{}", init_ok.output);
+        assert!(init_success_workspace.join("docs/boundline/canon.md").exists());
 
         for command in [
             DeveloperCommand::Config {

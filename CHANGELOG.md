@@ -17,6 +17,23 @@ recorded workspace version.
 
 ## [Unreleased]
 
+## [0.48.0] - 2026-05-10
+
+Delivered specs:
+
+- `047` - Catalog Freshness, Independent Voting, and File-Backed Inputs
+
+Highlights:
+
+- Refresh the bundled assistant model catalog with the current mainstream
+  route-capable models documented by OpenAI, Anthropic, and Google, then align
+  built-in verification and review defaults to that refreshed bundle.
+- Treat a single Markdown path or ordered Markdown-path array passed through
+  prompted authored input as file-backed input instead of persisting the raw
+  shorthand as direct goal text.
+- Reject review councils that collapse onto the same effective runtime/model
+  route and persist the resolved effective route for each counted reviewer.
+
 ## [0.47.0] - 2026-05-09
 
 Delivered specs:
