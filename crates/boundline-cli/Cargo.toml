@@ -9,7 +9,6 @@ boundline-core.workspace = true
 boundline-adapters.workspace = true
 clap.workspace = true
 dialoguer.workspace = true
-indicatif.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

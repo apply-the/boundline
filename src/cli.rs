@@ -1366,6 +1366,7 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                 workspace,
                 non_interactive: *non_interactive,
                 interactive_terminal_override: None,
+                interactor: None,
                 template: *template,
                 assistants: assistant,
                 routes: route,
