@@ -25,13 +25,13 @@ fn distribution_metadata_keeps_versions_and_bundle_names_aligned() {
 
     assert!(cargo_toml.contains("version = \"0.47.0\""));
     assert!(channel_metadata.contains("boundline_version = \"0.47.0\""));
-    assert!(channel_metadata.contains("canon_version = \"0.42.0\""));
+    assert!(channel_metadata.contains("canon_version = \"0.43.0\""));
     assert!(channel_metadata.contains("tap_repository = \"apply-the/homebrew-boundline\""));
     assert!(channel_metadata.contains("tap_name = \"apply-the/boundline\""));
     assert!(formula.contains("version \"0.47.0\""));
     assert!(formula.contains("using: :git, tag: \"0.47.0\""));
     assert!(formula.contains("resource \"canon-source\""));
-    assert!(formula.contains("tag: \"0.42.0\""));
+    assert!(formula.contains("tag: \"0.43.0\""));
     assert!(formula.contains("boundline doctor --install"));
     assert!(winget_version.contains("PackageVersion: 0.47.0"));
     assert!(winget_installer.contains("boundline-bundle-0.47.0-windows-x86_64.zip"));
