@@ -172,6 +172,8 @@ pub struct ReviewerParticipation {
     pub status: ReviewerParticipationStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effective_route: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -187,6 +189,7 @@ impl VoteRuleDefinition {
         &self,
         reviewers: &[ReviewerDefinition],
         findings: &[ReviewerFinding],
+        effective_routes: Option<&BTreeMap<String, String>>,
     ) -> Result<VoteResolution, ReviewProfileError> {
         if findings.is_empty() {
             return Err(ReviewProfileError::MissingVoteFindings);
@@ -238,8 +241,11 @@ impl VoteRuleDefinition {
                     ReviewerParticipationStatus::Omitted
                 },
                 reason: None,
+                effective_route: effective_route_for_reviewer(reviewer, effective_routes),
             })
             .collect::<Vec<_>>();
+
+        ensure_distinct_effective_routes(&participants)?;
 
         let decision = if self.reject_on_blocking && blocks > 0 {
             VoteDecision::Rejected
@@ -260,6 +266,51 @@ impl VoteRuleDefinition {
             decision,
         })
     }
+}
+
+fn effective_route_for_reviewer(
+    reviewer: &ReviewerDefinition,
+    effective_routes: Option<&BTreeMap<String, String>>,
+) -> Option<String> {
+    effective_routes.and_then(|routes| routes.get(&reviewer.reviewer_id).cloned()).or_else(|| {
+        reviewer
+            .source
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    })
+}
+
+fn ensure_distinct_effective_routes(
+    participants: &[ReviewerParticipation],
+) -> Result<(), ReviewProfileError> {
+    let mut seen_routes = BTreeMap::<String, String>::new();
+
+    for participant in participants
+        .iter()
+        .filter(|participant| participant.status == ReviewerParticipationStatus::Completed)
+    {
+        let Some(route) =
+            participant.effective_route.as_deref().map(str::trim).filter(|value| !value.is_empty())
+        else {
+            return Err(ReviewProfileError::MissingEffectiveReviewerRoute(
+                participant.reviewer_id.clone(),
+            ));
+        };
+
+        if let Some(first_reviewer) =
+            seen_routes.insert(route.to_string(), participant.reviewer_id.clone())
+        {
+            return Err(ReviewProfileError::DuplicateEffectiveReviewerRoute {
+                first_reviewer,
+                second_reviewer: participant.reviewer_id.clone(),
+                route: route.to_string(),
+            });
+        }
+    }
+
+    Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -398,10 +449,240 @@ pub enum ReviewProfileError {
     MissingFindingSummary(String),
     #[error("finding reviewer '{0}' is duplicated in one scenario or vote")]
     DuplicateFindingReviewer(String),
+    #[error("reviewer '{0}' did not resolve to an effective review route")]
+    MissingEffectiveReviewerRoute(String),
+    #[error(
+        "reviewers '{first_reviewer}' and '{second_reviewer}' resolve to the same effective route '{route}'"
+    )]
+    DuplicateEffectiveReviewerRoute {
+        first_reviewer: String,
+        second_reviewer: String,
+        route: String,
+    },
     #[error(
         "scenario for trigger '{0:?}' cannot define an adjudication finding when adjudication is disabled"
     )]
     UnexpectedAdjudicationFinding(ReviewTrigger),
     #[error("vote resolution requires at least one finding")]
     MissingVoteFindings,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use serde_json::json;
+
+    use super::*;
+
+    fn sample_reviewers() -> Vec<ReviewerDefinition> {
+        vec![
+            ReviewerDefinition {
+                reviewer_id: "safety".to_string(),
+                role: "Safety".to_string(),
+                source: Some("copilot/gpt-5.5".to_string()),
+                weight: 1,
+            },
+            ReviewerDefinition {
+                reviewer_id: "maintainability".to_string(),
+                role: "Maintainability".to_string(),
+                source: Some("claude/sonnet-4.6".to_string()),
+                weight: 1,
+            },
+        ]
+    }
+
+    fn sample_findings() -> Vec<ReviewerFinding> {
+        vec![
+            ReviewerFinding {
+                reviewer_id: "safety".to_string(),
+                disposition: ReviewerDisposition::Approve,
+                summary: "No blocking issues".to_string(),
+                details: None,
+            },
+            ReviewerFinding {
+                reviewer_id: "maintainability".to_string(),
+                disposition: ReviewerDisposition::Approve,
+                summary: "Looks maintainable".to_string(),
+                details: None,
+            },
+        ]
+    }
+
+    #[test]
+    fn review_scenario_validates_enabled_adjudication_finding() {
+        let triggers = BTreeSet::from([ReviewTrigger::PrReady]);
+        let reviewer_ids = BTreeSet::from(["safety".to_string(), "maintainability".to_string()]);
+        let adjudication =
+            AdjudicationDefinition { enabled: true, reviewer_id: Some("arbiter".to_string()) };
+        let scenario = ReviewScenario {
+            trigger: ReviewTrigger::PrReady,
+            findings: sample_findings(),
+            adjudication_finding: Some(ReviewerFinding {
+                reviewer_id: "arbiter".to_string(),
+                disposition: ReviewerDisposition::Approve,
+                summary: "Break the tie".to_string(),
+                details: None,
+            }),
+        };
+
+        assert!(scenario.validate(&triggers, &reviewer_ids, &adjudication).is_ok());
+    }
+
+    #[test]
+    fn resolve_rejects_missing_vote_findings() {
+        let error =
+            VoteRuleDefinition::default().resolve(&sample_reviewers(), &[], None).unwrap_err();
+
+        assert_eq!(error, ReviewProfileError::MissingVoteFindings);
+    }
+
+    #[test]
+    fn resolve_uses_reviewer_source_routes_and_rejects_block_majority() {
+        let reviewers = vec![
+            ReviewerDefinition {
+                reviewer_id: "safety".to_string(),
+                role: "Safety".to_string(),
+                source: Some("copilot/gpt-5.5".to_string()),
+                weight: 1,
+            },
+            ReviewerDefinition {
+                reviewer_id: "maintainability".to_string(),
+                role: "Maintainability".to_string(),
+                source: Some("claude/sonnet-4.6".to_string()),
+                weight: 1,
+            },
+            ReviewerDefinition {
+                reviewer_id: "ux".to_string(),
+                role: "UX".to_string(),
+                source: Some("gemini/gemini-2.5-pro".to_string()),
+                weight: 1,
+            },
+        ];
+        let findings = vec![
+            ReviewerFinding {
+                reviewer_id: "safety".to_string(),
+                disposition: ReviewerDisposition::Block,
+                summary: "Unsafe".to_string(),
+                details: None,
+            },
+            ReviewerFinding {
+                reviewer_id: "maintainability".to_string(),
+                disposition: ReviewerDisposition::Block,
+                summary: "Hard to maintain".to_string(),
+                details: None,
+            },
+            ReviewerFinding {
+                reviewer_id: "ux".to_string(),
+                disposition: ReviewerDisposition::Approve,
+                summary: "Looks fine from UX".to_string(),
+                details: None,
+            },
+        ];
+
+        let resolution =
+            VoteRuleDefinition::default().resolve(&reviewers, &findings, None).unwrap();
+
+        assert_eq!(resolution.decision, VoteDecision::Rejected);
+        assert_eq!(resolution.participants[0].effective_route.as_deref(), Some("copilot/gpt-5.5"));
+        assert_eq!(
+            resolution.participants[1].effective_route.as_deref(),
+            Some("claude/sonnet-4.6")
+        );
+        assert_eq!(
+            resolution.participants[2].effective_route.as_deref(),
+            Some("gemini/gemini-2.5-pro")
+        );
+    }
+
+    #[test]
+    fn resolve_requires_effective_route_for_completed_reviewers() {
+        let reviewers = vec![
+            ReviewerDefinition {
+                reviewer_id: "safety".to_string(),
+                role: "Safety".to_string(),
+                source: None,
+                weight: 1,
+            },
+            ReviewerDefinition {
+                reviewer_id: "maintainability".to_string(),
+                role: "Maintainability".to_string(),
+                source: None,
+                weight: 1,
+            },
+        ];
+        let findings = vec![ReviewerFinding {
+            reviewer_id: "safety".to_string(),
+            disposition: ReviewerDisposition::Approve,
+            summary: "No blockers".to_string(),
+            details: None,
+        }];
+
+        let error = VoteRuleDefinition::default().resolve(&reviewers, &findings, None).unwrap_err();
+
+        assert_eq!(error, ReviewProfileError::MissingEffectiveReviewerRoute("safety".to_string()));
+    }
+
+    #[test]
+    fn adjudication_definition_accepts_distinct_reviewer_id() {
+        let reviewer_ids = BTreeSet::from(["safety".to_string(), "maintainability".to_string()]);
+        let adjudication =
+            AdjudicationDefinition { enabled: true, reviewer_id: Some("arbiter".to_string()) };
+
+        assert!(adjudication.validate(&reviewer_ids).is_ok());
+    }
+
+    #[test]
+    fn reviewer_definition_deserializes_default_weight() {
+        let reviewer: ReviewerDefinition = serde_json::from_value(json!({
+            "reviewer_id": "safety",
+            "role": "Safety"
+        }))
+        .unwrap();
+
+        assert_eq!(reviewer.weight, 1);
+    }
+
+    #[test]
+    fn resolve_includes_effective_routes_for_completed_reviewers() {
+        let routes = BTreeMap::from([
+            ("safety".to_string(), "copilot/gpt-5.5".to_string()),
+            ("maintainability".to_string(), "claude/sonnet-4.6".to_string()),
+        ]);
+
+        let resolution = VoteRuleDefinition::default()
+            .resolve(&sample_reviewers(), &sample_findings(), Some(&routes))
+            .unwrap();
+
+        assert_eq!(resolution.decision, VoteDecision::Accepted);
+        assert_eq!(resolution.participants.len(), 2);
+        assert_eq!(resolution.participants[0].effective_route.as_deref(), Some("copilot/gpt-5.5"));
+        assert_eq!(
+            resolution.participants[1].effective_route.as_deref(),
+            Some("claude/sonnet-4.6")
+        );
+    }
+
+    #[test]
+    fn resolve_rejects_duplicate_effective_routes() {
+        let routes = BTreeMap::from([
+            ("safety".to_string(), "copilot/gpt-5.5".to_string()),
+            ("maintainability".to_string(), "copilot/gpt-5.5".to_string()),
+        ]);
+
+        let error = VoteRuleDefinition::default()
+            .resolve(&sample_reviewers(), &sample_findings(), Some(&routes))
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            ReviewProfileError::DuplicateEffectiveReviewerRoute {
+                first_reviewer,
+                second_reviewer,
+                route,
+            } if first_reviewer == "safety"
+                && second_reviewer == "maintainability"
+                && route == "copilot/gpt-5.5"
+        ));
+    }
 }

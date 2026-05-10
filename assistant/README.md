@@ -4,7 +4,7 @@ This directory contains Markdown-based commands to run `boundline` from various 
 
 The primary delivery surface is session-native: `start -> capture -> plan -> run -> status -> next -> inspect` against `<workspace>/.boundline/session.json` and `<workspace>/.boundline/traces/`.
 
-In `0.47.0`, shell-enabled assistant flows should prefer `--json` for the session-native lifecycle commands plus `run`, `status`, `next`, and `inspect`. Treat `command_name`, `exit_status`, `rendered_output`, `trace_location`, `session_status`, and `trace_summary` as the authoritative host envelope when those fields are present, and use `rendered_output` only as the human-readable companion.
+In `0.48.0`, shell-enabled assistant flows should prefer `--json` for the session-native lifecycle commands plus `run`, `status`, `next`, and `inspect`. Treat `command_name`, `exit_status`, `rendered_output`, `trace_location`, `session_status`, and `trace_summary` as the authoritative host envelope when those fields are present, and use `rendered_output` only as the human-readable companion.
 
 In `0.44.0`, assistants should treat installation verification as the first
 boundary in a new environment: prefer the README quick path, run
@@ -63,7 +63,7 @@ those values exactly: they explain whether the current proposal is still
 waiting for confirmation, what changed across revisions, and how Boundline expects
 to validate the bounded plan.
 
-`boundline init` still scaffolds `<workspace>/.boundline/execution.json` plus local routing config, but that manifest is now an explicit compatibility/bootstrap surface rather than the default product story. When operators pass `--assistant claude|copilot|codex|gemini`, preserve the reported `route_setup`, including seeded routes, explicit overrides, `inspect_or_edit`, and any `fallback-from=<runtime>-unavailable` wording. When init reports `assistant_setup`, `workspace_hygiene`, or `next_steps`, preserve created, updated, unchanged, skipped, provenance, and follow-up wording exactly; those lines explain which bounded assistant and hygiene defaults were applied without overwriting local rules.
+`boundline init` still scaffolds `<workspace>/.boundline/execution.json` plus local routing config, but that manifest is now an explicit compatibility/bootstrap surface rather than the default product story. When operators pass `--assistant claude|copilot|codex|gemini`, preserve the reported `route_setup`, including seeded routes, explicit overrides, `inspect_or_edit`, and any `fallback-from=<runtime>-unavailable` wording. When operators also pass `--export-docs`, Boundline mirrors a stable Canon reference plus the selected assistant reference files under `<workspace>/docs/boundline/` by default or another root via `--to`; that export is create-only unless the operator explicitly asks for `--refresh` or `--force`, and `--diff` previews changes without writing. When init reports `assistant_setup`, `docs_export`, `workspace_hygiene`, or `next_steps`, preserve created, updated, unchanged, skipped, provenance, and follow-up wording exactly; those lines explain which bounded assistant and hygiene defaults were applied without overwriting local rules.
 
 In the same release, `boundline doctor` now groups output into `summary`, `checks`, and `actions`. Preserve those section labels and follow-up commands exactly instead of paraphrasing them away, because they are now the first-run recovery surface for install and workspace readiness.
 

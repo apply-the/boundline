@@ -1,11 +1,15 @@
 [metadata]
 source_label = "bundled"
-catalog_version = "0.47.0"
-updated_at = "2026-05-09"
+catalog_version = "0.48.0"
+updated_at = "2026-05-10"
 
 [[runtimes]]
 runtime = "copilot"
 display_name = "GitHub Copilot"
+
+[[runtimes.models]]
+model_id = "gpt-5.5"
+display_name = "GPT-5.5"
 
 [[runtimes.models]]
 model_id = "gpt-5.4"
@@ -14,6 +18,10 @@ display_name = "GPT-5.4"
 [[runtimes.models]]
 model_id = "gpt-5.4-mini"
 display_name = "GPT-5.4 Mini"
+
+[[runtimes.models]]
+model_id = "gpt-5.4-nano"
+display_name = "GPT-5.4 Nano"
 
 [[runtimes]]
 runtime = "codex"
@@ -26,6 +34,18 @@ display_name = "GPT-5 Codex"
 [[runtimes]]
 runtime = "claude"
 display_name = "Claude"
+
+[[runtimes.models]]
+model_id = "sonnet-4.6"
+display_name = "Sonnet 4.6"
+
+[[runtimes.models]]
+model_id = "opus-4.7"
+display_name = "Opus 4.7"
+
+[[runtimes.models]]
+model_id = "haiku-4.5"
+display_name = "Haiku 4.5"
 
 [[runtimes.models]]
 model_id = "sonnet-4"
@@ -48,11 +68,31 @@ model_id = "gemini-2.5-pro"
 display_name = "Gemini 2.5 Pro"
 
 [[runtimes.models]]
+model_id = "gemini-3.1-pro-preview"
+display_name = "Gemini 3.1 Pro Preview"
+
+[[runtimes.models]]
 model_id = "gemini-2.5-flash"
 display_name = "Gemini 2.5 Flash"
+
+[[runtimes.models]]
+model_id = "gemini-2.5-flash-lite"
+display_name = "Gemini 2.5 Flash-Lite"
+
+[[runtimes.models]]
+model_id = "gemini-3-flash-preview"
+display_name = "Gemini 3 Flash Preview"
+
+[[runtimes.models]]
+model_id = "gemini-3.1-flash-lite"
+display_name = "Gemini 3.1 Flash-Lite"
+
+[[runtimes.models]]
+model_id = "gemini-3.1-flash-lite-preview"
+display_name = "Gemini 3.1 Flash-Lite Preview"
 
 [default_routes]
 planning = { runtime = "codex", model_id = "gpt-5-codex" }
 implementation = { runtime = "codex", model_id = "gpt-5-codex" }
-verification = { runtime = "copilot", model_id = "gpt-5.4" }
-review = { runtime = "claude", model_id = "sonnet-4" }
+verification = { runtime = "copilot", model_id = "gpt-5.5" }
+review = { runtime = "claude", model_id = "sonnet-4.6" }

@@ -1,9 +1,11 @@
 <!--
 Sync Impact Report
-Version change: 1.0.0 -> 1.1.0
+Version change: 1.1.0 -> 1.2.0
 Modified principles:
-- XII. Strict Non-Goals: expanded to allow explicitly reprioritized, bounded
-	review councils and voting as delivery quality-control slices
+- Specification Standards: expanded to require a provider model catalog refresh
+	check against current public web sources for every spec
+- Planning & Review Workflow: expanded to require explicit catalog refresh
+	evidence in plans and task breakdowns
 Added sections:
 - None
 Removed sections:
@@ -11,6 +13,7 @@ Removed sections:
 Templates requiring updates:
 - updated: .specify/templates/plan-template.md
 - updated: .specify/templates/spec-template.md
+- updated: .specify/templates/tasks-template.md
 Related docs updated:
 - None
 Follow-up TODOs:
@@ -214,6 +217,9 @@ Rationale: completion is defined by delivery behavior, not by conceptual ambitio
 	path and at least one failure, retry, replanning, or exhaustion path.
 - Every feature spec MUST avoid language that implies hidden heuristics, autonomous
 	background work, or capabilities delegated to external governance systems.
+- Every feature spec MUST verify the bundled assistant model catalog against current
+	public provider documentation using web research, update the catalog when differences
+	are found, and record either the applied catalog delta or the no-change rationale.
 - Every feature spec SHOULD choose the smallest viable capability slice; when a broader
 	scope is necessary, the author MUST explain why a smaller slice would fail.
 
@@ -224,6 +230,9 @@ Rationale: completion is defined by delivery behavior, not by conceptual ambitio
 - Every task breakdown MUST include work for validation, failure handling, and
 	observability whenever those concerns appear in the spec; for Boundline delivery features,
 	reviewers SHOULD expect those concerns by default.
+- Every plan and task breakdown MUST surface the catalog-refresh evidence required by the
+	Specification Standards section. When the web refresh finds no provider-model delta,
+	the no-change result MUST still be recorded explicitly.
 - Reviews MUST reject features that invert the delivery-first priority order or that
 	reintroduce deferred non-goals without an approved amendment.
 - Non-compliant specs, plans, and tasks MUST be revised before implementation begins.
@@ -247,4 +256,4 @@ Rationale: completion is defined by delivery behavior, not by conceptual ambitio
 - Ratification and amendment dates MUST use ISO format. An amendment is incomplete until
 	this file, the Sync Impact Report, and dependent artifacts are in sync.
 
-**Version**: 1.1.0 | **Ratified**: 2026-04-23 | **Last Amended**: 2026-04-26
+**Version**: 1.2.0 | **Ratified**: 2026-04-23 | **Last Amended**: 2026-05-10

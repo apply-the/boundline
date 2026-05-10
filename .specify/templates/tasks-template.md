@@ -15,6 +15,9 @@ runtime routing, governance surfaces, or operator-facing summaries, include cove
 route explanation, `execution_condition`, selected mode, approval state, packet provenance,
 next-command guidance, and other CLI-visible surfaces, then refresh coverage artifacts such
 as `lcov.info`.
+Every feature task list MUST also include a catalog-refresh task that checks current public
+provider docs against `assistant/catalog/model-catalog.toml` and records the applied delta
+or explicit no-change result.
 
 **Organization**: Tasks are grouped by user story so each slice can deliver bounded,
 inspectable value independently.

@@ -129,7 +129,7 @@ fn render_session_status_surfaces_compatibility_follow_up_without_replacing_nati
     assert!(rendered.contains("continuity_authority: native_session"), "{rendered}");
     assert!(
         rendered.contains(
-            "route_config_projection: effective_routing: planning=codex/gpt-5-codex [built-in], implementation=codex/gpt-5-codex [built-in], verification=copilot/gpt-5.4 [built-in], review=claude/sonnet-4 [built-in], adjudication=codex/gpt-5-codex [built-in]"
+            "route_config_projection: effective_routing: planning=codex/gpt-5-codex [built-in], implementation=codex/gpt-5-codex [built-in], verification=copilot/gpt-5.5 [built-in], review=claude/sonnet-4.6 [built-in], adjudication=codex/gpt-5-codex [built-in]"
         ),
         "{rendered}"
     );

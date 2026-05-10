@@ -1,9 +1,9 @@
-# Configuration in Boundline 0.47.0
+# Configuration in Boundline 0.48.0
 
-Boundline `0.47.0` keeps a user-friendly setup and routing configuration surface
+Boundline `0.48.0` keeps a user-friendly setup and routing configuration surface
 for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
-The `0.47.0` release keeps configuration behavior stable while preserving the
+The `0.48.0` release keeps configuration behavior stable while preserving the
 same governed routing defaults across earlier `bug-fix:investigate` work,
 later verify-stage `security-assessment`, workflow-aware projection of the
 same bounded governance state, continuity-aware read-side follow-up, the
@@ -53,6 +53,7 @@ ranking, explicit adaptive exhaustion, or negotiation-state overrides.
 ## What changed
 
 - `boundline init` bootstraps an optional compatibility workspace profile and local config under `.boundline/`
+- `boundline init --export-docs` can also mirror stable repo-local Canon and selected assistant reference docs under `docs/boundline/`; that export is create-only by default, `--refresh` enables in-place updates, `--diff` previews changes without writing, and `--to <path>` switches the export root
 - `boundline init` can also infer or accept active domain families and seed scoped domain-template defaults plus optional external context bindings
 - direct `boundline run --goal` is native-first; add `--compatibility` only when the manifest-backed route is intentional
 - default `boundline plan` now creates one evidence-driven proposal and `boundline plan --confirm` confirms it; planning lifecycle state is session-owned rather than config-owned

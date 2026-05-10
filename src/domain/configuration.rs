@@ -361,9 +361,9 @@ impl RoutingConfig {
 
 pub fn assistant_default_model_route(runtime: RuntimeKind) -> ModelRoute {
     match runtime {
-        RuntimeKind::Claude => ModelRoute { runtime, model: "sonnet-4".to_string() },
+        RuntimeKind::Claude => ModelRoute { runtime, model: "sonnet-4.6".to_string() },
         RuntimeKind::Codex => ModelRoute { runtime, model: "gpt-5-codex".to_string() },
-        RuntimeKind::Copilot => ModelRoute { runtime, model: "gpt-5.4".to_string() },
+        RuntimeKind::Copilot => ModelRoute { runtime, model: "gpt-5.5".to_string() },
         RuntimeKind::Gemini => ModelRoute { runtime, model: "gemini-2.5-pro".to_string() },
     }
 }
@@ -783,8 +783,8 @@ fn built_in_defaults() -> BuiltInDefaults {
             runtime: RuntimeKind::Codex,
             model: "gpt-5-codex".to_string(),
         },
-        verification: ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-5.4".to_string() },
-        review: ModelRoute { runtime: RuntimeKind::Claude, model: "sonnet-4".to_string() },
+        verification: ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-5.5".to_string() },
+        review: ModelRoute { runtime: RuntimeKind::Claude, model: "sonnet-4.6".to_string() },
         adjudication: ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-5-codex".to_string() },
     }
 }
@@ -823,8 +823,8 @@ mod tests {
     #[test]
     fn assistant_default_routes_match_built_in_runtime_catalog() {
         assert_eq!(assistant_default_model_route(RuntimeKind::Codex).model, "gpt-5-codex");
-        assert_eq!(assistant_default_model_route(RuntimeKind::Copilot).model, "gpt-5.4");
-        assert_eq!(assistant_default_model_route(RuntimeKind::Claude).model, "sonnet-4");
+        assert_eq!(assistant_default_model_route(RuntimeKind::Copilot).model, "gpt-5.5");
+        assert_eq!(assistant_default_model_route(RuntimeKind::Claude).model, "sonnet-4.6");
         assert_eq!(assistant_default_model_route(RuntimeKind::Gemini).model, "gemini-2.5-pro");
     }
 
@@ -832,7 +832,7 @@ mod tests {
     fn seeded_routes_prefer_selected_built_in_runtime_and_fallback_to_first_assistant() {
         let seeded = seeded_routes_for_assistants(&[RuntimeKind::Copilot, RuntimeKind::Claude]);
         assert_eq!(seeded.get(&RouteSlot::Planning).unwrap().runtime, RuntimeKind::Copilot);
-        assert_eq!(seeded.get(&RouteSlot::Planning).unwrap().model, "gpt-5.4");
+        assert_eq!(seeded.get(&RouteSlot::Planning).unwrap().model, "gpt-5.5");
         assert_eq!(seeded.get(&RouteSlot::Implementation).unwrap().runtime, RuntimeKind::Copilot);
         assert_eq!(seeded.get(&RouteSlot::Verification).unwrap().runtime, RuntimeKind::Copilot);
         assert_eq!(seeded.get(&RouteSlot::Review).unwrap().runtime, RuntimeKind::Claude);

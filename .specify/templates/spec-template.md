@@ -129,6 +129,18 @@
 - **SC-003**: [Measurable inspectability metric, e.g., "Developers can identify failure and recovery paths from recorded execution output in under 5 minutes"]
 - **SC-004**: [Measurable value metric, e.g., "At least 90% of representative tasks reach the intended delivery outcome on first plan or after bounded recovery"]
 
+## Catalog Research & Currency *(mandatory)*
+
+<!--
+  ACTION REQUIRED: Every Boundline spec MUST verify the bundled assistant model catalog
+  against current public provider documentation using web research.
+  Record what sources were checked and whether the catalog changed.
+-->
+
+- **Public Sources Reviewed**: [List the provider documentation or changelog pages checked during spec creation]
+- **Catalog Delta**: [Summarize the model additions, removals, or label changes applied to the bundled catalog]
+- **No-Change Rationale**: [If no catalog change was required, explain why the current bundled catalog remains accurate]
+
 ## Assumptions
 
 <!--

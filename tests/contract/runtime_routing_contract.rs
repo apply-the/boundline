@@ -286,7 +286,7 @@ fn compatibility_inspect_uses_persisted_routing_snapshot_after_config_changes() 
     assert!(
         inspect
             .terminal_output
-            .contains("effective_routing: planning=codex/gpt-5-codex [built-in], implementation=codex/gpt-5-codex [built-in], verification=copilot/gpt-5.4 [built-in], review=claude/reviewer-before [workspace], adjudication=codex/gpt-5-codex [built-in]"),
+            .contains("effective_routing: planning=codex/gpt-5-codex [built-in], implementation=codex/gpt-5-codex [built-in], verification=copilot/gpt-5.5 [built-in], review=claude/reviewer-before [workspace], adjudication=codex/gpt-5-codex [built-in]"),
         "{}",
         inspect.terminal_output
     );
@@ -348,7 +348,7 @@ fn native_inspect_uses_persisted_routing_snapshot_after_config_changes() {
     assert!(
         inspect
             .terminal_output
-            .contains("effective_routing: planning=codex/gpt-5-codex [built-in], implementation=codex/gpt-5-codex [built-in], verification=copilot/gpt-5.4 [built-in], review=claude/reviewer-before [workspace], adjudication=codex/gpt-5-codex [built-in]"),
+            .contains("effective_routing: planning=codex/gpt-5-codex [built-in], implementation=codex/gpt-5-codex [built-in], verification=copilot/gpt-5.5 [built-in], review=claude/reviewer-before [workspace], adjudication=codex/gpt-5-codex [built-in]"),
         "{}",
         inspect.terminal_output
     );

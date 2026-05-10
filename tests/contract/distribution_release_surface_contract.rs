@@ -2,7 +2,7 @@ use std::fs;
 use std::path::Path;
 
 #[test]
-fn release_surface_closes_on_0_47_0_without_an_upcoming_047_entry() {
+fn release_surface_closes_on_0_48_0_without_an_upcoming_048_entry() {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let cargo_toml = fs::read_to_string(repo_root.join("Cargo.toml")).unwrap();
     let changelog = fs::read_to_string(repo_root.join("CHANGELOG.md")).unwrap();
@@ -13,11 +13,11 @@ fn release_surface_closes_on_0_47_0_without_an_upcoming_047_entry() {
     let homebrew_tap_workflow =
         fs::read_to_string(repo_root.join(".github/workflows/sync-homebrew-tap.yml")).unwrap();
 
-    assert!(cargo_toml.contains("version = \"0.47.0\""));
-    assert!(changelog.contains("## [0.47.0] - 2026-05-09"));
-    assert!(changelog.contains("Guided Init TUI and Runtime Catalog"));
-    assert!(roadmap.contains("## Current Status: v0.47.0"));
-    assert!(roadmap.contains("### Delivered in 0.47.0"));
+    assert!(cargo_toml.contains("version = \"0.48.0\""));
+    assert!(changelog.contains("## [0.48.0] - 2026-05-10"));
+    assert!(changelog.contains("Catalog Freshness, Independent Voting, and File-Backed Inputs"));
+    assert!(roadmap.contains("## Current Status: v0.48.0"));
+    assert!(roadmap.contains("### Delivered in 0.48.0"));
     assert!(windows_release_workflow.contains(
         "git clone --depth 1 --branch \"$canonVersion\" https://github.com/apply-the/canon canon-source"
     ));

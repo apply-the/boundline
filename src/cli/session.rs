@@ -1527,6 +1527,27 @@ fn red_to_green_addition() {
             .unwrap(),
         )
         .unwrap();
+        let config = ConfigFile {
+            version: 1,
+            routing: RoutingConfig {
+                reviewer_roles: std::collections::BTreeMap::from([
+                    (
+                        "safety".to_string(),
+                        ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-5.5".to_string() },
+                    ),
+                    (
+                        "maintainability".to_string(),
+                        ModelRoute {
+                            runtime: RuntimeKind::Claude,
+                            model: "sonnet-4.6".to_string(),
+                        },
+                    ),
+                ]),
+                ..RoutingConfig::default()
+            },
+            canon: None,
+        };
+        FileConfigStore::for_workspace(&workspace).save_local(&config).unwrap();
         workspace
     }
 
