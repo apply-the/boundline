@@ -17,6 +17,23 @@ recorded workspace version.
 
 ## [Unreleased]
 
+## [0.47.0] - 2026-05-09
+
+Delivered specs:
+
+- `046` - Guided Init TUI and Runtime Catalog
+
+Highlights:
+
+- Replace the fragile guided `init` freeform prompts with a bounded terminal
+  wizard that shows visible defaults, slot-by-slot route editing, and a final
+  summary before writes.
+- Ship a bundled runtime/model catalog with explicit source metadata, custom
+  model fallback warnings, and assistant-pack scaffolding status grouped by
+  selected surface.
+- Add top-level `--version` support, non-interactive `init` parity, and
+  spinner-style progress feedback for time-consuming bootstrap steps.
+
 ## [0.46.0] - 2026-05-09
 
 Delivered specs:

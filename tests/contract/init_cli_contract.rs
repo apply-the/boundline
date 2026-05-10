@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::process::Command;
 
 use boundline::cli::{Cli, DeveloperCommand};
 use boundline::domain::configuration::{InitTemplate, RuntimeKind};
@@ -25,6 +26,7 @@ fn init_accepts_template_and_assistant_runtimes() {
     match cli.command {
         DeveloperCommand::Init {
             workspace,
+            non_interactive,
             template,
             assistant,
             route,
@@ -39,6 +41,7 @@ fn init_accepts_template_and_assistant_runtimes() {
             force,
         } => {
             assert_eq!(workspace, PathBuf::from("/tmp/ws"));
+            assert!(!non_interactive);
             assert_eq!(template, Some(InitTemplate::Delivery));
             assert_eq!(assistant, vec![RuntimeKind::Codex, RuntimeKind::Gemini]);
             assert!(route.is_empty());
@@ -63,6 +66,7 @@ fn init_accepts_canon_preferences_and_model_routes() {
         "init",
         "--workspace",
         "/tmp/ws",
+        "--non-interactive",
         "--canon-mode-selection",
         "auto-confirm",
         "--assistant",
@@ -73,7 +77,10 @@ fn init_accepts_canon_preferences_and_model_routes() {
     .unwrap();
 
     match cli.command {
-        DeveloperCommand::Init { assistant, route, canon_mode_selection, .. } => {
+        DeveloperCommand::Init {
+            non_interactive, assistant, route, canon_mode_selection, ..
+        } => {
+            assert!(non_interactive);
             assert_eq!(assistant, vec![RuntimeKind::Copilot]);
             assert_eq!(route, vec!["planning=copilot:gpt-4o".to_string()]);
             assert_eq!(canon_mode_selection.unwrap().to_string(), "auto-confirm");
@@ -105,6 +112,7 @@ fn init_accepts_domain_templates_standards_and_bindings() {
     match cli.command {
         DeveloperCommand::Init {
             workspace,
+            non_interactive,
             template,
             assistant,
             route,
@@ -119,6 +127,7 @@ fn init_accepts_domain_templates_standards_and_bindings() {
             force,
         } => {
             assert_eq!(workspace, PathBuf::from("/tmp/ws"));
+            assert!(!non_interactive);
             assert_eq!(template, None);
             assert!(assistant.is_empty());
             assert!(route.is_empty());
@@ -146,6 +155,7 @@ fn init_accepts_workspace_without_template() {
     match cli.command {
         DeveloperCommand::Init {
             workspace,
+            non_interactive,
             template,
             assistant,
             route,
@@ -160,6 +170,7 @@ fn init_accepts_workspace_without_template() {
             force,
         } => {
             assert_eq!(workspace, PathBuf::from("/tmp/ws"));
+            assert!(!non_interactive);
             assert_eq!(template, None);
             assert!(assistant.is_empty());
             assert!(route.is_empty());
@@ -194,4 +205,14 @@ fn init_help_explains_supported_assistants_route_shape_and_defaults() {
         help.contains("leave guided routes blank to let selected assistants seed defaults"),
         "{help}"
     );
+}
+
+#[test]
+fn version_flags_work_without_a_subcommand() {
+    let output =
+        Command::new(env!("CARGO_BIN_EXE_boundline")).args(["--version"]).output().unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert_eq!(output.status.code(), Some(0), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(stdout.contains(env!("CARGO_PKG_VERSION")), "{stdout}");
 }

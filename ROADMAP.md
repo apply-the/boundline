@@ -6,7 +6,7 @@ Canon is downstream from Boundline in this roadmap: Boundline thinks, decides, o
 
 Evolve Boundline into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.46.0
+## Current Status: v0.47.0
 
 Boundline now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -136,6 +136,17 @@ JSON host envelope over the primary session-native lifecycle.
 The governing rule remains simple: Boundline is still the product and execution
 owner. Canon stays a bounded, useful governed runtime inside that same delivery
 path rather than drifting back into a parallel tool story.
+
+### Delivered in 0.47.0
+
+- replaced the fragile guided `boundline init` freeform prompts with a bounded
+  terminal wizard that shows visible defaults, route review, slot-by-slot
+  editing, and an explicit final summary before writes
+- added a bundled runtime/model catalog with explicit source metadata,
+  custom-model warnings, and grouped assistant-pack scaffolding status for the
+  selected assistant surfaces
+- added top-level `--version` support plus non-interactive init parity and
+  time-consuming bootstrap progress feedback
 
 ### Delivered in 0.46.0
 
