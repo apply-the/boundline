@@ -2,7 +2,15 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
+use std::thread;
+use std::time::Duration;
 
+use dialoguer::{Confirm, Input, MultiSelect, Select, theme::ColorfulTheme};
+use serde::Deserialize;
 use serde_json::json;
 use thiserror::Error;
 
@@ -21,6 +29,16 @@ use crate::domain::governance::CanonModeSelectionPreference;
 use crate::domain::workspace_hygiene::{merge_hygiene_content, plan_hygiene_defaults};
 
 const INIT_ROUTE_EXAMPLE: &str = "planning=copilot:gpt-5.4";
+const BUNDLED_MODEL_CATALOG: &str = include_str!("../../assistant/catalog/model-catalog.toml");
+#[cfg(test)]
+const NO_TTY_GUIDANCE: &str =
+    "Terminal interaction is unavailable. Rerun with --non-interactive and explicit flags.";
+const ACCEPT_CURRENT_ROUTES_LABEL: &str = "Accept current routes";
+const CLEAR_ALL_ROUTES_LABEL: &str = "Clear all routes";
+const LEAVE_SLOT_UNSET_LABEL: &str = "Leave slot unset";
+const CUSTOM_MODEL_ID_LABEL: &str = "Use custom model id";
+const WRITE_CONFIGURATION_PROMPT: &str = "Write configuration?";
+const PROGRESS_TICK_MS: u64 = 100;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InitCommandReport {
@@ -35,9 +53,222 @@ struct SeededRouteSelection {
     fallback_from_unavailable: Option<RuntimeKind>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Deserialize)]
+struct BundledModelCatalog {
+    metadata: CatalogMetadata,
+    #[serde(default)]
+    runtimes: Vec<CatalogRuntimeEntry>,
+    #[serde(default)]
+    default_routes: CatalogDefaultRoutes,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct CatalogMetadata {
+    source_label: String,
+    catalog_version: String,
+    updated_at: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct CatalogRuntimeEntry {
+    runtime: RuntimeKind,
+    display_name: String,
+    #[serde(default)]
+    models: Vec<CatalogModelEntry>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct CatalogModelEntry {
+    model_id: String,
+    display_name: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+struct CatalogDefaultRoutes {
+    planning: Option<CatalogRouteReference>,
+    implementation: Option<CatalogRouteReference>,
+    verification: Option<CatalogRouteReference>,
+    review: Option<CatalogRouteReference>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct CatalogRouteReference {
+    runtime: RuntimeKind,
+    model_id: String,
+}
+
+impl BundledModelCatalog {
+    fn load() -> Result<Self, InitCommandError> {
+        toml::from_str(BUNDLED_MODEL_CATALOG)
+            .map_err(|source| InitCommandError::InvalidBundledCatalog(source.to_string()))
+    }
+
+    fn summary_label(&self) -> String {
+        format!(
+            "{} catalog {} ({})",
+            self.metadata.source_label, self.metadata.catalog_version, self.metadata.updated_at
+        )
+    }
+
+    fn runtime_entry(&self, runtime: RuntimeKind) -> Option<&CatalogRuntimeEntry> {
+        self.runtimes.iter().find(|entry| entry.runtime == runtime)
+    }
+
+    fn default_route_for_runtime(&self, runtime: RuntimeKind) -> Option<ModelRoute> {
+        let entry = self.runtime_entry(runtime)?;
+        let model = entry.models.first()?;
+        Some(ModelRoute { runtime, model: model.model_id.clone() })
+    }
+
+    fn default_route_for_slot(&self, slot: RouteSlot) -> Option<ModelRoute> {
+        let reference = match slot {
+            RouteSlot::Planning => self.default_routes.planning.as_ref(),
+            RouteSlot::Implementation => self.default_routes.implementation.as_ref(),
+            RouteSlot::Verification => self.default_routes.verification.as_ref(),
+            RouteSlot::Review => self.default_routes.review.as_ref(),
+        }?;
+        Some(ModelRoute { runtime: reference.runtime, model: reference.model_id.clone() })
+    }
+
+    fn runtime_labels(&self) -> Vec<String> {
+        self.runtimes
+            .iter()
+            .map(|entry| format!("{} ({})", entry.display_name, entry.runtime.as_str()))
+            .collect()
+    }
+
+    fn model_labels_for_runtime(&self, runtime: RuntimeKind) -> Vec<String> {
+        self.runtime_entry(runtime)
+            .map(|entry| {
+                entry
+                    .models
+                    .iter()
+                    .map(|model| format!("{} ({})", model.display_name, model.model_id))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum GuidedRouteSource {
+    AssistantDefault { fallback_from: Option<RuntimeKind> },
+    Bundled,
+    Custom,
+    Unset,
+}
+
+impl GuidedRouteSource {
+    fn label(&self) -> String {
+        match self {
+            Self::AssistantDefault { fallback_from: Some(runtime) } => {
+                format!("assistant-default fallback-from={}-unavailable", runtime.as_str())
+            }
+            Self::AssistantDefault { fallback_from: None } => "assistant-default".to_string(),
+            Self::Bundled => "bundled".to_string(),
+            Self::Custom => "custom-unverified".to_string(),
+            Self::Unset => "unset".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct GuidedRouteSelection {
+    slot: RouteSlot,
+    route: Option<ModelRoute>,
+    source: GuidedRouteSource,
+}
+
+impl GuidedRouteSelection {
+    fn display_line(&self) -> String {
+        match &self.route {
+            Some(route) => format!(
+                "{:<15} {}:{} [{}]",
+                self.slot.as_str(),
+                route.runtime,
+                route.model,
+                self.source.label()
+            ),
+            None => format!("{:<15} unset [{}]", self.slot.as_str(), self.source.label()),
+        }
+    }
+}
+
+pub trait InitInteractor: std::fmt::Debug {
+    fn select(
+        &mut self,
+        prompt: &str,
+        items: &[String],
+        default: usize,
+    ) -> Result<usize, InitCommandError>;
+    fn multi_select(
+        &mut self,
+        prompt: &str,
+        items: &[String],
+        defaults: &[bool],
+    ) -> Result<Vec<usize>, InitCommandError>;
+    fn input(&mut self, prompt: &str, initial: &str) -> Result<String, InitCommandError>;
+    fn confirm(&mut self, prompt: &str, default: bool) -> Result<bool, InitCommandError>;
+}
+
+#[derive(Debug, Default)]
+struct DialoguerInitInteractor;
+
+impl InitInteractor for DialoguerInitInteractor {
+    fn select(
+        &mut self,
+        prompt: &str,
+        items: &[String],
+        default: usize,
+    ) -> Result<usize, InitCommandError> {
+        Select::with_theme(&ColorfulTheme::default())
+            .with_prompt(prompt)
+            .items(items)
+            .default(default)
+            .interact()
+            .map_err(|error| InitCommandError::PromptInteraction(error.to_string()))
+    }
+
+    fn multi_select(
+        &mut self,
+        prompt: &str,
+        items: &[String],
+        defaults: &[bool],
+    ) -> Result<Vec<usize>, InitCommandError> {
+        MultiSelect::with_theme(&ColorfulTheme::default())
+            .with_prompt(prompt)
+            .items(items)
+            .defaults(defaults)
+            .interact()
+            .map_err(|error| InitCommandError::PromptInteraction(error.to_string()))
+    }
+
+    fn input(&mut self, prompt: &str, initial: &str) -> Result<String, InitCommandError> {
+        Input::with_theme(&ColorfulTheme::default())
+            .with_prompt(prompt)
+            .with_initial_text(initial.to_string())
+            .allow_empty(true)
+            .interact_text()
+            .map_err(|error| InitCommandError::PromptInteraction(error.to_string()))
+    }
+
+    fn confirm(&mut self, prompt: &str, default: bool) -> Result<bool, InitCommandError> {
+        Confirm::with_theme(&ColorfulTheme::default())
+            .with_prompt(prompt)
+            .default(default)
+            .interact()
+            .map_err(|error| InitCommandError::PromptInteraction(error.to_string()))
+    }
+}
+
+#[derive(Debug)]
 pub struct InitRequest<'a> {
     pub workspace: &'a Path,
+    pub non_interactive: bool,
+    /// Override TTY detection for testing. `None` means auto-detect from stdin/stdout.
+    pub interactive_terminal_override: Option<bool>,
+    /// Inject a custom interactor for testing. `None` uses `DialoguerInitInteractor`.
+    pub interactor: Option<Box<dyn InitInteractor>>,
     pub template: Option<InitTemplate>,
     pub assistants: &'a [RuntimeKind],
     pub routes: &'a [String],
@@ -52,12 +283,24 @@ pub struct InitRequest<'a> {
     pub force: bool,
 }
 
-pub fn execute_init(request: InitRequest<'_>) -> Result<InitCommandReport, InitCommandError> {
+pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, InitCommandError> {
     let workspace = request.workspace;
     fs::create_dir_all(workspace).map_err(|source| InitCommandError::CreateWorkspace {
         path: workspace.to_path_buf(),
         source,
     })?;
+
+    let catalog = BundledModelCatalog::load()?;
+    let interactive_terminal = request
+        .interactive_terminal_override
+        .unwrap_or_else(|| io::stdin().is_terminal() && io::stdout().is_terminal());
+    let needs_guided_values = request.canon_mode_selection.is_none()
+        || request.assistants.is_empty()
+        || request.routes.is_empty();
+
+    if !request.non_interactive && needs_guided_values && !interactive_terminal {
+        return Err(InitCommandError::InteractiveTerminalUnavailable);
+    }
 
     let template = request.template.unwrap_or(InitTemplate::BugFix);
     let requested_domain_templates = requested_domain_templates(
@@ -71,15 +314,21 @@ pub fn execute_init(request: InitRequest<'_>) -> Result<InitCommandReport, InitC
     let execution_path = workspace.join(".boundline/execution.json");
     let local_config_path = store.local_config_path();
 
-    let guided_answers = if io::stdin().is_terminal()
-        && (request.canon_mode_selection.is_none()
-            || request.assistants.is_empty()
-            || request.routes.is_empty())
+    let mut default_interactor: Box<dyn InitInteractor> = Box::new(DialoguerInitInteractor);
+    let interactor: &mut dyn InitInteractor = match request.interactor.as_mut() {
+        Some(i) => i.as_mut(),
+        None => default_interactor.as_mut(),
+    };
+
+    let guided_answers = if !request.non_interactive && interactive_terminal && needs_guided_values
     {
-        Some(collect_guided_init_answers(
+        Some(collect_guided_init_answers_with_interactor(
+            interactor,
             request.canon_mode_selection.is_none(),
             request.assistants.is_empty(),
             request.routes.is_empty(),
+            &catalog,
+            request.assistants,
         )?)
     } else {
         None
@@ -150,17 +399,53 @@ pub fn execute_init(request: InitRequest<'_>) -> Result<InitCommandReport, InitC
     let guided_routes = if explicit_routes.is_empty()
         && let Some(answers) = guided_answers.as_ref()
     {
-        answers.routes.clone()
+        answers
+            .routes
+            .iter()
+            .filter_map(|selection| selection.route.clone().map(|route| (selection.slot, route)))
+            .collect::<Vec<_>>()
     } else {
         Vec::new()
     };
+    let guided_route_decisions = guided_answers
+        .as_ref()
+        .map(|answers| {
+            answers.routes.iter().map(|selection| selection.slot).collect::<BTreeSet<_>>()
+        })
+        .unwrap_or_default();
     let mut effective_routes =
         if explicit_routes.is_empty() { guided_routes.clone() } else { explicit_routes.clone() };
-    let explicit_slots = effective_routes.iter().map(|(slot, _)| *slot).collect::<BTreeSet<_>>();
+    let mut explicit_slots =
+        effective_routes.iter().map(|(slot, _)| *slot).collect::<BTreeSet<_>>();
+    explicit_slots.extend(guided_route_decisions);
     let seeded_routes =
         resolve_seeded_routes(&effective_assistants, &explicit_slots, runtime_available)?;
     effective_routes
         .extend(seeded_routes.iter().map(|selection| (selection.slot, selection.route.clone())));
+
+    if let Some(answers) = guided_answers.as_ref() {
+        let summary = render_guided_summary(
+            template,
+            effective_canon_mode_selection,
+            &effective_assistants,
+            &answers.routes,
+            &catalog,
+            &planned,
+        );
+        if !interactor.confirm(&summary, true)? {
+            return Ok(InitCommandReport {
+                exit_status: CommandExitStatus::NonSuccess,
+                terminal_output: render_cancelled_init_report(
+                    workspace,
+                    template,
+                    effective_canon_mode_selection,
+                    &effective_assistants,
+                    &answers.routes,
+                    &catalog,
+                ),
+            });
+        }
+    }
 
     if let Some(parent) = execution_path.parent() {
         fs::create_dir_all(parent)
@@ -219,14 +504,21 @@ pub fn execute_init(request: InitRequest<'_>) -> Result<InitCommandReport, InitC
     let hygiene_actions = apply_workspace_hygiene_defaults(workspace, &active_domains)?;
 
     let execution = execution_template(template, local.canon.as_ref());
-    fs::write(
-        &execution_path,
-        serde_json::to_string_pretty(&execution).expect("execution template should serialize"),
-    )
-    .map_err(|source| InitCommandError::WriteFile { path: execution_path.clone(), source })?;
+    run_init_activity("writing execution profile", interactive_terminal, || {
+        fs::write(
+            &execution_path,
+            serde_json::to_string_pretty(&execution).expect("execution template should serialize"),
+        )
+        .map_err(|source| InitCommandError::WriteFile { path: execution_path.clone(), source })
+    })?;
 
-    store.save_local(&local)?;
-    let assistant_actions = apply_assistant_assets(workspace, &assistant_assets)?;
+    run_init_activity("writing workspace config", interactive_terminal, || {
+        Ok(store.save_local(&local)?)
+    })?;
+    let assistant_actions =
+        run_init_activity("scaffolding assistant packs", interactive_terminal, || {
+            apply_assistant_assets(workspace, &assistant_assets)
+        })?;
 
     let capabilities = effective_assistants
         .iter()
@@ -247,9 +539,8 @@ pub fn execute_init(request: InitRequest<'_>) -> Result<InitCommandReport, InitC
         lines.extend(capabilities);
     }
 
-    let explicit_route_lines =
-        explicit_routes.iter().chain(guided_routes.iter()).collect::<Vec<_>>();
     lines.push("route_setup:".to_string());
+    lines.push(format!("- catalog_source: {}", catalog.summary_label()));
     if effective_assistants.is_empty() {
         lines.push(
             "- assistant_defaults: none selected; no assistant-seeded workspace routes were recorded"
@@ -258,29 +549,42 @@ pub fn execute_init(request: InitRequest<'_>) -> Result<InitCommandReport, InitC
     } else {
         lines.push(format!("- assistant_defaults: {}", format_runtime_list(&effective_assistants)));
     }
-    if seeded_routes.is_empty() && explicit_route_lines.is_empty() {
-        lines.push(
-            "- workspace-local routes: none recorded; add --assistant or --route later to pin workspace-specific defaults"
-                .to_string(),
+    if let Some(answers) = guided_answers.as_ref() {
+        lines.extend(
+            answers.routes.iter().map(|selection| format!("- {}", selection.display_line().trim())),
         );
     } else {
-        lines.extend(seeded_routes.iter().map(|selection| {
-            let provenance = match selection.fallback_from_unavailable {
-                Some(runtime) => {
-                    format!("assistant-default fallback-from={runtime}-unavailable")
-                }
-                None => "assistant-default".to_string(),
-            };
-            format!(
-                "- seeded {}: {}:{} [{provenance}]",
-                selection.slot.as_str(),
-                selection.route.runtime,
-                selection.route.model
-            )
-        }));
-        lines.extend(explicit_route_lines.iter().map(|(slot, route)| {
-            format!("- explicit {}: {}:{} [explicit]", slot.as_str(), route.runtime, route.model)
-        }));
+        let explicit_route_lines =
+            explicit_routes.iter().chain(guided_routes.iter()).collect::<Vec<_>>();
+        if seeded_routes.is_empty() && explicit_route_lines.is_empty() {
+            lines.push(
+                "- workspace-local routes: none recorded; add --assistant or --route later to pin workspace-specific defaults"
+                    .to_string(),
+            );
+        } else {
+            lines.extend(seeded_routes.iter().map(|selection| {
+                let provenance = match selection.fallback_from_unavailable {
+                    Some(runtime) => {
+                        format!("assistant-default fallback-from={runtime}-unavailable")
+                    }
+                    None => "assistant-default".to_string(),
+                };
+                format!(
+                    "- seeded {}: {}:{} [{provenance}]",
+                    selection.slot.as_str(),
+                    selection.route.runtime,
+                    selection.route.model
+                )
+            }));
+            lines.extend(explicit_route_lines.iter().map(|(slot, route)| {
+                format!(
+                    "- explicit {}: {}:{} [explicit]",
+                    slot.as_str(),
+                    route.runtime,
+                    route.model
+                )
+            }));
+        }
     }
     lines.push(format!("- inspect_or_edit: {inspect_command}"));
 
@@ -294,9 +598,8 @@ pub fn execute_init(request: InitRequest<'_>) -> Result<InitCommandReport, InitC
         lines.push("assistant_setup:".to_string());
         lines.extend(assistant_actions.iter().map(|action| {
             format!(
-                "- {}: {} created={} updated={} unchanged={}",
+                "- {}: {} created, {} updated, {} unchanged",
                 action.surface.plan_label(),
-                action.status,
                 action.created_files,
                 action.updated_files,
                 action.unchanged_files
@@ -665,25 +968,6 @@ fn init_doctor_command(workspace: &Path) -> String {
     format!("boundline doctor --workspace {}", workspace.display())
 }
 
-fn guided_canon_mode_prompt() -> String {
-    "Canon mode-selection [manual|auto-confirm|auto]\n  Default: auto-confirm\n  Choose how Canon approval is requested for governed stages.\n> ".to_string()
-}
-
-fn guided_assistant_prompt() -> String {
-    format!(
-        "Assistant surfaces [{}], comma-separated\n  Leave blank to skip repository-local assistant packs and assistant-seeded routes.\n  Example: copilot,codex\n> ",
-        supported_runtime_choices()
-    )
-}
-
-fn guided_route_prompt() -> String {
-    format!(
-        "Model routes [{}], comma-separated as SLOT=RUNTIME:MODEL\n  Optional: leave blank to let selected assistants seed missing slots.\n  Example: {}\n> ",
-        supported_route_slots(),
-        INIT_ROUTE_EXAMPLE
-    )
-}
-
 fn invalid_route_shape_message(raw: &str) -> String {
     format!(
         "model route `{raw}` must use SLOT=RUNTIME:MODEL with slots {}. Example: {}",
@@ -726,35 +1010,28 @@ fn parse_model_route(raw: &str) -> Result<(RouteSlot, ModelRoute), InitCommandEr
 struct GuidedInitAnswers {
     canon_mode_selection: Option<CanonModeSelectionPreference>,
     assistants: Vec<RuntimeKind>,
-    routes: Vec<(RouteSlot, ModelRoute)>,
+    routes: Vec<GuidedRouteSelection>,
 }
 
-fn collect_guided_init_answers(
+fn collect_guided_init_answers_with_interactor(
+    interactor: &mut dyn InitInteractor,
     prompt_for_canon_mode: bool,
     prompt_for_assistants: bool,
     prompt_for_routes: bool,
+    catalog: &BundledModelCatalog,
+    explicit_assistants: &[RuntimeKind],
 ) -> Result<GuidedInitAnswers, InitCommandError> {
-    let canon_mode_selection = if prompt_for_canon_mode {
-        let mode = prompt_line(&guided_canon_mode_prompt())?;
-        Some(parse_canon_mode_selection(if mode.trim().is_empty() {
-            "auto-confirm"
-        } else {
-            mode.trim()
-        })?)
-    } else {
-        None
-    };
+    let canon_mode_selection =
+        if prompt_for_canon_mode { Some(select_canon_mode(interactor)?) } else { None };
 
     let assistants = if prompt_for_assistants {
-        let assistants = prompt_line(&guided_assistant_prompt())?;
-        parse_guided_assistants(&assistants)?
+        select_assistants(interactor, catalog)?
     } else {
-        Vec::new()
+        explicit_assistants.to_vec()
     };
 
     let routes = if prompt_for_routes {
-        let routes = prompt_line(&guided_route_prompt())?;
-        parse_guided_routes(&routes)?
+        review_routes(interactor, catalog, &assistants)?
     } else {
         Vec::new()
     };
@@ -762,30 +1039,329 @@ fn collect_guided_init_answers(
     Ok(GuidedInitAnswers { canon_mode_selection, assistants, routes })
 }
 
-fn prompt_line(prompt: &str) -> Result<String, InitCommandError> {
-    print!("{prompt}");
-    io::stdout()
-        .flush()
-        .map_err(|error| InitCommandError::InvalidDomainArgument(error.to_string()))?;
-    let mut line = String::new();
-    io::stdin()
-        .read_line(&mut line)
-        .map_err(|error| InitCommandError::InvalidDomainArgument(error.to_string()))?;
-    Ok(line.trim().to_string())
+fn select_canon_mode(
+    interactor: &mut dyn InitInteractor,
+) -> Result<CanonModeSelectionPreference, InitCommandError> {
+    let items = vec![
+        "Auto-confirm recommended approvals".to_string(),
+        "Manual approval for every governed stage".to_string(),
+        "Auto approval where policy allows".to_string(),
+    ];
+    match interactor.select("Canon approval mode", &items, 0)? {
+        0 => Ok(CanonModeSelectionPreference::AutoConfirm),
+        1 => Ok(CanonModeSelectionPreference::Manual),
+        _ => Ok(CanonModeSelectionPreference::Auto),
+    }
 }
 
-fn parse_guided_assistants(raw: &str) -> Result<Vec<RuntimeKind>, InitCommandError> {
-    raw.split(',')
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(parse_runtime_kind)
+fn select_assistants(
+    interactor: &mut dyn InitInteractor,
+    catalog: &BundledModelCatalog,
+) -> Result<Vec<RuntimeKind>, InitCommandError> {
+    let items = catalog.runtime_labels();
+    let defaults = vec![false; items.len()];
+    let indices = interactor.multi_select(
+        "Assistant surfaces\nSelect the repository-local assistant packs and route-default sources to scaffold.",
+        &items,
+        &defaults,
+    )?;
+    Ok(indices
+        .into_iter()
+        .filter_map(|index| catalog.runtimes.get(index).map(|entry| entry.runtime))
+        .collect())
+}
+
+fn review_routes(
+    interactor: &mut dyn InitInteractor,
+    catalog: &BundledModelCatalog,
+    assistants: &[RuntimeKind],
+) -> Result<Vec<GuidedRouteSelection>, InitCommandError> {
+    let mut selections = initial_guided_route_selections(catalog, assistants);
+    let mut validation_message = None;
+
+    loop {
+        let prompt =
+            render_guided_route_review(catalog, &selections, validation_message.as_deref());
+        let items = route_review_items();
+        let choice = interactor.select(&prompt, &items, 0)?;
+        match choice {
+            0 => return Ok(selections),
+            1..=4 => {
+                let slot = required_init_route_slots()[choice - 1];
+                validation_message =
+                    edit_route_selection(interactor, catalog, &mut selections, slot).err();
+            }
+            _ => {
+                clear_guided_route_selections(&mut selections);
+                validation_message = None;
+            }
+        }
+    }
+}
+
+fn route_review_items() -> Vec<String> {
+    let mut items = vec![ACCEPT_CURRENT_ROUTES_LABEL.to_string()];
+    items.extend(
+        required_init_route_slots().into_iter().map(|slot| format!("Edit {}", slot.as_str())),
+    );
+    items.push(CLEAR_ALL_ROUTES_LABEL.to_string());
+    items
+}
+
+fn initial_guided_route_selections(
+    catalog: &BundledModelCatalog,
+    assistants: &[RuntimeKind],
+) -> Vec<GuidedRouteSelection> {
+    let available_assistants = assistants
+        .iter()
+        .copied()
+        .filter(|runtime| runtime_available(*runtime))
+        .collect::<Vec<_>>();
+    let fallback_runtime = available_assistants.first().copied();
+
+    required_init_route_slots()
+        .into_iter()
+        .map(|slot| {
+            if let Some(default_route) = catalog.default_route_for_slot(slot)
+                && available_assistants.contains(&default_route.runtime)
+            {
+                return GuidedRouteSelection {
+                    slot,
+                    route: Some(default_route),
+                    source: GuidedRouteSource::AssistantDefault { fallback_from: None },
+                };
+            }
+
+            if let Some(runtime) = fallback_runtime
+                && let Some(route) = catalog.default_route_for_runtime(runtime)
+            {
+                let fallback_from = catalog.default_route_for_slot(slot).map(|route| route.runtime);
+                return GuidedRouteSelection {
+                    slot,
+                    route: Some(route),
+                    source: GuidedRouteSource::AssistantDefault {
+                        fallback_from: fallback_from
+                            .filter(|default_runtime| *default_runtime != runtime),
+                    },
+                };
+            }
+
+            GuidedRouteSelection { slot, route: None, source: GuidedRouteSource::Unset }
+        })
         .collect()
 }
 
-fn parse_guided_routes(raw: &str) -> Result<Vec<(RouteSlot, ModelRoute)>, InitCommandError> {
-    raw.split(',').map(str::trim).filter(|value| !value.is_empty()).map(parse_model_route).collect()
+fn clear_guided_route_selections(selections: &mut [GuidedRouteSelection]) {
+    for selection in selections {
+        selection.route = None;
+        selection.source = GuidedRouteSource::Unset;
+    }
 }
 
+fn edit_route_selection(
+    interactor: &mut dyn InitInteractor,
+    catalog: &BundledModelCatalog,
+    selections: &mut [GuidedRouteSelection],
+    slot: RouteSlot,
+) -> Result<(), String> {
+    let Some(selection) = selections.iter_mut().find(|selection| selection.slot == slot) else {
+        return Err(format!("route slot `{}` is not supported", slot.as_str()));
+    };
+
+    let runtime_items = {
+        let mut items = catalog.runtime_labels();
+        items.push(LEAVE_SLOT_UNSET_LABEL.to_string());
+        items
+    };
+    let runtime_default = selection
+        .route
+        .as_ref()
+        .and_then(|route| catalog.runtimes.iter().position(|entry| entry.runtime == route.runtime))
+        .unwrap_or(0);
+    let runtime_choice = interactor
+        .select(
+            &format!("{} runtime", slot.as_str()),
+            &runtime_items,
+            runtime_default.min(runtime_items.len().saturating_sub(1)),
+        )
+        .map_err(|error| error.to_string())?;
+
+    if runtime_choice == catalog.runtimes.len() {
+        selection.route = None;
+        selection.source = GuidedRouteSource::Unset;
+        return Ok(());
+    }
+
+    let runtime_entry = &catalog.runtimes[runtime_choice];
+    let mut model_items = catalog.model_labels_for_runtime(runtime_entry.runtime);
+    model_items.push(CUSTOM_MODEL_ID_LABEL.to_string());
+    let model_default = selection
+        .route
+        .as_ref()
+        .and_then(|route| {
+            catalog.runtime_entry(runtime_entry.runtime).and_then(|entry| {
+                entry.models.iter().position(|model| model.model_id == route.model)
+            })
+        })
+        .unwrap_or(0);
+    let model_choice = interactor
+        .select(
+            &format!("{} model", slot.as_str()),
+            &model_items,
+            model_default.min(model_items.len().saturating_sub(1)),
+        )
+        .map_err(|error| error.to_string())?;
+
+    if model_choice == model_items.len() - 1 {
+        let initial =
+            selection.route.as_ref().map(|route| route.model.as_str()).unwrap_or_default();
+        let custom_model = interactor
+            .input(&format!("{} custom model id", slot.as_str()), initial)
+            .map_err(|error| error.to_string())?
+            .trim()
+            .to_string();
+        if custom_model.is_empty() {
+            return Err("Custom model id cannot be empty.".to_string());
+        }
+        selection.route = Some(ModelRoute { runtime: runtime_entry.runtime, model: custom_model });
+        selection.source = GuidedRouteSource::Custom;
+        return Ok(());
+    }
+
+    let model = runtime_entry.models[model_choice].model_id.clone();
+    selection.route = Some(ModelRoute { runtime: runtime_entry.runtime, model });
+    selection.source = GuidedRouteSource::Bundled;
+    Ok(())
+}
+
+fn render_guided_route_review(
+    catalog: &BundledModelCatalog,
+    selections: &[GuidedRouteSelection],
+    validation_message: Option<&str>,
+) -> String {
+    let mut lines = vec![
+        format!("Model routes\nCatalog: {}", catalog.summary_label()),
+        "Review the proposed routes, then accept defaults, edit one slot, or clear all routes."
+            .to_string(),
+    ];
+    if let Some(validation_message) = validation_message {
+        lines.push(format!("Validation: {validation_message}"));
+    }
+    lines.extend(selections.iter().map(GuidedRouteSelection::display_line));
+    lines.join("\n")
+}
+
+fn render_guided_summary(
+    template: InitTemplate,
+    canon_mode_selection: Option<CanonModeSelectionPreference>,
+    assistants: &[RuntimeKind],
+    routes: &[GuidedRouteSelection],
+    catalog: &BundledModelCatalog,
+    planned_changes: &[String],
+) -> String {
+    let mut lines = vec![
+        "Summary".to_string(),
+        format!("Template: {}", template_label(template)),
+        format!("Catalog: {}", catalog.summary_label()),
+        format!(
+            "Canon approval mode: {}",
+            canon_mode_selection.unwrap_or(CanonModeSelectionPreference::AutoConfirm)
+        ),
+    ];
+    if assistants.is_empty() {
+        lines.push("Assistant surfaces: none selected".to_string());
+    } else {
+        lines.push(format!("Assistant surfaces: {}", format_runtime_list(assistants)));
+    }
+    lines.push("Model routes:".to_string());
+    lines.extend(routes.iter().map(|selection| format!("- {}", selection.display_line().trim())));
+    lines.push("Planned changes:".to_string());
+    lines.extend(planned_changes.iter().cloned());
+    lines.push(WRITE_CONFIGURATION_PROMPT.to_string());
+    lines.join("\n")
+}
+
+fn render_cancelled_init_report(
+    workspace: &Path,
+    template: InitTemplate,
+    canon_mode_selection: Option<CanonModeSelectionPreference>,
+    assistants: &[RuntimeKind],
+    routes: &[GuidedRouteSelection],
+    catalog: &BundledModelCatalog,
+) -> String {
+    let mut lines = vec![
+        "init: canceled before write".to_string(),
+        format!("template: {}", template_label(template)),
+        format!("catalog: {}", catalog.summary_label()),
+        format!(
+            "canon_mode_selection: {}",
+            canon_mode_selection.unwrap_or(CanonModeSelectionPreference::AutoConfirm)
+        ),
+    ];
+    if assistants.is_empty() {
+        lines.push("assistant_surfaces: none selected".to_string());
+    } else {
+        lines.push(format!("assistant_surfaces: {}", format_runtime_list(assistants)));
+    }
+    lines.push("route_setup:".to_string());
+    lines.extend(routes.iter().map(|selection| format!("- {}", selection.display_line().trim())));
+    lines.push("next_steps:".to_string());
+    lines.push(format!(
+        "- rerun boundline init --workspace {} to confirm and write the configuration",
+        workspace.display()
+    ));
+    lines.join("\n")
+}
+
+fn run_init_activity<T, F>(
+    label: &str,
+    interactive_terminal: bool,
+    action: F,
+) -> Result<T, InitCommandError>
+where
+    F: FnOnce() -> Result<T, InitCommandError>,
+{
+    if interactive_terminal {
+        let spinner_running = Arc::new(AtomicBool::new(true));
+        let spinner_signal = Arc::clone(&spinner_running);
+        let spinner_label = label.to_string();
+        let spinner_thread = thread::spawn(move || {
+            let frames = ['|', '/', '-', '\\'];
+            let mut index = 0usize;
+
+            while spinner_signal.load(Ordering::Relaxed) {
+                eprint!("\r{} {}", frames[index % frames.len()], spinner_label);
+                let _ = io::stderr().flush();
+                thread::sleep(Duration::from_millis(PROGRESS_TICK_MS));
+                index += 1;
+            }
+        });
+        let result = action();
+        spinner_running.store(false, Ordering::Relaxed);
+        let _ = spinner_thread.join();
+        clear_progress_line();
+        match &result {
+            Ok(_) => {}
+            Err(_) => eprintln!("{label}: failed"),
+        }
+        result
+    } else {
+        eprintln!("progress: {label}");
+        let result = action();
+        match &result {
+            Ok(_) => eprintln!("progress: {label}: done"),
+            Err(error) => eprintln!("progress: {label}: failed ({error})"),
+        }
+        result
+    }
+}
+
+fn clear_progress_line() {
+    eprint!("\r\x1b[2K");
+    let _ = io::stderr().flush();
+}
+
+#[cfg(test)]
 fn parse_canon_mode_selection(raw: &str) -> Result<CanonModeSelectionPreference, InitCommandError> {
     match raw.trim() {
         "manual" => Ok(CanonModeSelectionPreference::Manual),
@@ -1030,6 +1606,14 @@ pub enum InitCommandError {
         "no available assistant defaults remain for slots {slots}; selected assistants {assistants} are missing from PATH or extension surface. Install one of them, choose an available assistant, or rerun with explicit --route overrides such as --route {example}"
     )]
     NoAvailableAssistantDefaults { assistants: String, slots: String, example: &'static str },
+    #[error(
+        "Terminal interaction is unavailable. Rerun with --non-interactive and explicit flags."
+    )]
+    InteractiveTerminalUnavailable,
+    #[error("invalid bundled model catalog: {0}")]
+    InvalidBundledCatalog(String),
+    #[error("failed to collect init input: {0}")]
+    PromptInteraction(String),
     #[error("invalid domain argument: {0}")]
     InvalidDomainArgument(String),
     #[error("invalid domain template settings: {0}")]
@@ -1039,17 +1623,19 @@ pub enum InitCommandError {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
+    use std::collections::VecDeque;
     use std::fs;
     use std::path::PathBuf;
 
     use uuid::Uuid;
 
     use super::{
-        InitRequest, command_in_path, execute_init, execution_template, format_runtime_list,
-        format_slot_list, guided_assistant_prompt, guided_canon_mode_prompt, guided_route_prompt,
+        BundledModelCatalog, GuidedRouteSource, InitInteractor, InitRequest,
+        collect_guided_init_answers_with_interactor, command_in_path, execute_init,
+        execution_template, format_runtime_list, format_slot_list, initial_guided_route_selections,
         parse_canon_mode_selection, parse_context_binding, parse_domain_family,
-        parse_domain_standard, parse_external_context_kind, parse_guided_assistants,
-        parse_guided_routes, parse_model_route, resolve_seeded_routes, supported_route_slots,
+        parse_domain_standard, parse_external_context_kind, parse_model_route,
+        render_guided_route_review, resolve_seeded_routes, supported_route_slots,
         supported_runtime_choices, template_label, upsert_binding,
     };
     use crate::adapters::config_store::FileConfigStore;
@@ -1066,6 +1652,60 @@ mod tests {
         workspace
     }
 
+    #[derive(Debug, Default)]
+    struct ScriptedInteractor {
+        selects: VecDeque<usize>,
+        multi_selects: VecDeque<Vec<usize>>,
+        inputs: VecDeque<String>,
+        confirms: VecDeque<bool>,
+    }
+
+    impl InitInteractor for ScriptedInteractor {
+        fn select(
+            &mut self,
+            _prompt: &str,
+            _items: &[String],
+            _default: usize,
+        ) -> Result<usize, super::InitCommandError> {
+            self.selects.pop_front().ok_or_else(|| {
+                super::InitCommandError::PromptInteraction("missing scripted select".to_string())
+            })
+        }
+
+        fn multi_select(
+            &mut self,
+            _prompt: &str,
+            _items: &[String],
+            _defaults: &[bool],
+        ) -> Result<Vec<usize>, super::InitCommandError> {
+            self.multi_selects.pop_front().ok_or_else(|| {
+                super::InitCommandError::PromptInteraction(
+                    "missing scripted multi-select".to_string(),
+                )
+            })
+        }
+
+        fn input(
+            &mut self,
+            _prompt: &str,
+            _initial: &str,
+        ) -> Result<String, super::InitCommandError> {
+            self.inputs.pop_front().ok_or_else(|| {
+                super::InitCommandError::PromptInteraction("missing scripted input".to_string())
+            })
+        }
+
+        fn confirm(
+            &mut self,
+            _prompt: &str,
+            _default: bool,
+        ) -> Result<bool, super::InitCommandError> {
+            self.confirms.pop_front().ok_or_else(|| {
+                super::InitCommandError::PromptInteraction("missing scripted confirm".to_string())
+            })
+        }
+    }
+
     #[test]
     fn execute_init_infers_and_seeds_domain_templates() {
         let workspace = temp_workspace("boundline-init-domain");
@@ -1075,6 +1715,9 @@ mod tests {
 
         let report = execute_init(InitRequest {
             workspace: &workspace,
+            non_interactive: true,
+            interactive_terminal_override: None,
+            interactor: None,
             template: None,
             assistants: &[RuntimeKind::Copilot],
             routes: &[],
@@ -1108,6 +1751,9 @@ mod tests {
 
         let error = execute_init(InitRequest {
             workspace: &workspace,
+            non_interactive: true,
+            interactive_terminal_override: None,
+            interactor: None,
             template: None,
             assistants: &[],
             routes: &[],
@@ -1135,6 +1781,9 @@ mod tests {
 
         let report = execute_init(InitRequest {
             workspace: &workspace,
+            non_interactive: true,
+            interactive_terminal_override: None,
+            interactor: None,
             template: Some(InitTemplate::Delivery),
             assistants: &[],
             routes: &[],
@@ -1164,6 +1813,9 @@ mod tests {
 
         let report = execute_init(InitRequest {
             workspace: &workspace,
+            non_interactive: true,
+            interactive_terminal_override: None,
+            interactor: None,
             template: Some(InitTemplate::Change),
             assistants: &[],
             routes: &[],
@@ -1194,6 +1846,9 @@ mod tests {
 
         let report = execute_init(InitRequest {
             workspace: &workspace,
+            non_interactive: true,
+            interactive_terminal_override: None,
+            interactor: None,
             template: None,
             assistants: &[RuntimeKind::Copilot],
             routes: &[],
@@ -1235,6 +1890,9 @@ mod tests {
 
         let report = execute_init(InitRequest {
             workspace: &workspace,
+            non_interactive: true,
+            interactive_terminal_override: None,
+            interactor: None,
             template: None,
             assistants: &[RuntimeKind::Copilot],
             routes: &explicit,
@@ -1265,22 +1923,9 @@ mod tests {
     }
 
     #[test]
-    fn parsing_helpers_cover_variants_errors_and_binding_upserts() {
-        let canon_prompt = guided_canon_mode_prompt();
-        assert!(canon_prompt.contains("manual|auto-confirm|auto"));
-        assert!(canon_prompt.contains("Default: auto-confirm"));
-
-        let assistant_prompt = guided_assistant_prompt();
-        assert!(assistant_prompt.contains("Assistant surfaces [claude, codex, copilot, gemini]"));
-        assert!(assistant_prompt.contains("Leave blank to skip repository-local assistant packs"));
-
-        let route_prompt = guided_route_prompt();
-        assert!(route_prompt.contains(&supported_route_slots()));
-        assert!(
-            route_prompt
-                .contains("Optional: leave blank to let selected assistants seed missing slots")
-        );
-        assert!(route_prompt.contains("planning=copilot:gpt-5.4"));
+    fn parsing_helpers_cover_variants_errors_binding_upserts_and_guided_catalog() {
+        let catalog = BundledModelCatalog::load().unwrap();
+        assert!(catalog.summary_label().contains("bundled"));
 
         let (family, standards) = parse_domain_standard("react= follow ui rules").unwrap();
         assert_eq!(family, DomainFamily::React);
@@ -1291,15 +1936,17 @@ mod tests {
             parse_canon_mode_selection("auto-confirm").unwrap(),
             crate::domain::governance::CanonModeSelectionPreference::AutoConfirm
         );
-        assert_eq!(
-            parse_guided_assistants("codex, copilot").unwrap(),
-            vec![RuntimeKind::Codex, RuntimeKind::Copilot]
-        );
-        let routes = parse_guided_routes("planning=codex:gpt-5-codex").unwrap();
-        assert_eq!(routes.len(), 1);
-        assert_eq!(routes[0].0, crate::domain::configuration::RouteSlot::Planning);
-        assert_eq!(routes[0].1.runtime, RuntimeKind::Codex);
-        assert_eq!(routes[0].1.model, "gpt-5-codex");
+
+        let routes = initial_guided_route_selections(&catalog, &[RuntimeKind::Copilot]);
+        assert_eq!(routes.len(), 4);
+        assert_eq!(routes[0].slot, crate::domain::configuration::RouteSlot::Planning);
+        assert_eq!(routes[0].route.as_ref().unwrap().runtime, RuntimeKind::Copilot);
+        assert!(matches!(routes[0].source, GuidedRouteSource::AssistantDefault { .. }));
+        let review =
+            render_guided_route_review(&catalog, &routes, Some("Custom model id cannot be empty."));
+        assert!(review.contains("Model routes"), "{review}");
+        assert!(review.contains("Custom model id cannot be empty."), "{review}");
+
         assert!(
             parse_model_route("planning-codex-gpt-5-codex")
                 .unwrap_err()
@@ -1313,7 +1960,7 @@ mod tests {
                 .contains(&supported_route_slots())
         );
         assert!(
-            parse_guided_assistants("cursor")
+            parse_model_route("planning=cursor:gpt-5-codex")
                 .unwrap_err()
                 .to_string()
                 .contains(&supported_runtime_choices())
@@ -1388,6 +2035,60 @@ mod tests {
     }
 
     #[test]
+    fn guided_answers_can_choose_custom_models_without_freeform_route_entry() {
+        let catalog = BundledModelCatalog::load().unwrap();
+        let mut interactor = ScriptedInteractor {
+            selects: VecDeque::from(vec![0, 1, 2, 3, 0]),
+            multi_selects: VecDeque::from(vec![vec![0]]),
+            inputs: VecDeque::from(vec!["gpt-5.4-enterprise".to_string()]),
+            confirms: VecDeque::new(),
+        };
+
+        let answers = collect_guided_init_answers_with_interactor(
+            &mut interactor,
+            true,
+            true,
+            true,
+            &catalog,
+            &[],
+        )
+        .unwrap();
+
+        assert_eq!(answers.canon_mode_selection, Some(CanonModeSelectionPreference::AutoConfirm));
+        assert_eq!(answers.assistants, vec![RuntimeKind::Copilot]);
+        assert_eq!(answers.routes[0].route.as_ref().unwrap().runtime, RuntimeKind::Claude);
+        assert_eq!(answers.routes[0].route.as_ref().unwrap().model, "gpt-5.4-enterprise");
+        assert!(matches!(answers.routes[0].source, GuidedRouteSource::Custom));
+    }
+
+    #[test]
+    fn execute_init_requires_non_interactive_flag_without_tty_when_guided_values_are_missing() {
+        let workspace = temp_workspace("boundline-init-no-tty");
+
+        let error = execute_init(InitRequest {
+            workspace: &workspace,
+            non_interactive: false,
+            interactive_terminal_override: Some(false),
+            interactor: None,
+            template: None,
+            assistants: &[],
+            routes: &[],
+            domains: &[],
+            domain_standards: &[],
+            context_bindings: &[],
+            required_context_bindings: &[],
+            canon_mode_selection: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            force: true,
+        })
+        .unwrap_err();
+
+        assert_eq!(error.to_string(), super::NO_TTY_GUIDANCE);
+    }
+
+    #[test]
     fn resolve_seeded_routes_marks_fallbacks_when_selected_preferred_runtime_is_unavailable() {
         let seeded = resolve_seeded_routes(
             &[RuntimeKind::Codex, RuntimeKind::Copilot],
@@ -1448,6 +2149,9 @@ mod tests {
 
         let report = execute_init(InitRequest {
             workspace: &workspace,
+            non_interactive: true,
+            interactive_terminal_override: None,
+            interactor: None,
             template: None,
             assistants: &[RuntimeKind::Copilot],
             routes: &[],
@@ -1483,6 +2187,9 @@ mod tests {
 
         let result = execute_init(InitRequest {
             workspace: &workspace,
+            non_interactive: true,
+            interactive_terminal_override: None,
+            interactor: None,
             template: None,
             assistants: &[RuntimeKind::Copilot],
             routes: &[],
@@ -1531,5 +2238,597 @@ mod tests {
         let _ = super::runtime_available(RuntimeKind::Codex);
         let _ = super::runtime_available(RuntimeKind::Gemini);
         assert!(!command_in_path("boundline-command-that-should-not-exist"));
+    }
+
+    #[test]
+    fn guided_route_source_labels_and_display_line_cover_all_variants() {
+        use super::{GuidedRouteSelection, GuidedRouteSource};
+        use crate::domain::configuration::ModelRoute;
+
+        let make = |slot: RouteSlot, route: Option<ModelRoute>, source: GuidedRouteSource| {
+            GuidedRouteSelection { slot, route, source }
+        };
+
+        let bundled = make(
+            RouteSlot::Planning,
+            Some(ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-5.4".to_string() }),
+            GuidedRouteSource::Bundled,
+        );
+        assert!(bundled.display_line().contains("[bundled]"), "{}", bundled.display_line());
+
+        let custom = make(
+            RouteSlot::Implementation,
+            Some(ModelRoute { runtime: RuntimeKind::Claude, model: "sonnet-4".to_string() }),
+            GuidedRouteSource::Custom,
+        );
+        assert!(custom.display_line().contains("[custom-unverified]"), "{}", custom.display_line());
+
+        let unset = make(RouteSlot::Verification, None, GuidedRouteSource::Unset);
+        assert!(unset.display_line().contains("unset"), "{}", unset.display_line());
+        assert!(unset.display_line().contains("[unset]"), "{}", unset.display_line());
+
+        let fallback = make(
+            RouteSlot::Review,
+            Some(ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-5.4".to_string() }),
+            GuidedRouteSource::AssistantDefault { fallback_from: Some(RuntimeKind::Codex) },
+        );
+        assert!(
+            fallback.display_line().contains("fallback-from=codex-unavailable"),
+            "{}",
+            fallback.display_line()
+        );
+
+        let no_fallback = make(
+            RouteSlot::Planning,
+            Some(ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-5.4".to_string() }),
+            GuidedRouteSource::AssistantDefault { fallback_from: None },
+        );
+        assert!(
+            no_fallback.display_line().contains("[assistant-default]"),
+            "{}",
+            no_fallback.display_line()
+        );
+    }
+
+    #[test]
+    fn catalog_helpers_cover_all_slot_arms_and_label_formatters() {
+        let catalog = BundledModelCatalog::load().unwrap();
+
+        // default_route_for_slot - all four arms
+        assert!(catalog.default_route_for_slot(RouteSlot::Planning).is_some());
+        assert!(catalog.default_route_for_slot(RouteSlot::Implementation).is_some());
+        assert!(catalog.default_route_for_slot(RouteSlot::Verification).is_some());
+        assert!(catalog.default_route_for_slot(RouteSlot::Review).is_some());
+
+        // runtime_labels
+        let labels = catalog.runtime_labels();
+        assert!(!labels.is_empty());
+        assert!(labels.iter().any(|l| l.contains("copilot")));
+
+        // model_labels_for_runtime
+        let copilot_models = catalog.model_labels_for_runtime(RuntimeKind::Copilot);
+        assert!(!copilot_models.is_empty());
+        // unknown runtime returns empty
+        let unknown_models = catalog.model_labels_for_runtime(RuntimeKind::Codex);
+        // Codex is in catalog, so this should be non-empty too - just verify it doesn't panic
+        let _ = unknown_models;
+
+        // default_route_for_runtime
+        assert!(catalog.default_route_for_runtime(RuntimeKind::Copilot).is_some());
+
+        // summary_label
+        let summary = catalog.summary_label();
+        assert!(summary.contains("bundled"), "{summary}");
+    }
+
+    #[test]
+    fn select_canon_mode_covers_manual_and_auto_variants() {
+        let catalog = BundledModelCatalog::load().unwrap();
+
+        // Manual (index 1)
+        let mut interactor = ScriptedInteractor {
+            selects: VecDeque::from(vec![1]),
+            multi_selects: VecDeque::default(),
+            inputs: VecDeque::default(),
+            confirms: VecDeque::default(),
+        };
+        let answers = collect_guided_init_answers_with_interactor(
+            &mut interactor,
+            true,
+            false,
+            false,
+            &catalog,
+            &[RuntimeKind::Copilot],
+        )
+        .unwrap();
+        assert_eq!(answers.canon_mode_selection, Some(CanonModeSelectionPreference::Manual));
+
+        // Auto (index 2)
+        let mut interactor2 = ScriptedInteractor {
+            selects: VecDeque::from(vec![2]),
+            multi_selects: VecDeque::default(),
+            inputs: VecDeque::default(),
+            confirms: VecDeque::default(),
+        };
+        let answers2 = collect_guided_init_answers_with_interactor(
+            &mut interactor2,
+            true,
+            false,
+            false,
+            &catalog,
+            &[RuntimeKind::Copilot],
+        )
+        .unwrap();
+        assert_eq!(answers2.canon_mode_selection, Some(CanonModeSelectionPreference::Auto));
+    }
+
+    #[test]
+    fn collect_guided_answers_skips_all_prompts_when_all_flags_are_false() {
+        let catalog = BundledModelCatalog::load().unwrap();
+        let explicit = [RuntimeKind::Copilot];
+        let mut interactor = ScriptedInteractor::default();
+
+        let answers = collect_guided_init_answers_with_interactor(
+            &mut interactor,
+            false,
+            false,
+            false,
+            &catalog,
+            &explicit,
+        )
+        .unwrap();
+
+        assert_eq!(answers.canon_mode_selection, None);
+        assert_eq!(answers.assistants, vec![RuntimeKind::Copilot]);
+        assert!(answers.routes.is_empty());
+    }
+
+    #[test]
+    fn initial_guided_route_selections_fallback_when_catalog_default_is_unavailable() {
+        let catalog = BundledModelCatalog::load().unwrap();
+
+        // Use Copilot as assistant but pass Codex as well - when codex isn't available
+        // it should fall back to copilot for its slots
+        let selections =
+            initial_guided_route_selections(&catalog, &[RuntimeKind::Codex, RuntimeKind::Copilot]);
+        assert_eq!(selections.len(), 4);
+        // All slots should have a route (copilot is always available)
+        for selection in &selections {
+            assert!(selection.route.is_some(), "slot {:?} has no route", selection.slot);
+        }
+    }
+
+    #[test]
+    fn clear_guided_route_selections_unsets_all_slots() {
+        let catalog = BundledModelCatalog::load().unwrap();
+        let mut selections = initial_guided_route_selections(&catalog, &[RuntimeKind::Copilot]);
+        assert!(selections.iter().all(|s| s.route.is_some()));
+
+        super::clear_guided_route_selections(&mut selections);
+
+        for selection in &selections {
+            assert!(selection.route.is_none(), "slot {:?} should be unset", selection.slot);
+            assert_eq!(selection.source, super::GuidedRouteSource::Unset);
+        }
+    }
+
+    #[test]
+    fn edit_route_selection_can_leave_slot_unset_and_pick_bundled_model() {
+        let catalog = BundledModelCatalog::load().unwrap();
+        let mut selections = initial_guided_route_selections(&catalog, &[RuntimeKind::Copilot]);
+
+        // Leave planning unset: pick last runtime index (= catalog.runtimes.len())
+        let unset_result = super::edit_route_selection(
+            &mut ScriptedInteractor {
+                selects: VecDeque::from(vec![catalog.runtimes.len()]),
+                ..Default::default()
+            },
+            &catalog,
+            &mut selections,
+            RouteSlot::Planning,
+        );
+        assert!(unset_result.is_ok());
+        let planning = selections.iter().find(|s| s.slot == RouteSlot::Planning).unwrap();
+        assert!(planning.route.is_none());
+        assert_eq!(planning.source, super::GuidedRouteSource::Unset);
+
+        // Pick bundled model for implementation: runtime=0, model=0
+        let bundled_result = super::edit_route_selection(
+            &mut ScriptedInteractor { selects: VecDeque::from(vec![0, 0]), ..Default::default() },
+            &catalog,
+            &mut selections,
+            RouteSlot::Implementation,
+        );
+        assert!(bundled_result.is_ok());
+        let impl_slot = selections.iter().find(|s| s.slot == RouteSlot::Implementation).unwrap();
+        assert!(impl_slot.route.is_some());
+        assert_eq!(impl_slot.source, super::GuidedRouteSource::Bundled);
+    }
+
+    #[test]
+    fn collect_guided_init_answers_wrapper_and_parse_model_route_cover_success_paths() {
+        let catalog = BundledModelCatalog::load().unwrap();
+
+        let answers = collect_guided_init_answers_with_interactor(
+            &mut ScriptedInteractor::default(),
+            false,
+            false,
+            false,
+            &catalog,
+            &[RuntimeKind::Copilot],
+        )
+        .unwrap();
+        assert_eq!(answers.canon_mode_selection, None);
+        assert_eq!(answers.assistants, vec![RuntimeKind::Copilot]);
+        assert!(answers.routes.is_empty());
+
+        let (slot, route) = parse_model_route("planning=copilot:gpt-5.4").unwrap();
+        assert_eq!(slot, RouteSlot::Planning);
+        assert_eq!(route.runtime, RuntimeKind::Copilot);
+        assert_eq!(route.model, "gpt-5.4");
+
+        assert!(parse_model_route("planning=copilot: ").is_err());
+    }
+
+    #[test]
+    fn select_assistants_filters_indices_that_are_not_in_the_catalog() {
+        let catalog = BundledModelCatalog::load().unwrap();
+        let expected_runtime = catalog.runtimes.first().unwrap().runtime;
+        let mut interactor = ScriptedInteractor {
+            multi_selects: VecDeque::from(vec![vec![0, catalog.runtimes.len() + 5]]),
+            ..Default::default()
+        };
+
+        let assistants = super::select_assistants(&mut interactor, &catalog).unwrap();
+
+        assert_eq!(assistants, vec![expected_runtime]);
+    }
+
+    #[test]
+    fn assistant_asset_plan_and_apply_cover_created_updated_and_unchanged_states() {
+        let workspace = temp_workspace("boundline-init-assistant-asset-states");
+        let assistant_assets = super::assets_for_assistants(&[RuntimeKind::Copilot]);
+        assert!(!assistant_assets.is_empty());
+        let multi_file_surface_asset = assistant_assets
+            .iter()
+            .copied()
+            .find(|candidate| {
+                assistant_assets
+                    .iter()
+                    .filter(|asset| asset.surface == candidate.surface)
+                    .nth(1)
+                    .is_some()
+            })
+            .unwrap();
+
+        let initial_plan = super::plan_assistant_setup(&workspace, &assistant_assets);
+        assert!(initial_plan.iter().all(|line| line.contains("scaffold")), "{initial_plan:?}");
+
+        let created = super::apply_assistant_assets(&workspace, &assistant_assets).unwrap();
+        assert!(created.iter().all(|action| action.status == "created"), "{created:?}");
+        assert_eq!(
+            created
+                .iter()
+                .map(|action| action.created_files + action.updated_files + action.unchanged_files)
+                .sum::<usize>(),
+            assistant_assets.len()
+        );
+
+        let refresh_plan = super::plan_assistant_setup(&workspace, &assistant_assets);
+        assert!(refresh_plan.iter().all(|line| line.contains("refresh")), "{refresh_plan:?}");
+
+        let unchanged = super::apply_assistant_assets(&workspace, &assistant_assets).unwrap();
+        assert!(unchanged.iter().all(|action| action.status == "unchanged"), "{unchanged:?}");
+
+        fs::remove_file(workspace.join(multi_file_surface_asset.relative_path)).unwrap();
+        let recreated = super::apply_assistant_assets(&workspace, &assistant_assets).unwrap();
+        assert!(recreated.iter().any(|action| action.status == "updated"), "{recreated:?}");
+        assert_eq!(recreated.iter().map(|action| action.created_files).sum::<usize>(), 1);
+
+        fs::write(workspace.join(multi_file_surface_asset.relative_path), "stale").unwrap();
+        let updated = super::apply_assistant_assets(&workspace, &assistant_assets).unwrap();
+        assert!(updated.iter().any(|action| action.updated_files > 0), "{updated:?}");
+    }
+
+    #[test]
+    fn review_routes_covers_clear_validation_retries_and_accept() {
+        let catalog = BundledModelCatalog::load().unwrap();
+        let review_items = super::route_review_items();
+        assert_eq!(review_items.first().unwrap(), super::ACCEPT_CURRENT_ROUTES_LABEL);
+        assert_eq!(review_items.last().unwrap(), super::CLEAR_ALL_ROUTES_LABEL);
+
+        let mut missing_selections: Vec<super::GuidedRouteSelection> = Vec::new();
+        let missing_slot_error = super::edit_route_selection(
+            &mut ScriptedInteractor::default(),
+            &catalog,
+            &mut missing_selections,
+            RouteSlot::Planning,
+        )
+        .unwrap_err();
+        assert!(missing_slot_error.contains("planning"), "{missing_slot_error}");
+
+        let custom_model_choice =
+            catalog.model_labels_for_runtime(catalog.runtimes[0].runtime).len();
+        let clear_choice = review_items.len() - 1;
+        let mut interactor = ScriptedInteractor {
+            selects: VecDeque::from(vec![clear_choice, 1, 0, custom_model_choice, 1, 0, 0, 0]),
+            inputs: VecDeque::from(vec!["   ".to_string()]),
+            ..Default::default()
+        };
+
+        let routes =
+            super::review_routes(&mut interactor, &catalog, &[RuntimeKind::Copilot]).unwrap();
+        let planning =
+            routes.iter().find(|selection| selection.slot == RouteSlot::Planning).unwrap();
+        assert_eq!(planning.source, super::GuidedRouteSource::Bundled);
+        assert_eq!(planning.route.as_ref().unwrap().runtime, catalog.runtimes[0].runtime);
+        assert!(
+            routes
+                .iter()
+                .filter(|selection| selection.slot != RouteSlot::Planning)
+                .all(|selection| selection.route.is_none())
+        );
+    }
+
+    #[test]
+    fn parser_helpers_cover_remaining_route_runtime_and_binding_variants() {
+        assert_eq!(super::parse_route_slot("implementation").unwrap(), RouteSlot::Implementation);
+        assert_eq!(super::parse_route_slot("verification").unwrap(), RouteSlot::Verification);
+        assert_eq!(super::parse_route_slot("review").unwrap(), RouteSlot::Review);
+
+        assert_eq!(super::parse_runtime_kind("claude").unwrap(), RuntimeKind::Claude);
+        assert_eq!(super::parse_runtime_kind("gemini").unwrap(), RuntimeKind::Gemini);
+
+        assert_eq!(parse_domain_family("systems").unwrap(), DomainFamily::Systems);
+        assert_eq!(
+            parse_external_context_kind("design-system").unwrap(),
+            ExternalContextKind::DesignSystem
+        );
+
+        assert!(super::parse_context_binding("react", false).is_err());
+        assert!(super::parse_context_binding("react|design_system", false).is_err());
+    }
+
+    #[test]
+    fn initial_guided_route_selections_leave_all_slots_unset_without_available_assistants() {
+        let catalog = BundledModelCatalog::load().unwrap();
+
+        let selections = initial_guided_route_selections(&catalog, &[]);
+
+        assert_eq!(selections.len(), 4);
+        assert!(selections.iter().all(|selection| selection.route.is_none()));
+        assert!(
+            selections.iter().all(|selection| selection.source == super::GuidedRouteSource::Unset)
+        );
+    }
+
+    #[test]
+    fn scripted_interactor_reports_missing_values_for_each_prompt_type() {
+        let mut interactor = ScriptedInteractor::default();
+
+        let select_error = interactor.select("prompt", &[], 0).unwrap_err();
+        assert!(select_error.to_string().contains("missing scripted select"));
+
+        let multi_select_error = interactor.multi_select("prompt", &[], &[]).unwrap_err();
+        assert!(multi_select_error.to_string().contains("missing scripted multi-select"));
+
+        let input_error = interactor.input("prompt", "").unwrap_err();
+        assert!(input_error.to_string().contains("missing scripted input"));
+
+        let confirm_error = interactor.confirm("prompt", false).unwrap_err();
+        assert!(confirm_error.to_string().contains("missing scripted confirm"));
+    }
+
+    #[test]
+    fn run_init_activity_covers_interactive_failure_path() {
+        let result: Result<(), _> = super::run_init_activity("failing activity", true, || {
+            Err(super::InitCommandError::InvalidBundledCatalog("broken catalog".to_string()))
+        });
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("bundled model catalog"));
+
+        let non_interactive_result: Result<(), _> =
+            super::run_init_activity("failing activity", false, || {
+                Err(super::InitCommandError::InvalidBundledCatalog("broken catalog".to_string()))
+            });
+        assert!(non_interactive_result.is_err());
+    }
+
+    #[test]
+    fn render_guided_summary_covers_empty_and_nonempty_assistants() {
+        let catalog = BundledModelCatalog::load().unwrap();
+        let slots = initial_guided_route_selections(&catalog, &[RuntimeKind::Copilot]);
+
+        let with_assistants = super::render_guided_summary(
+            InitTemplate::Change,
+            Some(CanonModeSelectionPreference::AutoConfirm),
+            &[RuntimeKind::Copilot],
+            &slots,
+            &catalog,
+            &["- create .boundline/config.toml".to_string()],
+        );
+        assert!(with_assistants.contains("copilot"), "{with_assistants}");
+        assert!(with_assistants.contains("Model routes:"), "{with_assistants}");
+
+        let no_assistants =
+            super::render_guided_summary(InitTemplate::BugFix, None, &[], &slots, &catalog, &[]);
+        assert!(no_assistants.contains("none selected"), "{no_assistants}");
+        assert!(no_assistants.contains("auto-confirm"), "{no_assistants}");
+    }
+
+    #[test]
+    fn render_cancelled_init_report_covers_empty_and_nonempty_assistants() {
+        let workspace = temp_workspace("boundline-init-cancel-render");
+        let catalog = BundledModelCatalog::load().unwrap();
+        let slots = initial_guided_route_selections(&catalog, &[RuntimeKind::Copilot]);
+
+        let with = super::render_cancelled_init_report(
+            &workspace,
+            InitTemplate::Delivery,
+            Some(CanonModeSelectionPreference::Manual),
+            &[RuntimeKind::Copilot],
+            &slots,
+            &catalog,
+        );
+        assert!(with.contains("canceled before write"), "{with}");
+        assert!(with.contains("copilot"), "{with}");
+
+        let without = super::render_cancelled_init_report(
+            &workspace,
+            InitTemplate::BugFix,
+            None,
+            &[],
+            &slots,
+            &catalog,
+        );
+        assert!(without.contains("none selected"), "{without}");
+        assert!(without.contains("auto-confirm"), "{without}");
+    }
+
+    #[test]
+    fn execute_init_uses_spinner_path_when_interactive_terminal_override_is_true() {
+        let workspace = temp_workspace("boundline-init-spinner");
+        let report = execute_init(InitRequest {
+            workspace: &workspace,
+            non_interactive: true,
+            interactive_terminal_override: Some(true),
+            interactor: None,
+            template: Some(InitTemplate::Change),
+            assistants: &[RuntimeKind::Copilot],
+            routes: &[],
+            domains: &[],
+            domain_standards: &[],
+            context_bindings: &[],
+            required_context_bindings: &[],
+            canon_mode_selection: Some(CanonModeSelectionPreference::AutoConfirm),
+            risk: None,
+            zone: None,
+            owner: None,
+            force: true,
+        })
+        .unwrap();
+        assert_eq!(report.exit_status, crate::cli::CommandExitStatus::Succeeded);
+        assert!(
+            report.terminal_output.contains("init: workspace initialized"),
+            "{}",
+            report.terminal_output
+        );
+    }
+
+    #[test]
+    fn init_command_error_new_variants_display_their_messages() {
+        let unavailable = super::InitCommandError::InteractiveTerminalUnavailable;
+        assert!(unavailable.to_string().contains("non-interactive"), "{}", unavailable);
+
+        let invalid_catalog =
+            super::InitCommandError::InvalidBundledCatalog("bad toml".to_string());
+        assert!(
+            invalid_catalog.to_string().contains("bundled model catalog"),
+            "{}",
+            invalid_catalog
+        );
+
+        let prompt_err = super::InitCommandError::PromptInteraction("user cancelled".to_string());
+        assert!(prompt_err.to_string().contains("collect init input"), "{}", prompt_err);
+    }
+
+    #[test]
+    fn parse_canon_mode_selection_covers_manual_auto_and_invalid() {
+        assert_eq!(
+            parse_canon_mode_selection("manual").unwrap(),
+            CanonModeSelectionPreference::Manual
+        );
+        assert_eq!(parse_canon_mode_selection("auto").unwrap(), CanonModeSelectionPreference::Auto);
+        assert!(parse_canon_mode_selection("unknown").is_err());
+    }
+
+    #[test]
+    fn execute_init_guided_flow_via_injected_interactor_confirm_true() {
+        let workspace = temp_workspace("boundline-init-guided-confirm");
+        let catalog = BundledModelCatalog::load().unwrap();
+        let copilot_models = catalog.model_labels_for_runtime(RuntimeKind::Copilot).len();
+
+        // Scripted answers:
+        //   select_canon_mode          → 0 (AutoConfirm)
+        //   select_assistants          → [0] (Copilot)
+        //   review_routes accept       → 0 (Accept current routes)
+        //   confirm summary            → true (write)
+        let interactor = ScriptedInteractor {
+            selects: VecDeque::from(vec![0, 0]),
+            multi_selects: VecDeque::from(vec![vec![0]]),
+            inputs: VecDeque::new(),
+            confirms: VecDeque::from(vec![true]),
+        };
+
+        let report = execute_init(InitRequest {
+            workspace: &workspace,
+            non_interactive: false,
+            interactive_terminal_override: Some(true),
+            interactor: Some(Box::new(interactor)),
+            template: Some(InitTemplate::BugFix),
+            assistants: &[],
+            routes: &[],
+            domains: &[],
+            domain_standards: &[],
+            context_bindings: &[],
+            required_context_bindings: &[],
+            canon_mode_selection: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            force: true,
+        })
+        .unwrap();
+
+        assert_eq!(report.exit_status, CommandExitStatus::Succeeded);
+        assert!(
+            report.terminal_output.contains("init: workspace initialized"),
+            "{}",
+            report.terminal_output
+        );
+        assert!(report.terminal_output.contains("copilot"), "{}", report.terminal_output);
+        // Suppress unused variable warning — copilot_models is needed to check catalog health
+        let _ = copilot_models;
+    }
+
+    #[test]
+    fn execute_init_guided_flow_via_injected_interactor_confirm_false_cancels() {
+        let workspace = temp_workspace("boundline-init-guided-cancel");
+
+        // Same guided flow but confirm → false (cancel before write)
+        let interactor = ScriptedInteractor {
+            selects: VecDeque::from(vec![0, 0]),
+            multi_selects: VecDeque::from(vec![vec![0]]),
+            inputs: VecDeque::new(),
+            confirms: VecDeque::from(vec![false]),
+        };
+
+        let report = execute_init(InitRequest {
+            workspace: &workspace,
+            non_interactive: false,
+            interactive_terminal_override: Some(true),
+            interactor: Some(Box::new(interactor)),
+            template: Some(InitTemplate::BugFix),
+            assistants: &[],
+            routes: &[],
+            domains: &[],
+            domain_standards: &[],
+            context_bindings: &[],
+            required_context_bindings: &[],
+            canon_mode_selection: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            force: true,
+        })
+        .unwrap();
+
+        assert_eq!(report.exit_status, CommandExitStatus::NonSuccess);
+        assert!(
+            report.terminal_output.contains("canceled before write"),
+            "{}",
+            report.terminal_output
+        );
     }
 }

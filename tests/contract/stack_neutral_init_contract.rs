@@ -10,7 +10,14 @@ fn doctor_workspace_output_stays_stack_neutral() {
 
     let init = run_boundline_in(
         &workspace,
-        &["init", "--workspace", workspace.to_string_lossy().as_ref(), "--assistant", "copilot"],
+        &[
+            "init",
+            "--non-interactive",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--assistant",
+            "copilot",
+        ],
     );
     assert_eq!(init.status.code(), Some(0), "{}", terminal_text(&init));
 
@@ -37,6 +44,7 @@ fn init_reports_seeded_routes_and_hygiene_actions() {
         &workspace,
         &[
             "init",
+            "--non-interactive",
             "--workspace",
             workspace.to_string_lossy().as_ref(),
             "--assistant",
@@ -67,6 +75,7 @@ fn init_reports_assistant_fallback_when_selected_runtime_is_unavailable() {
         &workspace,
         &[
             "init",
+            "--non-interactive",
             "--workspace",
             workspace.to_string_lossy().as_ref(),
             "--assistant",

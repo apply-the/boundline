@@ -2577,6 +2577,7 @@ mod tests {
             (
                 DeveloperCommand::Init {
                     workspace: "/tmp/workspace".into(),
+                    non_interactive: false,
                     template: None,
                     assistant: Vec::new(),
                     domain: Vec::new(),

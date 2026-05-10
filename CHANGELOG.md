@@ -17,6 +17,26 @@ recorded workspace version.
 
 ## [Unreleased]
 
+## [0.47.0] - 2026-05-09
+
+Delivered specs:
+
+- `046` - Guided Init TUI and Runtime Catalog
+
+Highlights:
+
+- Replace the fragile guided `init` freeform prompts with a bounded terminal
+  wizard that shows visible defaults, slot-by-slot route editing, and a final
+  summary before writes.
+- Ship a bundled runtime/model catalog with explicit source metadata, custom
+  model fallback warnings, and assistant-pack scaffolding status grouped by
+  selected surface.
+- Add top-level `--version` support, non-interactive `init` parity, and
+  spinner-style progress feedback for time-consuming bootstrap steps.
+- Adopt Canon `0.43.0` as the supported Boundline companion across install
+  diagnostics, distribution metadata, governed runtime snapshots, and operator
+  guidance.
+
 ## [0.46.0] - 2026-05-09
 
 Delivered specs:
@@ -31,7 +51,7 @@ Highlights:
 - Let shell-enabled assistant flows consume structured `session_status`,
   `trace_summary`, and `trace_location` fields directly, then align the Claude,
   Codex, Copilot, and Gemini guidance to the same structured shell path.
-- Adopt Canon `0.42.0` as the supported Boundline companion across install
+- Adopt Canon `0.43.0` as the supported Boundline companion across install
   diagnostics, distribution metadata, governed runtime snapshots, and operator
   guidance.
 
@@ -84,7 +104,7 @@ Highlights:
   and tool-specific ignore patterns only when selected domains or repository
   cues make them credible.
 
-## [0.42.0] - 2026-05-06
+## [0.43.0] - 2026-05-06
 
 Delivered specs:
 

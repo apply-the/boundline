@@ -1,6 +1,6 @@
 # boundline Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-05-07
+Auto-generated from all feature plans. Last updated: 2026-05-10
 
 ## Active Technologies
 - Rust 1.95.0, edition 2024 + Existing runtime dependencies (`serde`, `serde_json`, `thiserror`, `tracing`, `uuid`) plus `clap` 4.x for a stable subcommand-based CLI surface (002-developer-ux-orchestrator)
@@ -70,6 +70,8 @@ Auto-generated from all feature plans. Last updated: 2026-05-07
 - Workspace-local `.boundline/config.toml`, optional `.boundline/execution.json`, `.boundline/session.json`, `.boundline/traces/`, and repository ignore files such as `.gitignore`, `.dockerignore`, `.eslintignore`, `.prettierignore`, `.terraformignore`, and `.helmignore` when bounded hygiene defaults justify them (043-stack-neutral-init)
 - Rust 1.95.0, edition 2024 + Existing CLI/runtime stack (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`) with Rust standard library terminal and filesystem APIs (044-cli-init-ux)
 - Workspace-local files under `.boundline/`, repository-local assistant asset files under `assistant/`, and stdout/stderr CLI summaries (044-cli-init-ux)
+- Rust 1.95.0, edition 2024 + Existing CLI/runtime stack (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`) plus a terminal interaction crate for guided prompts and `indicatif` for spinner/progress feedback in the CLI crate (046-guided-init-tui)
+- Existing workspace-local `.boundline/execution.json`, `.boundline/config.toml`, assistant asset files under `assistant/`, and a bundled runtime/model catalog embedded from a repository-managed asset; no new user-writable persistence surface (046-guided-init-tui)
 
 - Rust 1.95.0, edition 2024 + Rust standard library plus `serde`, `serde_json`, `thiserror`, `tracing`, and `uuid` for structured state, trace serialization, error handling, instrumentation, and stable identifiers (001-delivery-orchestrator-core)
 
@@ -98,9 +100,9 @@ Crate versioning follows Semantic Versioning.
 Before 1.0.0, breaking changes MAY occur in minor versions.
 
 ## Recent Changes
+- 046-guided-init-tui: Added Rust 1.95.0, edition 2024 + Existing CLI/runtime stack (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`) plus a terminal interaction crate for guided prompts and `indicatif` for spinner/progress feedback in the CLI crate
 - 044-cli-init-ux: Added Rust 1.95.0, edition 2024 + Existing CLI/runtime stack (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`) with Rust standard library terminal and filesystem APIs
 - 043-stack-neutral-init: Added Rust 1.95.0, edition 2024 + Existing runtime dependencies `clap` 4.x, `serde` 1.x, `serde_json` 1.x, `thiserror` 2.x, `tracing` 0.1, `uuid` 1.x, `toml` 0.8, plus Rust standard library filesystem, path, collections, and process APIs; no new runtime dependencies planned
-- 042-native-canon-cli: Added Rust 1.95.0, edition 2024 + `clap` 4.x, `serde` 1.x, `serde_json` 1.x, `thiserror` 2.x, `tracing` 0.1, `uuid` 1.x, `toml` 0.8; Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies
 
 
 <!-- MANUAL ADDITIONS START -->

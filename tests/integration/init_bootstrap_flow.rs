@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use uuid::Uuid;
 
@@ -17,11 +17,33 @@ fn empty_workspace(prefix: &str) -> PathBuf {
     workspace
 }
 
+fn run_init_in(workspace: &Path, args: &[&str]) -> std::process::Output {
+    assert_eq!(args.first(), Some(&"init"));
+    let mut command = Vec::with_capacity(args.len() + 1);
+    command.push("init");
+    command.push("--non-interactive");
+    command.extend_from_slice(&args[1..]);
+    run_boundline_in(workspace, &command)
+}
+
+fn run_init_in_with_env(
+    workspace: &Path,
+    args: &[&str],
+    env: &[(&str, &str)],
+) -> std::process::Output {
+    assert_eq!(args.first(), Some(&"init"));
+    let mut command = Vec::with_capacity(args.len() + 1);
+    command.push("init");
+    command.push("--non-interactive");
+    command.extend_from_slice(&args[1..]);
+    run_boundline_in_with_env(workspace, &command, env)
+}
+
 #[test]
 fn init_scaffolds_execution_and_config_files() {
     let workspace = empty_workspace("boundline-init-bootstrap");
 
-    let init = run_boundline_in(
+    let init = run_init_in(
         &workspace,
         &[
             "init",
@@ -66,7 +88,7 @@ fn init_previews_existing_assistant_assets_without_force() {
     )
     .unwrap();
 
-    let init = run_boundline_in(
+    let init = run_init_in(
         &workspace,
         &["init", "--workspace", workspace.to_string_lossy().as_ref(), "--assistant", "copilot"],
     );
@@ -83,7 +105,7 @@ fn init_previews_existing_assistant_assets_without_force() {
 fn init_auto_seeds_routes_from_selected_assistant() {
     let workspace = empty_workspace("boundline-init-assistant-defaults");
 
-    let init = run_boundline_in(
+    let init = run_init_in(
         &workspace,
         &["init", "--workspace", workspace.to_string_lossy().as_ref(), "--assistant", "copilot"],
     );
@@ -107,7 +129,7 @@ fn init_auto_seeds_routes_from_selected_assistant() {
 fn init_falls_back_to_available_selected_assistant_when_preferred_runtime_is_unavailable() {
     let workspace = empty_workspace("boundline-init-assistant-fallback");
 
-    let init = run_boundline_in_with_env(
+    let init = run_init_in_with_env(
         &workspace,
         &[
             "init",
@@ -142,7 +164,7 @@ fn init_falls_back_to_available_selected_assistant_when_preferred_runtime_is_una
 fn init_stops_when_selected_assistant_defaults_are_unavailable() {
     let workspace = empty_workspace("boundline-init-assistant-unavailable");
 
-    let init = run_boundline_in_with_env(
+    let init = run_init_in_with_env(
         &workspace,
         &["init", "--workspace", workspace.to_string_lossy().as_ref(), "--assistant", "codex"],
         &[("PATH", "/usr/bin:/bin")],
@@ -161,7 +183,7 @@ fn init_stops_when_selected_assistant_defaults_are_unavailable() {
 fn init_keeps_explicit_route_and_seeds_remaining_slots() {
     let workspace = empty_workspace("boundline-init-assistant-partial");
 
-    let init = run_boundline_in(
+    let init = run_init_in(
         &workspace,
         &[
             "init",
@@ -195,10 +217,8 @@ fn init_keeps_explicit_route_and_seeds_remaining_slots() {
 fn init_reports_when_no_workspace_local_routes_are_recorded() {
     let workspace = empty_workspace("boundline-init-no-local-routes");
 
-    let init = run_boundline_in(
-        &workspace,
-        &["init", "--workspace", workspace.to_string_lossy().as_ref()],
-    );
+    let init =
+        run_init_in(&workspace, &["init", "--workspace", workspace.to_string_lossy().as_ref()]);
     let init_text = terminal_text(&init);
 
     assert_eq!(init.status.code(), Some(0), "{init_text}");
@@ -216,7 +236,7 @@ fn init_reports_when_no_workspace_local_routes_are_recorded() {
 fn init_rejects_malformed_route_with_actionable_example_and_no_mutation() {
     let workspace = empty_workspace("boundline-init-malformed-route");
 
-    let init = run_boundline_in(
+    let init = run_init_in(
         &workspace,
         &[
             "init",
@@ -239,10 +259,29 @@ fn init_rejects_malformed_route_with_actionable_example_and_no_mutation() {
 }
 
 #[test]
+fn init_requires_non_interactive_flag_when_guided_values_need_a_tty() {
+    let workspace = empty_workspace("boundline-init-no-tty-guidance");
+
+    let init = run_boundline_in(
+        &workspace,
+        &["init", "--workspace", workspace.to_string_lossy().as_ref(), "--assistant", "copilot"],
+    );
+    let init_text = terminal_text(&init);
+
+    assert_ne!(init.status.code(), Some(0), "{init_text}");
+    assert!(
+        init_text.contains(
+            "Terminal interaction is unavailable. Rerun with --non-interactive and explicit flags."
+        ),
+        "{init_text}"
+    );
+}
+
+#[test]
 fn init_writes_canon_preferences_when_flags_are_supplied() {
     let workspace = empty_workspace("boundline-init-canon");
 
-    let init = run_boundline_in(
+    let init = run_init_in(
         &workspace,
         &[
             "init",
@@ -274,7 +313,7 @@ fn init_writes_canon_preferences_when_flags_are_supplied() {
 fn init_writes_canon_preferences_and_model_routes_when_flags_are_supplied() {
     let workspace = empty_workspace("boundline-init-canon-routes");
 
-    let init = run_boundline_in(
+    let init = run_init_in(
         &workspace,
         &[
             "init",
@@ -309,7 +348,7 @@ fn init_writes_canon_preferences_and_model_routes_when_flags_are_supplied() {
 fn init_seeds_explicit_domain_templates_and_bindings() {
     let workspace = empty_workspace("boundline-init-bootstrap-domain");
 
-    let init = run_boundline_in(
+    let init = run_init_in(
         &workspace,
         &[
             "init",
@@ -347,7 +386,7 @@ fn init_seeds_domain_hygiene_defaults_without_overwriting_custom_rules() {
     fs::write(workspace.join("Dockerfile"), "FROM node:22\n").unwrap();
     fs::write(workspace.join(".gitignore"), "custom-local-cache/\n").unwrap();
 
-    let init = run_boundline_in(
+    let init = run_init_in(
         &workspace,
         &[
             "init",
@@ -383,7 +422,7 @@ fn init_creates_legacy_eslintignore_when_legacy_cues_are_present() {
     fs::create_dir_all(workspace.join(".git")).unwrap();
     fs::write(workspace.join(".eslintrc.json"), "{}\n").unwrap();
 
-    let init = run_boundline_in(
+    let init = run_init_in(
         &workspace,
         &["init", "--workspace", workspace.to_string_lossy().as_ref(), "--assistant", "copilot"],
     );
@@ -403,7 +442,7 @@ fn init_adds_kubernetes_related_gitignore_defaults_when_cues_are_present() {
     fs::create_dir_all(workspace.join(".git")).unwrap();
     fs::write(workspace.join("kustomization.yaml"), "resources: []\n").unwrap();
 
-    let init = run_boundline_in(
+    let init = run_init_in(
         &workspace,
         &["init", "--workspace", workspace.to_string_lossy().as_ref(), "--assistant", "copilot"],
     );
@@ -424,7 +463,7 @@ fn init_uses_only_universal_hygiene_when_no_stack_is_credible() {
         std::env::temp_dir().join(format!("boundline-init-hygiene-empty-{}", Uuid::new_v4()));
     fs::create_dir_all(workspace.join(".git")).unwrap();
 
-    let init = run_boundline_in(
+    let init = run_init_in(
         &workspace,
         &["init", "--workspace", workspace.to_string_lossy().as_ref(), "--assistant", "copilot"],
     );

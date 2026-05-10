@@ -143,7 +143,7 @@ fn task_context_round_trips_canon_snapshot_and_compacted_memory() {
         Map::new(),
     );
     let snapshot = CanonCapabilitySnapshot {
-        canon_version: "0.42.0".to_string(),
+        canon_version: "0.43.0".to_string(),
         supported_schema_versions: vec!["2026-02-01".to_string()],
         operations: vec!["start".to_string(), "refresh".to_string(), "capabilities".to_string()],
         supported_modes: Vec::new(),

@@ -8,7 +8,14 @@ fn doctor_accepts_initialized_stack_neutral_workspace_without_cargo_manifest() {
 
     let init = run_boundline_in(
         &workspace,
-        &["init", "--workspace", workspace.to_string_lossy().as_ref(), "--assistant", "copilot"],
+        &[
+            "init",
+            "--non-interactive",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--assistant",
+            "copilot",
+        ],
     );
     assert_eq!(init.status.code(), Some(0), "{}", terminal_text(&init));
 

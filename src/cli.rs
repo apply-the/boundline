@@ -16,7 +16,11 @@ use super::{
 };
 
 #[derive(Debug, Parser)]
-#[command(name = "boundline", about = "Local delivery orchestrator for bounded engineering work")]
+#[command(
+    name = "boundline",
+    about = "Local delivery orchestrator for bounded engineering work",
+    version
+)]
 pub struct Cli {
     #[arg(
         long,
@@ -206,6 +210,9 @@ pub enum DeveloperCommand {
         /// Workspace directory to bootstrap.
         #[arg(long)]
         workspace: PathBuf,
+        /// Disable guided terminal prompts and require explicit flag-driven input only.
+        #[arg(long = "non-interactive")]
+        non_interactive: bool,
         /// Optional starting template for the generated execution profile. Defaults to bug-fix.
         #[arg(long)]
         template: Option<InitTemplate>,
@@ -1341,6 +1348,7 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
         }
         DeveloperCommand::Init {
             workspace,
+            non_interactive,
             template,
             assistant,
             route,
@@ -1356,6 +1364,9 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
         } => {
             match init::execute_init(init::InitRequest {
                 workspace,
+                non_interactive: *non_interactive,
+                interactive_terminal_override: None,
+                interactor: None,
                 template: *template,
                 assistants: assistant,
                 routes: route,
@@ -1609,9 +1620,10 @@ mod tests {
     };
     use crate::domain::configuration::{
         CapabilityState, ConfigShowScope, ConfigWriteScope, EffortFallbackPolicy, EffortLevel,
-        RouteSlot, RuntimeKind,
+        InitTemplate, RouteSlot, RuntimeKind,
     };
     use crate::domain::domain_templates::{DomainFamily, ExternalContextKind};
+    use crate::domain::governance::CanonModeSelectionPreference;
 
     const FIXTURE_CARGO_TOML: &str = r#"[package]
 name = "dispatch_fixture"
@@ -1883,6 +1895,7 @@ fn red_to_green_addition() {
             (
                 DeveloperCommand::Init {
                     workspace: workspace.clone(),
+                    non_interactive: false,
                     template: None,
                     assistant: Vec::new(),
                     route: Vec::new(),
@@ -2007,6 +2020,7 @@ fn red_to_green_addition() {
 
         let init = dispatch(&DeveloperCommand::Init {
             workspace: file_workspace,
+            non_interactive: false,
             template: None,
             assistant: Vec::new(),
             route: Vec::new(),
@@ -2022,6 +2036,27 @@ fn red_to_green_addition() {
         });
         assert_eq!(init.exit_status, CommandExitStatus::NonSuccess);
         assert!(init.output.contains("init error:"), "{}", init.output);
+
+        // Init success path: dispatch with a real temp workspace and explicit values
+        let init_success_workspace = temp_workspace("boundline-cli-init-dispatch-success");
+        let init_ok = dispatch(&DeveloperCommand::Init {
+            workspace: init_success_workspace.clone(),
+            non_interactive: true,
+            template: Some(InitTemplate::Change),
+            assistant: vec![RuntimeKind::Copilot],
+            route: Vec::new(),
+            domain: Vec::new(),
+            domain_standard: Vec::new(),
+            context_binding: Vec::new(),
+            required_context_binding: Vec::new(),
+            canon_mode_selection: Some(CanonModeSelectionPreference::AutoConfirm),
+            risk: None,
+            zone: None,
+            owner: None,
+            force: true,
+        });
+        assert_eq!(init_ok.exit_status, CommandExitStatus::Succeeded, "{}", init_ok.output);
+        assert!(init_ok.output.contains("init: workspace initialized"), "{}", init_ok.output);
 
         for command in [
             DeveloperCommand::Config {

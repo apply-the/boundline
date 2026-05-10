@@ -6,7 +6,7 @@ Canon is downstream from Boundline in this roadmap: Boundline thinks, decides, o
 
 Evolve Boundline into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.46.0
+## Current Status: v0.47.0
 
 Boundline now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -137,6 +137,17 @@ The governing rule remains simple: Boundline is still the product and execution
 owner. Canon stays a bounded, useful governed runtime inside that same delivery
 path rather than drifting back into a parallel tool story.
 
+### Delivered in 0.47.0
+
+- replaced the fragile guided `boundline init` freeform prompts with a bounded
+  terminal wizard that shows visible defaults, route review, slot-by-slot
+  editing, and an explicit final summary before writes
+- added a bundled runtime/model catalog with explicit source metadata,
+  custom-model warnings, and grouped assistant-pack scaffolding status for the
+  selected assistant surfaces
+- added top-level `--version` support plus non-interactive init parity and
+  time-consuming bootstrap progress feedback
+
 ### Delivered in 0.46.0
 
 - added a stable `--json` host envelope across the session-native lifecycle,
@@ -144,7 +155,7 @@ path rather than drifting back into a parallel tool story.
 - aligned `inspect` and the assistant command packs to the same structured
   shell-first host flow, including current-workspace fallback for session-owned
   trace follow-up
-- adopted Canon `0.42.0` as the documented supported companion version across
+- adopted Canon `0.43.0` as the documented supported companion version across
   doctor/install output, distribution metadata, and governed runtime evidence
 
 ### Delivered in 0.45.0
@@ -192,7 +203,7 @@ path rather than drifting back into a parallel tool story.
 - Canon remains downstream and optional except where governed artifacts are
   already explicitly modeled in the current delivery flow
 
-### Delivered in 0.42.0
+### Delivered in 0.43.0
 
 - default `run --goal` to Canon on Canon-ready workspaces while keeping
   `--no-canon` and explicit `--mode <mode>` operator-controlled
@@ -244,7 +255,7 @@ governance adapter rather than reopening broad product-scope work:
 
 - revalidate the documented Canon compatibility target against the latest
   released `canon governance start|refresh|capabilities --json` `v1` surface;
-  the current documented target is Canon `0.42.0`
+  the current documented target is Canon `0.43.0`
 - preserve additive-field tolerance and capability-aware checks so intermediate
   Canon releases do not force unnecessary Boundline churn when the `v1` adapter
   contract remains stable

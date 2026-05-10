@@ -25,6 +25,7 @@ fn config_set_show_and_unset_workspace_slot() {
         &workspace,
         &[
             "init",
+            "--non-interactive",
             "--workspace",
             workspace.to_string_lossy().as_ref(),
             "--template",
@@ -111,6 +112,7 @@ fn config_set_canon_updates_workspace_mode_selection() {
         &workspace,
         &[
             "init",
+            "--non-interactive",
             "--workspace",
             workspace.to_string_lossy().as_ref(),
             "--canon-mode-selection",
@@ -159,6 +161,7 @@ fn config_show_effective_surfaces_assistant_bindings() {
         &workspace,
         &[
             "init",
+            "--non-interactive",
             "--workspace",
             workspace.to_string_lossy().as_ref(),
             "--template",
@@ -223,6 +226,7 @@ fn config_show_effective_surfaces_capability_and_effort_projection() {
         &workspace,
         &[
             "init",
+            "--non-interactive",
             "--workspace",
             workspace.to_string_lossy().as_ref(),
             "--template",
@@ -343,6 +347,7 @@ fn config_domain_commands_surface_effective_domain_templates() {
         &workspace,
         &[
             "init",
+            "--non-interactive",
             "--workspace",
             workspace.to_string_lossy().as_ref(),
             "--template",
