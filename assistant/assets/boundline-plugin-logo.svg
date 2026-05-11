@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 120" role="img" aria-labelledby="title">
+  <title>Boundline plugin logo</title>
+  <rect width="420" height="120" rx="16" fill="#0f172a"/>
+  <g transform="translate(28 28)">
+    <rect width="64" height="64" rx="12" fill="#38bdf8"/>
+    <path d="M16 17h22c8 0 14 6 14 15s-6 15-14 15H16V17Z" fill="#0f172a"/>
+    <path d="M25 26h13c3 0 5 2 5 6s-2 6-5 6H25V26Z" fill="#38bdf8"/>
+  </g>
+  <text x="112" y="58" fill="#f8fafc" font-family="Arial, sans-serif" font-size="34" font-weight="700">Boundline</text>
+  <text x="114" y="84" fill="#bae6fd" font-family="Arial, sans-serif" font-size="16">Plan, act, verify, trace</text>
+</svg>

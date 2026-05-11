@@ -1,0 +1,43 @@
+{
+  "name": "boundline",
+  "displayName": "Boundline Copilot Prompt Pack",
+  "version": "0.49.0",
+  "description": "Local delivery orchestrator for bounded engineering work",
+  "author": {
+    "name": "Apply The",
+    "url": "https://github.com/apply-the"
+  },
+  "homepage": "https://github.com/apply-the/boundline",
+  "repository": "https://github.com/apply-the/boundline",
+  "license": "MIT",
+  "keywords": [
+    "boundline",
+    "delivery",
+    "bounded-engineering",
+    "copilot-prompts"
+  ],
+  "manifestSupported": false,
+  "capabilities": [
+    {"id": "/boundline:start", "label": "start"},
+    {"id": "/boundline:capture", "label": "capture"},
+    {"id": "/boundline:plan", "label": "plan"},
+    {"id": "/boundline:run", "label": "run"},
+    {"id": "/boundline:status", "label": "status"},
+    {"id": "/boundline:inspect", "label": "inspect"},
+    {"id": "/boundline:recover", "label": "recover"},
+    {"id": "/boundline:govern", "label": "govern", "conditional": true}
+  ],
+  "positioning": [
+    "Local delivery orchestrator for bounded engineering work",
+    "Plan, act, verify, trace",
+    "Session-native runtime for AI-assisted software delivery"
+  ],
+  "paths": {
+    "promptPack": "assistant/prompts/copilot-command-pack.md",
+    "prompts": "assistant/copilot/prompts",
+    "commands": "assistant/commands/session-workflow.json",
+    "starterPrompts": "assistant/prompts/starter-prompts.md",
+    "icon": "assistant/assets/boundline-plugin-icon.svg",
+    "logo": "assistant/assets/boundline-plugin-logo.svg"
+  }
+}

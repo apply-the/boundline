@@ -1,3 +1,5 @@
+pub mod assistant_plugin_validation;
+
 pub use boundline_adapters::adapters;
 pub use boundline_adapters::fixture;
 pub use boundline_adapters::orchestrator;

@@ -1,0 +1,110 @@
+{
+  "stateAuthority": ".boundline/session.json",
+  "nextActionAuthority": "CLI-reported next_command",
+  "nonSuccessStates": [
+    "blocked",
+    "clarification-required",
+    "failed",
+    "exhausted",
+    "terminal"
+  ],
+  "commands": [
+    {
+      "id": "/boundline:start",
+      "label": "start",
+      "purpose": "Open or reset the active Boundline session for a workspace.",
+      "boundlineCommand": "cargo run --bin boundline -- start --workspace <workspace> --json",
+      "skillRefs": {
+        "claude": "assistant/claude/commands/boundline-start.md",
+        "codex": "assistant/codex/commands/boundline-start.md",
+        "copilot": "assistant/copilot/prompts/boundline-start.prompt.md"
+      },
+      "stateHandling": "Read .boundline/session.json through CLI output and preserve next_command plus blocked, clarification-required, failed, exhausted, and terminal states."
+    },
+    {
+      "id": "/boundline:capture",
+      "label": "capture",
+      "purpose": "Persist a goal or brief into the active session.",
+      "boundlineCommand": "cargo run --bin boundline -- capture --workspace <workspace> --goal <goal> --json",
+      "skillRefs": {
+        "claude": "assistant/claude/commands/boundline-capture.md",
+        "codex": "assistant/codex/commands/boundline-capture.md",
+        "copilot": "assistant/copilot/prompts/boundline-capture.prompt.md"
+      },
+      "stateHandling": "Preserve .boundline/session.json, CLI-authored input fields, next_command, and explicit blocked, clarification-required, failed, exhausted, and terminal states."
+    },
+    {
+      "id": "/boundline:plan",
+      "label": "plan",
+      "purpose": "Ask Boundline to propose or confirm a bounded implementation plan.",
+      "boundlineCommand": "cargo run --bin boundline -- plan --workspace <workspace> --json",
+      "skillRefs": {
+        "claude": "assistant/claude/commands/boundline-plan.md",
+        "codex": "assistant/codex/commands/boundline-plan.md",
+        "copilot": "assistant/copilot/prompts/boundline-plan.prompt.md"
+      },
+      "stateHandling": "Treat unconfirmed proposals, blocked, clarification-required, failed, exhausted, and terminal states as real stop conditions; prefer next_command."
+    },
+    {
+      "id": "/boundline:run",
+      "label": "run",
+      "purpose": "Run the next bounded action through the real Boundline runtime.",
+      "boundlineCommand": "cargo run --bin boundline -- run --workspace <workspace> --json",
+      "skillRefs": {
+        "claude": "assistant/claude/commands/boundline-run.md",
+        "codex": "assistant/codex/commands/boundline-run.md",
+        "copilot": "assistant/copilot/prompts/boundline-run.prompt.md"
+      },
+      "stateHandling": "Surface .boundline/session.json state, next_command, checkpoint restore guidance, and blocked, clarification-required, failed, exhausted, or terminal outcome."
+    },
+    {
+      "id": "/boundline:status",
+      "label": "status",
+      "purpose": "Report the active session state and current next action.",
+      "boundlineCommand": "cargo run --bin boundline -- status --workspace <workspace> --json",
+      "skillRefs": {
+        "claude": "assistant/claude/commands/boundline-status.md",
+        "codex": "assistant/codex/commands/boundline-status.md",
+        "copilot": "assistant/copilot/prompts/boundline-status.prompt.md"
+      },
+      "stateHandling": "Use the CLI status projection instead of chat history; preserve next_command and all blocked, clarification-required, failed, exhausted, and terminal wording."
+    },
+    {
+      "id": "/boundline:inspect",
+      "label": "inspect",
+      "purpose": "Inspect the latest authoritative Boundline trace and session evidence.",
+      "boundlineCommand": "cargo run --bin boundline -- inspect --workspace <workspace> --json",
+      "skillRefs": {
+        "claude": "assistant/claude/commands/boundline-inspect.md",
+        "codex": "assistant/codex/commands/boundline-inspect.md",
+        "copilot": "assistant/copilot/prompts/boundline-inspect.prompt.md"
+      },
+      "stateHandling": "Use trace output and .boundline/session.json to explain next_command, blocked, clarification-required, failed, exhausted, and terminal states."
+    },
+    {
+      "id": "/boundline:recover",
+      "label": "recover",
+      "purpose": "Recover from blocked or failed session state using CLI-reported guidance.",
+      "boundlineCommand": "cargo run --bin boundline -- status --workspace <workspace> --json",
+      "skillRefs": {
+        "claude": "assistant/claude/commands/boundline-recover.md",
+        "codex": "assistant/codex/commands/boundline-recover.md",
+        "copilot": "assistant/copilot/prompts/boundline-recover.prompt.md"
+      },
+      "stateHandling": "Start from status, inspect next_command or checkpoint restore command, and never infer recovery from chat history when blocked, clarification-required, failed, exhausted, or terminal."
+    },
+    {
+      "id": "/boundline:govern",
+      "label": "govern",
+      "purpose": "Use optional Canon governance only when configured for the active Boundline session.",
+      "boundlineCommand": "cargo run --bin boundline -- config show --workspace <workspace> --scope workspace --json",
+      "conditional": true,
+      "skillRefs": {
+        "claude": "assistant/claude/commands/boundline-govern.md",
+        "codex": "assistant/codex/commands/boundline-govern.md",
+        "copilot": "assistant/copilot/prompts/boundline-govern.prompt.md"
+      },
+      "stateHandling": "Canon governance is conditional; preserve .boundline/session.json, next_command, and blocked, clarification-required, failed, exhausted, or terminal state before invoking governed actions."
+    }
+  ]
+}

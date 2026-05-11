@@ -7,16 +7,7 @@ cd "$ROOT_DIR"
 metadata_file="distribution/channel-metadata.toml"
 boundline_version="$(sed -n 's/^version = "\([^"]*\)"$/\1/p' Cargo.toml | head -n 1)"
 
-# Fetch latest canon tag dynamically; fall back to channel-metadata.toml if unavailable
-canon_version="$(git ls-remote --tags https://github.com/apply-the/canon.git 2>/dev/null \
-  | grep -oE 'refs/tags/[0-9]+\.[0-9]+\.[0-9]+$' \
-  | sed 's|refs/tags/||' \
-  | sort -V \
-  | tail -1)"
-if [[ -z "$canon_version" ]]; then
-  canon_version="$(sed -n 's/^canon_version = "\([^"]*\)"$/\1/p' "$metadata_file" | head -n 1)"
-  echo "warning: could not fetch latest canon tag; falling back to channel-metadata.toml ($canon_version)" >&2
-fi
+canon_version="$(sed -n 's/^canon_version = "\([^"]*\)"$/\1/p' "$metadata_file" | head -n 1)"
 
 if [[ -z "$boundline_version" || -z "$canon_version" ]]; then
   echo "failed to resolve Boundline or Canon version" >&2

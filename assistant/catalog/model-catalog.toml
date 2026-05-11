@@ -1,7 +1,7 @@
 [metadata]
 source_label = "bundled"
-catalog_version = "0.48.0"
-updated_at = "2026-05-10"
+catalog_version = "0.49.0"
+updated_at = "2026-05-11"
 
 [[runtimes]]
 runtime = "copilot"

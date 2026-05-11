@@ -17,6 +17,23 @@ recorded workspace version.
 
 ## [Unreleased]
 
+## [0.49.0] - 2026-05-11
+
+Delivered specs:
+
+- `048` - Assistant Plugin Packages
+
+Highlights:
+
+- Add host-specific assistant package folders for Claude Code, Codex, Cursor,
+  and a Copilot prompt-pack boundary so chat surfaces can discover Boundline as
+  a session-native delivery runtime.
+- Expose namespaced `/boundline:*` commands for start, capture, plan, run,
+  status, inspect, recover, and conditional governance while keeping
+  `.boundline/session.json` and CLI output authoritative.
+- Validate plugin manifests, shared metadata, command coverage, referenced
+  paths, version alignment, and prohibited positioning before release closeout.
+
 ## [0.48.0] - 2026-05-10
 
 Delivered specs:
