@@ -1,9 +1,9 @@
-# Configuration in Boundline 0.49.0
+# Configuration in Boundline 0.49.1
 
-Boundline `0.49.0` keeps a user-friendly setup and routing configuration surface
+Boundline `0.49.1` keeps a user-friendly setup and routing configuration surface
 for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
-The `0.49.0` release keeps configuration behavior stable while preserving the
+The `0.49.1` release keeps configuration behavior stable while preserving the
 same governed routing defaults across earlier `bug-fix:investigate` work,
 later verify-stage `security-assessment`, workflow-aware projection of the
 same bounded governance state, continuity-aware read-side follow-up, the

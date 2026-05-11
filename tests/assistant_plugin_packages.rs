@@ -158,7 +158,7 @@ fn validation_rejects_drift_and_prohibited_positioning() {
     let valid = json!({
         "name": "boundline",
         "displayName": "Boundline Assistant Support",
-        "version": "0.49.0",
+        "version": "0.49.1",
         "description": "Local delivery orchestrator for bounded engineering work",
         "author": {"name": "Apply The", "url": "https://github.com/apply-the"},
         "homepage": "https://github.com/apply-the/boundline",
@@ -178,7 +178,7 @@ fn validation_rejects_drift_and_prohibited_positioning() {
     let mut missing_fields = valid.clone();
     missing_fields.as_object_mut().expect("valid manifest must be an object").remove("author");
     assert!(
-        manifest_errors(&missing_fields, "0.49.0", &root)
+        manifest_errors(&missing_fields, "0.49.1", &root)
             .iter()
             .any(|error| error.contains("missing required field"))
     );
@@ -186,7 +186,7 @@ fn validation_rejects_drift_and_prohibited_positioning() {
     let mut version_drift = valid.clone();
     version_drift["version"] = json!("0.0.0");
     assert!(
-        manifest_errors(&version_drift, "0.49.0", &root)
+        manifest_errors(&version_drift, "0.49.1", &root)
             .iter()
             .any(|error| error.contains("version"))
     );
@@ -194,7 +194,7 @@ fn validation_rejects_drift_and_prohibited_positioning() {
     let mut missing_path = valid.clone();
     missing_path["paths"]["commands"] = json!("missing/commands.json");
     assert!(
-        manifest_errors(&missing_path, "0.49.0", &root)
+        manifest_errors(&missing_path, "0.49.1", &root)
             .iter()
             .any(|error| error.contains("referenced path"))
     );
@@ -202,7 +202,7 @@ fn validation_rejects_drift_and_prohibited_positioning() {
     let mut non_string_path = valid.clone();
     non_string_path["paths"]["commands"] = json!(false);
     assert!(
-        manifest_errors(&non_string_path, "0.49.0", &root)
+        manifest_errors(&non_string_path, "0.49.1", &root)
             .iter()
             .any(|error| error.contains("path references must be strings"))
     );
@@ -210,7 +210,7 @@ fn validation_rejects_drift_and_prohibited_positioning() {
     let mut missing_paths = valid.clone();
     missing_paths.as_object_mut().expect("valid manifest must be an object").remove("paths");
     assert!(
-        manifest_errors(&missing_paths, "0.49.0", &root)
+        manifest_errors(&missing_paths, "0.49.1", &root)
             .iter()
             .any(|error| error.contains("missing paths object"))
     );
@@ -218,7 +218,7 @@ fn validation_rejects_drift_and_prohibited_positioning() {
     let mut missing_command = valid.clone();
     missing_command["capabilities"] = json!([]);
     assert!(
-        manifest_errors(&missing_command, "0.49.0", &root)
+        manifest_errors(&missing_command, "0.49.1", &root)
             .iter()
             .any(|error| error.contains("missing required Boundline command"))
     );
@@ -226,7 +226,7 @@ fn validation_rejects_drift_and_prohibited_positioning() {
     let mut invalid_capability = valid.clone();
     invalid_capability["capabilities"] = json!([{"label": "missing id"}]);
     assert!(
-        manifest_errors(&invalid_capability, "0.49.0", &root)
+        manifest_errors(&invalid_capability, "0.49.1", &root)
             .iter()
             .any(|error| error.contains("capability id must be a string"))
     );
@@ -234,7 +234,7 @@ fn validation_rejects_drift_and_prohibited_positioning() {
     let mut unsupported_capability = valid.clone();
     unsupported_capability["capabilities"] = json!([{"id": "generic-agent", "label": "agent"}]);
     assert!(
-        manifest_errors(&unsupported_capability, "0.49.0", &root)
+        manifest_errors(&unsupported_capability, "0.49.1", &root)
             .iter()
             .any(|error| error.contains("unsupported capability"))
     );
@@ -242,7 +242,7 @@ fn validation_rejects_drift_and_prohibited_positioning() {
     let mut prohibited = valid;
     prohibited["description"] = json!("Boundline is a generic agent framework");
     assert!(
-        manifest_errors(&prohibited, "0.49.0", &root)
+        manifest_errors(&prohibited, "0.49.1", &root)
             .iter()
             .any(|error| error.contains("prohibited positioning"))
     );

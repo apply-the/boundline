@@ -17,6 +17,18 @@ recorded workspace version.
 
 ## [Unreleased]
 
+## [0.49.1] - 2026-05-11
+
+Highlights:
+
+- Fix guided `boundline init` so fresh workspaces create `.boundline/` before
+  writing execution and config files, including the `--workspace .` path.
+- Seed guided no-assistant route selection from the bundled catalog defaults
+  instead of starting every slot unset.
+- Expand the bundled GitHub Copilot runtime catalog to include Anthropic and
+  Gemini models available through Copilot so model selection is not
+  OpenAI-only.
+
 ## [0.49.0] - 2026-05-11
 
 Delivered specs:
