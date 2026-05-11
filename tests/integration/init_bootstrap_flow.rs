@@ -79,6 +79,19 @@ fn init_scaffolds_execution_and_config_files() {
 }
 
 #[test]
+fn init_supports_relative_workspace_dot_without_existing_boundline() {
+    let workspace = empty_workspace("boundline-init-relative-workspace");
+
+    let init = run_init_in(&workspace, &["init", "--workspace", "."]);
+    let init_text = terminal_text(&init);
+
+    assert_eq!(init.status.code(), Some(0), "{init_text}");
+    assert!(init_text.contains("init: workspace initialized"), "{init_text}");
+    assert!(workspace.join(".boundline/execution.json").is_file(), "{init_text}");
+    assert!(workspace.join(".boundline/config.toml").is_file(), "{init_text}");
+}
+
+#[test]
 fn init_docs_export_is_create_only_by_default_when_targets_exist() {
     let workspace = empty_workspace("boundline-init-docs-create-only");
 

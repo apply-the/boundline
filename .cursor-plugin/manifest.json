@@ -1,7 +1,7 @@
 {
   "name": "boundline",
   "displayName": "Boundline Assistant Support for Cursor",
-  "version": "0.49.0",
+  "version": "0.49.1",
   "description": "Local delivery orchestrator for bounded engineering work",
   "author": {
     "name": "Apply The",

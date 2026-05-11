@@ -407,6 +407,19 @@ pub fn query_canon_capabilities(
         return Ok(None);
     }
 
+    let output = match query_canon_capabilities_output(command, workspace_ref) {
+        Some(output) => output,
+        None => return Ok(None),
+    };
+
+    if !output.status.success() {
+        return Ok(None);
+    }
+
+    Ok(parse_canon_capabilities(&output.stdout))
+}
+
+fn build_canon_capabilities_process(command: &str, workspace_ref: &Path) -> Command {
     let mut process = Command::new(command);
     process
         .arg("governance")
@@ -420,16 +433,49 @@ pub fn query_canon_capabilities(
         process.current_dir(workspace_ref);
     }
 
-    let output = match process.output() {
-        Ok(output) => output,
-        Err(_) => return Ok(None),
-    };
+    process
+}
 
-    if !output.status.success() {
-        return Ok(None);
+#[cfg(unix)]
+fn query_canon_capabilities_output(
+    command: &str,
+    workspace_ref: &Path,
+) -> Option<std::process::Output> {
+    let mut process = build_canon_capabilities_process(command, workspace_ref);
+    match process.output() {
+        Ok(output) => Some(output),
+        Err(_) => {
+            let command_path = Path::new(command);
+            if !command_path.is_file() {
+                return None;
+            }
+
+            let mut shell_process = Command::new("/bin/sh");
+            shell_process
+                .arg(command_path)
+                .arg("governance")
+                .arg("capabilities")
+                .arg("--json")
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+
+            if workspace_ref.is_dir() {
+                shell_process.current_dir(workspace_ref);
+            }
+
+            shell_process.output().ok()
+        }
     }
+}
 
-    Ok(parse_canon_capabilities(&output.stdout))
+#[cfg(not(unix))]
+fn query_canon_capabilities_output(
+    command: &str,
+    workspace_ref: &Path,
+) -> Option<std::process::Output> {
+    let mut process = build_canon_capabilities_process(command, workspace_ref);
+    process.output().ok()
 }
 
 fn parse_canon_capabilities(stdout: &[u8]) -> Option<CanonCapabilitySnapshot> {
@@ -707,6 +753,29 @@ mod tests {
         let snapshot = query_canon_capabilities(script.to_string_lossy().as_ref(), &workspace)
             .unwrap()
             .expect("snapshot should be parsed");
+
+        assert_eq!(snapshot.canon_version, "0.45.0");
+        assert_eq!(snapshot.operations, vec!["start", "refresh", "capabilities"]);
+
+        fs::remove_dir_all(workspace).unwrap();
+        fs::remove_dir_all(script.parent().unwrap()).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn query_canon_capabilities_falls_back_to_shell_for_non_executable_script() {
+        let workspace = temp_workspace("canon-capabilities-runtime-shell-fallback");
+        let script = write_shell_script(
+            "canon-capabilities-command-shell-fallback",
+            "#!/bin/sh\nprintf '%s' '{\"canon_version\":\"0.45.0\",\"supported_schema_versions\":[\"2026-02-01\"],\"operations\":[\"start\",\"refresh\",\"capabilities\"],\"supported_modes\":[\"verification\"],\"status_values\":[\"governed_ready\"],\"approval_state_values\":[\"not_needed\"],\"packet_readiness_values\":[\"reusable\"],\"compatibility_notes\":[\"stable-json\"]}'\n",
+        );
+        let mut permissions = fs::metadata(&script).unwrap().permissions();
+        permissions.set_mode(0o644);
+        fs::set_permissions(&script, permissions).unwrap();
+
+        let snapshot = query_canon_capabilities(script.to_string_lossy().as_ref(), &workspace)
+            .unwrap()
+            .expect("snapshot should be parsed via shell fallback");
 
         assert_eq!(snapshot.canon_version, "0.45.0");
         assert_eq!(snapshot.operations, vec!["start", "refresh", "capabilities"]);

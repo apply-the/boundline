@@ -6,7 +6,7 @@ Canon is downstream from Boundline in this roadmap: Boundline thinks, decides, o
 
 Evolve Boundline into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.49.0
+## Current Status: v0.49.1
 
 Boundline now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -22,6 +22,16 @@ surface in place, with Canon-default governed setup, runtime selection, and
 assistant-surface alignment now carried through the same primary workflow. The
 operator entry path is now stack-neutral for empty, non-Rust, and mixed
 repositories, with a clearer first-run CLI UX:
+
+### Delivered in 0.49.1
+
+- Guided `boundline init` now scaffolds `.boundline/` reliably before writing
+  release-critical workspace files, including relative `--workspace .` flows.
+- Guided route review now starts from bundled catalog defaults when no
+  assistant surfaces are selected, instead of presenting all slots unset.
+- The bundled Copilot runtime catalog now exposes Anthropic and Gemini models
+  that are available through Copilot, so cross-provider model selection is
+  visible from the Copilot runtime.
 
 ### Delivered in 0.49.0
 

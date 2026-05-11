@@ -320,7 +320,8 @@ pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, I
         request.required_context_bindings,
     )?;
     let store = FileConfigStore::for_workspace(workspace);
-    let execution_path = workspace.join(".boundline/execution.json");
+    let boundline_dir = workspace.join(".boundline");
+    let execution_path = boundline_dir.join("execution.json");
     let local_config_path = store.local_config_path();
 
     let mut default_interactor: Box<dyn InitInteractor> = Box::new(DialoguerInitInteractor);
@@ -548,10 +549,8 @@ pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, I
         }
     }
 
-    if let Some(parent) = execution_path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|source| InitCommandError::WriteFile { path: parent.to_path_buf(), source })?;
-    }
+    fs::create_dir_all(&boundline_dir)
+        .map_err(|source| InitCommandError::WriteFile { path: boundline_dir.clone(), source })?;
     let hygiene_actions = apply_workspace_hygiene_defaults(workspace, &active_domains)?;
     run_init_activity("writing execution profile", interactive_terminal, || {
         fs::write(
@@ -1467,6 +1466,22 @@ fn initial_guided_route_selections(
     catalog: &BundledModelCatalog,
     assistants: &[RuntimeKind],
 ) -> Vec<GuidedRouteSelection> {
+    if assistants.is_empty() {
+        return required_init_route_slots()
+            .into_iter()
+            .map(|slot| match catalog.default_route_for_slot(slot) {
+                Some(route) => GuidedRouteSelection {
+                    slot,
+                    route: Some(route),
+                    source: GuidedRouteSource::Bundled,
+                },
+                None => {
+                    GuidedRouteSelection { slot, route: None, source: GuidedRouteSource::Unset }
+                }
+            })
+            .collect();
+    }
+
     let available_assistants = assistants
         .iter()
         .copied()
@@ -1528,10 +1543,13 @@ fn edit_route_selection(
         items.push(LEAVE_SLOT_UNSET_LABEL.to_string());
         items
     };
+    let bundled_default = catalog.default_route_for_slot(slot);
     let runtime_default = selection
         .route
         .as_ref()
-        .and_then(|route| catalog.runtimes.iter().position(|entry| entry.runtime == route.runtime))
+        .map(|route| route.runtime)
+        .or_else(|| bundled_default.as_ref().map(|route| route.runtime))
+        .and_then(|runtime| catalog.runtimes.iter().position(|entry| entry.runtime == runtime))
         .unwrap_or(0);
     let runtime_choice = interactor
         .select(
@@ -1556,6 +1574,16 @@ fn edit_route_selection(
         .and_then(|route| {
             catalog.runtime_entry(runtime_entry.runtime).and_then(|entry| {
                 entry.models.iter().position(|model| model.model_id == route.model)
+            })
+        })
+        .or_else(|| {
+            bundled_default.as_ref().and_then(|route| {
+                if route.runtime != runtime_entry.runtime {
+                    return None;
+                }
+                catalog.runtime_entry(runtime_entry.runtime).and_then(|entry| {
+                    entry.models.iter().position(|model| model.model_id == route.model)
+                })
             })
         })
         .unwrap_or(0);
@@ -2703,6 +2731,14 @@ mod tests {
         // model_labels_for_runtime
         let copilot_models = catalog.model_labels_for_runtime(RuntimeKind::Copilot);
         assert!(!copilot_models.is_empty());
+        assert!(
+            copilot_models.iter().any(|label| label.contains("Sonnet 4.6")),
+            "{copilot_models:?}"
+        );
+        assert!(
+            copilot_models.iter().any(|label| label.contains("Gemini 2.5 Pro")),
+            "{copilot_models:?}"
+        );
         // unknown runtime returns empty
         let unknown_models = catalog.model_labels_for_runtime(RuntimeKind::Codex);
         // Codex is in catalog, so this should be non-empty too - just verify it doesn't panic
@@ -3068,16 +3104,89 @@ mod tests {
     }
 
     #[test]
-    fn initial_guided_route_selections_leave_all_slots_unset_without_available_assistants() {
+    fn initial_guided_route_selections_use_bundled_defaults_without_assistants() {
         let catalog = BundledModelCatalog::load().unwrap();
 
         let selections = initial_guided_route_selections(&catalog, &[]);
 
         assert_eq!(selections.len(), 4);
-        assert!(selections.iter().all(|selection| selection.route.is_none()));
-        assert!(
-            selections.iter().all(|selection| selection.source == super::GuidedRouteSource::Unset)
-        );
+        let planning =
+            selections.iter().find(|selection| selection.slot == RouteSlot::Planning).unwrap();
+        let implementation = selections
+            .iter()
+            .find(|selection| selection.slot == RouteSlot::Implementation)
+            .unwrap();
+        let verification =
+            selections.iter().find(|selection| selection.slot == RouteSlot::Verification).unwrap();
+        let review =
+            selections.iter().find(|selection| selection.slot == RouteSlot::Review).unwrap();
+
+        assert_eq!(planning.source, super::GuidedRouteSource::Bundled);
+        assert_eq!(planning.route.as_ref().unwrap().runtime, RuntimeKind::Codex);
+        assert_eq!(planning.route.as_ref().unwrap().model, "gpt-5-codex");
+
+        assert_eq!(implementation.source, super::GuidedRouteSource::Bundled);
+        assert_eq!(implementation.route.as_ref().unwrap().runtime, RuntimeKind::Codex);
+        assert_eq!(implementation.route.as_ref().unwrap().model, "gpt-5-codex");
+
+        assert_eq!(verification.source, super::GuidedRouteSource::Bundled);
+        assert_eq!(verification.route.as_ref().unwrap().runtime, RuntimeKind::Copilot);
+        assert_eq!(verification.route.as_ref().unwrap().model, "gpt-5.5");
+
+        assert_eq!(review.source, super::GuidedRouteSource::Bundled);
+        assert_eq!(review.route.as_ref().unwrap().runtime, RuntimeKind::Claude);
+        assert_eq!(review.route.as_ref().unwrap().model, "sonnet-4.6");
+    }
+
+    #[test]
+    fn execute_init_guided_flow_without_assistants_uses_bundled_catalog_defaults() {
+        let workspace = temp_workspace("boundline-init-guided-no-assistants");
+
+        let interactor = ScriptedInteractor {
+            selects: VecDeque::from(vec![0, 0]),
+            multi_selects: VecDeque::from(vec![vec![]]),
+            inputs: VecDeque::new(),
+            confirms: VecDeque::from(vec![true]),
+        };
+
+        let report = execute_init(InitRequest {
+            workspace: &workspace,
+            non_interactive: false,
+            interactive_terminal_override: Some(true),
+            interactor: Some(Box::new(interactor)),
+            template: Some(InitTemplate::BugFix),
+            assistants: &[],
+            routes: &[],
+            domains: &[],
+            domain_standards: &[],
+            context_bindings: &[],
+            required_context_bindings: &[],
+            canon_mode_selection: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            export_docs: false,
+            docs_refresh: false,
+            docs_diff: false,
+            docs_output_dir: None,
+            force: true,
+        })
+        .unwrap();
+
+        assert_eq!(report.exit_status, CommandExitStatus::Succeeded);
+        assert!(workspace.join(".boundline/execution.json").is_file());
+        assert!(workspace.join(".boundline/config.toml").is_file());
+
+        let local = FileConfigStore::for_workspace(&workspace).load_local().unwrap().unwrap();
+        assert_eq!(local.routing.assistant_runtimes, Vec::<RuntimeKind>::new());
+        assert_eq!(local.routing.planning.as_ref().unwrap().runtime, RuntimeKind::Codex);
+        assert_eq!(local.routing.planning.as_ref().unwrap().model, "gpt-5-codex");
+        assert_eq!(local.routing.implementation.as_ref().unwrap().runtime, RuntimeKind::Codex);
+        assert_eq!(local.routing.implementation.as_ref().unwrap().model, "gpt-5-codex");
+        assert_eq!(local.routing.verification.as_ref().unwrap().runtime, RuntimeKind::Copilot);
+        assert_eq!(local.routing.verification.as_ref().unwrap().model, "gpt-5.5");
+        assert_eq!(local.routing.review.as_ref().unwrap().runtime, RuntimeKind::Claude);
+        assert_eq!(local.routing.review.as_ref().unwrap().model, "sonnet-4.6");
     }
 
     #[test]
