@@ -10,6 +10,12 @@ The `0.17.0` surface-unification slice keeps review behavior bounded while
 making `run`, `status`, `next`, and `inspect` report review state through the
 same route and `execution_condition` summary model as the rest of the session.
 
+Review voting is not meant to gate every step. It enters at risky boundaries,
+such as PR-ready, validation-failed, or explicitly high-risk changes, where a
+bounded delivery phase needs structured findings or adjudication.
+
+Large work is supported by decomposition, not by unbounded autonomy.
+
 ## What the runtime supports
 
 - bounded review triggers: `pr_ready`, `validation_failed`, and `high_risk_change`

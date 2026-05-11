@@ -293,7 +293,8 @@ pub struct InitRequest<'a> {
 pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, InitCommandError> {
     validate_docs_export_options(&request)?;
 
-    let workspace = request.workspace;
+    let workspace_root = resolve_workspace_root(request.workspace)?;
+    let workspace = workspace_root.as_path();
     fs::create_dir_all(workspace).map_err(|source| InitCommandError::CreateWorkspace {
         path: workspace.to_path_buf(),
         source,
@@ -877,13 +878,12 @@ fn plan_assistant_setup(assistant_actions: &[AssistantInitAction]) -> Vec<String
 
 fn summarize_assistant_assets(
     workspace: &Path,
-    assistant_assets: &[&AssistantAsset],
+    assistant_assets: &[AssistantAsset],
 ) -> Result<Vec<AssistantInitAction>, InitCommandError> {
     let mut grouped = BTreeMap::<AssistantSurface, AssistantInitAction>::new();
 
     for asset in assistant_assets {
-        let asset = *asset;
-        let target = workspace.join(asset.relative_path);
+        let target = workspace.join(asset.relative_path.as_ref());
         let file_status = scaffold_file_status(&target, asset.contents)?;
         let entry = grouped.entry(asset.surface).or_insert(AssistantInitAction {
             surface: asset.surface,
@@ -916,13 +916,12 @@ fn summarize_assistant_assets(
 
 fn apply_assistant_assets(
     workspace: &Path,
-    assistant_assets: &[&AssistantAsset],
+    assistant_assets: &[AssistantAsset],
 ) -> Result<Vec<AssistantInitAction>, InitCommandError> {
     let mut grouped = BTreeMap::<AssistantSurface, AssistantInitAction>::new();
 
     for asset in assistant_assets {
-        let asset = *asset;
-        let target = workspace.join(asset.relative_path);
+        let target = workspace.join(asset.relative_path.as_ref());
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent).map_err(|source| InitCommandError::WriteFile {
                 path: parent.to_path_buf(),
@@ -991,6 +990,33 @@ fn scaffold_file_status(
     } else {
         Ok(ScaffoldFileStatus::Update)
     }
+}
+
+fn resolve_workspace_root(workspace: &Path) -> Result<PathBuf, InitCommandError> {
+    if workspace.is_absolute() {
+        return Ok(workspace.to_path_buf());
+    }
+
+    match std::env::current_dir() {
+        Ok(current_dir) => Ok(join_workspace_root(&current_dir, workspace)),
+        Err(source) => {
+            if let Some(pwd) = std::env::var_os("PWD") {
+                let pwd = PathBuf::from(pwd);
+                if pwd.is_absolute() && pwd.is_dir() {
+                    return Ok(join_workspace_root(&pwd, workspace));
+                }
+            }
+
+            Err(InitCommandError::CurrentDirectoryUnavailable {
+                workspace: workspace.to_path_buf(),
+                source,
+            })
+        }
+    }
+}
+
+fn join_workspace_root(root: &Path, workspace: &Path) -> PathBuf {
+    if workspace == Path::new(".") { root.to_path_buf() } else { root.join(workspace) }
 }
 
 fn docs_target_path(workspace: &Path, export_path: &str) -> PathBuf {
@@ -1979,6 +2005,10 @@ fn command_in_path(command: &str) -> bool {
 pub enum InitCommandError {
     #[error("failed to create workspace directory {path}: {source}")]
     CreateWorkspace { path: PathBuf, source: std::io::Error },
+    #[error(
+        "current working directory is unavailable while resolving workspace {workspace}: {source}. Rerun from an existing directory or pass --workspace /absolute/path"
+    )]
+    CurrentDirectoryUnavailable { workspace: PathBuf, source: std::io::Error },
     #[error("failed to write file {path}: {source}")]
     WriteFile { path: PathBuf, source: std::io::Error },
     #[error("failed to read file {path}: {source}")]
@@ -2009,19 +2039,21 @@ pub enum InitCommandError {
 mod tests {
     use std::collections::BTreeSet;
     use std::collections::VecDeque;
+    use std::ffi::OsString;
     use std::fs;
     use std::path::{Path, PathBuf};
+    use std::sync::{LazyLock, Mutex, MutexGuard};
 
     use uuid::Uuid;
 
     use super::{
-        BundledModelCatalog, GuidedRouteSource, InitInteractor, InitRequest,
+        BundledModelCatalog, GuidedRouteSource, InitCommandError, InitInteractor, InitRequest,
         collect_guided_init_answers_with_interactor, command_in_path, execute_init,
         execution_template, format_runtime_list, format_slot_list, initial_guided_route_selections,
         parse_canon_mode_selection, parse_context_binding, parse_domain_family,
         parse_domain_standard, parse_external_context_kind, parse_model_route,
-        render_guided_route_review, resolve_seeded_routes, supported_route_slots,
-        supported_runtime_choices, template_label, upsert_binding,
+        render_guided_route_review, resolve_seeded_routes, resolve_workspace_root,
+        supported_route_slots, supported_runtime_choices, template_label, upsert_binding,
     };
     use crate::adapters::config_store::FileConfigStore;
     use crate::cli::CommandExitStatus;
@@ -2031,10 +2063,67 @@ mod tests {
     };
     use crate::domain::governance::CanonModeSelectionPreference;
 
+    static CURRENT_DIR_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
     fn temp_workspace(prefix: &str) -> PathBuf {
         let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
         fs::create_dir_all(&workspace).unwrap();
         workspace
+    }
+
+    struct CurrentDirGuard {
+        original: PathBuf,
+        _lock: MutexGuard<'static, ()>,
+    }
+
+    impl CurrentDirGuard {
+        fn change_to(path: &Path) -> Self {
+            let lock = CURRENT_DIR_LOCK.lock().unwrap();
+            let original = std::env::current_dir().unwrap();
+            std::env::set_current_dir(path).unwrap();
+            Self { original, _lock: lock }
+        }
+    }
+
+    impl Drop for CurrentDirGuard {
+        fn drop(&mut self) {
+            std::env::set_current_dir(&self.original).unwrap();
+        }
+    }
+
+    struct PwdEnvGuard {
+        original: Option<OsString>,
+    }
+
+    impl PwdEnvGuard {
+        fn set(path: &Path) -> Self {
+            let original = std::env::var_os("PWD");
+            unsafe {
+                std::env::set_var("PWD", path);
+            }
+            Self { original }
+        }
+
+        fn remove() -> Self {
+            let original = std::env::var_os("PWD");
+            unsafe {
+                std::env::remove_var("PWD");
+            }
+            Self { original }
+        }
+    }
+
+    impl Drop for PwdEnvGuard {
+        fn drop(&mut self) {
+            match self.original.as_ref() {
+                Some(value) => unsafe {
+                    std::env::set_var("PWD", value);
+                },
+                None => unsafe {
+                    std::env::remove_var("PWD");
+                },
+            }
+        }
     }
 
     #[derive(Debug, Default)]
@@ -2088,6 +2177,49 @@ mod tests {
             self.confirms.pop_front().ok_or_else(|| {
                 super::InitCommandError::PromptInteraction("missing scripted confirm".to_string())
             })
+        }
+    }
+
+    #[derive(Debug)]
+    struct CurrentDirChangingInteractor {
+        inner: ScriptedInteractor,
+        confirm_dir: PathBuf,
+    }
+
+    impl InitInteractor for CurrentDirChangingInteractor {
+        fn select(
+            &mut self,
+            prompt: &str,
+            items: &[String],
+            default: usize,
+        ) -> Result<usize, super::InitCommandError> {
+            self.inner.select(prompt, items, default)
+        }
+
+        fn multi_select(
+            &mut self,
+            prompt: &str,
+            items: &[String],
+            defaults: &[bool],
+        ) -> Result<Vec<usize>, super::InitCommandError> {
+            self.inner.multi_select(prompt, items, defaults)
+        }
+
+        fn input(
+            &mut self,
+            prompt: &str,
+            initial: &str,
+        ) -> Result<String, super::InitCommandError> {
+            self.inner.input(prompt, initial)
+        }
+
+        fn confirm(
+            &mut self,
+            prompt: &str,
+            default: bool,
+        ) -> Result<bool, super::InitCommandError> {
+            std::env::set_current_dir(&self.confirm_dir).unwrap();
+            self.inner.confirm(prompt, default)
         }
     }
 
@@ -2922,7 +3054,7 @@ mod tests {
         assert!(!assistant_assets.is_empty());
         let multi_file_surface_asset = assistant_assets
             .iter()
-            .copied()
+            .cloned()
             .find(|candidate| {
                 assistant_assets
                     .iter()
@@ -2955,12 +3087,13 @@ mod tests {
         let unchanged = super::apply_assistant_assets(&workspace, &assistant_assets).unwrap();
         assert!(unchanged.iter().all(|action| action.status == "unchanged"), "{unchanged:?}");
 
-        fs::remove_file(workspace.join(multi_file_surface_asset.relative_path)).unwrap();
+        fs::remove_file(workspace.join(multi_file_surface_asset.relative_path.as_ref())).unwrap();
         let recreated = super::apply_assistant_assets(&workspace, &assistant_assets).unwrap();
         assert!(recreated.iter().any(|action| action.status == "updated"), "{recreated:?}");
         assert_eq!(recreated.iter().map(|action| action.created_files).sum::<usize>(), 1);
 
-        fs::write(workspace.join(multi_file_surface_asset.relative_path), "stale").unwrap();
+        fs::write(workspace.join(multi_file_surface_asset.relative_path.as_ref()), "stale")
+            .unwrap();
         let updated = super::apply_assistant_assets(&workspace, &assistant_assets).unwrap();
         assert!(updated.iter().any(|action| action.updated_files > 0), "{updated:?}");
     }
@@ -3312,6 +3445,12 @@ mod tests {
         let unavailable = super::InitCommandError::InteractiveTerminalUnavailable;
         assert!(unavailable.to_string().contains("non-interactive"), "{}", unavailable);
 
+        let cwd_unavailable = super::InitCommandError::CurrentDirectoryUnavailable {
+            workspace: PathBuf::from("."),
+            source: std::io::Error::from(std::io::ErrorKind::NotFound),
+        };
+        assert!(cwd_unavailable.to_string().contains("current working directory is unavailable"));
+
         let invalid_catalog =
             super::InitCommandError::InvalidBundledCatalog("bad toml".to_string());
         assert!(
@@ -3390,6 +3529,83 @@ mod tests {
         assert!(report.terminal_output.contains("copilot"), "{}", report.terminal_output);
         // Suppress unused variable warning — copilot_models is needed to check catalog health
         let _ = copilot_models;
+    }
+
+    #[test]
+    fn resolve_workspace_root_uses_pwd_when_current_directory_is_unavailable() {
+        let fallback_workspace = temp_workspace("boundline-init-pwd-fallback");
+        let broken_workspace = temp_workspace("boundline-init-broken-cwd");
+        let _current_dir_guard = CurrentDirGuard::change_to(&broken_workspace);
+        fs::remove_dir_all(&broken_workspace).unwrap();
+        let _pwd_guard = PwdEnvGuard::set(&fallback_workspace);
+
+        let resolved = resolve_workspace_root(Path::new(".")).unwrap();
+
+        assert_eq!(resolved, fallback_workspace);
+    }
+
+    #[test]
+    fn resolve_workspace_root_reports_unavailable_current_directory_without_valid_pwd() {
+        let broken_workspace = temp_workspace("boundline-init-broken-cwd-error");
+        let _current_dir_guard = CurrentDirGuard::change_to(&broken_workspace);
+        fs::remove_dir_all(&broken_workspace).unwrap();
+        let _pwd_guard = PwdEnvGuard::remove();
+
+        let error = resolve_workspace_root(Path::new(".")).unwrap_err();
+
+        match error {
+            InitCommandError::CurrentDirectoryUnavailable { workspace, .. } => {
+                assert_eq!(workspace, PathBuf::from("."));
+            }
+            other => panic!("expected current-directory error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn execute_init_guided_flow_with_dot_workspace_survives_current_dir_change() {
+        let workspace = temp_workspace("boundline-init-guided-dot");
+        let diverted_workspace = temp_workspace("boundline-init-guided-diverted");
+        let _current_dir_guard = CurrentDirGuard::change_to(&workspace);
+
+        let interactor = CurrentDirChangingInteractor {
+            inner: ScriptedInteractor {
+                selects: VecDeque::from(vec![0, 0]),
+                multi_selects: VecDeque::from(vec![vec![]]),
+                inputs: VecDeque::new(),
+                confirms: VecDeque::from(vec![true]),
+            },
+            confirm_dir: diverted_workspace.clone(),
+        };
+
+        let report = execute_init(InitRequest {
+            workspace: Path::new("."),
+            non_interactive: false,
+            interactive_terminal_override: Some(true),
+            interactor: Some(Box::new(interactor)),
+            template: Some(InitTemplate::BugFix),
+            assistants: &[],
+            routes: &[],
+            domains: &[],
+            domain_standards: &[],
+            context_bindings: &[],
+            required_context_bindings: &[],
+            canon_mode_selection: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            export_docs: false,
+            docs_refresh: false,
+            docs_diff: false,
+            docs_output_dir: None,
+            force: true,
+        })
+        .unwrap();
+
+        assert_eq!(report.exit_status, CommandExitStatus::Succeeded);
+        assert!(workspace.join(".boundline/execution.json").is_file());
+        assert!(workspace.join(".boundline/config.toml").is_file());
+        assert!(!diverted_workspace.join(".boundline/execution.json").exists());
+        assert!(!diverted_workspace.join(".boundline/config.toml").exists());
     }
 
     #[test]

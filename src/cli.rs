@@ -207,8 +207,8 @@ pub enum DeveloperCommand {
         after_long_help = "Guided mode tips:\n  - leave --assistant unset to skip repository-local assistant packs\n  - leave guided routes blank to let selected assistants seed defaults for planning, implementation, verification, and review\n\nDocs export policy:\n  - --export-docs is create-only by default; existing target files stop the command\n  - use --refresh to update generated docs in place\n  - use --diff to preview docs changes without writing\n  - use --to <path> to export generated docs under another root\n\nExamples:\n  boundline init --workspace . --assistant copilot\n  boundline init --workspace . --assistant copilot --route planning=copilot:gpt-5.4\n  boundline init --workspace . --assistant codex --assistant copilot --route review=claude:sonnet-4\n  boundline init --workspace . --export-docs\n  boundline init --workspace . --export-docs --refresh\n  boundline init --workspace . --export-docs --to docs/reference/boundline"
     )]
     Init {
-        /// Workspace directory to bootstrap.
-        #[arg(long)]
+        /// Workspace directory to bootstrap. Defaults to the current directory.
+        #[arg(long, default_value = ".")]
         workspace: PathBuf,
         /// Disable guided terminal prompts and require explicit flag-driven input only.
         #[arg(long = "non-interactive")]
@@ -1630,13 +1630,15 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
 mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
+    use std::sync::{LazyLock, Mutex, MutexGuard};
 
+    use clap::Parser;
     use serde_json::json;
     use uuid::Uuid;
 
     use super::{
-        CheckpointSubcommand, ClusterSubcommand, CommandExitStatus, CommandName, ConfigSubcommand,
-        DeveloperCommand, DeveloperCommandSession, WorkflowSubcommand, dispatch,
+        CheckpointSubcommand, Cli, ClusterSubcommand, CommandExitStatus, CommandName,
+        ConfigSubcommand, DeveloperCommand, DeveloperCommandSession, WorkflowSubcommand, dispatch,
     };
     use crate::domain::configuration::{
         CapabilityState, ConfigShowScope, ConfigWriteScope, EffortFallbackPolicy, EffortLevel,
@@ -1663,6 +1665,50 @@ fn red_to_green_addition() {
         let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
         fs::create_dir_all(&workspace).unwrap();
         workspace
+    }
+
+    static CURRENT_DIR_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+    struct CurrentDirGuard {
+        original: PathBuf,
+        _lock: MutexGuard<'static, ()>,
+    }
+
+    impl CurrentDirGuard {
+        fn change_to(path: &Path) -> Self {
+            let lock = CURRENT_DIR_LOCK.lock().unwrap();
+            let original = std::env::current_dir().unwrap();
+            std::env::set_current_dir(path).unwrap();
+            Self { original, _lock: lock }
+        }
+    }
+
+    impl Drop for CurrentDirGuard {
+        fn drop(&mut self) {
+            std::env::set_current_dir(&self.original).unwrap();
+        }
+    }
+
+    #[test]
+    fn init_cli_defaults_workspace_to_current_directory() {
+        let cli = Cli::try_parse_from([
+            "boundline",
+            "init",
+            "--non-interactive",
+            "--assistant",
+            "copilot",
+            "--canon-mode-selection",
+            "auto-confirm",
+            "--force",
+        ])
+        .unwrap();
+
+        match cli.command {
+            DeveloperCommand::Init { workspace, .. } => {
+                assert_eq!(workspace, PathBuf::from("."));
+            }
+            other => panic!("expected init command, got {other:?}"),
+        }
     }
 
     fn write_execution_workspace(prefix: &str) -> PathBuf {
@@ -1863,6 +1909,97 @@ fn red_to_green_addition() {
         });
         assert_eq!(invalid.exit_status, CommandExitStatus::InvalidInvocation);
         assert!(invalid.output.contains("bounded context required"), "{}", invalid.output);
+    }
+
+    #[test]
+    fn dispatch_custom_run_defaults_workspace_to_current_directory() {
+        let workspace = write_execution_workspace("boundline-cli-dispatch-default-custom");
+        let brief = write_context_brief(&workspace);
+        let _current_dir_guard = CurrentDirGuard::change_to(&workspace);
+
+        let run = dispatch(&DeveloperCommand::Run {
+            workspace: None,
+            cluster: None,
+            goal: Some("Fix the failing add test".to_string()),
+            compatibility: false,
+            brief: vec![brief],
+            governance: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            mode: None,
+            no_canon: false,
+        });
+
+        assert_eq!(run.exit_status, CommandExitStatus::Succeeded);
+        assert!(run.output.contains("terminal_status: succeeded"), "{}", run.output);
+        assert!(run.trace_location.is_some());
+    }
+
+    #[test]
+    fn dispatch_session_commands_default_workspace_to_current_directory() {
+        let workspace = write_execution_workspace("boundline-cli-dispatch-default-session");
+        let brief = write_context_brief(&workspace);
+        let _current_dir_guard = CurrentDirGuard::change_to(&workspace);
+
+        let start = dispatch(&DeveloperCommand::Start { workspace: None, cluster: None });
+        assert_eq!(start.exit_status, CommandExitStatus::Succeeded);
+
+        let capture = dispatch(&DeveloperCommand::Capture {
+            workspace: None,
+            cluster: None,
+            goal: Some("Fix the failing add test".to_string()),
+            brief: vec![brief],
+            governance: None,
+            risk: None,
+            zone: None,
+            owner: None,
+        });
+        assert_eq!(capture.exit_status, CommandExitStatus::Succeeded);
+
+        let plan = dispatch(&DeveloperCommand::Plan {
+            workspace: None,
+            cluster: None,
+            flow: None,
+            no_flow: false,
+            confirm: false,
+        });
+        assert_eq!(plan.exit_status, CommandExitStatus::Succeeded);
+        assert!(plan.output.contains("execution_path: native_goal_plan"), "{}", plan.output);
+
+        let confirm = dispatch(&DeveloperCommand::Plan {
+            workspace: None,
+            cluster: None,
+            flow: None,
+            no_flow: false,
+            confirm: true,
+        });
+        assert_eq!(confirm.exit_status, CommandExitStatus::Succeeded);
+
+        let run = dispatch(&DeveloperCommand::Run {
+            workspace: None,
+            cluster: None,
+            goal: None,
+            compatibility: false,
+            brief: Vec::new(),
+            governance: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            mode: None,
+            no_canon: false,
+        });
+        assert_eq!(run.exit_status, CommandExitStatus::Succeeded);
+        assert!(run.output.contains("terminal_status: succeeded"), "{}", run.output);
+
+        let status = dispatch(&DeveloperCommand::Status { workspace: None, cluster: None });
+        assert_eq!(status.exit_status, CommandExitStatus::Succeeded);
+        assert!(status.output.contains("latest_status: succeeded"), "{}", status.output);
+
+        let inspect =
+            dispatch(&DeveloperCommand::Inspect { trace: None, workspace: None, cluster: None });
+        assert_eq!(inspect.exit_status, CommandExitStatus::Succeeded);
+        assert!(inspect.output.contains("inspection_target:"), "{}", inspect.output);
     }
 
     #[test]

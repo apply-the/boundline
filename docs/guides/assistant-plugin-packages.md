@@ -1,6 +1,6 @@
 # Assistant Plugin Packages
 
-Boundline includes repository-local package surfaces for assistant hosts that can consume plugin metadata, command bindings, or prompt packs. These packages present Boundline as a local delivery orchestrator for bounded engineering work: plan, act, verify, trace.
+Boundline includes repository-local package surfaces for assistant hosts that can consume plugin metadata, command bindings, or prompt packs. `boundline init --assistant ...` scaffolds the shared assistant files plus the selected host package surfaces into the target workspace. These packages present Boundline as a local delivery orchestrator for bounded engineering work: plan, act, verify, trace.
 
 `.boundline/session.json remains authoritative` for active session state. Host chat history is never the source of truth for session state, current step, recovery status, or next action. Use CLI output, especially `next_command`, `corrected_command`, trace references, and checkpoint restore commands, before recommending follow-up work.
 
@@ -13,7 +13,7 @@ Canon governance is conditional. It should appear only when the workspace is con
 | Claude Code | `.claude-plugin/` | `manifest.json` plus command bindings | Copy or link the folder into the package location expected by Claude Code. |
 | Codex | `.codex-plugin/` | `plugin.json` with interface metadata, default prompts, capabilities, and paths | Use the folder as the Codex plugin package root for this repository. |
 | Cursor | `.cursor-plugin/` | `manifest.json` plus command bindings | Copy or link the folder into the package location expected by Cursor. |
-| Copilot | `.copilot-prompts/` and `assistant/prompts/copilot-command-pack.md` | Prompt-pack metadata and prompt guidance | Use the prompt pack directly; this repository does not claim a universal Copilot plugin format. |
+| Copilot | `.copilot-prompts/` and `assistant/prompts/copilot-command-pack.md` | Prompt-pack metadata and prompt guidance | `boundline init --assistant copilot` scaffolds the prompt pack metadata and mirrors the generated prompt files into `.github/prompts/` for VS Code Copilot discovery. `assistant/copilot/prompts/` remains the source copy, and this repository does not claim a universal Copilot plugin format beyond those repo-local files. |
 
 ## Shared Boundline Sources
 
@@ -26,6 +26,12 @@ Host packages reference shared Boundline-owned files instead of copying behavior
 - `assistant/claude/commands/`
 - `assistant/codex/commands/`
 - `assistant/copilot/prompts/`
+
+For VS Code Copilot specifically, `assistant/copilot/prompts/` remains the
+Boundline-owned source directory, while `.github/prompts/` is the repo-local
+discovery projection. `boundline init --assistant copilot` writes both. If you
+only need ad hoc use, you can still reference the generated prompt files
+directly via `#file`.
 
 ## Required Commands
 

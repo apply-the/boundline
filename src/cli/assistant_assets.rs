@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::path::Path;
 
@@ -15,7 +16,7 @@ pub enum AssistantSurface {
 impl AssistantSurface {
     pub const fn plan_label(self) -> &'static str {
         match self {
-            Self::SharedReadme => "assistant shared docs",
+            Self::SharedReadme => "assistant shared files",
             Self::Claude => "Claude command pack",
             Self::Codex => "Codex command pack",
             Self::Copilot => "Copilot prompt pack",
@@ -47,9 +48,9 @@ impl DocsExportSurface {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AssistantAsset {
-    pub relative_path: &'static str,
+    pub relative_path: Cow<'static, str>,
     pub contents: &'static str,
     pub surface: AssistantSurface,
 }
@@ -64,7 +65,7 @@ pub struct DocsExportAsset {
 macro_rules! asset {
     ($surface:expr, $path:literal) => {
         AssistantAsset {
-            relative_path: $path,
+            relative_path: Cow::Borrowed($path),
             contents: include_str!(concat!("../../", $path)),
             surface: $surface,
         }
@@ -72,6 +73,14 @@ macro_rules! asset {
 }
 
 const README_ASSET: AssistantAsset = asset!(AssistantSurface::SharedReadme, "assistant/README.md");
+
+static SHARED_SCAFFOLD_ASSETS: &[AssistantAsset] = &[
+    asset!(AssistantSurface::SharedReadme, "assistant/plugin-metadata.json"),
+    asset!(AssistantSurface::SharedReadme, "assistant/commands/session-workflow.json"),
+    asset!(AssistantSurface::SharedReadme, "assistant/prompts/starter-prompts.md"),
+    asset!(AssistantSurface::SharedReadme, "assistant/assets/boundline-plugin-icon.svg"),
+    asset!(AssistantSurface::SharedReadme, "assistant/assets/boundline-plugin-logo.svg"),
+];
 
 const CANON_DOCS_EXPORT_CONTENT: &str = r#"# Boundline And Canon
 
@@ -133,6 +142,11 @@ static CLAUDE_ASSETS: &[AssistantAsset] = &[
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-workflow-status.md"),
 ];
 
+static CLAUDE_PACKAGE_ASSETS: &[AssistantAsset] = &[
+    asset!(AssistantSurface::Claude, ".claude-plugin/manifest.json"),
+    asset!(AssistantSurface::Claude, ".claude-plugin/commands.json"),
+];
+
 static CODEX_ASSETS: &[AssistantAsset] = &[
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-architecture.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-backlog.md"),
@@ -167,6 +181,9 @@ static CODEX_ASSETS: &[AssistantAsset] = &[
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-workflow-run.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-workflow-status.md"),
 ];
+
+static CODEX_PACKAGE_ASSETS: &[AssistantAsset] =
+    &[asset!(AssistantSurface::Codex, ".codex-plugin/plugin.json")];
 
 static COPILOT_ASSETS: &[AssistantAsset] = &[
     asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-architecture.prompt.md"),
@@ -233,23 +250,34 @@ static COPILOT_ASSETS: &[AssistantAsset] = &[
     ),
 ];
 
+static COPILOT_SHARED_ASSETS: &[AssistantAsset] =
+    &[asset!(AssistantSurface::Copilot, "assistant/prompts/copilot-command-pack.md")];
+
+static COPILOT_PACKAGE_ASSETS: &[AssistantAsset] = &[
+    asset!(AssistantSurface::Copilot, ".copilot-prompts/README.md"),
+    asset!(AssistantSurface::Copilot, ".copilot-prompts/pack.json"),
+];
+
 static GEMINI_ASSETS: &[AssistantAsset] =
     &[asset!(AssistantSurface::Gemini, "assistant/gemini/README.md")];
 
-pub fn assets_for_assistants(assistants: &[RuntimeKind]) -> Vec<&'static AssistantAsset> {
+pub fn assets_for_assistants(assistants: &[RuntimeKind]) -> Vec<AssistantAsset> {
     if assistants.is_empty() {
         return Vec::new();
     }
 
-    let mut assets = vec![&README_ASSET];
-    let mut seen = BTreeSet::from([README_ASSET.relative_path]);
+    let mut assets = vec![README_ASSET.clone()];
+    let mut seen = BTreeSet::from([README_ASSET.relative_path.to_string()]);
+    extend_assets(&mut assets, &mut seen, SHARED_SCAFFOLD_ASSETS.iter().cloned());
     for runtime in assistants.iter().copied() {
-        for asset in runtime_assets(runtime) {
-            if seen.insert(asset.relative_path) {
-                assets.push(asset);
-            }
-        }
+        extend_assets(&mut assets, &mut seen, runtime_scaffold_assets(runtime));
+        extend_assets(&mut assets, &mut seen, runtime_package_assets(runtime).iter().cloned());
     }
+
+    if assistants.iter().copied().any(|runtime| runtime == RuntimeKind::Copilot) {
+        extend_assets(&mut assets, &mut seen, projected_copilot_prompt_assets());
+    }
+
     assets
 }
 
@@ -307,8 +335,58 @@ fn runtime_assets(runtime: RuntimeKind) -> &'static [AssistantAsset] {
     }
 }
 
+fn runtime_scaffold_assets(runtime: RuntimeKind) -> Vec<AssistantAsset> {
+    let mut assets = runtime_assets(runtime).to_vec();
+    if runtime == RuntimeKind::Copilot {
+        assets.extend(COPILOT_SHARED_ASSETS.iter().cloned());
+    }
+    assets
+}
+
+fn runtime_package_assets(runtime: RuntimeKind) -> &'static [AssistantAsset] {
+    match runtime {
+        RuntimeKind::Claude => CLAUDE_PACKAGE_ASSETS,
+        RuntimeKind::Codex => CODEX_PACKAGE_ASSETS,
+        RuntimeKind::Copilot => COPILOT_PACKAGE_ASSETS,
+        RuntimeKind::Gemini => &[],
+    }
+}
+
+fn projected_copilot_prompt_assets() -> Vec<AssistantAsset> {
+    COPILOT_ASSETS
+        .iter()
+        .map(|asset| {
+            let file_name = asset
+                .relative_path
+                .rsplit('/')
+                .next()
+                .expect("copilot prompt asset should have a file name");
+            AssistantAsset {
+                relative_path: Cow::Owned(format!(".github/prompts/{file_name}")),
+                contents: asset.contents,
+                surface: asset.surface,
+            }
+        })
+        .collect()
+}
+
+fn extend_assets<I>(assets: &mut Vec<AssistantAsset>, seen: &mut BTreeSet<String>, new_assets: I)
+where
+    I: IntoIterator<Item = AssistantAsset>,
+{
+    for asset in new_assets {
+        if seen.insert(asset.relative_path.to_string()) {
+            assets.push(asset);
+        }
+    }
+}
+
 fn docs_relative_path_for_asset_under(docs_root: &Path, asset: &AssistantAsset) -> String {
-    let suffix = asset.relative_path.strip_prefix("assistant/").unwrap_or(asset.relative_path);
+    let suffix = asset
+        .relative_path
+        .as_ref()
+        .strip_prefix("assistant/")
+        .unwrap_or(asset.relative_path.as_ref());
     docs_root.join("assistant").join(suffix).to_string_lossy().into_owned()
 }
 

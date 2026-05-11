@@ -52,6 +52,10 @@ fn init_scaffolds_execution_and_config_files() {
             "--template",
             "bug-fix",
             "--assistant",
+            "claude",
+            "--assistant",
+            "codex",
+            "--assistant",
             "copilot",
         ],
     );
@@ -69,10 +73,26 @@ fn init_scaffolds_execution_and_config_files() {
     assert!(workspace.join(".boundline/execution.json").is_file());
     assert!(workspace.join(".boundline/config.toml").is_file());
     assert!(workspace.join("assistant/README.md").is_file());
+    assert!(workspace.join("assistant/plugin-metadata.json").is_file());
+    assert!(workspace.join("assistant/commands/session-workflow.json").is_file());
+    assert!(workspace.join("assistant/prompts/starter-prompts.md").is_file());
+    assert!(workspace.join("assistant/prompts/copilot-command-pack.md").is_file());
+    assert!(workspace.join("assistant/assets/boundline-plugin-icon.svg").is_file());
+    assert!(workspace.join("assistant/assets/boundline-plugin-logo.svg").is_file());
+    assert!(workspace.join("assistant/claude/commands/boundline-start.md").is_file());
+    assert!(workspace.join("assistant/codex/commands/boundline-start.md").is_file());
     assert!(workspace.join("assistant/copilot/prompts/boundline-start.prompt.md").is_file());
+    assert!(workspace.join(".claude-plugin/manifest.json").is_file());
+    assert!(workspace.join(".claude-plugin/commands.json").is_file());
+    assert!(workspace.join(".codex-plugin/plugin.json").is_file());
+    assert!(workspace.join(".copilot-prompts/README.md").is_file());
+    assert!(workspace.join(".copilot-prompts/pack.json").is_file());
+    assert!(workspace.join(".github/prompts/boundline-start.prompt.md").is_file());
 
     let config = fs::read_to_string(workspace.join(".boundline/config.toml")).unwrap();
     assert!(config.contains("assistant_runtimes"));
+    assert!(config.contains("claude"));
+    assert!(config.contains("codex"));
     assert!(config.contains("copilot"));
     assert!(config.contains("domain_templates"));
     assert!(config.contains("systems"));

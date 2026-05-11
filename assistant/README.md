@@ -13,6 +13,15 @@ CLI-reported `next_command`, and explicit blocked, clarification-required,
 failed, exhausted, and terminal states. `/boundline:govern` is conditional:
 Canon governance is only visible when the workspace is configured for it or the
 user explicitly asks for governed delivery.
+Canon is the optional governed companion runtime.
+
+Treat the chat surface in three layers:
+
+- global bootstrap commands such as `/boundline-init` and `/boundline-doctor` for install, readiness, and repo setup
+- repo-local runtime commands such as `/boundline-start`, `/boundline-capture`, `/boundline-plan`, `/boundline-run`, `/boundline-status`, `/boundline-next`, `/boundline-inspect`, and `/boundline-recover` for the active session and trace-backed runtime state
+- guided delivery-intent commands such as workflow entrypoints or governed mode shorthands when the operator wants a bounded delivery phase surfaced directly
+
+Large work is supported by decomposition, not by unbounded autonomy.
 
 In `0.44.0`, assistants should treat installation verification as the first
 boundary in a new environment: prefer the README quick path, run
@@ -21,8 +30,8 @@ session-native workflow.
 
 Keep the product boundary explicit in assistant narration:
 
-- Boundline owns orchestration, planning, execution, validation, and session state.
-- Canon is the optional governed companion runtime, not the product entrypoint.
+- Boundline pilots the work through orchestration, decomposition, planning, execution, validation, and session state.
+- Canon governs packets, approvals, and governed artifacts when a delivery boundary requires it; it is not the product entrypoint.
 - If a user only needs the fast path, point them to README plus
 	`docs/getting-started.md`; use `docs/architecture.md` only for the second
 	read level.
@@ -184,9 +193,9 @@ same CLI commands without asking operators to edit manifests manually.
 ## Installation & Registration
 Each AI assistant has its own local or remote configuration. Currently, all command packs must be registered as local file references.
 
-- **Copilot**: Copy `./assistant/copilot/prompts/*.prompt.md` to `.github/prompts/` or reference via `#file`.
-- **Claude**: Load the respective `.md` files as projects or upload as attachments to the context window.
-- **Codex**: Import into the corresponding workbench.
+- **Copilot**: `boundline init --assistant copilot` scaffolds `./assistant/copilot/prompts/`, `.copilot-prompts/`, and mirrors the generated prompts into `.github/prompts/` for VS Code discovery. Use `#file` when you want ad hoc prompt references instead of repo-local discovery.
+- **Claude**: `boundline init --assistant claude` scaffolds `.claude-plugin/` plus `./assistant/claude/commands/`; complete any host-specific registration from that repo-local package root.
+- **Codex**: `boundline init --assistant codex` scaffolds `.codex-plugin/` plus `./assistant/codex/commands/`; import or register that repo-local package in the host.
 - **Gemini CLI**: Reference the command docs from this directory and run the mapped Boundline CLI commands locally.
 
 Gemini remains an explicit CLI fallback in this release. Claude, Codex, and

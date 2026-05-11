@@ -7,36 +7,51 @@
 [![Vulnerabilities](https://github.com/apply-the/boundline/actions/workflows/vulnerabilities.yml/badge.svg)](https://github.com/apply-the/boundline/actions/workflows/vulnerabilities.yml)
 [![Coverage](https://codecov.io/gh/apply-the/boundline/graph/badge.svg)](https://codecov.io/gh/apply-the/boundline)
 
-**Boundline is a local CLI for taking a small engineering task from goal to code change.**
-Point it at a workspace, give it a goal, let it run a bounded change, then use
-`status` and `inspect` to see what happened. Canon is optional: most users can
-ignore it unless they need governed stages or governed artifacts.
+**Boundline is a local delivery orchestrator for bounded engineering work, from idea intake to verified code changes.**
+Use it to move through discovery, requirements, architecture, backlog,
+implementation, review, and verification as a sequence of bounded sessions
+with explicit state, evidence, checkpoints, and governance when needed. It can
+pilot larger initiatives as sequences of bounded phases and verifiable units.
+Large work is supported by decomposition, not by unbounded autonomy.
+Point it at a workspace, give it an idea, brief, or bounded goal, then move
+through explicit sessions for planning, execution, inspection, recovery, and
+governed delivery when needed. Canon is optional: most users can ignore it
+unless they need governed stages or governed artifacts.
 
 ## Quick Path Brutale
 
 If Boundline is already installed, this is the shortest path to doing
 something useful:
 
+When you already run these commands from inside the target workspace,
+`--workspace .` is optional for `init`, `start`, `capture`, `plan`, `run`,
+`status`, and `inspect`.
+
+On an empty or lightly prepared repository, `boundline run` can still
+bootstrap a first bounded change, but only when the goal is specific enough to
+name the intended stack, files, or setup shape. If the goal is too vague,
+planning stops and asks for clarification instead of guessing.
+
 ```bash
 cd <workspace>
-boundline init --workspace . --assistant codex
+boundline init --assistant codex
 boundline doctor --workspace .
-boundline run --workspace . --goal "Fix the failing add test"
-boundline status --workspace .
-boundline inspect --workspace .
+boundline run --goal "Fix the failing add test"
+boundline status
+boundline inspect
 ```
 
 If you want to review the plan before execution, use the explicit flow instead:
 
 ```bash
 cd <workspace>
-boundline start --workspace .
-boundline capture --workspace . --goal "Fix the failing add test"
-boundline plan --workspace .
-boundline plan --workspace . --confirm
-boundline run --workspace .
-boundline status --workspace .
-boundline inspect --workspace .
+boundline start
+boundline capture --goal "Fix the failing add test"
+boundline plan
+boundline plan --confirm
+boundline run
+boundline status
+boundline inspect
 ```
 
 Plain English version of that flow:
@@ -52,8 +67,8 @@ The primary product route stays explicit: `session-native: start a session -> ca
 
 ## Use Boundline from chat
 
-Boundline can be installed into chat surfaces through repository-local package
-folders:
+Boundline supports repository-local chat package surfaces for supported hosts.
+In this repository, those package folders are:
 
 - Claude Code: `.claude-plugin/`
 - Codex: `.codex-plugin/`
@@ -61,26 +76,64 @@ folders:
 - Copilot-style prompt environments: `.copilot-prompts/` plus
   `assistant/prompts/copilot-command-pack.md`
 
+Minimal example for a Codex-style host:
+
+```bash
+cd <workspace>
+boundline init --assistant codex
+```
+
+That scaffolds the repo-local Boundline files, the shared assistant support
+files under `assistant/`, and the selected host package surface such as
+`.codex-plugin/`.
+
+When you run `boundline init --assistant claude`, `--assistant codex`, or
+`--assistant copilot`, Boundline also writes the matching repo-local package
+surface for that host. Exact host registration steps and package locations
+outside the repository still depend on the chat host.
+
+For Copilot-style prompt hosts, `boundline init --assistant copilot` scaffolds
+`.copilot-prompts/`, `assistant/prompts/copilot-command-pack.md`, and mirrors
+the generated prompt files into `.github/prompts/` for VS Code prompt
+discovery. `assistant/copilot/prompts/` remains the Boundline-owned source copy,
+and you can still reference those generated prompt files explicitly via `#file`
+when you want ad hoc prompt use instead of repo-local discovery.
+
 The chat commands are namespaced as `/boundline:*`: start, capture, plan, run,
 status, inspect, recover, and conditional govern. They guide the assistant into
 Boundline's real CLI/runtime instead of making chat history authoritative.
-Install details and host boundaries are in
+
+Think of the chat surface in three layers:
+
+- global bootstrap commands for install, readiness, and scaffolding such as `/boundline-init` and `/boundline-doctor`
+- repo-local runtime commands for session state and trace-backed execution such as `/boundline-start`, `/boundline-capture`, `/boundline-plan`, `/boundline-run`, `/boundline-status`, `/boundline-next`, `/boundline-inspect`, and `/boundline-recover`
+- guided delivery-intent commands for workflows, governed modes, or named delivery phases when the operator wants a bounded intent surface instead of raw runtime subcommands
+
+Exact host-specific install locations, validation steps, and package
+boundaries are in
 [docs/guides/assistant-plugin-packages.md](docs/guides/assistant-plugin-packages.md).
+
+Those repo-local assistant surfaces are separate from Boundline's internal
+slot routing. You can route planning to Codex, implementation to Copilot,
+verification to Gemini, and review to Claude in `.boundline/config.toml`
+without needing every host-specific package surface in the repository. The
+package folders are only needed when you want that repository to expose
+Boundline through those chat hosts directly.
 
 ## Use Boundline from CLI
 
-The CLI remains the primary product surface. Use `boundline run --workspace .
---goal "..."` for the fast path, or the explicit session-native loop when you
+The CLI remains the primary product surface. Use `boundline run --goal "..."`
+for the fast path, or the explicit session-native loop when you
 want to inspect and confirm the plan:
 
 ```bash
-boundline start --workspace .
-boundline capture --workspace . --goal "Fix the failing add test"
-boundline plan --workspace .
-boundline plan --workspace . --confirm
-boundline run --workspace .
-boundline status --workspace .
-boundline inspect --workspace .
+boundline start
+boundline capture --goal "Fix the failing add test"
+boundline plan
+boundline plan --confirm
+boundline run
+boundline status
+boundline inspect
 ```
 
 ## How chat commands map to CLI/runtime state
@@ -108,6 +161,10 @@ runtime is unavailable for the missing defaults, init either falls back to
 another selected available assistant and marks that fallback in `route_setup`,
 or stops explicitly when no selected assistant can credibly fill the remaining
 slots.
+If you do not select any assistant surfaces in guided mode, or do not pass any
+`--assistant` flags, `init` still bootstraps `.boundline/` plus any requested
+domain or hygiene defaults, but it does not scaffold repository-local assistant
+packs. Assistant pack scaffolding is opt-in.
 Add `--export-docs` when you want repo-local reference docs under
 `docs/boundline/`: Boundline writes a stable Canon reference plus the selected
 assistant reference files there. Documentation export is create-only by
@@ -129,7 +186,7 @@ printed restore command before making unrelated edits.
 
 ## Read This In Two Layers
 
-- Quick path: this README plus [docs/getting-started.md](docs/getting-started.md)
+- Quick start: this README plus [docs/getting-started.md](docs/getting-started.md)
 - Advanced architecture: [docs/architecture.md](docs/architecture.md)
 - Assistant-specific command packs: [assistant/README.md](assistant/README.md)
 
@@ -182,10 +239,11 @@ repair.
 
 Use Boundline when you want to:
 
-- fix a failing test, lint error, or small bug in one repository
-- make a scoped change from a short goal or a Markdown brief
-- run a repo-defined workflow such as a governed delivery path
-- coordinate one bounded change across a small registered cluster of repos
+- move from an idea or brief into governed delivery work
+- shape requirements, architecture, backlog, and implementation slices
+- execute bounded code changes with validation, checkpoints, and traceability
+- recover, inspect, or continue work across multiple bounded sessions
+- coordinate governed stages through Canon when evidence, approval, or published artifacts matter
 
 It is not meant to be a general deployment tool or an open-ended system for
 huge refactors.
@@ -211,7 +269,7 @@ Advanced execution-profile workflows are documented outside this README.
 | `boundline status` | See the current state and suggested follow-up |
 | `boundline next` | Ask Boundline for the next action |
 | `boundline inspect` | Read the latest trace in more detail |
-| `boundline init` | Scaffold optional `.boundline` files, assistant defaults, bounded hygiene setup, and optional create-only repo-local reference docs |
+| `boundline init` | Scaffold optional `.boundline` files, opt-in assistant pack defaults, bounded hygiene setup, and optional create-only repo-local reference docs |
 | `boundline config` | Inspect or change routing and domain defaults |
 | `boundline workflow ...` | Run a named workflow defined by the repo |
 | `boundline cluster ...` | Set up or inspect a multi-repo cluster |
@@ -231,17 +289,30 @@ Advanced execution-profile workflows are documented outside this README.
 Run directly from a goal:
 
 ```bash
-boundline run --workspace . --goal "Fix the failing add test"
+boundline run --goal "Fix the failing add test"
+```
+
+Bootstrap a first change in a mostly empty repo with an explicit goal:
+
+```bash
+boundline run --goal "Create a minimal Vite React TypeScript scaffold with package.json, tsconfig.json, vite.config.ts, index.html, src/main.tsx, and src/App.tsx"
+```
+
+If you want repository-local assistant packs as part of setup, choose them
+explicitly during guided init or pass them on the command line:
+
+```bash
+boundline init --assistant claude --assistant codex --assistant copilot --export-docs
 ```
 
 Run from a Markdown brief:
 
 ```bash
-boundline start --workspace .
-boundline capture --workspace . --brief docs/brief.md
-boundline plan --workspace .
-boundline plan --workspace . --confirm
-boundline run --workspace .
+boundline start
+boundline capture --brief docs/brief.md
+boundline plan
+boundline plan --confirm
+boundline run
 ```
 
 Run a named workflow when the repo defines one:
@@ -265,10 +336,11 @@ boundline run --cluster <primary-workspace> --goal "Fix the failing add test"
 
 ## Boundline And Canon
 
-Boundline is the main tool. Canon is a supporting governed runtime.
+Boundline is the local delivery orchestrator. Canon is the governed packet runtime.
 
-- Boundline owns the operator flow, session state, planning, execution, and validation.
-- Canon only enters when you explicitly want governed stages, approvals, or governed artifacts.
+- Boundline pilots the work: decomposition, session state, planning, execution, inspection, recovery, and validation.
+- Canon governs packets, approvals, and governed artifacts when a bounded delivery phase crosses a governance boundary.
+- Large work is supported by decomposition, not by unbounded autonomy.
 
 The current release documents Canon `0.45.0` support on the
 `canon governance start|refresh|capabilities --json` `v1` adapter surface.
