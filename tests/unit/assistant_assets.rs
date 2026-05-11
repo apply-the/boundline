@@ -30,6 +30,8 @@ const REQUIRED_COMMANDS: &[&str] = &[
     "boundline-config-show",
     "boundline-config-set-canon",
     "boundline-capture",
+    "boundline-recover",
+    "boundline-govern",
     "boundline-requirements",
     "boundline-discovery",
     "boundline-system-shaping",

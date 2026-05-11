@@ -50,6 +50,48 @@ Plain English version of that flow:
 
 The primary product route stays explicit: `session-native: start a session -> capture a goal -> plan -> confirm -> run -> status -> inspect`.
 
+## Use Boundline from chat
+
+Boundline can be installed into chat surfaces through repository-local package
+folders:
+
+- Claude Code: `.claude-plugin/`
+- Codex: `.codex-plugin/`
+- Cursor: `.cursor-plugin/`
+- Copilot-style prompt environments: `.copilot-prompts/` plus
+  `assistant/prompts/copilot-command-pack.md`
+
+The chat commands are namespaced as `/boundline:*`: start, capture, plan, run,
+status, inspect, recover, and conditional govern. They guide the assistant into
+Boundline's real CLI/runtime instead of making chat history authoritative.
+Install details and host boundaries are in
+[docs/guides/assistant-plugin-packages.md](docs/guides/assistant-plugin-packages.md).
+
+## Use Boundline from CLI
+
+The CLI remains the primary product surface. Use `boundline run --workspace .
+--goal "..."` for the fast path, or the explicit session-native loop when you
+want to inspect and confirm the plan:
+
+```bash
+boundline start --workspace .
+boundline capture --workspace . --goal "Fix the failing add test"
+boundline plan --workspace .
+boundline plan --workspace . --confirm
+boundline run --workspace .
+boundline status --workspace .
+boundline inspect --workspace .
+```
+
+## How chat commands map to CLI/runtime state
+
+`.boundline/session.json` remains authoritative for session state. Chat hosts
+must read the state through Boundline CLI output and preserve `next_command`,
+`corrected_command`, trace refs, checkpoint restore commands, and non-success
+states such as blocked, clarification-required, failed, exhausted, and terminal.
+Canon governance is conditional and should be surfaced only when the workspace
+configuration or user request requires it.
+
 Workspaces are stack-neutral on the native route. Empty, Python, Node, web, and
 mixed repositories do not need a `Cargo.toml` just to start. If the captured
 goal and repository evidence are too weak to choose a credible stack, planning
@@ -228,7 +270,7 @@ Boundline is the main tool. Canon is a supporting governed runtime.
 - Boundline owns the operator flow, session state, planning, execution, and validation.
 - Canon only enters when you explicitly want governed stages, approvals, or governed artifacts.
 
-The current release documents Canon `0.44.0` support on the
+The current release documents Canon `0.45.0` support on the
 `canon governance start|refresh|capabilities --json` `v1` adapter surface.
 
 ## Read More

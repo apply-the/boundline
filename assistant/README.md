@@ -6,6 +6,14 @@ The primary delivery surface is session-native: `start -> capture -> plan -> run
 
 In `0.48.0`, shell-enabled assistant flows should prefer `--json` for the session-native lifecycle commands plus `run`, `status`, `next`, and `inspect`. Treat `command_name`, `exit_status`, `rendered_output`, `trace_location`, `session_status`, and `trace_summary` as the authoritative host envelope when those fields are present, and use `rendered_output` only as the human-readable companion.
 
+In `0.49.0`, assistant plugin packages expose Boundline through `.claude-plugin/`,
+`.codex-plugin/`, `.cursor-plugin/`, and `.copilot-prompts/`. Package commands
+use `/boundline:*` names and must preserve `.boundline/session.json`,
+CLI-reported `next_command`, and explicit blocked, clarification-required,
+failed, exhausted, and terminal states. `/boundline:govern` is conditional:
+Canon governance is only visible when the workspace is configured for it or the
+user explicitly asks for governed delivery.
+
 In `0.44.0`, assistants should treat installation verification as the first
 boundary in a new environment: prefer the README quick path, run
 `boundline doctor --install` before workspace commands, and only then move into the
@@ -160,8 +168,11 @@ Canon-default setup and config commands are also first-class assistant surfaces:
 `/boundline-init` maps to `boundline init`, `/boundline-doctor` maps to
 `boundline doctor --install`, `/boundline-config-show` maps to
 `boundline config show --scope workspace`, `/boundline-config-set-canon` maps to
-`boundline config set-canon --mode-selection <manual|auto-confirm|auto>`, and
-`/boundline-capture` maps to `boundline capture --goal ... --brief ...`.
+`boundline config set-canon --mode-selection <manual|auto-confirm|auto>`,
+`/boundline-capture` maps to `boundline capture --goal ... --brief ...`,
+`/boundline-recover` maps to `boundline status --json` followed by the
+CLI-reported recovery command, and `/boundline-govern` maps to governed
+`boundline run --mode ...` only when Canon governance is configured.
 Assistants should collect missing chat answers first, then run or provide the
 same CLI commands without asking operators to edit manifests manually.
 

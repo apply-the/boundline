@@ -1,0 +1,14 @@
+{
+  "commandsRef": "assistant/commands/session-workflow.json",
+  "host": "claude-code",
+  "bindings": [
+    {"id": "/boundline:start", "commandRef": "/boundline:start"},
+    {"id": "/boundline:capture", "commandRef": "/boundline:capture"},
+    {"id": "/boundline:plan", "commandRef": "/boundline:plan"},
+    {"id": "/boundline:run", "commandRef": "/boundline:run"},
+    {"id": "/boundline:status", "commandRef": "/boundline:status"},
+    {"id": "/boundline:inspect", "commandRef": "/boundline:inspect"},
+    {"id": "/boundline:recover", "commandRef": "/boundline:recover"},
+    {"id": "/boundline:govern", "commandRef": "/boundline:govern", "conditional": true}
+  ]
+}

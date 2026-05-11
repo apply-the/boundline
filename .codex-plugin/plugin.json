@@ -1,0 +1,66 @@
+{
+  "name": "boundline",
+  "displayName": "Boundline Assistant Support for Codex",
+  "version": "0.49.0",
+  "description": "Local delivery orchestrator for bounded engineering work",
+  "author": {
+    "name": "Apply The",
+    "url": "https://github.com/apply-the"
+  },
+  "homepage": "https://github.com/apply-the/boundline",
+  "repository": "https://github.com/apply-the/boundline",
+  "license": "MIT",
+  "keywords": [
+    "boundline",
+    "delivery",
+    "bounded-engineering",
+    "session-native",
+    "plan-act-verify-trace"
+  ],
+  "capabilities": [
+    {"id": "/boundline:start", "label": "start"},
+    {"id": "/boundline:capture", "label": "capture"},
+    {"id": "/boundline:plan", "label": "plan"},
+    {"id": "/boundline:run", "label": "run"},
+    {"id": "/boundline:status", "label": "status"},
+    {"id": "/boundline:inspect", "label": "inspect"},
+    {"id": "/boundline:recover", "label": "recover"},
+    {"id": "/boundline:govern", "label": "govern", "conditional": true}
+  ],
+  "positioning": [
+    "Local delivery orchestrator for bounded engineering work",
+    "Turns bounded engineering goals into verified workspace changes",
+    "Session-native runtime for AI-assisted software delivery"
+  ],
+  "skills": "assistant/codex/commands",
+  "paths": {
+    "commands": "assistant/commands/session-workflow.json",
+    "skills": "assistant/codex/commands",
+    "starterPrompts": "assistant/prompts/starter-prompts.md",
+    "icon": "assistant/assets/boundline-plugin-icon.svg",
+    "logo": "assistant/assets/boundline-plugin-logo.svg"
+  },
+  "interface": {
+    "displayName": "Boundline",
+    "shortDescription": "Local delivery orchestrator for bounded engineering work",
+    "longDescription": "Boundline turns bounded engineering goals into verified workspace changes through a session-native loop: plan, act, verify, trace.",
+    "developerName": "Apply The",
+    "category": "Productivity",
+    "capabilities": [
+      "Bounded delivery",
+      "Session state",
+      "Trace inspection",
+      "Recovery guidance"
+    ],
+    "websiteURL": "https://github.com/apply-the/boundline",
+    "defaultPrompt": [
+      "I want to turn this idea into a bounded implementation plan.",
+      "Help me fix a failing test with Boundline.",
+      "Continue the active Boundline session.",
+      "Inspect the latest Boundline trace and tell me the next safe action."
+    ],
+    "brandColor": "#0f172a",
+    "composerIcon": "assistant/assets/boundline-plugin-icon.svg",
+    "logo": "assistant/assets/boundline-plugin-logo.svg"
+  }
+}

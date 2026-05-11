@@ -6,7 +6,7 @@ Canon is downstream from Boundline in this roadmap: Boundline thinks, decides, o
 
 Evolve Boundline into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.48.0
+## Current Status: v0.49.0
 
 Boundline now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -22,6 +22,22 @@ surface in place, with Canon-default governed setup, runtime selection, and
 assistant-surface alignment now carried through the same primary workflow. The
 operator entry path is now stack-neutral for empty, non-Rust, and mixed
 repositories, with a clearer first-run CLI UX:
+
+### Delivered in 0.49.0
+
+- Claude Code, Codex, and Cursor now have repository-local assistant plugin
+  package folders, with Copilot represented as an honest prompt-pack boundary
+  rather than an invented universal plugin format.
+- Shared plugin metadata and command definitions expose Boundline as a local
+  delivery orchestrator for bounded engineering work while keeping
+  `.boundline/session.json` and CLI output authoritative.
+- Namespaced `/boundline:*` command bindings cover start, capture, plan, run,
+  status, inspect, recover, and conditional Canon governance without making
+  Canon visible in normal delivery flow.
+- Package validation now checks manifest JSON, required fields, referenced
+  paths, command coverage, version alignment, and prohibited positioning.
+
+### Delivered in 0.48.0
 
 - shell-enabled lifecycle commands plus `run`, `status`, `next`, and `inspect`
   can now emit one stable host envelope with `command_name`, `exit_status`,
