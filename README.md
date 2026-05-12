@@ -361,6 +361,15 @@ Boundline is the local delivery orchestrator. Canon is the governed packet runti
 The current release documents Canon `0.45.0` support on the
 `canon governance start|refresh|capabilities --json` `v1` adapter surface.
 
+## Community And Support
+
+Use the GitHub templates and policies that match the kind of change or report:
+
+- bug reports, documentation issues, feature requests, and general issues: `.github/ISSUE_TEMPLATE/`
+- pull request expectations: `.github/PULL_REQUEST_TEMPLATE.md`
+- vulnerability reporting: [SECURITY.md](SECURITY.md)
+- participation expectations: `.github/CODE_OF_CONDUCT.md`
+
 ## Read More
 
 Keep this README short. Use the other docs only when you need more detail.
@@ -373,6 +382,7 @@ Keep this README short. Use the other docs only when you need more detail.
 - [docs/review-voting.md](docs/review-voting.md) for review councils on the advanced manifest-backed path
 - [assistant/README.md](assistant/README.md) for assistant command packs
 - [CONTRIBUTING.md](CONTRIBUTING.md) for contributor workflow
+- [SECURITY.md](SECURITY.md) for vulnerability reporting
 - [ROADMAP.md](ROADMAP.md) for planned releases
 - [CHANGELOG.md](CHANGELOG.md) for released changes
 

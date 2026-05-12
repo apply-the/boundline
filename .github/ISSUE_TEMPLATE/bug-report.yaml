@@ -1,0 +1,123 @@
+name: Bug Report
+description: Report a defect in Boundline's CLI, runtime, workflow surfaces, docs, release surfaces, or assistant command packs
+title: "[BUG] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a Boundline bug.
+
+        Use this form for reproducible defects in the CLI, session-native runtime behavior,
+        workflow surfaces, governed delivery flow, install flows, assistant command packs,
+        release artifacts, or published documentation.
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Summarize the failure and why it matters.
+      placeholder: e.g. `boundline workflow run governed-delivery --workspace .` stops after planning even though confirmation and validation are present.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps To Reproduce
+      description: Provide the smallest sequence that reproduces the problem.
+      placeholder: |
+        1. Run `boundline ...`
+        2. Use workspace state or config `...`
+        3. Inspect the result
+        4. Observe the failure
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should have happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened?
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected Surface
+      description: Which Boundline surface is involved?
+      options:
+        - boundline CLI
+        - session-native runtime
+        - workflow surfaces
+        - governed delivery / Canon integration
+        - docs or guides
+        - release or packaging
+        - assistant command packs
+        - CI or workflows
+        - other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Boundline Version Or Commit
+      description: Use `boundline --version` or provide the exact commit SHA if you are on source.
+      placeholder: e.g. 0.50.0 or ded4d9c
+    validations:
+      required: true
+  - type: dropdown
+    id: install_method
+    attributes:
+      label: Install Method
+      options:
+        - Homebrew
+        - winget
+        - cargo install --path .
+        - local source build or cargo run
+        - not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Operating System
+      options:
+        - macOS
+        - Windows
+        - Linux
+        - other
+    validations:
+      required: true
+  - type: input
+    id: architecture
+    attributes:
+      label: Architecture
+      placeholder: e.g. arm64, x86_64
+  - type: textarea
+    id: context
+    attributes:
+      label: Relevant Context
+      description: Include the command, workflow name, Canon companion version, assistant host, or workspace path if they matter.
+      placeholder: e.g. workflow=governed-delivery, canon=0.45.0, config=.boundline/config.toml
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Output Or Logs
+      description: Paste the smallest useful error output or command transcript.
+      render: shell
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirm
+      options:
+        - label: I searched existing issues first.
+          required: true
+        - label: I tested against the latest release line or current `main` when practical.
+        - label: I removed secrets, tokens, and private repository data from the report.
+          required: true
