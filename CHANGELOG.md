@@ -17,6 +17,23 @@ recorded workspace version.
 
 ## [Unreleased]
 
+## [0.50.0] - 2026-05-12
+
+Delivered specs:
+
+- `049` - Boundline Project-Scale Delivery UX
+
+Highlights:
+
+- Define project-scale delivery as bounded decomposition from idea intake to
+  verified code changes, including global assistant bootstrap before workspace
+  initialization.
+- Add the full Canon `0.45.0` mode set behind `/boundline:govern` and the
+  Boundline-owned governed stage catalog, while keeping Canon as the packet
+  runtime rather than the orchestrator.
+- Scope review voting to risky quality boundaries and document the Delivery
+  Pilot Model with the observe-decide-act-verify-update-context loop.
+
 ## [0.49.1] - 2026-05-11
 
 Highlights:

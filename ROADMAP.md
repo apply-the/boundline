@@ -6,7 +6,7 @@ Canon is downstream from Boundline in this roadmap: Boundline thinks, decides, o
 
 Evolve Boundline into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.49.1
+## Current Status: v0.50.0
 
 Boundline now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -22,6 +22,23 @@ surface in place, with Canon-default governed setup, runtime selection, and
 assistant-surface alignment now carried through the same primary workflow. The
 operator entry path is now stack-neutral for empty, non-Rust, and mixed
 repositories, with a clearer first-run CLI UX:
+
+### Delivered in 0.50.0
+
+- Boundline now has a project-scale delivery UX slice that treats broad
+  initiatives as bounded stages and bounded work units rather than one
+  unchecked autonomous run.
+- Global assistant bootstrap, repo-local assistant packages, and the CLI runtime
+  are now separated in the product model so `/boundline:init`, `/boundline:doctor`,
+  `/boundline:continue`, and `/boundline:status` can be available before
+  workspace initialization where hosts support it.
+- `/boundline:govern` is the primary governed stage surface for the full Canon
+  `0.45.0` mode set, with Canon capability checks and explicit unsupported-mode
+  failure instead of per-mode Boundline aliases as the primary UX.
+- Review voting is scoped to risky quality boundaries and projected through the
+  same status, next, inspect, trace, and checkpoint surfaces.
+- The Delivery Pilot Model explains that large work is supported by
+  decomposition, not by unbounded autonomy.
 
 ### Delivered in 0.49.1
 

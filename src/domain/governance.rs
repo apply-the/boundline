@@ -177,10 +177,10 @@ impl std::str::FromStr for CanonMode {
     }
 }
 
-/// The 15 canonical Canon modes, excluding legacy `PrReview`.
-pub const CANONICAL_MODES: [CanonMode; 15] = [
-    CanonMode::Requirements,
+/// The current project-scale Canon mode set supported through Boundline.
+pub const CANONICAL_MODES: [CanonMode; 16] = [
     CanonMode::Discovery,
+    CanonMode::Requirements,
     CanonMode::SystemShaping,
     CanonMode::Architecture,
     CanonMode::Backlog,
@@ -189,11 +189,201 @@ pub const CANONICAL_MODES: [CanonMode; 15] = [
     CanonMode::Refactor,
     CanonMode::Review,
     CanonMode::Verification,
+    CanonMode::PrReview,
     CanonMode::Incident,
     CanonMode::SecurityAssessment,
     CanonMode::SystemAssessment,
     CanonMode::Migration,
     CanonMode::SupplyChainAnalysis,
+];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GovernedStageCategory {
+    Planning,
+    ExecutionGuidance,
+    Review,
+    Verification,
+    Assessment,
+    Operational,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GovernedStageCatalogEntry {
+    pub mode: CanonMode,
+    pub consider_when: &'static str,
+    pub required_system_context: &'static str,
+    pub category: GovernedStageCategory,
+    pub voting_may_be_required: bool,
+    pub can_lead_to_implementation_or_refactor: bool,
+    pub recommendation_only: bool,
+}
+
+pub fn governed_stage_catalog() -> &'static [GovernedStageCatalogEntry] {
+    &GOVERNED_STAGE_CATALOG
+}
+
+pub fn validate_canon_capabilities_for_mode(
+    snapshot: &CanonCapabilitySnapshot,
+    mode: CanonMode,
+) -> Result<(), String> {
+    if !snapshot.supported_modes.contains(&mode) {
+        return Err(format!(
+            "Canon mode `{}` is unsupported by the installed capability snapshot",
+            mode.as_str()
+        ));
+    }
+    if !snapshot.operations.iter().any(|operation| operation == "capabilities") {
+        return Err("Canon capability snapshot is missing `capabilities` operation".to_string());
+    }
+    Ok(())
+}
+
+static GOVERNED_STAGE_CATALOG: [GovernedStageCatalogEntry; 16] = [
+    GovernedStageCatalogEntry {
+        mode: CanonMode::Discovery,
+        consider_when: "problem, user, or evidence is ambiguous",
+        required_system_context: "goal, available briefs, known unknowns",
+        category: GovernedStageCategory::Planning,
+        voting_may_be_required: false,
+        can_lead_to_implementation_or_refactor: true,
+        recommendation_only: true,
+    },
+    GovernedStageCatalogEntry {
+        mode: CanonMode::Requirements,
+        consider_when: "product scope or acceptance boundaries must be bounded",
+        required_system_context: "goal, stakeholders or authored brief, constraints",
+        category: GovernedStageCategory::Planning,
+        voting_may_be_required: true,
+        can_lead_to_implementation_or_refactor: true,
+        recommendation_only: true,
+    },
+    GovernedStageCatalogEntry {
+        mode: CanonMode::SystemShaping,
+        consider_when: "capability structure or domain boundaries are not fixed",
+        required_system_context: "requirements, current system evidence, domain constraints",
+        category: GovernedStageCategory::Planning,
+        voting_may_be_required: true,
+        can_lead_to_implementation_or_refactor: true,
+        recommendation_only: true,
+    },
+    GovernedStageCatalogEntry {
+        mode: CanonMode::Architecture,
+        consider_when: "boundaries, invariants, C4, ADR, or structural decisions matter",
+        required_system_context: "requirements, system-shaping evidence, current architecture",
+        category: GovernedStageCategory::Planning,
+        voting_may_be_required: true,
+        can_lead_to_implementation_or_refactor: true,
+        recommendation_only: true,
+    },
+    GovernedStageCatalogEntry {
+        mode: CanonMode::Backlog,
+        consider_when: "governed decomposition into delivery slices is needed",
+        required_system_context: "requirements or architecture packet, constraints, priorities",
+        category: GovernedStageCategory::Planning,
+        voting_may_be_required: true,
+        can_lead_to_implementation_or_refactor: true,
+        recommendation_only: true,
+    },
+    GovernedStageCatalogEntry {
+        mode: CanonMode::Change,
+        consider_when: "existing-system modification boundary must be established",
+        required_system_context: "current system evidence, target slice, validation strategy",
+        category: GovernedStageCategory::ExecutionGuidance,
+        voting_may_be_required: true,
+        can_lead_to_implementation_or_refactor: true,
+        recommendation_only: true,
+    },
+    GovernedStageCatalogEntry {
+        mode: CanonMode::Implementation,
+        consider_when: "a bounded behavior slice is ready to execute",
+        required_system_context: "confirmed plan, target files, validation command",
+        category: GovernedStageCategory::ExecutionGuidance,
+        voting_may_be_required: true,
+        can_lead_to_implementation_or_refactor: true,
+        recommendation_only: true,
+    },
+    GovernedStageCatalogEntry {
+        mode: CanonMode::Refactor,
+        consider_when: "structural cleanup is needed without new behavior",
+        required_system_context: "current behavior evidence, preservation tests, target slice",
+        category: GovernedStageCategory::ExecutionGuidance,
+        voting_may_be_required: false,
+        can_lead_to_implementation_or_refactor: true,
+        recommendation_only: true,
+    },
+    GovernedStageCatalogEntry {
+        mode: CanonMode::Review,
+        consider_when: "work product or packet needs governed review",
+        required_system_context: "evidence packet, changed files or artifacts, criteria",
+        category: GovernedStageCategory::Review,
+        voting_may_be_required: true,
+        can_lead_to_implementation_or_refactor: true,
+        recommendation_only: true,
+    },
+    GovernedStageCatalogEntry {
+        mode: CanonMode::Verification,
+        consider_when: "claims need governed validation evidence",
+        required_system_context: "validation outputs, changed files, acceptance criteria",
+        category: GovernedStageCategory::Verification,
+        voting_may_be_required: true,
+        can_lead_to_implementation_or_refactor: true,
+        recommendation_only: true,
+    },
+    GovernedStageCatalogEntry {
+        mode: CanonMode::PrReview,
+        consider_when: "a diff or worktree is ready for merge review",
+        required_system_context: "base/head refs, diff summary, validation evidence",
+        category: GovernedStageCategory::Review,
+        voting_may_be_required: true,
+        can_lead_to_implementation_or_refactor: true,
+        recommendation_only: true,
+    },
+    GovernedStageCatalogEntry {
+        mode: CanonMode::Incident,
+        consider_when: "operational issue requires containment or follow-up reasoning",
+        required_system_context: "incident brief, timeline, impact, current system state",
+        category: GovernedStageCategory::Operational,
+        voting_may_be_required: true,
+        can_lead_to_implementation_or_refactor: true,
+        recommendation_only: true,
+    },
+    GovernedStageCatalogEntry {
+        mode: CanonMode::SecurityAssessment,
+        consider_when: "security risk or control coverage must be assessed",
+        required_system_context: "threat context, assets, findings, current controls",
+        category: GovernedStageCategory::Assessment,
+        voting_may_be_required: true,
+        can_lead_to_implementation_or_refactor: true,
+        recommendation_only: true,
+    },
+    GovernedStageCatalogEntry {
+        mode: CanonMode::SystemAssessment,
+        consider_when: "current-state understanding is weak or systemic risk exists",
+        required_system_context: "system inventory, traces, architecture docs, known gaps",
+        category: GovernedStageCategory::Assessment,
+        voting_may_be_required: true,
+        can_lead_to_implementation_or_refactor: true,
+        recommendation_only: true,
+    },
+    GovernedStageCatalogEntry {
+        mode: CanonMode::Migration,
+        consider_when: "cutover, fallback, compatibility, or data movement is material",
+        required_system_context: "source/target state, rollback plan, validation strategy",
+        category: GovernedStageCategory::Operational,
+        voting_may_be_required: true,
+        can_lead_to_implementation_or_refactor: true,
+        recommendation_only: true,
+    },
+    GovernedStageCatalogEntry {
+        mode: CanonMode::SupplyChainAnalysis,
+        consider_when: "dependency, provenance, license, or package risk is material",
+        required_system_context: "dependency evidence, manifests, findings, policy",
+        category: GovernedStageCategory::Assessment,
+        voting_may_be_required: true,
+        can_lead_to_implementation_or_refactor: true,
+        recommendation_only: true,
+    },
 ];
 
 const DELIVERY_REQUIREMENTS_MODES: [CanonMode; 1] = [CanonMode::Requirements];

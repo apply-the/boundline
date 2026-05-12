@@ -49,11 +49,13 @@ pub use domain::goal_plan::{
     ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan,
 };
 pub use domain::governance::{
-    ApprovalState, AutopilotAction, AutopilotDecisionRecord, CanonMode, CanonRuntimeConfig,
-    GovernanceLifecycleState, GovernanceProfile, GovernanceProfileError, GovernanceRuntimeKind,
-    GovernedStagePacket, GovernedStageRecord, PacketReadiness, PacketReuseBinding,
-    StageGovernancePolicy, SystemContextBinding, autopilot_action_text, candidate_canon_modes,
-    classify_packet_readiness, resolved_canon_mode, supported_canon_modes_for_stage,
+    ApprovalState, AutopilotAction, AutopilotDecisionRecord, CanonCapabilitySnapshot, CanonMode,
+    CanonRuntimeConfig, GovernanceLifecycleState, GovernanceProfile, GovernanceProfileError,
+    GovernanceRuntimeKind, GovernedStageCatalogEntry, GovernedStageCategory, GovernedStagePacket,
+    GovernedStageRecord, PacketReadiness, PacketReuseBinding, StageGovernancePolicy,
+    SystemContextBinding, autopilot_action_text, candidate_canon_modes, classify_packet_readiness,
+    governed_stage_catalog, resolved_canon_mode, supported_canon_modes_for_stage,
+    validate_canon_capabilities_for_mode,
 };
 pub use domain::limits::{RunLimits, TerminalCondition};
 pub use domain::negotiation::{
@@ -66,6 +68,8 @@ pub use domain::review::{
     AdjudicationDefinition, ReviewOutcome, ReviewProfile, ReviewScenario, ReviewTrigger,
     ReviewerDefinition, ReviewerDisposition, ReviewerFinding, ReviewerParticipation,
     ReviewerParticipationStatus, VoteDecision, VoteResolution, VoteRuleDefinition, VoteStrategy,
+    VotingBoundaryDecision, VotingBoundaryInput, VotingBoundaryTrigger, VotingStageRisk,
+    voting_boundary_decision,
 };
 pub use domain::routing_decision::RoutingDecisionProjection;
 pub use domain::step::{
@@ -74,9 +78,12 @@ pub use domain::step::{
 };
 pub use domain::task::{TaskRunRequest, TaskRunResponse, TaskStatus, TerminalReason};
 pub use domain::workflow::{
-    ConditionalWorkflowPhase, WorkflowAvailabilityState, WorkflowConditionKind, WorkflowDefinition,
+    ConditionalWorkflowPhase, ProjectScaleBoundaryDecision, ProjectScaleBoundaryRequest,
+    ProjectScaleInput, ProjectScalePath, ProjectScalePathKind, ProjectScaleStage,
+    ProjectScaleStageKind, WorkflowAvailabilityState, WorkflowConditionKind, WorkflowDefinition,
     WorkflowDefinitionError, WorkflowDiscoveryEntry, WorkflowGoalSource, WorkflowLifecycleState,
     WorkflowOutputPreferences, WorkflowPhase, WorkflowProgressState, WorkflowRegistry,
+    evaluate_project_scale_boundary, propose_project_scale_path,
 };
 pub use domain::workspace_hygiene::{
     HygieneFilePlan, HygieneMergeResult, HygienePatternPack, merge_hygiene_content,

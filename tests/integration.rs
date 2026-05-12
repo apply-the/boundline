@@ -25,6 +25,33 @@ mod cli_adaptive_execution;
 #[path = "integration/cli_diagnostics.rs"]
 mod cli_diagnostics;
 
+#[path = "integration/global_assistant_bootstrap.rs"]
+mod global_assistant_bootstrap;
+
+#[path = "integration/global_assistant_continue_no_state.rs"]
+mod global_assistant_continue_no_state;
+
+#[path = "integration/project_scale_idea_to_code.rs"]
+mod project_scale_idea_to_code;
+
+#[path = "integration/project_scale_context_stop.rs"]
+mod project_scale_context_stop;
+
+#[path = "integration/boundline_govern_modes.rs"]
+mod boundline_govern_modes;
+
+#[path = "integration/boundline_govern_failures.rs"]
+mod boundline_govern_failures;
+
+#[path = "integration/voting_architecture_boundary.rs"]
+mod voting_architecture_boundary;
+
+#[path = "integration/voting_validation_exhausted.rs"]
+mod voting_validation_exhausted;
+
+#[path = "integration/voting_pr_ready_and_skip.rs"]
+mod voting_pr_ready_and_skip;
+
 #[path = "integration/distribution_doctor_flow.rs"]
 mod distribution_doctor_flow;
 

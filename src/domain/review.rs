@@ -13,6 +13,149 @@ pub enum ReviewTrigger {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum VotingBoundaryTrigger {
+    Architecture,
+    Change,
+    Implementation,
+    Verification,
+    PrReview,
+    Refactor,
+    SecurityAssessment,
+    SupplyChainAnalysis,
+    Migration,
+    Incident,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VotingStageRisk {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VotingBoundaryInput {
+    pub stage: VotingBoundaryTrigger,
+    pub risk: VotingStageRisk,
+    pub structural_impact: bool,
+    pub public_contract_change: bool,
+    pub validation_exhausted: bool,
+    pub pr_ready: bool,
+    pub material_security_finding: bool,
+    pub critical_supply_chain_finding: bool,
+    pub migration_cutover: bool,
+    pub incident_high_blast_radius: bool,
+    pub preserved_behavior_evidence: bool,
+    pub explicitly_requested: bool,
+}
+
+impl VotingBoundaryInput {
+    pub const fn low_risk(stage: VotingBoundaryTrigger) -> Self {
+        Self {
+            stage,
+            risk: VotingStageRisk::Low,
+            structural_impact: false,
+            public_contract_change: false,
+            validation_exhausted: false,
+            pr_ready: false,
+            material_security_finding: false,
+            critical_supply_chain_finding: false,
+            migration_cutover: false,
+            incident_high_blast_radius: false,
+            preserved_behavior_evidence: false,
+            explicitly_requested: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VotingBoundaryDecision {
+    pub required: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trigger: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skip_reason: Option<String>,
+    pub blocks_continuation_until_resolved: bool,
+}
+
+pub fn voting_boundary_decision(input: VotingBoundaryInput) -> VotingBoundaryDecision {
+    if input.explicitly_requested {
+        return voting_required("operator_requested");
+    }
+    if input.validation_exhausted {
+        return voting_required("validation_exhausted");
+    }
+    if input.pr_ready {
+        return voting_required("pr_ready");
+    }
+    if input.material_security_finding {
+        return voting_required("material_security_finding");
+    }
+    if input.critical_supply_chain_finding {
+        return voting_required("critical_supply_chain_finding");
+    }
+    if input.migration_cutover {
+        return voting_required("migration_cutover");
+    }
+    if input.incident_high_blast_radius {
+        return voting_required("incident_high_blast_radius");
+    }
+    if input.public_contract_change {
+        return voting_required("public_contract_change");
+    }
+    if input.stage == VotingBoundaryTrigger::Architecture
+        && (input.structural_impact
+            || matches!(input.risk, VotingStageRisk::High | VotingStageRisk::Critical))
+    {
+        return voting_required("high_impact_architecture");
+    }
+    if matches!(input.risk, VotingStageRisk::High | VotingStageRisk::Critical)
+        && matches!(
+            input.stage,
+            VotingBoundaryTrigger::Change
+                | VotingBoundaryTrigger::Implementation
+                | VotingBoundaryTrigger::Verification
+                | VotingBoundaryTrigger::PrReview
+                | VotingBoundaryTrigger::SecurityAssessment
+                | VotingBoundaryTrigger::SupplyChainAnalysis
+                | VotingBoundaryTrigger::Migration
+                | VotingBoundaryTrigger::Incident
+        )
+    {
+        return voting_required("high_risk_boundary");
+    }
+    if input.stage == VotingBoundaryTrigger::Refactor
+        && input.risk == VotingStageRisk::Low
+        && input.preserved_behavior_evidence
+    {
+        return voting_skipped("low_risk_preserved_behavior");
+    }
+
+    voting_skipped("risk_policy_not_triggered")
+}
+
+fn voting_required(trigger: &str) -> VotingBoundaryDecision {
+    VotingBoundaryDecision {
+        required: true,
+        trigger: Some(trigger.to_string()),
+        skip_reason: None,
+        blocks_continuation_until_resolved: true,
+    }
+}
+
+fn voting_skipped(reason: &str) -> VotingBoundaryDecision {
+    VotingBoundaryDecision {
+        required: false,
+        trigger: None,
+        skip_reason: Some(reason.to_string()),
+        blocks_continuation_until_resolved: false,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ReviewerDisposition {
     Approve,
     Concern,

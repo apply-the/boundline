@@ -125,6 +125,9 @@ pub fn command_name(command: &DeveloperCommand) -> &'static str {
         DeveloperCommand::Inspect { .. } => "inspect",
         DeveloperCommand::Status { .. } => "status",
         DeveloperCommand::Next { .. } => "next",
+        DeveloperCommand::Continue { .. } => "continue",
+        DeveloperCommand::Govern { .. } => "govern",
+        DeveloperCommand::Assistant { .. } => "assistant",
         DeveloperCommand::Init { .. } => "init",
         DeveloperCommand::Config { .. } => "config",
         DeveloperCommand::Cluster { .. } => "cluster",
@@ -750,6 +753,9 @@ pub fn render_run_trace(
                         lines.push(line);
                     }
                 }
+                TraceEventType::ProjectScalePathProposed
+                | TraceEventType::ProjectScaleStageTransitioned
+                | TraceEventType::VotingDecisionRecorded => {}
                 TraceEventType::GoalPlanCreated => {
                     let goal =
                         event.payload.get("goal").and_then(Value::as_str).unwrap_or("unknown");
@@ -1387,8 +1393,60 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
         ));
     }
 
+    if let Some(project_scale_path) = &view.project_scale_path {
+        lines.push(format!("project_scale_path: {project_scale_path}"));
+    }
+    if let Some(project_scale_current_stage) = &view.project_scale_current_stage {
+        lines.push(format!("project_scale_current_stage: {project_scale_current_stage}"));
+    }
+    if let Some(project_scale_next_action) = &view.project_scale_next_action {
+        lines.push(format!("project_scale_next_action: {project_scale_next_action}"));
+    }
+    if let Some(project_scale_checkpoint_refs) = &view.project_scale_checkpoint_refs
+        && !project_scale_checkpoint_refs.is_empty()
+    {
+        lines.push(format!(
+            "project_scale_checkpoint_refs: {}",
+            project_scale_checkpoint_refs.join(", ")
+        ));
+    }
+    if let Some(latest_voting_trigger) = &view.latest_voting_trigger {
+        lines.push(format!("latest_voting_trigger: {latest_voting_trigger}"));
+    }
+    if let Some(latest_voting_result) = &view.latest_voting_result {
+        lines.push(format!("latest_voting_result: {latest_voting_result}"));
+    }
+    if let Some(latest_voting_adjudication) = &view.latest_voting_adjudication {
+        lines.push(format!("latest_voting_adjudication: {latest_voting_adjudication}"));
+    }
+    if let Some(latest_voting_reviewed_evidence) = &view.latest_voting_reviewed_evidence {
+        lines.push(format!("latest_voting_reviewed_evidence: {latest_voting_reviewed_evidence}"));
+    }
+    if let Some(latest_voting_blocking) = view.latest_voting_blocking {
+        lines.push(format!("latest_voting_blocking: {latest_voting_blocking}"));
+    }
+    if let Some(latest_voting_next_action) = &view.latest_voting_next_action {
+        lines.push(format!("latest_voting_next_action: {latest_voting_next_action}"));
+    }
+
     if let Some(governance_next_action) = &view.governance_next_action {
         lines.push(format!("governance_next_action: {governance_next_action}"));
+    }
+    if let Some(governance_lifecycle_runtime) = &view.governance_lifecycle_runtime {
+        lines.push(format!("governance_lifecycle_runtime: {governance_lifecycle_runtime}"));
+    }
+    if let Some(governance_lifecycle_opt_out) = view.governance_lifecycle_opt_out {
+        lines.push(format!("governance_lifecycle_opt_out: {governance_lifecycle_opt_out}"));
+    }
+    if let Some(governance_lifecycle_mode_selection) = &view.governance_lifecycle_mode_selection {
+        lines.push(format!(
+            "governance_lifecycle_mode_selection: {governance_lifecycle_mode_selection}"
+        ));
+    }
+    if let Some(governance_lifecycle_selected_mode) = &view.governance_lifecycle_selected_mode {
+        lines.push(format!(
+            "governance_lifecycle_selected_mode: {governance_lifecycle_selected_mode}"
+        ));
     }
 
     let follow_through = FollowThroughProjection::from_session_view(view);
@@ -2804,6 +2862,16 @@ mod tests {
             governance_lifecycle_opt_out: None,
             governance_lifecycle_mode_selection: None,
             governance_lifecycle_selected_mode: None,
+            project_scale_path: None,
+            project_scale_current_stage: None,
+            project_scale_next_action: None,
+            project_scale_checkpoint_refs: None,
+            latest_voting_trigger: None,
+            latest_voting_result: None,
+            latest_voting_adjudication: None,
+            latest_voting_reviewed_evidence: None,
+            latest_voting_blocking: None,
+            latest_voting_next_action: None,
             next_command: None,
             explanation: "session is invalid".to_string(),
         };
@@ -3059,6 +3127,16 @@ mod tests {
             governance_lifecycle_opt_out: None,
             governance_lifecycle_mode_selection: None,
             governance_lifecycle_selected_mode: None,
+            project_scale_path: None,
+            project_scale_current_stage: None,
+            project_scale_next_action: None,
+            project_scale_checkpoint_refs: None,
+            latest_voting_trigger: None,
+            latest_voting_result: None,
+            latest_voting_adjudication: None,
+            latest_voting_reviewed_evidence: None,
+            latest_voting_blocking: None,
+            latest_voting_next_action: None,
             next_command: Some("boundline step".to_string()),
             explanation: "review is in progress".to_string(),
         };
@@ -3093,6 +3171,58 @@ mod tests {
             text.contains("governance_next_action: wait for approval and rerun boundline status"),
             "{text}"
         );
+    }
+
+    #[test]
+    fn render_session_status_surfaces_project_scale_voting_and_governance_lifecycle() {
+        let text = render_session_status(&SessionStatusView {
+            session_id: "session-project-scale-status".to_string(),
+            workspace_ref: "/tmp/workspace".to_string(),
+            goal: Some("Deliver bounded project-scale workflow".to_string()),
+            latest_status: SessionStatus::Running,
+            project_scale_path: Some("system_modification".to_string()),
+            project_scale_current_stage: Some("security_assessment".to_string()),
+            project_scale_next_action: Some("repair_context".to_string()),
+            project_scale_checkpoint_refs: Some(vec![
+                "checkpoint-a".to_string(),
+                "checkpoint-b".to_string(),
+            ]),
+            latest_voting_trigger: Some("governance boundary reached".to_string()),
+            latest_voting_result: Some("rejected".to_string()),
+            latest_voting_adjudication: Some("human escalation required".to_string()),
+            latest_voting_reviewed_evidence: Some("governance packet, execution trace".to_string()),
+            latest_voting_blocking: Some(true),
+            latest_voting_next_action: Some("collect missing evidence".to_string()),
+            governance_lifecycle_runtime: Some("canon".to_string()),
+            governance_lifecycle_opt_out: Some(false),
+            governance_lifecycle_mode_selection: Some("manual".to_string()),
+            governance_lifecycle_selected_mode: Some("implementation".to_string()),
+            governance_next_action: Some("refresh governance packet".to_string()),
+            explanation: "project scale and voting metadata are active".to_string(),
+            ..SessionStatusView::default()
+        });
+
+        assert!(text.contains("project_scale_path: system_modification"), "{text}");
+        assert!(text.contains("project_scale_current_stage: security_assessment"), "{text}");
+        assert!(text.contains("project_scale_next_action: repair_context"), "{text}");
+        assert!(
+            text.contains("project_scale_checkpoint_refs: checkpoint-a, checkpoint-b"),
+            "{text}"
+        );
+        assert!(text.contains("latest_voting_trigger: governance boundary reached"), "{text}");
+        assert!(text.contains("latest_voting_result: rejected"), "{text}");
+        assert!(text.contains("latest_voting_adjudication: human escalation required"), "{text}");
+        assert!(
+            text.contains("latest_voting_reviewed_evidence: governance packet, execution trace"),
+            "{text}"
+        );
+        assert!(text.contains("latest_voting_blocking: true"), "{text}");
+        assert!(text.contains("latest_voting_next_action: collect missing evidence"), "{text}");
+        assert!(text.contains("governance_next_action: refresh governance packet"), "{text}");
+        assert!(text.contains("governance_lifecycle_runtime: canon"), "{text}");
+        assert!(text.contains("governance_lifecycle_opt_out: false"), "{text}");
+        assert!(text.contains("governance_lifecycle_mode_selection: manual"), "{text}");
+        assert!(text.contains("governance_lifecycle_selected_mode: implementation"), "{text}");
     }
 
     #[test]

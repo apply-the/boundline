@@ -1,0 +1,21 @@
+{
+  "name": "boundline-global-assistant-bootstrap",
+  "display_name": "Boundline Global Assistant Bootstrap",
+  "version": "0.50.0",
+  "description": "User-scoped assistant bootstrap commands for Boundline before workspace initialization.",
+  "commands": [
+    "/boundline:init",
+    "/boundline:doctor",
+    "/boundline:help",
+    "/boundline:status",
+    "/boundline:continue"
+  ],
+  "source_of_truth": ".boundline/session.json",
+  "host_support": {
+    "claude": "copy_ready_assets",
+    "codex": "copy_ready_assets",
+    "cursor": "copy_ready_assets",
+    "copilot": "manual_fallback",
+    "gemini": "manual_fallback"
+  }
+}

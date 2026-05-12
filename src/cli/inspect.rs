@@ -721,6 +721,9 @@ pub fn summarize_trace(
                     failure_evidence.push(evidence);
                 }
             }
+            TraceEventType::ProjectScalePathProposed
+            | TraceEventType::ProjectScaleStageTransitioned
+            | TraceEventType::VotingDecisionRecorded => {}
         }
     }
 
@@ -1460,6 +1463,8 @@ mod tests {
             created_at: 10,
             updated_at: 20,
             governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
         };
         fs::write(
             workspace.join(".boundline/session.json"),

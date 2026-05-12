@@ -16,6 +16,34 @@ bounded delivery phase needs structured findings or adjudication.
 
 Large work is supported by decomposition, not by unbounded autonomy.
 
+## Project-Scale Boundary Triggers
+
+In project-scale delivery, voting is a stage-boundary quality-control mechanism.
+It is triggered by risk and evidence, not by every internal action.
+
+Recommended triggers:
+
+- high-impact architecture decisions
+- Type 1 or one-way-door decisions
+- high-risk change boundaries with systemic or broad ownership impact
+- implementation slices that modify public contracts, APIs, auth, schema,
+  integrations, data ownership, or service boundaries
+- validation failure after the retry budget is exhausted
+- PR-ready diffs
+- material security-assessment findings
+- critical or high supply-chain-analysis findings
+- migration fallback or cutover decisions
+- incident containment or follow-up decisions with material blast radius
+
+Voting is normally skipped for discovery packets, requirements packets,
+low-risk local code changes, and refactors with strong preserved-behavior
+evidence.
+
+When a voting boundary is active, `.boundline/session.json` records the latest
+voting trigger, reviewed evidence ref, result, adjudication result when present,
+blocking state, and next action. `status`, `next`, and `inspect` must preserve
+those fields instead of paraphrasing the boundary away.
+
 ## What the runtime supports
 
 - bounded review triggers: `pr_ready`, `validation_failed`, and `high_risk_change`

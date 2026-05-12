@@ -6,6 +6,262 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectScalePathKind {
+    IdeaToCode,
+    ExistingSystemChange,
+    OperationalOrRisk,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ProjectScaleStageKind {
+    Discovery,
+    Requirements,
+    SystemShaping,
+    Architecture,
+    Backlog,
+    Change,
+    Implementation,
+    Refactor,
+    Review,
+    Verification,
+    PrReview,
+    Incident,
+    SecurityAssessment,
+    SystemAssessment,
+    Migration,
+    SupplyChainAnalysis,
+}
+
+impl ProjectScaleStageKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Discovery => "discovery",
+            Self::Requirements => "requirements",
+            Self::SystemShaping => "system-shaping",
+            Self::Architecture => "architecture",
+            Self::Backlog => "backlog",
+            Self::Change => "change",
+            Self::Implementation => "implementation",
+            Self::Refactor => "refactor",
+            Self::Review => "review",
+            Self::Verification => "verification",
+            Self::PrReview => "pr-review",
+            Self::Incident => "incident",
+            Self::SecurityAssessment => "security-assessment",
+            Self::SystemAssessment => "system-assessment",
+            Self::Migration => "migration",
+            Self::SupplyChainAnalysis => "supply-chain-analysis",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectScaleInput {
+    pub goal: String,
+    #[serde(default)]
+    pub problem_unclear: bool,
+    #[serde(default)]
+    pub product_scope_unclear: bool,
+    #[serde(default)]
+    pub capability_structure_unclear: bool,
+    #[serde(default)]
+    pub architecture_material: bool,
+    #[serde(default)]
+    pub existing_system_change: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operational_entry: Option<ProjectScaleStageKind>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectScaleStage {
+    pub kind: ProjectScaleStageKind,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectScalePath {
+    pub kind: ProjectScalePathKind,
+    pub goal: String,
+    pub stages: Vec<ProjectScaleStage>,
+    pub requires_confirmation: bool,
+    pub next_action: String,
+    pub unbounded_autonomy: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectScaleBoundaryRequest {
+    pub active_stage: ProjectScaleStageKind,
+    pub requested_stage: ProjectScaleStageKind,
+    pub confirmed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectScaleBoundaryDecision {
+    pub blocked: bool,
+    pub reason: String,
+    pub next_action: String,
+}
+
+impl ProjectScalePath {
+    pub fn stage_names(&self) -> String {
+        self.stages.iter().map(|stage| stage.kind.as_str()).collect::<Vec<_>>().join(" -> ")
+    }
+}
+
+pub fn evaluate_project_scale_boundary(
+    request: ProjectScaleBoundaryRequest,
+) -> ProjectScaleBoundaryDecision {
+    if request.active_stage == request.requested_stage {
+        return ProjectScaleBoundaryDecision {
+            blocked: false,
+            reason: "requested action remains inside the active project-scale stage".to_string(),
+            next_action: "continue_project_scale_stage".to_string(),
+        };
+    }
+
+    if request.confirmed {
+        return ProjectScaleBoundaryDecision {
+            blocked: false,
+            reason: format!(
+                "confirmed transition from {} to {}",
+                request.active_stage.as_str(),
+                request.requested_stage.as_str()
+            ),
+            next_action: "continue_project_scale_stage".to_string(),
+        };
+    }
+
+    ProjectScaleBoundaryDecision {
+        blocked: true,
+        reason: format!(
+            "requested {} action exceeds current stage boundary {}; confirm before changing material delivery stage",
+            request.requested_stage.as_str(),
+            request.active_stage.as_str()
+        ),
+        next_action: "confirm_stage_transition".to_string(),
+    }
+}
+
+pub fn propose_project_scale_path(input: ProjectScaleInput) -> ProjectScalePath {
+    let mut stages = Vec::new();
+
+    let kind = if input.operational_entry.is_some() {
+        ProjectScalePathKind::OperationalOrRisk
+    } else if input.existing_system_change {
+        ProjectScalePathKind::ExistingSystemChange
+    } else {
+        ProjectScalePathKind::IdeaToCode
+    };
+
+    if let Some(entry) = input.operational_entry {
+        stages.push(ProjectScaleStage {
+            kind: entry,
+            reason: "operational or assessment entry stage requested".to_string(),
+        });
+    }
+
+    match kind {
+        ProjectScalePathKind::IdeaToCode => {
+            if input.problem_unclear {
+                push_stage(
+                    &mut stages,
+                    ProjectScaleStageKind::Discovery,
+                    "problem framing is incomplete",
+                );
+            }
+            if input.product_scope_unclear {
+                push_stage(
+                    &mut stages,
+                    ProjectScaleStageKind::Requirements,
+                    "product scope must be bounded",
+                );
+            }
+            if input.capability_structure_unclear {
+                push_stage(
+                    &mut stages,
+                    ProjectScaleStageKind::SystemShaping,
+                    "capability structure is not fixed",
+                );
+            }
+            if input.architecture_material {
+                push_stage(
+                    &mut stages,
+                    ProjectScaleStageKind::Architecture,
+                    "architecture and ownership boundaries are material",
+                );
+            }
+            push_stage(&mut stages, ProjectScaleStageKind::Backlog, "delivery slices are required");
+            push_stage(
+                &mut stages,
+                ProjectScaleStageKind::Implementation,
+                "first bounded implementation slice",
+            );
+            push_stage(&mut stages, ProjectScaleStageKind::Verification, "validate slice evidence");
+            push_stage(&mut stages, ProjectScaleStageKind::PrReview, "review merge-ready diff");
+        }
+        ProjectScalePathKind::ExistingSystemChange => {
+            push_stage(
+                &mut stages,
+                ProjectScaleStageKind::SystemAssessment,
+                "current-state coverage may be weak",
+            );
+            push_stage(
+                &mut stages,
+                ProjectScaleStageKind::Change,
+                "establish existing-system change boundary",
+            );
+            push_stage(
+                &mut stages,
+                ProjectScaleStageKind::Implementation,
+                "bounded existing-system change slice",
+            );
+            push_stage(
+                &mut stages,
+                ProjectScaleStageKind::Verification,
+                "validate change evidence",
+            );
+            push_stage(&mut stages, ProjectScaleStageKind::PrReview, "review merge-ready diff");
+        }
+        ProjectScalePathKind::OperationalOrRisk => {
+            push_stage(
+                &mut stages,
+                ProjectScaleStageKind::Change,
+                "route assessment output into a bounded delivery change",
+            );
+            push_stage(
+                &mut stages,
+                ProjectScaleStageKind::Implementation,
+                "bounded follow-up implementation slice",
+            );
+            push_stage(
+                &mut stages,
+                ProjectScaleStageKind::Verification,
+                "validate follow-up evidence",
+            );
+            push_stage(&mut stages, ProjectScaleStageKind::PrReview, "review merge-ready diff");
+        }
+    }
+
+    ProjectScalePath {
+        kind,
+        goal: input.goal,
+        stages,
+        requires_confirmation: true,
+        next_action: "confirm_project_scale_path".to_string(),
+        unbounded_autonomy: false,
+    }
+}
+
+fn push_stage(stages: &mut Vec<ProjectScaleStage>, kind: ProjectScaleStageKind, reason: &str) {
+    if stages.iter().any(|stage| stage.kind == kind) {
+        return;
+    }
+    stages.push(ProjectScaleStage { kind, reason: reason.to_string() });
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkflowGoalSource {

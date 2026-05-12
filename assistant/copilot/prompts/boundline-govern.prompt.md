@@ -1,17 +1,17 @@
 ---
-description: "Use optional Canon governance when configured"
+description: "Use optional Canon governance through Boundline"
 ---
 
 # Command: /boundline-govern
 
 Shared guidance: `assistant/README.md`
 
-Use Canon governance only when this Boundline workspace is configured for it.
+Use Canon governance through Boundline's governed stage surface.
 
-Ask the user for the workspace if it is missing, then run or ask them to run:
+Ask the user for the workspace and desired mode if either is missing, then run or ask them to run:
 
 ```bash
-cargo run --bin boundline -- config show --workspace <workspace> --scope workspace --json
+cargo run --bin boundline -- govern --workspace <workspace> --mode <mode> --json
 ```
 
-Canon governance is conditional and must not appear as the normal delivery path when governance is not configured. Preserve `.boundline/session.json`, `next_command`, and any blocked, clarification-required, failed, exhausted, or terminal state before suggesting governed actions.
+Canon produces governed packets while Boundline owns orchestration. Preserve `.boundline/session.json`, governed stage refs, packet refs, approval or missing-input state, `next_command`, and any blocked, clarification-required, failed, exhausted, or terminal state before suggesting follow-up actions.

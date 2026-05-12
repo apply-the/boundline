@@ -1,7 +1,7 @@
 {
   "name": "boundline",
   "displayName": "Boundline Assistant Support",
-  "version": "0.49.1",
+  "version": "0.50.0",
   "description": "Local delivery orchestrator for bounded engineering work",
   "author": {
     "name": "Apply The",
@@ -44,6 +44,10 @@
     {
       "id": "/boundline:status",
       "label": "status"
+    },
+    {
+      "id": "/boundline:continue",
+      "label": "continue"
     },
     {
       "id": "/boundline:inspect",

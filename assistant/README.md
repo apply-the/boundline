@@ -6,7 +6,7 @@ The primary delivery surface is session-native: `start -> capture -> plan -> run
 
 In `0.48.0`, shell-enabled assistant flows should prefer `--json` for the session-native lifecycle commands plus `run`, `status`, `next`, and `inspect`. Treat `command_name`, `exit_status`, `rendered_output`, `trace_location`, `session_status`, and `trace_summary` as the authoritative host envelope when those fields are present, and use `rendered_output` only as the human-readable companion.
 
-In `0.49.1`, assistant plugin packages expose Boundline through `.claude-plugin/`,
+In `0.50.0`, assistant plugin packages expose Boundline through `.claude-plugin/`,
 `.codex-plugin/`, `.cursor-plugin/`, and `.copilot-prompts/`. Package commands
 use `/boundline:*` names and must preserve `.boundline/session.json`,
 CLI-reported `next_command`, and explicit blocked, clarification-required,
@@ -17,8 +17,8 @@ Canon is the optional governed companion runtime.
 
 Treat the chat surface in three layers:
 
-- global bootstrap commands such as `/boundline-init` and `/boundline-doctor` for install, readiness, and repo setup
-- repo-local runtime commands such as `/boundline-start`, `/boundline-capture`, `/boundline-plan`, `/boundline-run`, `/boundline-status`, `/boundline-next`, `/boundline-inspect`, and `/boundline-recover` for the active session and trace-backed runtime state
+- global bootstrap commands such as `/boundline:init`, `/boundline:doctor`, `/boundline:help`, `/boundline:status`, and `/boundline:continue` for install, readiness, and repo setup before `.boundline/session.json` exists
+- repo-local runtime commands such as `/boundline:start`, `/boundline:capture`, `/boundline:plan`, `/boundline:run`, `/boundline:status`, `/boundline:next`, `/boundline:inspect`, and `/boundline:recover` for the active session and trace-backed runtime state
 - guided delivery-intent commands such as workflow entrypoints or governed mode shorthands when the operator wants a bounded delivery phase surfaced directly
 
 Large work is supported by decomposition, not by unbounded autonomy.
@@ -80,7 +80,17 @@ those values exactly: they explain whether the current proposal is still
 waiting for confirmation, what changed across revisions, and how Boundline expects
 to validate the bounded plan.
 
-`boundline init` still scaffolds `<workspace>/.boundline/execution.json` plus local routing config, but that manifest is now an explicit compatibility/bootstrap surface rather than the default product story. When operators pass `--assistant claude|copilot|codex|gemini`, preserve the reported `route_setup`, including seeded routes, explicit overrides, `inspect_or_edit`, and any `fallback-from=<runtime>-unavailable` wording. When operators also pass `--export-docs`, Boundline mirrors a stable Canon reference plus the selected assistant reference files under `<workspace>/docs/boundline/` by default or another root via `--to`; that export is create-only unless the operator explicitly asks for `--refresh` or `--force`, and `--diff` previews changes without writing. When init reports `assistant_setup`, `docs_export`, `workspace_hygiene`, or `next_steps`, preserve created, updated, unchanged, skipped, provenance, and follow-up wording exactly; those lines explain which bounded assistant and hygiene defaults were applied without overwriting local rules.
+`boundline assistant install --host <host> --scope user` reports global
+bootstrap assets from `assistant/global/` for `/boundline:init`,
+`/boundline:doctor`, `/boundline:help`, `/boundline:status`, and
+`/boundline:continue`. These commands must detect whether the workspace is
+initialized and must fall back to exact CLI commands when the host cannot run a
+shell. `boundline continue` must not infer state from chat history when
+`.boundline/session.json` is absent.
+The CLI runtime remains authoritative. Host chat history is not authoritative;
+chat history is not authoritative.
+
+`boundline init` still scaffolds `<workspace>/.boundline/execution.json` plus local routing config, but that manifest is now an explicit compatibility/bootstrap surface rather than the default product story. When operators pass `--assistant claude|copilot|codex|gemini`, preserve the reported `route_setup`, including seeded routes, explicit overrides, `inspect_or_edit`, `assistant_package_scope: repo-local`, and any `fallback-from=<runtime>-unavailable` wording. When operators also pass `--export-docs`, Boundline mirrors a stable Canon reference plus the selected assistant reference files under `<workspace>/docs/boundline/` by default or another root via `--to`; that export is create-only unless the operator explicitly asks for `--refresh` or `--force`, and `--diff` previews changes without writing. When init reports `assistant_setup`, `docs_export`, `workspace_hygiene`, or `next_steps`, preserve created, updated, unchanged, skipped, provenance, and follow-up wording exactly; those lines explain which bounded assistant and hygiene defaults were applied without overwriting local rules.
 
 In the same release, `boundline doctor` now groups output into `summary`, `checks`, and `actions`. Preserve those section labels and follow-up commands exactly instead of paraphrasing them away, because they are now the first-run recovery surface for install and workspace readiness.
 
@@ -197,6 +207,10 @@ Each AI assistant has its own local or remote configuration. Currently, all comm
 - **Claude**: `boundline init --assistant claude` scaffolds `.claude-plugin/` plus `./assistant/claude/commands/`; complete any host-specific registration from that repo-local package root.
 - **Codex**: `boundline init --assistant codex` scaffolds `.codex-plugin/` plus `./assistant/codex/commands/`; import or register that repo-local package in the host.
 - **Gemini CLI**: Reference the command docs from this directory and run the mapped Boundline CLI commands locally.
+
+For pre-init host chat bootstrap, use `boundline assistant install --host
+<claude|codex|cursor|copilot|gemini> --scope user`. Copilot and Gemini output
+manual fallback guidance instead of claiming a universal global plugin install.
 
 Gemini remains an explicit CLI fallback in this release. Claude, Codex, and
 Copilot command packs should follow the active route slot binding instead of

@@ -52,6 +52,8 @@ fn build_record(workspace_ref: &str) -> ActiveSessionRecord {
         created_at: 10,
         updated_at: 20,
         governance_lifecycle: None,
+        project_scale: None,
+        latest_voting: None,
     }
 }
 

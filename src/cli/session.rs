@@ -127,6 +127,8 @@ pub fn execute_start_with_target(
         created_at: now,
         updated_at: now,
         governance_lifecycle: None,
+        project_scale: None,
+        latest_voting: None,
     };
 
     FileSessionStore::for_workspace(&workspace).persist(&record)?;
@@ -457,7 +459,10 @@ pub fn execute_status_with_target(
             let Some(compatibility_follow_up) =
                 latest_workspace_compatibility_follow_up(&workspace, None)?
             else {
-                return Err(SessionCommandError::MissingActiveSession);
+                return Ok(report_with_text(
+                    CommandExitStatus::Succeeded,
+                    render_missing_active_session_bootstrap(&workspace, "status"),
+                ));
             };
 
             Ok(report_with_text(
@@ -476,6 +481,35 @@ pub fn execute_status_with_target(
 
 pub fn execute_next(workspace: Option<&Path>) -> Result<SessionCommandReport, SessionCommandError> {
     execute_next_with_target(workspace, None)
+}
+
+pub fn execute_continue_with_target(
+    workspace: Option<&Path>,
+    cluster: Option<&Path>,
+) -> Result<SessionCommandReport, SessionCommandError> {
+    let workspace = resolve_session_target(workspace, cluster, "continue")?.owner_workspace;
+    match load_active_session(&workspace) {
+        Ok(record) => {
+            let next_command =
+                suggested_next_command(&record).ok_or(SessionCommandError::NotImplemented {
+                    command_name: "continue",
+                    next_command: None,
+                })?;
+            let view = build_status_view(
+                &record,
+                Some(next_command.clone()),
+                format!(
+                    "continue uses the active session state from .boundline/session.json; next recommended command is `{next_command}`"
+                ),
+            );
+            Ok(report_with_session_status(CommandExitStatus::Succeeded, view))
+        }
+        Err(SessionCommandError::MissingActiveSession) => Ok(report_with_text(
+            CommandExitStatus::Succeeded,
+            render_missing_active_session_bootstrap(&workspace, "continue"),
+        )),
+        Err(error) => Err(error),
+    }
 }
 
 pub fn execute_next_with_target(
@@ -533,6 +567,34 @@ pub fn execute_next_with_target(
         }
         Err(error) => Err(error),
     }
+}
+
+fn render_missing_active_session_bootstrap(workspace: &Path, command_name: &str) -> String {
+    let initialized = workspace.join(".boundline").is_dir();
+    let next_command = if initialized {
+        format!("boundline start --workspace {}", workspace.display())
+    } else {
+        format!("boundline init --workspace {}", workspace.display())
+    };
+    let alternate = format!("boundline doctor --workspace {}", workspace.display());
+
+    format!(
+        concat!(
+            "session_bootstrap:\n",
+            "command: {}\n",
+            "workspace: {}\n",
+            "workspace_initialized: {}\n",
+            "source_of_truth: .boundline/session.json\n",
+            "summary: no active session available; chat history is not authoritative\n",
+            "next_command: {}\n",
+            "repair_command: {}\n"
+        ),
+        command_name,
+        workspace.display(),
+        initialized,
+        next_command,
+        alternate,
+    )
 }
 
 pub fn render_error(command_name: &str, error: &SessionCommandError) -> String {
@@ -1005,7 +1067,34 @@ pub(crate) fn build_status_view_with_follow_up(
         governance_lifecycle_selected_mode: record
             .governance_lifecycle
             .as_ref()
-            .and_then(|lc| lc.selected_mode.map(|m| format!("{m:?}").to_lowercase())),
+            .and_then(|lc| lc.selected_mode.map(|mode| mode.as_str().to_string())),
+        project_scale_path: record.project_scale.as_ref().map(|state| state.path.stage_names()),
+        project_scale_current_stage: record
+            .project_scale
+            .as_ref()
+            .and_then(crate::domain::session::ProjectScaleSessionState::active_stage_text),
+        project_scale_next_action: record
+            .project_scale
+            .as_ref()
+            .map(|state| state.next_action.clone()),
+        project_scale_checkpoint_refs: record.project_scale.as_ref().and_then(|state| {
+            (!state.checkpoint_refs.is_empty()).then_some(state.checkpoint_refs.clone())
+        }),
+        latest_voting_trigger: record.latest_voting.as_ref().map(|vote| vote.trigger.clone()),
+        latest_voting_result: record.latest_voting.as_ref().map(|vote| vote.result.clone()),
+        latest_voting_adjudication: record
+            .latest_voting
+            .as_ref()
+            .and_then(|vote| vote.adjudication_result.clone()),
+        latest_voting_reviewed_evidence: record
+            .latest_voting
+            .as_ref()
+            .and_then(|vote| vote.reviewed_evidence_ref.clone()),
+        latest_voting_blocking: record.latest_voting.as_ref().map(|vote| vote.blocking),
+        latest_voting_next_action: record
+            .latest_voting
+            .as_ref()
+            .map(|vote| vote.next_action.clone()),
         next_command,
         explanation: explanation.into(),
     }
@@ -1585,7 +1674,7 @@ fn red_to_green_addition() {
         let child = workspace.join("child");
         fs::create_dir_all(&child).unwrap();
 
-        let previous_dir = std::env::current_dir().unwrap();
+        let previous_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         std::env::set_current_dir(&workspace).unwrap();
         let resolved = resolve_workspace(Some(Path::new("child"))).unwrap();
         std::env::set_current_dir(previous_dir).unwrap();
@@ -1612,6 +1701,8 @@ fn red_to_green_addition() {
                 created_at: 1,
                 updated_at: 1,
                 governance_lifecycle: None,
+                project_scale: None,
+                latest_voting: None,
             }),
             Some("boundline start".to_string())
         );
@@ -2160,6 +2251,8 @@ fn red_to_green_addition() {
             created_at: 1,
             updated_at: 1,
             governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
         };
 
         let view = build_status_view_with_follow_up(
@@ -2232,6 +2325,8 @@ fn red_to_green_addition() {
             created_at: 1,
             updated_at: 1,
             governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
         };
 
         let view = build_status_view_with_follow_up(
@@ -2303,6 +2398,8 @@ fn red_to_green_addition() {
             created_at: 1,
             updated_at: 1,
             governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
         };
         assert_eq!(
             suggested_next_command(&base_record),
