@@ -3812,6 +3812,26 @@ mod tests {
             Some(ProjectScaleStageKind::SystemAssessment)
         );
 
+        let platform_initiative = project_scale_input_for_goal(
+            "Drive a platform initiative for the billing project rollout",
+        )
+        .expect("platform initiative should be classified as a broad goal");
+        assert!(!platform_initiative.existing_system_change);
+        assert!(platform_initiative.problem_unclear);
+        assert!(platform_initiative.product_scope_unclear);
+        assert!(platform_initiative.capability_structure_unclear);
+        assert_eq!(platform_initiative.operational_entry, None);
+
+        let long_goal = project_scale_input_for_goal(
+            "Coordinate design notes across multiple teams before locking the delivery sequence",
+        )
+        .expect("long goals should be classified even without a named keyword");
+        assert!(!long_goal.existing_system_change);
+        assert!(long_goal.problem_unclear);
+        assert!(long_goal.product_scope_unclear);
+        assert!(!long_goal.capability_structure_unclear);
+        assert_eq!(long_goal.operational_entry, None);
+
         assert_eq!(project_scale_input_for_goal("Fix typo"), None);
     }
 
@@ -4268,13 +4288,13 @@ mod tests {
             .unwrap();
 
         let error = runtime.plan_task(&mut session, None, false).unwrap_err();
-        match error {
-            super::SessionRuntimeError::ClarificationRequired { headline, prompt } => {
-                assert_eq!(headline, "bounded context required before planning");
-                assert!(!prompt.trim().is_empty());
-            }
-            other => panic!("unexpected error: {other:?}"),
-        }
+        let rendered_error = error.to_string();
+        let prompt = rendered_error
+            .strip_prefix(
+                "active session requires clarification before planning can continue: bounded context required before planning: ",
+            )
+            .expect("plan_task should return clarification-required details");
+        assert!(!prompt.trim().is_empty());
 
         assert_eq!(session.latest_status, SessionStatus::GoalCaptured);
         assert!(session.goal_plan.is_some());

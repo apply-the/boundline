@@ -1080,3 +1080,86 @@ pub enum GovernanceProfileError {
         system_context: SystemContextBinding,
     },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn canonical_modes_and_catalog_cover_project_scale_stage_set() {
+        assert_eq!("requirements".parse::<CanonMode>().unwrap(), CanonMode::Requirements);
+        assert_eq!("pr-review".parse::<CanonMode>().unwrap(), CanonMode::PrReview);
+
+        assert_eq!(CANONICAL_MODES.len(), 16);
+        assert!(CANONICAL_MODES.contains(&CanonMode::Requirements));
+        assert!(CANONICAL_MODES.contains(&CanonMode::PrReview));
+
+        let catalog = governed_stage_catalog();
+        assert_eq!(catalog.len(), 16);
+        assert!(catalog.iter().any(|entry| {
+            entry.mode == CanonMode::Review
+                && entry.category == GovernedStageCategory::Review
+                && entry.voting_may_be_required
+        }));
+        assert!(catalog.iter().any(|entry| {
+            entry.mode == CanonMode::Verification
+                && entry.category == GovernedStageCategory::Verification
+        }));
+        assert!(catalog.iter().any(|entry| {
+            entry.mode == CanonMode::Incident
+                && entry.category == GovernedStageCategory::Operational
+        }));
+        assert!(catalog.iter().any(|entry| {
+            entry.mode == CanonMode::SecurityAssessment
+                && entry.category == GovernedStageCategory::Assessment
+        }));
+        assert!(catalog.iter().any(|entry| {
+            entry.mode == CanonMode::Refactor
+                && !entry.voting_may_be_required
+                && entry.recommendation_only
+        }));
+    }
+
+    #[test]
+    fn capability_snapshot_validation_and_summary_cover_success_and_failure_paths() {
+        let snapshot = CanonCapabilitySnapshot {
+            canon_version: "0.45.0".to_string(),
+            supported_schema_versions: vec!["2026-02-01".to_string()],
+            operations: vec!["capabilities".to_string(), "start".to_string()],
+            supported_modes: vec![CanonMode::Change, CanonMode::PrReview],
+            status_values: Vec::new(),
+            approval_state_values: Vec::new(),
+            packet_readiness_values: Vec::new(),
+            compatibility_notes: Vec::new(),
+        };
+
+        assert_eq!(snapshot.summary_text(), "Canon 0.45.0 capabilities available");
+        assert_eq!(
+            CanonCapabilitySnapshot {
+                canon_version: String::new(),
+                supported_schema_versions: Vec::new(),
+                operations: Vec::new(),
+                supported_modes: Vec::new(),
+                status_values: Vec::new(),
+                approval_state_values: Vec::new(),
+                packet_readiness_values: Vec::new(),
+                compatibility_notes: Vec::new(),
+            }
+            .summary_text(),
+            "Canon capabilities available"
+        );
+
+        assert!(validate_canon_capabilities_for_mode(&snapshot, CanonMode::PrReview).is_ok());
+
+        let unsupported =
+            validate_canon_capabilities_for_mode(&snapshot, CanonMode::Migration).unwrap_err();
+        assert!(unsupported.contains("unsupported"), "{unsupported}");
+
+        let missing_operation = validate_canon_capabilities_for_mode(
+            &CanonCapabilitySnapshot { operations: vec!["start".to_string()], ..snapshot.clone() },
+            CanonMode::Change,
+        )
+        .unwrap_err();
+        assert!(missing_operation.contains("missing `capabilities` operation"));
+    }
+}

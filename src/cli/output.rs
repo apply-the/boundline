@@ -2460,10 +2460,15 @@ mod tests {
         session_execution_condition_parts, trace_execution_condition_parts,
     };
     use crate::cli::CommandExitStatus;
+    use crate::cli::assistant_assets::{AssistantHost, AssistantInstallScope};
     use crate::cli::diagnostics::{
         DiagnosticsCheck, DiagnosticsReport, DiagnosticsStatus, DiagnosticsSubject,
     };
-    use crate::cli::{CheckpointSubcommand, ClusterSubcommand, ConfigSubcommand, DeveloperCommand};
+    use crate::cli::{
+        AssistantSubcommand, CheckpointSubcommand, ClusterSubcommand, ConfigSubcommand,
+        DeveloperCommand,
+    };
+    use crate::domain::governance::CanonMode;
     use crate::domain::limits::{RunLimits, TerminalCondition};
     use crate::domain::routing_decision::RoutingDecisionProjection;
     use crate::domain::session::{ContinuityAuthority, SessionStatus, SessionStatusView};
@@ -2632,6 +2637,33 @@ mod tests {
             (DeveloperCommand::Inspect { trace: None, workspace: None, cluster: None }, "inspect"),
             (DeveloperCommand::Status { workspace: None, cluster: None }, "status"),
             (DeveloperCommand::Next { workspace: None, cluster: None }, "next"),
+            (DeveloperCommand::Continue { workspace: None, cluster: None }, "continue"),
+            (
+                DeveloperCommand::Govern {
+                    workspace: None,
+                    mode: Some(CanonMode::Review),
+                    goal: Some("Prepare review packet".to_string()),
+                    brief: Vec::new(),
+                    base: None,
+                    head: None,
+                    risk: None,
+                    structural_impact: false,
+                    public_contract_change: false,
+                    validation_exhausted: false,
+                    pr_ready: false,
+                    preserved_behavior_evidence: false,
+                },
+                "govern",
+            ),
+            (
+                DeveloperCommand::Assistant {
+                    command: AssistantSubcommand::Install {
+                        host: AssistantHost::Copilot,
+                        scope: AssistantInstallScope::User,
+                    },
+                },
+                "assistant",
+            ),
             (
                 DeveloperCommand::Init {
                     workspace: "/tmp/workspace".into(),
@@ -2702,6 +2734,38 @@ mod tests {
 
         assert!(text.contains("stage replan after unknown-step: replan scheduled"), "{text}");
         assert!(text.contains("stage unknown-stage failed: stage failed"), "{text}");
+    }
+
+    #[test]
+    fn render_run_trace_ignores_project_scale_and_voting_projection_events() {
+        let mut trace = ExecutionTrace::new("task-output", "session-output", "Render output");
+        trace.record_event(TraceEventType::ProjectScalePathProposed, None, 0, json!({}));
+        trace.record_event(TraceEventType::ProjectScaleStageTransitioned, None, 0, json!({}));
+        trace.record_event(TraceEventType::VotingDecisionRecorded, None, 0, json!({}));
+
+        let response = TaskRunResponse {
+            task_id: "task-output".to_string(),
+            terminal_status: TaskStatus::Succeeded,
+            terminal_reason: TerminalReason::new(
+                TerminalCondition::GoalSatisfied,
+                "run finished",
+                None,
+            ),
+            final_context: TaskContext::new(
+                "session-output",
+                "/tmp/workspace",
+                RunLimits::default(),
+                serde_json::Map::new(),
+            ),
+            plan_revision: 0,
+            trace_location: "/tmp/workspace/.boundline/traces/task-output.json".to_string(),
+        };
+
+        let text = render_run_trace("run", Some(&trace), &response, "/boundline-next");
+
+        assert!(text.contains("terminal_status: succeeded"), "{text}");
+        assert!(!text.contains("project_scale"), "{text}");
+        assert!(!text.contains("voting_decision"), "{text}");
     }
 
     #[test]

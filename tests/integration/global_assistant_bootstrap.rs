@@ -20,7 +20,7 @@ fn global_bootstrap_commands_are_actionable_before_workspace_init() {
 
     let init = run_boundline_in(
         &workspace,
-        &["init", "--non-interactive", "--assistant", "codex", "--force"],
+        &["init", "--non-interactive", "--assistant", "copilot", "--force"],
     );
     let init_text = terminal_text(&init);
     assert_eq!(init.status.code(), Some(0), "{init_text}");

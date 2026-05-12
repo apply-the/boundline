@@ -488,28 +488,30 @@ pub fn execute_continue_with_target(
     cluster: Option<&Path>,
 ) -> Result<SessionCommandReport, SessionCommandError> {
     let workspace = resolve_session_target(workspace, cluster, "continue")?.owner_workspace;
-    match load_active_session(&workspace) {
-        Ok(record) => {
-            let next_command =
-                suggested_next_command(&record).ok_or(SessionCommandError::NotImplemented {
-                    command_name: "continue",
-                    next_command: None,
-                })?;
-            let view = build_status_view(
-                &record,
-                Some(next_command.clone()),
-                format!(
-                    "continue uses the active session state from .boundline/session.json; next recommended command is `{next_command}`"
-                ),
-            );
-            Ok(report_with_session_status(CommandExitStatus::Succeeded, view))
+    let record = match load_active_session(&workspace) {
+        Ok(record) => record,
+        Err(SessionCommandError::MissingActiveSession) => {
+            return Ok(report_with_text(
+                CommandExitStatus::Succeeded,
+                render_missing_active_session_bootstrap(&workspace, "continue"),
+            ));
         }
-        Err(SessionCommandError::MissingActiveSession) => Ok(report_with_text(
-            CommandExitStatus::Succeeded,
-            render_missing_active_session_bootstrap(&workspace, "continue"),
-        )),
-        Err(error) => Err(error),
-    }
+        Err(error) => return Err(error),
+    };
+
+    let next_command =
+        suggested_next_command(&record).ok_or(SessionCommandError::NotImplemented {
+            command_name: "continue",
+            next_command: None,
+        })?;
+    let view = build_status_view(
+        &record,
+        Some(next_command.clone()),
+        format!(
+            "continue uses the active session state from .boundline/session.json; next recommended command is `{next_command}`"
+        ),
+    );
+    Ok(report_with_session_status(CommandExitStatus::Succeeded, view))
 }
 
 pub fn execute_next_with_target(
@@ -1448,14 +1450,15 @@ mod tests {
 
     use super::{
         CommandExitStatus, SessionCommandError, build_status_view_with_follow_up, execute_capture,
-        execute_flow, execute_next, execute_plan, execute_run, execute_start,
-        execute_start_with_target, execute_status, exit_status_for_session, exit_status_for_task,
-        latest_workspace_compatibility_follow_up, load_active_session, map_runtime_error,
-        map_store_error, render_error, requested_governance_runtime_text, resolve_workspace,
-        review_headline_from_task, suggested_next_command,
+        execute_continue_with_target, execute_flow, execute_next, execute_plan, execute_run,
+        execute_start, execute_start_with_target, execute_status, execute_status_with_target,
+        exit_status_for_session, exit_status_for_task, latest_workspace_compatibility_follow_up,
+        load_active_session, map_runtime_error, map_store_error, render_error,
+        requested_governance_runtime_text, resolve_workspace, review_headline_from_task,
+        suggested_next_command,
     };
     use crate::adapters::config_store::FileConfigStore;
-    use crate::adapters::session_store::SessionStoreError;
+    use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
     use crate::adapters::trace_store::{FileTraceStore, TraceStore, TraceStoreError};
     use crate::domain::configuration::{
         CapabilityState, ConfigFile, EffortFallbackPolicy, EffortLevel, ModelRoute, RouteSlot,
@@ -1467,12 +1470,19 @@ mod tests {
         InferredFlow, PlannedTask,
     };
     use crate::domain::governance::{
-        CompactedCanonMemory, GovernanceRuntimeKind, MemoryCredibilityState,
+        ApprovalState, CanonMode, CanonModeSelectionPreference, CompactedCanonMemory,
+        GovernanceLifecycleState, GovernanceRuntimeKind, GovernedSessionLifecycle,
+        GovernedStageRecord, MemoryCredibilityState,
     };
     use crate::domain::limits::TerminalCondition;
-    use crate::domain::session::SessionStatus;
+    use crate::domain::session::{
+        ActiveSessionRecord, ProjectScaleSessionState, SessionStatus, VotingSessionState,
+    };
     use crate::domain::task::{Task, TaskStatus, TerminalReason};
     use crate::domain::trace::ExecutionTrace;
+    use crate::domain::workflow::{
+        ProjectScalePath, ProjectScalePathKind, ProjectScaleStage, ProjectScaleStageKind,
+    };
     use crate::fixture::{build_fixture_plan_for_goal, build_task_request};
     use crate::orchestrator::session_runtime::{SessionRuntime, SessionRuntimeError};
 
@@ -2482,6 +2492,186 @@ fn red_to_green_addition() {
         assert!(
             cluster_text.contains("boundline cluster init --workspace <primary>"),
             "{cluster_text}"
+        );
+    }
+
+    #[test]
+    fn status_and_continue_bootstrap_distinguish_workspace_initialization() {
+        let uninitialized = temp_workspace("boundline-cli-session-uninitialized");
+        let status_report = execute_status_with_target(Some(&uninitialized), None).unwrap();
+        assert_eq!(status_report.exit_status, CommandExitStatus::Succeeded);
+        assert!(
+            status_report.terminal_output.contains("command: status"),
+            "{}",
+            status_report.terminal_output
+        );
+        assert!(
+            status_report.terminal_output.contains("workspace_initialized: false"),
+            "{}",
+            status_report.terminal_output
+        );
+        assert!(
+            status_report.terminal_output.contains("next_command: boundline init --workspace "),
+            "{}",
+            status_report.terminal_output
+        );
+
+        let initialized = temp_workspace("boundline-cli-session-initialized");
+        fs::create_dir_all(initialized.join(".boundline")).unwrap();
+        let continue_report = execute_continue_with_target(Some(&initialized), None).unwrap();
+        assert_eq!(continue_report.exit_status, CommandExitStatus::Succeeded);
+        assert!(
+            continue_report.terminal_output.contains("command: continue"),
+            "{}",
+            continue_report.terminal_output
+        );
+        assert!(
+            continue_report.terminal_output.contains("workspace_initialized: true"),
+            "{}",
+            continue_report.terminal_output
+        );
+        assert!(
+            continue_report.terminal_output.contains("chat history is not authoritative"),
+            "{}",
+            continue_report.terminal_output
+        );
+        assert!(
+            continue_report.terminal_output.contains("next_command: boundline start --workspace "),
+            "{}",
+            continue_report.terminal_output
+        );
+    }
+
+    #[test]
+    fn continue_projects_governance_project_scale_and_voting_state_from_session_record() {
+        let workspace = write_execution_workspace("boundline-cli-session-continue-projection");
+        let canonical_workspace = fs::canonicalize(&workspace).unwrap();
+        let goal_plan = GoalPlan::new(
+            "Prepare review packet",
+            vec![PlannedTask {
+                task_id: "planned-task-review".to_string(),
+                description: "Prepare governed review packet".to_string(),
+                target: "src/lib.rs".to_string(),
+                expected_outcome: Some("review packet is ready".to_string()),
+                decision_type_hint: None,
+            }],
+        )
+        .unwrap();
+
+        let record = ActiveSessionRecord {
+            session_id: "session-continue-projection".to_string(),
+            workspace_ref: canonical_workspace.to_string_lossy().into_owned(),
+            goal: Some("Prepare review packet".to_string()),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: Some(goal_plan),
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Planned,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 1,
+            updated_at: 2,
+            governance_lifecycle: Some(GovernedSessionLifecycle {
+                governance_runtime: GovernanceRuntimeKind::Canon,
+                explicit_opt_out: false,
+                mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+                selected_mode: Some(CanonMode::Review),
+                selected_mode_sequence: vec![CanonMode::Review],
+                current_stage_index: 0,
+                stage_records: vec![GovernedStageRecord {
+                    stage_key: "govern:review".to_string(),
+                    runtime: GovernanceRuntimeKind::Canon,
+                    lifecycle_state: GovernanceLifecycleState::AwaitingApproval,
+                    required: true,
+                    autopilot_enabled: false,
+                    approval_state: ApprovalState::Requested,
+                    canon_run_ref: Some("run-42".to_string()),
+                    governance_attempt_id: "attempt-1".to_string(),
+                    previous_governance_attempt_id: None,
+                    packet_ref: Some(".canon/runs/run-42".to_string()),
+                    decision_ref: Some(".canon/runs/run-42/decision.md".to_string()),
+                    blocked_reason: Some("waiting for review approval".to_string()),
+                }],
+                accumulated_context: Vec::new(),
+                terminal_reason: None,
+            }),
+            project_scale: Some(ProjectScaleSessionState {
+                path: ProjectScalePath {
+                    kind: ProjectScalePathKind::ExistingSystemChange,
+                    goal: "Prepare review packet".to_string(),
+                    stages: vec![
+                        ProjectScaleStage {
+                            kind: ProjectScaleStageKind::Requirements,
+                            reason: "clarify the governed packet scope".to_string(),
+                        },
+                        ProjectScaleStage {
+                            kind: ProjectScaleStageKind::Implementation,
+                            reason: "prepare the packet inputs".to_string(),
+                        },
+                        ProjectScaleStage {
+                            kind: ProjectScaleStageKind::Verification,
+                            reason: "confirm the packet can be reviewed".to_string(),
+                        },
+                    ],
+                    requires_confirmation: false,
+                    next_action: "complete implementation changes".to_string(),
+                    unbounded_autonomy: false,
+                },
+                active_stage_index: 1,
+                active_work_unit_id: Some("impl-1".to_string()),
+                checkpoint_refs: vec!["checkpoint-1".to_string()],
+                trace_refs: vec!["trace-1".to_string()],
+                next_action: "complete implementation changes".to_string(),
+            }),
+            latest_voting: Some(VotingSessionState {
+                trigger: "pr_ready".to_string(),
+                reviewed_evidence_ref: Some("govern:review".to_string()),
+                result: "approved".to_string(),
+                reviewer_findings: vec!["safety: approved".to_string()],
+                adjudication_result: Some("accepted".to_string()),
+                blocking: true,
+                next_action: "collect approval".to_string(),
+            }),
+        };
+
+        FileSessionStore::for_workspace(&workspace).persist(&record).unwrap();
+
+        let report = execute_continue_with_target(Some(&workspace), None).unwrap();
+        let view = report.session_status.unwrap();
+
+        assert_eq!(view.governance_lifecycle_runtime.as_deref(), Some("canon"));
+        assert_eq!(view.governance_lifecycle_mode_selection.as_deref(), Some("auto-confirm"));
+        assert_eq!(view.governance_lifecycle_selected_mode.as_deref(), Some("review"));
+        assert_eq!(
+            view.project_scale_path.as_deref(),
+            Some("requirements -> implementation -> verification")
+        );
+        assert_eq!(view.project_scale_current_stage.as_deref(), Some("implementation"));
+        assert_eq!(
+            view.project_scale_next_action.as_deref(),
+            Some("complete implementation changes")
+        );
+        assert_eq!(
+            view.project_scale_checkpoint_refs.as_deref(),
+            Some(["checkpoint-1".to_string()].as_slice())
+        );
+        assert_eq!(view.latest_voting_trigger.as_deref(), Some("pr_ready"));
+        assert_eq!(view.latest_voting_result.as_deref(), Some("approved"));
+        assert_eq!(view.latest_voting_adjudication.as_deref(), Some("accepted"));
+        assert_eq!(view.latest_voting_reviewed_evidence.as_deref(), Some("govern:review"));
+        assert_eq!(view.latest_voting_blocking, Some(true));
+        assert_eq!(view.latest_voting_next_action.as_deref(), Some("collect approval"));
+        assert_eq!(view.next_command.as_deref(), Some("boundline plan --confirm"));
+        assert!(
+            report
+                .terminal_output
+                .contains("continue uses the active session state from .boundline/session.json"),
+            "{}",
+            report.terminal_output
         );
     }
 }

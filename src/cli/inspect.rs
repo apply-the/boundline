@@ -1443,6 +1443,20 @@ mod tests {
     }
 
     #[test]
+    fn summarize_trace_ignores_project_scale_and_voting_projection_events() {
+        let mut trace = terminal_trace();
+        trace.record_event(TraceEventType::ProjectScalePathProposed, None, 0, json!({}));
+        trace.record_event(TraceEventType::ProjectScaleStageTransitioned, None, 0, json!({}));
+        trace.record_event(TraceEventType::VotingDecisionRecorded, None, 0, json!({}));
+
+        let summary = summarize_trace("/tmp/trace.json", &trace).unwrap();
+
+        assert_eq!(summary.trace_ref, "/tmp/trace.json");
+        assert_eq!(summary.terminal_status, TaskStatus::Failed);
+        assert_eq!(summary.goal, "Inspect trace");
+    }
+
+    #[test]
     fn resolve_session_trace_ref_maps_invalid_records_to_invalid_session_errors() {
         let workspace = temp_workspace("boundline-inspect-invalid-session");
         let invalid_record = ActiveSessionRecord {
