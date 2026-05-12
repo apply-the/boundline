@@ -1,0 +1,62 @@
+name: Documentation
+description: Report a docs issue or suggest an improvement to Boundline documentation
+title: "[DOCS] "
+labels:
+  - documentation
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Help improve Boundline documentation.
+
+        Use this form for README, guides, workflow docs, examples, install docs,
+        contributor docs, and release-facing documentation.
+  - type: dropdown
+    id: doc_type
+    attributes:
+      label: Documentation Issue Type
+      options:
+        - error or inaccuracy
+        - missing information
+        - unclear or confusing guidance
+        - outdated content
+        - request for new documentation
+        - typo or grammar
+    validations:
+      required: true
+  - type: input
+    id: location
+    attributes:
+      label: Documentation Location
+      description: Point to the file, URL, or section that needs attention.
+      placeholder: e.g. README.md, docs/getting-started.md, or a workflow guide section
+    validations:
+      required: true
+  - type: textarea
+    id: issue
+    attributes:
+      label: What Is Wrong Or Missing?
+      description: Describe the problem in the current documentation.
+      placeholder: e.g. The install section does not explain when the Canon companion pairing is considered ready.
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested Improvement
+      description: Describe the correction, clarification, or new content you want to see.
+      placeholder: e.g. Add one short example showing `boundline doctor --install` after a Homebrew install.
+  - type: input
+    id: version
+    attributes:
+      label: Boundline Version Or Release Line
+      description: Optional, but useful when the docs issue only affects a specific release.
+      placeholder: e.g. 0.50.0
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirm
+      options:
+        - label: I searched existing issues first.
+          required: true
+        - label: I checked the current README or guides before filing this issue.

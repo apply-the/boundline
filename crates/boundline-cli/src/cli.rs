@@ -8,6 +8,8 @@ pub mod cluster;
 pub mod config;
 #[path = "../../../src/cli/diagnostics.rs"]
 pub mod diagnostics;
+#[path = "../../../src/cli/govern.rs"]
+pub mod govern;
 #[path = "../../../src/cli/init.rs"]
 pub mod init;
 #[path = "../../../src/cli/inspect.rs"]

@@ -64,6 +64,15 @@ mod governance_runtime;
 #[path = "unit/canon_stage_mapping.rs"]
 mod canon_stage_mapping;
 
+#[path = "unit/governed_stage_catalog.rs"]
+mod governed_stage_catalog;
+
+#[path = "unit/project_scale_path_policy.rs"]
+mod project_scale_path_policy;
+
+#[path = "unit/voting_boundary_policy.rs"]
+mod voting_boundary_policy;
+
 #[path = "unit/coverage_additional.rs"]
 mod coverage_additional;
 

@@ -1,0 +1,12 @@
+{
+  "session_id": "stale-project-scale-session",
+  "workspace_ref": "/missing/workspace",
+  "goal": "Build customer onboarding with audit logging",
+  "active_task": null,
+  "decisions": [],
+  "latest_status": "running",
+  "latest_terminal_reason": null,
+  "latest_trace_ref": ".boundline/traces/missing.json",
+  "created_at": 1,
+  "updated_at": 2
+}

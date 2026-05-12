@@ -648,6 +648,11 @@ pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, I
     if assistant_actions.is_empty() {
         lines.push("assistant_setup: none".to_string());
     } else {
+        lines.push("assistant_package_scope: repo-local".to_string());
+        lines.push(
+            "assistant_global_bootstrap: use `boundline assistant install --host <host> --scope user` before workspace init"
+                .to_string(),
+        );
         lines.push("assistant_setup:".to_string());
         lines.extend(assistant_actions.iter().map(|action| {
             format!(
@@ -3054,7 +3059,6 @@ mod tests {
         assert!(!assistant_assets.is_empty());
         let multi_file_surface_asset = assistant_assets
             .iter()
-            .cloned()
             .find(|candidate| {
                 assistant_assets
                     .iter()
@@ -3062,6 +3066,7 @@ mod tests {
                     .nth(1)
                     .is_some()
             })
+            .cloned()
             .unwrap();
 
         let initial_plan = super::plan_assistant_setup(
@@ -3435,6 +3440,18 @@ mod tests {
         assert_eq!(report.exit_status, crate::cli::CommandExitStatus::Succeeded);
         assert!(
             report.terminal_output.contains("init: workspace initialized"),
+            "{}",
+            report.terminal_output
+        );
+        assert!(
+            report.terminal_output.contains("assistant_package_scope: repo-local"),
+            "{}",
+            report.terminal_output
+        );
+        assert!(
+            report
+                .terminal_output
+                .contains("assistant_global_bootstrap: use `boundline assistant install --host <host> --scope user` before workspace init"),
             "{}",
             report.terminal_output
         );

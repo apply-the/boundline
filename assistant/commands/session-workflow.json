@@ -1,6 +1,7 @@
 {
   "stateAuthority": ".boundline/session.json",
   "nextActionAuthority": "CLI-reported next_command",
+  "projectScaleAuthority": "CLI-reported project_scale_path, project_scale_current_stage, project_scale_next_action, checkpoint refs, trace refs",
   "nonSuccessStates": [
     "blocked",
     "clarification-required",
@@ -46,6 +47,18 @@
       "stateHandling": "Treat unconfirmed proposals, blocked, clarification-required, failed, exhausted, and terminal states as real stop conditions; prefer next_command."
     },
     {
+      "id": "/boundline:continue",
+      "label": "continue",
+      "purpose": "Continue only from the active Boundline session source of truth.",
+      "boundlineCommand": "cargo run --bin boundline -- continue --workspace <workspace> --json",
+      "skillRefs": {
+        "claude": "assistant/claude/commands/boundline-next.md",
+        "codex": "assistant/codex/commands/boundline-next.md",
+        "copilot": "assistant/copilot/prompts/boundline-next.prompt.md"
+      },
+      "stateHandling": "Do not infer state from chat history. If .boundline/session.json is missing, report CLI bootstrap guidance. Preserve project_scale_path, project_scale_current_stage, project_scale_next_action, next_command, and blocked state."
+    },
+    {
       "id": "/boundline:run",
       "label": "run",
       "purpose": "Run the next bounded action through the real Boundline runtime.",
@@ -67,7 +80,7 @@
         "codex": "assistant/codex/commands/boundline-status.md",
         "copilot": "assistant/copilot/prompts/boundline-status.prompt.md"
       },
-      "stateHandling": "Use the CLI status projection instead of chat history; preserve next_command and all blocked, clarification-required, failed, exhausted, and terminal wording."
+      "stateHandling": "Use the CLI status projection instead of chat history; preserve project_scale_path, project_scale_current_stage, project_scale_next_action, next_command, and all blocked, clarification-required, failed, exhausted, and terminal wording."
     },
     {
       "id": "/boundline:inspect",

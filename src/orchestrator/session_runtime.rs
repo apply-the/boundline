@@ -41,7 +41,7 @@ use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::session::{
     ActiveSessionRecord, ContinuityAuthority, DelegationContinuityMode, DelegationContinuityState,
     DelegationPacket, DelegationPacketKind, DelegationPacketState, DelegationStatusView,
-    SessionCommand, SessionStatus,
+    ProjectScaleSessionState, SessionCommand, SessionStatus,
 };
 use crate::domain::step::{
     ErrorInfo, ExecutionStatus, Recoverability, Step, StepAttempt, StepExecutionRequest,
@@ -50,6 +50,9 @@ use crate::domain::step::{
 use crate::domain::task::{Task, TaskRequestError, TaskRunResponse, TaskStatus, TerminalReason};
 use crate::domain::task_context::TaskContext;
 use crate::domain::trace::{ExecutionTrace, TraceEvent, TraceEventType, current_timestamp_millis};
+use crate::domain::workflow::{
+    ProjectScaleInput, ProjectScaleStageKind, propose_project_scale_path,
+};
 use crate::fixture::{
     FixtureRuntime, FixtureRuntimeError, build_fixture_plan_for_goal,
     build_fixture_runtime_for_flow, build_fixture_runtime_for_goal_plan, build_task_request,
@@ -77,6 +80,74 @@ pub struct SessionRuntime {
     checkpoint_store: FileCheckpointStore,
     session_store: FileSessionStore,
     trace_store: FileTraceStore,
+}
+
+fn project_scale_state_for_goal(goal: &str, next_action: &str) -> Option<ProjectScaleSessionState> {
+    let input = project_scale_input_for_goal(goal)?;
+    let path = propose_project_scale_path(input);
+    let active_stage = path.stages.first()?;
+    Some(ProjectScaleSessionState {
+        active_work_unit_id: Some(format!("stage-001-{}", active_stage.kind.as_str())),
+        path,
+        active_stage_index: 0,
+        checkpoint_refs: Vec::new(),
+        trace_refs: Vec::new(),
+        next_action: next_action.to_string(),
+    })
+}
+
+fn project_scale_input_for_goal(goal: &str) -> Option<ProjectScaleInput> {
+    let lower = goal.to_ascii_lowercase();
+    let operational_entry = if lower.contains("supply chain") || lower.contains("supply-chain") {
+        Some(ProjectScaleStageKind::SupplyChainAnalysis)
+    } else if lower.contains("security") {
+        Some(ProjectScaleStageKind::SecurityAssessment)
+    } else if lower.contains("incident") {
+        Some(ProjectScaleStageKind::Incident)
+    } else if lower.contains("migration") || lower.contains("migrate") {
+        Some(ProjectScaleStageKind::Migration)
+    } else if lower.contains("system assessment") || lower.contains("assess the system") {
+        Some(ProjectScaleStageKind::SystemAssessment)
+    } else {
+        None
+    };
+
+    let broad_goal = operational_entry.is_some()
+        || lower.contains("capability")
+        || lower.contains("project")
+        || lower.contains("initiative")
+        || lower.contains("platform")
+        || lower.contains("onboarding")
+        || lower.contains("architecture")
+        || lower.split_whitespace().count() >= 10;
+
+    if !broad_goal {
+        return None;
+    }
+
+    let existing_system_change = operational_entry.is_none()
+        && (lower.contains("existing")
+            || lower.contains("modify")
+            || lower.contains("change")
+            || lower.contains("refactor")
+            || lower.contains("fix"));
+
+    Some(ProjectScaleInput {
+        goal: goal.to_string(),
+        problem_unclear: !existing_system_change,
+        product_scope_unclear: !existing_system_change,
+        capability_structure_unclear: lower.contains("capability")
+            || lower.contains("platform")
+            || lower.contains("system"),
+        architecture_material: lower.contains("architecture")
+            || lower.contains("audit")
+            || lower.contains("auth")
+            || lower.contains("schema")
+            || lower.contains("integration")
+            || lower.contains("capability"),
+        existing_system_change,
+        operational_entry,
+    })
 }
 
 impl SessionRuntime {
@@ -338,6 +409,7 @@ impl SessionRuntime {
         no_flow: bool,
     ) -> Result<(), SessionRuntimeError> {
         let goal = session.goal.clone().ok_or(SessionRuntimeError::MissingGoal)?;
+        let project_scale_state = project_scale_state_for_goal(&goal, "confirm_project_scale_path");
         if !no_flow
             && requested_flow.is_none()
             && let Some(active_flow) = &session.active_flow
@@ -414,6 +486,7 @@ impl SessionRuntime {
                 session.active_flow = native_flow_state.clone();
                 session.active_task = None;
                 session.goal_plan = Some(goal_plan);
+                session.project_scale = project_scale_state_for_goal(&goal, "repair_context");
                 session.decisions.clear();
                 session.active_flow_policy = preserved_flow_policy.clone();
                 session.latest_status = SessionStatus::GoalCaptured;
@@ -457,6 +530,7 @@ impl SessionRuntime {
         session.active_flow = native_flow_state;
         session.active_task = None;
         session.goal_plan = Some(goal_plan);
+        session.project_scale = project_scale_state;
         session.decisions.clear();
         session.active_flow_policy = preserved_flow_policy;
         session.latest_status = SessionStatus::Planned;
@@ -3494,7 +3568,8 @@ mod tests {
 
     use super::{
         SessionRuntime, cluster_task_status_text, cluster_workspace_is_blocked,
-        effective_assistant_runtimes, is_governance_trace_event, session_status_for_task_status,
+        effective_assistant_runtimes, is_governance_trace_event, project_scale_input_for_goal,
+        project_scale_state_for_goal, session_status_for_task_status,
     };
     use crate::adapters::checkpoint_store::FileCheckpointStore;
     use crate::adapters::trace_store::TraceStore;
@@ -3522,6 +3597,7 @@ mod tests {
     use crate::domain::task::{Task, TaskRunRequest, TaskStatus, TerminalReason};
     use crate::domain::task_context::TaskContext;
     use crate::domain::trace::{ExecutionTrace, TraceEventType};
+    use crate::domain::workflow::ProjectScaleStageKind;
     use crate::fixture::FixtureRuntime;
     use crate::orchestrator::planner::StaticPlanner;
     use crate::registry::agent_registry::AgentRegistry;
@@ -3604,6 +3680,8 @@ mod tests {
             created_at: 10,
             updated_at: 10,
             governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
         }
     }
 
@@ -3685,6 +3763,106 @@ mod tests {
         assert!(sources.authored_input_sources.iter().any(|label| label.contains("brief.md")));
 
         fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn project_scale_helpers_classify_broad_goals_and_operational_entries() {
+        let onboarding = project_scale_input_for_goal(
+            "Build a customer onboarding capability with audit logging",
+        )
+        .expect("broad onboarding goal should be classified");
+        assert!(!onboarding.existing_system_change);
+        assert!(onboarding.problem_unclear);
+        assert!(onboarding.product_scope_unclear);
+        assert!(onboarding.capability_structure_unclear);
+        assert!(onboarding.architecture_material);
+        assert_eq!(onboarding.operational_entry, None);
+
+        let existing = project_scale_input_for_goal("Modify the existing onboarding auth flow")
+            .expect("existing system change should be classified");
+        assert!(existing.existing_system_change);
+        assert!(!existing.problem_unclear);
+        assert!(!existing.product_scope_unclear);
+
+        let supply_chain =
+            project_scale_input_for_goal("Assess supply-chain risk before migration")
+                .expect("supply-chain goal should be classified");
+        assert_eq!(
+            supply_chain.operational_entry,
+            Some(ProjectScaleStageKind::SupplyChainAnalysis)
+        );
+
+        let security = project_scale_input_for_goal("Run security review for the auth boundary")
+            .expect("security goal should be classified");
+        assert_eq!(security.operational_entry, Some(ProjectScaleStageKind::SecurityAssessment));
+
+        let incident = project_scale_input_for_goal("Handle incident follow up for auth outage")
+            .expect("incident goal should be classified");
+        assert_eq!(incident.operational_entry, Some(ProjectScaleStageKind::Incident));
+
+        let migration = project_scale_input_for_goal("Migrate onboarding state to the new schema")
+            .expect("migration goal should be classified");
+        assert_eq!(migration.operational_entry, Some(ProjectScaleStageKind::Migration));
+
+        let system_assessment =
+            project_scale_input_for_goal("Assess the system before broad refactor")
+                .expect("system assessment goal should be classified");
+        assert_eq!(
+            system_assessment.operational_entry,
+            Some(ProjectScaleStageKind::SystemAssessment)
+        );
+
+        let platform_initiative = project_scale_input_for_goal(
+            "Drive a platform initiative for the billing project rollout",
+        )
+        .expect("platform initiative should be classified as a broad goal");
+        assert!(!platform_initiative.existing_system_change);
+        assert!(platform_initiative.problem_unclear);
+        assert!(platform_initiative.product_scope_unclear);
+        assert!(platform_initiative.capability_structure_unclear);
+        assert_eq!(platform_initiative.operational_entry, None);
+
+        let long_goal = project_scale_input_for_goal(
+            "Coordinate design notes across multiple teams before locking the delivery sequence",
+        )
+        .expect("long goals should be classified even without a named keyword");
+        assert!(!long_goal.existing_system_change);
+        assert!(long_goal.problem_unclear);
+        assert!(long_goal.product_scope_unclear);
+        assert!(!long_goal.capability_structure_unclear);
+        assert_eq!(long_goal.operational_entry, None);
+
+        assert_eq!(project_scale_input_for_goal("Fix typo"), None);
+    }
+
+    #[test]
+    fn project_scale_state_uses_first_stage_and_work_unit_id() {
+        let state = project_scale_state_for_goal(
+            "Build a customer onboarding capability with audit logging",
+            "confirm_project_scale_path",
+        )
+        .expect("broad goal should produce project-scale state");
+
+        assert_eq!(state.active_stage_index, 0);
+        assert_eq!(state.active_work_unit_id.as_deref(), Some("stage-001-discovery"));
+        assert_eq!(state.next_action, "confirm_project_scale_path");
+        assert_eq!(state.active_stage_text().as_deref(), Some("discovery"));
+        assert!(state.path.stage_names().contains("pr-review"));
+        assert!(state.checkpoint_refs.is_empty());
+        assert!(state.trace_refs.is_empty());
+
+        let security = project_scale_state_for_goal(
+            "Run security review for the auth boundary",
+            "repair_context",
+        )
+        .expect("security goal should produce project-scale state");
+        assert_eq!(
+            security.path.stages.first().map(|stage| stage.kind),
+            Some(ProjectScaleStageKind::SecurityAssessment)
+        );
+        assert_eq!(security.next_action, "repair_context");
+
+        assert_eq!(project_scale_state_for_goal("Fix typo", "repair_context"), None);
     }
 
     #[test]
@@ -3906,6 +4084,8 @@ mod tests {
             created_at: 10,
             updated_at: 10,
             governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
         };
 
         let created = runtime.load_or_create_trace(&mut session, &task).unwrap();
@@ -3984,6 +4164,8 @@ mod tests {
             created_at: 10,
             updated_at: 10,
             governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
         };
 
         assert!(matches!(
@@ -4073,6 +4255,53 @@ mod tests {
             session.goal_plan.as_ref().unwrap().cluster_session_projection.as_ref().unwrap(),
             &projection
         );
+    }
+
+    #[test]
+    fn broad_goal_planning_persists_project_scale_state_when_context_is_insufficient() {
+        let workspace = temp_workspace("boundline-runtime-project-scale-clarify");
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let mut session = ActiveSessionRecord {
+            session_id: "session-runtime".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: None,
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Initialized,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 10,
+            updated_at: 10,
+            governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
+        };
+
+        runtime
+            .capture_goal(&mut session, "Build a customer onboarding capability with audit logging")
+            .unwrap();
+
+        let error = runtime.plan_task(&mut session, None, false).unwrap_err();
+        let rendered_error = error.to_string();
+        let prompt = rendered_error
+            .strip_prefix(
+                "active session requires clarification before planning can continue: bounded context required before planning: ",
+            )
+            .expect("plan_task should return clarification-required details");
+        assert!(!prompt.trim().is_empty());
+
+        assert_eq!(session.latest_status, SessionStatus::GoalCaptured);
+        assert!(session.goal_plan.is_some());
+        let project_scale = session.project_scale.expect("project scale state should be persisted");
+        assert_eq!(project_scale.next_action, "repair_context");
+        assert_eq!(project_scale.active_stage_text().as_deref(), Some("discovery"));
+        assert!(project_scale.path.stage_names().contains("pr-review"));
     }
 
     #[test]
@@ -4215,6 +4444,8 @@ mod tests {
             created_at: 10,
             updated_at: 10,
             governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
         };
 
         runtime.execute_next_step(&mut session).unwrap();
@@ -4273,6 +4504,8 @@ mod tests {
             created_at: 10,
             updated_at: 10,
             governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
         };
 
         let response = runtime.run_to_terminal(&mut session).unwrap();
@@ -4342,6 +4575,8 @@ mod tests {
             created_at: 10,
             updated_at: 10,
             governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
         };
 
         runtime.capture_goal(&mut session, "Drive governed bug fix").unwrap();
@@ -4484,6 +4719,8 @@ mod tests {
             created_at: 10,
             updated_at: 10,
             governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
         };
         let trace = ExecutionTrace::new("task-cluster", "session-runtime", "cluster goal");
         let response = runtime
@@ -4650,6 +4887,8 @@ mod tests {
             created_at: 10,
             updated_at: 10,
             governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
         };
         session
             .active_task
@@ -4764,6 +5003,8 @@ mod tests {
             created_at: 10,
             updated_at: 10,
             governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
         };
 
         runtime.capture_goal(&mut session, "Drive governed bug fix").unwrap();
@@ -4824,6 +5065,8 @@ mod tests {
             created_at: 10,
             updated_at: 10,
             governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
         };
         let policy = StageGovernancePolicy {
             flow_name: "bug-fix".to_string(),
@@ -4941,6 +5184,8 @@ mod tests {
             created_at: 10,
             updated_at: 10,
             governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
         };
         runtime_missing_mode
             .capture_goal(&mut missing_mode_session, "Drive governed bug fix")

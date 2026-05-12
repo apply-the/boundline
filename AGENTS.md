@@ -76,6 +76,8 @@ Auto-generated from all feature plans. Last updated: 2026-05-11
 - Repository-managed bundled catalog at `assistant/catalog/model-catalog.toml`, workspace-local `.boundline/config.toml` for effective routing inputs, workspace-local `.boundline/execution.json`, task/session state in `.boundline/session.json`, and persisted traces under `.boundline/traces/` (047-catalog-voting-inputs)
 - Rust 1.95.0 workspace, edition 2024, plus JSON, Markdown, Bash, and SVG repository assets + Existing workspace dependencies only (`serde_json` and `toml` already available for validation); no new external crates planned (048-assistant-plugin-packages)
 - Repository files only: hidden host package folders, shared assistant metadata under `assistant/`, docs under `docs/`, validation script under `scripts/`, and Spec Kit artifacts under `specs/048-assistant-plugin-packages/` (048-assistant-plugin-packages)
+- Rust 1.95.0 workspace, edition 2024, plus JSON, Markdown, TOML, Bash, and assistant command assets + Existing workspace dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`); external Canon CLI compatibility target `0.45.0`; no new runtime crates planned for the first implementation slice (049-project-scale-delivery-ux)
+- Workspace-local `.boundline/session.json`, `.boundline/traces/`, optional `.boundline/checkpoints/`, optional `.canon/` governed packet artifacts, repo-managed assistant package files, docs, and Spec Kit artifacts (049-project-scale-delivery-ux)
 
 - Rust 1.95.0, edition 2024 + Rust standard library plus `serde`, `serde_json`, `thiserror`, `tracing`, and `uuid` for structured state, trace serialization, error handling, instrumentation, and stable identifiers (001-delivery-orchestrator-core)
 
@@ -104,9 +106,9 @@ Crate versioning follows Semantic Versioning.
 Before 1.0.0, breaking changes MAY occur in minor versions.
 
 ## Recent Changes
+- 049-project-scale-delivery-ux: Added Rust 1.95.0 workspace, edition 2024, plus JSON, Markdown, TOML, Bash, and assistant command assets + Existing workspace dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`); external Canon CLI compatibility target `0.45.0`; no new runtime crates planned for the first implementation slice
 - 048-assistant-plugin-packages: Added Rust 1.95.0 workspace, edition 2024, plus JSON, Markdown, Bash, and SVG repository assets + Existing workspace dependencies only (`serde_json` and `toml` already available for validation); no new external crates planned
 - 047-catalog-voting-inputs: Added Rust 1.95.0, edition 2024 + Existing workspace runtime stack (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`) with Rust standard library filesystem, path, and collections APIs; no new runtime dependencies required for this slice
-- 046-guided-init-tui: Added Rust 1.95.0, edition 2024 + Existing CLI/runtime stack (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`) plus a terminal interaction crate for guided prompts and `indicatif` for spinner/progress feedback in the CLI crate
 
 
 <!-- MANUAL ADDITIONS START -->

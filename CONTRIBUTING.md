@@ -89,6 +89,19 @@ After `./scripts/install-hooks.sh`, `pre-commit` runs `cargo fmt --all --
 `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`.
 That matches the blocking GitHub lint, test, and coverage workflows.
 
+## Reporting Issues
+
+Use the GitHub issue templates in `.github/ISSUE_TEMPLATE/` so reports land
+with the right structure:
+
+- `bug-report.yaml` for reproducible defects in the CLI, session-native runtime, workflow surfaces, governed delivery flow, release surfaces, or assistant command packs
+- `documentation.yaml` for README, guides, command-pack docs, examples, and contributor-doc issues
+- `feature-request.md` for bounded product proposals
+- `issue.md` only when the other templates do not fit
+
+If the report is a vulnerability, do not open a public exploit report. Follow
+`SECURITY.md` instead.
+
 ### Test Layout Notes
 
 - Cargo discovers this repository's nested tests through the top-level harness files [tests/unit.rs](tests/unit.rs), [tests/integration.rs](tests/integration.rs), and [tests/contract.rs](tests/contract.rs).
@@ -158,6 +171,15 @@ PRs should make it easy to review the behavioral delta. Include:
 - any known follow-up work that was intentionally left out
 
 For CLI or trace-surface changes, include representative output snippets when that improves review clarity.
+
+GitHub pre-fills `.github/PULL_REQUEST_TEMPLATE.md` for new pull requests.
+Keep it accurate and include the exact validation you ran for the touched
+surfaces.
+
+## Code of Conduct
+
+Participation in Boundline project spaces is governed by
+`.github/CODE_OF_CONDUCT.md`.
 
 ## Versioning
 

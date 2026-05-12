@@ -402,6 +402,7 @@ mod tests {
                 "refactor",
                 "review",
                 "verification",
+                "pr-review",
                 "incident",
                 "security-assessment",
                 "system-assessment",

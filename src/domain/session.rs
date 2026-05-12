@@ -22,7 +22,42 @@ use crate::domain::task_context::{
     LATEST_GOVERNANCE_PACKET_REUSE_KEY, LATEST_GOVERNANCE_STAGE_KEY,
 };
 use crate::domain::trace::current_timestamp_millis;
-use crate::domain::workflow::WorkflowProgressState;
+use crate::domain::workflow::{ProjectScalePath, WorkflowProgressState};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectScaleSessionState {
+    pub path: ProjectScalePath,
+    #[serde(default)]
+    pub active_stage_index: usize,
+    #[serde(default)]
+    pub active_work_unit_id: Option<String>,
+    #[serde(default)]
+    pub checkpoint_refs: Vec<String>,
+    #[serde(default)]
+    pub trace_refs: Vec<String>,
+    pub next_action: String,
+}
+
+impl ProjectScaleSessionState {
+    pub fn active_stage_text(&self) -> Option<String> {
+        self.path.stages.get(self.active_stage_index).map(|stage| stage.kind.as_str().to_string())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VotingSessionState {
+    pub trigger: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reviewed_evidence_ref: Option<String>,
+    pub result: String,
+    #[serde(default)]
+    pub reviewer_findings: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub adjudication_result: Option<String>,
+    #[serde(default)]
+    pub blocking: bool,
+    pub next_action: String,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -85,6 +120,10 @@ pub struct ActiveSessionRecord {
     pub updated_at: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub governance_lifecycle: Option<GovernedSessionLifecycle>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_scale: Option<ProjectScaleSessionState>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_voting: Option<VotingSessionState>,
 }
 
 impl ActiveSessionRecord {
@@ -830,6 +869,26 @@ pub struct SessionStatusView {
     pub governance_lifecycle_mode_selection: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub governance_lifecycle_selected_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_scale_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_scale_current_stage: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_scale_next_action: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_scale_checkpoint_refs: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_voting_trigger: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_voting_result: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_voting_adjudication: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_voting_reviewed_evidence: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_voting_blocking: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_voting_next_action: Option<String>,
     pub next_command: Option<String>,
     pub explanation: String,
 }
@@ -915,6 +974,16 @@ impl Default for SessionStatusView {
             governance_lifecycle_opt_out: None,
             governance_lifecycle_mode_selection: None,
             governance_lifecycle_selected_mode: None,
+            project_scale_path: None,
+            project_scale_current_stage: None,
+            project_scale_next_action: None,
+            project_scale_checkpoint_refs: None,
+            latest_voting_trigger: None,
+            latest_voting_result: None,
+            latest_voting_adjudication: None,
+            latest_voting_reviewed_evidence: None,
+            latest_voting_blocking: None,
+            latest_voting_next_action: None,
             next_command: None,
             explanation: String::new(),
         }
@@ -1409,6 +1478,85 @@ impl SessionStatusView {
             });
         }
 
+        let expected_project_scale_path =
+            record.project_scale.as_ref().map(|state| state.path.stage_names());
+        if self.project_scale_path != expected_project_scale_path {
+            return Err(SessionValidationError::StatusViewProjectScalePathMismatch {
+                expected: expected_project_scale_path,
+                actual: self.project_scale_path.clone(),
+            });
+        }
+
+        let expected_project_scale_stage =
+            record.project_scale.as_ref().and_then(ProjectScaleSessionState::active_stage_text);
+        if self.project_scale_current_stage != expected_project_scale_stage {
+            return Err(SessionValidationError::StatusViewProjectScaleStageMismatch {
+                expected: expected_project_scale_stage,
+                actual: self.project_scale_current_stage.clone(),
+            });
+        }
+
+        let expected_project_scale_next =
+            record.project_scale.as_ref().map(|state| state.next_action.clone());
+        if self.project_scale_next_action != expected_project_scale_next {
+            return Err(SessionValidationError::StatusViewProjectScaleNextActionMismatch {
+                expected: expected_project_scale_next,
+                actual: self.project_scale_next_action.clone(),
+            });
+        }
+
+        let expected_project_scale_checkpoints = record.project_scale.as_ref().and_then(|state| {
+            (!state.checkpoint_refs.is_empty()).then_some(state.checkpoint_refs.clone())
+        });
+        if self.project_scale_checkpoint_refs != expected_project_scale_checkpoints {
+            return Err(SessionValidationError::StatusViewProjectScaleCheckpointRefsMismatch {
+                expected: expected_project_scale_checkpoints,
+                actual: self.project_scale_checkpoint_refs.clone(),
+            });
+        }
+
+        let expected_vote = record.latest_voting.as_ref();
+        if self.latest_voting_trigger != expected_vote.map(|vote| vote.trigger.clone()) {
+            return Err(SessionValidationError::StatusViewVotingTriggerMismatch {
+                expected: expected_vote.map(|vote| vote.trigger.clone()),
+                actual: self.latest_voting_trigger.clone(),
+            });
+        }
+        if self.latest_voting_result != expected_vote.map(|vote| vote.result.clone()) {
+            return Err(SessionValidationError::StatusViewVotingResultMismatch {
+                expected: expected_vote.map(|vote| vote.result.clone()),
+                actual: self.latest_voting_result.clone(),
+            });
+        }
+        if self.latest_voting_adjudication
+            != expected_vote.and_then(|vote| vote.adjudication_result.clone())
+        {
+            return Err(SessionValidationError::StatusViewVotingAdjudicationMismatch {
+                expected: expected_vote.and_then(|vote| vote.adjudication_result.clone()),
+                actual: self.latest_voting_adjudication.clone(),
+            });
+        }
+        if self.latest_voting_reviewed_evidence
+            != expected_vote.and_then(|vote| vote.reviewed_evidence_ref.clone())
+        {
+            return Err(SessionValidationError::StatusViewVotingEvidenceMismatch {
+                expected: expected_vote.and_then(|vote| vote.reviewed_evidence_ref.clone()),
+                actual: self.latest_voting_reviewed_evidence.clone(),
+            });
+        }
+        if self.latest_voting_blocking != expected_vote.map(|vote| vote.blocking) {
+            return Err(SessionValidationError::StatusViewVotingBlockingMismatch {
+                expected: expected_vote.map(|vote| vote.blocking),
+                actual: self.latest_voting_blocking,
+            });
+        }
+        if self.latest_voting_next_action != expected_vote.map(|vote| vote.next_action.clone()) {
+            return Err(SessionValidationError::StatusViewVotingNextActionMismatch {
+                expected: expected_vote.map(|vote| vote.next_action.clone()),
+                actual: self.latest_voting_next_action.clone(),
+            });
+        }
+
         if self.explanation.trim().is_empty() {
             return Err(SessionValidationError::MissingStatusExplanation);
         }
@@ -1753,6 +1901,33 @@ pub enum SessionValidationError {
     },
     #[error("status view governance next action mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewGovernanceNextActionMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view project-scale path mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewProjectScalePathMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view project-scale stage mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewProjectScaleStageMismatch { expected: Option<String>, actual: Option<String> },
+    #[error(
+        "status view project-scale next action mismatch: expected {expected:?}, got {actual:?}"
+    )]
+    StatusViewProjectScaleNextActionMismatch { expected: Option<String>, actual: Option<String> },
+    #[error(
+        "status view project-scale checkpoint refs mismatch: expected {expected:?}, got {actual:?}"
+    )]
+    StatusViewProjectScaleCheckpointRefsMismatch {
+        expected: Option<Vec<String>>,
+        actual: Option<Vec<String>>,
+    },
+    #[error("status view voting trigger mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewVotingTriggerMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view voting result mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewVotingResultMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view voting adjudication mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewVotingAdjudicationMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view voting evidence mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewVotingEvidenceMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view voting blocking mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewVotingBlockingMismatch { expected: Option<bool>, actual: Option<bool> },
+    #[error("status view voting next action mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewVotingNextActionMismatch { expected: Option<String>, actual: Option<String> },
     #[error("status view explanation must not be empty")]
     MissingStatusExplanation,
     #[error("status view governance_next_action must not be empty when present")]
@@ -2110,11 +2285,12 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        ActiveSessionRecord, CompatibilityFollowUpMode, DelegationStatusView, RoutingMode,
-        RoutingSource, SessionStatus, SessionStatusView, SessionValidationError,
-        delegation_next_command, execution_path_text, routing_outcome,
-        task_state_attempt_lineage_summary, task_state_review_headline, task_state_string,
-        task_state_strings, task_state_workspace_slice_summary, trace_within_workspace,
+        ActiveSessionRecord, CompatibilityFollowUpMode, DelegationStatusView,
+        ProjectScaleSessionState, RoutingMode, RoutingSource, SessionStatus, SessionStatusView,
+        SessionValidationError, VotingSessionState, delegation_next_command, execution_path_text,
+        routing_outcome, task_state_attempt_lineage_summary, task_state_review_headline,
+        task_state_string, task_state_strings, task_state_workspace_slice_summary,
+        trace_within_workspace,
     };
     use crate::domain::goal_plan::{
         ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan,
@@ -2130,7 +2306,10 @@ mod tests {
     };
     use crate::domain::step::Step;
     use crate::domain::task::{Task, TaskPersistenceError, TaskRunRequest};
-    use crate::domain::workflow::{WorkflowLifecycleState, WorkflowPhase, WorkflowProgressState};
+    use crate::domain::workflow::{
+        ProjectScalePath, ProjectScalePathKind, ProjectScaleStage, ProjectScaleStageKind,
+        WorkflowLifecycleState, WorkflowPhase, WorkflowProgressState,
+    };
 
     fn build_task(workspace_ref: &str) -> Task {
         let request = TaskRunRequest {
@@ -2166,6 +2345,8 @@ mod tests {
             created_at: 10,
             updated_at: 20,
             governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
         }
     }
 
@@ -2289,6 +2470,16 @@ mod tests {
             governance_lifecycle_opt_out: None,
             governance_lifecycle_mode_selection: None,
             governance_lifecycle_selected_mode: None,
+            project_scale_path: None,
+            project_scale_current_stage: None,
+            project_scale_next_action: None,
+            project_scale_checkpoint_refs: None,
+            latest_voting_trigger: None,
+            latest_voting_result: None,
+            latest_voting_adjudication: None,
+            latest_voting_reviewed_evidence: None,
+            latest_voting_blocking: None,
+            latest_voting_next_action: None,
             next_command: Some("boundline step".to_string()),
             explanation: "view is consistent".to_string(),
         }
@@ -2912,6 +3103,165 @@ mod tests {
             wrong_context_staleness,
             SessionValidationError::StatusViewContextStalenessReasonMismatch { .. }
         );
+    }
+
+    #[test]
+    fn status_view_rejects_project_scale_and_voting_projection_mismatches() {
+        let workspace = "/tmp/boundline-session-domain-project-scale";
+        let mut record = build_record(workspace);
+        record.project_scale = Some(ProjectScaleSessionState {
+            path: ProjectScalePath {
+                kind: ProjectScalePathKind::IdeaToCode,
+                goal: record.goal.clone().unwrap(),
+                stages: vec![
+                    ProjectScaleStage {
+                        kind: ProjectScaleStageKind::Discovery,
+                        reason: "problem framing is incomplete".to_string(),
+                    },
+                    ProjectScaleStage {
+                        kind: ProjectScaleStageKind::Requirements,
+                        reason: "product scope must be bounded".to_string(),
+                    },
+                ],
+                requires_confirmation: true,
+                next_action: "confirm_project_scale_path".to_string(),
+                unbounded_autonomy: false,
+            },
+            active_stage_index: 0,
+            active_work_unit_id: Some("stage-001-discovery".to_string()),
+            checkpoint_refs: vec!["checkpoint-1".to_string()],
+            trace_refs: Vec::new(),
+            next_action: "repair_context".to_string(),
+        });
+        record.latest_voting = Some(VotingSessionState {
+            trigger: "high_impact_architecture".to_string(),
+            reviewed_evidence_ref: Some("govern:architecture".to_string()),
+            result: "pending".to_string(),
+            reviewer_findings: vec!["needs ADR".to_string()],
+            adjudication_result: Some("escalate".to_string()),
+            blocking: true,
+            next_action: "resolve_voting_boundary".to_string(),
+        });
+
+        let mut view = build_view(&record);
+        let project_scale = record.project_scale.as_ref().unwrap();
+        let vote = record.latest_voting.as_ref().unwrap();
+        view.project_scale_path = Some(project_scale.path.stage_names());
+        view.project_scale_current_stage = project_scale.active_stage_text();
+        view.project_scale_next_action = Some(project_scale.next_action.clone());
+        view.project_scale_checkpoint_refs = Some(project_scale.checkpoint_refs.clone());
+        view.latest_voting_trigger = Some(vote.trigger.clone());
+        view.latest_voting_result = Some(vote.result.clone());
+        view.latest_voting_adjudication = vote.adjudication_result.clone();
+        view.latest_voting_reviewed_evidence = vote.reviewed_evidence_ref.clone();
+        view.latest_voting_blocking = Some(vote.blocking);
+        view.latest_voting_next_action = Some(vote.next_action.clone());
+        view.validate(&record).unwrap();
+
+        macro_rules! assert_view_error {
+            ($candidate:expr, $pattern:pat) => {{
+                let error = $candidate.validate(&record).unwrap_err();
+                assert!(matches!(error, $pattern), "unexpected error: {error:?}");
+            }};
+        }
+
+        let mut wrong_project_scale_path = view.clone();
+        wrong_project_scale_path.project_scale_path =
+            Some("discovery -> implementation".to_string());
+        assert_view_error!(
+            wrong_project_scale_path,
+            SessionValidationError::StatusViewProjectScalePathMismatch { .. }
+        );
+
+        let mut wrong_project_scale_stage = view.clone();
+        wrong_project_scale_stage.project_scale_current_stage = Some("requirements".to_string());
+        assert_view_error!(
+            wrong_project_scale_stage,
+            SessionValidationError::StatusViewProjectScaleStageMismatch { .. }
+        );
+
+        let mut wrong_project_scale_next = view.clone();
+        wrong_project_scale_next.project_scale_next_action =
+            Some("confirm_project_scale_path".to_string());
+        assert_view_error!(
+            wrong_project_scale_next,
+            SessionValidationError::StatusViewProjectScaleNextActionMismatch { .. }
+        );
+
+        let mut wrong_project_scale_checkpoints = view.clone();
+        wrong_project_scale_checkpoints.project_scale_checkpoint_refs =
+            Some(vec!["checkpoint-2".to_string()]);
+        assert_view_error!(
+            wrong_project_scale_checkpoints,
+            SessionValidationError::StatusViewProjectScaleCheckpointRefsMismatch { .. }
+        );
+
+        let mut wrong_vote_trigger = view.clone();
+        wrong_vote_trigger.latest_voting_trigger = Some("pr_ready".to_string());
+        assert_view_error!(
+            wrong_vote_trigger,
+            SessionValidationError::StatusViewVotingTriggerMismatch { .. }
+        );
+
+        let mut wrong_vote_result = view.clone();
+        wrong_vote_result.latest_voting_result = Some("approved".to_string());
+        assert_view_error!(
+            wrong_vote_result,
+            SessionValidationError::StatusViewVotingResultMismatch { .. }
+        );
+
+        let mut wrong_vote_adjudication = view.clone();
+        wrong_vote_adjudication.latest_voting_adjudication = Some("override".to_string());
+        assert_view_error!(
+            wrong_vote_adjudication,
+            SessionValidationError::StatusViewVotingAdjudicationMismatch { .. }
+        );
+
+        let mut wrong_vote_evidence = view.clone();
+        wrong_vote_evidence.latest_voting_reviewed_evidence = Some("govern:pr-review".to_string());
+        assert_view_error!(
+            wrong_vote_evidence,
+            SessionValidationError::StatusViewVotingEvidenceMismatch { .. }
+        );
+
+        let mut wrong_vote_blocking = view.clone();
+        wrong_vote_blocking.latest_voting_blocking = Some(false);
+        assert_view_error!(
+            wrong_vote_blocking,
+            SessionValidationError::StatusViewVotingBlockingMismatch { .. }
+        );
+
+        let mut wrong_vote_next_action = view;
+        wrong_vote_next_action.latest_voting_next_action =
+            Some("continue_architecture_stage".to_string());
+        assert_view_error!(
+            wrong_vote_next_action,
+            SessionValidationError::StatusViewVotingNextActionMismatch { .. }
+        );
+    }
+
+    #[test]
+    fn project_scale_active_stage_text_returns_none_when_index_is_out_of_bounds() {
+        let state = ProjectScaleSessionState {
+            path: ProjectScalePath {
+                kind: ProjectScalePathKind::IdeaToCode,
+                goal: "Build onboarding".to_string(),
+                stages: vec![ProjectScaleStage {
+                    kind: ProjectScaleStageKind::Discovery,
+                    reason: "problem framing is incomplete".to_string(),
+                }],
+                requires_confirmation: true,
+                next_action: "confirm_project_scale_path".to_string(),
+                unbounded_autonomy: false,
+            },
+            active_stage_index: 99,
+            active_work_unit_id: None,
+            checkpoint_refs: Vec::new(),
+            trace_refs: Vec::new(),
+            next_action: "repair_context".to_string(),
+        };
+
+        assert_eq!(state.active_stage_text(), None);
     }
 
     #[test]

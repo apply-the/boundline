@@ -67,7 +67,21 @@ The primary product route stays explicit: `session-native: start a session -> ca
 
 ## Use Boundline from chat
 
-Boundline supports repository-local chat package surfaces for supported hosts.
+Boundline supports global bootstrap commands and repository-local chat package
+surfaces for supported hosts.
+
+Install or reference the global bootstrap package when the host can expose
+commands before workspace init:
+
+```bash
+boundline assistant install --host codex --scope user
+```
+
+The global bootstrap commands are `/boundline:init`, `/boundline:doctor`,
+`/boundline:help`, `/boundline:status`, and `/boundline:continue`. Copilot and
+Gemini are documented fallback paths rather than claimed universal global
+command installs.
+
 In this repository, those package folders are:
 
 - Claude Code: `.claude-plugin/`
@@ -105,8 +119,8 @@ Boundline's real CLI/runtime instead of making chat history authoritative.
 
 Think of the chat surface in three layers:
 
-- global bootstrap commands for install, readiness, and scaffolding such as `/boundline-init` and `/boundline-doctor`
-- repo-local runtime commands for session state and trace-backed execution such as `/boundline-start`, `/boundline-capture`, `/boundline-plan`, `/boundline-run`, `/boundline-status`, `/boundline-next`, `/boundline-inspect`, and `/boundline-recover`
+- global bootstrap commands for install, readiness, and scaffolding such as `/boundline:init` and `/boundline:doctor`
+- repo-local runtime commands for session state and trace-backed execution such as `/boundline:start`, `/boundline:capture`, `/boundline:plan`, `/boundline:run`, `/boundline:status`, `/boundline:next`, `/boundline:inspect`, and `/boundline:recover`
 - guided delivery-intent commands for workflows, governed modes, or named delivery phases when the operator wants a bounded intent surface instead of raw runtime subcommands
 
 Exact host-specific install locations, validation steps, and package
@@ -142,6 +156,7 @@ boundline inspect
 must read the state through Boundline CLI output and preserve `next_command`,
 `corrected_command`, trace refs, checkpoint restore commands, and non-success
 states such as blocked, clarification-required, failed, exhausted, and terminal.
+Host chat history is not authoritative.
 Canon governance is conditional and should be surfaced only when the workspace
 configuration or user request requires it.
 
@@ -187,6 +202,7 @@ printed restore command before making unrelated edits.
 ## Read This In Two Layers
 
 - Quick start: this README plus [docs/getting-started.md](docs/getting-started.md)
+- Delivery model: [docs/delivery-model.md](docs/delivery-model.md)
 - Advanced architecture: [docs/architecture.md](docs/architecture.md)
 - Assistant-specific command packs: [assistant/README.md](assistant/README.md)
 
@@ -345,17 +361,28 @@ Boundline is the local delivery orchestrator. Canon is the governed packet runti
 The current release documents Canon `0.45.0` support on the
 `canon governance start|refresh|capabilities --json` `v1` adapter surface.
 
+## Community And Support
+
+Use the GitHub templates and policies that match the kind of change or report:
+
+- bug reports, documentation issues, feature requests, and general issues: `.github/ISSUE_TEMPLATE/`
+- pull request expectations: `.github/PULL_REQUEST_TEMPLATE.md`
+- vulnerability reporting: [SECURITY.md](SECURITY.md)
+- participation expectations: `.github/CODE_OF_CONDUCT.md`
+
 ## Read More
 
 Keep this README short. Use the other docs only when you need more detail.
 
 - [docs/getting-started.md](docs/getting-started.md) for a longer first-run walkthrough
+- [docs/delivery-model.md](docs/delivery-model.md) for the Delivery Pilot Model and project-scale loop
 - [docs/architecture.md](docs/architecture.md) for routing, governance, compatibility, and cluster details
 - [docs/configuration.md](docs/configuration.md) for `init`, config precedence, and advanced execution-profile setup
 - [docs/adaptive-execution.md](docs/adaptive-execution.md) for advanced adaptive manifest-backed execution
 - [docs/review-voting.md](docs/review-voting.md) for review councils on the advanced manifest-backed path
 - [assistant/README.md](assistant/README.md) for assistant command packs
 - [CONTRIBUTING.md](CONTRIBUTING.md) for contributor workflow
+- [SECURITY.md](SECURITY.md) for vulnerability reporting
 - [ROADMAP.md](ROADMAP.md) for planned releases
 - [CHANGELOG.md](CHANGELOG.md) for released changes
 

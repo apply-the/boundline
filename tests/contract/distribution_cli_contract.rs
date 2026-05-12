@@ -35,7 +35,7 @@ fn fake_canon_directory(version: &str) -> PathBuf {
     fs::create_dir_all(&directory).unwrap();
     let canon = directory.join("canon");
     let capabilities = format!(
-        r#"{{"canon_version":"{SUPPORTED_CANON_VERSION}","supported_schema_versions":["2026-02-01"],"operations":["start","refresh","capabilities"],"supported_modes":["requirements","discovery","system-shaping","architecture","backlog","change","implementation","refactor","review","verification","incident","security-assessment","system-assessment","migration","supply-chain-analysis"],"status_values":["governed_ready"],"approval_state_values":["not_needed"],"packet_readiness_values":["reusable"],"compatibility_notes":["stable-json"]}}"#
+        r#"{{"canon_version":"{SUPPORTED_CANON_VERSION}","supported_schema_versions":["2026-02-01"],"operations":["start","refresh","capabilities"],"supported_modes":["requirements","discovery","system-shaping","architecture","backlog","change","implementation","refactor","review","verification","pr-review","incident","security-assessment","system-assessment","migration","supply-chain-analysis"],"status_values":["governed_ready"],"approval_state_values":["not_needed"],"packet_readiness_values":["reusable"],"compatibility_notes":["stable-json"]}}"#
     );
     fs::write(
         &canon,

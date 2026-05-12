@@ -4,6 +4,9 @@ This document is the second read level for Boundline. Read it after the quick pa
 in the README and [getting-started.md](getting-started.md) if you need the
 deeper product model.
 
+For the product-level project-scale loop, read
+[delivery-model.md](delivery-model.md) first.
+
 ## Boundline Versus Canon
 
 Keep this boundary explicit:
@@ -62,6 +65,19 @@ Planning in Boundline is evidence-driven:
 
 That explicit stop behavior is a feature, not an inconvenience. Boundline should
 stop rather than pretend a plan is credible when the evidence is weak.
+
+## Risk Review Boundaries
+
+Boundline can require review voting at risky stage boundaries without turning
+every step into a council process. High-impact architecture, high-risk change,
+validation-exhausted implementation, PR-ready diff, security, supply-chain,
+migration, and incident boundaries can persist voting state in
+`.boundline/session.json`.
+
+Low-risk local changes and preserved-behavior refactors should not be burdened
+by voting by default. When voting is active, `status`, `next`, and `inspect`
+surface the trigger, result, blocking state, adjudication state, reviewed
+evidence, and next action. See [review-voting.md](review-voting.md).
 
 ## Routing, Workflows, And Clusters
 

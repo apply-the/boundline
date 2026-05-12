@@ -2,7 +2,153 @@ use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::path::Path;
 
+use clap::ValueEnum;
+
 use crate::domain::configuration::RuntimeKind;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+#[value(rename_all = "kebab-case")]
+pub enum AssistantHost {
+    Claude,
+    Codex,
+    Cursor,
+    Copilot,
+    Gemini,
+}
+
+impl AssistantHost {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Claude => "claude",
+            Self::Codex => "codex",
+            Self::Cursor => "cursor",
+            Self::Copilot => "copilot",
+            Self::Gemini => "gemini",
+        }
+    }
+
+    const fn install_mode(self) -> &'static str {
+        match self {
+            Self::Claude | Self::Codex | Self::Cursor => "copy_ready_assets",
+            Self::Copilot | Self::Gemini => "manual_fallback",
+        }
+    }
+
+    const fn package_path(self) -> &'static str {
+        match self {
+            Self::Claude => "assistant/global/claude",
+            Self::Codex => "assistant/global/codex",
+            Self::Cursor => "assistant/global/cursor",
+            Self::Copilot => "assistant/global/copilot",
+            Self::Gemini => "assistant/global/gemini",
+        }
+    }
+
+    const fn fallback_note(self) -> &'static str {
+        match self {
+            Self::Claude => {
+                "Claude-compatible global command assets are copy-ready for user-scoped installation."
+            }
+            Self::Codex => {
+                "Codex-compatible global command assets are copy-ready for user-scoped installation."
+            }
+            Self::Cursor => {
+                "Cursor support is represented as copy-ready command and rule assets; confirm the local Cursor install path before copying."
+            }
+            Self::Copilot => {
+                "Copilot environments vary; global command installation is not claimed for this host."
+            }
+            Self::Gemini => {
+                "Gemini host support is fallback guidance; global command installation is not claimed for this host."
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[value(rename_all = "kebab-case")]
+pub enum AssistantInstallScope {
+    User,
+}
+
+impl AssistantInstallScope {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::User => "user",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AssistantInstallReport {
+    pub host: AssistantHost,
+    pub scope: AssistantInstallScope,
+    pub install_mode: &'static str,
+    pub package_path: &'static str,
+    pub bootstrap_commands: &'static [&'static str],
+    pub cli_fallback_commands: Vec<String>,
+    pub note: &'static str,
+}
+
+pub fn install_global_assistant_package(
+    host: AssistantHost,
+    scope: AssistantInstallScope,
+) -> AssistantInstallReport {
+    AssistantInstallReport {
+        host,
+        scope,
+        install_mode: host.install_mode(),
+        package_path: host.package_path(),
+        bootstrap_commands: &[
+            "/boundline:init",
+            "/boundline:doctor",
+            "/boundline:help",
+            "/boundline:status",
+            "/boundline:continue",
+        ],
+        cli_fallback_commands: vec![
+            "boundline init --workspace <workspace> --assistant <host>".to_string(),
+            "boundline doctor --workspace <workspace>".to_string(),
+            "boundline status --workspace <workspace>".to_string(),
+            "boundline continue --workspace <workspace>".to_string(),
+        ],
+        note: host.fallback_note(),
+    }
+}
+
+pub fn render_assistant_install_report(report: &AssistantInstallReport) -> String {
+    format!(
+        concat!(
+            "assistant_global_package:\n",
+            "host: {}\n",
+            "scope: {}\n",
+            "install_mode: {}\n",
+            "package_path: {}\n",
+            "commands:\n",
+            "{}\n",
+            "fallback_cli:\n",
+            "{}\n",
+            "note: {}\n"
+        ),
+        report.host.as_str(),
+        report.scope.as_str(),
+        report.install_mode,
+        report.package_path,
+        report
+            .bootstrap_commands
+            .iter()
+            .map(|command| format!("- {command}"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        report
+            .cli_fallback_commands
+            .iter()
+            .map(|command| format!("- {command}"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        report.note,
+    )
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum AssistantSurface {
@@ -113,6 +259,7 @@ static CLAUDE_ASSETS: &[AssistantAsset] = &[
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-config-show.md"),
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-discovery.md"),
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-doctor.md"),
+    asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-govern.md"),
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-implementation.md"),
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-incident.md"),
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-init.md"),
@@ -156,6 +303,7 @@ static CODEX_ASSETS: &[AssistantAsset] = &[
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-config-show.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-discovery.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-doctor.md"),
+    asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-govern.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-implementation.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-incident.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-init.md"),
@@ -197,6 +345,7 @@ static COPILOT_ASSETS: &[AssistantAsset] = &[
     asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-config-show.prompt.md"),
     asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-discovery.prompt.md"),
     asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-doctor.prompt.md"),
+    asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-govern.prompt.md"),
     asset!(
         AssistantSurface::Copilot,
         "assistant/copilot/prompts/boundline-implementation.prompt.md"

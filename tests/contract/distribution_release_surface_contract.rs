@@ -13,11 +13,11 @@ fn release_surface_closes_on_0_49_1_without_an_upcoming_049_entry() {
     let homebrew_tap_workflow =
         fs::read_to_string(repo_root.join(".github/workflows/sync-homebrew-tap.yml")).unwrap();
 
-    assert!(cargo_toml.contains("version = \"0.49.1\""));
-    assert!(changelog.contains("## [0.49.1] - 2026-05-11"));
+    assert!(cargo_toml.contains("version = \"0.50.0\""));
+    assert!(changelog.contains("## [0.50.0] - 2026-05-12"));
     assert!(changelog.contains("Assistant Plugin Packages"));
-    assert!(roadmap.contains("## Current Status: v0.49.1"));
-    assert!(roadmap.contains("### Delivered in 0.49.1"));
+    assert!(roadmap.contains("## Current Status: v0.50.0"));
+    assert!(roadmap.contains("### Delivered in 0.50.0"));
     assert!(windows_release_workflow.contains(
         "git clone --depth 1 --branch \"$canonVersion\" https://github.com/apply-the/canon canon-source"
     ));

@@ -1,0 +1,9 @@
+{
+  "stage": "architecture",
+  "risk": "high",
+  "structural_impact": "high",
+  "decision_type": "type_1",
+  "public_contract_change": false,
+  "validation_exhausted": false,
+  "pr_ready": false
+}

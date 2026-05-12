@@ -16,6 +16,21 @@ mod trace_record;
 #[path = "contract/cli_command_contract.rs"]
 mod cli_command_contract;
 
+#[path = "contract/global_assistant_install_contract.rs"]
+mod global_assistant_install_contract;
+
+#[path = "contract/project_scale_session_contract.rs"]
+mod project_scale_session_contract;
+
+#[path = "contract/canon_capability_contract.rs"]
+mod canon_capability_contract;
+
+#[path = "contract/delivery_model_docs_contract.rs"]
+mod delivery_model_docs_contract;
+
+#[path = "contract/assistant_delivery_docs_contract.rs"]
+mod assistant_delivery_docs_contract;
+
 #[path = "contract/diagnostics_report_contract.rs"]
 mod diagnostics_report_contract;
 

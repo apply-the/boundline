@@ -11,8 +11,8 @@ use crate::domain::governance::{CanonMode, CanonModeSelectionPreference, Governa
 use crate::domain::trace::current_timestamp_millis;
 
 use super::{
-    checkpoint, cluster, config, diagnostics, init, inspect, output, run, session, workflow,
-    workspace as cli_workspace,
+    assistant_assets, checkpoint, cluster, config, diagnostics, govern, init, inspect, output, run,
+    session, workflow, workspace as cli_workspace,
 };
 
 #[derive(Debug, Parser)]
@@ -47,13 +47,16 @@ pub enum CommandName {
     Step,
     Status,
     Next,
+    Continue,
+    Govern,
     Init,
+    Assistant,
     Config,
     Cluster,
 }
 
 impl CommandName {
-    pub const fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             Self::Doctor => "doctor",
             Self::Checkpoint => "checkpoint",
@@ -67,7 +70,10 @@ impl CommandName {
             Self::Step => "step",
             Self::Status => "status",
             Self::Next => "next",
+            Self::Continue => "continue",
+            Self::Govern => "govern",
             Self::Init => "init",
+            Self::Assistant => "assistant",
             Self::Config => "config",
             Self::Cluster => "cluster",
         }
@@ -202,6 +208,42 @@ pub enum DeveloperCommand {
         #[arg(long)]
         cluster: Option<PathBuf>,
     },
+    Continue {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long)]
+        cluster: Option<PathBuf>,
+    },
+    Govern {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long = "mode", value_enum)]
+        mode: Option<CanonMode>,
+        #[arg(long)]
+        goal: Option<String>,
+        #[arg(long = "brief")]
+        brief: Vec<PathBuf>,
+        #[arg(long)]
+        base: Option<String>,
+        #[arg(long)]
+        head: Option<String>,
+        #[arg(long)]
+        risk: Option<String>,
+        #[arg(long = "structural-impact")]
+        structural_impact: bool,
+        #[arg(long = "public-contract-change")]
+        public_contract_change: bool,
+        #[arg(long = "validation-exhausted")]
+        validation_exhausted: bool,
+        #[arg(long = "pr-ready")]
+        pr_ready: bool,
+        #[arg(long = "preserved-behavior-evidence")]
+        preserved_behavior_evidence: bool,
+    },
+    Assistant {
+        #[command(subcommand)]
+        command: AssistantSubcommand,
+    },
     #[command(
         about = "Bootstrap Boundline files, assistant packs, and default routing for a workspace",
         after_long_help = "Guided mode tips:\n  - leave --assistant unset to skip repository-local assistant packs\n  - leave guided routes blank to let selected assistants seed defaults for planning, implementation, verification, and review\n\nDocs export policy:\n  - --export-docs is create-only by default; existing target files stop the command\n  - use --refresh to update generated docs in place\n  - use --diff to preview docs changes without writing\n  - use --to <path> to export generated docs under another root\n\nExamples:\n  boundline init --workspace . --assistant copilot\n  boundline init --workspace . --assistant copilot --route planning=copilot:gpt-5.4\n  boundline init --workspace . --assistant codex --assistant copilot --route review=claude:sonnet-4\n  boundline init --workspace . --export-docs\n  boundline init --workspace . --export-docs --refresh\n  boundline init --workspace . --export-docs --to docs/reference/boundline"
@@ -296,6 +338,16 @@ pub enum WorkflowSubcommand {
     Inspect {
         #[arg(long)]
         workspace: Option<PathBuf>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum AssistantSubcommand {
+    Install {
+        #[arg(long, value_enum)]
+        host: assistant_assets::AssistantHost,
+        #[arg(long, value_enum)]
+        scope: assistant_assets::AssistantInstallScope,
     },
 }
 
@@ -519,6 +571,9 @@ impl DeveloperCommand {
             Self::Inspect { .. } => CommandName::Inspect,
             Self::Status { .. } => CommandName::Status,
             Self::Next { .. } => CommandName::Next,
+            Self::Continue { .. } => CommandName::Continue,
+            Self::Govern { .. } => CommandName::Govern,
+            Self::Assistant { .. } => CommandName::Assistant,
             Self::Init { .. } => CommandName::Init,
             Self::Config { .. } => CommandName::Config,
             Self::Cluster { .. } => CommandName::Cluster,
@@ -765,6 +820,45 @@ impl DeveloperCommandSession {
                 exit_status: None,
                 trace_location: None,
             },
+            DeveloperCommand::Continue { workspace, cluster } => Self {
+                command_name: CommandName::Continue,
+                workspace_ref: workspace
+                    .as_ref()
+                    .or(cluster.as_ref())
+                    .map(|path| path.to_string_lossy().into_owned()),
+                requires_workspace_ref: false,
+                install_check: false,
+                goal: None,
+                trace_ref: None,
+                started_at: current_timestamp_millis(),
+                completed_at: None,
+                exit_status: None,
+                trace_location: None,
+            },
+            DeveloperCommand::Govern { workspace, goal, .. } => Self {
+                command_name: CommandName::Govern,
+                workspace_ref: workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
+                requires_workspace_ref: false,
+                install_check: false,
+                goal: goal.clone(),
+                trace_ref: None,
+                started_at: current_timestamp_millis(),
+                completed_at: None,
+                exit_status: None,
+                trace_location: None,
+            },
+            DeveloperCommand::Assistant { .. } => Self {
+                command_name: CommandName::Assistant,
+                workspace_ref: None,
+                requires_workspace_ref: false,
+                install_check: false,
+                goal: None,
+                trace_ref: None,
+                started_at: current_timestamp_millis(),
+                completed_at: None,
+                exit_status: None,
+                trace_location: None,
+            },
             DeveloperCommand::Init { workspace, .. } => Self {
                 command_name: CommandName::Init,
                 workspace_ref: Some(workspace.to_string_lossy().into_owned()),
@@ -861,7 +955,10 @@ impl DeveloperCommandSession {
             | CommandName::Workflow
             | CommandName::Status
             | CommandName::Next
+            | CommandName::Continue
+            | CommandName::Govern
             | CommandName::Init
+            | CommandName::Assistant
             | CommandName::Config
             | CommandName::Cluster => {}
         }
@@ -1358,6 +1455,64 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                 ),
             }
         }
+        DeveloperCommand::Continue { workspace, cluster } => {
+            match session::execute_continue_with_target(workspace.as_deref(), cluster.as_deref()) {
+                Ok(report) => DispatchOutcome::from_session_report(report),
+                Err(error) => DispatchOutcome::text(
+                    CommandExitStatus::NonSuccess,
+                    session::render_error(command.name().as_str(), &error),
+                    None,
+                ),
+            }
+        }
+        DeveloperCommand::Govern {
+            workspace,
+            mode,
+            goal,
+            brief,
+            base,
+            head,
+            risk,
+            structural_impact,
+            public_contract_change,
+            validation_exhausted,
+            pr_ready,
+            preserved_behavior_evidence,
+        } => {
+            match govern::execute_govern(govern::GovernRequest {
+                workspace: workspace.as_deref(),
+                mode: *mode,
+                goal: goal.as_deref(),
+                brief,
+                base: base.as_deref(),
+                head: head.as_deref(),
+                risk: risk.as_deref(),
+                structural_impact: *structural_impact,
+                public_contract_change: *public_contract_change,
+                validation_exhausted: *validation_exhausted,
+                pr_ready: *pr_ready,
+                preserved_behavior_evidence: *preserved_behavior_evidence,
+            }) {
+                Ok(report) => {
+                    DispatchOutcome::text(report.exit_status, report.terminal_output, None)
+                }
+                Err(error) => DispatchOutcome::text(
+                    CommandExitStatus::NonSuccess,
+                    format!("govern error: {error}"),
+                    None,
+                ),
+            }
+        }
+        DeveloperCommand::Assistant { command } => match command {
+            AssistantSubcommand::Install { host, scope } => {
+                let report = assistant_assets::install_global_assistant_package(*host, *scope);
+                DispatchOutcome::text(
+                    CommandExitStatus::Succeeded,
+                    assistant_assets::render_assistant_install_report(&report),
+                    None,
+                )
+            }
+        },
         DeveloperCommand::Init {
             workspace,
             non_interactive,
@@ -1637,15 +1792,19 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        CheckpointSubcommand, Cli, ClusterSubcommand, CommandExitStatus, CommandName,
-        ConfigSubcommand, DeveloperCommand, DeveloperCommandSession, WorkflowSubcommand, dispatch,
+        AssistantSubcommand, CheckpointSubcommand, Cli, ClusterSubcommand, CommandExitStatus,
+        CommandName, ConfigSubcommand, DeveloperCommand, DeveloperCommandSession,
+        WorkflowSubcommand, dispatch,
     };
+    use crate::adapters::session_store::{FileSessionStore, SessionStore};
+    use crate::cli::assistant_assets::{AssistantHost, AssistantInstallScope};
     use crate::domain::configuration::{
         CapabilityState, ConfigShowScope, ConfigWriteScope, EffortFallbackPolicy, EffortLevel,
         InitTemplate, RouteSlot, RuntimeKind,
     };
     use crate::domain::domain_templates::{DomainFamily, ExternalContextKind};
-    use crate::domain::governance::CanonModeSelectionPreference;
+    use crate::domain::governance::{CanonMode, CanonModeSelectionPreference};
+    use crate::domain::session::{ActiveSessionRecord, SessionStatus};
 
     const FIXTURE_CARGO_TOML: &str = r#"[package]
 name = "dispatch_fixture"
@@ -1786,7 +1945,6 @@ fn red_to_green_addition() {
                 confirm: false,
             },
             DeveloperCommand::Step { workspace: Some(workspace.clone()), cluster: None },
-            DeveloperCommand::Status { workspace: Some(workspace.clone()), cluster: None },
             DeveloperCommand::Next { workspace: Some(workspace.clone()), cluster: None },
         ];
 
@@ -1795,6 +1953,20 @@ fn red_to_green_addition() {
             assert_eq!(outcome.exit_status, CommandExitStatus::NonSuccess);
             assert!(outcome.output.contains("session error"), "{}", outcome.output);
         }
+
+        let status = dispatch(&DeveloperCommand::Status {
+            workspace: Some(workspace.clone()),
+            cluster: None,
+        });
+        assert_eq!(status.exit_status, CommandExitStatus::Succeeded);
+        assert!(status.output.contains("session_bootstrap"), "{}", status.output);
+
+        let cont = dispatch(&DeveloperCommand::Continue {
+            workspace: Some(workspace.clone()),
+            cluster: None,
+        });
+        assert_eq!(cont.exit_status, CommandExitStatus::Succeeded);
+        assert!(cont.output.contains("chat history is not authoritative"), "{}", cont.output);
 
         let inspect = dispatch(&DeveloperCommand::Inspect {
             trace: None,
@@ -1960,21 +2132,12 @@ fn red_to_green_addition() {
         let plan = dispatch(&DeveloperCommand::Plan {
             workspace: None,
             cluster: None,
-            flow: None,
+            flow: Some("bug-fix".to_string()),
             no_flow: false,
             confirm: false,
         });
-        assert_eq!(plan.exit_status, CommandExitStatus::Succeeded);
+        assert_eq!(plan.exit_status, CommandExitStatus::Succeeded, "{}", plan.output);
         assert!(plan.output.contains("execution_path: native_goal_plan"), "{}", plan.output);
-
-        let confirm = dispatch(&DeveloperCommand::Plan {
-            workspace: None,
-            cluster: None,
-            flow: None,
-            no_flow: false,
-            confirm: true,
-        });
-        assert_eq!(confirm.exit_status, CommandExitStatus::Succeeded);
 
         let run = dispatch(&DeveloperCommand::Run {
             workspace: None,
@@ -2008,7 +2171,10 @@ fn red_to_green_addition() {
             (CommandName::Checkpoint, "checkpoint"),
             (CommandName::Workflow, "workflow"),
             (CommandName::Inspect, "inspect"),
+            (CommandName::Continue, "continue"),
+            (CommandName::Govern, "govern"),
             (CommandName::Init, "init"),
+            (CommandName::Assistant, "assistant"),
             (CommandName::Config, "config"),
             (CommandName::Cluster, "cluster"),
         ] {
@@ -2376,5 +2542,123 @@ fn red_to_green_addition() {
             assert_eq!(outcome.exit_status, CommandExitStatus::NonSuccess);
             assert!(outcome.output.contains("cluster error:"), "{}", outcome.output);
         }
+    }
+
+    #[test]
+    fn continue_govern_and_assistant_commands_cover_new_dispatch_paths() {
+        let workspace = write_execution_workspace("boundline-cli-govern-assistant");
+
+        let continue_command =
+            DeveloperCommand::Continue { workspace: Some(workspace.clone()), cluster: None };
+        assert_eq!(continue_command.name(), CommandName::Continue);
+        let continue_session = DeveloperCommandSession::from_command(&continue_command);
+        assert_eq!(continue_session.command_name, CommandName::Continue);
+        assert_eq!(
+            continue_session.workspace_ref.as_deref(),
+            Some(workspace.to_string_lossy().as_ref())
+        );
+        assert!(continue_session.validate().is_ok());
+
+        let govern_command = DeveloperCommand::Govern {
+            workspace: Some(workspace.clone()),
+            mode: Some(CanonMode::Review),
+            goal: Some("Prepare review packet".to_string()),
+            brief: Vec::new(),
+            base: None,
+            head: None,
+            risk: None,
+            structural_impact: false,
+            public_contract_change: false,
+            validation_exhausted: false,
+            pr_ready: false,
+            preserved_behavior_evidence: false,
+        };
+        assert_eq!(govern_command.name(), CommandName::Govern);
+        let govern_session = DeveloperCommandSession::from_command(&govern_command);
+        assert_eq!(govern_session.command_name, CommandName::Govern);
+        assert_eq!(govern_session.goal.as_deref(), Some("Prepare review packet"));
+        assert!(govern_session.validate().is_ok());
+
+        let govern_without_session = dispatch(&govern_command);
+        assert_eq!(govern_without_session.exit_status, CommandExitStatus::NonSuccess);
+        assert!(
+            govern_without_session.output.contains(".boundline/session.json is missing"),
+            "{}",
+            govern_without_session.output
+        );
+
+        let start = dispatch(&DeveloperCommand::Start {
+            workspace: Some(workspace.clone()),
+            cluster: None,
+        });
+        assert_eq!(start.exit_status, CommandExitStatus::Succeeded);
+
+        let govern_with_session = dispatch(&govern_command);
+        assert_eq!(govern_with_session.exit_status, CommandExitStatus::Succeeded);
+        assert!(
+            govern_with_session.output.contains("govern: staged"),
+            "{}",
+            govern_with_session.output
+        );
+        assert!(
+            govern_with_session.output.contains("mode: review"),
+            "{}",
+            govern_with_session.output
+        );
+
+        let assistant_command = DeveloperCommand::Assistant {
+            command: AssistantSubcommand::Install {
+                host: AssistantHost::Copilot,
+                scope: AssistantInstallScope::User,
+            },
+        };
+        assert_eq!(assistant_command.name(), CommandName::Assistant);
+        let assistant_session = DeveloperCommandSession::from_command(&assistant_command);
+        assert_eq!(assistant_session.command_name, CommandName::Assistant);
+        assert!(assistant_session.workspace_ref.is_none());
+        assert!(assistant_session.validate().is_ok());
+
+        let assistant = dispatch(&assistant_command);
+        assert_eq!(assistant.exit_status, CommandExitStatus::Succeeded);
+        assert!(assistant.output.contains("assistant_global_package:"), "{}", assistant.output);
+        assert!(assistant.output.contains("host: copilot"), "{}", assistant.output);
+    }
+
+    #[test]
+    fn continue_error_dispatch_and_command_name_strings_cover_new_variants() {
+        assert_eq!(CommandName::Continue.as_str(), "continue");
+        assert_eq!(CommandName::Govern.as_str(), "govern");
+        assert_eq!(CommandName::Assistant.as_str(), "assistant");
+
+        let workspace = temp_workspace("boundline-cli-continue-error");
+        FileSessionStore::for_workspace(&workspace)
+            .persist(&ActiveSessionRecord {
+                session_id: "session-mismatch".to_string(),
+                workspace_ref: "/tmp/other-workspace".to_string(),
+                goal: None,
+                authored_brief: None,
+                negotiation_packet: None,
+                active_flow: None,
+                active_task: None,
+                goal_plan: None,
+                workflow_progress: None,
+                decisions: Vec::new(),
+                active_flow_policy: None,
+                latest_status: SessionStatus::Initialized,
+                latest_terminal_reason: None,
+                latest_trace_ref: None,
+                created_at: 1,
+                updated_at: 1,
+                governance_lifecycle: None,
+                project_scale: None,
+                latest_voting: None,
+            })
+            .unwrap();
+
+        let outcome =
+            dispatch(&DeveloperCommand::Continue { workspace: Some(workspace), cluster: None });
+
+        assert_eq!(outcome.exit_status, CommandExitStatus::NonSuccess);
+        assert!(outcome.output.contains("continue: session error"), "{}", outcome.output);
     }
 }

@@ -95,6 +95,8 @@ fn build_planned_record(workspace_ref: &str) -> ActiveSessionRecord {
         created_at: 10,
         updated_at: 20,
         governance_lifecycle: None,
+        project_scale: None,
+        latest_voting: None,
     }
 }
 
@@ -203,6 +205,8 @@ fn build_started_session(workspace: &Path) -> ActiveSessionRecord {
         created_at: now,
         updated_at: now,
         governance_lifecycle: None,
+        project_scale: None,
+        latest_voting: None,
     }
 }
 
