@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::governance::{CANONICAL_MODES, CanonCapabilitySnapshot, CanonMode};
 
-pub const SUPPORTED_CANON_VERSION: &str = "0.45.0";
+pub const SUPPORTED_CANON_VERSION: &str = "0.48.0";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -373,8 +373,9 @@ mod tests {
     use super::{
         CompanionState, DistributionChannel, SUPPORTED_CANON_VERSION,
         evaluate_canon_install_with_path_dirs, extract_semver_token,
-        supported_distribution_channels,
+        supported_distribution_channels, verify_canon_surface,
     };
+    use crate::domain::governance::{CanonCapabilitySnapshot, CanonMode};
 
     fn temp_dir(prefix: &str) -> PathBuf {
         let directory = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
@@ -428,12 +429,31 @@ mod tests {
         command_path
     }
 
+    #[cfg(unix)]
+    fn write_fake_canon_without_capabilities(directory: &Path, version_output: &str) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+
+        let command_path = directory.join("canon");
+        fs::write(
+            &command_path,
+            format!(
+                "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '{version_output}'\n  exit 0\nfi\nif [ \"$1\" = \"governance\" ] && [ \"$2\" = \"capabilities\" ]; then\n  exit 0\nfi\nexit 1\n"
+            ),
+        )
+        .unwrap();
+        let mut permissions = fs::metadata(&command_path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&command_path, permissions).unwrap();
+        command_path
+    }
+
     #[test]
     fn extract_semver_token_finds_a_canon_version() {
         assert_eq!(
-            extract_semver_token("canon version 0.45.0 (stable)"),
+            extract_semver_token("canon version 0.48.0 (stable)"),
             Some(SUPPORTED_CANON_VERSION.to_string())
         );
+        assert_eq!(extract_semver_token("canon version stable"), None);
     }
 
     #[test]
@@ -447,6 +467,52 @@ mod tests {
     fn companion_state_string_values_are_stable() {
         assert_eq!(CompanionState::RepairNeeded.to_string(), "repair_needed");
         assert_eq!(CompanionState::AlreadySatisfied.to_string(), "already_satisfied");
+        assert_eq!(CompanionState::Blocked.to_string(), "blocked");
+        assert_eq!(CompanionState::Ready.to_string(), "ready");
+        assert_eq!(DistributionChannel::Homebrew.to_string(), "homebrew");
+        assert_eq!(DistributionChannel::Winget.to_string(), "winget");
+        assert_eq!(DistributionChannel::Source.to_string(), "source");
+    }
+
+    #[test]
+    fn verify_canon_surface_reports_version_operation_and_mode_gaps() {
+        let snapshot = CanonCapabilitySnapshot {
+            canon_version: "0.38.0".to_string(),
+            supported_schema_versions: vec!["2026-02-01".to_string()],
+            operations: vec!["capabilities".to_string()],
+            supported_modes: vec![CanonMode::Requirements],
+            status_values: vec!["governed_ready".to_string()],
+            approval_state_values: vec!["not_needed".to_string()],
+            packet_readiness_values: vec!["reusable".to_string()],
+            compatibility_notes: Vec::new(),
+        };
+
+        let verification = verify_canon_surface(Path::new("/tmp/canon"), &snapshot);
+
+        assert!(!verification.ready);
+        assert!(!verification.version_compatible);
+        assert!(!verification.operations_verified);
+        assert!(!verification.modes_verified);
+        assert!(verification.missing_operations.contains(&"start".to_string()));
+        assert!(verification.missing_operations.contains(&"refresh".to_string()));
+        assert!(
+            verification
+                .repair_actions
+                .iter()
+                .any(|action| action.contains("does not match supported version"))
+        );
+        assert!(
+            verification
+                .repair_actions
+                .iter()
+                .any(|action| action.contains("missing governance operations"))
+        );
+        assert!(
+            verification
+                .repair_actions
+                .iter()
+                .any(|action| action.contains("missing canonical modes"))
+        );
     }
 
     #[cfg(unix)]
@@ -503,5 +569,31 @@ mod tests {
         assert_eq!(blocked_status.location.as_deref(), Some(blocked_binary.as_path()));
         assert!(blocked_status.message.contains("could not be determined"));
         assert!(blocked_status.suggested_actions[0].contains("--version"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn evaluate_canon_install_reports_missing_capabilities_output() {
+        let executable_root = temp_dir("boundline-distribution-executable-missing-capabilities");
+        let path_root = temp_dir("boundline-distribution-missing-capabilities");
+        let executable = executable_root.join("boundline");
+        fs::write(&executable, "").unwrap();
+
+        let binary = write_fake_canon_without_capabilities(
+            &path_root,
+            &format!("canon version {SUPPORTED_CANON_VERSION}"),
+        );
+        let status = evaluate_canon_install_with_path_dirs(&executable, &[path_root]);
+
+        assert_eq!(status.state, CompanionState::RepairNeeded);
+        assert_eq!(status.location.as_deref(), Some(binary.as_path()));
+        assert_eq!(status.version.as_deref(), Some(SUPPORTED_CANON_VERSION));
+        assert!(status.surface_verification.is_none());
+        assert!(
+            status
+                .suggested_actions
+                .iter()
+                .any(|action| action.contains("did not report governance capabilities"))
+        );
     }
 }

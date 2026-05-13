@@ -31,11 +31,16 @@ use crate::domain::flow::{FlowStepMetadata, built_in_flow, supported_flow_names_
 use crate::domain::flow_policy::FlowPolicy;
 use crate::domain::goal_plan::GoalPlan;
 use crate::domain::governance::{
-    ApprovalState, GovernanceLifecycleState, GovernanceRuntimeKind, GovernedStageRecord,
-    PacketReadiness, resolved_canon_mode,
+    ApprovalState, CanonEvidenceInspectSummary, CanonPossibleActionSummary,
+    CanonRecommendedActionSummary, CompactedCanonMemory, GovernanceLifecycleState,
+    GovernanceRuntimeKind, GovernedStageRecord, MemoryCredibilityState, PacketReadiness,
+    resolved_canon_mode,
 };
 use crate::domain::limits::{RunLimits, TerminalCondition};
 use crate::domain::negotiation::{NegotiatedDeliveryPacket, NegotiationResolutionState};
+use crate::domain::project_memory::{
+    ProjectMemoryContext, ProjectMemoryStatus, PromotionStateView, read_project_memory,
+};
 use crate::domain::review::{ReviewOutcome, ReviewTrigger};
 use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::session::{
@@ -708,6 +713,8 @@ impl SessionRuntime {
         goal: &str,
     ) -> PlanningContextSources {
         let negotiation_packet = self.session_negotiation_packet(session, goal);
+        let compacted_project_memory =
+            Self::compacted_project_memory_for_workspace(&self.workspace_ref);
 
         PlanningContextSources {
             authored_input_summary: session
@@ -754,7 +761,8 @@ impl SessionRuntime {
             compacted_canon_memory: session
                 .active_task
                 .as_ref()
-                .and_then(|task| task.context.latest_compacted_canon_memory().ok().flatten()),
+                .and_then(|task| task.context.latest_compacted_canon_memory().ok().flatten())
+                .or(compacted_project_memory),
             latest_changed_files: session
                 .active_task
                 .as_ref()
@@ -773,6 +781,178 @@ impl SessionRuntime {
                 .and_then(|task| task.context.state.get("latest_validation_status"))
                 .and_then(|value| value.as_str().map(str::to_string)),
         }
+    }
+
+    fn compacted_project_memory_for_workspace(
+        workspace_ref: &Path,
+    ) -> Option<CompactedCanonMemory> {
+        let context = read_project_memory(workspace_ref);
+        Self::compacted_canon_memory_from_project_memory_context(workspace_ref, &context)
+    }
+
+    fn compacted_canon_memory_from_project_memory_context(
+        workspace_ref: &Path,
+        context: &ProjectMemoryContext,
+    ) -> Option<CompactedCanonMemory> {
+        match context.status {
+            ProjectMemoryStatus::Absent => None,
+            ProjectMemoryStatus::Incompatible => Some(CompactedCanonMemory {
+                headline: "Canon project memory contract is unsupported".to_string(),
+                credibility: MemoryCredibilityState::Stale,
+                stage_key: None,
+                run_ref: None,
+                packet_ref: None,
+                reason_code: Some("project_memory_contract_incompatible".to_string()),
+                artifact_refs: Vec::new(),
+                mode_summary: None,
+                possible_actions: vec![Self::project_memory_action(
+                    "update",
+                    "update Canon or Boundline so both support the same project-memory contract",
+                )],
+                recommended_next_action: Some(Self::project_memory_recommended_action(
+                    "update",
+                    "update Canon or Boundline so both support the same project-memory contract before planning",
+                )),
+                evidence_summary: None,
+            }),
+            ProjectMemoryStatus::Available => {
+                let artifact_refs = Self::project_memory_artifact_refs(workspace_ref, context);
+                let effective_state =
+                    context.effective_promotion_state.unwrap_or(PromotionStateView::Unknown);
+                let (headline, credibility, reason_code, possible_actions, recommended_next_action) =
+                    match effective_state {
+                        PromotionStateView::Stable => (
+                            "Canon project memory available".to_string(),
+                            MemoryCredibilityState::Credible,
+                            None,
+                            Vec::new(),
+                            None,
+                        ),
+                        PromotionStateView::PendingOrIndex => (
+                            "Canon project memory is pending".to_string(),
+                            MemoryCredibilityState::Stale,
+                            Some("project_memory_pending".to_string()),
+                            vec![Self::project_memory_action(
+                                "refresh",
+                                "refresh project memory after Canon promotes a stable docs/project surface",
+                            )],
+                            Some(Self::project_memory_recommended_action(
+                                "refresh",
+                                "refresh project memory after Canon promotes a stable docs/project surface",
+                            )),
+                        ),
+                        PromotionStateView::EvidenceOnly => (
+                            "Canon project memory is evidence-only".to_string(),
+                            MemoryCredibilityState::Stale,
+                            Some("project_memory_evidence_only".to_string()),
+                            vec![Self::project_memory_action(
+                                "promote",
+                                "publish a stable docs/project surface from Canon before reusing project memory as planning context",
+                            )],
+                            Some(Self::project_memory_recommended_action(
+                                "promote",
+                                "publish a stable docs/project surface from Canon before reusing project memory as planning context",
+                            )),
+                        ),
+                        PromotionStateView::Manual => (
+                            "Canon project memory requires manual promotion".to_string(),
+                            MemoryCredibilityState::Stale,
+                            Some("project_memory_manual".to_string()),
+                            vec![Self::project_memory_action(
+                                "promote",
+                                "complete the manual Canon promotion step and refresh project memory",
+                            )],
+                            Some(Self::project_memory_recommended_action(
+                                "promote",
+                                "complete the manual Canon promotion step and refresh project memory",
+                            )),
+                        ),
+                        PromotionStateView::Unknown => (
+                            "Canon project memory metadata is incomplete".to_string(),
+                            MemoryCredibilityState::Stale,
+                            Some("project_memory_unknown".to_string()),
+                            vec![Self::project_memory_action(
+                                "inspect",
+                                "inspect the Canon packet metadata sidecars and refresh project memory",
+                            )],
+                            Some(Self::project_memory_recommended_action(
+                                "inspect",
+                                "inspect the Canon packet metadata sidecars and refresh project memory",
+                            )),
+                        ),
+                    };
+
+                Some(CompactedCanonMemory {
+                    headline,
+                    credibility,
+                    stage_key: None,
+                    run_ref: context.surfaces.iter().find_map(|surface| {
+                        surface.lineage.as_ref().map(|lineage| lineage.source_run.clone())
+                    }),
+                    packet_ref: None,
+                    reason_code,
+                    artifact_refs: artifact_refs.clone(),
+                    mode_summary: None,
+                    possible_actions,
+                    recommended_next_action,
+                    evidence_summary: (!artifact_refs.is_empty()).then_some(
+                        CanonEvidenceInspectSummary {
+                            execution_posture: None,
+                            carried_forward_items: Vec::new(),
+                            artifact_provenance_links: artifact_refs,
+                            closure_status: None,
+                            closure_findings: Vec::new(),
+                        },
+                    ),
+                })
+            }
+        }
+    }
+
+    fn project_memory_action(action: &str, text: &str) -> CanonPossibleActionSummary {
+        CanonPossibleActionSummary {
+            action: action.to_string(),
+            text: text.to_string(),
+            target: None,
+        }
+    }
+
+    fn project_memory_recommended_action(
+        action: &str,
+        rationale: &str,
+    ) -> CanonRecommendedActionSummary {
+        CanonRecommendedActionSummary {
+            action: action.to_string(),
+            rationale: rationale.to_string(),
+            target: None,
+        }
+    }
+
+    fn project_memory_artifact_refs(
+        workspace_ref: &Path,
+        context: &ProjectMemoryContext,
+    ) -> Vec<String> {
+        let mut refs = context
+            .surfaces
+            .iter()
+            .map(|surface| surface.path.display().to_string())
+            .collect::<Vec<_>>();
+
+        for lineage in &context.evidence_refs {
+            let evidence_root =
+                workspace_ref.join("docs/evidence").join(&lineage.mode).join(&lineage.source_run);
+            if evidence_root.exists() {
+                let display = evidence_root
+                    .strip_prefix(workspace_ref)
+                    .map(|path| path.display().to_string())
+                    .unwrap_or_else(|_| evidence_root.display().to_string());
+                if !refs.contains(&display) {
+                    refs.push(display);
+                }
+            }
+        }
+
+        refs
     }
 
     fn session_negotiation_packet(
@@ -2230,7 +2410,12 @@ impl SessionRuntime {
                 &lifecycle.accumulated_context,
             );
         }
-        let input_documents = governance_input_documents(&task.input);
+        let compacted_canon_memory = task
+            .context
+            .latest_compacted_canon_memory()
+            .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?;
+        let input_documents =
+            governance_input_documents(&task.input, compacted_canon_memory.as_ref());
 
         let requested_runtime = policy.effective_runtime(governance.default_runtime);
         let canon_available = governance
@@ -3589,6 +3774,10 @@ mod tests {
     };
     use crate::domain::limits::{RunLimits, TerminalCondition};
     use crate::domain::plan::Plan;
+    use crate::domain::project_memory::{
+        CompatibilityOutcome, LineageRef, ProjectMemoryContext, ProjectMemoryStatus,
+        ProjectMemorySurface, PromotionStateView,
+    };
     use crate::domain::session::{
         ActiveSessionRecord, ContinuityAuthority, DelegationContinuityMode,
         DelegationContinuityState, SessionCommand, SessionStatus,
@@ -3895,6 +4084,329 @@ mod tests {
         assert_eq!(
             sources.execution_profile_read_targets,
             vec!["src/lib.rs".to_string(), "tests/red_to_green.rs".to_string()]
+        );
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn planning_context_sources_fall_back_to_project_memory_surfaces() {
+        let workspace = temp_workspace("boundline-runtime-project-memory");
+        let project_dir = workspace.join("docs/project");
+        let evidence_dir = workspace.join("docs/evidence/architecture/run-123");
+        fs::create_dir_all(&project_dir).unwrap();
+        fs::create_dir_all(&evidence_dir).unwrap();
+
+        fs::write(
+            project_dir.join("architecture-map.md"),
+            "# Architecture Map\n\nStable Canon context.\n",
+        )
+        .unwrap();
+        fs::write(evidence_dir.join("architecture-overview.md"), "overview\n").unwrap();
+        fs::write(
+            project_dir.join("architecture-map.packet-metadata.json"),
+            serde_json::to_string_pretty(&json!({
+                "run_id": "run-123",
+                "mode": "architecture",
+                "risk": "bounded-impact",
+                "zone": "yellow",
+                "publish_timestamp": "2026-05-13T14:30:00Z",
+                "descriptor": "architecture-map",
+                "destination": "docs/project/architecture-map.md",
+                "source_artifacts": ["architecture-overview.md"],
+                "profile": "project-memory",
+                "promotion_state": "auto-if-approved",
+                "update_strategy": "managed-blocks",
+                "lineage": {
+                    "contract_version": "0.1.0",
+                    "source_run": "run-123",
+                    "mode": "architecture",
+                    "profile": "project-memory",
+                    "promotion_state": "auto-if-approved",
+                    "approval_state": "Completed",
+                    "readiness": "complete",
+                    "published_at": "2026-05-13T14:30:00Z",
+                    "update_strategy": "managed-blocks",
+                    "source_artifacts": ["architecture-overview.md"]
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let mut session = build_session(
+            &workspace,
+            decision_task(workspace.to_string_lossy().as_ref(), json!({})),
+        );
+        session.goal = Some("Plan the next bounded change".to_string());
+
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let sources = runtime.planning_context_sources(&session, "Plan the next bounded change");
+        let memory = sources
+            .compacted_canon_memory
+            .expect("project memory should be compacted into planning sources");
+
+        assert_eq!(memory.credibility, crate::domain::governance::MemoryCredibilityState::Credible);
+        assert_eq!(memory.run_ref.as_deref(), Some("run-123"));
+        assert!(memory.artifact_refs.contains(&"docs/project/architecture-map.md".to_string()));
+        assert!(memory.artifact_refs.contains(&"docs/evidence/architecture/run-123".to_string()));
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn planning_context_sources_rejects_future_project_memory_contract_line() {
+        let workspace = temp_workspace("boundline-runtime-project-memory-guidance");
+        let project_dir = workspace.join("docs/project");
+        fs::create_dir_all(&project_dir).unwrap();
+
+        fs::write(
+            project_dir.join("architecture-map.md"),
+            "# Architecture Map\n\nStable Canon context.\n",
+        )
+        .unwrap();
+        fs::write(
+            project_dir.join("architecture-map.packet-metadata.json"),
+            serde_json::to_string_pretty(&json!({
+                "run_id": "run-123",
+                "mode": "architecture",
+                "risk": "bounded-impact",
+                "zone": "yellow",
+                "publish_timestamp": "2026-05-13T14:30:00Z",
+                "descriptor": "architecture-map",
+                "destination": "docs/project/architecture-map.md",
+                "source_artifacts": ["architecture-overview.md"],
+                "profile": "project-memory",
+                "promotion_state": "auto-if-approved",
+                "update_strategy": "managed-blocks",
+                "lineage": {
+                    "contract_version": "0.2.0",
+                    "source_run": "run-123",
+                    "mode": "architecture",
+                    "profile": "project-memory",
+                    "promotion_state": "auto-if-approved",
+                    "approval_state": "Completed",
+                    "readiness": "complete",
+                    "published_at": "2026-05-13T14:30:00Z",
+                    "update_strategy": "managed-blocks",
+                    "source_artifacts": ["architecture-overview.md"]
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let mut session = build_session(
+            &workspace,
+            decision_task(workspace.to_string_lossy().as_ref(), json!({})),
+        );
+        session.goal = Some("Plan the next bounded change".to_string());
+
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let sources = runtime.planning_context_sources(&session, "Plan the next bounded change");
+        let memory = sources
+            .compacted_canon_memory
+            .expect("unsupported project memory should still surface repair guidance");
+
+        assert_eq!(memory.credibility, crate::domain::governance::MemoryCredibilityState::Stale);
+        assert_eq!(memory.reason_code.as_deref(), Some("project_memory_contract_incompatible"));
+        assert_eq!(
+            memory.recommended_next_action.as_ref().map(|action| action.action.as_str()),
+            Some("update")
+        );
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn planning_context_sources_block_on_incompatible_project_memory_contract() {
+        let workspace = temp_workspace("boundline-runtime-project-memory-incompatible");
+        let project_dir = workspace.join("docs/project");
+        fs::create_dir_all(&project_dir).unwrap();
+
+        fs::write(
+            project_dir.join("architecture-map.md"),
+            "# Architecture Map\n\nIncompatible Canon context.\n",
+        )
+        .unwrap();
+        fs::write(
+            project_dir.join("architecture-map.packet-metadata.json"),
+            serde_json::to_string_pretty(&json!({
+                "run_id": "run-999",
+                "mode": "architecture",
+                "risk": "bounded-impact",
+                "zone": "yellow",
+                "publish_timestamp": "2026-05-13T14:30:00Z",
+                "descriptor": "architecture-map",
+                "destination": "docs/project/architecture-map.md",
+                "source_artifacts": ["architecture-overview.md"],
+                "profile": "project-memory",
+                "promotion_state": "auto-if-approved",
+                "update_strategy": "managed-blocks",
+                "lineage": {
+                    "contract_version": "2.0.0",
+                    "source_run": "run-999",
+                    "mode": "architecture",
+                    "profile": "project-memory",
+                    "promotion_state": "auto-if-approved",
+                    "approval_state": "Completed",
+                    "readiness": "complete",
+                    "published_at": "2026-05-13T14:30:00Z",
+                    "update_strategy": "managed-blocks",
+                    "source_artifacts": ["architecture-overview.md"]
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let mut session = build_session(
+            &workspace,
+            decision_task(workspace.to_string_lossy().as_ref(), json!({})),
+        );
+        session.goal = Some("Plan the next bounded change".to_string());
+
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let sources = runtime.planning_context_sources(&session, "Plan the next bounded change");
+        let memory = sources
+            .compacted_canon_memory
+            .expect("incompatible project memory should still surface repair guidance");
+
+        assert_eq!(memory.credibility, crate::domain::governance::MemoryCredibilityState::Stale);
+        assert_eq!(memory.reason_code.as_deref(), Some("project_memory_contract_incompatible"));
+        assert_eq!(
+            memory.recommended_next_action.as_ref().map(|action| action.action.as_str()),
+            Some("update")
+        );
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn compacted_project_memory_maps_non_credible_states_to_actions() {
+        let workspace = temp_workspace("boundline-runtime-project-memory-states");
+        let cases = [
+            (
+                PromotionStateView::PendingOrIndex,
+                "Canon project memory is pending",
+                "project_memory_pending",
+                "refresh",
+            ),
+            (
+                PromotionStateView::EvidenceOnly,
+                "Canon project memory is evidence-only",
+                "project_memory_evidence_only",
+                "promote",
+            ),
+            (
+                PromotionStateView::Manual,
+                "Canon project memory requires manual promotion",
+                "project_memory_manual",
+                "promote",
+            ),
+            (
+                PromotionStateView::Unknown,
+                "Canon project memory metadata is incomplete",
+                "project_memory_unknown",
+                "inspect",
+            ),
+        ];
+
+        for (state, headline, reason_code, action) in cases {
+            let context = ProjectMemoryContext {
+                status: ProjectMemoryStatus::Available,
+                compatibility: Some(CompatibilityOutcome::Compatible),
+                surfaces: vec![ProjectMemorySurface {
+                    path: PathBuf::from("docs/project/overview.md"),
+                    lineage: Some(LineageRef {
+                        contract_version: "0.1.0".to_string(),
+                        source_run: "run-123".to_string(),
+                        mode: "architecture".to_string(),
+                        profile: Some("project-memory".to_string()),
+                        promotion_state: "auto".to_string(),
+                        approval_state: Some("Completed".to_string()),
+                        readiness: "complete".to_string(),
+                        published_at: None,
+                        update_strategy: None,
+                        source_artifacts: Vec::new(),
+                    }),
+                    promotion_view: state,
+                    category: "overview".to_string(),
+                }],
+                evidence_refs: Vec::new(),
+                effective_promotion_state: Some(state),
+            };
+
+            let memory = SessionRuntime::compacted_canon_memory_from_project_memory_context(
+                &workspace, &context,
+            )
+            .expect("non-credible project memory should still compact");
+
+            assert_eq!(memory.headline, headline);
+            assert_eq!(
+                memory.credibility,
+                crate::domain::governance::MemoryCredibilityState::Stale
+            );
+            assert_eq!(memory.reason_code.as_deref(), Some(reason_code));
+            assert_eq!(memory.run_ref.as_deref(), Some("run-123"));
+            assert_eq!(memory.possible_actions[0].action, action);
+            assert_eq!(
+                memory.recommended_next_action.as_ref().map(|next| next.action.as_str()),
+                Some(action)
+            );
+            assert_eq!(
+                memory
+                    .evidence_summary
+                    .as_ref()
+                    .map(|summary| summary.artifact_provenance_links.clone()),
+                Some(vec!["docs/project/overview.md".to_string()])
+            );
+        }
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn project_memory_artifact_refs_skip_missing_and_duplicate_evidence_roots() {
+        let workspace = temp_workspace("boundline-runtime-project-memory-artifact-refs");
+        fs::create_dir_all(workspace.join("docs/evidence/architecture/run-123")).unwrap();
+
+        let existing_lineage = LineageRef {
+            contract_version: "0.1.0".to_string(),
+            source_run: "run-123".to_string(),
+            mode: "architecture".to_string(),
+            profile: Some("project-memory".to_string()),
+            promotion_state: "auto".to_string(),
+            approval_state: Some("Completed".to_string()),
+            readiness: "complete".to_string(),
+            published_at: None,
+            update_strategy: None,
+            source_artifacts: Vec::new(),
+        };
+        let missing_lineage =
+            LineageRef { source_run: "run-missing".to_string(), ..existing_lineage.clone() };
+
+        let context = ProjectMemoryContext {
+            status: ProjectMemoryStatus::Available,
+            compatibility: Some(CompatibilityOutcome::Compatible),
+            surfaces: vec![ProjectMemorySurface {
+                path: PathBuf::from("docs/project/architecture-map.md"),
+                lineage: None,
+                promotion_view: PromotionStateView::Stable,
+                category: "architecture-map".to_string(),
+            }],
+            evidence_refs: vec![existing_lineage.clone(), existing_lineage, missing_lineage],
+            effective_promotion_state: Some(PromotionStateView::Stable),
+        };
+
+        let refs = SessionRuntime::project_memory_artifact_refs(&workspace, &context);
+
+        assert_eq!(
+            refs,
+            vec![
+                "docs/project/architecture-map.md".to_string(),
+                "docs/evidence/architecture/run-123".to_string(),
+            ]
         );
 
         fs::remove_dir_all(workspace).unwrap();

@@ -1123,7 +1123,7 @@ mod tests {
     #[test]
     fn capability_snapshot_validation_and_summary_cover_success_and_failure_paths() {
         let snapshot = CanonCapabilitySnapshot {
-            canon_version: "0.45.0".to_string(),
+            canon_version: "0.48.0".to_string(),
             supported_schema_versions: vec!["2026-02-01".to_string()],
             operations: vec!["capabilities".to_string(), "start".to_string()],
             supported_modes: vec![CanonMode::Change, CanonMode::PrReview],
@@ -1133,7 +1133,7 @@ mod tests {
             compatibility_notes: Vec::new(),
         };
 
-        assert_eq!(snapshot.summary_text(), "Canon 0.45.0 capabilities available");
+        assert_eq!(snapshot.summary_text(), "Canon 0.48.0 capabilities available");
         assert_eq!(
             CanonCapabilitySnapshot {
                 canon_version: String::new(),

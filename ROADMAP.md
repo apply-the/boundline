@@ -6,7 +6,7 @@ Canon is downstream from Boundline in this roadmap: Boundline thinks, decides, o
 
 Evolve Boundline into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.50.0
+## Current Status: v0.51.0
 
 Boundline now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -21,7 +21,22 @@ memory, bounded delegated execution, and a release-aligned distribution
 surface in place, with Canon-default governed setup, runtime selection, and
 assistant-surface alignment now carried through the same primary workflow. The
 operator entry path is now stack-neutral for empty, non-Rust, and mixed
-repositories, with a clearer first-run CLI UX:
+repositories, with a clearer first-run CLI UX. That baseline now extends into
+Canon-promoted project-memory reuse, so published `docs/project/*.md` surfaces
+and their supporting evidence can feed later planning and governed follow-through
+when the lineage is compatible and credible:
+
+### Delivered in 0.51.0
+
+- Boundline now reads Canon-promoted `docs/project/*.md` surfaces with adjacent
+  packet metadata sidecars and derives the supporting `docs/evidence/...`
+  locations needed for later reuse.
+- Project-memory compatibility is pinned to the Canon `0.1.x` contract line,
+  while pending or incomplete promotions remain visible without becoming
+  authoritative planning input.
+- Compacted Canon memory and governed-stage input assembly now carry project-memory
+  provenance forward, and the documented Canon companion target is updated to
+  `0.48.0`.
 
 ### Delivered in 0.50.0
 

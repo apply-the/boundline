@@ -918,6 +918,14 @@ pub fn build_context_pack(
     if has_credible_context && let Some(memory) = context_sources.compacted_canon_memory.as_ref() {
         summary.push_str("; ");
         summary.push_str(&memory.summary_text());
+        if memory.credibility != MemoryCredibilityState::Credible
+            && let Some(recommended_next_action) = memory.recommended_next_action.as_ref()
+        {
+            summary.push_str("; next action: ");
+            summary.push_str(&recommended_next_action.action);
+            summary.push_str(": ");
+            summary.push_str(&recommended_next_action.rationale);
+        }
     }
     let staleness_reason = if credibility == ContextPackCredibility::Stale {
         let mut reasons = Vec::new();
@@ -1504,7 +1512,12 @@ mod tests {
                     artifact_refs: vec![".canon/runs/run-1/verification.md".to_string()],
                     mode_summary: None,
                     possible_actions: Vec::new(),
-                    recommended_next_action: None,
+                    recommended_next_action: Some(CanonRecommendedActionSummary {
+                        action: "refresh".to_string(),
+                        rationale: "refresh the governed packet and reassess its credibility"
+                            .to_string(),
+                        target: None,
+                    }),
                     evidence_summary: None,
                 }),
                 ..PlanningContextSources::default()
@@ -1516,6 +1529,7 @@ mod tests {
             crate::domain::goal_plan::ContextPackCredibility::Stale
         );
         assert_eq!(context_pack.staleness_reason.as_deref(), Some("stale_packet"));
+        assert!(context_pack.summary.contains("next action: refresh"));
         assert!(context_pack.selected_targets.contains(&"src/lib.rs".to_string()));
 
         fs::remove_dir_all(workspace).unwrap();
@@ -1584,7 +1598,7 @@ mod tests {
             &workspace,
             &PlanningContextSources {
                 canon_capability_snapshot: Some(CanonCapabilitySnapshot {
-                    canon_version: "0.45.0".to_string(),
+                    canon_version: "0.48.0".to_string(),
                     supported_schema_versions: vec!["2026-02-01".to_string()],
                     operations: vec![
                         "start".to_string(),
@@ -1647,7 +1661,7 @@ mod tests {
             goal_plan
                 .source_evidence
                 .iter()
-                .any(|entry| entry.reference.contains("Canon 0.45.0 capabilities available"))
+                .any(|entry| entry.reference.contains("Canon 0.48.0 capabilities available"))
         );
 
         fs::remove_dir_all(workspace).unwrap();

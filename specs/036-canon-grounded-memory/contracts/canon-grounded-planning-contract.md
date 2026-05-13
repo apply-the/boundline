@@ -12,6 +12,16 @@ evidence as live bounded reasoning input.
   planning.
 - Canon-governed evidence may or may not exist; absence must remain explicit.
 
+## Minimum Planning Contract
+
+- The planning path consumes the minimum orchestration contract exposed by
+  Canon-grounded context: compatible contract semantics, decisive promotion or
+  approval state when relevant, bounded packet or artifact refs, and current
+  credibility state.
+- Producer-specific provenance may enrich summaries and inspect surfaces, but
+  its absence alone must not block planning unless that provenance is itself
+  the decisive evidence for the next bounded action.
+
 ## `boundline plan`
 
 ### Required behavior

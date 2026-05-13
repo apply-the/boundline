@@ -76,43 +76,78 @@ pub fn overlay_stage_policy_with_intent(
     policy
 }
 
-pub fn governance_input_documents(task_input: &Value) -> Vec<GovernanceInputDocument> {
-    let Some(bundle) = task_input
+pub fn governance_input_documents(
+    task_input: &Value,
+    compacted_canon_memory: Option<&CompactedCanonMemory>,
+) -> Vec<GovernanceInputDocument> {
+    let mut documents = Vec::new();
+    if let Some(bundle) = task_input
         .get("authored_brief")
         .cloned()
         .and_then(|value| serde_json::from_value::<AuthoredBriefBundle>(value).ok())
-    else {
-        return Vec::new();
-    };
-
-    let mut documents = Vec::new();
-    let mut stage_brief_assigned = false;
-    for source in bundle.sources {
-        let Some(path) = source.workspace_path else {
-            continue;
-        };
-        let kind = if stage_brief_assigned {
-            "authored-brief"
-        } else {
-            stage_brief_assigned = true;
-            "stage-brief"
-        };
-        documents.push(GovernanceInputDocument { kind: kind.to_string(), path });
-    }
-
-    // T040: Include clarification answers as input documents.
-    if let Some(clarification) = bundle
-        .clarification
-        .as_ref()
-        .filter(|c| c.status == crate::domain::task::ClarificationStatus::Answered)
     {
-        documents.push(GovernanceInputDocument {
-            kind: "clarification-answer".to_string(),
-            path: format!("clarification-{}", clarification.clarification_id),
-        });
+        let mut stage_brief_assigned = false;
+        for source in bundle.sources {
+            let Some(path) = source.workspace_path else {
+                continue;
+            };
+            let kind = if stage_brief_assigned {
+                "authored-brief"
+            } else {
+                stage_brief_assigned = true;
+                "stage-brief"
+            };
+            documents.push(GovernanceInputDocument { kind: kind.to_string(), path });
+        }
+
+        // T040: Include clarification answers as input documents.
+        if let Some(clarification) = bundle
+            .clarification
+            .as_ref()
+            .filter(|c| c.status == crate::domain::task::ClarificationStatus::Answered)
+        {
+            documents.push(GovernanceInputDocument {
+                kind: "clarification-answer".to_string(),
+                path: format!("clarification-{}", clarification.clarification_id),
+            });
+        }
     }
+
+    append_project_memory_input_documents(&mut documents, compacted_canon_memory);
 
     documents
+}
+
+fn append_project_memory_input_documents(
+    documents: &mut Vec<GovernanceInputDocument>,
+    compacted_canon_memory: Option<&CompactedCanonMemory>,
+) {
+    let Some(memory) = compacted_canon_memory else {
+        return;
+    };
+
+    let provenance_links = memory
+        .evidence_summary
+        .as_ref()
+        .filter(|summary| !summary.artifact_provenance_links.is_empty())
+        .map(|summary| summary.artifact_provenance_links.as_slice())
+        .unwrap_or(memory.artifact_refs.as_slice());
+
+    for path in provenance_links {
+        let kind = if path.starts_with("docs/project/") {
+            "project-memory-surface"
+        } else if path.starts_with("docs/evidence/") {
+            "project-memory-evidence"
+        } else {
+            continue;
+        };
+
+        if documents.iter().any(|document| document.path == *path) {
+            continue;
+        }
+
+        documents.push(GovernanceInputDocument { kind: kind.to_string(), path: path.clone() });
+    }
 }
 
 pub fn select_packet_reuse_binding(
@@ -817,17 +852,20 @@ pub fn evaluate_mode_selection_gate(
 #[cfg(test)]
 mod tests {
     use serde::Serialize;
-    use serde_json::Value;
+    use serde_json::{Value, json};
 
     use super::{
         GovernanceStateSelectionError, canon_memory_credibility, canon_memory_possible_actions,
         canon_memory_recommended_action, compacted_canon_memory_for_block,
-        compacted_canon_memory_from_response, optional_serialized_value, serialize_to_value,
+        compacted_canon_memory_from_response, governance_input_documents,
+        optional_serialized_value, serialize_to_value,
     };
+    use crate::adapters::governance_runtime::GovernanceInputDocument;
     use crate::adapters::governance_runtime::GovernanceRuntimeResponse;
     use crate::domain::governance::{
-        ApprovalState, CanonRecommendedActionSummary, GovernanceLifecycleState,
-        GovernanceRuntimeKind, GovernedStagePacket, MemoryCredibilityState, PacketReadiness,
+        ApprovalState, CanonEvidenceInspectSummary, CanonRecommendedActionSummary,
+        CompactedCanonMemory, GovernanceLifecycleState, GovernanceRuntimeKind, GovernedStagePacket,
+        MemoryCredibilityState, PacketReadiness,
     };
     use crate::domain::task_context::TaskContextError;
 
@@ -858,6 +896,53 @@ mod tests {
             headline: "Verification packet ready".to_string(),
             reason_code: Some("packet_ready".to_string()),
         }
+    }
+
+    #[test]
+    fn governance_input_documents_include_project_memory_provenance_without_authored_brief() {
+        let memory = CompactedCanonMemory {
+            headline: "Canon project memory available".to_string(),
+            credibility: MemoryCredibilityState::Credible,
+            stage_key: None,
+            run_ref: Some("run-123".to_string()),
+            packet_ref: None,
+            reason_code: None,
+            artifact_refs: vec![
+                "docs/project/architecture-map.md".to_string(),
+                "docs/evidence/architecture/run-123".to_string(),
+                ".canon/runs/canon-run-1/verification.md".to_string(),
+            ],
+            mode_summary: None,
+            possible_actions: Vec::new(),
+            recommended_next_action: None,
+            evidence_summary: Some(CanonEvidenceInspectSummary {
+                execution_posture: None,
+                carried_forward_items: Vec::new(),
+                artifact_provenance_links: vec![
+                    "docs/project/architecture-map.md".to_string(),
+                    "docs/evidence/architecture/run-123".to_string(),
+                    ".canon/runs/canon-run-1/verification.md".to_string(),
+                ],
+                closure_status: None,
+                closure_findings: Vec::new(),
+            }),
+        };
+
+        let documents = governance_input_documents(&json!({}), Some(&memory));
+
+        assert_eq!(
+            documents,
+            vec![
+                GovernanceInputDocument {
+                    kind: "project-memory-surface".to_string(),
+                    path: "docs/project/architecture-map.md".to_string(),
+                },
+                GovernanceInputDocument {
+                    kind: "project-memory-evidence".to_string(),
+                    path: "docs/evidence/architecture/run-123".to_string(),
+                },
+            ]
+        );
     }
 
     #[test]
