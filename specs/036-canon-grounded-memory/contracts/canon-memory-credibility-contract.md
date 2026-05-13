@@ -10,6 +10,18 @@ it must trigger refresh, replanning, or an explicit stop.
 - A session or active task carries compacted Canon-grounded memory.
 - Later planning, execution, or inspection wants to rely on that memory.
 
+## Minimum Reuse Gate
+
+- Boundline evaluates Canon-grounded memory against the minimum reuse gate
+  needed for bounded continuation, not against the full provenance envelope
+  emitted by any one producer.
+- The minimum reuse gate covers decisive packet lineage, decisive artifact or
+  evidence refs, approval or readiness state when those semantics affect the
+  next bounded action, and capability constraints that materially change the
+  route.
+- Extra producer provenance may be preserved and rendered, but missing optional
+  provenance alone must not make memory non-credible.
+
 ## Credible reuse
 
 ### Required behavior
@@ -26,7 +38,7 @@ it must trigger refresh, replanning, or an explicit stop.
 
 - The runtime must mark compacted Canon-grounded memory as non-credible when:
   - required packet lineage no longer matches,
-  - required artifact provenance is missing,
+  - required artifact provenance for the next bounded action is missing,
   - Canon capability constraints changed materially,
   - later validation contradicts a carried-forward Canon assumption, or
   - the compacted summary no longer contains enough evidence for the next

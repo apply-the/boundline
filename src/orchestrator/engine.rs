@@ -386,12 +386,17 @@ where
             .context
             .latest_governance_packet()
             .map_err(|error| OrchestratorError::TaskContext(error.to_string()))?;
+        let compacted_canon_memory = task
+            .context
+            .latest_compacted_canon_memory()
+            .map_err(|error| OrchestratorError::TaskContext(error.to_string()))?;
         let governance_attempt_id =
             format!("{}-attempt-{}", stage_key.replace(':', "-"), task.plan.revision);
         let (bounded_context, packet_reuse) =
             bounded_governance_context(&task.context, &metadata, &self.read_targets)
                 .map_err(|error| OrchestratorError::GovernancePatch(error.to_string()))?;
-        let input_documents = governance_input_documents(&task.input);
+        let input_documents =
+            governance_input_documents(&task.input, compacted_canon_memory.as_ref());
 
         let requested_runtime = policy.effective_runtime(governance.default_runtime);
         let canon_available = governance

@@ -17,6 +17,30 @@ recorded workspace version.
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-05-13
+
+Delivered specs:
+
+- `050` - Project Memory Delivery Integration
+
+Highlights:
+
+- Added consumer-side types for reading Canon-promoted project-memory and
+  evidence surfaces: `PromotionStateView`, `LineageRef`,
+  `CompatibilityOutcome`, `ProjectMemoryContext`, `ProjectMemorySurface`.
+- Implemented a Canon-shaped project-memory reader for named `docs/project/*.md`
+  surfaces with adjacent `<surface>.packet-metadata.json` sidecars, while
+  deriving supporting evidence roots under `docs/evidence/<mode>/<RUN_ID>/`.
+- Integrated current contract-version compatibility checking for Canon's active
+  `0.1.x` project-memory contract line and future major-version rejection.
+- Stage planning now reuses stable Canon project memory through the existing
+  compacted Canon memory projection while treating pending or evidence-only
+  surfaces as non-authoritative.
+- Session-native Canon memory summaries now carry project-memory artifact refs
+  sourced from published `docs/project/*.md` and `docs/evidence/...` surfaces.
+- Updated the documented and distributed Canon companion target to `0.48.0`.
+- Bumped workspace version to `0.51.0`.
+
 ## [0.50.0] - 2026-05-12
 
 Delivered specs:

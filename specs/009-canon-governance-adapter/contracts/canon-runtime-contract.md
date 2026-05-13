@@ -58,6 +58,16 @@ For approval refreshes on a previously started Canon run, Boundline reuses the s
 }
 ```
 
+## Minimum Orchestration Contract
+
+- Boundline's runtime core validates only the semantic minimum required to
+  drive a bounded next action: explicit lifecycle status, explicit packet
+  readiness, stable run or packet lineage when a governed attempt exists, and
+  approval state when the stage is waiting on approval.
+- Provider- or framework-specific provenance may be surfaced by the adapter or
+  downstream summaries, but it is not part of the minimum orchestration gate
+  unless a narrower integration contract promotes it.
+
 ## Supported Mode Packet Expectations (First Slice)
 
 Boundline's first slice treats the following primary document as required for packet readiness under each supported Canon mode:

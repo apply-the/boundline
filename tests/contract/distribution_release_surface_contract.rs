@@ -1,10 +1,13 @@
 use std::fs;
 use std::path::Path;
 
+use boundline::assistant_plugin_validation::workspace_version_from_toml;
+
 #[test]
-fn release_surface_closes_on_0_49_1_without_an_upcoming_049_entry() {
+fn release_surface_tracks_current_workspace_version_without_stale_status_heading() {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let cargo_toml = fs::read_to_string(repo_root.join("Cargo.toml")).unwrap();
+    let version = workspace_version_from_toml(&cargo_toml).expect("workspace version must parse");
     let changelog = fs::read_to_string(repo_root.join("CHANGELOG.md")).unwrap();
     let roadmap = fs::read_to_string(repo_root.join("ROADMAP.md")).unwrap();
     let windows_release_workflow =
@@ -12,12 +15,15 @@ fn release_surface_closes_on_0_49_1_without_an_upcoming_049_entry() {
             .unwrap();
     let homebrew_tap_workflow =
         fs::read_to_string(repo_root.join(".github/workflows/sync-homebrew-tap.yml")).unwrap();
+    let changelog_heading = format!("## [{version}] - ");
+    let roadmap_status_heading = format!("## Current Status: v{version}");
+    let roadmap_delivered_heading = format!("### Delivered in {version}");
 
-    assert!(cargo_toml.contains("version = \"0.50.0\""));
-    assert!(changelog.contains("## [0.50.0] - 2026-05-12"));
-    assert!(changelog.contains("Assistant Plugin Packages"));
-    assert!(roadmap.contains("## Current Status: v0.50.0"));
-    assert!(roadmap.contains("### Delivered in 0.50.0"));
+    assert!(cargo_toml.contains(&format!("version = \"{version}\"")));
+    assert!(changelog.contains(&changelog_heading));
+    assert!(roadmap.contains(&roadmap_status_heading));
+    assert!(roadmap.contains(&roadmap_delivered_heading));
+    assert_eq!(roadmap.matches("## Current Status:").count(), 1);
     assert!(windows_release_workflow.contains(
         "git clone --depth 1 --branch \"$canonVersion\" https://github.com/apply-the/canon canon-source"
     ));
