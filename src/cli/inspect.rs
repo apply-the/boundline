@@ -1757,7 +1757,7 @@ mod tests {
                 "context_summary": "bounded context from src/lib.rs",
                 "context_credibility": "stale",
                 "context_primary_inputs": ["src/lib.rs"],
-                "context_provenance": ["workspace_file: src/lib.rs (failing test target)"],
+                "context_provenance": ["workspace_file: src/lib.rs (failing test target) [source=symbol_scan]"],
                 "context_staleness_reason": "trace snapshot is stale"
             }),
         );
@@ -1802,7 +1802,9 @@ mod tests {
         assert_eq!(summary.context_primary_inputs, vec!["src/lib.rs".to_string()]);
         assert_eq!(
             summary.context_provenance,
-            vec!["workspace_file: src/lib.rs (failing test target)".to_string()]
+            vec![
+                "workspace_file: src/lib.rs (failing test target) [source=symbol_scan]".to_string()
+            ]
         );
         assert_eq!(summary.context_staleness_reason.as_deref(), Some("trace snapshot is stale"));
         assert!(

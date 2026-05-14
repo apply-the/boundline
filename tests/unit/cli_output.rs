@@ -553,8 +553,8 @@ fn render_run_trace_surfaces_context_projection() {
             "context_credibility": "credible",
             "context_primary_inputs": ["src/context_router.rs", "src/lib.rs"],
             "context_provenance": [
-                "workspace_file: src/context_router.rs (selected as a bounded workspace target for the current goal)",
-                "recent_trace: .boundline/traces/last.json (reuses the latest persisted trace as bounded historical evidence)"
+                "workspace_file: src/context_router.rs (selected as a bounded workspace target for the current goal) [source=workspace_scan]",
+                "recent_trace: .boundline/traces/last.json (reuses the latest persisted trace as bounded historical evidence) [source=latest_trace_ref]"
             ]
         }),
         recorded_at: 0,
@@ -727,7 +727,7 @@ fn execute_inspect_surfaces_context_projection() {
             "context_credibility": "credible",
             "context_primary_inputs": ["src/context_router.rs"],
             "context_provenance": [
-                "workspace_file: src/context_router.rs (selected as a bounded workspace target for the current goal)"
+                "workspace_file: src/context_router.rs (selected as a bounded workspace target for the current goal) [source=workspace_scan]"
             ]
         }),
         recorded_at: 0,
@@ -1053,7 +1053,7 @@ fn render_session_status_surfaces_context_projection() {
         context_credibility: Some("credible".to_string()),
         context_primary_inputs: Some(vec!["src/context_router.rs".to_string()]),
         context_provenance: Some(vec![
-            "workspace_file: src/context_router.rs (selected as a bounded workspace target for the current goal)"
+            "workspace_file: src/context_router.rs (selected as a bounded workspace target for the current goal) [source=workspace_scan]"
                 .to_string(),
         ]),
         next_command: Some("boundline run".to_string()),
@@ -1262,7 +1262,7 @@ fn summarize_trace_uses_goal_plan_projection_and_decision_evidence_fallbacks() {
             "context_summary": "bounded context from src/lib.rs",
             "context_credibility": "stale",
             "context_primary_inputs": ["src/lib.rs"],
-            "context_provenance": ["workspace_file: src/lib.rs (failing test target)"],
+            "context_provenance": ["workspace_file: src/lib.rs (failing test target) [source=workspace_scan]"],
             "context_staleness_reason": "trace snapshot is stale"
         }),
         recorded_at: 0,
@@ -1319,7 +1319,9 @@ fn summarize_trace_uses_goal_plan_projection_and_decision_evidence_fallbacks() {
     assert_eq!(summary.context_primary_inputs, vec!["src/lib.rs".to_string()]);
     assert_eq!(
         summary.context_provenance,
-        vec!["workspace_file: src/lib.rs (failing test target)".to_string()]
+        vec![
+            "workspace_file: src/lib.rs (failing test target) [source=workspace_scan]".to_string()
+        ]
     );
     assert_eq!(summary.context_staleness_reason.as_deref(), Some("trace snapshot is stale"));
     assert!(

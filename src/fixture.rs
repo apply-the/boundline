@@ -575,6 +575,18 @@ fn first_stable_line(contents: &str) -> Option<String> {
     contents.lines().map(str::trim).find(|line| !line.is_empty()).map(str::to_string)
 }
 
+fn resolve_supported_fixture_flow(
+    flow_name: &str,
+    context: &'static str,
+) -> Result<&'static crate::domain::flow::FlowDefinition, FixtureRuntimeError> {
+    // Reuse one unsupported-flow error path so direct and adaptive fixture
+    // planning report the same contract shape.
+    built_in_flow(flow_name).ok_or_else(|| FixtureRuntimeError::UnsupportedFixtureFlow {
+        flow_name: flow_name.to_string(),
+        context,
+    })
+}
+
 fn build_vertical_slice_plan(
     profile: &WorkspaceExecutionProfile,
     active_flow: Option<&SessionFlowState>,
@@ -586,124 +598,134 @@ fn build_vertical_slice_plan(
         return Ok(Plan::new(steps)?);
     };
 
-    let flow = built_in_flow(&active_flow.flow_name).ok_or_else(|| {
-        FixtureRuntimeError::UnsupportedFixtureFlow {
-            flow_name: active_flow.flow_name.clone(),
-            context: "fixture planning",
+    let mut steps = match active_flow.flow_name.as_str() {
+        "bug-fix" => {
+            let flow = resolve_supported_fixture_flow(&active_flow.flow_name, "fixture planning")?;
+            vec![
+                Step::agent(
+                    "investigate",
+                    "analyzer",
+                    attach_stage_metadata(analysis_step_input(profile), flow, 0)?,
+                )?,
+                Step::agent(
+                    "implement",
+                    "coder",
+                    attach_stage_metadata(
+                        code_step_input(
+                            profile,
+                            attempt_index,
+                            json!({
+                                "phase": "implement",
+                                "force_retry_once": profile.limits.max_retries > 0,
+                            }),
+                        )?,
+                        flow,
+                        1,
+                    )?,
+                )?,
+                Step::tool(
+                    "verify",
+                    "tester",
+                    attach_stage_metadata(
+                        verify_step_input(
+                            profile,
+                            attempt_index,
+                            json!({
+                                "phase": "verify",
+                            }),
+                        )?,
+                        flow,
+                        2,
+                    )?,
+                )?,
+            ]
         }
-    })?;
-
-    let mut steps = match flow.name {
-        "bug-fix" => vec![
-            Step::agent(
-                "investigate",
-                "analyzer",
-                attach_stage_metadata(analysis_step_input(profile), flow, 0)?,
-            )?,
-            Step::agent(
-                "implement",
-                "coder",
-                attach_stage_metadata(
-                    code_step_input(
-                        profile,
-                        attempt_index,
-                        json!({
-                            "phase": "implement",
-                            "force_retry_once": profile.limits.max_retries > 0,
-                        }),
+        "change" => {
+            let flow = resolve_supported_fixture_flow(&active_flow.flow_name, "fixture planning")?;
+            vec![
+                Step::agent(
+                    "understand-change",
+                    "analyzer",
+                    attach_stage_metadata(analysis_step_input(profile), flow, 0)?,
+                )?,
+                Step::agent(
+                    "implement",
+                    "coder",
+                    attach_stage_metadata(
+                        code_step_input(profile, attempt_index, json!({"phase": "implement"}))?,
+                        flow,
+                        1,
                     )?,
-                    flow,
-                    1,
                 )?,
-            )?,
-            Step::tool(
-                "verify",
-                "tester",
-                attach_stage_metadata(
-                    verify_step_input(
-                        profile,
-                        attempt_index,
-                        json!({
-                            "phase": "verify",
-                        }),
+                Step::tool(
+                    "verify",
+                    "tester",
+                    attach_stage_metadata(
+                        verify_step_input(profile, attempt_index, json!({"phase": "verify"}))?,
+                        flow,
+                        2,
                     )?,
-                    flow,
-                    2,
                 )?,
-            )?,
-        ],
-        "change" => vec![
-            Step::agent(
-                "understand-change",
-                "analyzer",
-                attach_stage_metadata(analysis_step_input(profile), flow, 0)?,
-            )?,
-            Step::agent(
-                "implement",
-                "coder",
-                attach_stage_metadata(
-                    code_step_input(profile, attempt_index, json!({"phase": "implement"}))?,
-                    flow,
-                    1,
+            ]
+        }
+        "delivery" => {
+            let flow = resolve_supported_fixture_flow(&active_flow.flow_name, "fixture planning")?;
+            vec![
+                Step::agent(
+                    "requirements",
+                    "analyzer",
+                    attach_stage_metadata(analysis_step_input(profile), flow, 0)?,
                 )?,
-            )?,
-            Step::tool(
-                "verify",
-                "tester",
-                attach_stage_metadata(
-                    verify_step_input(profile, attempt_index, json!({"phase": "verify"}))?,
-                    flow,
-                    2,
+                Step::decision(
+                    "architecture",
+                    attach_stage_metadata(
+                        json!({
+                            "phase": "architecture",
+                            "output": {"architecture_ready": true},
+                        }),
+                        flow,
+                        1,
+                    )?,
                 )?,
-            )?,
-        ],
-        "delivery" => vec![
-            Step::agent(
-                "requirements",
-                "analyzer",
-                attach_stage_metadata(analysis_step_input(profile), flow, 0)?,
-            )?,
-            Step::decision(
-                "architecture",
-                attach_stage_metadata(
-                    json!({
-                        "phase": "architecture",
-                        "output": {"architecture_ready": true},
-                    }),
-                    flow,
-                    1,
+                Step::decision(
+                    "backlog",
+                    attach_stage_metadata(
+                        json!({
+                            "phase": "backlog",
+                            "output": {"backlog_ready": true},
+                        }),
+                        flow,
+                        2,
+                    )?,
                 )?,
-            )?,
-            Step::decision(
-                "backlog",
-                attach_stage_metadata(
-                    json!({
-                        "phase": "backlog",
-                        "output": {"backlog_ready": true},
-                    }),
-                    flow,
-                    2,
+                Step::agent(
+                    "implementation-code",
+                    "coder",
+                    attach_stage_metadata(
+                        code_step_input(
+                            profile,
+                            attempt_index,
+                            json!({"phase": "implementation"}),
+                        )?,
+                        flow,
+                        3,
+                    )?,
                 )?,
-            )?,
-            Step::agent(
-                "implementation-code",
-                "coder",
-                attach_stage_metadata(
-                    code_step_input(profile, attempt_index, json!({"phase": "implementation"}))?,
-                    flow,
-                    3,
+                Step::tool(
+                    "implementation-verify",
+                    "tester",
+                    attach_stage_metadata(
+                        verify_step_input(
+                            profile,
+                            attempt_index,
+                            json!({"phase": "implementation"}),
+                        )?,
+                        flow,
+                        3,
+                    )?,
                 )?,
-            )?,
-            Step::tool(
-                "implementation-verify",
-                "tester",
-                attach_stage_metadata(
-                    verify_step_input(profile, attempt_index, json!({"phase": "implementation"}))?,
-                    flow,
-                    3,
-                )?,
-            )?,
-        ],
+            ]
+        }
         other => {
             return Err(FixtureRuntimeError::UnsupportedFixtureFlow {
                 flow_name: other.to_string(),
@@ -761,126 +783,153 @@ fn build_adaptive_initial_plan(
         return Ok(Plan::new(steps)?);
     };
 
-    let flow = built_in_flow(&active_flow.flow_name).ok_or_else(|| {
-        FixtureRuntimeError::UnsupportedFixtureFlow {
-            flow_name: active_flow.flow_name.clone(),
-            context: "adaptive fixture planning",
+    let mut steps = match active_flow.flow_name.as_str() {
+        "bug-fix" => {
+            let flow = resolve_supported_fixture_flow(
+                &active_flow.flow_name,
+                "adaptive fixture planning",
+            )?;
+            vec![
+                Step::agent(
+                    "investigate",
+                    "analyzer",
+                    attach_stage_metadata(
+                        adaptive_analysis_step_input(profile, &candidate),
+                        flow,
+                        0,
+                    )?,
+                )?,
+                Step::agent(
+                    "implement",
+                    "coder",
+                    attach_stage_metadata(
+                        adaptive_code_step_input(
+                            profile,
+                            &candidate,
+                            json!({
+                                "phase": "implement",
+                                "force_retry_once": profile.limits.max_retries > 0,
+                            }),
+                        ),
+                        flow,
+                        1,
+                    )?,
+                )?,
+                Step::tool(
+                    "verify",
+                    "tester",
+                    attach_stage_metadata(
+                        adaptive_verify_step_input(profile, &candidate, json!({"phase": "verify"})),
+                        flow,
+                        2,
+                    )?,
+                )?,
+            ]
         }
-    })?;
-
-    let mut steps = match flow.name {
-        "bug-fix" => vec![
-            Step::agent(
-                "investigate",
-                "analyzer",
-                attach_stage_metadata(adaptive_analysis_step_input(profile, &candidate), flow, 0)?,
-            )?,
-            Step::agent(
-                "implement",
-                "coder",
-                attach_stage_metadata(
-                    adaptive_code_step_input(
-                        profile,
-                        &candidate,
+        "change" => {
+            let flow = resolve_supported_fixture_flow(
+                &active_flow.flow_name,
+                "adaptive fixture planning",
+            )?;
+            vec![
+                Step::agent(
+                    "understand-change",
+                    "analyzer",
+                    attach_stage_metadata(
+                        adaptive_analysis_step_input(profile, &candidate),
+                        flow,
+                        0,
+                    )?,
+                )?,
+                Step::agent(
+                    "implement",
+                    "coder",
+                    attach_stage_metadata(
+                        adaptive_code_step_input(
+                            profile,
+                            &candidate,
+                            json!({"phase": "implement"}),
+                        ),
+                        flow,
+                        1,
+                    )?,
+                )?,
+                Step::tool(
+                    "verify",
+                    "tester",
+                    attach_stage_metadata(
+                        adaptive_verify_step_input(profile, &candidate, json!({"phase": "verify"})),
+                        flow,
+                        2,
+                    )?,
+                )?,
+            ]
+        }
+        "delivery" => {
+            let flow = resolve_supported_fixture_flow(
+                &active_flow.flow_name,
+                "adaptive fixture planning",
+            )?;
+            vec![
+                Step::agent(
+                    "requirements",
+                    "analyzer",
+                    attach_stage_metadata(
+                        adaptive_analysis_step_input(profile, &candidate),
+                        flow,
+                        0,
+                    )?,
+                )?,
+                Step::decision(
+                    "architecture",
+                    attach_stage_metadata(
                         json!({
-                            "phase": "implement",
-                            "force_retry_once": profile.limits.max_retries > 0,
+                            "phase": "architecture",
+                            "output": {"architecture_ready": true},
                         }),
-                    ),
-                    flow,
-                    1,
+                        flow,
+                        1,
+                    )?,
                 )?,
-            )?,
-            Step::tool(
-                "verify",
-                "tester",
-                attach_stage_metadata(
-                    adaptive_verify_step_input(profile, &candidate, json!({"phase": "verify"})),
-                    flow,
-                    2,
+                Step::decision(
+                    "backlog",
+                    attach_stage_metadata(
+                        json!({
+                            "phase": "backlog",
+                            "output": {"backlog_ready": true},
+                        }),
+                        flow,
+                        2,
+                    )?,
                 )?,
-            )?,
-        ],
-        "change" => vec![
-            Step::agent(
-                "understand-change",
-                "analyzer",
-                attach_stage_metadata(adaptive_analysis_step_input(profile, &candidate), flow, 0)?,
-            )?,
-            Step::agent(
-                "implement",
-                "coder",
-                attach_stage_metadata(
-                    adaptive_code_step_input(profile, &candidate, json!({"phase": "implement"})),
-                    flow,
-                    1,
+                Step::agent(
+                    "implementation-code",
+                    "coder",
+                    attach_stage_metadata(
+                        adaptive_code_step_input(
+                            profile,
+                            &candidate,
+                            json!({"phase": "implementation"}),
+                        ),
+                        flow,
+                        3,
+                    )?,
                 )?,
-            )?,
-            Step::tool(
-                "verify",
-                "tester",
-                attach_stage_metadata(
-                    adaptive_verify_step_input(profile, &candidate, json!({"phase": "verify"})),
-                    flow,
-                    2,
+                Step::tool(
+                    "implementation-verify",
+                    "tester",
+                    attach_stage_metadata(
+                        adaptive_verify_step_input(
+                            profile,
+                            &candidate,
+                            json!({"phase": "implementation"}),
+                        ),
+                        flow,
+                        3,
+                    )?,
                 )?,
-            )?,
-        ],
-        "delivery" => vec![
-            Step::agent(
-                "requirements",
-                "analyzer",
-                attach_stage_metadata(adaptive_analysis_step_input(profile, &candidate), flow, 0)?,
-            )?,
-            Step::decision(
-                "architecture",
-                attach_stage_metadata(
-                    json!({
-                        "phase": "architecture",
-                        "output": {"architecture_ready": true},
-                    }),
-                    flow,
-                    1,
-                )?,
-            )?,
-            Step::decision(
-                "backlog",
-                attach_stage_metadata(
-                    json!({
-                        "phase": "backlog",
-                        "output": {"backlog_ready": true},
-                    }),
-                    flow,
-                    2,
-                )?,
-            )?,
-            Step::agent(
-                "implementation-code",
-                "coder",
-                attach_stage_metadata(
-                    adaptive_code_step_input(
-                        profile,
-                        &candidate,
-                        json!({"phase": "implementation"}),
-                    ),
-                    flow,
-                    3,
-                )?,
-            )?,
-            Step::tool(
-                "implementation-verify",
-                "tester",
-                attach_stage_metadata(
-                    adaptive_verify_step_input(
-                        profile,
-                        &candidate,
-                        json!({"phase": "implementation"}),
-                    ),
-                    flow,
-                    3,
-                )?,
-            )?,
-        ],
+            ]
+        }
         other => {
             return Err(FixtureRuntimeError::UnsupportedFixtureFlow {
                 flow_name: other.to_string(),
@@ -3336,7 +3385,7 @@ mod tests {
         ValidationGuidance, ValidationGuidanceConfidence, ValidationGuidanceSource,
         ValidationRecord,
     };
-    use crate::domain::flow::{attach_stage_metadata, built_in_flow};
+    use crate::domain::flow::{SessionFlowState, attach_stage_metadata, built_in_flow};
     use crate::domain::goal_plan::{GoalPlan, PlannedTask};
     use crate::domain::governance::{
         ApprovalState, CanonMode, GovernanceLifecycleState, GovernanceRuntimeKind,
@@ -3475,6 +3524,15 @@ mod tests {
             ],
         });
         profile
+    }
+
+    fn unsupported_flow_state() -> SessionFlowState {
+        SessionFlowState {
+            flow_name: "unsupported-flow".to_string(),
+            current_stage_id: "invent-stage".to_string(),
+            current_stage_index: 0,
+            total_stages: 1,
+        }
     }
 
     fn first_adaptive_candidate(
@@ -3753,6 +3811,66 @@ mod tests {
     }
 
     #[test]
+    fn build_fixture_plans_report_unsupported_flows() {
+        let profile = sample_profile(ExecutionCommand {
+            program: "cargo".to_string(),
+            args: vec!["test".to_string(), "--quiet".to_string()],
+        });
+        let unsupported_flow = unsupported_flow_state();
+
+        let vertical_slice_error =
+            build_vertical_slice_plan(&profile, Some(&unsupported_flow), 0).unwrap_err();
+        assert!(matches!(
+            vertical_slice_error,
+            FixtureRuntimeError::UnsupportedFixtureFlow { flow_name, context }
+                if flow_name == "unsupported-flow" && context == "fixture planning"
+        ));
+
+        let workspace = write_execution_workspace(
+            "boundline-fixture-unsupported-flow",
+            "pub fn add(left: i32, right: i32) -> bool {\n    left != right\n}\n",
+        );
+        let adaptive_profile = sample_adaptive_profile(ExecutionCommand {
+            program: "cargo".to_string(),
+            args: vec!["test".to_string(), "--quiet".to_string()],
+        });
+        let adaptive_error = build_adaptive_initial_plan(
+            &workspace,
+            &adaptive_profile,
+            Some(&unsupported_flow),
+            "repair the unsupported flow",
+        )
+        .unwrap_err();
+        assert!(matches!(
+            adaptive_error,
+            FixtureRuntimeError::UnsupportedFixtureFlow { flow_name, context }
+                if flow_name == "unsupported-flow" && context == "adaptive fixture planning"
+        ));
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn adaptive_fixture_planning_requires_an_adaptive_profile() {
+        let workspace = temp_workspace();
+        let profile = sample_profile(ExecutionCommand {
+            program: "cargo".to_string(),
+            args: vec!["test".to_string(), "--quiet".to_string()],
+        });
+
+        let error =
+            build_adaptive_initial_plan(&workspace, &profile, None, "repair the bug").unwrap_err();
+
+        assert!(matches!(
+            error,
+            FixtureRuntimeError::MissingAdaptiveProfile { profile }
+                if profile == "fixture-profile"
+        ));
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
     fn build_vertical_slice_plan_appends_review_steps_when_review_is_configured() {
         let profile = sample_review_profile(ExecutionCommand {
             program: "cargo".to_string(),
@@ -3808,6 +3926,23 @@ mod tests {
                 "investigate-review-attempt-1-finalize",
             ]
         );
+    }
+
+    #[test]
+    fn build_review_steps_for_attempt_requires_an_adjudicator_when_enabled() {
+        let mut profile = sample_review_profile(ExecutionCommand {
+            program: "cargo".to_string(),
+            args: vec!["test".to_string(), "--quiet".to_string()],
+        });
+        profile.review.as_mut().unwrap().adjudication.enabled = true;
+
+        let error = build_review_steps_for_attempt(&profile, None, "attempt-1").unwrap_err();
+
+        assert!(matches!(
+            error,
+            FixtureRuntimeError::MissingReviewAdjudicator { profile }
+                if profile == "fixture-profile"
+        ));
     }
 
     #[test]

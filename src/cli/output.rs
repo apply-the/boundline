@@ -3117,9 +3117,13 @@ mod tests {
                 "runtime": "canon",
                 "required": true,
                 "reason": "refresh_required",
+                "run_ref": "run-8",
+                "packet_ref": ".canon/runs/run-8",
                 "document_refs": [".canon/runs/run-8/verification.md"],
                 "canon_memory_summary": "Canon verification packet [stale]",
                 "canon_memory_credibility": "stale",
+                "canon_memory_compatibility": "warning",
+                "canon_memory_reason_code": "refresh_required",
                 "canon_next_action": "refresh: refresh the governed packet and reassess its credibility"
             }),
         );
@@ -3148,6 +3152,20 @@ mod tests {
         assert!(text.contains("context_credibility: stale"), "{text}");
         assert!(
             text.contains("context_primary_inputs: .canon/runs/run-8/verification.md"),
+            "{text}"
+        );
+        assert!(
+            text.contains("context_provenance: canon_memory: Canon verification packet [stale]"),
+            "{text}"
+        );
+        assert!(text.contains("canon_memory_compatibility: warning"), "{text}");
+        assert!(text.contains("canon_memory_run_ref: run-8"), "{text}");
+        assert!(text.contains("canon_memory_packet: .canon/runs/run-8"), "{text}");
+        assert!(text.contains("canon_memory_reason: refresh_required"), "{text}");
+        assert!(
+            text.contains(
+                "canon_memory_next_action: refresh: refresh the governed packet and reassess its credibility"
+            ),
             "{text}"
         );
         assert!(text.contains("context_staleness_reason: refresh_required"), "{text}");
@@ -3461,7 +3479,7 @@ mod tests {
                     "context_summary": "bounded context from src/lib.rs",
                     "context_credibility": "stale",
                     "context_primary_inputs": ["src/lib.rs"],
-                    "context_provenance": ["workspace_file: src/lib.rs (failing test target)"],
+                    "context_provenance": ["workspace_file: src/lib.rs (failing test target) [source=symbol_scan]"],
                     "context_staleness_reason": "trace snapshot is stale"
                 }
             }),
@@ -3851,6 +3869,18 @@ mod tests {
         });
         assert_eq!(exhausted_trace.0, "terminal");
         assert_eq!(exhausted_trace.1, "limits exhausted");
+
+        let failed_trace = trace_execution_condition_parts(&TraceSummaryView {
+            terminal_status: TaskStatus::Failed,
+            terminal_reason: TerminalReason::new(
+                TerminalCondition::UnrecoverableError,
+                "trace failed without adaptive exhaustion",
+                None,
+            ),
+            ..TraceSummaryView::default()
+        });
+        assert_eq!(failed_trace.0, "terminal");
+        assert_eq!(failed_trace.1, "trace failed without adaptive exhaustion");
 
         let waiting_run = render_run_execution_condition(&TaskRunResponse {
             task_id: "task-run".to_string(),

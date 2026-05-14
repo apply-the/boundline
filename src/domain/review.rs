@@ -676,6 +676,27 @@ mod tests {
     }
 
     #[test]
+    fn review_scenario_rejects_enabled_adjudication_without_reviewer_id() {
+        let triggers = BTreeSet::from([ReviewTrigger::PrReady]);
+        let reviewer_ids = BTreeSet::from(["safety".to_string(), "maintainability".to_string()]);
+        let adjudication = AdjudicationDefinition { enabled: true, reviewer_id: None };
+        let scenario = ReviewScenario {
+            trigger: ReviewTrigger::PrReady,
+            findings: sample_findings(),
+            adjudication_finding: Some(ReviewerFinding {
+                reviewer_id: "arbiter".to_string(),
+                disposition: ReviewerDisposition::Approve,
+                summary: "Break the tie".to_string(),
+                details: None,
+            }),
+        };
+
+        let error = scenario.validate(&triggers, &reviewer_ids, &adjudication).unwrap_err();
+
+        assert_eq!(error, ReviewProfileError::MissingAdjudicatorReviewerId);
+    }
+
+    #[test]
     fn resolve_rejects_missing_vote_findings() {
         let error =
             VoteRuleDefinition::default().resolve(&sample_reviewers(), &[], None).unwrap_err();
@@ -742,6 +763,48 @@ mod tests {
     }
 
     #[test]
+    fn weighted_vote_resolution_uses_reviewer_weights() {
+        let reviewers = vec![
+            ReviewerDefinition {
+                reviewer_id: "safety".to_string(),
+                role: "Safety".to_string(),
+                source: Some("copilot/gpt-5.5".to_string()),
+                weight: 3,
+            },
+            ReviewerDefinition {
+                reviewer_id: "maintainability".to_string(),
+                role: "Maintainability".to_string(),
+                source: Some("claude/sonnet-4.6".to_string()),
+                weight: 1,
+            },
+        ];
+        let findings = vec![
+            ReviewerFinding {
+                reviewer_id: "safety".to_string(),
+                disposition: ReviewerDisposition::Approve,
+                summary: "No blockers".to_string(),
+                details: None,
+            },
+            ReviewerFinding {
+                reviewer_id: "maintainability".to_string(),
+                disposition: ReviewerDisposition::Concern,
+                summary: "Watch maintainability".to_string(),
+                details: None,
+            },
+        ];
+
+        let resolution =
+            VoteRuleDefinition { strategy: VoteStrategy::Weighted, reject_on_blocking: false }
+                .resolve(&reviewers, &findings, None)
+                .unwrap();
+
+        assert_eq!(resolution.approvals, 3);
+        assert_eq!(resolution.concerns, 1);
+        assert_eq!(resolution.blocks, 0);
+        assert_eq!(resolution.decision, VoteDecision::Accepted);
+    }
+
+    #[test]
     fn resolve_requires_effective_route_for_completed_reviewers() {
         let reviewers = vec![
             ReviewerDefinition {
@@ -776,6 +839,23 @@ mod tests {
             AdjudicationDefinition { enabled: true, reviewer_id: Some("arbiter".to_string()) };
 
         assert!(adjudication.validate(&reviewer_ids).is_ok());
+    }
+
+    #[test]
+    fn adjudication_definition_requires_non_empty_reviewer_id_when_enabled() {
+        let reviewer_ids = BTreeSet::from(["safety".to_string(), "maintainability".to_string()]);
+
+        let missing = AdjudicationDefinition { enabled: true, reviewer_id: None };
+        let blank = AdjudicationDefinition { enabled: true, reviewer_id: Some(" ".to_string()) };
+
+        assert_eq!(
+            missing.validate(&reviewer_ids).unwrap_err(),
+            ReviewProfileError::MissingAdjudicatorReviewerId
+        );
+        assert_eq!(
+            blank.validate(&reviewer_ids).unwrap_err(),
+            ReviewProfileError::MissingAdjudicatorReviewerId
+        );
     }
 
     #[test]
