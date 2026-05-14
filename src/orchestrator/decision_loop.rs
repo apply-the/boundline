@@ -62,6 +62,20 @@ struct TerminalTracePayload<'a> {
     selector: ActionSelector,
 }
 
+#[derive(Debug, serde::Deserialize)]
+struct ToolExecutionOutput {
+    #[serde(default)]
+    stdout: Option<String>,
+    #[serde(default)]
+    stderr: Option<String>,
+    #[serde(default)]
+    diff: Option<String>,
+    #[serde(default)]
+    exit_code: Option<i64>,
+}
+
+const SYNTHETIC_TOOL_FAILURE_EXIT_CODE: i32 = -1;
+
 /// Terminal state produced by the decision loop.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LoopTerminal {
@@ -764,22 +778,26 @@ fn tool_result_from_step_execution(
     );
 
     if let Some(output) = result.output.as_ref() {
-        if let Some(stdout) = output.get("stdout").and_then(Value::as_str) {
-            tool_result = tool_result.with_stdout(stdout.to_string());
+        if let Ok(tool_output) = serde_json::from_value::<ToolExecutionOutput>(output.clone()) {
+            if let Some(stdout) = tool_output.stdout {
+                tool_result = tool_result.with_stdout(stdout);
+            } else {
+                tool_result = tool_result.with_stdout(output.to_string());
+            }
+
+            if let Some(stderr) = tool_output.stderr {
+                tool_result = tool_result.with_stderr(stderr);
+            }
+
+            if let Some(diff) = tool_output.diff {
+                tool_result = tool_result.with_diff(diff);
+            }
+
+            if let Some(exit_code) = tool_output.exit_code {
+                tool_result = tool_result.with_exit_code(exit_code as i32);
+            }
         } else {
             tool_result = tool_result.with_stdout(output.to_string());
-        }
-
-        if let Some(stderr) = output.get("stderr").and_then(Value::as_str) {
-            tool_result = tool_result.with_stderr(stderr.to_string());
-        }
-
-        if let Some(diff) = output.get("diff").and_then(Value::as_str) {
-            tool_result = tool_result.with_diff(diff.to_string());
-        }
-
-        if let Some(exit_code) = output.get("exit_code").and_then(Value::as_i64) {
-            tool_result = tool_result.with_exit_code(exit_code as i32);
         }
     }
 
@@ -796,7 +814,7 @@ fn tool_result_from_step_execution(
     }
 
     if matches!(result.status, ExecutionStatus::Failed) && tool_result.exit_code.is_none() {
-        tool_result = tool_result.with_exit_code(-1);
+        tool_result = tool_result.with_exit_code(SYNTHETIC_TOOL_FAILURE_EXIT_CODE);
     }
 
     tool_result
@@ -1275,6 +1293,16 @@ mod tests {
         assert_eq!(tool_result.stderr, "tests failed");
         assert!(tool_result.stdout.contains("validation"));
         assert_eq!(tool_result.exit_code, Some(-1));
+
+        let raw_output_tool_result = tool_result_from_step_execution(
+            "tester",
+            &Decision::new(DecisionType::Test, "src/lib.rs", "run tests", "tests pass", Vec::new()),
+            &StepExecutionResult::success(json!({
+                "raw_stdout": "fallback"
+            })),
+        );
+        assert_eq!(raw_output_tool_result.stdout, r#"{"raw_stdout":"fallback"}"#);
+        assert_eq!(raw_output_tool_result.stderr, "");
     }
 
     #[test]

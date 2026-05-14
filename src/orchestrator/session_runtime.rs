@@ -8,6 +8,7 @@ use crate::adapters::governance_runtime::{
     CanonCliRuntime, GovernanceRequestKind, GovernanceRuntime, GovernanceRuntimeRequest,
     LocalGovernanceRuntime,
 };
+use serde::Serialize;
 use serde_json::{Map, Value, json};
 use thiserror::Error;
 use uuid::Uuid;
@@ -86,6 +87,101 @@ pub struct SessionRuntime {
     checkpoint_store: FileCheckpointStore,
     session_store: FileSessionStore,
     trace_store: FileTraceStore,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct DelegationTraceDetails {
+    delegation: Option<DelegationStatusView>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct GoalPlanTracePayload {
+    plan_id: String,
+    goal: String,
+    task_count: usize,
+    goal_plan_state: String,
+    goal_plan_revision: usize,
+    flow_state: String,
+    planning_rationale: Option<String>,
+    verification_strategy: Option<String>,
+    negotiation_goal_summary: Option<String>,
+    negotiation_resolution: Option<String>,
+    negotiation_acceptance_boundary: Option<String>,
+    context_summary: Option<String>,
+    context_credibility: Option<String>,
+    context_primary_inputs: Vec<String>,
+    context_provenance: Vec<String>,
+    context_staleness_reason: Option<String>,
+    canon_memory_summary: Option<String>,
+    canon_memory_credibility: Option<String>,
+    canon_memory_reason_code: Option<String>,
+    canon_memory_artifact_refs: Vec<String>,
+    routing_projection: RoutingDecisionProjection,
+    canon_next_action: Option<String>,
+    delegation: Option<DelegationStatusView>,
+}
+
+impl GoalPlanTracePayload {
+    fn from_goal_plan(
+        goal_plan: &GoalPlan,
+        routing_projection: RoutingDecisionProjection,
+        delegation: Option<DelegationStatusView>,
+    ) -> Self {
+        Self {
+            plan_id: goal_plan.plan_id.clone(),
+            goal: goal_plan.goal_text.clone(),
+            task_count: goal_plan.tasks.len(),
+            goal_plan_state: goal_plan.proposal_state_text().to_string(),
+            goal_plan_revision: goal_plan.proposal_revision,
+            flow_state: goal_plan.flow_state().summary_text(),
+            planning_rationale: goal_plan.planning_rationale.clone(),
+            verification_strategy: goal_plan.verification_strategy.clone(),
+            negotiation_goal_summary: goal_plan.negotiation_goal_summary.clone(),
+            negotiation_resolution: goal_plan.negotiation_resolution.clone(),
+            negotiation_acceptance_boundary: goal_plan.negotiation_acceptance_boundary.clone(),
+            context_summary: goal_plan.context_summary(),
+            context_credibility: goal_plan.context_credibility(),
+            context_primary_inputs: goal_plan.context_primary_inputs(),
+            context_provenance: goal_plan.context_provenance_lines(),
+            context_staleness_reason: goal_plan
+                .context_pack
+                .as_ref()
+                .and_then(|pack| pack.staleness_reason.clone())
+                .or_else(|| goal_plan.canon_memory_staleness_reason()),
+            canon_memory_summary: goal_plan
+                .compacted_canon_memory
+                .as_ref()
+                .map(|memory| memory.summary_text()),
+            canon_memory_credibility: goal_plan
+                .compacted_canon_memory
+                .as_ref()
+                .map(|memory| memory.credibility.as_str().to_string()),
+            canon_memory_reason_code: goal_plan
+                .compacted_canon_memory
+                .as_ref()
+                .and_then(|memory| memory.reason_code.clone()),
+            canon_memory_artifact_refs: goal_plan
+                .compacted_canon_memory
+                .as_ref()
+                .map(|memory| memory.artifact_refs.clone())
+                .unwrap_or_default(),
+            routing_projection,
+            canon_next_action: goal_plan
+                .compacted_canon_memory
+                .as_ref()
+                .and_then(|memory| memory.recommended_next_action.as_ref())
+                .map(|action| format!("{}: {}", action.action, action.rationale)),
+            delegation,
+        }
+    }
+}
+
+fn serialize_trace_payload<T: Serialize>(payload: &T) -> Value {
+    serde_json::to_value(payload).unwrap_or(Value::Null)
+}
+
+fn delegation_trace_details(delegation: Option<DelegationStatusView>) -> Option<Value> {
+    serde_json::to_value(DelegationTraceDetails { delegation }).ok()
 }
 
 fn project_scale_state_for_goal(goal: &str, next_action: &str) -> Option<ProjectScaleSessionState> {
@@ -1064,7 +1160,7 @@ impl SessionRuntime {
                 build_terminal_reason(
                     TerminalCondition::NoCredibleNextStep,
                     delegation.headline.clone(),
-                    Some(json!({ "delegation": delegation })),
+                    delegation_trace_details(Some(delegation.clone())),
                 )
             });
             let trace = self.build_goal_plan_trace(&session.session_id, &goal_plan);
@@ -1093,7 +1189,7 @@ impl SessionRuntime {
                 delegation.as_ref().map(|view| view.headline.clone()).unwrap_or_else(|| {
                     "native goal plan reached a delegated continuity boundary".to_string()
                 }),
-                Some(json!({ "delegation": delegation })),
+                delegation_trace_details(delegation.clone()),
             );
             let trace = self.build_goal_plan_trace(&session.session_id, &goal_plan);
             return self.persist_native_result(
@@ -1557,51 +1653,12 @@ impl SessionRuntime {
     }
 
     fn goal_plan_trace_payload(&self, goal_plan: &GoalPlan) -> Value {
-        json!({
-            "plan_id": goal_plan.plan_id,
-            "goal": goal_plan.goal_text,
-            "task_count": goal_plan.tasks.len(),
-            "goal_plan_state": goal_plan.proposal_state_text(),
-            "goal_plan_revision": goal_plan.proposal_revision,
-            "flow_state": goal_plan.flow_state().summary_text(),
-            "planning_rationale": goal_plan.planning_rationale,
-            "verification_strategy": goal_plan.verification_strategy,
-            "negotiation_goal_summary": goal_plan.negotiation_goal_summary,
-            "negotiation_resolution": goal_plan.negotiation_resolution,
-            "negotiation_acceptance_boundary": goal_plan.negotiation_acceptance_boundary,
-            "context_summary": goal_plan.context_summary(),
-            "context_credibility": goal_plan.context_credibility(),
-            "context_primary_inputs": goal_plan.context_primary_inputs(),
-            "context_provenance": goal_plan.context_provenance_lines(),
-            "context_staleness_reason": goal_plan
-                .context_pack
-                .as_ref()
-                .and_then(|pack| pack.staleness_reason.clone())
-                .or_else(|| goal_plan.canon_memory_staleness_reason()),
-            "canon_memory_summary": goal_plan
-                .compacted_canon_memory
-                .as_ref()
-                .map(|memory| memory.summary_text()),
-            "canon_memory_credibility": goal_plan.compacted_canon_memory.as_ref().map(|memory| {
-                memory.credibility.as_str().to_string()
-            }),
-            "canon_memory_reason_code": goal_plan
-                .compacted_canon_memory
-                .as_ref()
-                .and_then(|memory| memory.reason_code.clone()),
-            "canon_memory_artifact_refs": goal_plan
-                .compacted_canon_memory
-                .as_ref()
-                .map(|memory| memory.artifact_refs.clone())
-                .unwrap_or_default(),
-            "routing_projection": self.goal_plan_routing_projection(),
-            "canon_next_action": goal_plan
-                .compacted_canon_memory
-                .as_ref()
-                .and_then(|memory| memory.recommended_next_action.as_ref())
-                .map(|action| format!("{}: {}", action.action, action.rationale)),
-            "delegation": self.goal_plan_delegation_view(goal_plan),
-        })
+        let payload = GoalPlanTracePayload::from_goal_plan(
+            goal_plan,
+            self.goal_plan_routing_projection(),
+            self.goal_plan_delegation_view(goal_plan),
+        );
+        serialize_trace_payload(&payload)
     }
 
     fn goal_plan_routing_projection(&self) -> RoutingDecisionProjection {
@@ -2611,7 +2668,7 @@ impl SessionRuntime {
                     "zone": request.zone,
                     "owner": request.owner,
                     "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
-                    "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
+                    "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason),
                 }),
             );
             let response = CanonCliRuntime::new(canon.command.clone())
@@ -2683,7 +2740,7 @@ impl SessionRuntime {
                 "stage_key": stage_key,
                 "runtime": GovernanceRuntimeKind::Local,
                 "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
-                "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
+                "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason),
             }),
         );
         let response = LocalGovernanceRuntime
@@ -2783,7 +2840,7 @@ impl SessionRuntime {
                         .map(|packet| packet.missing_sections.clone())
                         .unwrap_or_default(),
                     "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
-                    "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
+                    "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason),
                 }),
             );
             let trace_location = self.persist_trace(trace)?;
@@ -2873,7 +2930,7 @@ impl SessionRuntime {
                     "missing_sections": packet.missing_sections,
                     "reason": blocked_reason.as_deref().unwrap_or(&response.message),
                     "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
-                    "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
+                    "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason),
                 }),
             );
         }
@@ -2892,7 +2949,7 @@ impl SessionRuntime {
                         "document_refs": response.packet.as_ref().map(|packet| packet.document_refs.clone()).unwrap_or_default(),
                         "headline": response.packet.as_ref().map(|packet| packet.headline.clone()).unwrap_or_else(|| response.message.clone()),
                         "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
-                        "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
+                        "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason),
                     }),
                 );
                 let trace_location = self.persist_trace(trace)?;
@@ -2927,7 +2984,7 @@ impl SessionRuntime {
                         "approval_state": response.approval_state,
                         "run_ref": response.run_ref,
                         "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
-                        "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
+                        "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason),
                     }),
                 );
                 let trace_location = self.persist_trace(trace)?;
@@ -2950,7 +3007,7 @@ impl SessionRuntime {
                         "reason": reason,
                         "packet_ref": response.packet.as_ref().map(|packet| packet.packet_ref.clone()),
                         "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
-                        "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
+                        "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason),
                     }),
                 );
                 let trace_location = self.persist_trace(trace)?;

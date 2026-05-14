@@ -1,21 +1,17 @@
 <!--
 Sync Impact Report
-Version change: 1.1.0 -> 1.2.0
+Version change: 1.2.0 -> 1.3.0
 Modified principles:
-- Specification Standards: expanded to require a provider model catalog refresh
-	check against current public web sources for every spec
-- Planning & Review Workflow: expanded to require explicit catalog refresh
-	evidence in plans and task breakdowns
-Added sections:
 - None
+Added sections:
+- Language Rules: added Rust-level rules for banning magic literals in owned
+	logic and requiring typed serde models for stable serialization shapes
 Removed sections:
 - None
 Templates requiring updates:
-- updated: .specify/templates/plan-template.md
-- updated: .specify/templates/spec-template.md
-- updated: .specify/templates/tasks-template.md
-Related docs updated:
 - None
+Related docs updated:
+- updated: .agents/skills/boundline-shared/references/rust-language-rules.md
 Follow-up TODOs:
 - None
 -->
@@ -239,6 +235,34 @@ Rationale: completion is defined by delivery behavior, not by conceptual ambitio
 - Implementation is not done until the execution behavior, failure handling, and trace
 	expectations required by Principle XVIII are demonstrably satisfied.
 
+## Language Rules
+
+Language-specific implementation rules MAY tighten repository behavior beyond
+the generic delivery rules above when they remove avoidable failure classes.
+Those rules are constitutionally binding when they are published in an
+AI-visible repository reference.
+
+For Rust code in this repository, the normative language rules live in
+`.agents/skills/boundline-shared/references/rust-language-rules.md`.
+
+Compliance expectations are mandatory:
+
+- Rust code outside `main.rs`, `#[cfg(test)]` modules, and files under
+	`tests/` MUST NOT introduce panic-prone control flow; failures and
+	invariant breaks MUST surface as explicit error values or equivalent
+	blocked, stale, unsupported, or invalid states.
+- Rust code outside `main.rs`, `#[cfg(test)]` modules, and files under
+	`tests/` MUST NOT introduce magic strings or magic numbers in domain logic,
+	protocol handling, persistence, configuration, CLI contracts, or
+	serialization paths. Reusable literals MUST be expressed through named
+	constants or typed enums/newtypes owned by the relevant module or type.
+- When a serialized or deserialized shape is stable, Rust code outside
+	`main.rs`, `#[cfg(test)]` modules, and files under `tests/` MUST model it
+	with typed `struct` or `enum` definitions plus `serde` derives instead of
+	ad hoc `serde_json::Map` assembly, repeated raw field-name strings, or
+	`json!` object construction. Map-based serialization is valid only when the
+	shape is genuinely dynamic.
+
 ## Governance
 
 - This constitution supersedes conflicting local habits, template defaults, and feature-
@@ -256,4 +280,4 @@ Rationale: completion is defined by delivery behavior, not by conceptual ambitio
 - Ratification and amendment dates MUST use ISO format. An amendment is incomplete until
 	this file, the Sync Impact Report, and dependent artifacts are in sync.
 
-**Version**: 1.2.0 | **Ratified**: 2026-04-23 | **Last Amended**: 2026-05-10
+**Version**: 1.3.0 | **Ratified**: 2026-04-23 | **Last Amended**: 2026-05-14

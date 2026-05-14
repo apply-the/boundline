@@ -1,3 +1,4 @@
+use boundline::SUPPORTED_CANON_VERSION;
 use boundline::domain::cluster::{
     ClusterDeliveryStory, ClusterRouteOwner, ClusterSessionProjection, ClusteredExecutionCondition,
     ClusteredExecutionKind, WorkspaceParticipationKind, WorkspaceParticipationRecord,
@@ -6,6 +7,7 @@ use boundline::domain::governance::{
     ApprovalState, AutopilotAction, AutopilotDecisionRecord, CanonCapabilitySnapshot,
     CompactedCanonMemory, GovernanceLifecycleState, GovernanceRuntimeKind, GovernedStagePacket,
     GovernedStageRecord, MemoryCredibilityState, PacketReadiness, PacketReuseBinding,
+    PacketReuseBindingReason,
 };
 use boundline::domain::limits::RunLimits;
 use boundline::domain::step::{ErrorInfo, Recoverability, Step, StepResultSummary};
@@ -90,7 +92,7 @@ fn task_context_round_trips_governance_state_records() {
         upstream_stage_key: "bug-fix:investigate".to_string(),
         downstream_stage_key: "bug-fix:implement".to_string(),
         packet_ref: packet.packet_ref.clone(),
-        binding_reason: "reuse immediate upstream packet".to_string(),
+        binding_reason: PacketReuseBindingReason::UpstreamStageContext,
     };
     let decision = AutopilotDecisionRecord {
         decision_id: "decision-1".to_string(),
@@ -143,7 +145,7 @@ fn task_context_round_trips_canon_snapshot_and_compacted_memory() {
         Map::new(),
     );
     let snapshot = CanonCapabilitySnapshot {
-        canon_version: "0.51.0".to_string(),
+        canon_version: SUPPORTED_CANON_VERSION.to_string(),
         supported_schema_versions: vec!["2026-02-01".to_string()],
         operations: vec!["start".to_string(), "refresh".to_string(), "capabilities".to_string()],
         supported_modes: Vec::new(),

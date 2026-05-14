@@ -20,11 +20,17 @@ use crate::domain::domain_templates::{
     DomainFamily, ExternalContextBinding, ExternalContextStatus, detect_domain_families,
 };
 use crate::domain::goal_plan::{
-    ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan, GoalPlanError,
-    InferredFlow, PlannedTask, WorkspaceSignals,
+    CanonExpertiseInputConsideration, CanonExpertiseInputDisposition, ContextInput,
+    ContextInputKind, ContextPack, ContextPackCredibility, ExpertPackSelectionOutcome,
+    ExpertPackSelectionState, ExpertPackSignal, ExpertPackSignalStatus, GoalPlan, GoalPlanError,
+    InferredFlow, PlannedTask, RejectedExpertCandidate, WorkspaceSignals,
 };
 use crate::domain::governance::{
     CanonCapabilitySnapshot, CompactedCanonMemory, MemoryCredibilityState,
+};
+use crate::domain::project_memory::{
+    CompatibilityOutcome, GovernedExpertiseInputSurface, PromotionStateView,
+    read_governed_expertise_inputs,
 };
 use crate::domain::workflow::WorkflowProgressState;
 use crate::orchestrator::flow_inference::{FlowInferenceContext, infer_flow_from_context};
@@ -565,6 +571,401 @@ fn resolve_effective_domain_templates_for_workspace(
         workspace_routing.as_ref(),
         cluster_routing.as_ref(),
         global_routing.as_ref(),
+    )
+}
+
+fn resolve_effective_routing_for_workspace(
+    workspace_ref: &Path,
+) -> crate::domain::configuration::EffectiveRouting {
+    let workspace_routing =
+        FileConfigStore::for_workspace(workspace_ref).local_routing().ok().flatten();
+    let cluster_routing = FileClusterStore::for_workspace(workspace_ref)
+        .load()
+        .ok()
+        .flatten()
+        .map(|config| config.routing);
+    let global_routing = FileConfigStore::global_routing().ok().flatten();
+
+    resolve_effective_routing(
+        &RoutingOverrides::default(),
+        workspace_routing.as_ref(),
+        cluster_routing.as_ref(),
+        global_routing.as_ref(),
+    )
+}
+
+fn expert_pack_id_for_family(family: DomainFamily) -> String {
+    format!("domain-{}-expert-pack", family.as_str().replace('_', "-"))
+}
+
+fn reviewer_role_keywords_for_family(family: DomainFamily) -> &'static [&'static str] {
+    match family {
+        DomainFamily::React => &["react", "frontend", "web", "ui"],
+        DomainFamily::Vue => &["vue", "frontend", "web", "ui"],
+        DomainFamily::Angular => &["angular", "frontend", "web", "ui"],
+        DomainFamily::WebUi => &["frontend", "web", "ui", "design"],
+        DomainFamily::NodeService => &["node", "backend", "service", "api", "architecture"],
+        DomainFamily::PythonService => &["python", "backend", "service", "api", "architecture"],
+        DomainFamily::JvmService => &["java", "jvm", "backend", "service", "architecture"],
+        DomainFamily::DotNetService => &["dotnet", "net", "backend", "service", "architecture"],
+        DomainFamily::Systems => &["systems", "rust", "backend", "service", "architecture"],
+        DomainFamily::Ruby => &["ruby", "backend", "service"],
+        DomainFamily::Php => &["php", "backend", "service"],
+        DomainFamily::Data => &["data", "analytics", "ml"],
+        DomainFamily::Mobile => &["mobile", "ios", "android"],
+    }
+}
+
+fn reviewer_role_matches_family(role_id: &str, family: DomainFamily) -> bool {
+    let lower = role_id.to_ascii_lowercase();
+    reviewer_role_keywords_for_family(family).iter().any(|keyword| lower.contains(keyword))
+}
+
+fn expert_pack_signal(
+    kind: &str,
+    reference: impl Into<String>,
+    source: &str,
+    status: ExpertPackSignalStatus,
+    rationale: impl Into<String>,
+) -> ExpertPackSignal {
+    ExpertPackSignal {
+        kind: kind.to_string(),
+        reference: reference.into(),
+        source: source.to_string(),
+        status,
+        rationale: rationale.into(),
+    }
+}
+
+fn build_expert_pack_selection(
+    workspace_ref: &Path,
+    context_pack: &ContextPack,
+) -> ExpertPackSelectionOutcome {
+    let target_ref =
+        context_pack.selected_targets.first().cloned().unwrap_or_else(|| "workspace".to_string());
+    let effective_routing = resolve_effective_routing_for_workspace(workspace_ref);
+    let reviewer_role_ids = effective_routing.reviewer_roles.keys().cloned().collect::<Vec<_>>();
+    let families = detect_domain_families(workspace_ref, Some(target_ref.as_str()));
+    let selected_family_ids =
+        families.iter().map(|family| family.as_str().to_string()).collect::<BTreeSet<_>>();
+
+    let mut selected_expert_packs = Vec::new();
+    let mut suggested_runtime_roles = BTreeSet::new();
+    let mut supporting_signals = Vec::new();
+    let mut rejected_expert_candidates = Vec::new();
+
+    for family in families.iter().copied() {
+        let pack_id = expert_pack_id_for_family(family);
+        supporting_signals.push(expert_pack_signal(
+            "domain_family",
+            family.as_str(),
+            "domain_family_detection",
+            ExpertPackSignalStatus::Supporting,
+            format!(
+                "detected {} guidance opportunity for bounded target {}",
+                family.display_name(),
+                target_ref
+            ),
+        ));
+
+        if context_pack.inputs.iter().any(|input| {
+            input.kind == ContextInputKind::DomainTemplate && input.reference == family.as_str()
+        }) {
+            supporting_signals.push(expert_pack_signal(
+                "domain_template",
+                family.as_str(),
+                "context_pack",
+                ExpertPackSignalStatus::Supporting,
+                format!(
+                    "the bounded context already carries an enabled {} domain template",
+                    family.display_name()
+                ),
+            ));
+        }
+
+        let matched_roles = reviewer_role_ids
+            .iter()
+            .filter(|role_id| reviewer_role_matches_family(role_id, family))
+            .cloned()
+            .collect::<Vec<_>>();
+
+        if matched_roles.is_empty() {
+            supporting_signals.push(expert_pack_signal(
+                "reviewer_role",
+                family.as_str(),
+                "effective_routing",
+                ExpertPackSignalStatus::Ignored,
+                format!(
+                    "no routed reviewer role matched the {} expert pack; keep the pack selection but omit runtime-role guidance",
+                    family.display_name()
+                ),
+            ));
+        } else {
+            for role_id in matched_roles {
+                suggested_runtime_roles.insert(role_id.clone());
+                supporting_signals.push(expert_pack_signal(
+                    "reviewer_role",
+                    role_id,
+                    "effective_routing",
+                    ExpertPackSignalStatus::Supporting,
+                    format!(
+                        "the effective reviewer-role routing aligns with the {} expert pack",
+                        family.display_name()
+                    ),
+                ));
+            }
+        }
+
+        selected_expert_packs.push(pack_id);
+    }
+
+    let canon_inputs_considered = evaluate_canon_expertise_inputs(
+        workspace_ref,
+        &selected_family_ids,
+        &mut supporting_signals,
+    );
+
+    let selection_state = if selected_expert_packs.is_empty() {
+        let reason = if context_pack.selected_targets.is_empty() {
+            "no bounded target was available for expert-pack selection"
+        } else {
+            "no supported domain families were detected for the bounded target"
+        };
+        rejected_expert_candidates.push(RejectedExpertCandidate {
+            pack_id: "built-in-domain-experts".to_string(),
+            reason: reason.to_string(),
+            blocking_signals: vec![expert_pack_signal(
+                "selection_scope",
+                target_ref.clone(),
+                "planner",
+                ExpertPackSignalStatus::Blocked,
+                reason,
+            )],
+        });
+        ExpertPackSelectionState::NoneSelected
+    } else {
+        ExpertPackSelectionState::Selected
+    };
+
+    let suggested_runtime_roles = suggested_runtime_roles.into_iter().collect::<Vec<_>>();
+    let summary = if selection_state == ExpertPackSelectionState::Selected {
+        if suggested_runtime_roles.is_empty() {
+            format!(
+                "selected {} for {} without a dedicated runtime-role recommendation",
+                selected_expert_packs.join(", "),
+                target_ref
+            )
+        } else {
+            format!(
+                "selected {} for {}; suggested runtime roles: {}",
+                selected_expert_packs.join(", "),
+                target_ref,
+                suggested_runtime_roles.join(", ")
+            )
+        }
+    } else {
+        format!("no expert pack selected for {}", target_ref)
+    };
+    let summary = if canon_inputs_considered.is_empty() {
+        summary
+    } else {
+        let used = canon_inputs_considered
+            .iter()
+            .filter(|input| input.disposition == CanonExpertiseInputDisposition::Used)
+            .count();
+        let ignored = canon_inputs_considered.len().saturating_sub(used);
+        format!("{summary}; canon expertise inputs: used={used}, ignored={ignored}")
+    };
+
+    ExpertPackSelectionOutcome {
+        target_ref,
+        selection_state,
+        selected_expert_packs,
+        suggested_runtime_roles,
+        supporting_signals,
+        rejected_expert_candidates,
+        canon_inputs_considered,
+        summary,
+    }
+}
+
+fn evaluate_canon_expertise_inputs(
+    workspace_ref: &Path,
+    selected_family_ids: &BTreeSet<String>,
+    supporting_signals: &mut Vec<ExpertPackSignal>,
+) -> Vec<CanonExpertiseInputConsideration> {
+    let mut considerations = Vec::new();
+
+    for input in read_governed_expertise_inputs(workspace_ref) {
+        let source = input.path.display().to_string();
+        let publication_target_class =
+            input.publication_target_class.clone().unwrap_or_else(|| "unknown".to_string());
+        let (disposition, disposition_reason) =
+            canon_input_disposition(&input, selected_family_ids);
+
+        if disposition == CanonExpertiseInputDisposition::Used {
+            supporting_signals.push(expert_pack_signal(
+                "canon_expertise_input",
+                input.expertise_input.expertise_kind.clone(),
+                &source,
+                ExpertPackSignalStatus::Supporting,
+                disposition_reason.clone(),
+            ));
+        }
+
+        considerations.push(CanonExpertiseInputConsideration {
+            contract_version: input.lineage.contract_version.clone(),
+            mode: input.lineage.mode_name().to_string(),
+            expertise_kind: input.expertise_input.expertise_kind.clone(),
+            domain_families: input.expertise_input.domain_families.clone(),
+            source_ref: input.lineage.source_ref.clone(),
+            promotion_state: input.lineage.promotion_state.clone(),
+            publication_target_class,
+            disposition,
+            disposition_reason,
+        });
+    }
+
+    considerations
+}
+
+fn canon_input_disposition(
+    input: &GovernedExpertiseInputSurface,
+    selected_family_ids: &BTreeSet<String>,
+) -> (CanonExpertiseInputDisposition, String) {
+    if CompatibilityOutcome::check(&input.lineage.contract_version)
+        == CompatibilityOutcome::Unsupported
+    {
+        return (
+            CanonExpertiseInputDisposition::Ignored,
+            format!(
+                "unsupported Canon expertise contract line `{}`",
+                input.lineage.contract_version
+            ),
+        );
+    }
+
+    match input.expertise_input.expertise_kind.as_str() {
+        "domain-language" | "domain-model" => {}
+        other => {
+            return (
+                CanonExpertiseInputDisposition::Ignored,
+                format!("unsupported Canon expertise kind `{other}`"),
+            );
+        }
+    }
+
+    if input.lineage.approval_blocked() || input.lineage.packet_blocked() {
+        return (
+            CanonExpertiseInputDisposition::Ignored,
+            "Canon expertise input is blocked by Canon governance".to_string(),
+        );
+    }
+    if input.lineage.requires_approval() && !input.lineage.approval_satisfied() {
+        return (
+            CanonExpertiseInputDisposition::Ignored,
+            "Canon expertise input is awaiting required approval".to_string(),
+        );
+    }
+
+    match input.promotion_view {
+        PromotionStateView::Stable => {}
+        PromotionStateView::PendingOrIndex => {
+            return (
+                CanonExpertiseInputDisposition::Ignored,
+                "Canon expertise input is published to a pending or index-only surface".to_string(),
+            );
+        }
+        PromotionStateView::EvidenceOnly => {
+            return (
+                CanonExpertiseInputDisposition::Ignored,
+                "Canon expertise input is evidence-only for this slice".to_string(),
+            );
+        }
+        PromotionStateView::Manual => {
+            return (
+                CanonExpertiseInputDisposition::Ignored,
+                "Canon expertise input requires manual promotion".to_string(),
+            );
+        }
+        PromotionStateView::Unknown => {
+            return (
+                CanonExpertiseInputDisposition::Ignored,
+                "Canon expertise input metadata is incomplete".to_string(),
+            );
+        }
+    }
+
+    let publication_target_class = input.publication_target_class.as_deref().unwrap_or("unknown");
+    match publication_target_class {
+        "stable" => {}
+        "pending" => {
+            return (
+                CanonExpertiseInputDisposition::Ignored,
+                "Canon expertise input is published to a pending surface".to_string(),
+            );
+        }
+        "proposal" => {
+            return (
+                CanonExpertiseInputDisposition::Ignored,
+                "Canon expertise input is published to a proposal surface".to_string(),
+            );
+        }
+        "evidence" => {
+            return (
+                CanonExpertiseInputDisposition::Ignored,
+                "Canon expertise input is published to an evidence surface".to_string(),
+            );
+        }
+        "index" => {
+            return (
+                CanonExpertiseInputDisposition::Ignored,
+                "Canon expertise input is published to an index surface".to_string(),
+            );
+        }
+        other => {
+            return (
+                CanonExpertiseInputDisposition::Ignored,
+                format!(
+                    "Canon expertise input is missing a usable publication target class (`{other}`)"
+                ),
+            );
+        }
+    }
+
+    if selected_family_ids.is_empty() {
+        return (
+            CanonExpertiseInputDisposition::Ignored,
+            "no selected domain families are available for Canon matching".to_string(),
+        );
+    }
+
+    let matching_families = input
+        .expertise_input
+        .domain_families
+        .iter()
+        .filter(|family| selected_family_ids.contains(*family))
+        .cloned()
+        .collect::<Vec<_>>();
+
+    if matching_families.is_empty() {
+        return (
+            CanonExpertiseInputDisposition::Ignored,
+            format!(
+                "Canon expertise families {} do not match selected domain families {}",
+                input.expertise_input.domain_families.join(", "),
+                selected_family_ids.iter().cloned().collect::<Vec<_>>().join(", ")
+            ),
+        );
+    }
+
+    (
+        CanonExpertiseInputDisposition::Used,
+        format!(
+            "stable Canon {} expertise matches selected domain families {}",
+            input.expertise_input.expertise_kind,
+            matching_families.join(", ")
+        ),
     )
 }
 
@@ -1385,6 +1786,7 @@ pub fn build_goal_plan_with_sources(
         routing_policy_summary.as_deref(),
         context_sources.compacted_canon_memory.as_ref(),
     );
+    let expert_selection = build_expert_pack_selection(workspace_ref, &context_pack);
     let tasks = derive_tasks_from_context(
         goal_text,
         &context_pack,
@@ -1406,6 +1808,7 @@ pub fn build_goal_plan_with_sources(
     let mut plan = GoalPlan::new(goal_text, tasks)
         .map_err(GoalPlannerError::PlanCreation)?
         .with_context_pack(context_pack)
+        .with_expert_selection(expert_selection)
         .with_signals(signals)
         .with_evidence(source_evidence)
         .with_planning_rationale(planning_rationale)
@@ -1458,7 +1861,7 @@ pub enum GoalPlannerError {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
     use std::path::PathBuf;
 
@@ -1469,17 +1872,22 @@ mod tests {
 
     use super::{
         AuthoredInputDocument, PlanningContextSources, build_context_pack,
-        build_goal_plan_with_sources, resolve_domain_context,
+        build_goal_plan_with_sources, canon_input_disposition, resolve_domain_context,
     };
     use crate::adapters::config_store::FileConfigStore;
     use crate::domain::configuration::{ConfigFile, RoutingConfig};
     use crate::domain::domain_templates::{
         DomainFamily, DomainTemplateSettings, ExternalContextBinding, ExternalContextKind,
     };
-    use crate::domain::goal_plan::ContextPackCredibility;
+    use crate::domain::goal_plan::{
+        CanonExpertiseInputDisposition, ContextPackCredibility, ExpertPackSelectionState,
+    };
     use crate::domain::governance::{
         CanonCapabilitySnapshot, CanonMode, CanonModeSummary, CanonRecommendedActionSummary,
         CanonResultActionSummary, CompactedCanonMemory, MemoryCredibilityState,
+    };
+    use crate::domain::project_memory::{
+        ExpertiseInputRef, GovernedExpertiseInputSurface, LineageRef, PromotionStateView,
     };
     use crate::orchestrator::goal_planner::GoalPlannerError;
 
@@ -1495,6 +1903,92 @@ mod tests {
         FileConfigStore::for_workspace(workspace)
             .save_local(&ConfigFile { version: 1, routing, canon: None })
             .unwrap();
+    }
+
+    struct CanonExpertiseFixture<'a> {
+        surface_name: &'a str,
+        mode: &'a str,
+        expertise_kind: &'a str,
+        domain_families: &'a [&'a str],
+        publication_target_class: &'a str,
+        promotion_state: &'a str,
+        approval_state: Option<&'a str>,
+        packet_readiness: Option<&'a str>,
+    }
+
+    struct CanonInputSurfaceFixture<'a> {
+        contract_version: &'a str,
+        expertise_kind: &'a str,
+        domain_families: &'a [&'a str],
+        promotion_state: &'a str,
+        approval_state: Option<&'a str>,
+        packet_readiness: Option<&'a str>,
+        promotion_view: PromotionStateView,
+        publication_target_class: Option<&'a str>,
+    }
+
+    fn write_canon_expertise_sidecar(
+        workspace: &std::path::Path,
+        fixture: CanonExpertiseFixture<'_>,
+    ) {
+        let project_dir = workspace.join("docs/project");
+        fs::create_dir_all(&project_dir).unwrap();
+        fs::write(project_dir.join(fixture.surface_name), "# Canon expertise\n").unwrap();
+        let sidecar_name = fixture.surface_name.replace(".md", ".packet-metadata.json");
+        let metadata = serde_json::json!({
+            "publication_target_class": fixture.publication_target_class,
+            "expertise_input": {
+                "expertise_kind": fixture.expertise_kind,
+                "domain_families": fixture.domain_families,
+            },
+            "lineage": {
+                "contract_version": "v1",
+                "producer": "canon",
+                "source_ref": format!("canon-run:{}", fixture.surface_name),
+                "source_artifacts": ["01-language-overview.md"],
+                "mode": fixture.mode,
+                "promotion_state": fixture.promotion_state,
+                "approval_state": fixture.approval_state,
+                "packet_readiness": fixture.packet_readiness,
+                "promoted_at": "2026-05-14T00:00:00Z",
+                "content_digest": "sha256:abc123"
+            }
+        });
+        fs::write(project_dir.join(sidecar_name), serde_json::to_vec_pretty(&metadata).unwrap())
+            .unwrap();
+    }
+
+    fn canon_input_surface(fixture: CanonInputSurfaceFixture<'_>) -> GovernedExpertiseInputSurface {
+        GovernedExpertiseInputSurface {
+            path: PathBuf::from("docs/project/domain-language.md"),
+            lineage: LineageRef {
+                contract_version: fixture.contract_version.to_string(),
+                producer: "canon".to_string(),
+                source_ref: "canon-run:domain-language".to_string(),
+                source_artifacts: vec!["docs/project/domain-language.md".to_string()],
+                mode: Some("domain-language".to_string()),
+                promotion_state: fixture.promotion_state.to_string(),
+                approval_state: fixture.approval_state.map(str::to_string),
+                stage: None,
+                owner: None,
+                risk: None,
+                zone: None,
+                promoted_at: "2026-05-14T00:00:00Z".to_string(),
+                content_digest: "sha256:abc123".to_string(),
+                packet_readiness: fixture.packet_readiness.map(str::to_string),
+                promotion_profile: Some("project-memory".to_string()),
+            },
+            promotion_view: fixture.promotion_view,
+            publication_target_class: fixture.publication_target_class.map(str::to_string),
+            expertise_input: ExpertiseInputRef {
+                expertise_kind: fixture.expertise_kind.to_string(),
+                domain_families: fixture
+                    .domain_families
+                    .iter()
+                    .map(|family| (*family).to_string())
+                    .collect(),
+            },
+        }
     }
 
     #[test]
@@ -1543,6 +2037,265 @@ mod tests {
         assert!(context_pack.selected_targets.contains(&"src/lib.rs".to_string()));
 
         fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn canon_input_disposition_covers_ignored_and_used_paths() {
+        let selected_families = BTreeSet::from(["react".to_string(), "web_ui".to_string()]);
+
+        let cases = vec![
+            (
+                canon_input_surface(CanonInputSurfaceFixture {
+                    contract_version: "v2",
+                    expertise_kind: "domain-language",
+                    domain_families: &["react"],
+                    promotion_state: "auto",
+                    approval_state: None,
+                    packet_readiness: Some("complete"),
+                    promotion_view: PromotionStateView::Stable,
+                    publication_target_class: Some("stable"),
+                }),
+                selected_families.clone(),
+                CanonExpertiseInputDisposition::Ignored,
+                "unsupported Canon expertise contract line `v2`",
+            ),
+            (
+                canon_input_surface(CanonInputSurfaceFixture {
+                    contract_version: "v1",
+                    expertise_kind: "unknown-kind",
+                    domain_families: &["react"],
+                    promotion_state: "auto",
+                    approval_state: None,
+                    packet_readiness: Some("complete"),
+                    promotion_view: PromotionStateView::Stable,
+                    publication_target_class: Some("stable"),
+                }),
+                selected_families.clone(),
+                CanonExpertiseInputDisposition::Ignored,
+                "unsupported Canon expertise kind `unknown-kind`",
+            ),
+            (
+                canon_input_surface(CanonInputSurfaceFixture {
+                    contract_version: "v1",
+                    expertise_kind: "domain-language",
+                    domain_families: &["react"],
+                    promotion_state: "auto",
+                    approval_state: Some("rejected"),
+                    packet_readiness: Some("complete"),
+                    promotion_view: PromotionStateView::Stable,
+                    publication_target_class: Some("stable"),
+                }),
+                selected_families.clone(),
+                CanonExpertiseInputDisposition::Ignored,
+                "blocked by Canon governance",
+            ),
+            (
+                canon_input_surface(CanonInputSurfaceFixture {
+                    contract_version: "v1",
+                    expertise_kind: "domain-language",
+                    domain_families: &["react"],
+                    promotion_state: "auto-if-approved",
+                    approval_state: Some("requested"),
+                    packet_readiness: Some("complete"),
+                    promotion_view: PromotionStateView::Stable,
+                    publication_target_class: Some("stable"),
+                }),
+                selected_families.clone(),
+                CanonExpertiseInputDisposition::Ignored,
+                "awaiting required approval",
+            ),
+            (
+                canon_input_surface(CanonInputSurfaceFixture {
+                    contract_version: "v1",
+                    expertise_kind: "domain-language",
+                    domain_families: &["react"],
+                    promotion_state: "pending-index",
+                    approval_state: None,
+                    packet_readiness: Some("complete"),
+                    promotion_view: PromotionStateView::PendingOrIndex,
+                    publication_target_class: Some("stable"),
+                }),
+                selected_families.clone(),
+                CanonExpertiseInputDisposition::Ignored,
+                "pending or index-only surface",
+            ),
+            (
+                canon_input_surface(CanonInputSurfaceFixture {
+                    contract_version: "v1",
+                    expertise_kind: "domain-language",
+                    domain_families: &["react"],
+                    promotion_state: "evidence-only",
+                    approval_state: None,
+                    packet_readiness: Some("complete"),
+                    promotion_view: PromotionStateView::EvidenceOnly,
+                    publication_target_class: Some("stable"),
+                }),
+                selected_families.clone(),
+                CanonExpertiseInputDisposition::Ignored,
+                "evidence-only for this slice",
+            ),
+            (
+                canon_input_surface(CanonInputSurfaceFixture {
+                    contract_version: "v1",
+                    expertise_kind: "domain-language",
+                    domain_families: &["react"],
+                    promotion_state: "manual",
+                    approval_state: None,
+                    packet_readiness: Some("complete"),
+                    promotion_view: PromotionStateView::Manual,
+                    publication_target_class: Some("stable"),
+                }),
+                selected_families.clone(),
+                CanonExpertiseInputDisposition::Ignored,
+                "requires manual promotion",
+            ),
+            (
+                canon_input_surface(CanonInputSurfaceFixture {
+                    contract_version: "v1",
+                    expertise_kind: "domain-language",
+                    domain_families: &["react"],
+                    promotion_state: "mystery-state",
+                    approval_state: None,
+                    packet_readiness: None,
+                    promotion_view: PromotionStateView::Unknown,
+                    publication_target_class: Some("stable"),
+                }),
+                selected_families.clone(),
+                CanonExpertiseInputDisposition::Ignored,
+                "metadata is incomplete",
+            ),
+            (
+                canon_input_surface(CanonInputSurfaceFixture {
+                    contract_version: "v1",
+                    expertise_kind: "domain-language",
+                    domain_families: &["react"],
+                    promotion_state: "auto",
+                    approval_state: None,
+                    packet_readiness: Some("complete"),
+                    promotion_view: PromotionStateView::Stable,
+                    publication_target_class: Some("pending"),
+                }),
+                selected_families.clone(),
+                CanonExpertiseInputDisposition::Ignored,
+                "published to a pending surface",
+            ),
+            (
+                canon_input_surface(CanonInputSurfaceFixture {
+                    contract_version: "v1",
+                    expertise_kind: "domain-language",
+                    domain_families: &["react"],
+                    promotion_state: "auto",
+                    approval_state: None,
+                    packet_readiness: Some("complete"),
+                    promotion_view: PromotionStateView::Stable,
+                    publication_target_class: Some("proposal"),
+                }),
+                selected_families.clone(),
+                CanonExpertiseInputDisposition::Ignored,
+                "published to a proposal surface",
+            ),
+            (
+                canon_input_surface(CanonInputSurfaceFixture {
+                    contract_version: "v1",
+                    expertise_kind: "domain-language",
+                    domain_families: &["react"],
+                    promotion_state: "auto",
+                    approval_state: None,
+                    packet_readiness: Some("complete"),
+                    promotion_view: PromotionStateView::Stable,
+                    publication_target_class: Some("evidence"),
+                }),
+                selected_families.clone(),
+                CanonExpertiseInputDisposition::Ignored,
+                "published to an evidence surface",
+            ),
+            (
+                canon_input_surface(CanonInputSurfaceFixture {
+                    contract_version: "v1",
+                    expertise_kind: "domain-language",
+                    domain_families: &["react"],
+                    promotion_state: "auto",
+                    approval_state: None,
+                    packet_readiness: Some("complete"),
+                    promotion_view: PromotionStateView::Stable,
+                    publication_target_class: Some("index"),
+                }),
+                selected_families.clone(),
+                CanonExpertiseInputDisposition::Ignored,
+                "published to an index surface",
+            ),
+            (
+                canon_input_surface(CanonInputSurfaceFixture {
+                    contract_version: "v1",
+                    expertise_kind: "domain-language",
+                    domain_families: &["react"],
+                    promotion_state: "auto",
+                    approval_state: None,
+                    packet_readiness: Some("complete"),
+                    promotion_view: PromotionStateView::Stable,
+                    publication_target_class: None,
+                }),
+                selected_families.clone(),
+                CanonExpertiseInputDisposition::Ignored,
+                "missing a usable publication target class (`unknown`)",
+            ),
+            (
+                canon_input_surface(CanonInputSurfaceFixture {
+                    contract_version: "v1",
+                    expertise_kind: "domain-language",
+                    domain_families: &["react"],
+                    promotion_state: "auto",
+                    approval_state: None,
+                    packet_readiness: Some("complete"),
+                    promotion_view: PromotionStateView::Stable,
+                    publication_target_class: Some("stable"),
+                }),
+                BTreeSet::new(),
+                CanonExpertiseInputDisposition::Ignored,
+                "no selected domain families are available for Canon matching",
+            ),
+            (
+                canon_input_surface(CanonInputSurfaceFixture {
+                    contract_version: "v1",
+                    expertise_kind: "domain-language",
+                    domain_families: &["services"],
+                    promotion_state: "auto",
+                    approval_state: None,
+                    packet_readiness: Some("complete"),
+                    promotion_view: PromotionStateView::Stable,
+                    publication_target_class: Some("stable"),
+                }),
+                BTreeSet::from(["react".to_string()]),
+                CanonExpertiseInputDisposition::Ignored,
+                "do not match selected domain families react",
+            ),
+            (
+                canon_input_surface(CanonInputSurfaceFixture {
+                    contract_version: "v1",
+                    expertise_kind: "domain-language",
+                    domain_families: &["react", "web_ui"],
+                    promotion_state: "auto",
+                    approval_state: None,
+                    packet_readiness: Some("complete"),
+                    promotion_view: PromotionStateView::Stable,
+                    publication_target_class: Some("stable"),
+                }),
+                selected_families,
+                CanonExpertiseInputDisposition::Used,
+                "matches selected domain families react, web_ui",
+            ),
+        ];
+
+        for (surface, selected_ids, expected_disposition, expected_reason) in cases {
+            let (disposition, reason) = canon_input_disposition(&surface, &selected_ids);
+            assert_eq!(disposition, expected_disposition);
+            assert!(
+                reason.contains(expected_reason),
+                "expected `{}` in `{}`",
+                expected_reason,
+                reason
+            );
+        }
     }
 
     #[test]
@@ -1653,7 +2406,7 @@ mod tests {
             &workspace,
             &PlanningContextSources {
                 canon_capability_snapshot: Some(CanonCapabilitySnapshot {
-                    canon_version: "0.51.0".to_string(),
+                    canon_version: crate::domain::distribution::SUPPORTED_CANON_VERSION.to_string(),
                     supported_schema_versions: vec!["2026-02-01".to_string()],
                     operations: vec![
                         "start".to_string(),
@@ -1712,12 +2465,10 @@ mod tests {
             goal_plan.verification_strategy.as_deref(),
             Some("verify against Canon-grounded evidence for Verification packet ready")
         );
-        assert!(
-            goal_plan
-                .source_evidence
-                .iter()
-                .any(|entry| entry.reference.contains("Canon 0.51.0 capabilities available"))
-        );
+        assert!(goal_plan.source_evidence.iter().any(|entry| entry.reference.contains(&format!(
+            "Canon {} capabilities available",
+            crate::domain::distribution::SUPPORTED_CANON_VERSION
+        ))));
 
         fs::remove_dir_all(workspace).unwrap();
     }
@@ -1782,6 +2533,277 @@ mod tests {
                 .iter()
                 .any(|line| line.contains("external_context_input: design/reference.md"))
         );
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn build_goal_plan_with_sources_records_expert_pack_selection_and_runtime_role_hints() {
+        let workspace = temp_workspace("goal-planner-expert-selection");
+        fs::write(workspace.join("package.json"), r#"{"dependencies":{"react":"18.0.0"}}"#)
+            .unwrap();
+        fs::create_dir_all(workspace.join("src/components")).unwrap();
+        fs::write(
+            workspace.join("src/components/App.tsx"),
+            "export function App() { return <div />; }\n",
+        )
+        .unwrap();
+        save_local_routing(
+            &workspace,
+            RoutingConfig {
+                reviewer_roles: BTreeMap::from([(
+                    "frontend".to_string(),
+                    crate::domain::configuration::ModelRoute {
+                        runtime: crate::domain::configuration::RuntimeKind::Copilot,
+                        model: "gpt-5.5".to_string(),
+                    },
+                )]),
+                ..RoutingConfig::default()
+            },
+        );
+
+        let plan = build_goal_plan_with_sources(
+            "update the react component",
+            &workspace,
+            &PlanningContextSources {
+                authored_input_documents: vec![AuthoredInputDocument {
+                    label: "attached_markdown: brief.md".to_string(),
+                    content: "Update src/components/App.tsx without broad UI churn.".to_string(),
+                }],
+                authored_input_summary: Some("1 markdown source(s)".to_string()),
+                authored_input_sources: vec!["attached_markdown: brief.md".to_string()],
+                ..PlanningContextSources::default()
+            },
+            None,
+        )
+        .unwrap();
+
+        let expert_selection = plan.expert_selection.as_ref().unwrap();
+        assert_eq!(expert_selection.selection_state, ExpertPackSelectionState::Selected);
+        assert!(
+            expert_selection
+                .selected_expert_packs
+                .contains(&"domain-react-expert-pack".to_string())
+        );
+        assert_eq!(expert_selection.suggested_runtime_roles, vec!["frontend".to_string()]);
+        let context_summary = plan.context_summary().unwrap();
+        assert!(context_summary.contains("expert selection:"));
+        assert!(context_summary.contains("domain-react-expert-pack"));
+        assert!(
+            plan.context_provenance_lines()
+                .iter()
+                .any(|line| line.contains("expert_pack_signal: reviewer_role=frontend"))
+        );
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn build_goal_plan_with_sources_marks_matching_canon_expertise_input_as_used() {
+        let workspace = temp_workspace("goal-planner-canon-expertise-used");
+        fs::write(workspace.join("package.json"), r#"{"dependencies":{"react":"18.0.0"}}"#)
+            .unwrap();
+        fs::create_dir_all(workspace.join("src/components")).unwrap();
+        fs::write(
+            workspace.join("src/components/App.tsx"),
+            "export function App() { return <div />; }\n",
+        )
+        .unwrap();
+        write_canon_expertise_sidecar(
+            &workspace,
+            CanonExpertiseFixture {
+                surface_name: "domain-language.md",
+                mode: "domain-language",
+                expertise_kind: "domain-language",
+                domain_families: &["react", "web_ui"],
+                publication_target_class: "stable",
+                promotion_state: "auto",
+                approval_state: None,
+                packet_readiness: Some("complete"),
+            },
+        );
+
+        let plan = build_goal_plan_with_sources(
+            "update the react component",
+            &workspace,
+            &PlanningContextSources {
+                authored_input_documents: vec![AuthoredInputDocument {
+                    label: "attached_markdown: brief.md".to_string(),
+                    content: "Update src/components/App.tsx without broad UI churn.".to_string(),
+                }],
+                authored_input_summary: Some("1 markdown source(s)".to_string()),
+                authored_input_sources: vec!["attached_markdown: brief.md".to_string()],
+                ..PlanningContextSources::default()
+            },
+            None,
+        )
+        .unwrap();
+
+        let expert_selection = plan.expert_selection.as_ref().unwrap();
+        assert_eq!(expert_selection.selection_state, ExpertPackSelectionState::Selected);
+        assert_eq!(expert_selection.canon_inputs_considered.len(), 1);
+        assert_eq!(
+            expert_selection.canon_inputs_considered[0].disposition,
+            CanonExpertiseInputDisposition::Used
+        );
+        assert_eq!(
+            expert_selection.canon_inputs_considered[0].domain_families,
+            vec!["react".to_string(), "web_ui".to_string()]
+        );
+        assert!(
+            expert_selection.canon_inputs_considered[0]
+                .disposition_reason
+                .contains("matches selected domain families react")
+        );
+        assert!(expert_selection.summary.contains("canon expertise inputs: used=1, ignored=0"));
+        assert!(plan.context_provenance_lines().iter().any(|line| {
+            line.contains("canon_expertise_input: domain-language [domain-language]")
+                && line.contains("disposition=used")
+        }));
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn build_goal_plan_with_sources_ignores_pending_canon_expertise_input() {
+        let workspace = temp_workspace("goal-planner-canon-expertise-pending");
+        fs::write(workspace.join("package.json"), r#"{"dependencies":{"react":"18.0.0"}}"#)
+            .unwrap();
+        fs::create_dir_all(workspace.join("src/components")).unwrap();
+        fs::write(
+            workspace.join("src/components/App.tsx"),
+            "export function App() { return <div />; }\n",
+        )
+        .unwrap();
+        write_canon_expertise_sidecar(
+            &workspace,
+            CanonExpertiseFixture {
+                surface_name: "domain-model.md",
+                mode: "domain-model",
+                expertise_kind: "domain-model",
+                domain_families: &["react"],
+                publication_target_class: "stable",
+                promotion_state: "auto-if-approved",
+                approval_state: Some("requested"),
+                packet_readiness: Some("partial"),
+            },
+        );
+
+        let plan = build_goal_plan_with_sources(
+            "update the react component",
+            &workspace,
+            &PlanningContextSources {
+                authored_input_documents: vec![AuthoredInputDocument {
+                    label: "attached_markdown: brief.md".to_string(),
+                    content: "Update src/components/App.tsx without broad UI churn.".to_string(),
+                }],
+                authored_input_summary: Some("1 markdown source(s)".to_string()),
+                authored_input_sources: vec!["attached_markdown: brief.md".to_string()],
+                ..PlanningContextSources::default()
+            },
+            None,
+        )
+        .unwrap();
+
+        let expert_selection = plan.expert_selection.as_ref().unwrap();
+        assert_eq!(expert_selection.canon_inputs_considered.len(), 1);
+        assert_eq!(
+            expert_selection.canon_inputs_considered[0].disposition,
+            CanonExpertiseInputDisposition::Ignored
+        );
+        assert!(
+            expert_selection.canon_inputs_considered[0]
+                .disposition_reason
+                .contains("awaiting required approval")
+        );
+        assert!(expert_selection.summary.contains("canon expertise inputs: used=0, ignored=1"));
+        assert!(plan.context_provenance_lines().iter().any(|line| {
+            line.contains("canon_expertise_input: domain-model [domain-model]")
+                && line.contains("disposition=ignored")
+        }));
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn build_goal_plan_with_sources_reports_no_expert_pack_when_no_domain_family_matches() {
+        let workspace = temp_workspace("goal-planner-no-expert-pack");
+        fs::remove_file(workspace.join("Cargo.toml")).unwrap();
+        fs::create_dir_all(workspace.join("docs")).unwrap();
+        fs::write(
+            workspace.join("docs/notes.md"),
+            "Invoice calculation guidance stays in markdown notes only.\n",
+        )
+        .unwrap();
+
+        let plan = build_goal_plan_with_sources(
+            "refactor the invoice calculation",
+            &workspace,
+            &PlanningContextSources {
+                authored_input_documents: vec![AuthoredInputDocument {
+                    label: "attached_markdown: brief.md".to_string(),
+                    content: "Focus on docs/notes.md and keep the change bounded.".to_string(),
+                }],
+                authored_input_summary: Some("1 markdown source(s)".to_string()),
+                authored_input_sources: vec!["attached_markdown: brief.md".to_string()],
+                ..PlanningContextSources::default()
+            },
+            None,
+        )
+        .unwrap();
+
+        let expert_selection = plan.expert_selection.as_ref().unwrap();
+        assert_eq!(expert_selection.selection_state, ExpertPackSelectionState::NoneSelected);
+        assert!(expert_selection.selected_expert_packs.is_empty());
+        assert_eq!(expert_selection.rejected_expert_candidates.len(), 1);
+        assert!(expert_selection.summary.contains("no expert pack selected for docs/notes.md"));
+        assert!(
+            expert_selection.rejected_expert_candidates[0]
+                .reason
+                .contains("no supported domain families were detected")
+        );
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn build_goal_plan_with_sources_selects_pack_without_runtime_role_when_routing_lacks_match() {
+        let workspace = temp_workspace("goal-planner-expert-pack-no-role");
+        fs::write(workspace.join("package.json"), r#"{"dependencies":{"react":"18.0.0"}}"#)
+            .unwrap();
+        fs::create_dir_all(workspace.join("src/components")).unwrap();
+        fs::write(
+            workspace.join("src/components/App.tsx"),
+            "export function App() { return <div />; }\n",
+        )
+        .unwrap();
+
+        let plan = build_goal_plan_with_sources(
+            "update the react component",
+            &workspace,
+            &PlanningContextSources {
+                authored_input_documents: vec![AuthoredInputDocument {
+                    label: "attached_markdown: brief.md".to_string(),
+                    content: "Update src/components/App.tsx without broad UI churn.".to_string(),
+                }],
+                authored_input_summary: Some("1 markdown source(s)".to_string()),
+                authored_input_sources: vec!["attached_markdown: brief.md".to_string()],
+                ..PlanningContextSources::default()
+            },
+            None,
+        )
+        .unwrap();
+
+        let expert_selection = plan.expert_selection.as_ref().unwrap();
+        assert_eq!(expert_selection.selection_state, ExpertPackSelectionState::Selected);
+        assert!(expert_selection.suggested_runtime_roles.is_empty());
+        assert!(
+            expert_selection.summary.contains("without a dedicated runtime-role recommendation")
+        );
+        assert!(expert_selection.supporting_signals.iter().any(|signal| {
+            signal.kind == "reviewer_role"
+                && signal.status == crate::domain::goal_plan::ExpertPackSignalStatus::Ignored
+        }));
 
         fs::remove_dir_all(workspace).unwrap();
     }

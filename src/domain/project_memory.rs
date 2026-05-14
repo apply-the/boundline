@@ -189,6 +189,27 @@ fn normalized_metadata_value(raw: Option<&str>) -> Option<String> {
 struct CanonSurfaceMetadata {
     #[serde(default)]
     lineage: Option<LineageRef>,
+    #[serde(default)]
+    publication_target_class: Option<String>,
+    #[serde(default)]
+    expertise_input: Option<ExpertiseInputRef>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExpertiseInputRef {
+    pub expertise_kind: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub domain_families: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GovernedExpertiseInputSurface {
+    pub path: PathBuf,
+    pub lineage: LineageRef,
+    pub promotion_view: PromotionStateView,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub publication_target_class: Option<String>,
+    pub expertise_input: ExpertiseInputRef,
 }
 
 /// Result of checking a Canon `contract_version` against the Boundline
@@ -564,6 +585,43 @@ pub fn read_project_memory(workspace_root: &std::path::Path) -> ProjectMemoryCon
     }
 }
 
+/// Read Canon project-memory surfaces that carry governed expertise metadata.
+pub fn read_governed_expertise_inputs(workspace_root: &Path) -> Vec<GovernedExpertiseInputSurface> {
+    let doc_roots =
+        resolve_project_doc_roots(workspace_root).unwrap_or_else(|_| ProjectDocRoots::default());
+    let project_dir = doc_roots.project_memory_dir(workspace_root);
+    if !project_dir.exists() {
+        return Vec::new();
+    }
+
+    let mut discovered_paths = BTreeSet::new();
+    let mut inputs = Vec::new();
+
+    for relative_path in CANON_PROJECT_SURFACES {
+        let path = project_dir.join(relative_path);
+        if !path.exists() {
+            continue;
+        }
+        discovered_paths.insert(path.clone());
+        collect_governed_expertise_input(workspace_root, &path, &mut inputs);
+    }
+
+    if let Ok(entries) = std::fs::read_dir(&project_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_file()
+                || path.extension().is_none_or(|extension| extension != "md")
+                || discovered_paths.contains(&path)
+            {
+                continue;
+            }
+            collect_governed_expertise_input(workspace_root, &path, &mut inputs);
+        }
+    }
+
+    inputs
+}
+
 fn collect_surface(
     workspace_root: &Path,
     surface_path: &Path,
@@ -624,10 +682,14 @@ fn read_lineage_sidecar(artifact_path: &std::path::Path) -> Option<LineageRef> {
 }
 
 fn read_packet_metadata_sidecar(artifact_path: &Path) -> Option<LineageRef> {
+    let metadata = read_packet_metadata_sidecar_metadata(artifact_path)?;
+    metadata.lineage
+}
+
+fn read_packet_metadata_sidecar_metadata(artifact_path: &Path) -> Option<CanonSurfaceMetadata> {
     let sidecar = packet_metadata_sidecar_path(artifact_path);
     let content = std::fs::read_to_string(&sidecar).ok()?;
-    let metadata: CanonSurfaceMetadata = serde_json::from_str(&content).ok()?;
-    metadata.lineage
+    serde_json::from_str(&content).ok()
 }
 
 fn packet_metadata_sidecar_path(artifact_path: &Path) -> PathBuf {
@@ -726,6 +788,50 @@ fn managed_block_attribute(line: &str, attribute: &str) -> Option<String> {
 
 fn surface_category(surface_path: &Path) -> String {
     surface_path.file_stem().map(|value| value.to_string_lossy().into_owned()).unwrap_or_default()
+}
+
+fn collect_governed_expertise_input(
+    workspace_root: &Path,
+    surface_path: &Path,
+    inputs: &mut Vec<GovernedExpertiseInputSurface>,
+) {
+    let Some(metadata) = read_packet_metadata_sidecar_metadata(surface_path) else {
+        return;
+    };
+    let Some(lineage) = metadata.lineage else {
+        return;
+    };
+    let Some(mut expertise_input) = metadata.expertise_input else {
+        return;
+    };
+
+    let Some(expertise_kind) = normalized_metadata_value(Some(&expertise_input.expertise_kind))
+    else {
+        return;
+    };
+    let domain_families = expertise_input
+        .domain_families
+        .into_iter()
+        .filter_map(|family| normalized_metadata_value(Some(&family)))
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    if domain_families.is_empty() {
+        return;
+    }
+
+    expertise_input.expertise_kind = expertise_kind;
+    expertise_input.domain_families = domain_families;
+
+    inputs.push(GovernedExpertiseInputSurface {
+        path: surface_path.strip_prefix(workspace_root).unwrap_or(surface_path).to_path_buf(),
+        promotion_view: PromotionStateView::from_lineage(&lineage),
+        publication_target_class: normalized_metadata_value(
+            metadata.publication_target_class.as_deref(),
+        ),
+        lineage,
+        expertise_input,
+    });
 }
 
 #[cfg(test)]
@@ -1027,6 +1133,43 @@ mod tests {
 
         assert_eq!(ctx.condition(), Some(ProjectMemoryCondition::BlockedGovernance));
         assert_eq!(ctx.decision(), Some(ProjectMemoryDecision::HardStop));
+    }
+
+    #[test]
+    fn project_memory_context_requires_ready_packet_after_approval() {
+        let temp = std::env::temp_dir().join("boundline-test-pm-approved-packet-not-ready");
+        let _ = std::fs::remove_dir_all(&temp);
+        std::fs::create_dir_all(&temp).unwrap();
+
+        let mut lineage = sample_lineage_ref(
+            "canon-run:run-approved-not-ready",
+            "architecture",
+            "auto-if-approved",
+            Some("Completed"),
+            Some("partial"),
+        );
+        lineage.source_artifacts.clear();
+
+        let ctx = ProjectMemoryContext {
+            status: ProjectMemoryStatus::Available,
+            compatibility: Some(CompatibilityOutcome::Compatible),
+            surfaces: vec![ProjectMemorySurface {
+                path: "docs/project/architecture-map.md".into(),
+                lineage: Some(lineage),
+                promotion_view: PromotionStateView::Stable,
+                category: "architecture-map".into(),
+            }],
+            evidence_refs: Vec::new(),
+            effective_promotion_state: Some(PromotionStateView::Stable),
+        };
+
+        assert_eq!(
+            ctx.condition_for_workspace(&temp),
+            Some(ProjectMemoryCondition::MissingRequiredSourceArtifacts)
+        );
+        assert_eq!(ctx.decision_for_workspace(&temp), Some(ProjectMemoryDecision::HardStop));
+
+        let _ = std::fs::remove_dir_all(&temp);
     }
 
     #[test]

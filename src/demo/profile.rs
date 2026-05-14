@@ -8,6 +8,11 @@ use crate::domain::plan::Plan;
 use crate::domain::step::{Step, StepError, StepKind};
 use crate::domain::task::TaskRunRequest;
 
+const DIRECT_RUN_MAX_STEPS: usize = 6;
+const FLOW_RUN_MAX_STEPS: usize = 8;
+const DEMO_DEFAULT_MAX_RETRIES: usize = 1;
+const DEMO_DEFAULT_MAX_REPLANS: usize = 1;
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DemoStepOutline {
     pub step_id: String,
@@ -218,9 +223,9 @@ impl DemoRunProfile {
             ],
             recovery_trigger_step: "code".to_string(),
             limits: RunLimits {
-                max_steps: 6,
-                max_retries: 1,
-                max_replans: 1,
+                max_steps: DIRECT_RUN_MAX_STEPS,
+                max_retries: DEMO_DEFAULT_MAX_RETRIES,
+                max_replans: DEMO_DEFAULT_MAX_REPLANS,
                 ..RunLimits::default()
             },
         }
@@ -258,9 +263,9 @@ impl DemoRunProfile {
             step_outline,
             recovery_trigger_step: recovery_trigger_step.to_string(),
             limits: RunLimits {
-                max_steps: 8,
-                max_retries: 1,
-                max_replans: 1,
+                max_steps: FLOW_RUN_MAX_STEPS,
+                max_retries: DEMO_DEFAULT_MAX_RETRIES,
+                max_replans: DEMO_DEFAULT_MAX_REPLANS,
                 ..RunLimits::default()
             },
         })

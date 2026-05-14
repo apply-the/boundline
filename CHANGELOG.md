@@ -17,6 +17,23 @@ recorded workspace version.
 
 ## [Unreleased]
 
+## [0.53.0] - 2026-05-14
+
+Delivered specs:
+
+- `053` - Expert Pack Selection
+
+Highlights:
+
+- Added the bounded expert-pack-selection slice so Boundline can project
+  built-in expert packs and runtime-role recommendations before planning
+  continues.
+- Narrowed Canon integration to optional governed expertise inputs with an
+  explicit `expertise_input` compatibility surface instead of generic runtime
+  influence.
+- Bumped workspace version to `0.53.0` and aligned active release metadata to
+  Canon `0.52.0` for this feature branch.
+
 ## [0.52.0] - 2026-05-14
 
 Delivered specs:

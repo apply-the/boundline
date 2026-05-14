@@ -550,7 +550,7 @@ where
                     "zone": request.zone,
                     "owner": request.owner,
                     "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
-                    "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
+                    "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason),
                 }),
             );
             let response = CanonCliRuntime::new(canon.command.clone())
@@ -615,7 +615,7 @@ where
                 "stage_key": stage_key,
                 "runtime": GovernanceRuntimeKind::Local,
                 "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
-                "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
+                "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason),
             }),
         );
         let response = LocalGovernanceRuntime
@@ -764,7 +764,7 @@ where
                     "missing_sections": packet.missing_sections,
                     "reason": blocked_reason.as_deref().unwrap_or(&response.message),
                     "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
-                    "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
+                    "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason),
                     "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
                     "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
                     "canon_memory_compatibility": compacted_canon_memory.as_ref().map(|memory| memory.compatibility_state().to_string()),
@@ -789,7 +789,7 @@ where
                         "document_refs": response.packet.as_ref().map(|packet| packet.document_refs.clone()).unwrap_or_default(),
                         "headline": response.packet.as_ref().map(|packet| packet.headline.clone()).unwrap_or_else(|| response.message.clone()),
                         "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
-                        "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
+                        "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason),
                         "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
                         "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
                         "canon_memory_compatibility": compacted_canon_memory.as_ref().map(|memory| memory.compatibility_state().to_string()),
@@ -813,7 +813,7 @@ where
                         "approval_state": response.approval_state,
                         "run_ref": response.run_ref,
                         "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
-                        "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
+                        "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason),
                         "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
                         "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
                         "canon_memory_compatibility": compacted_canon_memory.as_ref().map(|memory| memory.compatibility_state().to_string()),
@@ -847,7 +847,7 @@ where
                         "reason": reason,
                         "packet_ref": response.packet.as_ref().map(|packet| packet.packet_ref.clone()),
                         "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
-                        "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
+                        "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason),
                         "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
                         "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
                         "canon_memory_compatibility": compacted_canon_memory.as_ref().map(|memory| memory.compatibility_state().to_string()),

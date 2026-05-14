@@ -122,6 +122,16 @@ Before 1.0.0, breaking changes MAY occur in minor versions.
 	NOT introduce panic-prone control flow such as `unwrap`, `expect`,
 	`panic!`, `todo!`, `unimplemented!`, `unreachable!`, or assert-family
 	runtime guards; use explicit error propagation instead.
+- Rust code outside `main.rs`, `#[cfg(test)]`, and files under `tests/` MUST
+	NOT introduce magic strings or magic numbers in domain logic, protocol
+	handling, persistence, configuration, CLI contracts, or serialization
+	paths; use named constants or typed enums/newtypes owned by the relevant
+	module or type.
+- Stable serialized or deserialized shapes in Rust code outside `main.rs`,
+	`#[cfg(test)]`, and files under `tests/` MUST use typed `struct` or
+	`enum` models with `serde` derives instead of ad hoc `serde_json::Map`
+	assembly, repeated raw field-name strings, or stable `json!` object
+	construction.
 <!-- MANUAL ADDITIONS END -->
 
 

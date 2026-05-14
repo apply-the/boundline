@@ -16,9 +16,24 @@ use crate::domain::session::{RoutingMode, RoutingOutcome, RoutingSource};
 use crate::domain::session::{governance_next_action_for_state, governance_packet_provenance_text};
 use crate::domain::step::{StepKind, StepStatus};
 use crate::domain::task::{TaskStatus, TerminalReason};
+use crate::domain::tool_result::ToolResult;
 use crate::domain::trace::{
     ExecutionTrace, TraceEventType, TraceRecoveryEvent, TraceStepSummary, TraceSummaryView,
 };
+
+const UNKNOWN_VALIDATION_EXIT_CODE: i64 = -1;
+const UNKNOWN_DECISION_ID: &str = "unknown-decision";
+const UNKNOWN_TARGET: &str = "unknown";
+const KEY_ACTION_RESULT: &str = "action_result";
+const KEY_FAILURE_REASON: &str = "failure_reason";
+const KEY_FINDING: &str = "finding";
+const KEY_REVIEW_OUTCOME: &str = "review_outcome";
+const KEY_REVIEW_TRIGGER: &str = "review_trigger";
+const KEY_REVIEWER_ID: &str = "reviewer_id";
+const KEY_REVIEWER_ROLE: &str = "reviewer_role";
+const KEY_SUMMARY: &str = "summary";
+const KEY_TARGET: &str = "target";
+const KEY_VOTE_RESOLUTION: &str = "vote_resolution";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct InspectCommandReport {
@@ -920,22 +935,27 @@ fn decision_failure_evidence(
     decision_id: Option<&str>,
     payload: &serde_json::Value,
 ) -> Option<String> {
-    let decision_id = decision_id.unwrap_or("unknown-decision");
-    let target = payload.get("target").and_then(|value| value.as_str()).unwrap_or("unknown");
-    let action_result = payload.get("action_result")?;
-
-    let message = action_result
-        .get("stderr")
-        .and_then(|value| value.as_str())
-        .filter(|value| !value.trim().is_empty())
+    let decision_id = decision_id.unwrap_or(UNKNOWN_DECISION_ID);
+    let target = payload.get(KEY_TARGET).and_then(|value| value.as_str()).unwrap_or(UNKNOWN_TARGET);
+    let action_result = payload.get(KEY_ACTION_RESULT)?;
+    let typed_result = serde_json::from_value::<ToolResult>(action_result.clone()).ok();
+    let message = typed_result
+        .as_ref()
+        .and_then(|tool_result| {
+            first_non_empty(&[Some(tool_result.stderr.as_str()), Some(tool_result.stdout.as_str())])
+        })
         .or_else(|| {
-            action_result
-                .get("stdout")
-                .and_then(|value| value.as_str())
-                .filter(|value| !value.trim().is_empty())
+            first_non_empty(&[
+                action_result.get("stderr").and_then(|value| value.as_str()),
+                action_result.get("stdout").and_then(|value| value.as_str()),
+            ])
         })?;
 
     Some(format!("{decision_id} {target}: {message}"))
+}
+
+fn first_non_empty<'a>(values: &[Option<&'a str>]) -> Option<&'a str> {
+    values.iter().filter_map(|value| *value).find(|value| !value.trim().is_empty())
 }
 
 fn format_evidence_input(value: &serde_json::Value) -> Option<String> {
@@ -1027,20 +1047,20 @@ fn corrected_command(inspection_target: TraceResolutionTarget) -> &'static str {
 fn review_timeline_line(event_type: TraceEventType, payload: &serde_json::Value) -> Option<String> {
     match event_type {
         TraceEventType::ReviewStarted => payload
-            .get("review_trigger")
+            .get(KEY_REVIEW_TRIGGER)
             .and_then(|value| value.as_str())
             .map(|trigger| format!("review_trigger: {trigger}")),
         TraceEventType::ReviewTriggerIgnored => payload
-            .get("review_trigger")
+            .get(KEY_REVIEW_TRIGGER)
             .and_then(|value| value.as_str())
             .map(|trigger| format!("review_trigger_ignored: {trigger}")),
         TraceEventType::ReviewerCompleted => reviewer_line(payload),
         TraceEventType::ReviewVoteResolved => payload
-            .get("summary")
+            .get(KEY_SUMMARY)
             .and_then(|value| value.as_str())
             .map(|summary| format!("review_vote: {summary}"))
             .or_else(|| {
-                payload.get("vote_resolution").map(|resolution| {
+                payload.get(KEY_VOTE_RESOLUTION).map(|resolution| {
                     format!(
                         "review_vote: {}",
                         serde_json::to_string(resolution).unwrap_or_default()
@@ -1051,12 +1071,12 @@ fn review_timeline_line(event_type: TraceEventType, payload: &serde_json::Value)
             reviewer_line(payload).map(|line| format!("review_adjudication: {line}"))
         }
         TraceEventType::ReviewTerminalRecorded => payload
-            .get("review_outcome")
+            .get(KEY_REVIEW_OUTCOME)
             .and_then(|value| value.as_str())
             .map(|outcome| format!("review_outcome: {outcome}"))
             .or_else(|| {
                 payload
-                    .get("failure_reason")
+                    .get(KEY_FAILURE_REASON)
                     .and_then(|value| value.as_str())
                     .map(|reason| format!("review_reason: {reason}"))
             }),
@@ -1150,14 +1170,14 @@ fn governance_packet_provenance_suffix(payload: &serde_json::Value) -> String {
 }
 
 fn reviewer_line(payload: &serde_json::Value) -> Option<String> {
-    let reviewer_id = payload.get("reviewer_id").and_then(|value| value.as_str())?;
+    let reviewer_id = payload.get(KEY_REVIEWER_ID).and_then(|value| value.as_str())?;
 
-    if let Some(finding) = payload.get("finding") {
+    if let Some(finding) = payload.get(KEY_FINDING) {
         let disposition =
             finding.get("disposition").and_then(|value| value.as_str()).unwrap_or("unknown");
         let summary =
             finding.get("summary").and_then(|value| value.as_str()).unwrap_or("review finding");
-        let role = payload.get("reviewer_role").and_then(|value| value.as_str());
+        let role = payload.get(KEY_REVIEWER_ROLE).and_then(|value| value.as_str());
         return Some(match role {
             Some(role) => format!("reviewer {reviewer_id} ({role}) {disposition}: {summary}"),
             None => format!("reviewer {reviewer_id} {disposition}: {summary}"),
@@ -1165,7 +1185,7 @@ fn reviewer_line(payload: &serde_json::Value) -> Option<String> {
     }
 
     payload
-        .get("failure_reason")
+        .get(KEY_FAILURE_REASON)
         .and_then(|value| value.as_str())
         .map(|reason| format!("reviewer {reviewer_id} failed: {reason}"))
 }
@@ -1254,7 +1274,10 @@ fn failure_headline(payload: &serde_json::Value, attempts: usize) -> String {
     {
         let command =
             validation.get("command").and_then(|value| value.as_str()).unwrap_or("validation");
-        let exit_code = validation.get("exit_code").and_then(|value| value.as_i64()).unwrap_or(-1);
+        let exit_code = validation
+            .get("exit_code")
+            .and_then(|value| value.as_i64())
+            .unwrap_or(UNKNOWN_VALIDATION_EXIT_CODE);
         return adaptive_selection_reason(payload).map_or_else(
             || {
                 format!(
@@ -1373,9 +1396,9 @@ mod tests {
 
     use super::{
         InspectCommandError, TraceResolutionTarget, TraceSummaryError, adaptive_evidence_lines,
-        corrected_command, failure_headline, governance_timeline_line, inspection_target_for,
-        parse_step_kind, render_error, resolve_session_trace_ref, resolve_trace_path,
-        review_timeline_line, success_headline, summarize_trace,
+        corrected_command, decision_failure_evidence, failure_headline, governance_timeline_line,
+        inspection_target_for, parse_step_kind, render_error, resolve_session_trace_ref,
+        resolve_trace_path, review_timeline_line, success_headline, summarize_trace,
     };
     use crate::adapters::session_store::SessionStoreError;
     use crate::domain::limits::TerminalCondition;
@@ -1863,6 +1886,21 @@ mod tests {
         assert_eq!(
             summary.governance_next_action.as_deref(),
             Some("refresh: refresh the governed packet and reassess its credibility")
+        );
+    }
+
+    #[test]
+    fn decision_failure_evidence_falls_back_to_raw_action_result_fields() {
+        let payload = json!({
+            "target": "src/lib.rs",
+            "action_result": {
+                "stderr": "compiler exploded"
+            }
+        });
+
+        assert_eq!(
+            decision_failure_evidence(Some("decision-raw"), &payload),
+            Some("decision-raw src/lib.rs: compiler exploded".to_string())
         );
     }
 

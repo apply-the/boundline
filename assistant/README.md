@@ -4,9 +4,9 @@ This directory contains Markdown-based commands to run `boundline` from various 
 
 The primary delivery surface is session-native: `start -> capture -> plan -> run -> status -> next -> inspect` against `<workspace>/.boundline/session.json` and `<workspace>/.boundline/traces/`.
 
-In `0.52.0`, shell-enabled assistant flows should prefer `--json` for the session-native lifecycle commands plus `run`, `status`, `next`, and `inspect`. Treat `command_name`, `exit_status`, `rendered_output`, `trace_location`, `session_status`, and `trace_summary` as the authoritative host envelope when those fields are present, and use `rendered_output` only as the human-readable companion.
+In `0.53.0`, shell-enabled assistant flows should prefer `--json` for the session-native lifecycle commands plus `run`, `status`, `next`, and `inspect`. Treat `command_name`, `exit_status`, `rendered_output`, `trace_location`, `session_status`, and `trace_summary` as the authoritative host envelope when those fields are present, and use `rendered_output` only as the human-readable companion.
 
-In `0.52.0`, assistant plugin packages expose Boundline through `.claude-plugin/`,
+In `0.53.0`, assistant plugin packages expose Boundline through `.claude-plugin/`,
 `.codex-plugin/`, `.cursor-plugin/`, and `.copilot-prompts/`. Package commands
 use `/boundline:*` names and must preserve `.boundline/session.json`,
 CLI-reported `next_command`, and explicit blocked, clarification-required,

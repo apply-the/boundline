@@ -183,6 +183,163 @@ impl ContextPack {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ExpertPackSelectionState {
+    Selected,
+    NoneSelected,
+}
+
+impl ExpertPackSelectionState {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Selected => "selected",
+            Self::NoneSelected => "none-selected",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ExpertPackSignalStatus {
+    Supporting,
+    Ignored,
+    Blocked,
+}
+
+impl ExpertPackSignalStatus {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Supporting => "supporting",
+            Self::Ignored => "ignored",
+            Self::Blocked => "blocked",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CanonExpertiseInputDisposition {
+    Used,
+    Ignored,
+}
+
+impl CanonExpertiseInputDisposition {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Used => "used",
+            Self::Ignored => "ignored",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExpertPackSignal {
+    pub kind: String,
+    pub reference: String,
+    pub source: String,
+    pub status: ExpertPackSignalStatus,
+    pub rationale: String,
+}
+
+impl ExpertPackSignal {
+    pub fn provenance_line(&self) -> String {
+        format!(
+            "expert_pack_signal: {}={} [{}] ({}) [source={}]",
+            self.kind,
+            self.reference,
+            self.status.as_str(),
+            self.rationale,
+            self.source
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RejectedExpertCandidate {
+    pub pack_id: String,
+    pub reason: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blocking_signals: Vec<ExpertPackSignal>,
+}
+
+impl RejectedExpertCandidate {
+    pub fn summary_line(&self) -> String {
+        format!("expert_pack_rejected: {} ({})", self.pack_id, self.reason)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CanonExpertiseInputConsideration {
+    pub contract_version: String,
+    pub mode: String,
+    pub expertise_kind: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub domain_families: Vec<String>,
+    pub source_ref: String,
+    pub promotion_state: String,
+    pub publication_target_class: String,
+    pub disposition: CanonExpertiseInputDisposition,
+    pub disposition_reason: String,
+}
+
+impl CanonExpertiseInputConsideration {
+    pub fn provenance_line(&self) -> String {
+        let domain_families = if self.domain_families.is_empty() {
+            "none".to_string()
+        } else {
+            self.domain_families.join(", ")
+        };
+        format!(
+            "canon_expertise_input: {} [{}] families={} disposition={} ({}) source_ref={} target_class={} promotion_state={}",
+            self.expertise_kind,
+            self.mode,
+            domain_families,
+            self.disposition.as_str(),
+            self.disposition_reason,
+            self.source_ref,
+            self.publication_target_class,
+            self.promotion_state
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExpertPackSelectionOutcome {
+    pub target_ref: String,
+    pub selection_state: ExpertPackSelectionState,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub selected_expert_packs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub suggested_runtime_roles: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub supporting_signals: Vec<ExpertPackSignal>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rejected_expert_candidates: Vec<RejectedExpertCandidate>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub canon_inputs_considered: Vec<CanonExpertiseInputConsideration>,
+    pub summary: String,
+}
+
+impl ExpertPackSelectionOutcome {
+    pub fn provenance_lines(&self) -> Vec<String> {
+        let mut lines = self
+            .supporting_signals
+            .iter()
+            .map(ExpertPackSignal::provenance_line)
+            .collect::<Vec<_>>();
+        lines.extend(
+            self.rejected_expert_candidates.iter().map(RejectedExpertCandidate::summary_line),
+        );
+        lines.extend(
+            self.canon_inputs_considered
+                .iter()
+                .map(CanonExpertiseInputConsideration::provenance_line),
+        );
+        lines
+    }
+}
+
 /// An inferred flow proposal attached to a goal plan.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InferredFlow {
@@ -293,6 +450,8 @@ pub struct GoalPlan {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compacted_canon_memory: Option<CompactedCanonMemory>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expert_selection: Option<ExpertPackSelectionOutcome>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cluster_session_projection: Option<ClusterSessionProjection>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cluster_delivery_story: Option<ClusterDeliveryStory>,
@@ -338,6 +497,7 @@ impl GoalPlan {
             flow_skipped: false,
             workflow_progress: None,
             compacted_canon_memory: None,
+            expert_selection: None,
             cluster_session_projection: None,
             cluster_delivery_story: None,
             delegation_packet_history: Vec::new(),
@@ -500,6 +660,11 @@ impl GoalPlan {
         self
     }
 
+    pub fn with_expert_selection(mut self, expert_selection: ExpertPackSelectionOutcome) -> Self {
+        self.expert_selection = Some(expert_selection);
+        self
+    }
+
     pub fn with_delegation_state(
         mut self,
         packet_history: Vec<DelegationPacket>,
@@ -654,7 +819,7 @@ impl GoalPlan {
     }
 
     pub fn context_summary(&self) -> Option<String> {
-        match (
+        let base_summary = match (
             self.context_pack.as_ref().map(|pack| pack.summary.clone()),
             self.compacted_canon_memory.as_ref().map(CompactedCanonMemory::summary_text),
         ) {
@@ -663,6 +828,20 @@ impl GoalPlan {
             }
             (Some(context_summary), None) => Some(context_summary),
             (None, Some(canon_summary)) => Some(format!("canon memory: {canon_summary}")),
+            (None, None) => None,
+        };
+
+        match (
+            base_summary,
+            self.expert_selection.as_ref().map(|selection| selection.summary.clone()),
+        ) {
+            (Some(context_summary), Some(selection_summary)) => {
+                Some(format!("{context_summary}; expert selection: {selection_summary}"))
+            }
+            (Some(context_summary), None) => Some(context_summary),
+            (None, Some(selection_summary)) => {
+                Some(format!("expert selection: {selection_summary}"))
+            }
             (None, None) => None,
         }
     }
@@ -688,7 +867,28 @@ impl GoalPlan {
         if let Some(memory) = self.compacted_canon_memory.as_ref() {
             lines.extend(memory.provenance_lines());
         }
+        if let Some(selection) = self.expert_selection.as_ref() {
+            lines.extend(selection.provenance_lines());
+        }
         lines
+    }
+
+    pub fn expert_selection_summary(&self) -> Option<String> {
+        self.expert_selection.as_ref().map(|selection| selection.summary.clone())
+    }
+
+    pub fn selected_expert_packs(&self) -> Vec<String> {
+        self.expert_selection
+            .as_ref()
+            .map(|selection| selection.selected_expert_packs.clone())
+            .unwrap_or_default()
+    }
+
+    pub fn suggested_runtime_roles(&self) -> Vec<String> {
+        self.expert_selection
+            .as_ref()
+            .map(|selection| selection.suggested_runtime_roles.clone())
+            .unwrap_or_default()
     }
 
     pub fn canon_memory_staleness_reason(&self) -> Option<String> {
@@ -744,7 +944,10 @@ pub enum GoalPlanError {
 #[cfg(test)]
 mod tests {
     use super::{
-        ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan, PlannedTask,
+        CanonExpertiseInputConsideration, CanonExpertiseInputDisposition, ContextInput,
+        ContextInputKind, ContextPack, ContextPackCredibility, ExpertPackSelectionOutcome,
+        ExpertPackSelectionState, ExpertPackSignal, ExpertPackSignalStatus, GoalPlan,
+        GoalPlanError, PlannedTask, RejectedExpertCandidate,
     };
     use crate::domain::governance::{
         CanonEvidenceInspectSummary, CanonModeSummary, CanonResultActionSummary,
@@ -995,6 +1198,213 @@ mod tests {
         assert_eq!(
             input.provenance_line(),
             "workspace_file: src/lib.rs (failing test target) [source=workspace_signal, symbol_scan]"
+        );
+    }
+
+    #[test]
+    fn context_pack_validation_and_selection_strings_cover_remaining_branches() {
+        assert_eq!(ContextInputKind::RecentTrace.as_str(), "recent_trace");
+        assert_eq!(ContextInputKind::CanonCapability.as_str(), "canon_capability");
+        assert_eq!(ContextInputKind::CanonMemory.as_str(), "canon_memory");
+        assert_eq!(ExpertPackSelectionState::Selected.as_str(), "selected");
+        assert_eq!(ExpertPackSelectionState::NoneSelected.as_str(), "none-selected");
+        assert_eq!(ExpertPackSignalStatus::Ignored.as_str(), "ignored");
+        assert_eq!(ExpertPackSignalStatus::Blocked.as_str(), "blocked");
+        assert_eq!(CanonExpertiseInputDisposition::Used.as_str(), "used");
+        assert_eq!(CanonExpertiseInputDisposition::Ignored.as_str(), "ignored");
+
+        let missing_id = ContextPack {
+            pack_id: " ".to_string(),
+            summary: "bounded context".to_string(),
+            credibility: ContextPackCredibility::Insufficient,
+            inputs: Vec::new(),
+            selected_targets: Vec::new(),
+            staleness_reason: None,
+        };
+        assert_eq!(missing_id.validate().unwrap_err(), GoalPlanError::MissingContextPackId);
+
+        let missing_summary = ContextPack {
+            pack_id: "cp-1".to_string(),
+            summary: " ".to_string(),
+            credibility: ContextPackCredibility::Insufficient,
+            inputs: Vec::new(),
+            selected_targets: Vec::new(),
+            staleness_reason: None,
+        };
+        assert_eq!(
+            missing_summary.validate().unwrap_err(),
+            GoalPlanError::MissingContextPackSummary
+        );
+
+        let missing_primary = ContextPack {
+            pack_id: "cp-2".to_string(),
+            summary: "bounded context".to_string(),
+            credibility: ContextPackCredibility::Credible,
+            inputs: vec![ContextInput {
+                kind: ContextInputKind::WorkspaceFile,
+                reference: "src/lib.rs".to_string(),
+                rationale: "secondary evidence".to_string(),
+                source: "workspace_scan".to_string(),
+                primary: false,
+            }],
+            selected_targets: Vec::new(),
+            staleness_reason: None,
+        };
+        assert_eq!(
+            missing_primary.validate().unwrap_err(),
+            GoalPlanError::MissingCredibleContextPrimaryInput
+        );
+
+        let stale_without_reason = ContextPack {
+            pack_id: "cp-3".to_string(),
+            summary: "bounded context".to_string(),
+            credibility: ContextPackCredibility::Stale,
+            inputs: Vec::new(),
+            selected_targets: vec!["src/lib.rs".to_string()],
+            staleness_reason: None,
+        };
+        assert_eq!(
+            stale_without_reason.validate().unwrap_err(),
+            GoalPlanError::MissingContextStalenessReason
+        );
+
+        let fallback_targets = ContextPack {
+            pack_id: "cp-4".to_string(),
+            summary: "bounded context".to_string(),
+            credibility: ContextPackCredibility::Credible,
+            inputs: vec![ContextInput {
+                kind: ContextInputKind::WorkspaceFile,
+                reference: "src/lib.rs".to_string(),
+                rationale: "secondary evidence".to_string(),
+                source: "workspace_scan".to_string(),
+                primary: false,
+            }],
+            selected_targets: vec!["src/lib.rs".to_string()],
+            staleness_reason: None,
+        };
+        assert_eq!(fallback_targets.primary_references(), vec!["src/lib.rs".to_string()]);
+    }
+
+    #[test]
+    fn goal_plan_context_helpers_surface_expert_selection_and_memory_fallbacks() {
+        let expert_selection = ExpertPackSelectionOutcome {
+            target_ref: "src/lib.rs".to_string(),
+            selection_state: ExpertPackSelectionState::Selected,
+            selected_expert_packs: vec!["domain-react-expert-pack".to_string()],
+            suggested_runtime_roles: vec!["frontend".to_string()],
+            supporting_signals: vec![ExpertPackSignal {
+                kind: "reviewer_role".to_string(),
+                reference: "frontend".to_string(),
+                source: "routing_resolution".to_string(),
+                status: ExpertPackSignalStatus::Blocked,
+                rationale: "declared reviewer role requires explicit verification".to_string(),
+            }],
+            rejected_expert_candidates: vec![RejectedExpertCandidate {
+                pack_id: "domain-rust-expert-pack".to_string(),
+                reason: "bounded target resolved to react".to_string(),
+                blocking_signals: Vec::new(),
+            }],
+            canon_inputs_considered: vec![CanonExpertiseInputConsideration {
+                contract_version: "v1".to_string(),
+                mode: "domain-language".to_string(),
+                expertise_kind: "domain-language".to_string(),
+                domain_families: Vec::new(),
+                source_ref: "canon-run:domain-language".to_string(),
+                promotion_state: "auto".to_string(),
+                publication_target_class: "stable".to_string(),
+                disposition: CanonExpertiseInputDisposition::Ignored,
+                disposition_reason: "no selected domain families are available for Canon matching"
+                    .to_string(),
+            }],
+            summary: "selected domain-react-expert-pack with frontend verification".to_string(),
+        };
+
+        let selection_only_plan = build_plan().with_expert_selection(expert_selection.clone());
+        assert_eq!(
+            selection_only_plan.context_summary().as_deref(),
+            Some("expert selection: selected domain-react-expert-pack with frontend verification")
+        );
+
+        let plan = build_plan()
+            .with_expert_selection(expert_selection)
+            .with_routing_policy_summary("planning route=copilot/gpt-5.5 [workspace]")
+            .with_compacted_canon_memory(CompactedCanonMemory {
+                headline: "Canon packet remains usable".to_string(),
+                credibility: MemoryCredibilityState::Credible,
+                stage_key: Some("change:verify".to_string()),
+                run_ref: Some("canon-run-2".to_string()),
+                packet_ref: Some(".canon/runs/canon-run-2".to_string()),
+                reason_code: None,
+                artifact_refs: vec![
+                    ".canon/runs/canon-run-2/verification.md".to_string(),
+                    ".canon/runs/canon-run-2/evidence.md".to_string(),
+                    ".canon/runs/canon-run-2/extra.md".to_string(),
+                ],
+                mode_summary: None,
+                possible_actions: Vec::new(),
+                recommended_next_action: None,
+                evidence_summary: None,
+            });
+
+        assert_eq!(
+            plan.routing_policy_summary.as_deref(),
+            Some("planning route=copilot/gpt-5.5 [workspace]")
+        );
+        assert_eq!(
+            plan.context_primary_inputs(),
+            vec![
+                ".canon/runs/canon-run-2/verification.md".to_string(),
+                ".canon/runs/canon-run-2/evidence.md".to_string(),
+            ]
+        );
+        assert_eq!(
+            plan.expert_selection_summary().as_deref(),
+            Some("selected domain-react-expert-pack with frontend verification")
+        );
+        assert_eq!(plan.selected_expert_packs(), vec!["domain-react-expert-pack".to_string()]);
+        assert_eq!(plan.suggested_runtime_roles(), vec!["frontend".to_string()]);
+        assert!(
+            plan.context_provenance_lines()
+                .iter()
+                .any(|line| line.contains("expert_pack_signal: reviewer_role=frontend [blocked]"))
+        );
+        assert!(
+            plan.context_provenance_lines()
+                .iter()
+                .any(|line| line.contains("expert_pack_rejected: domain-rust-expert-pack"))
+        );
+        assert!(
+            plan.context_provenance_lines()
+                .iter()
+                .any(|line| line.contains("families=none") && line.contains("disposition=ignored"))
+        );
+    }
+
+    #[test]
+    fn recording_existing_delegation_packet_replaces_it_in_place() {
+        let mut plan = build_plan();
+        let packet = build_packet("packet-1", DelegationPacketKind::Handoff);
+        let continuity = DelegationContinuityState {
+            active_packet_id: Some("packet-1".to_string()),
+            mode: DelegationContinuityMode::HandoffRequired,
+            authority_source: ContinuityAuthority::NativeSession,
+            next_command: "boundline status".to_string(),
+            headline: "handoff required".to_string(),
+            evidence_summary: "initial bounded packet".to_string(),
+        };
+
+        plan.record_delegation_packet(packet, continuity.clone()).unwrap();
+
+        let mut replacement = build_packet("packet-1", DelegationPacketKind::Handoff);
+        replacement.capability_summary = Some("replacement packet state".to_string());
+
+        plan.record_delegation_packet(replacement, continuity).unwrap();
+
+        assert_eq!(plan.delegation_packet_history().len(), 1);
+        assert_eq!(plan.delegation_packet_history()[0].state, DelegationPacketState::Active);
+        assert_eq!(
+            plan.delegation_packet_history()[0].capability_summary.as_deref(),
+            Some("replacement packet state")
         );
     }
 }
