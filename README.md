@@ -358,7 +358,7 @@ Boundline is the local delivery orchestrator. Canon is the governed packet runti
 - Canon governs packets, approvals, and governed artifacts when a bounded delivery phase crosses a governance boundary.
 - Large work is supported by decomposition, not by unbounded autonomy.
 
-The current release documents Canon `0.48.0` support on the
+The current release documents Canon `0.50.0` support on the
 `canon governance start|refresh|capabilities --json` `v1` adapter surface.
 
 ## Community And Support

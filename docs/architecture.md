@@ -20,9 +20,20 @@ Canon is not the orchestrator and not the product entrypoint. A Boundline instal
 can be perfectly usable without Canon when you stay on the default local and
 session-native routes.
 
-The current Boundline adapter documents Canon `0.48.0` support for the
+The current Boundline adapter documents Canon `0.50.0` support for the
 `canon governance start|refresh|capabilities --json` `v1` surface. That is a
 bounded compatibility target, not a claim of total Canon feature parity.
+
+The same boundary now applies to Canon-promoted repo-visible knowledge.
+Boundline can read compatible `docs/project/*.md` surfaces plus supporting
+`docs/evidence/...` roots, but it still treats Canon as the producer of
+promotion facts. Boundline only applies consumer policy on top of those facts:
+`compatible` when project memory is reusable, `warning` when Canon knowledge is
+partial or stale, and `unsupported` when Canon reports blocked governance,
+missing required approval, missing required source artifacts, or an unsupported
+contract line. When evidence files contain shared `project-memory:managed`
+blocks, Boundline preserves producer plus `source_ref` attribution instead of
+flattening Canon and Boundline contributions together.
 
 ## Primary Runtime Model
 

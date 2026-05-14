@@ -207,7 +207,7 @@ fn governance_input_documents_uses_first_workspace_doc_as_stage_brief() {
 #[test]
 fn canon_helper_summaries_render_expected_text() {
     let snapshot = CanonCapabilitySnapshot {
-        canon_version: "0.48.0".to_string(),
+        canon_version: "0.50.0".to_string(),
         supported_schema_versions: vec!["2026-02-01".to_string()],
         operations: vec!["start".to_string(), "refresh".to_string()],
         supported_modes: vec![CanonMode::Discovery],
@@ -243,7 +243,7 @@ fn canon_helper_summaries_render_expected_text() {
         evidence_summary: None,
     };
 
-    assert_eq!(snapshot.summary_text(), "Canon 0.48.0 capabilities available");
+    assert_eq!(snapshot.summary_text(), "Canon 0.50.0 capabilities available");
     assert!(mode_summary.summary_text().contains("execution posture: recommendation-only"));
     assert!(memory.summary_text().contains("Canon verification packet is still credible"));
     assert_eq!(MemoryCredibilityState::Stale.as_str(), "stale");

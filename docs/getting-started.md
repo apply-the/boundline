@@ -256,10 +256,17 @@ Canon is not the product entrypoint. Boundline still owns orchestration, session
 state, planning, execution, and validation. Canon matters only when you enable
 governed routes, governed approvals, or governed artifact capture.
 
-The current Boundline release documents Canon `0.48.0` as the supported CLI target
+The current Boundline release documents Canon `0.50.0` as the supported CLI target
 for the machine-facing `canon governance start|refresh|capabilities --json`
 `v1` adapter surface. Install diagnostics keep that boundary explicit after
 install or upgrade.
+
+If the repository also carries Canon-promoted `docs/project/` and
+`docs/evidence/` content, the session-native path can reuse that material as
+planning context without switching to a Canon-owned workflow. `status`, `next`,
+and `inspect` now show whether that project memory is `compatible`, a bounded
+`warning`, or `unsupported`, along with the relevant Canon run refs and any
+managed-block producer attribution carried from `docs/evidence/`.
 
 ## When To Read More
 

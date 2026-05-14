@@ -301,20 +301,16 @@ impl TaskContext {
     }
 
     fn store_nested(&mut self, bucket_key: &str, entry_key: &str, value: Value) {
-        if !self.state.contains_key(bucket_key) {
-            self.state.insert(bucket_key.to_string(), Value::Object(Map::new()));
-        }
-
-        let bucket = self.state.get_mut(bucket_key).expect("bucket key was inserted before access");
+        let bucket =
+            self.state.entry(bucket_key.to_string()).or_insert_with(|| Value::Object(Map::new()));
 
         if !bucket.is_object() {
             *bucket = Value::Object(Map::new());
         }
 
-        bucket
-            .as_object_mut()
-            .expect("bucket value is guaranteed to be an object")
-            .insert(entry_key.to_string(), value);
+        if let Some(object) = bucket.as_object_mut() {
+            object.insert(entry_key.to_string(), value);
+        }
     }
 }
 

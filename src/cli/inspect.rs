@@ -87,9 +87,7 @@ pub fn render_error(
             "failed to read the requested trace"
         }
         InspectCommandError::SessionStore(_) => "failed to read the active session",
-        InspectCommandError::InvalidSession(_) => {
-            unreachable!("invalid sessions are rendered separately")
-        }
+        InspectCommandError::InvalidSession(_) => "active session is invalid",
         InspectCommandError::Summary(_) => "failed to summarize the requested trace",
     };
 
@@ -538,6 +536,52 @@ pub fn summarize_trace(
                         context_provenance.push(line);
                     }
                 }
+                if let Some(canon_memory_compatibility) =
+                    event.payload.get("canon_memory_compatibility").and_then(|value| value.as_str())
+                {
+                    let line = format!("canon_memory_compatibility: {canon_memory_compatibility}");
+                    if !context_provenance.contains(&line) {
+                        context_provenance.push(line);
+                    }
+                }
+                if let Some(canon_memory_run_ref) = event
+                    .payload
+                    .get("canon_memory_run_ref")
+                    .or_else(|| event.payload.get("run_ref"))
+                    .and_then(|value| value.as_str())
+                {
+                    let line = format!("canon_memory_run_ref: {canon_memory_run_ref}");
+                    if !context_provenance.contains(&line) {
+                        context_provenance.push(line);
+                    }
+                }
+                if let Some(canon_memory_packet_ref) = event
+                    .payload
+                    .get("canon_memory_packet_ref")
+                    .or_else(|| event.payload.get("packet_ref"))
+                    .and_then(|value| value.as_str())
+                {
+                    let line = format!("canon_memory_packet: {canon_memory_packet_ref}");
+                    if !context_provenance.contains(&line) {
+                        context_provenance.push(line);
+                    }
+                }
+                if let Some(canon_memory_reason_code) =
+                    event.payload.get("canon_memory_reason_code").and_then(|value| value.as_str())
+                {
+                    let line = format!("canon_memory_reason: {canon_memory_reason_code}");
+                    if !context_provenance.contains(&line) {
+                        context_provenance.push(line);
+                    }
+                }
+                if let Some(canon_next_action) =
+                    event.payload.get("canon_next_action").and_then(|value| value.as_str())
+                {
+                    let line = format!("canon_memory_next_action: {canon_next_action}");
+                    if !context_provenance.contains(&line) {
+                        context_provenance.push(line);
+                    }
+                }
                 if context_staleness_reason.is_none()
                     && event
                         .payload
@@ -909,8 +953,9 @@ fn load_trace(
 
     let trace = match target {
         TraceResolutionTarget::LatestWorkspaceTrace => {
-            let workspace_path =
-                workspace.expect("workspace is required for latest workspace trace resolution");
+            let Some(workspace_path) = workspace else {
+                return Err(InspectCommandError::MissingTraceReference);
+            };
             let store = FileTraceStore::for_workspace(workspace_path);
             store.load(&trace_path)?
         }
@@ -1779,9 +1824,13 @@ mod tests {
                 "runtime": "canon",
                 "required": true,
                 "reason": "refresh_required",
+                "run_ref": "run-7",
+                "packet_ref": ".canon/runs/run-7",
                 "document_refs": [".canon/runs/run-7/verification.md"],
                 "canon_memory_summary": "Canon verification packet [stale]",
                 "canon_memory_credibility": "stale",
+                "canon_memory_compatibility": "warning",
+                "canon_memory_reason_code": "refresh_required",
                 "canon_next_action": "refresh: refresh the governed packet and reassess its credibility"
             }),
         );
@@ -1798,6 +1847,15 @@ mod tests {
             summary
                 .context_provenance
                 .contains(&"canon_memory: Canon verification packet [stale]".to_string())
+        );
+        assert!(
+            summary.context_provenance.contains(&"canon_memory_compatibility: warning".to_string())
+        );
+        assert!(summary.context_provenance.contains(&"canon_memory_run_ref: run-7".to_string()));
+        assert!(
+            summary
+                .context_provenance
+                .contains(&"canon_memory_packet: .canon/runs/run-7".to_string())
         );
         assert_eq!(summary.context_staleness_reason.as_deref(), Some("refresh_required"));
         assert_eq!(

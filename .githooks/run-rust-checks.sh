@@ -20,10 +20,10 @@ case "$hook_name" in
     step_total=1
     ;;
   pre-push)
-    step_total=4
+    step_total=5
     ;;
   *)
-    step_total=4
+    step_total=5
     ;;
 esac
 
@@ -53,6 +53,11 @@ run_step \
   cargo fmt --all -- --check
 
 if [ "$hook_name" != "pre-commit" ]; then
+  run_step \
+    "sh scripts/check-rust-no-panic.sh" \
+    "Run 'sh scripts/check-rust-no-panic.sh' and replace the reported panic-prone calls outside main.rs and test code." \
+    sh scripts/check-rust-no-panic.sh
+
   run_step \
     "cargo clippy --workspace --all-targets --all-features -- -D warnings" \
     "Run 'cargo clippy --workspace --all-targets --all-features -- -D warnings' and fix the reported warnings." \

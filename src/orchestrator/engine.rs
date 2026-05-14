@@ -128,17 +128,20 @@ where
             match self.ensure_stage_governance(&mut task, &mut trace)? {
                 GovernanceStepDecision::Continue => {}
                 GovernanceStepDecision::Halt => {
-                    unreachable!("engine governance never halts non-terminally")
+                    return Err(OrchestratorError::ExecutionInvariant(
+                        "engine governance halted without a terminal response".to_string(),
+                    ));
                 }
                 GovernanceStepDecision::Terminal(trace_location) => break trace_location,
             }
 
             let step_index = task.plan.current_step_index;
             let step_snapshot = {
-                let step = task
-                    .plan
-                    .current_step_mut()
-                    .expect("current step was checked before entering the loop body");
+                let Some(step) = task.plan.current_step_mut() else {
+                    return Err(OrchestratorError::ExecutionInvariant(
+                        "current step disappeared after scheduler validation".to_string(),
+                    ));
+                };
                 step.mark_running();
                 step.clone()
             };
@@ -173,7 +176,12 @@ where
 
             match result.status {
                 ExecutionStatus::Succeeded => {
-                    let output = result.output.clone().expect("successful results are validated");
+                    let Some(output) = result.output.clone() else {
+                        return Err(OrchestratorError::ExecutionInvariant(format!(
+                            "step {} reported success without output after normalization",
+                            step_snapshot.id
+                        )));
+                    };
                     task.plan.steps[step_index].mark_succeeded(output.clone());
                     task.context.apply_success_output(
                         &step_snapshot.id,
@@ -227,7 +235,12 @@ where
                     self.persist_trace(&mut trace)?;
                 }
                 ExecutionStatus::Failed => {
-                    let error = result.error.clone().expect("failed results are validated");
+                    let Some(error) = result.error.clone() else {
+                        return Err(OrchestratorError::ExecutionInvariant(format!(
+                            "step {} reported failure without error details after normalization",
+                            step_snapshot.id
+                        )));
+                    };
                     task.plan.steps[step_index].mark_failed(error.clone(), result.recoverability);
                     task.context.apply_failure_error(&step_snapshot.id, &error);
                     if let Some(state_patch) = result.state_patch.as_ref() {
@@ -332,13 +345,16 @@ where
             }
         };
 
+        let terminal_reason = task.terminal_reason.clone().ok_or_else(|| {
+            OrchestratorError::ExecutionInvariant(
+                "run loop returned without recording a terminal reason".to_string(),
+            )
+        })?;
+
         Ok(TaskRunResponse {
             task_id: task.id.clone(),
             terminal_status: task.status,
-            terminal_reason: task
-                .terminal_reason
-                .clone()
-                .expect("run loop always finalizes the task before returning"),
+            terminal_reason,
             final_context: task.context.clone(),
             plan_revision: task.plan.revision,
             trace_location,
@@ -751,6 +767,10 @@ where
                     "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
                     "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
                     "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
+                    "canon_memory_compatibility": compacted_canon_memory.as_ref().map(|memory| memory.compatibility_state().to_string()),
+                    "canon_memory_reason_code": compacted_canon_memory.as_ref().and_then(|memory| memory.reason_code.clone()),
+                    "canon_memory_run_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.run_ref.clone()),
+                    "canon_memory_packet_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.packet_ref.clone()),
                 }),
             );
         }
@@ -772,6 +792,10 @@ where
                         "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
                         "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
                         "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
+                        "canon_memory_compatibility": compacted_canon_memory.as_ref().map(|memory| memory.compatibility_state().to_string()),
+                        "canon_memory_reason_code": compacted_canon_memory.as_ref().and_then(|memory| memory.reason_code.clone()),
+                        "canon_memory_run_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.run_ref.clone()),
+                        "canon_memory_packet_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.packet_ref.clone()),
                         "canon_next_action": compacted_canon_memory.as_ref().and_then(|memory| memory.recommended_next_action.as_ref()).map(|action| format!("{}: {}", action.action, action.rationale)),
                     }),
                 );
@@ -792,6 +816,10 @@ where
                         "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
                         "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
                         "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
+                        "canon_memory_compatibility": compacted_canon_memory.as_ref().map(|memory| memory.compatibility_state().to_string()),
+                        "canon_memory_reason_code": compacted_canon_memory.as_ref().and_then(|memory| memory.reason_code.clone()),
+                        "canon_memory_run_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.run_ref.clone()),
+                        "canon_memory_packet_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.packet_ref.clone()),
                         "canon_next_action": compacted_canon_memory.as_ref().and_then(|memory| memory.recommended_next_action.as_ref()).map(|action| format!("{}: {}", action.action, action.rationale)),
                     }),
                 );
@@ -822,6 +850,10 @@ where
                         "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason.clone()),
                         "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
                         "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
+                        "canon_memory_compatibility": compacted_canon_memory.as_ref().map(|memory| memory.compatibility_state().to_string()),
+                        "canon_memory_reason_code": compacted_canon_memory.as_ref().and_then(|memory| memory.reason_code.clone()),
+                        "canon_memory_run_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.run_ref.clone()),
+                        "canon_memory_packet_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.packet_ref.clone()),
                         "canon_next_action": compacted_canon_memory.as_ref().and_then(|memory| memory.recommended_next_action.as_ref()).map(|action| format!("{}: {}", action.action, action.rationale)),
                     }),
                 );
@@ -894,6 +926,10 @@ where
                 "reason": block.reason,
                 "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
                 "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
+                "canon_memory_compatibility": compacted_canon_memory.as_ref().map(|memory| memory.compatibility_state().to_string()),
+                "canon_memory_reason_code": compacted_canon_memory.as_ref().and_then(|memory| memory.reason_code.clone()),
+                "canon_memory_run_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.run_ref.clone()),
+                "canon_memory_packet_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.packet_ref.clone()),
                 "canon_next_action": compacted_canon_memory.as_ref().and_then(|memory| memory.recommended_next_action.as_ref()).map(|action| format!("{}: {}", action.action, action.rationale)),
             }),
         );
@@ -1072,6 +1108,8 @@ pub enum OrchestratorError {
     GovernancePatch(String),
     #[error("governance runtime failed: {0}")]
     GovernanceRuntime(String),
+    #[error("orchestrator execution invariant failed: {0}")]
+    ExecutionInvariant(String),
 }
 
 struct GovernanceBlockContext {

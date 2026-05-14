@@ -609,7 +609,7 @@ fn canon_surface_verification_fails_when_operations_are_missing() {
     use boundline::domain::governance::{CANONICAL_MODES, CanonCapabilitySnapshot};
 
     let snapshot = CanonCapabilitySnapshot {
-        canon_version: "0.48.0".to_string(),
+        canon_version: "0.50.0".to_string(),
         supported_schema_versions: vec!["2026-02-01".to_string()],
         operations: vec!["capabilities".to_string()],
         supported_modes: CANONICAL_MODES.to_vec(),
@@ -633,7 +633,7 @@ fn canon_surface_verification_checks_all_canonical_modes() {
     use boundline::domain::governance::{CANONICAL_MODES, CanonCapabilitySnapshot, CanonMode};
 
     let mut missing_mode_snapshot = CanonCapabilitySnapshot {
-        canon_version: "0.48.0".to_string(),
+        canon_version: "0.50.0".to_string(),
         supported_schema_versions: vec!["2026-02-01".to_string()],
         operations: vec!["start".to_string(), "refresh".to_string()],
         supported_modes: vec![CanonMode::Requirements],

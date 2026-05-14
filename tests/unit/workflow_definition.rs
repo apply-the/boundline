@@ -42,6 +42,32 @@ fn rejects_unknown_phase_while_parsing_workflow_file() {
 }
 
 #[test]
+fn parses_delivery_paths_inside_workflow_registry() {
+    let registry = WorkflowRegistry::from_toml_str(concat!(
+        "[workflow.default]\n",
+        "goal_source = \"session\"\n",
+        "entry = \"capture\"\n",
+        "phases = [\"capture\", \"plan\", \"run\", \"inspect\"]\n",
+        "allow_review = false\n",
+        "allow_governance = false\n\n",
+        "[delivery_paths.idea_to_code]\n",
+        "description = \"Move from idea intake to verified code through bounded stages.\"\n",
+        "stages = [\"discovery\", \"requirements\", \"domain-language\", \"domain-model\", \"system-shaping\", \"architecture\", \"backlog\", \"implementation\", \"verification\", \"pr-review\"]\n",
+        "adaptive = true\n",
+    ))
+    .unwrap();
+
+    assert_eq!(registry.delivery_path_names(), vec!["idea_to_code"]);
+
+    let delivery_path = registry.delivery_path("idea_to_code").unwrap();
+    assert_eq!(
+        delivery_path.stage_names(),
+        "discovery -> requirements -> domain-language -> domain-model -> system-shaping -> architecture -> backlog -> implementation -> verification -> pr-review"
+    );
+    assert!(delivery_path.adaptive);
+}
+
+#[test]
 fn rejects_conditional_phase_that_is_not_declared() {
     let error = WorkflowRegistry::from_toml_str(concat!(
         "[workflow.default]\n",

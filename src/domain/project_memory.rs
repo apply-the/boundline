@@ -3,23 +3,25 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::domain::project_index::{ProjectDocRoots, resolve_project_doc_roots};
+
 /// Supported contract line for this Boundline integration slice.
-const SUPPORTED_CONTRACT_MAJOR: u64 = 0;
-const SUPPORTED_CONTRACT_MINOR: u64 = 1;
+const SUPPORTED_CONTRACT_MAJOR: u64 = 1;
 const PROFILE_METADATA_FILE_SUFFIX: &str = ".packet-metadata.json";
 const LEGACY_LINEAGE_FILE_SUFFIX: &str = ".lineage.json";
+const MANAGED_BLOCK_START_MARKER: &str = "<!-- project-memory:managed:start";
 const CANON_PROJECT_SURFACES: [&str; 11] = [
-    "docs/project/overview.md",
-    "docs/project/product-context.md",
-    "docs/project/domain-language.md",
-    "docs/project/domain-model.md",
-    "docs/project/architecture-map.md",
-    "docs/project/decision-index.md",
-    "docs/project/delivery-map.md",
-    "docs/project/operational-context.md",
-    "docs/project/pending-decisions.md",
-    "docs/project/open-risks.md",
-    "docs/project/audit-log.md",
+    "overview.md",
+    "product-context.md",
+    "domain-language.md",
+    "domain-model.md",
+    "architecture-map.md",
+    "decision-index.md",
+    "delivery-map.md",
+    "operational-context.md",
+    "pending-decisions.md",
+    "open-risks.md",
+    "audit-log.md",
 ];
 
 /// Consumer-side read-only projection of Canon's promotion state vocabulary.
@@ -61,10 +63,14 @@ impl PromotionStateView {
     pub fn from_lineage(lineage: &LineageRef) -> Self {
         match lineage.promotion_state.as_str() {
             "auto-if-approved" => {
-                match (lineage.approval_state.as_deref(), lineage.readiness.as_str()) {
-                    (Some("Completed"), "complete") => Self::Stable,
-                    (Some(_), _) => Self::PendingOrIndex,
-                    (None, _) => Self::Unknown,
+                match (lineage.approval_state.as_deref(), lineage.packet_readiness.as_deref()) {
+                    (Some(_), Some(_))
+                        if lineage.approval_satisfied() && lineage.packet_ready() =>
+                    {
+                        Self::Stable
+                    }
+                    (Some(_), Some(_)) => Self::PendingOrIndex,
+                    (Some(_), None) | (None, _) => Self::Unknown,
                 }
             }
             other => Self::from_canon_state(other),
@@ -93,20 +99,90 @@ impl std::fmt::Display for PromotionStateView {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LineageRef {
     pub contract_version: String,
-    pub source_run: String,
-    pub mode: String,
+    #[serde(default = "default_canon_producer")]
+    pub producer: String,
+    #[serde(alias = "source_run")]
+    pub source_ref: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_artifacts: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile: Option<String>,
+    pub mode: Option<String>,
     pub promotion_state: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approval_state: Option<String>,
-    pub readiness: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub published_at: Option<String>,
+    pub stage: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub update_strategy: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub source_artifacts: Vec<String>,
+    pub owner: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub risk: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub zone: Option<String>,
+    #[serde(default, alias = "published_at", skip_serializing_if = "String::is_empty")]
+    pub promoted_at: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub content_digest: String,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "readiness")]
+    pub packet_readiness: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "profile")]
+    pub promotion_profile: Option<String>,
+}
+
+impl LineageRef {
+    /// Return the most stable human-readable run fragment for display.
+    pub fn source_ref_leaf(&self) -> &str {
+        self.source_ref.rsplit(':').next().unwrap_or(&self.source_ref)
+    }
+
+    /// Return the emitting Canon mode when present.
+    pub fn mode_name(&self) -> &str {
+        self.mode.as_deref().unwrap_or("unknown-mode")
+    }
+
+    /// Whether Canon requires an approval outcome before this surface can be reused.
+    pub fn requires_approval(&self) -> bool {
+        self.promotion_state.eq_ignore_ascii_case("auto-if-approved")
+    }
+
+    /// Whether the lineage records a satisfied approval outcome.
+    pub fn approval_satisfied(&self) -> bool {
+        matches!(
+            normalized_metadata_value(self.approval_state.as_deref()).as_deref(),
+            Some("completed" | "granted" | "not_needed" | "not-needed")
+        )
+    }
+
+    /// Whether the lineage records a blocked approval outcome.
+    pub fn approval_blocked(&self) -> bool {
+        matches!(
+            normalized_metadata_value(self.approval_state.as_deref()).as_deref(),
+            Some("rejected" | "expired")
+        )
+    }
+
+    /// Whether the lineage records a reusable packet.
+    pub fn packet_ready(&self) -> bool {
+        matches!(
+            normalized_metadata_value(self.packet_readiness.as_deref()).as_deref(),
+            Some("complete" | "ready" | "reusable")
+        )
+    }
+
+    /// Whether the lineage records a rejected packet outcome.
+    pub fn packet_blocked(&self) -> bool {
+        matches!(
+            normalized_metadata_value(self.packet_readiness.as_deref()).as_deref(),
+            Some("rejected")
+        )
+    }
+}
+
+fn default_canon_producer() -> String {
+    "canon".to_string()
+}
+
+fn normalized_metadata_value(raw: Option<&str>) -> Option<String> {
+    raw.map(str::trim).filter(|value| !value.is_empty()).map(|value| value.to_ascii_lowercase())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -130,17 +206,24 @@ impl CompatibilityOutcome {
     /// Check a Canon contract version string against the supported major.
     pub fn check(contract_version: &str) -> Self {
         match parse_contract_version(contract_version) {
-            Some((SUPPORTED_CONTRACT_MAJOR, SUPPORTED_CONTRACT_MINOR)) => Self::Compatible,
+            Some((SUPPORTED_CONTRACT_MAJOR, _)) => Self::Compatible,
             Some(_) => Self::Unsupported,
             None => Self::Unsupported,
         }
     }
 }
 
-fn parse_contract_version(contract_version: &str) -> Option<(u64, u64)> {
-    let mut segments = contract_version.split('.');
+fn parse_contract_version(contract_version: &str) -> Option<(u64, Option<u64>)> {
+    let normalized = contract_version.trim();
+    let numeric =
+        normalized.strip_prefix('v').or_else(|| normalized.strip_prefix('V')).unwrap_or(normalized);
+
+    let mut segments = numeric.split('.');
     let major = segments.next()?.parse::<u64>().ok()?;
-    let minor = segments.next().unwrap_or("0").parse::<u64>().ok()?;
+    let minor = match segments.next() {
+        Some(value) => Some(value.parse::<u64>().ok()?),
+        None => None,
+    };
     Some((major, minor))
 }
 
@@ -166,6 +249,89 @@ pub enum ProjectMemoryStatus {
     Absent,
     /// Canon project-memory found but contract version is incompatible.
     Incompatible,
+}
+
+/// Consumer-side continuation stance for Canon project memory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ProjectMemoryDecision {
+    Proceed,
+    Warning,
+    HardStop,
+}
+
+impl ProjectMemoryDecision {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Proceed => "proceed",
+            Self::Warning => "warning",
+            Self::HardStop => "hard-stop",
+        }
+    }
+}
+
+/// Primary condition that determines how Boundline should consume Canon
+/// project memory for the current workspace state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectMemoryCondition {
+    Stable,
+    Pending,
+    EvidenceOnly,
+    ManualPromotion,
+    BlockedGovernance,
+    MissingRequiredApproval,
+    MissingRequiredSourceArtifacts,
+    IncompleteMetadata,
+    UnsupportedContract,
+}
+
+impl ProjectMemoryCondition {
+    pub const fn decision(self) -> ProjectMemoryDecision {
+        match self {
+            Self::Stable => ProjectMemoryDecision::Proceed,
+            Self::BlockedGovernance
+            | Self::MissingRequiredApproval
+            | Self::MissingRequiredSourceArtifacts
+            | Self::UnsupportedContract => ProjectMemoryDecision::HardStop,
+            Self::Pending
+            | Self::EvidenceOnly
+            | Self::ManualPromotion
+            | Self::IncompleteMetadata => ProjectMemoryDecision::Warning,
+        }
+    }
+
+    pub const fn headline(self) -> &'static str {
+        match self {
+            Self::Stable => "Canon project memory available",
+            Self::Pending => "Canon project memory is pending",
+            Self::EvidenceOnly => "Canon project memory is evidence-only",
+            Self::ManualPromotion => "Canon project memory requires manual promotion",
+            Self::BlockedGovernance => "Canon project memory reports blocked governance",
+            Self::MissingRequiredApproval => {
+                "Canon project memory is waiting for required approval"
+            }
+            Self::MissingRequiredSourceArtifacts => {
+                "Canon project memory is missing required source artifacts"
+            }
+            Self::IncompleteMetadata => "Canon project memory metadata is incomplete",
+            Self::UnsupportedContract => "Canon project memory contract is unsupported",
+        }
+    }
+
+    pub const fn reason_code(self) -> Option<&'static str> {
+        match self {
+            Self::Stable => None,
+            Self::Pending => Some("project_memory_pending"),
+            Self::EvidenceOnly => Some("project_memory_evidence_only"),
+            Self::ManualPromotion => Some("project_memory_manual"),
+            Self::BlockedGovernance => Some("project_memory_blocked"),
+            Self::MissingRequiredApproval => Some("project_memory_missing_approval"),
+            Self::MissingRequiredSourceArtifacts => Some("project_memory_missing_source_artifacts"),
+            Self::IncompleteMetadata => Some("project_memory_unknown"),
+            Self::UnsupportedContract => Some("project_memory_contract_incompatible"),
+        }
+    }
 }
 
 /// A single Canon-promoted document discovered by Boundline.
@@ -215,6 +381,92 @@ impl ProjectMemoryContext {
     pub fn has_credible_memory(&self) -> bool {
         self.effective_promotion_state.is_some_and(|s| s.is_credible())
     }
+
+    /// Returns the primary project-memory condition when Canon output is
+    /// available enough to classify.
+    pub fn condition(&self) -> Option<ProjectMemoryCondition> {
+        match self.status {
+            ProjectMemoryStatus::Absent => None,
+            ProjectMemoryStatus::Incompatible => Some(ProjectMemoryCondition::UnsupportedContract),
+            ProjectMemoryStatus::Available => {
+                if self.has_blocked_governance() {
+                    return Some(ProjectMemoryCondition::BlockedGovernance);
+                }
+                if self.has_missing_required_approval() {
+                    return Some(ProjectMemoryCondition::MissingRequiredApproval);
+                }
+                Some(match self.effective_promotion_state.unwrap_or(PromotionStateView::Unknown) {
+                    PromotionStateView::Stable => ProjectMemoryCondition::Stable,
+                    PromotionStateView::PendingOrIndex => ProjectMemoryCondition::Pending,
+                    PromotionStateView::EvidenceOnly => ProjectMemoryCondition::EvidenceOnly,
+                    PromotionStateView::Manual => ProjectMemoryCondition::ManualPromotion,
+                    PromotionStateView::Unknown => ProjectMemoryCondition::IncompleteMetadata,
+                })
+            }
+        }
+    }
+
+    /// Returns the project-memory condition after validating workspace-visible
+    /// producer evidence such as required source artifacts.
+    pub fn condition_for_workspace(&self, workspace_root: &Path) -> Option<ProjectMemoryCondition> {
+        if self.has_missing_required_source_artifacts(workspace_root) {
+            return Some(ProjectMemoryCondition::MissingRequiredSourceArtifacts);
+        }
+
+        self.condition()
+    }
+
+    pub fn decision(&self) -> Option<ProjectMemoryDecision> {
+        self.condition().map(ProjectMemoryCondition::decision)
+    }
+
+    /// Returns the workspace-aware project-memory decision.
+    pub fn decision_for_workspace(&self, workspace_root: &Path) -> Option<ProjectMemoryDecision> {
+        self.condition_for_workspace(workspace_root).map(ProjectMemoryCondition::decision)
+    }
+
+    fn has_blocked_governance(&self) -> bool {
+        self.surfaces
+            .iter()
+            .filter_map(|surface| surface.lineage.as_ref())
+            .any(|lineage| lineage.approval_blocked() || lineage.packet_blocked())
+    }
+
+    fn has_missing_required_approval(&self) -> bool {
+        self.surfaces.iter().filter_map(|surface| surface.lineage.as_ref()).any(|lineage| {
+            lineage.requires_approval()
+                && !lineage.approval_satisfied()
+                && !lineage.approval_blocked()
+        })
+    }
+
+    fn has_missing_required_source_artifacts(&self, workspace_root: &Path) -> bool {
+        self.surfaces.iter().any(|surface| {
+            let Some(lineage) = surface.lineage.as_ref() else {
+                return false;
+            };
+
+            let artifacts_required = surface.promotion_view.is_credible()
+                || (lineage.requires_approval() && lineage.approval_satisfied());
+            if !artifacts_required {
+                return false;
+            }
+
+            if lineage.requires_approval()
+                && lineage.approval_satisfied()
+                && !lineage.packet_ready()
+            {
+                return true;
+            }
+
+            if lineage.source_artifacts.is_empty() {
+                return false;
+            }
+
+            let evidence_root = evidence_root_for_lineage(workspace_root, lineage);
+            lineage.source_artifacts.iter().any(|artifact| !evidence_root.join(artifact).exists())
+        })
+    }
 }
 
 /// Read Canon-promoted project-memory surfaces from a workspace.
@@ -223,8 +475,10 @@ impl ProjectMemoryContext {
 /// `<surface>.packet-metadata.json` sidecars. Legacy `*.lineage.json`
 /// sidecars remain tolerated for compatibility with earlier fixtures.
 pub fn read_project_memory(workspace_root: &std::path::Path) -> ProjectMemoryContext {
-    let project_dir = workspace_root.join("docs/project");
-    let evidence_dir = workspace_root.join("docs/evidence");
+    let doc_roots =
+        resolve_project_doc_roots(workspace_root).unwrap_or_else(|_| ProjectDocRoots::default());
+    let project_dir = doc_roots.project_memory_dir(workspace_root);
+    let evidence_dir = doc_roots.evidence_dir(workspace_root);
 
     if !project_dir.exists() && !evidence_dir.exists() {
         return ProjectMemoryContext::absent();
@@ -237,7 +491,7 @@ pub fn read_project_memory(workspace_root: &std::path::Path) -> ProjectMemoryCon
     let mut discovered_paths = BTreeSet::new();
 
     for relative_path in CANON_PROJECT_SURFACES {
-        let path = workspace_root.join(relative_path);
+        let path = project_dir.join(relative_path);
         if !path.exists() {
             continue;
         }
@@ -386,8 +640,88 @@ fn legacy_lineage_sidecar_path(artifact_path: &Path) -> PathBuf {
     artifact_path.with_file_name(format!("{stem}{LEGACY_LINEAGE_FILE_SUFFIX}"))
 }
 
-fn evidence_root_for_lineage(workspace_root: &Path, lineage: &LineageRef) -> PathBuf {
-    workspace_root.join("docs/evidence").join(&lineage.mode).join(&lineage.source_run)
+pub fn evidence_root_for_lineage(workspace_root: &Path, lineage: &LineageRef) -> PathBuf {
+    resolve_project_doc_roots(workspace_root)
+        .unwrap_or_else(|_| ProjectDocRoots::default())
+        .evidence_dir(workspace_root)
+        .join(lineage.mode_name())
+        .join(lineage.source_ref_leaf())
+}
+
+/// Read producer-attributed managed-block summaries from an evidence root.
+pub fn evidence_contribution_summaries(workspace_root: &Path, lineage: &LineageRef) -> Vec<String> {
+    let evidence_root = evidence_root_for_lineage(workspace_root, lineage);
+    if !evidence_root.exists() {
+        return Vec::new();
+    }
+
+    let mut summaries = BTreeSet::new();
+    for markdown_path in markdown_files_under(&evidence_root) {
+        let Ok(content) = std::fs::read_to_string(&markdown_path) else {
+            continue;
+        };
+        let target = markdown_path
+            .strip_prefix(workspace_root)
+            .unwrap_or(markdown_path.as_path())
+            .display()
+            .to_string();
+        for summary in managed_block_summaries_for_content(&content, &target) {
+            summaries.insert(summary);
+        }
+    }
+
+    summaries.into_iter().collect()
+}
+
+fn markdown_files_under(root: &Path) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    collect_markdown_files(root, &mut files);
+    files
+}
+
+fn collect_markdown_files(root: &Path, files: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return;
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_markdown_files(&path, files);
+            continue;
+        }
+
+        if path.extension().is_some_and(|extension| extension == "md") {
+            files.push(path);
+        }
+    }
+}
+
+fn managed_block_summaries_for_content(content: &str, target: &str) -> Vec<String> {
+    content
+        .lines()
+        .filter(|line| line.contains(MANAGED_BLOCK_START_MARKER))
+        .filter_map(|line| {
+            let producer = managed_block_attribute(line, "producer")?;
+            let source_ref = managed_block_attribute(line, "source_ref")?;
+            let contract_version = managed_block_attribute(line, "contract_version");
+            Some(match contract_version {
+                Some(contract_version) => format!(
+                    "producer={producer} source_ref={source_ref} contract_version={contract_version} target={target}"
+                ),
+                None => format!("producer={producer} source_ref={source_ref} target={target}"),
+            })
+        })
+        .collect()
+}
+
+fn managed_block_attribute(line: &str, attribute: &str) -> Option<String> {
+    let marker = format!("{attribute}=\"");
+    let start = line.find(&marker)? + marker.len();
+    let remainder = &line[start..];
+    let end = remainder.find('"')?;
+    let value = remainder[..end].trim();
+    (!value.is_empty()).then(|| value.to_string())
 }
 
 fn surface_category(surface_path: &Path) -> String {
@@ -398,6 +732,32 @@ fn surface_category(surface_path: &Path) -> String {
 mod tests {
     use super::*;
 
+    fn sample_lineage_ref(
+        source_ref: &str,
+        mode: &str,
+        promotion_state: &str,
+        approval_state: Option<&str>,
+        packet_readiness: Option<&str>,
+    ) -> LineageRef {
+        LineageRef {
+            contract_version: "v1".into(),
+            producer: "canon".into(),
+            source_ref: source_ref.into(),
+            source_artifacts: vec!["architecture-overview.md".into()],
+            mode: Some(mode.into()),
+            promotion_state: promotion_state.into(),
+            approval_state: approval_state.map(str::to_string),
+            stage: Some(mode.into()),
+            owner: Some("Owner <owner@example.com>".into()),
+            risk: Some("bounded-impact".into()),
+            zone: Some("yellow".into()),
+            promoted_at: "2026-05-13T14:30:00Z".into(),
+            content_digest: "sha256:abc123".into(),
+            packet_readiness: packet_readiness.map(str::to_string),
+            promotion_profile: Some("project-memory".into()),
+        }
+    }
+
     #[test]
     fn promotion_state_view_display_and_helper_branches() {
         assert_eq!(PromotionStateView::Stable.to_string(), "stable");
@@ -406,7 +766,9 @@ mod tests {
         assert_eq!(PromotionStateView::Manual.to_string(), "manual");
         assert_eq!(PromotionStateView::Unknown.to_string(), "unknown");
 
-        assert_eq!(parse_contract_version("0"), Some((0, 0)));
+        assert_eq!(parse_contract_version("0"), Some((0, None)));
+        assert_eq!(parse_contract_version("v1"), Some((1, None)));
+        assert_eq!(parse_contract_version("v1.7"), Some((1, Some(7))));
         assert_eq!(parse_contract_version("0.invalid"), None);
         assert_eq!(
             merge_compatibility(
@@ -422,21 +784,24 @@ mod tests {
         assert!(legacy_lineage_sidecar_path(Path::new("/")).ends_with("packet.lineage.json"));
         assert_eq!(surface_category(Path::new("/tmp/architecture-map.md")), "architecture-map");
 
-        let lineage = LineageRef {
-            contract_version: "0.1.0".into(),
-            source_run: "run-1".into(),
-            mode: "architecture".into(),
-            profile: None,
-            promotion_state: "pending-index".into(),
-            approval_state: None,
-            readiness: "partial".into(),
-            published_at: None,
-            update_strategy: None,
-            source_artifacts: Vec::new(),
-        };
+        let lineage = sample_lineage_ref(
+            "canon-run:run-1",
+            "architecture",
+            "pending-index",
+            None,
+            Some("partial"),
+        );
         assert_eq!(
             evidence_root_for_lineage(Path::new("/tmp/workspace"), &lineage),
             PathBuf::from("/tmp/workspace/docs/evidence/architecture/run-1")
+        );
+        assert_eq!(
+            managed_block_attribute(
+                r#"<!-- project-memory:managed:start producer="canon" source_ref="run-1" contract_version="v1" -->"#,
+                "producer"
+            )
+            .as_deref(),
+            Some("canon")
         );
     }
 
@@ -468,46 +833,40 @@ mod tests {
 
     #[test]
     fn promotion_state_view_from_lineage_requires_approval_metadata() {
-        let stable = LineageRef {
-            contract_version: "0.1.0".into(),
-            source_run: "run-stable".into(),
-            mode: "architecture".into(),
-            profile: Some("project-memory".into()),
-            promotion_state: "auto-if-approved".into(),
-            approval_state: Some("Completed".into()),
-            readiness: "complete".into(),
-            published_at: Some("2026-05-13T14:30:00Z".into()),
-            update_strategy: Some("managed-blocks".into()),
-            source_artifacts: vec!["architecture-overview.md".into()],
-        };
-        let pending = LineageRef {
-            contract_version: "0.1.0".into(),
-            source_run: "run-pending".into(),
-            mode: "architecture".into(),
-            profile: Some("project-memory".into()),
-            promotion_state: "auto-if-approved".into(),
-            approval_state: Some("AwaitingApproval".into()),
-            readiness: "partial".into(),
-            published_at: Some("2026-05-13T14:30:00Z".into()),
-            update_strategy: Some("managed-blocks".into()),
-            source_artifacts: vec!["architecture-overview.md".into()],
-        };
-        let incomplete = LineageRef {
-            contract_version: "0.1.0".into(),
-            source_run: "run-unknown".into(),
-            mode: "architecture".into(),
-            profile: None,
-            promotion_state: "auto-if-approved".into(),
-            approval_state: None,
-            readiness: "complete".into(),
-            published_at: Some("2026-05-13T14:30:00Z".into()),
-            update_strategy: Some("managed-blocks".into()),
-            source_artifacts: vec!["architecture-overview.md".into()],
-        };
+        let stable = sample_lineage_ref(
+            "canon-run:run-stable",
+            "architecture",
+            "auto-if-approved",
+            Some("Completed"),
+            Some("complete"),
+        );
+        let pending = sample_lineage_ref(
+            "canon-run:run-pending",
+            "architecture",
+            "auto-if-approved",
+            Some("AwaitingApproval"),
+            Some("partial"),
+        );
+        let incomplete = sample_lineage_ref(
+            "canon-run:run-unknown",
+            "architecture",
+            "auto-if-approved",
+            None,
+            Some("complete"),
+        );
 
         assert_eq!(PromotionStateView::from_lineage(&stable), PromotionStateView::Stable);
         assert_eq!(PromotionStateView::from_lineage(&pending), PromotionStateView::PendingOrIndex);
         assert_eq!(PromotionStateView::from_lineage(&incomplete), PromotionStateView::Unknown);
+
+        let granted = sample_lineage_ref(
+            "canon-run:run-granted",
+            "architecture",
+            "auto-if-approved",
+            Some("granted"),
+            Some("reusable"),
+        );
+        assert_eq!(PromotionStateView::from_lineage(&granted), PromotionStateView::Stable);
     }
 
     #[test]
@@ -520,29 +879,59 @@ mod tests {
     }
 
     #[test]
+    fn project_memory_condition_classifies_warning_and_hard_stop_states() {
+        assert_eq!(ProjectMemoryDecision::Proceed.as_str(), "proceed");
+        assert_eq!(ProjectMemoryDecision::Warning.as_str(), "warning");
+        assert_eq!(ProjectMemoryDecision::HardStop.as_str(), "hard-stop");
+
+        assert_eq!(ProjectMemoryCondition::Stable.decision(), ProjectMemoryDecision::Proceed);
+        assert_eq!(ProjectMemoryCondition::Pending.decision(), ProjectMemoryDecision::Warning);
+        assert_eq!(
+            ProjectMemoryCondition::MissingRequiredApproval.decision(),
+            ProjectMemoryDecision::HardStop
+        );
+        assert_eq!(
+            ProjectMemoryCondition::UnsupportedContract.decision(),
+            ProjectMemoryDecision::HardStop
+        );
+        assert_eq!(
+            ProjectMemoryCondition::BlockedGovernance.reason_code(),
+            Some("project_memory_blocked")
+        );
+        assert_eq!(
+            ProjectMemoryCondition::MissingRequiredSourceArtifacts.reason_code(),
+            Some("project_memory_missing_source_artifacts")
+        );
+        assert_eq!(
+            ProjectMemoryCondition::UnsupportedContract.reason_code(),
+            Some("project_memory_contract_incompatible")
+        );
+        assert_eq!(
+            ProjectMemoryCondition::IncompleteMetadata.headline(),
+            "Canon project memory metadata is incomplete"
+        );
+    }
+
+    #[test]
     fn compatibility_outcome_check() {
-        assert_eq!(CompatibilityOutcome::check("0.1.0"), CompatibilityOutcome::Compatible);
-        assert_eq!(CompatibilityOutcome::check("0.1.7"), CompatibilityOutcome::Compatible);
+        assert_eq!(CompatibilityOutcome::check("v1"), CompatibilityOutcome::Compatible);
+        assert_eq!(CompatibilityOutcome::check("v1.7"), CompatibilityOutcome::Compatible);
+        assert_eq!(CompatibilityOutcome::check("0.1.0"), CompatibilityOutcome::Unsupported);
         assert_eq!(CompatibilityOutcome::check("0.2.0"), CompatibilityOutcome::Unsupported);
-        assert_eq!(CompatibilityOutcome::check("1.0.0"), CompatibilityOutcome::Unsupported);
-        assert_eq!(CompatibilityOutcome::check("2.0.0"), CompatibilityOutcome::Unsupported);
+        assert_eq!(CompatibilityOutcome::check("1.0.0"), CompatibilityOutcome::Compatible);
+        assert_eq!(CompatibilityOutcome::check("v2"), CompatibilityOutcome::Unsupported);
         assert_eq!(CompatibilityOutcome::check("invalid"), CompatibilityOutcome::Unsupported);
     }
 
     #[test]
     fn lineage_ref_serde_round_trip() {
-        let lineage = LineageRef {
-            contract_version: "0.1.0".into(),
-            source_run: "019738a4-test".into(),
-            mode: "architecture".into(),
-            profile: Some("project-memory".into()),
-            promotion_state: "auto".into(),
-            approval_state: Some("Completed".into()),
-            readiness: "stable".into(),
-            published_at: Some("2026-05-13T14:30:00Z".into()),
-            update_strategy: Some("managed-blocks".into()),
-            source_artifacts: vec!["architecture-overview.md".into()],
-        };
+        let lineage = sample_lineage_ref(
+            "canon-run:019738a4-test",
+            "architecture",
+            "auto",
+            Some("Completed"),
+            Some("complete"),
+        );
         let json = serde_json::to_string(&lineage).unwrap();
         let back: LineageRef = serde_json::from_str(&json).unwrap();
         assert_eq!(lineage, back);
@@ -560,6 +949,8 @@ mod tests {
         let ctx = ProjectMemoryContext::incompatible();
         assert_eq!(ctx.status, ProjectMemoryStatus::Incompatible);
         assert_eq!(ctx.compatibility, Some(CompatibilityOutcome::Unsupported));
+        assert_eq!(ctx.condition(), Some(ProjectMemoryCondition::UnsupportedContract));
+        assert_eq!(ctx.decision(), Some(ProjectMemoryDecision::HardStop));
         assert!(!ctx.has_credible_memory());
     }
 
@@ -570,25 +961,72 @@ mod tests {
             compatibility: Some(CompatibilityOutcome::Compatible),
             surfaces: vec![ProjectMemorySurface {
                 path: "docs/project/architecture-map.md".into(),
-                lineage: Some(LineageRef {
-                    contract_version: "0.1.0".into(),
-                    source_run: "run-1".into(),
-                    mode: "architecture".into(),
-                    profile: Some("project-memory".into()),
-                    promotion_state: "auto".into(),
-                    approval_state: Some("Completed".into()),
-                    readiness: "stable".into(),
-                    published_at: Some("2026-05-13T14:30:00Z".into()),
-                    update_strategy: Some("managed-blocks".into()),
-                    source_artifacts: vec!["architecture-overview.md".into()],
-                }),
+                lineage: Some(sample_lineage_ref(
+                    "canon-run:run-1",
+                    "architecture",
+                    "auto",
+                    Some("Completed"),
+                    Some("complete"),
+                )),
                 promotion_view: PromotionStateView::Stable,
                 category: "architecture-map".into(),
             }],
             evidence_refs: Vec::new(),
             effective_promotion_state: Some(PromotionStateView::Stable),
         };
+        assert_eq!(ctx.condition(), Some(ProjectMemoryCondition::Stable));
+        assert_eq!(ctx.decision(), Some(ProjectMemoryDecision::Proceed));
         assert!(ctx.has_credible_memory());
+    }
+
+    #[test]
+    fn project_memory_context_classifies_missing_required_approval() {
+        let ctx = ProjectMemoryContext {
+            status: ProjectMemoryStatus::Available,
+            compatibility: Some(CompatibilityOutcome::Compatible),
+            surfaces: vec![ProjectMemorySurface {
+                path: "docs/project/architecture-map.md".into(),
+                lineage: Some(sample_lineage_ref(
+                    "canon-run:run-awaiting-approval",
+                    "architecture",
+                    "auto-if-approved",
+                    Some("requested"),
+                    Some("pending"),
+                )),
+                promotion_view: PromotionStateView::PendingOrIndex,
+                category: "architecture-map".into(),
+            }],
+            evidence_refs: Vec::new(),
+            effective_promotion_state: Some(PromotionStateView::PendingOrIndex),
+        };
+
+        assert_eq!(ctx.condition(), Some(ProjectMemoryCondition::MissingRequiredApproval));
+        assert_eq!(ctx.decision(), Some(ProjectMemoryDecision::HardStop));
+    }
+
+    #[test]
+    fn project_memory_context_classifies_blocked_governance() {
+        let ctx = ProjectMemoryContext {
+            status: ProjectMemoryStatus::Available,
+            compatibility: Some(CompatibilityOutcome::Compatible),
+            surfaces: vec![ProjectMemorySurface {
+                path: "docs/project/architecture-map.md".into(),
+                lineage: Some(sample_lineage_ref(
+                    "canon-run:run-blocked",
+                    "architecture",
+                    "auto-if-approved",
+                    Some("rejected"),
+                    Some("rejected"),
+                )),
+                promotion_view: PromotionStateView::PendingOrIndex,
+                category: "architecture-map".into(),
+            }],
+            evidence_refs: Vec::new(),
+            effective_promotion_state: Some(PromotionStateView::PendingOrIndex),
+        };
+
+        assert_eq!(ctx.condition(), Some(ProjectMemoryCondition::BlockedGovernance));
+        assert_eq!(ctx.decision(), Some(ProjectMemoryDecision::HardStop));
     }
 
     #[test]
@@ -616,18 +1054,13 @@ mod tests {
         .unwrap();
 
         // Create a Canon packet-metadata sidecar.
-        let lineage = LineageRef {
-            contract_version: "0.1.0".into(),
-            source_run: "run-123".into(),
-            mode: "architecture".into(),
-            profile: Some("project-memory".into()),
-            promotion_state: "auto-if-approved".into(),
-            approval_state: Some("Completed".into()),
-            readiness: "complete".into(),
-            published_at: Some("2026-05-13T14:30:00Z".into()),
-            update_strategy: Some("managed-blocks".into()),
-            source_artifacts: vec!["architecture-overview.md".into()],
-        };
+        let lineage = sample_lineage_ref(
+            "canon-run:run-123",
+            "architecture",
+            "auto-if-approved",
+            Some("Completed"),
+            Some("complete"),
+        );
         std::fs::write(
             project_dir.join("architecture-map.packet-metadata.json"),
             serde_json::to_string_pretty(&serde_json::json!({
@@ -658,6 +1091,55 @@ mod tests {
     }
 
     #[test]
+    fn read_project_memory_uses_project_index_doc_overrides() {
+        let temp = std::env::temp_dir().join("boundline-test-pm-doc-overrides");
+        let _ = std::fs::remove_dir_all(&temp);
+        let project_dir = temp.join("knowledge/project");
+        let evidence_dir = temp.join("knowledge/evidence/architecture/run-123");
+        std::fs::create_dir_all(&project_dir).unwrap();
+        std::fs::create_dir_all(&evidence_dir).unwrap();
+        std::fs::write(
+            temp.join("project.boundline.toml"),
+            "[project]\nname = \"boundline\"\n\n[docs]\nproject_memory = \"knowledge/project\"\nevidence = \"knowledge/evidence\"\n",
+        )
+        .unwrap();
+        std::fs::write(project_dir.join("architecture-map.md"), "# Architecture Map\n").unwrap();
+        std::fs::write(evidence_dir.join("architecture-overview.md"), "overview\n").unwrap();
+        std::fs::write(
+            project_dir.join("architecture-map.packet-metadata.json"),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "lineage": {
+                    "contract_version": "v1",
+                    "producer": "canon",
+                    "source_ref": "canon-run:run-123",
+                    "mode": "architecture",
+                    "promotion_state": "auto",
+                    "approval_state": "Completed",
+                    "packet_readiness": "complete",
+                    "promoted_at": "2026-05-13T14:30:00Z",
+                    "content_digest": "sha256:abc123",
+                    "source_artifacts": ["architecture-overview.md"]
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let ctx = read_project_memory(&temp);
+
+        assert_eq!(ctx.status, ProjectMemoryStatus::Available);
+        assert_eq!(ctx.surfaces.len(), 1);
+        assert_eq!(ctx.surfaces[0].path, PathBuf::from("knowledge/project/architecture-map.md"));
+        assert_eq!(ctx.evidence_refs.len(), 1);
+        assert_eq!(
+            evidence_root_for_lineage(&temp, ctx.evidence_refs.first().unwrap()),
+            temp.join("knowledge/evidence/architecture/run-123")
+        );
+
+        let _ = std::fs::remove_dir_all(&temp);
+    }
+
+    #[test]
     fn read_lineage_sidecar_prefers_packet_metadata_then_falls_back_to_legacy() {
         let temp = std::env::temp_dir().join("boundline-test-pm-sidecar-fallback");
         let _ = std::fs::remove_dir_all(&temp);
@@ -667,30 +1149,13 @@ mod tests {
         let artifact = project_dir.join("decision-map.md");
         std::fs::write(&artifact, "# Decision Map\n").unwrap();
 
-        let packet_lineage = LineageRef {
-            contract_version: "0.1.0".into(),
-            source_run: "packet-run".into(),
-            mode: "architecture".into(),
-            profile: Some("project-memory".into()),
-            promotion_state: "auto".into(),
-            approval_state: Some("Completed".into()),
-            readiness: "complete".into(),
-            published_at: None,
-            update_strategy: None,
-            source_artifacts: Vec::new(),
-        };
-        let legacy_lineage = LineageRef {
-            contract_version: "0.1.0".into(),
-            source_run: "legacy-run".into(),
-            mode: "architecture".into(),
-            profile: None,
-            promotion_state: "pending-index".into(),
-            approval_state: None,
-            readiness: "partial".into(),
-            published_at: None,
-            update_strategy: None,
-            source_artifacts: Vec::new(),
-        };
+        let packet_lineage = sample_lineage_ref(
+            "canon-run:packet-run",
+            "architecture",
+            "auto",
+            Some("Completed"),
+            Some("complete"),
+        );
 
         std::fs::write(
             packet_metadata_sidecar_path(&artifact),
@@ -700,19 +1165,26 @@ mod tests {
         .unwrap();
         std::fs::write(
             legacy_lineage_sidecar_path(&artifact),
-            serde_json::to_string_pretty(&legacy_lineage).unwrap(),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "contract_version": "v1",
+                "source_run": "legacy-run",
+                "mode": "architecture",
+                "promotion_state": "pending-index",
+                "readiness": "partial"
+            }))
+            .unwrap(),
         )
         .unwrap();
 
         assert_eq!(
-            read_lineage_sidecar(&artifact).as_ref().map(|lineage| lineage.source_run.as_str()),
-            Some("packet-run")
+            read_lineage_sidecar(&artifact).as_ref().map(|lineage| lineage.source_ref.as_str()),
+            Some("canon-run:packet-run")
         );
 
         std::fs::remove_file(packet_metadata_sidecar_path(&artifact)).unwrap();
 
         assert_eq!(
-            read_lineage_sidecar(&artifact).as_ref().map(|lineage| lineage.source_run.as_str()),
+            read_lineage_sidecar(&artifact).as_ref().map(|lineage| lineage.source_ref.as_str()),
             Some("legacy-run")
         );
 
@@ -733,18 +1205,13 @@ mod tests {
         std::fs::write(evidence_dir.join("summary.md"), "summary\n").unwrap();
         std::fs::write(
             legacy_lineage_sidecar_path(&artifact),
-            serde_json::to_string_pretty(&LineageRef {
-                contract_version: "0.1.0".into(),
-                source_run: "run-additive".into(),
-                mode: "architecture".into(),
-                profile: None,
-                promotion_state: "pending-index".into(),
-                approval_state: None,
-                readiness: "partial".into(),
-                published_at: None,
-                update_strategy: None,
-                source_artifacts: Vec::new(),
-            })
+            serde_json::to_string_pretty(&serde_json::json!({
+                "contract_version": "v1",
+                "source_run": "run-additive",
+                "mode": "architecture",
+                "promotion_state": "pending-index",
+                "readiness": "partial"
+            }))
             .unwrap(),
         )
         .unwrap();
@@ -790,18 +1257,14 @@ mod tests {
         std::fs::write(&artifact, "# Custom Map\n").unwrap();
         std::fs::write(
             legacy_lineage_sidecar_path(&artifact),
-            serde_json::to_string_pretty(&LineageRef {
-                contract_version: "0.2.0".into(),
-                source_run: "run-additive".into(),
-                mode: "architecture".into(),
-                profile: None,
-                promotion_state: "auto".into(),
-                approval_state: Some("Completed".into()),
-                readiness: "complete".into(),
-                published_at: None,
-                update_strategy: None,
-                source_artifacts: Vec::new(),
-            })
+            serde_json::to_string_pretty(&serde_json::json!({
+                "contract_version": "v2",
+                "source_run": "run-additive",
+                "mode": "architecture",
+                "promotion_state": "auto",
+                "approval_state": "Completed",
+                "readiness": "complete"
+            }))
             .unwrap(),
         )
         .unwrap();
@@ -840,14 +1303,15 @@ mod tests {
                 "promotion_state": "auto",
                 "update_strategy": "managed-blocks",
                 "lineage": {
-                    "contract_version": "0.1.0",
-                    "source_run": "run-123",
+                    "contract_version": "v1",
+                    "producer": "canon",
+                    "source_ref": "canon-run:run-123",
                     "mode": "architecture",
                     "promotion_state": "auto",
                     "approval_state": "Completed",
-                    "readiness": "complete",
-                    "published_at": "2026-05-13T14:30:00Z",
-                    "update_strategy": "managed-blocks",
+                    "packet_readiness": "complete",
+                    "promoted_at": "2026-05-13T14:30:00Z",
+                    "content_digest": "sha256:abc123",
                     "source_artifacts": ["architecture-overview.md"]
                 }
             }))
@@ -859,7 +1323,10 @@ mod tests {
         assert_eq!(ctx.status, ProjectMemoryStatus::Available);
         assert_eq!(ctx.surfaces.len(), 1);
         assert_eq!(
-            ctx.surfaces[0].lineage.as_ref().and_then(|lineage| lineage.profile.as_deref()),
+            ctx.surfaces[0]
+                .lineage
+                .as_ref()
+                .and_then(|lineage| lineage.promotion_profile.as_deref()),
             None
         );
         assert_eq!(ctx.effective_promotion_state, Some(PromotionStateView::Stable));
@@ -874,18 +1341,15 @@ mod tests {
         std::fs::create_dir_all(&project_dir).unwrap();
 
         std::fs::write(project_dir.join("overview.md"), "# Overview").unwrap();
-        let lineage = LineageRef {
-            contract_version: "2.0.0".into(),
-            source_run: "run-456".into(),
-            mode: "requirements".into(),
-            profile: Some("project-memory".into()),
-            promotion_state: "auto".into(),
-            approval_state: Some("Completed".into()),
-            readiness: "stable".into(),
-            published_at: Some("2026-05-13T14:30:00Z".into()),
-            update_strategy: Some("managed-blocks".into()),
-            source_artifacts: vec!["prd.md".into()],
-        };
+        let mut lineage = sample_lineage_ref(
+            "canon-run:run-456",
+            "requirements",
+            "auto",
+            Some("Completed"),
+            Some("complete"),
+        );
+        lineage.contract_version = "v2".into();
+        lineage.source_artifacts = vec!["prd.md".into()];
         std::fs::write(
             project_dir.join("overview.packet-metadata.json"),
             serde_json::to_string_pretty(&serde_json::json!({
@@ -908,6 +1372,86 @@ mod tests {
 
         let ctx = read_project_memory(&temp);
         assert_eq!(ctx.status, ProjectMemoryStatus::Incompatible);
+        let _ = std::fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn read_project_memory_marks_missing_required_source_artifacts_as_hard_stop() {
+        let temp = std::env::temp_dir().join("boundline-test-pm-missing-required-artifacts");
+        let _ = std::fs::remove_dir_all(&temp);
+        let project_dir = temp.join("docs/project");
+        std::fs::create_dir_all(&project_dir).unwrap();
+
+        std::fs::write(project_dir.join("architecture-map.md"), "# Architecture Map\n").unwrap();
+        std::fs::write(
+            project_dir.join("architecture-map.packet-metadata.json"),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "lineage": {
+                    "contract_version": "v1",
+                    "producer": "canon",
+                    "source_ref": "canon-run:run-123",
+                    "mode": "architecture",
+                    "promotion_state": "auto",
+                    "approval_state": "Completed",
+                    "packet_readiness": "reusable",
+                    "promoted_at": "2026-05-13T14:30:00Z",
+                    "content_digest": "sha256:abc123",
+                    "source_artifacts": ["architecture-overview.md"]
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let ctx = read_project_memory(&temp);
+
+        assert_eq!(
+            ctx.condition_for_workspace(&temp),
+            Some(ProjectMemoryCondition::MissingRequiredSourceArtifacts)
+        );
+        assert_eq!(ctx.decision_for_workspace(&temp), Some(ProjectMemoryDecision::HardStop));
+
+        let _ = std::fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn evidence_contribution_summaries_preserve_managed_block_attribution() {
+        let temp = std::env::temp_dir().join("boundline-test-pm-managed-block-attribution");
+        let _ = std::fs::remove_dir_all(&temp);
+        let evidence_dir = temp.join("docs/evidence/architecture/run-123");
+        std::fs::create_dir_all(&evidence_dir).unwrap();
+        std::fs::write(
+            evidence_dir.join("verification.md"),
+            concat!(
+                "<!-- project-memory:managed:start producer=\"canon\" source_ref=\"canon-run:run-123\" contract_version=\"v1\" -->\n",
+                "Canon-managed evidence\n",
+                "<!-- project-memory:managed:end -->\n",
+                "\n",
+                "<!-- project-memory:managed:start producer=\"boundline\" source_ref=\"trace-7\" contract_version=\"v1\" -->\n",
+                "Boundline-managed evidence\n",
+                "<!-- project-memory:managed:end -->\n"
+            ),
+        )
+        .unwrap();
+
+        let summaries = evidence_contribution_summaries(
+            &temp,
+            &sample_lineage_ref(
+                "canon-run:run-123",
+                "architecture",
+                "auto",
+                Some("Completed"),
+                Some("reusable"),
+            ),
+        );
+
+        assert_eq!(summaries.len(), 2);
+        assert!(summaries.iter().any(|summary| summary.contains("producer=canon")));
+        assert!(summaries.iter().any(|summary| summary.contains("producer=boundline")));
+        assert!(summaries.iter().all(|summary| {
+            summary.contains("target=docs/evidence/architecture/run-123/verification.md")
+        }));
+
         let _ = std::fs::remove_dir_all(&temp);
     }
 }

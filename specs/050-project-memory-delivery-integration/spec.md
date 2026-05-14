@@ -39,10 +39,11 @@ promotion semantics untouched
 - Missing or incompatible Canon project-memory output must result in explicit
   guidance, fallback, or bounded stop behavior rather than silent guesswork.
 
-**External Contract Dependency**: Canon contract line
-`0.1.x` (currently emitted as `0.1.0`) at
-`/Users/rt/workspace/apply-the/canon/specs/048-project-memory-promotion-policy/contracts/boundline-project-memory-promotion-contract.md`
-is the authoritative source for producer semantics.
+**External Contract Dependency**: Canon contract line `v1` at
+`/Users/rt/workspace/apply-the/canon/docs/integration/project-memory-promotion-contract.md`
+is the authoritative source for producer semantics. Supporting owner-side
+shape briefs remain versioned under
+`/Users/rt/workspace/apply-the/canon/specs/050-project-memory-control/contracts/`.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -119,23 +120,24 @@ clear repair path instead of silent consumer drift.
 **Why this priority**: Cross-repo integration is brittle if producer and
 consumer semantics can drift without a compatibility check.
 
-**Independent Test**: Exercise supported `0.1.x`, future-line, and malformed
-contract scenarios and verify Boundline either consumes the output credibly or
-stops with explicit compatibility guidance.
+**Independent Test**: Exercise supported major-1 (`v1`) contract variants,
+future-major lines, and malformed contract scenarios and verify Boundline
+either consumes the output credibly or stops with explicit compatibility
+guidance.
 
 **Acceptance Scenarios**:
 
 1. **Given** Canon output whose `contract_version` is compatible with the
   Boundline integration slice, **When** Boundline reads the output, **Then** it
-  proceeds using the documented consumer behavior for the supported `0.1.x`
-  line.
+  proceeds using the documented consumer behavior for the supported major-1
+  (`v1`) line.
 2. **Given** Canon output whose `contract_version` falls outside the supported
   line,
    **When** Boundline reads the output, **Then** it stops or degrades explicitly
    with repair guidance instead of silently reinterpreting producer semantics.
-3. **Given** Canon output on the supported `0.1.x` line that includes extra
-  non-required metadata fields, **When** Boundline reads the output, **Then** it
-  continues without redefining Canon-owned semantics.
+3. **Given** Canon output on the supported major-1 (`v1`) line that includes
+  extra non-required metadata fields, **When** Boundline reads the output,
+  **Then** it continues without redefining Canon-owned semantics.
 
 ### Edge Cases
 
@@ -207,6 +209,12 @@ Boundline must stay aligned with the Canon-owned contract on:
 - compatibility rules and pre-1.0 change policy
 
 Boundline must not redefine any of those Canon-owned meanings inside this spec.
+
+## Catalog / Provider Scope
+
+No model catalog, provider runtime readiness, or route catalog changes are part
+of this feature. Existing provider and model routing behavior remains
+unchanged.
 
 ## Success Criteria *(mandatory)*
 

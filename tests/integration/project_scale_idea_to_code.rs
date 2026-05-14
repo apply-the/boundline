@@ -22,7 +22,7 @@ fn broad_capability_goal_surfaces_a_bounded_idea_to_code_path() {
     assert!(text.contains("project_scale_path:"), "{text}");
     assert!(
         text.contains(
-            "discovery -> requirements -> system-shaping -> architecture -> backlog -> implementation -> verification -> pr-review"
+            "discovery -> requirements -> domain-language -> domain-model -> system-shaping -> architecture -> backlog -> implementation -> verification -> pr-review"
         ),
         "{text}"
     );

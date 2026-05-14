@@ -140,6 +140,11 @@ const DISCOVERY_WORKFLOWS_TOML: &str = concat!(
     "phases = [\"capture\", \"plan\", \"run\", \"inspect\"]\n",
     "allow_review = false\n",
     "allow_governance = false\n",
+    "\n",
+    "[delivery_paths.idea_to_code]\n",
+    "description = \"Move from idea intake to verified code through bounded stages.\"\n",
+    "stages = [\"discovery\", \"requirements\", \"domain-language\", \"domain-model\", \"system-shaping\", \"architecture\", \"backlog\", \"implementation\", \"verification\", \"pr-review\"]\n",
+    "adaptive = true\n",
 );
 
 const BLOCKED_GOVERN_WORKFLOW_TOML: &str = concat!(

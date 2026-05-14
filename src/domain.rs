@@ -14,6 +14,7 @@ pub mod governance;
 pub mod limits;
 pub mod negotiation;
 pub mod plan;
+pub mod project_index;
 pub mod project_memory;
 pub mod review;
 pub mod routing_decision;

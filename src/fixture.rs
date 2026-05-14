@@ -586,8 +586,12 @@ fn build_vertical_slice_plan(
         return Ok(Plan::new(steps)?);
     };
 
-    let flow = built_in_flow(&active_flow.flow_name)
-        .expect("validated flow name should resolve for fixture planning");
+    let flow = built_in_flow(&active_flow.flow_name).ok_or_else(|| {
+        FixtureRuntimeError::UnsupportedFixtureFlow {
+            flow_name: active_flow.flow_name.clone(),
+            context: "fixture planning",
+        }
+    })?;
 
     let mut steps = match flow.name {
         "bug-fix" => vec![
@@ -700,7 +704,12 @@ fn build_vertical_slice_plan(
                 )?,
             )?,
         ],
-        _ => unreachable!("unsupported built-in flow should have been rejected earlier"),
+        other => {
+            return Err(FixtureRuntimeError::UnsupportedFixtureFlow {
+                flow_name: other.to_string(),
+                context: "fixture planning",
+            });
+        }
     };
 
     steps.extend(build_review_steps(profile, Some(active_flow), attempt_index)?);
@@ -752,8 +761,12 @@ fn build_adaptive_initial_plan(
         return Ok(Plan::new(steps)?);
     };
 
-    let flow = built_in_flow(&active_flow.flow_name)
-        .expect("validated flow name should resolve for adaptive fixture planning");
+    let flow = built_in_flow(&active_flow.flow_name).ok_or_else(|| {
+        FixtureRuntimeError::UnsupportedFixtureFlow {
+            flow_name: active_flow.flow_name.clone(),
+            context: "adaptive fixture planning",
+        }
+    })?;
 
     let mut steps = match flow.name {
         "bug-fix" => vec![
@@ -868,7 +881,12 @@ fn build_adaptive_initial_plan(
                 )?,
             )?,
         ],
-        _ => unreachable!("unsupported built-in flow should have been rejected earlier"),
+        other => {
+            return Err(FixtureRuntimeError::UnsupportedFixtureFlow {
+                flow_name: other.to_string(),
+                context: "adaptive fixture planning",
+            });
+        }
     };
 
     steps.extend(build_review_steps_for_attempt(
@@ -942,10 +960,9 @@ fn build_adaptive_candidates(
     goal: &str,
     context: AdaptiveCandidateContext<'_>,
 ) -> Result<Vec<AdaptiveAttemptPlan>, FixtureRuntimeError> {
-    let adaptive = profile
-        .adaptive
-        .as_ref()
-        .expect("adaptive candidate synthesis requires an adaptive profile");
+    let adaptive = profile.adaptive.as_ref().ok_or_else(|| {
+        FixtureRuntimeError::MissingAdaptiveProfile { profile: profile.name.clone() }
+    })?;
     let goal_hint = adaptive_goal_hint(goal, profile);
     let goal_terms = tokenize_terms(&goal_hint);
     let validation_terms = merge_terms(
@@ -2070,12 +2087,11 @@ fn build_review_steps_for_attempt(
     )?);
 
     if review.adjudication.enabled {
-        let adjudicator_id = review
-            .adjudication
-            .reviewer_id
-            .as_ref()
-            .expect("validated review profile must define an adjudicator when enabled")
-            .clone();
+        let Some(adjudicator_id) = review.adjudication.reviewer_id.as_ref().cloned() else {
+            return Err(FixtureRuntimeError::MissingReviewAdjudicator {
+                profile: profile.name.clone(),
+            });
+        };
         steps.push(review_agent_step(
             format!("{}-adjudicate", prefix),
             review_step_input_for_attempt(profile, attempt_id, adjudicator_id, true),
@@ -3267,6 +3283,8 @@ pub enum FixtureRuntimeError {
     InvalidAttemptIndex { profile: String, attempt_index: usize },
     #[error("execution profile '{profile}' does not define a credible adaptive candidate")]
     NoAdaptiveCandidate { profile: String },
+    #[error("execution profile '{profile}' does not define adaptive fixture metadata")]
+    MissingAdaptiveProfile { profile: String },
     #[error("execution profile '{profile}' returned invalid adaptive attempt metadata: {message}")]
     InvalidAdaptiveAttemptMetadata { profile: String, message: String },
     #[error(
@@ -3279,6 +3297,10 @@ pub enum FixtureRuntimeError {
         #[source]
         source: std::io::Error,
     },
+    #[error("fixture runtime does not support flow '{flow_name}' in {context}")]
+    UnsupportedFixtureFlow { flow_name: String, context: &'static str },
+    #[error("execution profile '{profile}' enables review adjudication without an adjudicator")]
+    MissingReviewAdjudicator { profile: String },
 }
 
 #[cfg(test)]

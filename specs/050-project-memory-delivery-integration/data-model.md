@@ -49,7 +49,7 @@ version window.
 
 | Variant | Meaning |
 |---------|---------|
-| `Compatible` | `contract_version` is on the supported `0.1.x` line |
+| `Compatible` | `contract_version` is on the supported major-1 (`v1`) line |
 | `Unsupported` | `contract_version` is malformed or outside the supported line |
 
 ### ProjectMemoryContext

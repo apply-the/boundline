@@ -589,13 +589,21 @@ impl StageGovernancePolicy {
 
         if let Some(mode) = resolved_mode
             && mode.requires_existing_context()
-            && system_context != Some(SystemContextBinding::Existing)
         {
-            return Err(GovernanceProfileError::InvalidSystemContextForMode {
-                stage_key: self.stage_key(),
-                mode,
-                system_context: system_context.expect("system_context presence checked above"),
-            });
+            let Some(system_context) = system_context else {
+                return Err(GovernanceProfileError::MissingCanonField {
+                    stage_key: self.stage_key(),
+                    field: "system_context",
+                });
+            };
+
+            if system_context != SystemContextBinding::Existing {
+                return Err(GovernanceProfileError::InvalidSystemContextForMode {
+                    stage_key: self.stage_key(),
+                    mode,
+                    system_context,
+                });
+            }
         }
 
         Ok(())
@@ -790,6 +798,8 @@ impl MemoryCredibilityState {
     }
 }
 
+/// Compact Canon memory facts that Boundline can carry through planning,
+/// status, and inspection surfaces without depending on the original packet.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CompactedCanonMemory {
     pub headline: String,
@@ -815,8 +825,56 @@ pub struct CompactedCanonMemory {
 }
 
 impl CompactedCanonMemory {
+    /// Render the primary memory summary used by status and trace views.
     pub fn summary_text(&self) -> String {
         format!("{} [{}]", self.headline, self.credibility.as_str())
+    }
+
+    /// Map Canon-memory credibility onto the consumer-side compatibility state.
+    pub const fn compatibility_state(&self) -> &'static str {
+        match self.credibility {
+            MemoryCredibilityState::Credible => "compatible",
+            MemoryCredibilityState::Stale | MemoryCredibilityState::Contradicted => "warning",
+            MemoryCredibilityState::Insufficient => "unsupported",
+        }
+    }
+
+    /// Render the recommended Canon follow-up as a single CLI-safe string.
+    pub fn next_action_text(&self) -> Option<String> {
+        self.recommended_next_action
+            .as_ref()
+            .map(|action| format!("{}: {}", action.action, action.rationale))
+    }
+
+    /// Emit stable provenance lines for session-native status and inspect views.
+    pub fn provenance_lines(&self) -> Vec<String> {
+        let mut lines =
+            vec![format!("canon_memory: {} [{}]", self.headline, self.credibility.as_str())];
+        lines.push(format!("canon_memory_compatibility: {}", self.compatibility_state()));
+        if let Some(run_ref) = self.run_ref.as_ref() {
+            lines.push(format!("canon_memory_run_ref: {run_ref}"));
+        }
+        if let Some(packet_ref) = self.packet_ref.as_ref() {
+            lines.push(format!("canon_memory_packet: {packet_ref}"));
+        }
+        if let Some(reason_code) = self.reason_code.as_ref() {
+            lines.push(format!("canon_memory_reason: {reason_code}"));
+        }
+        if let Some(next_action) = self.next_action_text() {
+            lines.push(format!("canon_memory_next_action: {next_action}"));
+        }
+        if let Some(mode_summary) = self.mode_summary.as_ref() {
+            lines.push(format!("canon_memory_mode: {}", mode_summary.summary_text()));
+        }
+        if let Some(evidence_summary) = self.evidence_summary.as_ref() {
+            for item in &evidence_summary.carried_forward_items {
+                lines.push(format!("canon_evidence_contribution: {item}"));
+            }
+            for link in &evidence_summary.artifact_provenance_links {
+                lines.push(format!("canon_provenance: {link}"));
+            }
+        }
+        lines
     }
 }
 
@@ -1123,7 +1181,7 @@ mod tests {
     #[test]
     fn capability_snapshot_validation_and_summary_cover_success_and_failure_paths() {
         let snapshot = CanonCapabilitySnapshot {
-            canon_version: "0.48.0".to_string(),
+            canon_version: "0.50.0".to_string(),
             supported_schema_versions: vec!["2026-02-01".to_string()],
             operations: vec!["capabilities".to_string(), "start".to_string()],
             supported_modes: vec![CanonMode::Change, CanonMode::PrReview],
@@ -1133,7 +1191,7 @@ mod tests {
             compatibility_notes: Vec::new(),
         };
 
-        assert_eq!(snapshot.summary_text(), "Canon 0.48.0 capabilities available");
+        assert_eq!(snapshot.summary_text(), "Canon 0.50.0 capabilities available");
         assert_eq!(
             CanonCapabilitySnapshot {
                 canon_version: String::new(),

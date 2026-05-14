@@ -17,6 +17,22 @@ recorded workspace version.
 
 ## [Unreleased]
 
+## [0.51.1] - 2026-05-13
+
+Highlights:
+
+- Extend Canon project-memory consumption with explicit hard-stop conditions for
+  blocked governance, missing required approval, and missing required source
+  artifacts instead of collapsing those cases into generic stale memory.
+- Surface Canon-memory consumer compatibility, Canon run refs, recommended next
+  actions, and managed-block producer attribution through session-native
+  status, inspect, and run-trace projections.
+- Parse shared `project-memory:managed` blocks from repo-visible
+  `docs/evidence/...` roots and preserve `producer` plus `source_ref`
+  attribution in compacted Canon memory evidence summaries.
+- Realign the documented and distributed Canon companion target to `0.50.0` and
+  keep the release metadata on Boundline `0.51.1`.
+
 ## [0.51.0] - 2026-05-13
 
 Delivered specs:
@@ -32,13 +48,13 @@ Highlights:
   surfaces with adjacent `<surface>.packet-metadata.json` sidecars, while
   deriving supporting evidence roots under `docs/evidence/<mode>/<RUN_ID>/`.
 - Integrated current contract-version compatibility checking for Canon's active
-  `0.1.x` project-memory contract line and future major-version rejection.
+  major-1 (`v1`) project-memory contract line and future major-version rejection.
 - Stage planning now reuses stable Canon project memory through the existing
   compacted Canon memory projection while treating pending or evidence-only
   surfaces as non-authoritative.
 - Session-native Canon memory summaries now carry project-memory artifact refs
   sourced from published `docs/project/*.md` and `docs/evidence/...` surfaces.
-- Updated the documented and distributed Canon companion target to `0.48.0`.
+- Updated the documented and distributed Canon companion target to `0.50.0`.
 - Bumped workspace version to `0.51.0`.
 
 ## [0.50.0] - 2026-05-12

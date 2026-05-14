@@ -2161,12 +2161,9 @@ pub fn governance_next_action_for_state(governance_state: Option<&str>) -> Optio
 
 pub fn task_state_governance_next_action(task: &Task) -> Option<String> {
     if let Some(memory) = task_state_compacted_canon_memory(task)
-        && let Some(recommended_next_action) = memory.recommended_next_action
+        && let Some(next_action) = memory.next_action_text()
     {
-        return Some(format!(
-            "{}: {}",
-            recommended_next_action.action, recommended_next_action.rationale
-        ));
+        return Some(next_action);
     }
 
     let governance_state = task_state_governance_state_text(task);
@@ -2192,20 +2189,7 @@ pub fn task_state_canon_memory_primary_inputs(task: &Task) -> Option<Vec<String>
 }
 
 pub fn task_state_canon_memory_provenance(task: &Task) -> Option<Vec<String>> {
-    task_state_compacted_canon_memory(task).map(|memory| {
-        let mut lines =
-            vec![format!("canon_memory: {} [{}]", memory.headline, memory.credibility.as_str())];
-        if let Some(packet_ref) = memory.packet_ref {
-            lines.push(format!("canon_memory_packet: {packet_ref}"));
-        }
-        if let Some(reason_code) = memory.reason_code {
-            lines.push(format!("canon_memory_reason: {reason_code}"));
-        }
-        for artifact_ref in memory.artifact_refs {
-            lines.push(format!("canon_artifact: {artifact_ref}"));
-        }
-        lines
-    })
+    task_state_compacted_canon_memory(task).map(|memory| memory.provenance_lines())
 }
 
 pub fn task_state_canon_memory_staleness_reason(task: &Task) -> Option<String> {

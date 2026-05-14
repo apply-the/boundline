@@ -1,0 +1,44 @@
+name: sbom
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  sbom:
+    name: sbom
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install cargo-cyclonedx --locked
+      - name: Generate CycloneDX SBOMs
+        shell: bash
+        run: |
+          rm -rf sbom
+          mkdir -p sbom
+          cargo cyclonedx --manifest-path Cargo.toml --format json --all-features --target all --override-filename workspace-sbom
+          find . -name 'workspace-sbom.json' -print | while IFS= read -r file; do
+            relative_dir=$(dirname "${file#./}")
+            if [ "$relative_dir" = "." ]; then
+              relative_dir="workspace-root"
+            fi
+            relative_dir=$(printf '%s' "$relative_dir" | tr '/' '-')
+            cp "$file" "sbom/${relative_dir}-workspace-sbom.json"
+          done
+          test -n "$(find sbom -type f -name '*.json' -print -quit)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: boundline-sbom
+          path: sbom/
+          if-no-files-found: error

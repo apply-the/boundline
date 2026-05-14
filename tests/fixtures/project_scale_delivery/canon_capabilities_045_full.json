@@ -1,5 +1,5 @@
 {
-  "canon_version": "0.48.0",
+  "canon_version": "0.50.0",
   "supported_schema_versions": ["2026-02-01"],
   "operations": ["start", "refresh", "capabilities"],
   "supported_modes": [
