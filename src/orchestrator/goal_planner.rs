@@ -396,9 +396,8 @@ fn select_relevant_workspace_inputs(
             .cloned()
             .collect::<Vec<_>>();
 
-        if source_matches.len() == 1 && test_matches.len() == 1 {
-            let source_match = source_matches.first().expect("source match should exist");
-            let test_match = test_matches.first().expect("test match should exist");
+        if let ([source_match], [test_match]) = (source_matches.as_slice(), test_matches.as_slice())
+        {
             insert_context_candidate(
                 &mut candidates,
                 source_match.clone(),
@@ -623,7 +622,9 @@ fn resolve_domain_context(
     let mut standard_sources = Vec::new();
 
     for family in &selected_families {
-        let template = effective_templates.get(family).expect("selected family should resolve");
+        let Some(template) = effective_templates.get(family) else {
+            continue;
+        };
         inputs.push(ContextInput {
             kind: ContextInputKind::DomainTemplate,
             reference: family.as_str().to_string(),
@@ -878,10 +879,19 @@ pub fn build_context_pack(
             .any(|path| workspace_ref.join(path).is_file());
     let memory_staleness_reason =
         context_sources.compacted_canon_memory.as_ref().and_then(|memory| {
-            (memory.credibility != MemoryCredibilityState::Credible)
+            matches!(
+                memory.credibility,
+                MemoryCredibilityState::Stale | MemoryCredibilityState::Contradicted
+            )
+            .then(|| memory.reason_code.clone().unwrap_or_else(|| memory.headline.clone()))
+        });
+    let memory_insufficient_reason =
+        context_sources.compacted_canon_memory.as_ref().and_then(|memory| {
+            (memory.credibility == MemoryCredibilityState::Insufficient)
                 .then(|| memory.reason_code.clone().unwrap_or_else(|| memory.headline.clone()))
         });
     let credibility = if !has_credible_context
+        || memory_insufficient_reason.is_some()
         || domain_outcome
             .as_ref()
             .is_some_and(|outcome| outcome.credibility == ContextPackCredibility::Insufficient)
@@ -1536,6 +1546,51 @@ mod tests {
     }
 
     #[test]
+    fn build_context_pack_marks_insufficient_canon_memory_as_insufficient() {
+        let workspace = temp_workspace("goal-planner-insufficient-memory");
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::write(
+            workspace.join("src/lib.rs"),
+            "pub fn add(left: i32, right: i32) -> i32 { left - right }",
+        )
+        .unwrap();
+
+        let context_pack = build_context_pack(
+            "investigate incompatible Canon memory",
+            &workspace,
+            &PlanningContextSources {
+                latest_changed_files: vec!["src/lib.rs".to_string()],
+                compacted_canon_memory: Some(CompactedCanonMemory {
+                    headline: "Canon project memory contract is unsupported".to_string(),
+                    credibility: MemoryCredibilityState::Insufficient,
+                    stage_key: None,
+                    run_ref: None,
+                    packet_ref: None,
+                    reason_code: Some("project_memory_contract_incompatible".to_string()),
+                    artifact_refs: Vec::new(),
+                    mode_summary: None,
+                    possible_actions: Vec::new(),
+                    recommended_next_action: Some(CanonRecommendedActionSummary {
+                        action: "update".to_string(),
+                        rationale: "update Canon or Boundline so both support the same project-memory contract before planning"
+                            .to_string(),
+                        target: None,
+                    }),
+                    evidence_summary: None,
+                }),
+                ..PlanningContextSources::default()
+            },
+        );
+
+        assert_eq!(context_pack.credibility, ContextPackCredibility::Insufficient);
+        assert!(context_pack.staleness_reason.is_none());
+        assert!(context_pack.summary.contains("next action: update"));
+        assert!(context_pack.selected_targets.contains(&"src/lib.rs".to_string()));
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
     fn build_goal_plan_with_sources_uses_canon_memory_targets_and_guidance() {
         let workspace = temp_workspace("goal-planner-canon-memory");
         let goal_plan = build_goal_plan_with_sources(
@@ -1598,7 +1653,7 @@ mod tests {
             &workspace,
             &PlanningContextSources {
                 canon_capability_snapshot: Some(CanonCapabilitySnapshot {
-                    canon_version: "0.48.0".to_string(),
+                    canon_version: "0.50.0".to_string(),
                     supported_schema_versions: vec!["2026-02-01".to_string()],
                     operations: vec![
                         "start".to_string(),
@@ -1661,7 +1716,7 @@ mod tests {
             goal_plan
                 .source_evidence
                 .iter()
-                .any(|entry| entry.reference.contains("Canon 0.48.0 capabilities available"))
+                .any(|entry| entry.reference.contains("Canon 0.50.0 capabilities available"))
         );
 
         fs::remove_dir_all(workspace).unwrap();

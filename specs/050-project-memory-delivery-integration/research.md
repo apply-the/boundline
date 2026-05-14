@@ -20,14 +20,16 @@ contract document governs semantic alignment.
 
 ## Decision 2: Contract-Version Compatibility Strategy
 
-**Decision**: Pin Boundline's initial consumer support to the Canon
-`0.1.x` contract line. Treat `0.1.x` as compatible and reject malformed or
-future contract lines until the integration slice is explicitly updated.
+**Decision**: Pin Boundline's initial consumer support to the Canon major-1
+contract line. Treat `v1`, `v1.<minor>`, and semantic-version strings with
+major `1` as compatible, and reject malformed or future-major contract lines
+until the integration slice is explicitly updated.
 
-**Rationale**: The contract remains pre-1.0, so no compatibility grace period
-is guaranteed across minor versions. A pinned `0.1.x` window matches the actual
-consumer posture, keeps behavior explicit, and avoids implying support that the
-consumer has not verified.
+**Rationale**: The consumer implementation currently accepts Canon contract
+versions that normalize onto major `1`, including `v1`, `v1.<minor>`, and
+semantic-version forms such as `1.0.0`. Documenting that major-1 window keeps
+behavior explicit and avoids implying support that the consumer has not
+verified.
 
 **Alternatives considered**:
 - Per-field capability negotiation: rejected as over-engineered; the contract

@@ -14,11 +14,13 @@ pub enum ProjectScalePathKind {
     OperationalOrRisk,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ProjectScaleStageKind {
     Discovery,
     Requirements,
+    DomainLanguage,
+    DomainModel,
     SystemShaping,
     Architecture,
     Backlog,
@@ -35,11 +37,19 @@ pub enum ProjectScaleStageKind {
     SupplyChainAnalysis,
 }
 
+impl fmt::Display for ProjectScaleStageKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 impl ProjectScaleStageKind {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Discovery => "discovery",
             Self::Requirements => "requirements",
+            Self::DomainLanguage => "domain-language",
+            Self::DomainModel => "domain-model",
             Self::SystemShaping => "system-shaping",
             Self::Architecture => "architecture",
             Self::Backlog => "backlog",
@@ -180,6 +190,16 @@ pub fn propose_project_scale_path(input: ProjectScaleInput) -> ProjectScalePath 
                 );
             }
             if input.capability_structure_unclear {
+                push_stage(
+                    &mut stages,
+                    ProjectScaleStageKind::DomainLanguage,
+                    "domain language is not fixed",
+                );
+                push_stage(
+                    &mut stages,
+                    ProjectScaleStageKind::DomainModel,
+                    "domain model is not fixed",
+                );
                 push_stage(
                     &mut stages,
                     ProjectScaleStageKind::SystemShaping,
@@ -514,9 +534,44 @@ pub struct WorkflowDiscoveryEntry {
     pub availability_state: WorkflowAvailabilityState,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeliveryPathDefinition {
+    pub delivery_path_name: String,
+    pub description: String,
+    pub stages: Vec<ProjectScaleStageKind>,
+    pub adaptive: bool,
+}
+
+impl DeliveryPathDefinition {
+    pub fn validate(&self) -> Result<(), WorkflowDefinitionError> {
+        if self.stages.is_empty() {
+            return Err(WorkflowDefinitionError::MissingDeliveryPathStages {
+                delivery_path_name: self.delivery_path_name.clone(),
+            });
+        }
+
+        let mut seen = BTreeSet::new();
+        for stage in &self.stages {
+            if !seen.insert(*stage) {
+                return Err(WorkflowDefinitionError::DuplicateDeliveryPathStage {
+                    delivery_path_name: self.delivery_path_name.clone(),
+                    stage: *stage,
+                });
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn stage_names(&self) -> String {
+        self.stages.iter().map(|stage| stage.as_str()).collect::<Vec<_>>().join(" -> ")
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct WorkflowRegistry {
     workflows: BTreeMap<String, WorkflowDefinition>,
+    delivery_paths: BTreeMap<String, DeliveryPathDefinition>,
 }
 
 impl WorkflowRegistry {
@@ -534,7 +589,13 @@ impl WorkflowRegistry {
             workflows.insert(definition.workflow_name.clone(), definition);
         }
 
-        Ok(Self { workflows })
+        let mut delivery_paths = BTreeMap::new();
+        for (delivery_path_name, raw_definition) in raw.delivery_paths {
+            let definition = raw_definition.into_definition(delivery_path_name)?;
+            delivery_paths.insert(definition.delivery_path_name.clone(), definition);
+        }
+
+        Ok(Self { workflows, delivery_paths })
     }
 
     pub fn load(path: &Path) -> Result<Self, WorkflowDefinitionError> {
@@ -549,6 +610,14 @@ impl WorkflowRegistry {
 
     pub fn workflow_names(&self) -> Vec<&str> {
         self.workflows.keys().map(String::as_str).collect()
+    }
+
+    pub fn delivery_path(&self, delivery_path_name: &str) -> Option<&DeliveryPathDefinition> {
+        self.delivery_paths.get(delivery_path_name)
+    }
+
+    pub fn delivery_path_names(&self) -> Vec<&str> {
+        self.delivery_paths.keys().map(String::as_str).collect()
     }
 
     pub fn discovery_entries(&self, workspace: &Path) -> Vec<WorkflowDiscoveryEntry> {
@@ -619,6 +688,8 @@ impl WorkflowProgressState {
 struct WorkflowRegistryToml {
     #[serde(default)]
     workflow: BTreeMap<String, WorkflowDefinitionToml>,
+    #[serde(default)]
+    delivery_paths: BTreeMap<String, DeliveryPathDefinitionToml>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -640,6 +711,15 @@ struct WorkflowDefinitionToml {
     summary: Option<String>,
     #[serde(default)]
     recommended_when: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DeliveryPathDefinitionToml {
+    description: String,
+    stages: Vec<ProjectScaleStageKind>,
+    #[serde(default)]
+    adaptive: bool,
 }
 
 impl WorkflowDefinitionToml {
@@ -681,6 +761,22 @@ impl WorkflowDefinitionToml {
             output_preferences: self.output_preferences,
             summary: self.summary,
             recommended_when: self.recommended_when,
+        };
+        definition.validate()?;
+        Ok(definition)
+    }
+}
+
+impl DeliveryPathDefinitionToml {
+    fn into_definition(
+        self,
+        delivery_path_name: String,
+    ) -> Result<DeliveryPathDefinition, WorkflowDefinitionError> {
+        let definition = DeliveryPathDefinition {
+            delivery_path_name,
+            description: self.description,
+            stages: self.stages,
+            adaptive: self.adaptive,
         };
         definition.validate()?;
         Ok(definition)
@@ -738,4 +834,8 @@ pub enum WorkflowDefinitionError {
     },
     #[error("workflow `{workflow_name}` repeats completed phase `{phase}` in persisted progress")]
     DuplicateCompletedPhase { workflow_name: String, phase: WorkflowPhase },
+    #[error("delivery path `{delivery_path_name}` must declare at least one stage")]
+    MissingDeliveryPathStages { delivery_path_name: String },
+    #[error("delivery path `{delivery_path_name}` declares duplicate stage `{stage}`")]
+    DuplicateDeliveryPathStage { delivery_path_name: String, stage: ProjectScaleStageKind },
 }

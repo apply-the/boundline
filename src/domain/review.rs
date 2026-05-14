@@ -290,11 +290,9 @@ impl ReviewScenario {
 
         match (&self.adjudication_finding, adjudication.enabled) {
             (Some(finding), true) => {
-                let adjudicator_id = adjudication
-                    .reviewer_id
-                    .as_ref()
-                    .expect("validated adjudication must define reviewer_id")
-                    .clone();
+                let Some(adjudicator_id) = adjudication.reviewer_id.as_ref() else {
+                    return Err(ReviewProfileError::MissingAdjudicatorReviewerId);
+                };
                 let mut adjudicator_ids = BTreeSet::new();
                 adjudicator_ids.insert(adjudicator_id.clone());
                 finding.validate(&adjudicator_ids, "adjudication")?;
@@ -361,9 +359,14 @@ impl VoteRuleDefinition {
 
             let weight = match self.strategy {
                 VoteStrategy::Majority => 1,
-                VoteStrategy::Weighted => *reviewer_weights
-                    .get(&finding.reviewer_id)
-                    .expect("validated finding reviewer must exist"),
+                VoteStrategy::Weighted => match reviewer_weights.get(&finding.reviewer_id) {
+                    Some(weight) => *weight,
+                    None => {
+                        return Err(ReviewProfileError::UnknownFindingReviewer(
+                            finding.reviewer_id.clone(),
+                        ));
+                    }
+                },
             };
             total += weight;
             dispositions.insert(finding.reviewer_id.clone(), finding.disposition);

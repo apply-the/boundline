@@ -678,25 +678,7 @@ impl GoalPlan {
         let mut lines =
             self.context_pack.as_ref().map(ContextPack::provenance_lines).unwrap_or_default();
         if let Some(memory) = self.compacted_canon_memory.as_ref() {
-            lines.push(format!(
-                "canon_memory: {} [{}]",
-                memory.headline,
-                memory.credibility.as_str()
-            ));
-            if let Some(packet_ref) = memory.packet_ref.as_ref() {
-                lines.push(format!("canon_memory_packet: {packet_ref}"));
-            }
-            if let Some(reason_code) = memory.reason_code.as_ref() {
-                lines.push(format!("canon_memory_reason: {reason_code}"));
-            }
-            if let Some(mode_summary) = memory.mode_summary.as_ref() {
-                lines.push(format!("canon_memory_mode: {}", mode_summary.summary_text()));
-            }
-            if let Some(evidence_summary) = memory.evidence_summary.as_ref() {
-                for link in &evidence_summary.artifact_provenance_links {
-                    lines.push(format!("canon_provenance: {link}"));
-                }
-            }
+            lines.extend(memory.provenance_lines());
         }
         lines
     }

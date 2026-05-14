@@ -81,10 +81,7 @@ pub fn execute_list(
     let workflow_path = workspace.join(".boundline/workflows.toml");
 
     match WorkflowRegistry::load(&workflow_path) {
-        Ok(registry) => Ok(render_workflow_discovery_report(
-            &workspace,
-            &registry.discovery_entries(&workspace),
-        )),
+        Ok(registry) => Ok(render_workflow_discovery_report(&workspace, &registry)),
         Err(error) => Ok(render_workflow_registry_error_report(&workspace, &error)),
     }
 }
@@ -96,7 +93,7 @@ pub fn execute_status(
     let runtime = SessionRuntime::for_workspace(&workspace);
     let mut record = load_active_workflow_session(&runtime)?;
     let workflow_name =
-        record.active_workflow_name().expect("active workflow was checked before rendering status");
+        record.active_workflow_name().ok_or(WorkflowCommandError::MissingActiveWorkflow)?;
     let workflow = match load_workflow_definition(&workspace, &workflow_name) {
         Ok(workflow) => workflow,
         Err(error) => {
@@ -132,7 +129,7 @@ pub fn execute_resume(
     let runtime = SessionRuntime::for_workspace(&workspace);
     let mut record = load_active_workflow_session(&runtime)?;
     let workflow_name =
-        record.active_workflow_name().expect("active workflow was checked before resume");
+        record.active_workflow_name().ok_or(WorkflowCommandError::MissingActiveWorkflow)?;
     let workflow = match load_workflow_definition(&workspace, &workflow_name) {
         Ok(workflow) => workflow,
         Err(error) => {
@@ -157,7 +154,7 @@ pub fn execute_inspect(
     let runtime = SessionRuntime::for_workspace(&workspace);
     let mut record = load_active_workflow_session(&runtime)?;
     let workflow_name =
-        record.active_workflow_name().expect("active workflow was checked before inspect");
+        record.active_workflow_name().ok_or(WorkflowCommandError::MissingActiveWorkflow)?;
     let workflow = match load_workflow_definition(&workspace, &workflow_name) {
         Ok(workflow) => workflow,
         Err(error) => {
@@ -570,14 +567,16 @@ fn render_workflow_report(
 
 fn render_workflow_discovery_report(
     workspace: &Path,
-    entries: &[crate::domain::workflow::WorkflowDiscoveryEntry],
+    registry: &WorkflowRegistry,
 ) -> WorkflowCommandReport {
+    let entries = registry.discovery_entries(workspace);
     let mut lines = vec![
         "workflow registry status: ready".to_string(),
         format!("workflow_count: {}", entries.len()),
+        format!("delivery_path_count: {}", registry.delivery_path_names().len()),
     ];
 
-    for entry in entries {
+    for entry in &entries {
         lines.push(format!("workflow: {}", entry.workflow_name));
         lines.push(format!("summary: {}", entry.summary));
         lines.push(format!(
@@ -590,9 +589,20 @@ fn render_workflow_discovery_report(
         lines.push(format!("invoke_with: {}", entry.invocation_command));
     }
 
+    for delivery_path_name in registry.delivery_path_names() {
+        let Some(delivery_path) = registry.delivery_path(delivery_path_name) else {
+            continue;
+        };
+        lines.push(format!("delivery_path: {}", delivery_path.delivery_path_name));
+        lines.push(format!("description: {}", delivery_path.description));
+        lines.push(format!("stages: {}", delivery_path.stage_names()));
+        lines.push(format!("adaptive: {}", delivery_path.adaptive));
+    }
+
     lines.push(format!(
-        "explanation: discovered {} workflow definition(s) in workspace {} for the primary Boundline workflow surface",
+        "explanation: discovered {} workflow definition(s) and {} delivery path(s) in workspace {} for the primary Boundline workflow surface",
         entries.len(),
+        registry.delivery_path_names().len(),
         workspace.display()
     ));
 

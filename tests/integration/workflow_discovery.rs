@@ -19,6 +19,7 @@ fn workflow_list_surfaces_names_metadata_and_invocation_guidance() {
 
     assert_eq!(output.status.code(), Some(0), "{text}");
     assert!(text.contains("workflow registry status: ready"), "{text}");
+    assert!(text.contains("delivery_path_count: 1"), "{text}");
     assert!(text.contains("workflow: governed-delivery"), "{text}");
     assert!(
         text.contains(
@@ -40,6 +41,20 @@ fn workflow_list_surfaces_names_metadata_and_invocation_guidance() {
         "{text}"
     );
     assert!(text.contains("invoke_with: boundline workflow run quick-fix --workspace "), "{text}");
+    assert!(text.contains("delivery_path: idea_to_code"), "{text}");
+    assert!(
+        text.contains(
+            "description: Move from idea intake to verified code through bounded stages."
+        ),
+        "{text}"
+    );
+    assert!(
+        text.contains(
+            "stages: discovery -> requirements -> domain-language -> domain-model -> system-shaping -> architecture -> backlog -> implementation -> verification -> pr-review"
+        ),
+        "{text}"
+    );
+    assert!(text.contains("adaptive: true"), "{text}");
 }
 
 #[test]

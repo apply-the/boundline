@@ -96,15 +96,26 @@ pub fn render_host_command_json(
     session_status: Option<&SessionStatusView>,
     trace_summary: Option<&TraceSummaryView>,
 ) -> String {
-    serde_json::to_string_pretty(&HostCommandEnvelope {
+    match serde_json::to_string_pretty(&HostCommandEnvelope {
         command_name: command_name.to_string(),
         exit_status: command_exit_status_label(exit_status).to_string(),
         rendered_output: rendered_output.to_string(),
         trace_location: trace_location.map(str::to_string),
         session_status: session_status.cloned(),
         trace_summary: trace_summary.cloned(),
-    })
-    .expect("host command envelope should serialize")
+    }) {
+        Ok(rendered) => rendered,
+        Err(error) => serde_json::json!({
+            "command_name": command_name,
+            "exit_status": command_exit_status_label(exit_status),
+            "rendered_output": rendered_output,
+            "trace_location": trace_location,
+            "session_status": session_status,
+            "trace_summary": trace_summary,
+            "serialization_error": error.to_string(),
+        })
+        .to_string(),
+    }
 }
 
 pub fn unimplemented_message(command: &DeveloperCommand) -> String {
@@ -543,6 +554,52 @@ pub fn render_run_trace(
                 event.payload.get("canon_memory_summary").and_then(Value::as_str)
             {
                 let line = format!("canon_memory: {canon_memory_summary}");
+                if !context_provenance.contains(&line) {
+                    context_provenance.push(line);
+                }
+            }
+            if let Some(canon_memory_compatibility) =
+                event.payload.get("canon_memory_compatibility").and_then(Value::as_str)
+            {
+                let line = format!("canon_memory_compatibility: {canon_memory_compatibility}");
+                if !context_provenance.contains(&line) {
+                    context_provenance.push(line);
+                }
+            }
+            if let Some(canon_memory_run_ref) = event
+                .payload
+                .get("canon_memory_run_ref")
+                .or_else(|| event.payload.get("run_ref"))
+                .and_then(Value::as_str)
+            {
+                let line = format!("canon_memory_run_ref: {canon_memory_run_ref}");
+                if !context_provenance.contains(&line) {
+                    context_provenance.push(line);
+                }
+            }
+            if let Some(canon_memory_packet_ref) = event
+                .payload
+                .get("canon_memory_packet_ref")
+                .or_else(|| event.payload.get("packet_ref"))
+                .and_then(Value::as_str)
+            {
+                let line = format!("canon_memory_packet: {canon_memory_packet_ref}");
+                if !context_provenance.contains(&line) {
+                    context_provenance.push(line);
+                }
+            }
+            if let Some(canon_memory_reason_code) =
+                event.payload.get("canon_memory_reason_code").and_then(Value::as_str)
+            {
+                let line = format!("canon_memory_reason: {canon_memory_reason_code}");
+                if !context_provenance.contains(&line) {
+                    context_provenance.push(line);
+                }
+            }
+            if let Some(canon_next_action) =
+                event.payload.get("canon_next_action").and_then(Value::as_str)
+            {
+                let line = format!("canon_memory_next_action: {canon_next_action}");
                 if !context_provenance.contains(&line) {
                     context_provenance.push(line);
                 }
@@ -2395,17 +2452,18 @@ fn trace_execution_condition_parts(summary: &TraceSummaryView) -> (&'static str,
     }
 
     match summary.terminal_status {
-        TaskStatus::Failed | TaskStatus::Exhausted
-            if trace_adaptive_exhaustion_reason(summary).is_some() =>
-        {
-            ("terminal", trace_adaptive_exhaustion_reason(summary).unwrap())
+        TaskStatus::Failed | TaskStatus::Exhausted => {
+            if let Some(reason) = trace_adaptive_exhaustion_reason(summary) {
+                ("terminal", reason)
+            } else {
+                ("terminal", summary.terminal_reason.message.clone())
+            }
         }
         TaskStatus::Planned => ("waiting", summary.terminal_reason.message.clone()),
         TaskStatus::Running => ("running", summary.terminal_reason.message.clone()),
-        TaskStatus::Succeeded
-        | TaskStatus::Failed
-        | TaskStatus::Exhausted
-        | TaskStatus::Aborted => ("terminal", summary.terminal_reason.message.clone()),
+        TaskStatus::Succeeded | TaskStatus::Aborted => {
+            ("terminal", summary.terminal_reason.message.clone())
+        }
     }
 }
 

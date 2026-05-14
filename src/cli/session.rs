@@ -1485,6 +1485,7 @@ mod tests {
     };
     use crate::fixture::{build_fixture_plan_for_goal, build_task_request};
     use crate::orchestrator::session_runtime::{SessionRuntime, SessionRuntimeError};
+    use crate::test_support::CurrentDirGuard;
 
     const FIXTURE_CARGO_TOML: &str = r#"[package]
 name = "session_cli_fixture"
@@ -1684,10 +1685,8 @@ fn red_to_green_addition() {
         let child = workspace.join("child");
         fs::create_dir_all(&child).unwrap();
 
-        let previous_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        std::env::set_current_dir(&workspace).unwrap();
+        let _current_dir_guard = CurrentDirGuard::change_to(&workspace);
         let resolved = resolve_workspace(Some(Path::new("child"))).unwrap();
-        std::env::set_current_dir(previous_dir).unwrap();
 
         assert_eq!(resolved, child.canonicalize().unwrap());
         assert_eq!(exit_status_for_session(SessionStatus::Invalid), CommandExitStatus::NonSuccess);
@@ -2354,6 +2353,14 @@ fn red_to_green_addition() {
         assert_eq!(
             view.context_primary_inputs.as_deref(),
             Some([".canon/runs/run-9/verification.md".to_string()].as_slice())
+        );
+        assert!(view.context_provenance.as_ref().is_some_and(|lines| {
+            lines.contains(&"canon_memory_compatibility: warning".to_string())
+        }));
+        assert!(
+            view.context_provenance.as_ref().is_some_and(|lines| {
+                lines.contains(&"canon_memory_run_ref: run-9".to_string())
+            })
         );
         assert_eq!(view.context_staleness_reason.as_deref(), Some("refresh_required"));
         assert_eq!(

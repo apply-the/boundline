@@ -1,9 +1,9 @@
-# Configuration in Boundline 0.50.0
+# Configuration in Boundline 0.51.1
 
-Boundline `0.50.0` keeps a user-friendly setup and routing configuration surface
+Boundline `0.51.1` keeps a user-friendly setup and routing configuration surface
 for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
-The `0.50.0` release keeps configuration behavior stable while preserving the
+The `0.51.1` release keeps configuration behavior stable while preserving the
 same governed routing defaults across earlier `bug-fix:investigate` work,
 later verify-stage `security-assessment`, workflow-aware projection of the
 same bounded governance state, continuity-aware read-side follow-up, the
@@ -62,6 +62,8 @@ ranking, explicit adaptive exhaustion, or negotiation-state overrides.
 - `boundline cluster` registers bounded multi-workspace membership and aggregated inspection
 - negotiated delivery modeling stays session-owned and trace-projected; there is no new negotiation-specific key in `config.toml` or `.boundline/execution.json`
 - context-pack assembly and credibility projection stay session-owned and trace-projected; there is no new context-specific key in `config.toml` or `.boundline/execution.json`
+- repo-visible `project.boundline.toml` can override the default Canon knowledge roots through `[docs] project_memory = "..."` and `evidence = "..."`; Boundline still defaults to `docs/project/` and `docs/evidence/` when the repo does not override them
+- Canon project-memory continue, warning, and hard-stop outcomes stay runtime-owned, but `plan`, `status`, `next`, and `inspect` now project the resulting compatibility state, Canon refs, and any producer-attributed managed-block summaries discovered under `docs/evidence/`
 - session-native commands can use `--cluster <primary-workspace>` to keep one authoritative primary-owned session while traversing cluster members sequentially
 - continuity between explicit compatibility traces and read-side commands is projected by the CLI surfaces, not by a new config key
 - adaptive validation-guided repair remains configured in `.boundline/execution.json`, not in `config.toml`

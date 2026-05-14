@@ -468,10 +468,9 @@ pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, I
         )
         .collect::<BTreeSet<_>>();
     let execution = execution_template(template, local.canon.as_ref());
-    let execution_status = scaffold_file_status(
-        &execution_path,
-        &serde_json::to_string_pretty(&execution).expect("execution template should serialize"),
-    )?;
+    let execution_contents = serde_json::to_string_pretty(&execution)
+        .map_err(|source| InitCommandError::InvalidExecutionProfile(source.to_string()))?;
+    let execution_status = scaffold_file_status(&execution_path, &execution_contents)?;
     let config_status = match existing_local.as_ref() {
         Some(existing) if existing == &local => ScaffoldFileStatus::Unchanged,
         Some(_) => ScaffoldFileStatus::Update,
@@ -554,11 +553,8 @@ pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, I
         .map_err(|source| InitCommandError::WriteFile { path: boundline_dir.clone(), source })?;
     let hygiene_actions = apply_workspace_hygiene_defaults(workspace, &active_domains)?;
     run_init_activity("writing execution profile", interactive_terminal, || {
-        fs::write(
-            &execution_path,
-            serde_json::to_string_pretty(&execution).expect("execution template should serialize"),
-        )
-        .map_err(|source| InitCommandError::WriteFile { path: execution_path.clone(), source })
+        fs::write(&execution_path, &execution_contents)
+            .map_err(|source| InitCommandError::WriteFile { path: execution_path.clone(), source })
     })?;
 
     run_init_activity("writing workspace config", interactive_terminal, || {
@@ -2030,6 +2026,8 @@ pub enum InitCommandError {
     InteractiveTerminalUnavailable,
     #[error("invalid bundled model catalog: {0}")]
     InvalidBundledCatalog(String),
+    #[error("failed to serialize execution profile: {0}")]
+    InvalidExecutionProfile(String),
     #[error("failed to collect init input: {0}")]
     PromptInteraction(String),
     #[error("invalid docs export argument: {0}")]
@@ -2047,7 +2045,6 @@ mod tests {
     use std::ffi::OsString;
     use std::fs;
     use std::path::{Path, PathBuf};
-    use std::sync::{LazyLock, Mutex, MutexGuard};
 
     use uuid::Uuid;
 
@@ -2067,33 +2064,12 @@ mod tests {
         DomainFamily, ExternalContextBinding, ExternalContextKind,
     };
     use crate::domain::governance::CanonModeSelectionPreference;
-
-    static CURRENT_DIR_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+    use crate::test_support::CurrentDirGuard;
 
     fn temp_workspace(prefix: &str) -> PathBuf {
         let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
         fs::create_dir_all(&workspace).unwrap();
         workspace
-    }
-
-    struct CurrentDirGuard {
-        original: PathBuf,
-        _lock: MutexGuard<'static, ()>,
-    }
-
-    impl CurrentDirGuard {
-        fn change_to(path: &Path) -> Self {
-            let lock = CURRENT_DIR_LOCK.lock().unwrap();
-            let original = std::env::current_dir().unwrap();
-            std::env::set_current_dir(path).unwrap();
-            Self { original, _lock: lock }
-        }
-    }
-
-    impl Drop for CurrentDirGuard {
-        fn drop(&mut self) {
-            std::env::set_current_dir(&self.original).unwrap();
-        }
     }
 
     struct PwdEnvGuard {

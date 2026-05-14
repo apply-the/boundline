@@ -509,7 +509,8 @@ fn projected_copilot_prompt_assets() -> Vec<AssistantAsset> {
                 .relative_path
                 .rsplit('/')
                 .next()
-                .expect("copilot prompt asset should have a file name");
+                .filter(|name| !name.is_empty())
+                .unwrap_or(asset.relative_path.as_ref());
             AssistantAsset {
                 relative_path: Cow::Owned(format!(".github/prompts/{file_name}")),
                 contents: asset.contents,

@@ -53,7 +53,7 @@ paths from the Canon contract
   appear inside `status`, `next`, and `inspect` when available. No
   compatibility path is needed. (Spec §US2)
 - **Bounded execution**: PASS. Contract-version check is a single-step gate
-  with two outcomes: compatible on the supported `0.1.x` line or unsupported
+  with two outcomes: compatible on the supported major-1 (`v1`) line or unsupported
   (bounded stop). No loops or retries. (Spec §US3)
 - **Stateful execution**: PASS. `ProjectMemoryContext` is written into session
   task context at stage-planning time and read by downstream status/next/inspect.

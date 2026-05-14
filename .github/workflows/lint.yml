@@ -12,6 +12,18 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  code-quality:
+    name: code-quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: sh scripts/check-rust-no-panic.sh
+
   clippy:
     name: clippy
     runs-on: ubuntu-latest

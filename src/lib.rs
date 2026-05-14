@@ -64,6 +64,10 @@ pub use domain::negotiation::{
     TradeoffDecision,
 };
 pub use domain::plan::Plan;
+pub use domain::project_index::{
+    ProjectDocRoots, ProjectIndex, ProjectIndexDocs, ProjectIndexError, ProjectIndexProject,
+    ProjectIndexSystem, resolve_project_doc_roots,
+};
 pub use domain::review::{
     AdjudicationDefinition, ReviewOutcome, ReviewProfile, ReviewScenario, ReviewTrigger,
     ReviewerDefinition, ReviewerDisposition, ReviewerFinding, ReviewerParticipation,
@@ -78,12 +82,12 @@ pub use domain::step::{
 };
 pub use domain::task::{TaskRunRequest, TaskRunResponse, TaskStatus, TerminalReason};
 pub use domain::workflow::{
-    ConditionalWorkflowPhase, ProjectScaleBoundaryDecision, ProjectScaleBoundaryRequest,
-    ProjectScaleInput, ProjectScalePath, ProjectScalePathKind, ProjectScaleStage,
-    ProjectScaleStageKind, WorkflowAvailabilityState, WorkflowConditionKind, WorkflowDefinition,
-    WorkflowDefinitionError, WorkflowDiscoveryEntry, WorkflowGoalSource, WorkflowLifecycleState,
-    WorkflowOutputPreferences, WorkflowPhase, WorkflowProgressState, WorkflowRegistry,
-    evaluate_project_scale_boundary, propose_project_scale_path,
+    ConditionalWorkflowPhase, DeliveryPathDefinition, ProjectScaleBoundaryDecision,
+    ProjectScaleBoundaryRequest, ProjectScaleInput, ProjectScalePath, ProjectScalePathKind,
+    ProjectScaleStage, ProjectScaleStageKind, WorkflowAvailabilityState, WorkflowConditionKind,
+    WorkflowDefinition, WorkflowDefinitionError, WorkflowDiscoveryEntry, WorkflowGoalSource,
+    WorkflowLifecycleState, WorkflowOutputPreferences, WorkflowPhase, WorkflowProgressState,
+    WorkflowRegistry, evaluate_project_scale_boundary, propose_project_scale_path,
 };
 pub use domain::workspace_hygiene::{
     HygieneFilePlan, HygieneMergeResult, HygienePatternPack, merge_hygiene_content,

@@ -6,7 +6,7 @@ Canon is downstream from Boundline in this roadmap: Boundline thinks, decides, o
 
 Evolve Boundline into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.51.0
+## Current Status: v0.51.1
 
 Boundline now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -26,17 +26,34 @@ Canon-promoted project-memory reuse, so published `docs/project/*.md` surfaces
 and their supporting evidence can feed later planning and governed follow-through
 when the lineage is compatible and credible:
 
+Current `0.51.1` work closes that same consumer slice with explicit
+project-memory hard stops for blocked governance, missing required approval,
+and missing required source artifacts, while also surfacing Canon compatibility
+state, Canon refs, and producer-attributed managed-block summaries from
+`docs/evidence/...` in the session-native inspection path.
+
+### Delivered in 0.51.1
+
+- Boundline now hard-stops on Canon project-memory states that are blocked by
+  governance, missing required approval, or missing required source artifacts
+  instead of collapsing them into generic stale-memory handling.
+- Session-native status, next, inspect, and run-trace surfaces now project
+  Canon compatibility state, Canon run refs, and producer-attributed managed
+  block summaries carried forward from `docs/evidence/...`.
+- The distributed Canon companion target is now aligned to Canon `0.50.0`,
+  while the Boundline release metadata advances to `0.51.1`.
+
 ### Delivered in 0.51.0
 
 - Boundline now reads Canon-promoted `docs/project/*.md` surfaces with adjacent
   packet metadata sidecars and derives the supporting `docs/evidence/...`
   locations needed for later reuse.
-- Project-memory compatibility is pinned to the Canon `0.1.x` contract line,
+- Project-memory compatibility is pinned to the Canon major-1 (`v1`) contract line,
   while pending or incomplete promotions remain visible without becoming
   authoritative planning input.
 - Compacted Canon memory and governed-stage input assembly now carry project-memory
   provenance forward, and the documented Canon companion target is updated to
-  `0.48.0`.
+  `0.50.0`.
 
 ### Delivered in 0.50.0
 

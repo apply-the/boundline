@@ -21,6 +21,8 @@ fn broad_unclear_idea_proposes_idea_to_code_path() {
         vec![
             ProjectScaleStageKind::Discovery,
             ProjectScaleStageKind::Requirements,
+            ProjectScaleStageKind::DomainLanguage,
+            ProjectScaleStageKind::DomainModel,
             ProjectScaleStageKind::SystemShaping,
             ProjectScaleStageKind::Architecture,
             ProjectScaleStageKind::Backlog,
@@ -126,6 +128,8 @@ fn operational_entry_dedupes_repeated_change_stage() {
 #[test]
 fn project_scale_stage_kind_text_covers_late_stage_variants() {
     let late_stage_text = [
+        (ProjectScaleStageKind::DomainLanguage, "domain-language"),
+        (ProjectScaleStageKind::DomainModel, "domain-model"),
         (ProjectScaleStageKind::Refactor, "refactor"),
         (ProjectScaleStageKind::Review, "review"),
         (ProjectScaleStageKind::Verification, "verification"),
