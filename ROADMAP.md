@@ -6,7 +6,7 @@ Canon is downstream from Boundline in this roadmap: Boundline thinks, decides, o
 
 Evolve Boundline into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.51.1
+## Current Status: v0.52.0
 
 Boundline now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -22,26 +22,25 @@ surface in place, with Canon-default governed setup, runtime selection, and
 assistant-surface alignment now carried through the same primary workflow. The
 operator entry path is now stack-neutral for empty, non-Rust, and mixed
 repositories, with a clearer first-run CLI UX. That baseline now extends into
-Canon-promoted project-memory reuse, so published `docs/project/*.md` surfaces
-and their supporting evidence can feed later planning and governed follow-through
-when the lineage is compatible and credible:
+Canon-promoted project-memory reuse, while the current `0.52.0` work tightens
+the local runtime substrate itself: Boundline now assembles one deterministic,
+inspectable context pack before planning, projects that bounded context through
+session-native runtime surfaces, and treats Canon capability or memory inputs as
+optional enrichment instead of hidden prerequisites.
 
-Current `0.51.1` work closes that same consumer slice with explicit
-project-memory hard stops for blocked governance, missing required approval,
-and missing required source artifacts, while also surfacing Canon compatibility
-state, Canon refs, and producer-attributed managed-block summaries from
-`docs/evidence/...` in the session-native inspection path.
+### Delivered in 0.52.0
 
-### Delivered in 0.51.1
-
-- Boundline now hard-stops on Canon project-memory states that are blocked by
-  governance, missing required approval, or missing required source artifacts
-  instead of collapsing them into generic stale-memory handling.
-- Session-native status, next, inspect, and run-trace surfaces now project
-  Canon compatibility state, Canon run refs, and producer-attributed managed
-  block summaries carried forward from `docs/evidence/...`.
-- The distributed Canon companion target is now aligned to Canon `0.50.0`,
-  while the Boundline release metadata advances to `0.51.1`.
+- Boundline now formalizes the local runtime substrate as the planning
+  precondition for deterministic context packs, explicit credibility states,
+  and inspectable provenance.
+- Session-native `status`, `next`, `inspect`, and run-trace surfaces now make
+  local-versus-Canon context selection inspectable, including source-labelled
+  provenance for bounded context inputs.
+- Canon remains optional enrichment, while the active compatibility and
+  distribution surfaces align the companion target to Canon `0.51.0` and keep
+  the Boundline release metadata on `0.52.0`.
+- The bundled model catalog was revalidated against current provider docs and
+  stayed release-aligned without adding new route families for this slice.
 
 ### Delivered in 0.51.0
 
@@ -584,6 +583,58 @@ next_command = true
 routing_summary = true
 execution_condition = true
 ```
+
+### Future research and extension specs
+
+The next forward-looking roadmap drafts now live in the repo-local `roadmap/`
+folder. The S1 foundation is already being tracked in active
+[`052-runtime-intelligence-substrate`](specs/052-runtime-intelligence-substrate/spec.md);
+the copied drafts below extend that baseline rather than replacing the current
+delivery line.
+
+- [S2: Domain Expert Packs And Runtime Role Composition](roadmap/S2%20-%20domain-expert-packs-and-runtime-role-selection-spec.md)
+  extends [`038-domain-agent-templates`](specs/038-domain-agent-templates/spec.md)
+  and active substrate work in
+  [`052-runtime-intelligence-substrate`](specs/052-runtime-intelligence-substrate/spec.md)
+  from bounded domain templates into installable expert packs, pack
+  resolution, and runtime role composition.
+- [S3: Authority-Zoned Delivery Roles, Personas, And Review Councils](roadmap/S3%20-%20authority-zoned-delivery-roles-and-review-councils-spec.md)
+  extends the bounded review-council baseline in
+  [`007-multi-agent-review`](specs/007-multi-agent-review/spec.md) and
+  [`047-catalog-voting-inputs`](specs/047-catalog-voting-inputs/spec.md)
+  into authority zones, personas, and admission-control posture.
+- [S4: Control Graduation And Adaptive Governance](roadmap/S4%20-%20control-graduation-and-adaptive-governance-spec.md)
+  extends adaptive execution and recovery depth from
+  [`008-adaptive-execution-engine`](specs/008-adaptive-execution-engine/spec.md),
+  [`021-adaptive-repair-depth`](specs/021-adaptive-repair-depth/spec.md), and
+  [`023-broaden-bounded-adaptive-repair`](specs/023-broaden-bounded-adaptive-repair/spec.md)
+  into calibrated governance progression, degradation, and control
+  graduation.
+- [S5: Advanced Context Intelligence](roadmap/S5%20-%20advanced-context-intelligence.md)
+  and
+  [S5.addendum: Advanced Context Intelligence Technology Evaluation](roadmap/S5.addendum%20-%20advanced-context-intelligence-technology-evaluation.md)
+  are not already covered by an active delivery slice; they build on
+  [`033-context-assembly-foundation`](specs/033-context-assembly-foundation/spec.md),
+  [`040-context-selection-hardening`](specs/040-context-selection-hardening/spec.md),
+  and [`052-runtime-intelligence-substrate`](specs/052-runtime-intelligence-substrate/spec.md)
+  with optional semantic retrieval, graph projection, and local-first index
+  technology evaluation.
+- [S6: Advanced Multi-Agent Reasoning Profiles](roadmap/S6%20-%20advanced-multi-agent-reasoning-profiles-spec.md)
+  is intentionally future-facing rather than already covered by the active
+  roadmap; it builds on the review-council baseline in
+  [`007-multi-agent-review`](specs/007-multi-agent-review/spec.md) after S3
+  and S4 make councils operationally credible.
+- [S7: Assistant Delight And Cognitive Affordance Layer](roadmap/S7%20-%20assistant-delight-and-cognitive-affordance-layer.md)
+  complements assistant/package and operator-surface work in
+  [`048-assistant-plugin-packages`](specs/048-assistant-plugin-packages/spec.md),
+  [`049-project-scale-delivery-ux`](specs/049-project-scale-delivery-ux/spec.md),
+  and [`051-delivery-control-consumer`](specs/051-delivery-control-consumer/spec.md),
+  but it is not duplicate scope.
+
+Coverage check: the delivered content already recorded in this roadmap is
+covered by the active spec set, not by these future drafts. The copied S2-S7
+documents mostly extend the current line; the strongest direct overlap is at
+the dependency and foundation level rather than as duplicate roadmap scope.
 
 ### Sequencing rule
 

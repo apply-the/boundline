@@ -1670,7 +1670,7 @@ mod tests {
             approval_state: ApprovalState::Requested,
             run_ref: Some("canon-run-1".to_string()),
             packet: None,
-            reason_code: None,
+            reason_code: Some("approval_pending".to_string()),
             message: "waiting for approval".to_string(),
         };
 
@@ -1705,6 +1705,101 @@ mod tests {
                 .events
                 .iter()
                 .any(|event| event.event_type == TraceEventType::GovernanceAwaitingApproval)
+        );
+        let approval_event = trace
+            .events
+            .iter()
+            .find(|event| event.event_type == TraceEventType::GovernanceAwaitingApproval)
+            .unwrap();
+        assert_eq!(approval_event.payload["canon_memory_compatibility"], json!("compatible"));
+        assert_eq!(approval_event.payload["canon_memory_reason_code"], json!("approval_pending"));
+        assert_eq!(approval_event.payload["canon_memory_run_ref"], json!("canon-run-1"));
+        assert!(approval_event.payload["canon_memory_packet_ref"].is_null());
+    }
+
+    #[test]
+    fn apply_governance_response_surfaces_canon_memory_for_rejected_canon_packets() {
+        let orchestrator = build_governed_orchestrator(true);
+        let mut task = build_governed_task();
+        let mut trace = ExecutionTrace::new("task-governed", "session-engine", "goal");
+        let step = task.plan.steps[0].clone();
+        let policy = build_governance_profile(true).stages[0].clone();
+        let decision = crate::domain::governance::AutopilotDecisionRecord {
+            decision_id: "decision-rejected-packet".to_string(),
+            stage_key: "bug-fix:investigate".to_string(),
+            candidate_actions: vec![crate::domain::governance::AutopilotAction::BlockStage],
+            candidate_modes: vec![CanonMode::Discovery],
+            selected_action: Some(crate::domain::governance::AutopilotAction::BlockStage),
+            selected_mode: Some(CanonMode::Discovery),
+            selected_target_stage_key: None,
+            rationale: "packet was rejected".to_string(),
+            blocked_reason: Some("packet rejected by governance".to_string()),
+        };
+        let response = crate::adapters::governance_runtime::GovernanceRuntimeResponse {
+            status: GovernanceLifecycleState::GovernedReady,
+            approval_state: ApprovalState::NotNeeded,
+            run_ref: Some("canon-run-2".to_string()),
+            packet: Some(crate::domain::governance::GovernedStagePacket {
+                packet_ref: ".canon/runs/canon-run-2".to_string(),
+                runtime: GovernanceRuntimeKind::Canon,
+                canon_mode: Some(CanonMode::Discovery),
+                expected_document_refs: vec![".canon/runs/canon-run-2/discovery.md".to_string()],
+                document_refs: vec![".canon/runs/canon-run-2/discovery.md".to_string()],
+                readiness: PacketReadiness::Rejected,
+                missing_sections: vec!["evidence".to_string()],
+                headline: "rejected discovery packet".to_string(),
+                reason_code: Some("packet_rejected".to_string()),
+            }),
+            reason_code: Some("packet_rejected".to_string()),
+            message: "canon packet rejected".to_string(),
+        };
+
+        let result = orchestrator
+            .apply_governance_response(
+                &mut task,
+                &mut trace,
+                &step,
+                "bug-fix:investigate".to_string(),
+                &policy,
+                GovernanceRuntimeKind::Canon,
+                "attempt-rejected".to_string(),
+                None,
+                Some(decision),
+                response,
+            )
+            .unwrap();
+
+        assert!(matches!(
+            result,
+            crate::orchestrator::governance::GovernanceStepDecision::Terminal(_)
+        ));
+        let packet_rejected_event = trace
+            .events
+            .iter()
+            .find(|event| event.event_type == TraceEventType::GovernancePacketRejected)
+            .unwrap();
+        assert_eq!(packet_rejected_event.payload["canon_memory_compatibility"], json!("warning"));
+        assert_eq!(
+            packet_rejected_event.payload["canon_memory_reason_code"],
+            json!("packet_rejected")
+        );
+        assert_eq!(packet_rejected_event.payload["canon_memory_run_ref"], json!("canon-run-2"));
+        assert_eq!(
+            packet_rejected_event.payload["canon_memory_packet_ref"],
+            json!(".canon/runs/canon-run-2")
+        );
+
+        let blocked_event = trace
+            .events
+            .iter()
+            .find(|event| event.event_type == TraceEventType::GovernanceBlocked)
+            .unwrap();
+        assert_eq!(blocked_event.payload["canon_memory_compatibility"], json!("warning"));
+        assert_eq!(blocked_event.payload["canon_memory_reason_code"], json!("packet_rejected"));
+        assert_eq!(blocked_event.payload["canon_memory_run_ref"], json!("canon-run-2"));
+        assert_eq!(
+            blocked_event.payload["canon_memory_packet_ref"],
+            json!(".canon/runs/canon-run-2")
         );
     }
 
@@ -1878,6 +1973,18 @@ mod tests {
                 .iter()
                 .any(|event| event.event_type == TraceEventType::GovernanceCompleted)
         );
+        let completed_event = trace
+            .events
+            .iter()
+            .find(|event| event.event_type == TraceEventType::GovernanceCompleted)
+            .unwrap();
+        assert_eq!(completed_event.payload["canon_memory_compatibility"], json!("compatible"));
+        assert_eq!(completed_event.payload["canon_memory_reason_code"], json!("packet_ready"));
+        assert_eq!(completed_event.payload["canon_memory_run_ref"], json!("canon-run-1"));
+        assert_eq!(
+            completed_event.payload["canon_memory_packet_ref"],
+            json!(".canon/runs/canon-run-1")
+        );
 
         fs::remove_dir_all(workspace).unwrap();
         fs::remove_dir_all(script.parent().unwrap()).unwrap();
@@ -1914,6 +2021,15 @@ mod tests {
             task.terminal_reason.as_ref().unwrap().condition,
             TerminalCondition::TaskNotCredible
         );
+        let blocked_event = trace
+            .events
+            .iter()
+            .find(|event| event.event_type == TraceEventType::GovernanceBlocked)
+            .unwrap();
+        assert_eq!(blocked_event.payload["canon_memory_compatibility"], json!("unsupported"));
+        assert_eq!(blocked_event.payload["canon_memory_reason_code"], json!("blocked_context"));
+        assert!(blocked_event.payload["canon_memory_run_ref"].is_null());
+        assert!(blocked_event.payload["canon_memory_packet_ref"].is_null());
     }
 
     #[test]

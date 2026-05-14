@@ -17,6 +17,28 @@ recorded workspace version.
 
 ## [Unreleased]
 
+## [0.52.0] - 2026-05-14
+
+Delivered specs:
+
+- `052` - Runtime Intelligence Substrate
+
+Highlights:
+
+- Formalize the local runtime substrate as the planning precondition for
+  deterministic context packs, explicit credibility states, and inspectable
+  substrate provenance.
+- Extend session-native status, next, inspect, and run-trace surfaces to
+  explain local-versus-Canon context selection with source-labelled
+  provenance.
+- Keep Canon enrichment optional while aligning active compatibility and
+  distribution surfaces to Canon `0.51.0`.
+- Revalidate the bundled model catalog against current provider docs and keep
+  the bundled catalog accurate at `0.52.0` without adding new route families
+  for this slice.
+- Bumped workspace version to `0.52.0` across crates, assistant plugin
+  metadata, and bundled catalog metadata.
+
 ## [0.51.1] - 2026-05-13
 
 Highlights:

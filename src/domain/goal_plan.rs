@@ -115,7 +115,15 @@ impl ContextInput {
     }
 
     pub fn provenance_line(&self) -> String {
-        format!("{}: {} ({})", self.kind.as_str(), self.reference, self.rationale)
+        // Keep the source label operator-visible so local scans and Canon
+        // enrichment remain distinguishable in runtime projections.
+        format!(
+            "{}: {} ({}) [source={}]",
+            self.kind.as_str(),
+            self.reference,
+            self.rationale,
+            self.source
+        )
     }
 }
 
@@ -972,5 +980,21 @@ mod tests {
         let flow_state = plan.flow_state();
         assert_eq!(flow_state.mode, super::GoalPlanFlowMode::Skipped);
         assert!(flow_state.flow_name.is_none());
+    }
+
+    #[test]
+    fn context_input_provenance_line_includes_source_label() {
+        let input = ContextInput {
+            kind: ContextInputKind::WorkspaceFile,
+            reference: "src/lib.rs".to_string(),
+            rationale: "failing test target".to_string(),
+            source: "workspace_signal, symbol_scan".to_string(),
+            primary: true,
+        };
+
+        assert_eq!(
+            input.provenance_line(),
+            "workspace_file: src/lib.rs (failing test target) [source=workspace_signal, symbol_scan]"
+        );
     }
 }

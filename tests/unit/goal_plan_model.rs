@@ -228,7 +228,10 @@ fn with_context_pack_sets_summary_and_primary_inputs() {
     assert_eq!(plan.context_primary_inputs(), vec!["src/lib.rs".to_string()]);
     assert_eq!(
         plan.context_provenance_lines(),
-        vec!["workspace_file: src/lib.rs (matches the goal keywords)".to_string()]
+        vec![
+            "workspace_file: src/lib.rs (matches the goal keywords) [source=workspace_scan]"
+                .to_string()
+        ]
     );
 }
 
@@ -329,7 +332,7 @@ fn context_input_and_flow_state_helpers_cover_remaining_goal_plan_branches() {
     };
     assert_eq!(
         input.provenance_line(),
-        "symbol_hint: src/lib.rs::add (matches the failing test evidence)"
+        "symbol_hint: src/lib.rs::add (matches the failing test evidence) [source=workspace_scan]"
     );
 
     let context_pack = ContextPack {

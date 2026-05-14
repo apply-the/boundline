@@ -420,7 +420,9 @@ fn goal_plan_created_trace_event_includes_context_projection() {
     assert_eq!(payload.get("context_primary_inputs"), Some(&json!(["src/lib.rs"])));
     assert_eq!(
         payload.get("context_provenance"),
-        Some(&json!(["workspace_file: src/lib.rs (contains the failing arithmetic path)"]))
+        Some(&json!([
+            "workspace_file: src/lib.rs (contains the failing arithmetic path) [source=workspace_scan]"
+        ]))
     );
 }
 

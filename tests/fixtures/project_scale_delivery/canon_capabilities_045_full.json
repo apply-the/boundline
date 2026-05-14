@@ -1,5 +1,5 @@
 {
-  "canon_version": "0.50.0",
+  "canon_version": "0.51.0",
   "supported_schema_versions": ["2026-02-01"],
   "operations": ["start", "refresh", "capabilities"],
   "supported_modes": [
@@ -23,5 +23,5 @@
   "status_values": ["pending_selection", "running", "governed_ready", "awaiting_approval", "blocked", "incomplete", "completed", "failed"],
   "approval_state_values": ["not_needed", "requested", "granted", "rejected", "expired"],
   "packet_readiness_values": ["pending", "incomplete", "reusable", "rejected"],
-  "compatibility_notes": ["stable-json", "boundline-0.50.0"]
+  "compatibility_notes": ["stable-json", "boundline-0.52.0"]
 }
