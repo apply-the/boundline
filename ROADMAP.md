@@ -6,7 +6,7 @@ Canon is downstream from Boundline in this roadmap: Boundline thinks, decides, o
 
 Evolve Boundline into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.52.0
+## Current Status: v0.53.0
 
 Boundline now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -22,11 +22,23 @@ surface in place, with Canon-default governed setup, runtime selection, and
 assistant-surface alignment now carried through the same primary workflow. The
 operator entry path is now stack-neutral for empty, non-Rust, and mixed
 repositories, with a clearer first-run CLI UX. That baseline now extends into
-Canon-promoted project-memory reuse, while the current `0.52.0` work tightens
-the local runtime substrate itself: Boundline now assembles one deterministic,
-inspectable context pack before planning, projects that bounded context through
-session-native runtime surfaces, and treats Canon capability or memory inputs as
-optional enrichment instead of hidden prerequisites.
+Canon-promoted project-memory reuse, while the current `0.53.0` work makes
+expert-pack selection explicit before planning: Boundline now records
+deterministic selected and rejected expert-pack candidates, suggested runtime
+roles, and Canon expertise-input provenance without giving Canon ownership of
+runtime choice.
+
+### Delivered in 0.53.0
+
+- Boundline now computes one deterministic built-in expert-pack selection
+  outcome before planning continues and persists the selected packs,
+  rejected candidates, and supporting signals in the goal plan.
+- Session-native `status`, `next`, and `inspect` surfaces now expose
+  expert-pack selection summaries, suggested runtime roles, and the boundary
+  between local evidence and optional Canon expertise input.
+- Canon remains supporting evidence only for this slice, while the active
+  compatibility and distribution surfaces align the companion target to Canon
+  `0.52.0` and keep the Boundline release metadata on `0.53.0`.
 
 ### Delivered in 0.52.0
 

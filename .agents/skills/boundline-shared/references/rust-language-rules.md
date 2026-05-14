@@ -21,6 +21,28 @@ and AI-authored changes.
 - `#[cfg(test)]` code and files under `tests/` may use panicking helpers
   freely.
 
+## No Magic Literals In Owned Logic
+
+- In Rust code outside `main.rs`, `#[cfg(test)]` modules, and files under
+  `tests/`, do not introduce magic strings or magic numbers in domain logic,
+  protocol handling, persistence, configuration, CLI contracts, or
+  serialization paths.
+- Promote reusable literals, wire-format keys, status strings, exit codes,
+  schema versions, filenames, and sentinel numeric values into named `const`
+  items or typed enums/newtypes scoped to the owning module or type.
+- Prefer typed wrappers or enums when the literal represents a constrained
+  domain value rather than a generic scalar.
+
+## Typed Serialization For Stable Shapes
+
+- When a serialized or deserialized shape is stable, model it with typed
+  `struct` or `enum` definitions plus `serde` derives rather than assembling
+  `serde_json::Map`, relying on repeated raw key strings, or constructing
+  stable payloads with ad hoc `json!` objects.
+- Use map- or value-oriented assembly only when the payload shape is genuinely
+  dynamic or partially open-ended, and keep the dynamic boundary explicit in
+  the owning type or function.
+
 ## Allowed Non-Panicking Helpers
 
 - This rule does not ban non-panicking combinators such as
@@ -31,3 +53,6 @@ and AI-authored changes.
 
 - Reviewers and implementers should treat newly introduced panic-prone calls
   outside `main.rs` and test code as policy violations.
+- Reviewers and implementers should treat newly introduced magic literals or
+  stable-shape ad hoc map/json serialization outside `main.rs` and test code
+  as policy violations.

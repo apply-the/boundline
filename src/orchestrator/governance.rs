@@ -12,7 +12,7 @@ use crate::domain::governance::{
     CanonMode, CanonPossibleActionSummary, CanonRecommendedActionSummary, CompactedCanonMemory,
     GovernanceLifecycleState, GovernanceProfile, GovernanceRuntimeKind, GovernedStagePacket,
     GovernedStageRecord, MemoryCredibilityState, PacketReadiness, PacketReuseBinding,
-    StageGovernancePolicy, candidate_canon_modes, resolved_canon_mode,
+    PacketReuseBindingReason, StageGovernancePolicy, candidate_canon_modes, resolved_canon_mode,
     supported_canon_modes_for_stage,
 };
 use crate::domain::task_context::{
@@ -20,6 +20,14 @@ use crate::domain::task_context::{
     LATEST_GOVERNANCE_PACKET_KEY, LATEST_GOVERNANCE_PACKET_REUSE_KEY, LATEST_GOVERNANCE_STAGE_KEY,
     TaskContext, TaskContextError,
 };
+
+const GOVERNANCE_DOCUMENT_KIND_AUTHORED_BRIEF: &str = "authored-brief";
+const GOVERNANCE_DOCUMENT_KIND_CLARIFICATION_ANSWER: &str = "clarification-answer";
+const GOVERNANCE_DOCUMENT_KIND_PROJECT_MEMORY_EVIDENCE: &str = "project-memory-evidence";
+const GOVERNANCE_DOCUMENT_KIND_PROJECT_MEMORY_SURFACE: &str = "project-memory-surface";
+const GOVERNANCE_DOCUMENT_KIND_STAGE_BRIEF: &str = "stage-brief";
+const GOVERNANCE_STAGE_IMPLEMENT: &str = "implement";
+const GOVERNANCE_STAGE_VERIFY: &str = "verify";
 
 pub fn governance_stage_key(flow_name: &str, stage_id: &str) -> String {
     format!("{}:{}", flow_name, stage_id)
@@ -92,10 +100,10 @@ pub fn governance_input_documents(
                 continue;
             };
             let kind = if stage_brief_assigned {
-                "authored-brief"
+                GOVERNANCE_DOCUMENT_KIND_AUTHORED_BRIEF
             } else {
                 stage_brief_assigned = true;
-                "stage-brief"
+                GOVERNANCE_DOCUMENT_KIND_STAGE_BRIEF
             };
             documents.push(GovernanceInputDocument { kind: kind.to_string(), path });
         }
@@ -107,7 +115,7 @@ pub fn governance_input_documents(
             .filter(|c| c.status == crate::domain::task::ClarificationStatus::Answered)
         {
             documents.push(GovernanceInputDocument {
-                kind: "clarification-answer".to_string(),
+                kind: GOVERNANCE_DOCUMENT_KIND_CLARIFICATION_ANSWER.to_string(),
                 path: format!("clarification-{}", clarification.clarification_id),
             });
         }
@@ -135,9 +143,9 @@ fn append_project_memory_input_documents(
 
     for path in provenance_links {
         let kind = if path.starts_with("docs/project/") {
-            "project-memory-surface"
+            GOVERNANCE_DOCUMENT_KIND_PROJECT_MEMORY_SURFACE
         } else if path.starts_with("docs/evidence/") {
-            "project-memory-evidence"
+            GOVERNANCE_DOCUMENT_KIND_PROJECT_MEMORY_EVIDENCE
         } else {
             continue;
         };
@@ -176,7 +184,7 @@ pub fn select_packet_reuse_binding(
             upstream_stage_key: stage_record.stage_key,
             downstream_stage_key,
             packet_ref: packet.packet_ref,
-            binding_reason: "same_stage_rerun".to_string(),
+            binding_reason: PacketReuseBindingReason::SameStageRerun,
         }));
     }
 
@@ -198,7 +206,7 @@ pub fn select_packet_reuse_binding(
         upstream_stage_key,
         downstream_stage_key,
         packet_ref: packet.packet_ref,
-        binding_reason: "upstream_stage_context".to_string(),
+        binding_reason: PacketReuseBindingReason::UpstreamStageContext,
     }))
 }
 
@@ -463,9 +471,9 @@ pub fn build_autopilot_decision(
         candidate_actions.push(AutopilotAction::RetryStageWithNarrowedContext);
     }
     if candidate_modes.is_empty() && !approval_requested {
-        if metadata.stage_id == "implement" {
+        if metadata.stage_id == GOVERNANCE_STAGE_IMPLEMENT {
             candidate_actions.push(AutopilotAction::EscalateVerification);
-        } else if metadata.stage_id == "verify"
+        } else if metadata.stage_id == GOVERNANCE_STAGE_VERIFY
             && supports_pr_review
             && resolved_mode != Some(CanonMode::PrReview)
         {
@@ -498,7 +506,7 @@ pub fn build_autopilot_decision(
                 format!("autopilot narrowed the bounded context for {stage_key}"),
                 None,
             )
-        } else if metadata.stage_id == "implement" {
+        } else if metadata.stage_id == GOVERNANCE_STAGE_IMPLEMENT {
             let target =
                 escalation_target_stage_key(metadata, AutopilotAction::EscalateVerification);
             (
@@ -508,7 +516,7 @@ pub fn build_autopilot_decision(
                 format!("autopilot escalated {stage_key} toward verification governance"),
                 None,
             )
-        } else if metadata.stage_id == "verify"
+        } else if metadata.stage_id == GOVERNANCE_STAGE_VERIFY
             && supports_pr_review
             && resolved_mode != Some(CanonMode::PrReview)
         {

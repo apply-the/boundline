@@ -711,8 +711,9 @@ mod tests {
 
     #[test]
     fn parse_canon_capabilities_reads_supported_surface() {
-        let stdout = br#"{
-            "canon_version": "0.51.0",
+        let stdout = format!(
+            r#"{{
+            "canon_version": "{}",
             "supported_schema_versions": ["2026-02-01"],
             "operations": ["start", "refresh", "capabilities"],
             "supported_modes": ["discovery", "verification", "pr-review"],
@@ -720,11 +721,13 @@ mod tests {
             "approval_state_values": ["not_needed", "requested", "granted", "rejected", "expired"],
             "packet_readiness_values": ["pending", "incomplete", "reusable", "rejected"],
             "compatibility_notes": ["stable-json", "mode-summary-separate"]
-        }"#;
+        }}"#,
+            crate::domain::distribution::SUPPORTED_CANON_VERSION
+        );
 
-        let snapshot = parse_canon_capabilities(stdout).unwrap();
+        let snapshot = parse_canon_capabilities(stdout.as_bytes()).unwrap();
 
-        assert_eq!(snapshot.canon_version, "0.51.0");
+        assert_eq!(snapshot.canon_version, crate::domain::distribution::SUPPORTED_CANON_VERSION);
         assert_eq!(snapshot.supported_modes.len(), 3);
         assert!(snapshot.compatibility_notes.contains(&"stable-json".to_string()));
     }
@@ -747,14 +750,17 @@ mod tests {
         let workspace = temp_workspace("canon-capabilities-runtime");
         let script = write_shell_script(
             "canon-capabilities-command",
-            "#!/bin/sh\nprintf '%s' '{\"canon_version\":\"0.51.0\",\"supported_schema_versions\":[\"2026-02-01\"],\"operations\":[\"start\",\"refresh\",\"capabilities\"],\"supported_modes\":[\"verification\"],\"status_values\":[\"governed_ready\"],\"approval_state_values\":[\"not_needed\"],\"packet_readiness_values\":[\"reusable\"],\"compatibility_notes\":[\"stable-json\"]}'\n",
+            &format!(
+                "#!/bin/sh\nprintf '%s' '{{\"canon_version\":\"{}\",\"supported_schema_versions\":[\"2026-02-01\"],\"operations\":[\"start\",\"refresh\",\"capabilities\"],\"supported_modes\":[\"verification\"],\"status_values\":[\"governed_ready\"],\"approval_state_values\":[\"not_needed\"],\"packet_readiness_values\":[\"reusable\"],\"compatibility_notes\":[\"stable-json\"]}}'\n",
+                crate::domain::distribution::SUPPORTED_CANON_VERSION
+            ),
         );
 
         let snapshot = query_canon_capabilities(script.to_string_lossy().as_ref(), &workspace)
             .unwrap()
             .expect("snapshot should be parsed");
 
-        assert_eq!(snapshot.canon_version, "0.51.0");
+        assert_eq!(snapshot.canon_version, crate::domain::distribution::SUPPORTED_CANON_VERSION);
         assert_eq!(snapshot.operations, vec!["start", "refresh", "capabilities"]);
 
         fs::remove_dir_all(workspace).unwrap();
@@ -767,7 +773,10 @@ mod tests {
         let workspace = temp_workspace("canon-capabilities-runtime-shell-fallback");
         let script = write_shell_script(
             "canon-capabilities-command-shell-fallback",
-            "#!/bin/sh\nprintf '%s' '{\"canon_version\":\"0.51.0\",\"supported_schema_versions\":[\"2026-02-01\"],\"operations\":[\"start\",\"refresh\",\"capabilities\"],\"supported_modes\":[\"verification\"],\"status_values\":[\"governed_ready\"],\"approval_state_values\":[\"not_needed\"],\"packet_readiness_values\":[\"reusable\"],\"compatibility_notes\":[\"stable-json\"]}'\n",
+            &format!(
+                "#!/bin/sh\nprintf '%s' '{{\"canon_version\":\"{}\",\"supported_schema_versions\":[\"2026-02-01\"],\"operations\":[\"start\",\"refresh\",\"capabilities\"],\"supported_modes\":[\"verification\"],\"status_values\":[\"governed_ready\"],\"approval_state_values\":[\"not_needed\"],\"packet_readiness_values\":[\"reusable\"],\"compatibility_notes\":[\"stable-json\"]}}'\n",
+                crate::domain::distribution::SUPPORTED_CANON_VERSION
+            ),
         );
         let mut permissions = fs::metadata(&script).unwrap().permissions();
         permissions.set_mode(0o644);
@@ -777,7 +786,7 @@ mod tests {
             .unwrap()
             .expect("snapshot should be parsed via shell fallback");
 
-        assert_eq!(snapshot.canon_version, "0.51.0");
+        assert_eq!(snapshot.canon_version, crate::domain::distribution::SUPPORTED_CANON_VERSION);
         assert_eq!(snapshot.operations, vec!["start", "refresh", "capabilities"]);
 
         fs::remove_dir_all(workspace).unwrap();

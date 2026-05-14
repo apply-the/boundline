@@ -2097,7 +2097,8 @@ pub fn task_state_governance_packet_source_stage(task: &Task) -> Option<String> 
 }
 
 pub fn task_state_governance_packet_binding_reason(task: &Task) -> Option<String> {
-    task_state_governance_packet_reuse(task).map(|binding| binding.binding_reason)
+    task_state_governance_packet_reuse(task)
+        .map(|binding| binding.binding_reason.as_str().to_string())
 }
 
 pub fn governance_packet_provenance_text(
@@ -2535,7 +2536,8 @@ mod tests {
                 upstream_stage_key: "bug-fix:investigate".to_string(),
                 downstream_stage_key: "bug-fix:implement".to_string(),
                 packet_ref: ".canon/runs/canon-run-1".to_string(),
-                binding_reason: "upstream_stage_context".to_string(),
+                binding_reason:
+                    crate::domain::governance::PacketReuseBindingReason::UpstreamStageContext,
             })
             .unwrap();
         task.context

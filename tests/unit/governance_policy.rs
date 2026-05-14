@@ -4,7 +4,7 @@ use boundline::domain::brief::AuthoredBriefResolutionState;
 use boundline::domain::flow::FlowStepMetadata;
 use boundline::domain::governance::{
     CanonCapabilitySnapshot, CanonModeSummary, CanonResultActionSummary, CompactedCanonMemory,
-    MemoryCredibilityState,
+    MemoryCredibilityState, PacketReuseBindingReason,
 };
 use boundline::domain::limits::RunLimits;
 use boundline::domain::task_context::TaskContext;
@@ -20,10 +20,11 @@ use boundline::{
     CanonRuntimeConfig, GovernanceBoundedContext, GovernanceIntent, GovernanceLifecycleState,
     GovernanceProfile, GovernanceRuntimeKind, GovernedStagePacket, GovernedStageRecord,
     InputSourceKind, InputSourceReference, PacketReadiness, PacketReuseBinding,
-    StageGovernancePolicy, SystemContextBinding, autopilot_action_text, bounded_reused_packets,
-    build_autopilot_decision, classify_packet_readiness, escalation_target_stage_key,
-    governance_stage_key, governance_state_patch, narrowed_bounded_context,
-    select_packet_reuse_binding, selected_stage_policy, supported_canon_modes_for_stage,
+    SUPPORTED_CANON_VERSION, StageGovernancePolicy, SystemContextBinding, autopilot_action_text,
+    bounded_reused_packets, build_autopilot_decision, classify_packet_readiness,
+    escalation_target_stage_key, governance_stage_key, governance_state_patch,
+    narrowed_bounded_context, select_packet_reuse_binding, selected_stage_policy,
+    supported_canon_modes_for_stage,
 };
 use serde_json::json;
 
@@ -207,7 +208,7 @@ fn governance_input_documents_uses_first_workspace_doc_as_stage_brief() {
 #[test]
 fn canon_helper_summaries_render_expected_text() {
     let snapshot = CanonCapabilitySnapshot {
-        canon_version: "0.51.0".to_string(),
+        canon_version: SUPPORTED_CANON_VERSION.to_string(),
         supported_schema_versions: vec!["2026-02-01".to_string()],
         operations: vec!["start".to_string(), "refresh".to_string()],
         supported_modes: vec![CanonMode::Discovery],
@@ -243,7 +244,10 @@ fn canon_helper_summaries_render_expected_text() {
         evidence_summary: None,
     };
 
-    assert_eq!(snapshot.summary_text(), "Canon 0.51.0 capabilities available");
+    assert_eq!(
+        snapshot.summary_text(),
+        format!("Canon {SUPPORTED_CANON_VERSION} capabilities available")
+    );
     assert!(mode_summary.summary_text().contains("execution posture: recommendation-only"));
     assert!(memory.summary_text().contains("Canon verification packet is still credible"));
     assert_eq!(MemoryCredibilityState::Stale.as_str(), "stale");
@@ -281,7 +285,7 @@ fn governance_state_patch_writes_all_present_entries() {
         upstream_stage_key: "bug-fix:investigate".to_string(),
         downstream_stage_key: "bug-fix:implement".to_string(),
         packet_ref: packet.packet_ref.clone(),
-        binding_reason: "immediate upstream governance packet".to_string(),
+        binding_reason: PacketReuseBindingReason::UpstreamStageContext,
     };
     let decision = AutopilotDecisionRecord {
         decision_id: "decision-1".to_string(),
@@ -300,7 +304,10 @@ fn governance_state_patch_writes_all_present_entries() {
 
     assert_eq!(patch[LATEST_GOVERNANCE_STAGE_KEY]["stage_key"], "bug-fix:investigate");
     assert_eq!(patch[LATEST_GOVERNANCE_PACKET_KEY]["packet_ref"], packet.packet_ref);
-    assert_eq!(patch[LATEST_GOVERNANCE_PACKET_REUSE_KEY]["binding_reason"], reuse.binding_reason);
+    assert_eq!(
+        patch[LATEST_GOVERNANCE_PACKET_REUSE_KEY]["binding_reason"],
+        serde_json::json!(reuse.binding_reason)
+    );
     assert_eq!(patch[LATEST_GOVERNANCE_DECISION_KEY]["decision_id"], "decision-1");
 }
 
@@ -717,7 +724,7 @@ fn governance_reuse_binding_uses_immediate_upstream_stage_context() {
 
     assert_eq!(binding.upstream_stage_key, "bug-fix:investigate");
     assert_eq!(binding.downstream_stage_key, "bug-fix:implement");
-    assert_eq!(binding.binding_reason, "upstream_stage_context");
+    assert_eq!(binding.binding_reason, PacketReuseBindingReason::UpstreamStageContext);
     assert_eq!(reused_packets.len(), 1);
     assert_eq!(reused_packets[0].stage_key, "bug-fix:investigate");
     assert_eq!(reused_packets[0].packet_ref, ".canon/runs/canon-run-1");
@@ -770,7 +777,7 @@ fn governance_reuse_binding_supports_same_stage_rerun() {
     let binding =
         select_packet_reuse_binding(&context, &metadata).unwrap().expect("binding should exist");
 
-    assert_eq!(binding.binding_reason, "same_stage_rerun");
+    assert_eq!(binding.binding_reason, PacketReuseBindingReason::SameStageRerun);
     assert_eq!(binding.upstream_stage_key, "bug-fix:implement");
 }
 

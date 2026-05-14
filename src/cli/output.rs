@@ -28,6 +28,18 @@ use crate::domain::step::{StepKind, StepStatus};
 use crate::domain::task::{TaskRunResponse, TaskStatus};
 use crate::domain::trace::{ExecutionTrace, TraceEventType, TraceSummaryView};
 
+const KEY_FAILURE_REASON: &str = "failure_reason";
+const KEY_FINDING: &str = "finding";
+const KEY_REASON: &str = "reason";
+const KEY_REVIEW_OUTCOME: &str = "review_outcome";
+const KEY_REVIEW_TRIGGER: &str = "review_trigger";
+const KEY_REVIEWER_ID: &str = "reviewer_id";
+const KEY_REVIEWER_ROLE: &str = "reviewer_role";
+const KEY_STAGE_ID: &str = "stage_id";
+const KEY_SUMMARY: &str = "summary";
+const KEY_VOTE_RESOLUTION: &str = "vote_resolution";
+const UNKNOWN_STAGE_ID: &str = "unknown-stage";
+
 fn checkpoint_projection_from_state(
     state: &serde_json::Map<String, Value>,
 ) -> (Option<String>, Option<String>, Option<String>) {
@@ -790,12 +802,12 @@ pub fn render_run_trace(
                 TraceEventType::StageFailed => {
                     let stage_id = event
                         .payload
-                        .get("stage_id")
+                        .get(KEY_STAGE_ID)
                         .and_then(Value::as_str)
-                        .unwrap_or("unknown-stage");
+                        .unwrap_or(UNKNOWN_STAGE_ID);
                     let reason = event
                         .payload
-                        .get("reason")
+                        .get(KEY_REASON)
                         .and_then(Value::as_str)
                         .unwrap_or("stage failed");
                     lines.push(format!("stage {stage_id} failed: {reason}"));
@@ -1614,6 +1626,8 @@ fn value_as_string_list(value: &Value) -> Option<Vec<String>> {
     })
 }
 
+const UNKNOWN_VALIDATION_EXIT_CODE: i64 = -1;
+
 fn validation_line_from_event(payload: &Value) -> Option<String> {
     let validation =
         payload.get("output").and_then(|output| output.get("validation")).or_else(|| {
@@ -1621,7 +1635,8 @@ fn validation_line_from_event(payload: &Value) -> Option<String> {
         })?;
     let command = validation.get("command").and_then(Value::as_str).unwrap_or("validation");
     let succeeded = validation.get("succeeded").and_then(Value::as_bool).unwrap_or(false);
-    let exit_code = validation.get("exit_code").and_then(Value::as_i64).unwrap_or(-1);
+    let exit_code =
+        validation.get("exit_code").and_then(Value::as_i64).unwrap_or(UNKNOWN_VALIDATION_EXIT_CODE);
     Some(format!(
         "validation: {} ({command}, exit_code={exit_code})",
         if succeeded { "passed" } else { "failed" }
@@ -1631,20 +1646,20 @@ fn validation_line_from_event(payload: &Value) -> Option<String> {
 fn review_event_line(event_type: TraceEventType, payload: &Value) -> Option<String> {
     match event_type {
         TraceEventType::ReviewStarted => payload
-            .get("review_trigger")
+            .get(KEY_REVIEW_TRIGGER)
             .and_then(Value::as_str)
             .map(|trigger| format!("review_trigger: {trigger}")),
         TraceEventType::ReviewTriggerIgnored => payload
-            .get("review_trigger")
+            .get(KEY_REVIEW_TRIGGER)
             .and_then(Value::as_str)
             .map(|trigger| format!("review_trigger_ignored: {trigger}")),
         TraceEventType::ReviewerCompleted => reviewer_event_line(payload),
         TraceEventType::ReviewVoteResolved => payload
-            .get("summary")
+            .get(KEY_SUMMARY)
             .and_then(Value::as_str)
             .map(|summary| format!("review_vote: {summary}"))
             .or_else(|| {
-                payload.get("vote_resolution").map(|resolution| {
+                payload.get(KEY_VOTE_RESOLUTION).map(|resolution| {
                     format!(
                         "review_vote: {}",
                         serde_json::to_string(resolution).unwrap_or_default()
@@ -1655,12 +1670,12 @@ fn review_event_line(event_type: TraceEventType, payload: &Value) -> Option<Stri
             reviewer_event_line(payload).map(|line| format!("review_adjudication: {line}"))
         }
         TraceEventType::ReviewTerminalRecorded => payload
-            .get("review_outcome")
+            .get(KEY_REVIEW_OUTCOME)
             .and_then(Value::as_str)
             .map(|outcome| format!("review_outcome: {outcome}"))
             .or_else(|| {
                 payload
-                    .get("failure_reason")
+                    .get(KEY_FAILURE_REASON)
                     .and_then(Value::as_str)
                     .map(|reason| format!("review_reason: {reason}"))
             }),
@@ -1745,12 +1760,12 @@ pub(crate) fn governance_packet_provenance_suffix(payload: &Value) -> String {
 }
 
 fn reviewer_event_line(payload: &Value) -> Option<String> {
-    let reviewer_id = payload.get("reviewer_id").and_then(Value::as_str)?;
+    let reviewer_id = payload.get(KEY_REVIEWER_ID).and_then(Value::as_str)?;
 
-    if let Some(finding) = payload.get("finding") {
+    if let Some(finding) = payload.get(KEY_FINDING) {
         let disposition = finding.get("disposition").and_then(Value::as_str).unwrap_or("unknown");
         let summary = finding.get("summary").and_then(Value::as_str).unwrap_or("review finding");
-        let role = payload.get("reviewer_role").and_then(Value::as_str);
+        let role = payload.get(KEY_REVIEWER_ROLE).and_then(Value::as_str);
         return Some(match role {
             Some(role) => format!("reviewer {reviewer_id} ({role}) {disposition}: {summary}"),
             None => format!("reviewer {reviewer_id} {disposition}: {summary}"),
@@ -1758,7 +1773,7 @@ fn reviewer_event_line(payload: &Value) -> Option<String> {
     }
 
     payload
-        .get("failure_reason")
+        .get(KEY_FAILURE_REASON)
         .and_then(Value::as_str)
         .map(|reason| format!("reviewer {reviewer_id} failed: {reason}"))
 }

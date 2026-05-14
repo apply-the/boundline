@@ -1011,7 +1011,29 @@ pub struct PacketReuseBinding {
     pub upstream_stage_key: String,
     pub downstream_stage_key: String,
     pub packet_ref: String,
-    pub binding_reason: String,
+    pub binding_reason: PacketReuseBindingReason,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PacketReuseBindingReason {
+    SameStageRerun,
+    UpstreamStageContext,
+}
+
+impl PacketReuseBindingReason {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::SameStageRerun => "same_stage_rerun",
+            Self::UpstreamStageContext => "upstream_stage_context",
+        }
+    }
+}
+
+impl std::fmt::Display for PacketReuseBindingReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1181,7 +1203,7 @@ mod tests {
     #[test]
     fn capability_snapshot_validation_and_summary_cover_success_and_failure_paths() {
         let snapshot = CanonCapabilitySnapshot {
-            canon_version: "0.51.0".to_string(),
+            canon_version: crate::domain::distribution::SUPPORTED_CANON_VERSION.to_string(),
             supported_schema_versions: vec!["2026-02-01".to_string()],
             operations: vec!["capabilities".to_string(), "start".to_string()],
             supported_modes: vec![CanonMode::Change, CanonMode::PrReview],
@@ -1191,7 +1213,13 @@ mod tests {
             compatibility_notes: Vec::new(),
         };
 
-        assert_eq!(snapshot.summary_text(), "Canon 0.51.0 capabilities available");
+        assert_eq!(
+            snapshot.summary_text(),
+            format!(
+                "Canon {} capabilities available",
+                crate::domain::distribution::SUPPORTED_CANON_VERSION
+            )
+        );
         assert_eq!(
             CanonCapabilitySnapshot {
                 canon_version: String::new(),
@@ -1219,5 +1247,19 @@ mod tests {
         )
         .unwrap_err();
         assert!(missing_operation.contains("missing `capabilities` operation"));
+    }
+
+    #[test]
+    fn packet_reuse_binding_reason_text_is_stable() {
+        assert_eq!(PacketReuseBindingReason::SameStageRerun.as_str(), "same_stage_rerun");
+        assert_eq!(
+            PacketReuseBindingReason::UpstreamStageContext.as_str(),
+            "upstream_stage_context"
+        );
+        assert_eq!(PacketReuseBindingReason::SameStageRerun.to_string(), "same_stage_rerun");
+        assert_eq!(
+            PacketReuseBindingReason::UpstreamStageContext.to_string(),
+            "upstream_stage_context"
+        );
     }
 }
