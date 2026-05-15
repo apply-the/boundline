@@ -1,0 +1,20 @@
+[guidance.language-best-practices]
+title = "Python Language Guidance"
+applies_to = ["planning", "implementation", "verification", "review"]
+roles = ["planner", "implementer", "verifier", "reviewer"]
+path = "../guidance/language-python.md"
+priority = "high"
+
+[guidance.framework-best-practices]
+title = "Python Service Framework Guidance"
+applies_to = ["planning", "implementation", "verification", "review"]
+roles = ["planner", "implementer", "verifier", "reviewer"]
+path = "../guidance/framework-python-services.md"
+priority = "high"
+
+[guidance.testing-best-practices]
+title = "Python Testing Guidance"
+applies_to = ["planning", "testing", "verification", "review"]
+roles = ["planner", "verifier", "reviewer"]
+path = "../guidance/testing-python.md"
+priority = "high"

@@ -174,3 +174,15 @@ mod governed_stage_depth_workflow;
 
 #[path = "integration/canon_default_governance_flow.rs"]
 mod canon_default_governance_flow;
+
+#[path = "integration/cli_guidance_resolution.rs"]
+mod cli_guidance_resolution;
+
+#[path = "integration/cli_guardian_findings.rs"]
+mod cli_guardian_findings;
+
+#[path = "integration/cli_guardian_routing.rs"]
+mod cli_guardian_routing;
+
+#[path = "integration/cli_guidance_guardian_projection.rs"]
+mod cli_guidance_guardian_projection;

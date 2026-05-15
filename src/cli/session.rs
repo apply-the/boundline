@@ -1,3 +1,5 @@
+//! Session-native CLI command handlers and status/report projection helpers.
+
 use std::path::{Path, PathBuf};
 
 use crate::adapters::cluster_store::{ClusterStoreError, FileClusterStore};
@@ -17,6 +19,7 @@ use crate::cli::output;
 use crate::domain::cluster::ClusterSessionProjection;
 use crate::domain::decision::ActionSelector;
 use crate::domain::governance::GovernanceRuntimeKind;
+use crate::domain::guidance::GuidanceGuardianProjection;
 use crate::domain::negotiation::NegotiatedDeliveryPacket;
 use crate::domain::session::{
     ActiveSessionRecord, CompatibilityFollowUpMode, CompatibilityFollowUpView, ContinuityAuthority,
@@ -38,6 +41,7 @@ use crate::domain::task::TaskStatus;
 use crate::domain::trace::{TraceSummaryView, current_timestamp_millis};
 use crate::orchestrator::session_runtime::{SessionRuntime, SessionRuntimeError};
 
+/// Result returned by session-native CLI commands.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SessionCommandReport {
     pub exit_status: CommandExitStatus,
@@ -51,8 +55,22 @@ fn report_with_session_status(
     exit_status: CommandExitStatus,
     view: SessionStatusView,
 ) -> SessionCommandReport {
+    report_with_session_guidance(exit_status, view, None)
+}
+
+fn report_with_session_guidance(
+    exit_status: CommandExitStatus,
+    view: SessionStatusView,
+    guidance_guardian: Option<&GuidanceGuardianProjection>,
+) -> SessionCommandReport {
     let trace_location = view.latest_trace_ref.clone();
-    let terminal_output = output::render_session_status(&view);
+    let mut terminal_output = output::render_session_status(&view);
+    let guidance_lines =
+        guidance_guardian.map(output::render_guidance_projection_lines).unwrap_or_default();
+    if !guidance_lines.is_empty() {
+        terminal_output.push('\n');
+        terminal_output.push_str(&guidance_lines.join("\n"));
+    }
     SessionCommandReport {
         exit_status,
         terminal_output,
@@ -96,12 +114,14 @@ struct ResolvedSessionTarget {
     cluster_projection: Option<ClusterSessionProjection>,
 }
 
+/// Starts a new active session for the current or requested workspace.
 pub fn execute_start(
     workspace: Option<&Path>,
 ) -> Result<SessionCommandReport, SessionCommandError> {
     execute_start_with_target(workspace, None)
 }
 
+/// Starts a new active session for an explicit workspace or cluster target.
 pub fn execute_start_with_target(
     workspace: Option<&Path>,
     cluster: Option<&Path>,
@@ -146,6 +166,7 @@ pub fn execute_start_with_target(
     Ok(report_with_session_status(CommandExitStatus::Succeeded, view))
 }
 
+/// Captures a goal and optional authored briefs into the active session.
 pub fn execute_capture(
     workspace: Option<&Path>,
     goal: Option<&str>,
@@ -158,6 +179,7 @@ pub fn execute_capture(
     execute_capture_with_target(workspace, None, goal, briefs, governance, risk, zone, owner)
 }
 
+/// Captures a goal and optional authored briefs into an explicit workspace or cluster target.
 #[allow(clippy::too_many_arguments)]
 pub fn execute_capture_with_target(
     workspace: Option<&Path>,
@@ -215,6 +237,7 @@ pub fn execute_capture_with_target(
     Ok(report_with_session_status(CommandExitStatus::Succeeded, view))
 }
 
+/// Selects a delivery flow for the active session.
 pub fn execute_flow(
     workspace: Option<&Path>,
     name: &str,
@@ -222,6 +245,7 @@ pub fn execute_flow(
     execute_flow_with_target(workspace, None, name)
 }
 
+/// Selects a delivery flow for an explicit workspace or cluster target.
 pub fn execute_flow_with_target(
     workspace: Option<&Path>,
     cluster: Option<&Path>,
@@ -248,6 +272,7 @@ pub fn execute_flow_with_target(
     Ok(report_with_session_status(CommandExitStatus::Succeeded, view))
 }
 
+/// Builds or confirms a plan for the active session.
 pub fn execute_plan(
     workspace: Option<&Path>,
     requested_flow: Option<&str>,
@@ -257,6 +282,7 @@ pub fn execute_plan(
     execute_plan_with_target(workspace, None, requested_flow, no_flow, confirm)
 }
 
+/// Builds or confirms a plan for an explicit workspace or cluster target.
 pub fn execute_plan_with_target(
     workspace: Option<&Path>,
     cluster: Option<&Path>,
@@ -297,13 +323,19 @@ pub fn execute_plan_with_target(
         },
     );
 
-    Ok(report_with_session_status(CommandExitStatus::Succeeded, view))
+    Ok(report_with_session_guidance(
+        CommandExitStatus::Succeeded,
+        view,
+        record.goal_plan.as_ref().map(|goal_plan| &goal_plan.guidance_guardian),
+    ))
 }
 
+/// Executes the next planned compatibility step for the active session.
 pub fn execute_step(workspace: Option<&Path>) -> Result<SessionCommandReport, SessionCommandError> {
     execute_step_with_target(workspace, None)
 }
 
+/// Executes the next planned compatibility step for an explicit workspace or cluster target.
 pub fn execute_step_with_target(
     workspace: Option<&Path>,
     cluster: Option<&Path>,
@@ -342,10 +374,12 @@ pub fn execute_step_with_target(
     Ok(report_with_session_status(exit_status_for_session(record.latest_status), view))
 }
 
+/// Runs the active session to terminal.
 pub fn execute_run(workspace: Option<&Path>) -> Result<SessionCommandReport, SessionCommandError> {
     execute_run_with_target(workspace, None)
 }
 
+/// Runs the active session to terminal for an explicit workspace or cluster target.
 pub fn execute_run_with_target(
     workspace: Option<&Path>,
     cluster: Option<&Path>,
@@ -417,12 +451,14 @@ pub fn execute_run_with_target(
     ))
 }
 
+/// Renders the current active session status for the workspace.
 pub fn execute_status(
     workspace: Option<&Path>,
 ) -> Result<SessionCommandReport, SessionCommandError> {
     execute_status_with_target(workspace, None)
 }
 
+/// Renders the current active session status for an explicit workspace or cluster target.
 pub fn execute_status_with_target(
     workspace: Option<&Path>,
     cluster: Option<&Path>,
@@ -453,7 +489,11 @@ pub fn execute_status_with_target(
                 },
                 compatibility_follow_up,
             );
-            Ok(report_with_session_status(CommandExitStatus::Succeeded, view))
+            Ok(report_with_session_guidance(
+                CommandExitStatus::Succeeded,
+                view,
+                record.goal_plan.as_ref().map(|goal_plan| &goal_plan.guidance_guardian),
+            ))
         }
         Err(SessionCommandError::MissingActiveSession) => {
             let Some(compatibility_follow_up) =
@@ -479,10 +519,12 @@ pub fn execute_status_with_target(
     }
 }
 
+/// Returns the next recommended command for the active session.
 pub fn execute_next(workspace: Option<&Path>) -> Result<SessionCommandReport, SessionCommandError> {
     execute_next_with_target(workspace, None)
 }
 
+/// Resolves the `continue` surface from the persisted active session.
 pub fn execute_continue_with_target(
     workspace: Option<&Path>,
     cluster: Option<&Path>,
@@ -514,6 +556,7 @@ pub fn execute_continue_with_target(
     Ok(report_with_session_status(CommandExitStatus::Succeeded, view))
 }
 
+/// Returns the next recommended command for an explicit workspace or cluster target.
 pub fn execute_next_with_target(
     workspace: Option<&Path>,
     cluster: Option<&Path>,
@@ -599,6 +642,7 @@ fn render_missing_active_session_bootstrap(workspace: &Path, command_name: &str)
     )
 }
 
+/// Renders a user-facing session-command error.
 pub fn render_error(command_name: &str, error: &SessionCommandError) -> String {
     let next_command = error.next_command();
     output::render_session_error(command_name, &error.message(), next_command.as_deref())
@@ -1312,6 +1356,7 @@ fn decision_evidence_basis(decision: &crate::domain::decision::Decision) -> Opti
     (!inputs.is_empty()).then_some(inputs.join(", "))
 }
 
+/// Errors surfaced by session-native CLI command handlers.
 #[derive(Debug, Error)]
 pub enum SessionCommandError {
     #[error("failed to resolve the current workspace: {0}")]

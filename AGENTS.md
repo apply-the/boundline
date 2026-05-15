@@ -1,6 +1,6 @@
 # boundline Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-05-13
+Auto-generated from all feature plans. Last updated: 2026-05-14
 
 ## Active Technologies
 - Rust 1.95.0, edition 2024 + Existing runtime dependencies (`serde`, `serde_json`, `thiserror`, `tracing`, `uuid`) plus `clap` 4.x for a stable subcommand-based CLI surface (002-developer-ux-orchestrator)
@@ -80,6 +80,8 @@ Auto-generated from all feature plans. Last updated: 2026-05-13
 - Workspace-local `.boundline/session.json`, `.boundline/traces/`, optional `.boundline/checkpoints/`, optional `.canon/` governed packet artifacts, repo-managed assistant package files, docs, and Spec Kit artifacts (049-project-scale-delivery-ux)
 - Rust 1.95.0, Edition 2024 + `clap`, `serde`, `serde_json`, `thiserror`, (050-project-memory-delivery-integration)
 - Rust 1.95.0, Edition 2024 + `clap`, `dialoguer`, `serde`, `serde_json`, (051-delivery-control-consumer)
+- Rust 1.95.0, edition 2024 + Existing workspace dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `toml`, `uuid`, and Rust standard-library collections, filesystem, path, and process APIs; no new runtime dependencies planned for this slice (054-guidance-guardian-capabilities)
+- Repository-managed built-in guidance and guardian assets under `assistant/`, workspace-local overrides under `.boundline/guidance/` and `.boundline/guardians/`, existing workspace-local `.boundline/session.json` and `.boundline/traces/`, and optional Canon-governed repo-visible standards discovered through existing project-memory and governed-artifact surfaces (054-guidance-guardian-capabilities)
 
 - Rust 1.95.0, edition 2024 + Rust standard library plus `serde`, `serde_json`, `thiserror`, `tracing`, and `uuid` for structured state, trace serialization, error handling, instrumentation, and stable identifiers (001-delivery-orchestrator-core)
 
@@ -108,9 +110,9 @@ Crate versioning follows Semantic Versioning.
 Before 1.0.0, breaking changes MAY occur in minor versions.
 
 ## Recent Changes
+- 054-guidance-guardian-capabilities: Added Rust 1.95.0, edition 2024 + Existing workspace dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `toml`, `uuid`, and Rust standard-library collections, filesystem, path, and process APIs; no new runtime dependencies planned for this slice
 - 051-delivery-control-consumer: Added Rust 1.95.0, Edition 2024 + `clap`, `dialoguer`, `serde`, `serde_json`,
 - 050-project-memory-delivery-integration: Added Rust 1.95.0, Edition 2024 + `clap`, `serde`, `serde_json`, `thiserror`,
-- 049-project-scale-delivery-ux: Added Rust 1.95.0 workspace, edition 2024, plus JSON, Markdown, TOML, Bash, and assistant command assets + Existing workspace dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`); external Canon CLI compatibility target `0.45.0`; no new runtime crates planned for the first implementation slice
 
 
 <!-- MANUAL ADDITIONS START -->

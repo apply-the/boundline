@@ -1,3 +1,5 @@
+//! Persisted execution traces and flattened trace-summary projections.
+
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -5,16 +7,19 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::domain::cluster::ClusterDeliveryStory;
+use crate::domain::guidance::GuidanceGuardianProjection;
 use crate::domain::limits::TerminalCondition;
 use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::session::DelegationStatusView;
 use crate::domain::step::{StepKind, StepStatus};
 use crate::domain::task::{TaskStatus, TerminalReason};
 
+/// Returns the current UNIX timestamp in milliseconds.
 pub fn current_timestamp_millis() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64
 }
 
+/// Event kinds recorded in persisted execution traces.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TraceEventType {
@@ -57,6 +62,7 @@ pub enum TraceEventType {
 }
 
 impl TraceEventType {
+    /// Returns true when the event belongs to the native decision-loop family.
     pub const fn is_decision_loop_event(self) -> bool {
         matches!(
             self,
@@ -70,6 +76,7 @@ impl TraceEventType {
         )
     }
 
+    /// Returns the routing-projection slot associated with this event type, when any.
     pub const fn routing_projection_key(self) -> Option<&'static str> {
         match self {
             Self::GoalPlanCreated => Some("goal_plan_created"),
@@ -84,6 +91,7 @@ impl TraceEventType {
     }
 }
 
+/// One event recorded inside a persisted execution trace.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TraceEvent {
     pub event_id: String,
@@ -94,6 +102,7 @@ pub struct TraceEvent {
     pub recorded_at: u64,
 }
 
+/// Persisted execution trace for one task run.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ExecutionTrace {
     pub task_id: String,
@@ -107,6 +116,7 @@ pub struct ExecutionTrace {
     pub trace_location: Option<String>,
 }
 
+/// Flattened read-side trace summary reused by inspect and other CLI surfaces.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TraceSummaryView {
     pub trace_ref: String,
@@ -141,6 +151,8 @@ pub struct TraceSummaryView {
     pub context_provenance: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_staleness_reason: Option<String>,
+    #[serde(flatten)]
+    pub guidance_guardian: GuidanceGuardianProjection,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clarification_headline: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -203,6 +215,7 @@ impl Default for TraceSummaryView {
             context_primary_inputs: Vec::new(),
             context_provenance: Vec::new(),
             context_staleness_reason: None,
+            guidance_guardian: GuidanceGuardianProjection::default(),
             clarification_headline: None,
             clarification_prompt: None,
             clarification_missing_fields: Vec::new(),
@@ -229,6 +242,7 @@ impl Default for TraceSummaryView {
     }
 }
 
+/// Summary of one executed step inside the flattened trace view.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TraceStepSummary {
     pub step_id: String,
@@ -238,6 +252,7 @@ pub struct TraceStepSummary {
     pub headline: String,
 }
 
+/// Summary of one recovery event inside the flattened trace view.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TraceRecoveryEvent {
     pub event_type: TraceEventType,
@@ -247,6 +262,7 @@ pub struct TraceRecoveryEvent {
 }
 
 impl ExecutionTrace {
+    /// Creates a new persisted execution trace for the given task, session, and goal.
     pub fn new(
         task_id: impl Into<String>,
         session_id: impl Into<String>,
@@ -265,6 +281,7 @@ impl ExecutionTrace {
         }
     }
 
+    /// Records one trace event at the current timestamp.
     pub fn record_event(
         &mut self,
         event_type: TraceEventType,
@@ -282,16 +299,19 @@ impl ExecutionTrace {
         });
     }
 
+    /// Finalizes the trace with terminal state and timestamp.
     pub fn finalize(&mut self, terminal_status: TaskStatus, terminal_reason: TerminalReason) {
         self.ended_at = Some(current_timestamp_millis());
         self.terminal_status = Some(terminal_status);
         self.terminal_reason = Some(terminal_reason);
     }
 
+    /// Stores the persisted trace location after the trace has been written.
     pub fn set_trace_location(&mut self, trace_location: impl Into<String>) {
         self.trace_location = Some(trace_location.into());
     }
 
+    /// Returns the trace duration in milliseconds, if the trace is finalized.
     pub fn duration_millis(&self) -> Option<u64> {
         self.ended_at.map(|ended_at| ended_at.saturating_sub(self.started_at))
     }

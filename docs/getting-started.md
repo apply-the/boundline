@@ -157,6 +157,20 @@ If `plan` stops because the context is weak, add a brief that names the right
 files, narrow the goal, or rerun after failing validation produces a better
 evidence anchor.
 
+Read guidance and guardian output literally too:
+
+- `guidance_resolution_summary` tells you how many capability entries were resolved for the current phase.
+- `loaded_guidance_sources` and `loaded_guardian_sources` show which workspace overrides, Canon inputs, or bundled packs actually won precedence.
+- `guardian_timeline` shows whether each guardian completed, skipped, degraded, or failed.
+- `guardian_findings_summary`, `guardian_findings`, `guardian_degradations`, and `guardian_blocking_outcome` explain whether the bounded run still has verification concerns or an explicit stop condition.
+
+If you need repository-local overrides, add Markdown guidance under
+`.boundline/guidance/` and guardian TOML under `.boundline/guardians/`.
+Boundline keeps shared engineering packs under `assistant/packs/` and chooses
+the best matching technology pack from workspace evidence, so you do not need
+to swap a Rust-only surface out by hand for Python, JavaScript, JVM, or other
+supported stacks.
+
 ## Optional Bootstrap
 
 Use `init` only when you want Boundline to scaffold local compatibility/bootstrap

@@ -1,4 +1,7 @@
-//! Goal-derived planning from workspace state (feature 013).
+//! Goal-derived planning from workspace state.
+//!
+//! This module turns bounded workspace evidence, authored input, governance
+//! context, and planning-time guidance into a persisted `GoalPlan`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -28,12 +31,16 @@ use crate::domain::goal_plan::{
 use crate::domain::governance::{
     CanonCapabilitySnapshot, CompactedCanonMemory, MemoryCredibilityState,
 };
+use crate::domain::guidance::CapabilityPhase;
 use crate::domain::project_memory::{
     CompatibilityOutcome, GovernedExpertiseInputSurface, PromotionStateView,
     read_governed_expertise_inputs,
 };
 use crate::domain::workflow::WorkflowProgressState;
 use crate::orchestrator::flow_inference::{FlowInferenceContext, infer_flow_from_context};
+use crate::orchestrator::guidance_runtime::{
+    planning_runtime_evidence, resolve_capabilities_for_phase,
+};
 
 /// Maximum directory traversal depth for workspace signal collection.
 const MAX_SCAN_DEPTH: usize = 4;
@@ -56,12 +63,17 @@ const GOAL_CUE_STOP_WORDS: &[&str] = &[
     "goal",
 ];
 
+/// One authored document that should stay visible while bounded planning is
+/// assembled from workspace and operator-supplied context.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AuthoredInputDocument {
     pub label: String,
     pub content: String,
 }
 
+/// Supplemental planning inputs collected outside the workspace scan.
+/// These sources let the planner keep operator intent, workflow state, and
+/// Canon/governance context visible without recomputing them from traces later.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PlanningContextSources {
     pub authored_input_summary: Option<String>,
@@ -79,7 +91,8 @@ pub struct PlanningContextSources {
     pub latest_validation_status: Option<String>,
 }
 
-/// Collect workspace signals from the given workspace root.
+/// Collects lightweight workspace signals from the given workspace root for
+/// planning, routing, and guidance ranking.
 pub fn collect_workspace_signals(workspace_ref: &Path) -> WorkspaceSignals {
     let mut signals = WorkspaceSignals::default();
 
@@ -969,6 +982,8 @@ fn canon_input_disposition(
     )
 }
 
+// Resolve the domain template view for the bounded target and translate it into
+// `ContextInput`s plus a credibility outcome that planning can persist directly.
 fn resolve_domain_context(
     workspace_ref: &Path,
     selected_target: Option<&str>,
@@ -1147,6 +1162,10 @@ fn domain_binding_input(
     }
 }
 
+/// Builds the bounded context pack used by goal planning.
+/// Concrete workspace evidence stays primary when available; authored or
+/// governance-derived context fills the gaps and is persisted for later status
+/// and inspect surfaces.
 pub fn build_context_pack(
     goal_text: &str,
     workspace_ref: &Path,
@@ -1611,7 +1630,7 @@ fn first_workspace_file(workspace_root: &Path, dir: &Path, depth: usize) -> Opti
     None
 }
 
-/// Scan Canon artifacts directory and return evidence references.
+/// Scans the Canon artifact directory and returns bounded evidence references.
 pub fn scan_canon_artifacts(workspace_ref: &Path) -> Vec<EvidenceRef> {
     let canon_dir = workspace_ref.join(".canon");
     if !canon_dir.is_dir() {
@@ -1630,7 +1649,9 @@ pub fn scan_canon_artifacts(workspace_ref: &Path) -> Vec<EvidenceRef> {
     evidence
 }
 
-/// Derive a bounded task list from goal text and workspace signals.
+/// Derives a simple bounded task list from goal text and workspace signals.
+/// This is the compatibility-oriented planner surface; the richer native path
+/// uses `build_goal_plan_with_sources`.
 pub fn derive_tasks(
     goal_text: &str,
     workspace_ref: &Path,
@@ -1745,6 +1766,10 @@ fn derive_tasks_from_context(
     ]
 }
 
+/// Builds a persisted goal plan from goal text plus any explicit planning
+/// context sources already captured by session-native or compatibility flows.
+/// Planning-phase guidance is resolved here, while guardian execution remains a
+/// later runtime concern.
 pub fn build_goal_plan_with_sources(
     goal_text: &str,
     workspace_ref: &Path,
@@ -1787,6 +1812,14 @@ pub fn build_goal_plan_with_sources(
         context_sources.compacted_canon_memory.as_ref(),
     );
     let expert_selection = build_expert_pack_selection(workspace_ref, &context_pack);
+    // Planning resolves only planning-phase capability selection here so the
+    // resulting plan carries a stable, inspectable guidance story before any
+    // implementation or verification work starts.
+    let guidance_resolution = resolve_capabilities_for_phase(
+        workspace_ref,
+        CapabilityPhase::Planning,
+        &planning_runtime_evidence(goal_text, &context_pack, &signals),
+    );
     let tasks = derive_tasks_from_context(
         goal_text,
         &context_pack,
@@ -1809,6 +1842,7 @@ pub fn build_goal_plan_with_sources(
         .map_err(GoalPlannerError::PlanCreation)?
         .with_context_pack(context_pack)
         .with_expert_selection(expert_selection)
+        .with_guidance_guardian(guidance_resolution.projection.clone())
         .with_signals(signals)
         .with_evidence(source_evidence)
         .with_planning_rationale(planning_rationale)
@@ -1829,6 +1863,9 @@ pub fn build_goal_plan_with_sources(
         plan = plan.with_workflow_progress(workflow_progress);
     }
 
+    // Persist the partially assembled plan even when bounded context is not yet
+    // credible; downstream status and inspect surfaces rely on that snapshot to
+    // explain why planning stopped.
     if plan.context_pack.as_ref().map(|pack| pack.credibility)
         != Some(ContextPackCredibility::Credible)
     {
@@ -1841,7 +1878,8 @@ pub fn build_goal_plan_with_sources(
     Ok(plan)
 }
 
-/// Build a complete goal plan from goal text and workspace.
+/// Convenience entry point for building a goal plan when no supplemental
+/// planning context has been captured yet.
 pub fn build_goal_plan(
     goal_text: &str,
     workspace_ref: &Path,
@@ -1849,6 +1887,7 @@ pub fn build_goal_plan(
     build_goal_plan_with_sources(goal_text, workspace_ref, &PlanningContextSources::default(), None)
 }
 
+/// Errors produced while building a native goal plan.
 #[derive(Debug, Error)]
 pub enum GoalPlannerError {
     #[error("no goal text provided — run `boundline capture` first")]

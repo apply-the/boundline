@@ -17,6 +17,23 @@ recorded workspace version.
 
 ## [Unreleased]
 
+## [0.54.0] - 2026-05-14
+
+Delivered specs:
+
+- `054` - Guidance And Guardian Capabilities
+
+Highlights:
+
+- Added the first typed guidance-and-guardian capability slice so Boundline can
+  resolve shared, workspace-local, and optional Canon-governed engineering
+  standards before planning and bounded execution.
+- Introduced structured guardian findings, explicit degraded outcomes, and
+  deterministic-before-LLM verification as bounded runtime behavior instead of
+  implicit agent heuristics.
+- Bumped workspace version to `0.54.0` for the guidance-and-guardian feature
+  branch.
+
 ## [0.53.0] - 2026-05-14
 
 Delivered specs:

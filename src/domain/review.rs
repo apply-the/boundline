@@ -1,8 +1,11 @@
+//! Review triggers, voting rules, and persisted multi-reviewer outcomes.
+
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+/// Conditions that can trigger a review flow.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReviewTrigger {
@@ -11,6 +14,7 @@ pub enum ReviewTrigger {
     PrReady,
 }
 
+/// Stage boundaries that may require a review vote.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum VotingBoundaryTrigger {
@@ -26,6 +30,7 @@ pub enum VotingBoundaryTrigger {
     Incident,
 }
 
+/// Risk level used by voting-boundary policy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum VotingStageRisk {
@@ -35,6 +40,7 @@ pub enum VotingStageRisk {
     Critical,
 }
 
+/// Input facts used to decide whether a vote is required before continuing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VotingBoundaryInput {
     pub stage: VotingBoundaryTrigger,
@@ -52,6 +58,7 @@ pub struct VotingBoundaryInput {
 }
 
 impl VotingBoundaryInput {
+    /// Returns a low-risk baseline boundary input for the given stage.
     pub const fn low_risk(stage: VotingBoundaryTrigger) -> Self {
         Self {
             stage,
@@ -70,6 +77,7 @@ impl VotingBoundaryInput {
     }
 }
 
+/// Decision produced by the voting-boundary policy.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VotingBoundaryDecision {
     pub required: bool,
@@ -91,6 +99,7 @@ const HIGH_RISK_BOUNDARY_STAGES: &[VotingBoundaryTrigger] = &[
     VotingBoundaryTrigger::Incident,
 ];
 
+/// Applies voting-boundary policy to the given stage facts.
 pub fn voting_boundary_decision(input: VotingBoundaryInput) -> VotingBoundaryDecision {
     if input.explicitly_requested {
         return voting_required("operator_requested");
@@ -154,6 +163,7 @@ fn voting_skipped(reason: &str) -> VotingBoundaryDecision {
     }
 }
 
+/// Reviewer disposition captured in a finding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReviewerDisposition {
@@ -162,6 +172,7 @@ pub enum ReviewerDisposition {
     Block,
 }
 
+/// Strategy used to aggregate reviewer votes.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum VoteStrategy {
@@ -170,6 +181,7 @@ pub enum VoteStrategy {
     Weighted,
 }
 
+/// Aggregated result of the review vote before adjudication.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum VoteDecision {
@@ -178,6 +190,7 @@ pub enum VoteDecision {
     NeedsAdjudication,
 }
 
+/// Final review outcome after voting and optional adjudication.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReviewOutcome {
@@ -187,6 +200,7 @@ pub enum ReviewOutcome {
     Failed,
 }
 
+/// Participation state for one configured reviewer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReviewerParticipationStatus {
@@ -195,6 +209,7 @@ pub enum ReviewerParticipationStatus {
     Omitted,
 }
 
+/// One configured reviewer in a review profile.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReviewerDefinition {
     pub reviewer_id: String,
@@ -206,6 +221,7 @@ pub struct ReviewerDefinition {
 }
 
 impl ReviewerDefinition {
+    /// Validates the reviewer definition.
     pub fn validate(&self) -> Result<(), ReviewProfileError> {
         if self.reviewer_id.trim().is_empty() {
             return Err(ReviewProfileError::MissingReviewerId);
@@ -223,6 +239,7 @@ impl ReviewerDefinition {
     }
 }
 
+/// One reviewer finding recorded during a review scenario.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReviewerFinding {
     pub reviewer_id: String,
@@ -233,6 +250,7 @@ pub struct ReviewerFinding {
 }
 
 impl ReviewerFinding {
+    /// Validates the finding against the configured reviewer set.
     pub fn validate(
         &self,
         reviewer_ids: &BTreeSet<String>,
@@ -254,6 +272,7 @@ impl ReviewerFinding {
     }
 }
 
+/// Scenario fixture describing findings for one configured trigger.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReviewScenario {
     pub trigger: ReviewTrigger,
@@ -264,6 +283,7 @@ pub struct ReviewScenario {
 }
 
 impl ReviewScenario {
+    /// Validates the scenario against the configured review profile.
     pub fn validate(
         &self,
         triggers: &BTreeSet<ReviewTrigger>,
@@ -307,6 +327,7 @@ impl ReviewScenario {
     }
 }
 
+/// Effective participation result for one reviewer in a vote.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReviewerParticipation {
     pub reviewer_id: String,
@@ -317,6 +338,7 @@ pub struct ReviewerParticipation {
     pub effective_route: Option<String>,
 }
 
+/// Vote aggregation policy attached to a review profile.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct VoteRuleDefinition {
     #[serde(default)]
@@ -326,6 +348,7 @@ pub struct VoteRuleDefinition {
 }
 
 impl VoteRuleDefinition {
+    /// Resolves findings into a vote result using the configured strategy.
     pub fn resolve(
         &self,
         reviewers: &[ReviewerDefinition],
@@ -459,6 +482,7 @@ fn ensure_distinct_effective_routes(
     Ok(())
 }
 
+/// Optional adjudication configuration for tied or contested votes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct AdjudicationDefinition {
     #[serde(default)]
@@ -468,6 +492,7 @@ pub struct AdjudicationDefinition {
 }
 
 impl AdjudicationDefinition {
+    /// Validates the adjudication configuration against the reviewer set.
     pub fn validate(&self, reviewer_ids: &BTreeSet<String>) -> Result<(), ReviewProfileError> {
         if !self.enabled {
             return Ok(());
@@ -489,6 +514,7 @@ impl AdjudicationDefinition {
     }
 }
 
+/// Aggregated result of applying a vote rule to reviewer findings.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VoteResolution {
     pub strategy: VoteStrategy,
@@ -500,6 +526,7 @@ pub struct VoteResolution {
     pub decision: VoteDecision,
 }
 
+/// Persisted review profile containing triggers, reviewers, vote rules, and scenarios.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReviewProfile {
     #[serde(default)]
@@ -515,14 +542,17 @@ pub struct ReviewProfile {
 }
 
 impl ReviewProfile {
+    /// Returns one reviewer definition by id.
     pub fn reviewer_by_id(&self, reviewer_id: &str) -> Option<&ReviewerDefinition> {
         self.reviewers.iter().find(|reviewer| reviewer.reviewer_id == reviewer_id)
     }
 
+    /// Returns the configured scenario for a trigger, when present.
     pub fn scenario_for(&self, trigger: ReviewTrigger) -> Option<&ReviewScenario> {
         self.scenarios.iter().find(|scenario| scenario.trigger == trigger)
     }
 
+    /// Validates the complete review profile.
     pub fn validate(&self) -> Result<(), ReviewProfileError> {
         if self.triggers.is_empty() {
             return Err(ReviewProfileError::MissingReviewTriggers);
@@ -563,6 +593,7 @@ const fn default_reviewer_weight() -> usize {
     1
 }
 
+/// Validation errors for review profiles, findings, and vote resolution.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ReviewProfileError {
     #[error("review profile must define at least one trigger")]

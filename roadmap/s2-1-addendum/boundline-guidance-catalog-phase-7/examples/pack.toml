@@ -1,0 +1,44 @@
+# Example Boundline Guidance Pack Manifest
+
+[pack]
+id = "boundline-guidance-catalog"
+version = "0.1.0"
+kind = "guidance-pack"
+description = "Baseline guidance and guardian rule catalog for Boundline."
+
+[compatibility]
+boundline = ">=0.54"
+canon_contract = ">=0.50"
+
+[authority]
+default_source = "shared-pack"
+default_strength = "recommendation"
+canon_promotable = true
+
+[guidance.clean_code]
+path = "guidance/clean-code.md"
+pillar = "clean-code"
+strength = "recommended"
+applies_to = ["planning", "implementation", "review", "refactor"]
+roles = ["planner", "implementer", "reviewer"]
+
+[guidance.architecture]
+path = "guidance/architecture.md"
+pillar = "architecture"
+strength = "recommended"
+applies_to = ["system-shaping", "architecture", "implementation", "review", "migration"]
+roles = ["architect", "planner", "reviewer"]
+
+[guardian.clean_code]
+pillar = "clean-code"
+kind = "llm"
+rules = ["intent-revealing-names", "no-mixed-responsibilities"]
+applies_to = ["implementation", "review", "refactor"]
+default_disposition = "concern"
+
+[guardian.architecture_boundary]
+pillar = "architecture"
+kind = "hybrid"
+rules = ["dependency-direction", "data-ownership-boundary"]
+applies_to = ["architecture", "implementation", "review", "migration"]
+default_disposition = "warning"

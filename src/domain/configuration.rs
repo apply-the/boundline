@@ -1,3 +1,5 @@
+//! Routing, runtime-capability, and domain-template configuration models.
+
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -10,6 +12,7 @@ use crate::domain::domain_templates::{
 };
 use crate::domain::governance::CanonModeSelectionPreference;
 
+/// Supported assistant runtimes that can back configured routes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeKind {
@@ -36,6 +39,7 @@ impl fmt::Display for RuntimeKind {
     }
 }
 
+/// Built-in init templates exposed by the CLI.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "kebab-case")]
 pub enum InitTemplate {
@@ -44,6 +48,7 @@ pub enum InitTemplate {
     Delivery,
 }
 
+/// Named routing slot used by effective model selection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub enum RouteSlot {
@@ -64,6 +69,7 @@ impl RouteSlot {
     }
 }
 
+/// Config display scope accepted by configuration inspection commands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub enum ConfigShowScope {
@@ -73,6 +79,7 @@ pub enum ConfigShowScope {
     Global,
 }
 
+/// Config write scope accepted by configuration mutation commands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub enum ConfigWriteScope {
@@ -81,6 +88,7 @@ pub enum ConfigWriteScope {
     Global,
 }
 
+/// Capability support state for runtime feature flags.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub enum CapabilityState {
@@ -107,6 +115,7 @@ impl fmt::Display for CapabilityState {
     }
 }
 
+/// Requested effort level for a routing slot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub enum EffortLevel {
@@ -133,6 +142,7 @@ impl fmt::Display for EffortLevel {
     }
 }
 
+/// Fallback policy when the requested effort level is unavailable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub enum EffortFallbackPolicy {
@@ -155,6 +165,7 @@ impl fmt::Display for EffortFallbackPolicy {
     }
 }
 
+/// Capability profile describing what one runtime can support.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeCapabilityProfile {
     pub continuation: CapabilityState,
@@ -167,6 +178,7 @@ pub struct RuntimeCapabilityProfile {
 }
 
 impl RuntimeCapabilityProfile {
+    /// Validates the capability profile.
     pub fn validate(&self) -> Result<(), ConfigurationError> {
         if self.notes.as_deref().is_some_and(|value| value.trim().is_empty()) {
             return Err(ConfigurationError::InvalidRuntimeCapability(
@@ -183,6 +195,7 @@ impl RuntimeCapabilityProfile {
         Ok(())
     }
 
+    /// Returns a compact human-readable summary of the profile.
     pub fn summary_text(&self) -> String {
         let mut parts = vec![
             format!("continuation={}", self.continuation),
@@ -199,6 +212,7 @@ impl RuntimeCapabilityProfile {
     }
 }
 
+/// Slot-specific effort policy layered through config precedence.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SlotEffortPolicy {
     pub level: EffortLevel,
@@ -208,6 +222,7 @@ pub struct SlotEffortPolicy {
 }
 
 impl SlotEffortPolicy {
+    /// Validates the slot effort policy.
     pub fn validate(&self) -> Result<(), ConfigurationError> {
         if self.rationale.as_deref().is_some_and(|value| value.trim().is_empty()) {
             return Err(ConfigurationError::InvalidSlotEffortPolicy(
@@ -217,6 +232,7 @@ impl SlotEffortPolicy {
         Ok(())
     }
 
+    /// Returns a compact human-readable summary of the policy.
     pub fn summary_text(&self) -> String {
         let mut summary = format!("level={}, fallback={}", self.level, self.fallback);
         if let Some(rationale) =
@@ -228,6 +244,7 @@ impl SlotEffortPolicy {
     }
 }
 
+/// Concrete runtime and model selected for a route slot.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ModelRoute {
     pub runtime: RuntimeKind,
@@ -235,6 +252,7 @@ pub struct ModelRoute {
 }
 
 impl ModelRoute {
+    /// Validates the route payload.
     pub fn validate(&self) -> Result<(), ConfigurationError> {
         if self.model.trim().is_empty() {
             return Err(ConfigurationError::MissingModelId);
@@ -243,6 +261,7 @@ impl ModelRoute {
     }
 }
 
+/// Persisted routing configuration layered across workspace, cluster, and global scopes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct RoutingConfig {
     #[serde(default)]
@@ -268,6 +287,7 @@ pub struct RoutingConfig {
 }
 
 impl RoutingConfig {
+    /// Validates the routing configuration and nested policies.
     pub fn validate(&self) -> Result<(), ConfigurationError> {
         for route in [
             self.planning.as_ref(),
@@ -359,6 +379,7 @@ impl RoutingConfig {
     }
 }
 
+/// Returns the default model route for a given assistant runtime.
 pub fn assistant_default_model_route(runtime: RuntimeKind) -> ModelRoute {
     match runtime {
         RuntimeKind::Claude => ModelRoute { runtime, model: "sonnet-4.6".to_string() },
@@ -368,6 +389,7 @@ pub fn assistant_default_model_route(runtime: RuntimeKind) -> ModelRoute {
     }
 }
 
+/// Returns the built-in default route for a routing slot.
 pub fn built_in_default_route(slot: RouteSlot) -> ModelRoute {
     let defaults = built_in_defaults();
     match slot {
@@ -378,6 +400,7 @@ pub fn built_in_default_route(slot: RouteSlot) -> ModelRoute {
     }
 }
 
+/// Seeds routing slots from the selected assistants while preserving built-in preferences when possible.
 pub fn seeded_routes_for_assistants(assistants: &[RuntimeKind]) -> BTreeMap<RouteSlot, ModelRoute> {
     let Some(fallback_runtime) = assistants.first().copied() else {
         return BTreeMap::new();
@@ -397,6 +420,7 @@ pub fn seeded_routes_for_assistants(assistants: &[RuntimeKind]) -> BTreeMap<Rout
         .collect()
 }
 
+/// Default Canon governance preferences carried in config files.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CanonPreferences {
     #[serde(default)]
@@ -411,6 +435,7 @@ pub struct CanonPreferences {
     pub default_system_context: Option<String>,
 }
 
+/// Root persisted config file shared by workspace and global configuration.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConfigFile {
     #[serde(default = "default_version")]
@@ -431,6 +456,7 @@ fn default_version() -> u32 {
     1
 }
 
+/// Source layer that contributed an effective value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ValueSource {
     Cli,
@@ -440,12 +466,14 @@ pub enum ValueSource {
     BuiltIn,
 }
 
+/// Route together with the precedence layer that supplied it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourcedRoute {
     pub route: ModelRoute,
     pub source: ValueSource,
 }
 
+/// Fully resolved routing view after precedence rules are applied.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EffectiveRouting {
     pub planning: SourcedRoute,
@@ -456,30 +484,35 @@ pub struct EffectiveRouting {
     pub reviewer_roles: BTreeMap<String, SourcedRoute>,
 }
 
+/// Runtime capability profile annotated with its value source.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourcedRuntimeCapabilityProfile {
     pub profile: RuntimeCapabilityProfile,
     pub source: ValueSource,
 }
 
+/// Slot effort policy annotated with its value source.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourcedSlotEffortPolicy {
     pub policy: SlotEffortPolicy,
     pub source: ValueSource,
 }
 
+/// Domain standards layer annotated with its value source.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourcedDomainStandardsLayer {
     pub text: String,
     pub source: ValueSource,
 }
 
+/// External context binding annotated with its value source.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourcedExternalContextBinding {
     pub binding: ExternalContextBinding,
     pub source: ValueSource,
 }
 
+/// Resolved domain-template view after enablement and layering rules are applied.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedDomainTemplate {
     pub enabled: bool,
@@ -488,6 +521,7 @@ pub struct ResolvedDomainTemplate {
     pub external_context_bindings: Vec<SourcedExternalContextBinding>,
 }
 
+/// CLI routing overrides applied ahead of persisted configuration.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RoutingOverrides {
     pub planning: Option<ModelRoute>,
@@ -498,6 +532,7 @@ pub struct RoutingOverrides {
     pub reviewer_roles: BTreeMap<String, ModelRoute>,
 }
 
+/// Resolves the effective route for every slot using CLI, workspace, cluster, global, and built-in precedence.
 pub fn resolve_effective_routing(
     cli: &RoutingOverrides,
     workspace: Option<&RoutingConfig>,
@@ -575,6 +610,7 @@ pub fn resolve_effective_routing(
     }
 }
 
+/// Resolves effective runtime capability profiles across config layers.
 pub fn resolve_effective_runtime_capabilities(
     workspace: Option<&RoutingConfig>,
     cluster: Option<&RoutingConfig>,
@@ -621,6 +657,7 @@ pub fn resolve_effective_runtime_capabilities(
         .collect()
 }
 
+/// Resolves effective slot effort policies across config layers.
 pub fn resolve_effective_slot_effort_policies(
     workspace: Option<&RoutingConfig>,
     cluster: Option<&RoutingConfig>,
@@ -663,6 +700,7 @@ pub fn resolve_effective_slot_effort_policies(
         .collect()
 }
 
+/// Resolves effective domain-template settings across config layers.
 pub fn resolve_effective_domain_templates(
     workspace: Option<&RoutingConfig>,
     cluster: Option<&RoutingConfig>,
@@ -789,6 +827,7 @@ fn built_in_defaults() -> BuiltInDefaults {
     }
 }
 
+/// Validation errors for configuration models and nested policies.
 #[derive(Debug, Error)]
 pub enum ConfigurationError {
     #[error("model id cannot be empty")]

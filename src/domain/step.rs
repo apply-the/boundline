@@ -1,3 +1,5 @@
+//! Step execution models, endpoint requests, and persisted step summaries.
+
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use thiserror::Error;
@@ -5,6 +7,7 @@ use uuid::Uuid;
 
 use crate::domain::task_context::TaskContext;
 
+/// Kind of executable step in a task plan.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StepKind {
@@ -13,6 +16,7 @@ pub enum StepKind {
     Decision,
 }
 
+/// Persisted lifecycle status of one step.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StepStatus {
@@ -23,6 +27,7 @@ pub enum StepStatus {
     Skipped,
 }
 
+/// Recovery policy attached to a failed step result.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Recoverability {
@@ -31,6 +36,7 @@ pub enum Recoverability {
     Terminal,
 }
 
+/// Success or failure status returned by a step endpoint.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionStatus {
@@ -38,6 +44,7 @@ pub enum ExecutionStatus {
     Failed,
 }
 
+/// Structured error details recorded for failed steps or invalid endpoint output.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ErrorInfo {
     pub code: String,
@@ -47,16 +54,19 @@ pub struct ErrorInfo {
 }
 
 impl ErrorInfo {
+    /// Creates a new error payload.
     pub fn new(code: impl Into<String>, message: impl Into<String>) -> Self {
         Self { code: code.into(), message: message.into(), details: None }
     }
 
+    /// Attaches structured details to the error payload.
     pub fn with_details(mut self, details: Value) -> Self {
         self.details = Some(details);
         self
     }
 }
 
+/// Persisted plan step.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Step {
     pub id: String,
@@ -71,6 +81,7 @@ pub struct Step {
 }
 
 impl Step {
+    /// Creates a new step and validates any required target name.
     pub fn new(
         id: impl Into<String>,
         kind: StepKind,
@@ -101,6 +112,7 @@ impl Step {
         })
     }
 
+    /// Convenience constructor for an agent step.
     pub fn agent(
         id: impl Into<String>,
         target_name: impl Into<String>,
@@ -109,6 +121,7 @@ impl Step {
         Self::new(id, StepKind::Agent, Some(target_name.into()), input)
     }
 
+    /// Convenience constructor for a tool step.
     pub fn tool(
         id: impl Into<String>,
         target_name: impl Into<String>,
@@ -117,15 +130,18 @@ impl Step {
         Self::new(id, StepKind::Tool, Some(target_name.into()), input)
     }
 
+    /// Convenience constructor for a decision step.
     pub fn decision(id: impl Into<String>, input: Value) -> Result<Self, StepError> {
         Self::new(id, StepKind::Decision, None, input)
     }
 
+    /// Marks the step as running and increments its attempt count.
     pub fn mark_running(&mut self) {
         self.status = StepStatus::Running;
         self.attempt_count += 1;
     }
 
+    /// Marks the step as succeeded with the given output.
     pub fn mark_succeeded(&mut self, output: Value) {
         self.status = StepStatus::Succeeded;
         self.output = Some(output);
@@ -133,6 +149,7 @@ impl Step {
         self.recoverability = None;
     }
 
+    /// Marks the step as failed with structured error and recoverability.
     pub fn mark_failed(&mut self, error: ErrorInfo, recoverability: Recoverability) {
         self.status = StepStatus::Failed;
         self.output = None;
@@ -141,6 +158,7 @@ impl Step {
     }
 }
 
+/// Validation failures for step construction.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum StepError {
     #[error("step id must not be empty")]
@@ -149,6 +167,7 @@ pub enum StepError {
     MissingTargetName(StepKind),
 }
 
+/// Request passed to an agent or tool endpoint when executing a step.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StepExecutionRequest {
     pub step_id: String,
@@ -159,6 +178,7 @@ pub struct StepExecutionRequest {
     pub attempt_number: usize,
 }
 
+/// Result returned by a step endpoint before it is normalized into persisted state.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StepExecutionResult {
     pub status: ExecutionStatus,
@@ -170,6 +190,7 @@ pub struct StepExecutionResult {
 }
 
 impl StepExecutionResult {
+    /// Creates a successful step result.
     pub fn success(output: Value) -> Self {
         Self {
             status: ExecutionStatus::Succeeded,
@@ -181,10 +202,12 @@ impl StepExecutionResult {
         }
     }
 
+    /// Creates a successful step result with an accompanying task-state patch.
     pub fn success_with_patch(output: Value, state_patch: Map<String, Value>) -> Self {
         Self { state_patch: Some(state_patch), ..Self::success(output) }
     }
 
+    /// Creates a failed step result.
     pub fn failure(error: ErrorInfo, recoverability: Recoverability) -> Self {
         Self {
             status: ExecutionStatus::Failed,
@@ -196,16 +219,19 @@ impl StepExecutionResult {
         }
     }
 
+    /// Attaches structured evidence to the step result.
     pub fn with_evidence(mut self, evidence: Value) -> Self {
         self.evidence = Some(evidence);
         self
     }
 
+    /// Attaches a task-state patch to the step result.
     pub fn with_state_patch(mut self, state_patch: Map<String, Value>) -> Self {
         self.state_patch = Some(state_patch);
         self
     }
 
+    /// Validates that the result shape matches its execution status.
     pub fn validate(&self) -> Result<(), StepExecutionResultError> {
         match self.status {
             ExecutionStatus::Succeeded => {
@@ -230,6 +256,7 @@ impl StepExecutionResult {
     }
 }
 
+/// Validation failures for step endpoint results.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum StepExecutionResultError {
     #[error("successful step results must include output")]
@@ -240,6 +267,7 @@ pub enum StepExecutionResultError {
     ConflictingOutputAndError,
 }
 
+/// One concrete attempt to execute a step.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StepAttempt {
     pub attempt_id: String,
@@ -252,6 +280,7 @@ pub struct StepAttempt {
 }
 
 impl StepAttempt {
+    /// Creates a new step-attempt record.
     pub fn new(step_id: impl Into<String>, input_snapshot: Value, started_at: u64) -> Self {
         Self {
             attempt_id: Uuid::new_v4().to_string(),
@@ -264,6 +293,7 @@ impl StepAttempt {
         }
     }
 
+    /// Completes the attempt from the endpoint result snapshot.
     pub fn complete(&mut self, result: &StepExecutionResult, ended_at: u64) {
         self.ended_at = Some(ended_at);
         self.result_snapshot = result.output.clone().or_else(|| {
@@ -275,6 +305,7 @@ impl StepAttempt {
     }
 }
 
+/// Flattened summary of a persisted step result.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StepResultSummary {
     pub step_id: String,
@@ -285,6 +316,7 @@ pub struct StepResultSummary {
 }
 
 impl StepResultSummary {
+    /// Builds a flattened summary from the current persisted step state.
     pub fn from_step(step: &Step) -> Self {
         Self {
             step_id: step.id.clone(),

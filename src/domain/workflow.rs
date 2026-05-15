@@ -1,3 +1,5 @@
+//! Workflow definitions, project-scale paths, and persisted workflow progress.
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::fs;
@@ -6,6 +8,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+/// High-level project-scale path selected for a delivery effort.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProjectScalePathKind {
@@ -14,6 +17,7 @@ pub enum ProjectScalePathKind {
     OperationalOrRisk,
 }
 
+/// Named project-scale stages used by delivery-path modeling.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ProjectScaleStageKind {
@@ -68,6 +72,7 @@ impl ProjectScaleStageKind {
     }
 }
 
+/// Inputs used to propose a bounded project-scale path.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectScaleInput {
     pub goal: String,
@@ -85,12 +90,14 @@ pub struct ProjectScaleInput {
     pub operational_entry: Option<ProjectScaleStageKind>,
 }
 
+/// One stage in a project-scale path with its supporting rationale.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectScaleStage {
     pub kind: ProjectScaleStageKind,
     pub reason: String,
 }
 
+/// Proposed project-scale path for a bounded delivery effort.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectScalePath {
     pub kind: ProjectScalePathKind,
@@ -101,6 +108,7 @@ pub struct ProjectScalePath {
     pub unbounded_autonomy: bool,
 }
 
+/// Request to move from one project-scale stage to another.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectScaleBoundaryRequest {
     pub active_stage: ProjectScaleStageKind,
@@ -108,6 +116,7 @@ pub struct ProjectScaleBoundaryRequest {
     pub confirmed: bool,
 }
 
+/// Decision produced when evaluating a project-scale boundary transition.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectScaleBoundaryDecision {
     pub blocked: bool,
@@ -116,11 +125,13 @@ pub struct ProjectScaleBoundaryDecision {
 }
 
 impl ProjectScalePath {
+    /// Returns the ordered stage names for operator-facing summaries.
     pub fn stage_names(&self) -> String {
         self.stages.iter().map(|stage| stage.kind.as_str()).collect::<Vec<_>>().join(" -> ")
     }
 }
 
+/// Evaluates whether a requested project-scale transition can proceed immediately.
 pub fn evaluate_project_scale_boundary(
     request: ProjectScaleBoundaryRequest,
 ) -> ProjectScaleBoundaryDecision {
@@ -155,6 +166,7 @@ pub fn evaluate_project_scale_boundary(
     }
 }
 
+/// Proposes a project-scale path from bounded input signals.
 pub fn propose_project_scale_path(input: ProjectScaleInput) -> ProjectScalePath {
     let mut stages = Vec::new();
 
@@ -282,6 +294,7 @@ fn push_stage(stages: &mut Vec<ProjectScaleStage>, kind: ProjectScaleStageKind, 
     stages.push(ProjectScaleStage { kind, reason: reason.to_string() });
 }
 
+/// Source of the goal that drives a workflow definition.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkflowGoalSource {
@@ -302,6 +315,7 @@ impl fmt::Display for WorkflowGoalSource {
     }
 }
 
+/// Ordered workflow phases supported by the workflow layer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkflowPhase {
@@ -334,6 +348,7 @@ impl fmt::Display for WorkflowPhase {
     }
 }
 
+/// Conditions that can gate optional workflow phases.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkflowConditionKind {
@@ -358,6 +373,7 @@ impl fmt::Display for WorkflowConditionKind {
     }
 }
 
+/// Persisted lifecycle state of a workflow run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkflowLifecycleState {
@@ -388,6 +404,7 @@ impl fmt::Display for WorkflowLifecycleState {
     }
 }
 
+/// Output preferences attached to a workflow definition.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkflowOutputPreferences {
     #[serde(default)]
@@ -398,6 +415,7 @@ pub struct WorkflowOutputPreferences {
     pub execution_condition: bool,
 }
 
+/// Conditional workflow phase that is enabled only when its condition is satisfied.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConditionalWorkflowPhase {
     pub phase: WorkflowPhase,
@@ -410,6 +428,7 @@ const fn default_enabled() -> bool {
     true
 }
 
+/// Persisted workflow definition loaded from workflow configuration.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkflowDefinition {
     pub workflow_name: String,
@@ -431,6 +450,7 @@ pub struct WorkflowDefinition {
 }
 
 impl WorkflowDefinition {
+    /// Validates the workflow definition and its conditional phase wiring.
     pub fn validate(&self) -> Result<(), WorkflowDefinitionError> {
         if self.workflow_name.trim().is_empty() {
             return Err(WorkflowDefinitionError::MissingWorkflowName);
@@ -501,6 +521,7 @@ impl WorkflowDefinition {
         Ok(())
     }
 
+    /// Returns a short summary suitable for discovery listings.
     pub fn discovery_summary(&self) -> String {
         self.summary.clone().unwrap_or_else(|| {
             format!(
@@ -510,11 +531,13 @@ impl WorkflowDefinition {
         })
     }
 
+    /// Returns the ordered phase chain as text.
     pub fn phase_chain_text(&self) -> String {
         self.phases.iter().map(|phase| phase.as_str()).collect::<Vec<_>>().join(" -> ")
     }
 }
 
+/// Availability state shown when discovering workflows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkflowAvailabilityState {
@@ -523,6 +546,7 @@ pub enum WorkflowAvailabilityState {
     Unsupported,
 }
 
+/// Discovery entry presented to CLI callers for one workflow.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkflowDiscoveryEntry {
     pub workflow_name: String,
@@ -534,6 +558,7 @@ pub struct WorkflowDiscoveryEntry {
     pub availability_state: WorkflowAvailabilityState,
 }
 
+/// Named delivery-path definition for project-scale orchestration.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeliveryPathDefinition {
     pub delivery_path_name: String,
@@ -543,6 +568,7 @@ pub struct DeliveryPathDefinition {
 }
 
 impl DeliveryPathDefinition {
+    /// Validates the delivery-path definition.
     pub fn validate(&self) -> Result<(), WorkflowDefinitionError> {
         if self.stages.is_empty() {
             return Err(WorkflowDefinitionError::MissingDeliveryPathStages {
@@ -563,11 +589,13 @@ impl DeliveryPathDefinition {
         Ok(())
     }
 
+    /// Returns the ordered stage names for operator-facing summaries.
     pub fn stage_names(&self) -> String {
         self.stages.iter().map(|stage| stage.as_str()).collect::<Vec<_>>().join(" -> ")
     }
 }
 
+/// In-memory registry of workflow and delivery-path definitions.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct WorkflowRegistry {
     workflows: BTreeMap<String, WorkflowDefinition>,
@@ -575,6 +603,7 @@ pub struct WorkflowRegistry {
 }
 
 impl WorkflowRegistry {
+    /// Parses a workflow registry from TOML contents.
     pub fn from_toml_str(contents: &str) -> Result<Self, WorkflowDefinitionError> {
         let raw: WorkflowRegistryToml =
             toml::from_str(contents).map_err(WorkflowDefinitionError::ParseWorkflowDefinitions)?;
@@ -598,28 +627,34 @@ impl WorkflowRegistry {
         Ok(Self { workflows, delivery_paths })
     }
 
+    /// Loads a workflow registry from disk.
     pub fn load(path: &Path) -> Result<Self, WorkflowDefinitionError> {
         let contents =
             fs::read_to_string(path).map_err(WorkflowDefinitionError::ReadWorkflowDefinitions)?;
         Self::from_toml_str(&contents)
     }
 
+    /// Returns one workflow definition by name.
     pub fn workflow(&self, workflow_name: &str) -> Option<&WorkflowDefinition> {
         self.workflows.get(workflow_name)
     }
 
+    /// Returns all workflow names in registry order.
     pub fn workflow_names(&self) -> Vec<&str> {
         self.workflows.keys().map(String::as_str).collect()
     }
 
+    /// Returns one delivery-path definition by name.
     pub fn delivery_path(&self, delivery_path_name: &str) -> Option<&DeliveryPathDefinition> {
         self.delivery_paths.get(delivery_path_name)
     }
 
+    /// Returns all delivery-path names in registry order.
     pub fn delivery_path_names(&self) -> Vec<&str> {
         self.delivery_paths.keys().map(String::as_str).collect()
     }
 
+    /// Builds discovery entries for workflows in the target workspace.
     pub fn discovery_entries(&self, workspace: &Path) -> Vec<WorkflowDiscoveryEntry> {
         self.workflows
             .values()
@@ -639,6 +674,7 @@ impl WorkflowRegistry {
     }
 }
 
+/// Persisted workflow progress state captured in session-native execution.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkflowProgressState {
     pub workflow_name: String,
@@ -656,6 +692,7 @@ pub struct WorkflowProgressState {
 }
 
 impl WorkflowProgressState {
+    /// Validates persisted workflow progress.
     pub fn validate(&self) -> Result<(), WorkflowDefinitionError> {
         if self.workflow_name.trim().is_empty() {
             return Err(WorkflowDefinitionError::MissingWorkflowName);
@@ -674,10 +711,12 @@ impl WorkflowProgressState {
         Ok(())
     }
 
+    /// Returns the current phase as text, when the workflow is inside a phase.
     pub fn current_phase_text(&self) -> Option<String> {
         self.current_phase.map(|phase| phase.as_str().to_string())
     }
 
+    /// Returns the recommended next action, when one is present.
     pub fn next_action_text(&self) -> Option<String> {
         self.next_action.clone()
     }
@@ -794,6 +833,7 @@ struct WorkflowConditionToml {
     governance: Option<WorkflowConditionKind>,
 }
 
+/// Validation and loading errors for workflow definitions and persisted workflow state.
 #[derive(Debug, Error)]
 pub enum WorkflowDefinitionError {
     #[error("workflow name must not be empty")]

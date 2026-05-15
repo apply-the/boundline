@@ -77,6 +77,15 @@ Planning in Boundline is evidence-driven:
 That explicit stop behavior is a feature, not an inconvenience. Boundline should
 stop rather than pretend a plan is credible when the evidence is weak.
 
+## Guidance And Guardian Capability Layer
+
+The same bounded context pack also drives guidance and guardian selection.
+
+- `plan` resolves capability sources once per lifecycle phase and persists the authority story: workspace overrides under `.boundline/guidance/`, optional Canon guidance under `.canon/boundline/guidance/`, bundled assistant packs under `assistant/packs/`, and built-ins as the final fallback.
+- Bundled packs now reuse shared capability ids across technology clusters. Boundline keeps shared engineering guidance in `assistant/guidance/`, then selects the best matching Rust, JavaScript or TypeScript, Python, JVM, .NET, Go, PHP or Ruby, mobile, systems, or shell pack from runtime evidence instead of loading one Rust-only surface everywhere.
+- `run` executes guardians on the same session-owned route. Deterministic guardians run first; hybrid and LLM guardians reuse the existing planning, implementation, verification, or review slot and degrade explicitly when the declared route cannot validate.
+- `status`, `next`, and `inspect` do not recompute that story. They project the persisted guidance summary, loaded and skipped sources, guardian timeline, findings summary, degradations, and blocking outcome from session state and traces.
+
 ## Risk Review Boundaries
 
 Boundline can require review voting at risky stage boundaries without turning

@@ -1,3 +1,6 @@
+//! Session-native persistence models, routing projections, and operator-facing
+//! view helpers.
+
 use std::path::Path;
 
 use serde::de::DeserializeOwned;
@@ -24,6 +27,7 @@ use crate::domain::task_context::{
 use crate::domain::trace::current_timestamp_millis;
 use crate::domain::workflow::{ProjectScalePath, WorkflowProgressState};
 
+/// Session-side projection of an in-progress project-scale path.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectScaleSessionState {
     pub path: ProjectScalePath,
@@ -39,11 +43,13 @@ pub struct ProjectScaleSessionState {
 }
 
 impl ProjectScaleSessionState {
+    /// Returns the active project-scale stage label, if the current index is valid.
     pub fn active_stage_text(&self) -> Option<String> {
         self.path.stages.get(self.active_stage_index).map(|stage| stage.kind.as_str().to_string())
     }
 }
 
+/// Persisted voting state attached to the active session.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VotingSessionState {
     pub trigger: String,
@@ -59,6 +65,7 @@ pub struct VotingSessionState {
     pub next_action: String,
 }
 
+/// Lifecycle status of the active workspace session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionStatus {
@@ -74,11 +81,13 @@ pub enum SessionStatus {
 }
 
 impl SessionStatus {
+    /// Returns true when the session is in a terminal state.
     pub fn is_terminal(self) -> bool {
         matches!(self, Self::Succeeded | Self::Failed | Self::Exhausted | Self::Aborted)
     }
 }
 
+/// Session-native commands that can trigger persisted state transitions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionCommand {
@@ -93,6 +102,7 @@ pub enum SessionCommand {
     Inspect,
 }
 
+/// Authoritative persisted session snapshot for one workspace.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ActiveSessionRecord {
     pub session_id: String,
@@ -127,6 +137,8 @@ pub struct ActiveSessionRecord {
 }
 
 impl ActiveSessionRecord {
+    /// Validates the persisted session snapshot and all nested state used by
+    /// status, inspect, and runtime orchestration.
     pub fn validate(&self) -> Result<(), SessionValidationError> {
         if self.session_id.trim().is_empty() {
             return Err(SessionValidationError::MissingSessionId);
@@ -214,20 +226,25 @@ impl ActiveSessionRecord {
         Ok(())
     }
 
+    /// Returns the active workflow progress, preferring session-local state and
+    /// falling back to the goal plan projection when necessary.
     pub fn active_workflow_progress(&self) -> Option<&WorkflowProgressState> {
         self.workflow_progress.as_ref().or_else(|| {
             self.goal_plan.as_ref().and_then(|goal_plan| goal_plan.workflow_progress.as_ref())
         })
     }
 
+    /// Returns the active workflow name, if one is present.
     pub fn active_workflow_name(&self) -> Option<String> {
         self.active_workflow_progress().map(|workflow| workflow.workflow_name.clone())
     }
 
+    /// Returns the current workflow phase label, if one is active.
     pub fn active_workflow_phase_text(&self) -> Option<String> {
         self.active_workflow_progress().and_then(WorkflowProgressState::current_phase_text)
     }
 
+    /// Returns the next suggested workflow action, if one is active.
     pub fn active_workflow_next_action(&self) -> Option<String> {
         self.active_workflow_progress().and_then(WorkflowProgressState::next_action_text)
     }
@@ -260,6 +277,7 @@ fn task_belongs_to_session_workspace(
             .any(|workspace_ref| workspace_ref == &task.context.workspace_ref))
 }
 
+/// Persisted explanation of one session transition.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionTransition {
     pub trigger_command: SessionCommand,
@@ -270,6 +288,8 @@ pub struct SessionTransition {
 }
 
 impl SessionTransition {
+    /// Validates that the transition matches the authoritative session record
+    /// it claims to describe.
     pub fn validate(&self, record: &ActiveSessionRecord) -> Result<(), SessionValidationError> {
         if self.reason.trim().is_empty() {
             return Err(SessionValidationError::MissingTransitionReason);
@@ -293,6 +313,7 @@ impl SessionTransition {
     }
 }
 
+/// Source that currently owns the authoritative follow-up state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ContinuityAuthority {
@@ -311,6 +332,7 @@ impl ContinuityAuthority {
     }
 }
 
+/// Delegation packet kind recorded in continuity history.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DelegationPacketKind {
@@ -327,6 +349,7 @@ impl DelegationPacketKind {
     }
 }
 
+/// Persisted state of one delegation packet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DelegationPacketState {
@@ -349,6 +372,7 @@ impl DelegationPacketState {
     }
 }
 
+/// Session-level follow-through mode for delegation continuity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DelegationContinuityMode {
@@ -379,6 +403,7 @@ impl DelegationContinuityMode {
     }
 }
 
+/// Recommended operator recovery action when continuity becomes stuck.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StuckRecoveryAction {
@@ -401,6 +426,7 @@ impl StuckRecoveryAction {
     }
 }
 
+/// Evidence that explains why a delegation packet is classified as stuck.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StuckEvidenceMarker {
     #[serde(default)]
@@ -415,6 +441,7 @@ pub struct StuckEvidenceMarker {
 }
 
 impl StuckEvidenceMarker {
+    /// Validates that the marker preserves at least one repeated or unchanged signal.
     pub fn validate(&self) -> Result<(), String> {
         if self.repeated_attempts == 0
             && self.same_reason_count == 0
@@ -431,6 +458,8 @@ impl StuckEvidenceMarker {
     }
 }
 
+/// Persisted delegation packet recorded when continuity leaves the current
+/// route owner.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DelegationPacket {
     pub packet_id: String,
@@ -455,6 +484,7 @@ pub struct DelegationPacket {
 }
 
 impl DelegationPacket {
+    /// Validates the persisted delegation packet shape.
     pub fn validate(&self) -> Result<(), String> {
         if self.packet_id.trim().is_empty() {
             return Err("delegation packet_id must not be empty".to_string());
@@ -499,6 +529,7 @@ impl DelegationPacket {
         Ok(())
     }
 
+    /// Returns a compact operator-facing headline for the packet.
     pub fn headline(&self) -> String {
         let subject = if self.continuity_reason.trim().is_empty() {
             self.evidence_refs
@@ -512,6 +543,7 @@ impl DelegationPacket {
         format!("{} required: {subject}", self.kind.as_str())
     }
 
+    /// Returns the most useful evidence summary recorded for the packet.
     pub fn evidence_summary(&self) -> String {
         if !self.evidence_refs.is_empty() {
             return self.evidence_refs.join(", ");
@@ -522,18 +554,21 @@ impl DelegationPacket {
         self.continuity_reason.clone()
     }
 
+    /// Marks the packet as resolved and records the resolution timestamp.
     pub fn mark_resolved(&mut self) {
         self.state = DelegationPacketState::Resolved;
         self.resolved_at = Some(current_timestamp_millis());
         self.superseded_by_packet_id = None;
     }
 
+    /// Marks the packet as superseded by a newer successor packet.
     pub fn mark_superseded(&mut self, successor_packet_id: impl Into<String>) {
         self.state = DelegationPacketState::Superseded;
         self.superseded_by_packet_id = Some(successor_packet_id.into());
     }
 }
 
+/// Persisted continuity state projected from delegation history.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DelegationContinuityState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -546,6 +581,7 @@ pub struct DelegationContinuityState {
 }
 
 impl DelegationContinuityState {
+    /// Validates the continuity view against the packet history it references.
     pub fn validate(&self, packet_history: &[DelegationPacket]) -> Result<(), String> {
         if self.next_command.trim().is_empty() {
             return Err("delegation next_command must not be empty".to_string());
@@ -618,6 +654,7 @@ impl DelegationContinuityState {
     }
 }
 
+/// Follow-up mode exposed when compatibility traces remain authoritative.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CompatibilityFollowUpMode {
@@ -636,6 +673,7 @@ impl CompatibilityFollowUpMode {
     }
 }
 
+/// Flattened follow-up projection derived from a compatibility trace.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CompatibilityFollowUpView {
     pub follow_up_mode: CompatibilityFollowUpMode,
@@ -647,6 +685,7 @@ pub struct CompatibilityFollowUpView {
     pub next_command: String,
 }
 
+/// Flattened delegation projection reused by status and inspect surfaces.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DelegationStatusView {
     pub mode: DelegationContinuityMode,
@@ -663,6 +702,7 @@ pub struct DelegationStatusView {
 }
 
 impl DelegationStatusView {
+    /// Builds the flattened delegation view from continuity state and packet history.
     pub fn from_continuity(
         continuity: &DelegationContinuityState,
         packet_history: &[DelegationPacket],
@@ -688,6 +728,8 @@ impl DelegationStatusView {
     }
 }
 
+/// Returns the authoritative delegation view for the current session, whether
+/// it lives on the goal plan or active task context.
 pub fn delegation_status_view(record: &ActiveSessionRecord) -> Option<DelegationStatusView> {
     if let Some(goal_plan) = record.goal_plan.as_ref()
         && let Some(continuity) = goal_plan.delegation_continuity().cloned()
@@ -705,6 +747,7 @@ pub fn delegation_status_view(record: &ActiveSessionRecord) -> Option<Delegation
     DelegationStatusView::from_continuity(&continuity, &packet_history).ok()
 }
 
+/// Returns the next delegation command recorded in the authoritative session state.
 pub fn delegation_next_command(record: &ActiveSessionRecord) -> Option<String> {
     if let Some(goal_plan) = record.goal_plan.as_ref()
         && let Some(continuity) = goal_plan.delegation_continuity()
@@ -719,6 +762,8 @@ pub fn delegation_next_command(record: &ActiveSessionRecord) -> Option<String> {
         .map(|continuity| continuity.next_command)
 }
 
+/// Flattened read-side projection used by `status`, `next`, and related CLI
+/// surfaces.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionStatusView {
     pub session_id: String,
@@ -991,6 +1036,8 @@ impl Default for SessionStatusView {
 }
 
 impl SessionStatusView {
+    /// Validates that the flattened status view matches the authoritative
+    /// session record it was projected from.
     pub fn validate(&self, record: &ActiveSessionRecord) -> Result<(), SessionValidationError> {
         if self.session_id != record.session_id {
             return Err(SessionValidationError::StatusViewSessionMismatch {
@@ -1602,6 +1649,7 @@ impl SessionStatusView {
     }
 }
 
+/// High-level execution mode selected for the current session state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RoutingMode {
@@ -1620,6 +1668,7 @@ impl RoutingMode {
     }
 }
 
+/// Persisted source that explains why the current routing mode was selected.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RoutingSource {
@@ -1640,6 +1689,7 @@ impl RoutingSource {
     }
 }
 
+/// Flattened routing projection derived from the active session snapshot.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RoutingOutcome {
     pub mode: RoutingMode,
@@ -1648,6 +1698,8 @@ pub struct RoutingOutcome {
 }
 
 impl RoutingOutcome {
+    /// Returns the stable execution-path key used by operator-facing surfaces,
+    /// when the current routing combination maps to one.
     pub fn execution_path_key(&self) -> Option<&'static str> {
         match (self.mode, self.source) {
             (RoutingMode::Native, RoutingSource::GoalPlan) => Some("native_goal_plan"),
@@ -1665,6 +1717,7 @@ impl RoutingOutcome {
     }
 }
 
+/// Resolves the current routing outcome from the authoritative session state.
 pub fn routing_outcome(record: &ActiveSessionRecord) -> RoutingOutcome {
     if let Some(delegation) = delegation_status_view(record) {
         match delegation.mode {
@@ -1722,10 +1775,12 @@ pub fn routing_outcome(record: &ActiveSessionRecord) -> RoutingOutcome {
     }
 }
 
+/// Returns the stable execution-path label for the current session, if one applies.
 pub fn execution_path_text(record: &ActiveSessionRecord) -> Option<String> {
     routing_outcome(record).execution_path_key().map(str::to_string)
 }
 
+/// Returns the operator-facing label for a persisted decision status.
 pub fn decision_status_text(status: DecisionStatus) -> &'static str {
     match status {
         DecisionStatus::Pending => "pending",
@@ -1736,6 +1791,7 @@ pub fn decision_status_text(status: DecisionStatus) -> &'static str {
     }
 }
 
+/// Validation failures for persisted session and session-view state.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum SessionValidationError {
     #[error("session_id must not be empty")]
@@ -2009,6 +2065,7 @@ fn trace_within_session_scope(record: &ActiveSessionRecord, trace_ref: &str) -> 
     })
 }
 
+/// Reads a string field from persisted task context state.
 pub fn task_state_string(task: &Task, key: &str) -> Option<String> {
     task.context.state.get(key).and_then(|value| value.as_str().map(str::to_string))
 }
@@ -2017,6 +2074,7 @@ fn task_state_json<T: DeserializeOwned>(task: &Task, key: &str) -> Option<T> {
     task.context.state.get(key).cloned().and_then(|value| serde_json::from_value(value).ok())
 }
 
+/// Reads a string array field from persisted task context state.
 pub fn task_state_strings(task: &Task, key: &str) -> Option<Vec<String>> {
     task.context.state.get(key).and_then(|value| {
         value.as_array().map(|items| {
@@ -2025,18 +2083,22 @@ pub fn task_state_strings(task: &Task, key: &str) -> Option<Vec<String>> {
     })
 }
 
+/// Returns the latest governed stage record from task context state.
 pub fn task_state_governed_stage(task: &Task) -> Option<GovernedStageRecord> {
     task_state_json(task, LATEST_GOVERNANCE_STAGE_KEY)
 }
 
+/// Returns the latest governed packet from task context state.
 pub fn task_state_governed_packet(task: &Task) -> Option<GovernedStagePacket> {
     task_state_json(task, LATEST_GOVERNANCE_PACKET_KEY)
 }
 
+/// Returns the latest governance packet reuse binding from task context state.
 pub fn task_state_governance_packet_reuse(task: &Task) -> Option<PacketReuseBinding> {
     task_state_json(task, LATEST_GOVERNANCE_PACKET_REUSE_KEY)
 }
 
+/// Returns the latest governance autopilot decision from task context state.
 pub fn task_state_governance_decision(task: &Task) -> Option<AutopilotDecisionRecord> {
     task_state_json(task, LATEST_GOVERNANCE_DECISION_KEY)
 }
@@ -2058,49 +2120,60 @@ fn autopilot_action_text(action: crate::domain::governance::AutopilotAction) -> 
     }
 }
 
+/// Returns the latest governance stage key from task context state.
 pub fn task_state_governance_stage_key(task: &Task) -> Option<String> {
     task_state_governed_stage(task).map(|record| record.stage_key)
 }
 
+/// Returns the latest governance runtime label from task context state.
 pub fn task_state_governance_runtime_text(task: &Task) -> Option<String> {
     task_state_governed_stage(task).and_then(|record| encoded_text(&record.runtime))
 }
 
+/// Returns the latest governance mode label from task context state.
 pub fn task_state_governance_mode_text(task: &Task) -> Option<String> {
     task_state_governed_packet(task)
         .and_then(|packet| packet.canon_mode)
         .and_then(|mode| encoded_text(&mode))
 }
 
+/// Returns the latest Canon governance run ref from task context state.
 pub fn task_state_governance_canon_run_ref(task: &Task) -> Option<String> {
     task_state_governed_stage(task).and_then(|record| record.canon_run_ref)
 }
 
+/// Returns the latest governance lifecycle-state label from task context state.
 pub fn task_state_governance_state_text(task: &Task) -> Option<String> {
     task_state_governed_stage(task).and_then(|record| encoded_text(&record.lifecycle_state))
 }
 
+/// Returns the latest governance blocked reason, falling back to Canon-memory
+/// staleness when that is the authoritative blocker.
 pub fn task_state_governance_blocked_reason(task: &Task) -> Option<String> {
     task_state_governed_stage(task)
         .and_then(|record| record.blocked_reason)
         .or_else(|| task_state_canon_memory_staleness_reason(task))
 }
 
+/// Returns the latest governance packet ref from task context state.
 pub fn task_state_governance_packet_ref(task: &Task) -> Option<String> {
     task_state_governed_packet(task)
         .map(|packet| packet.packet_ref)
         .or_else(|| task_state_governed_stage(task).and_then(|record| record.packet_ref))
 }
 
+/// Returns the source stage recorded for governance packet reuse.
 pub fn task_state_governance_packet_source_stage(task: &Task) -> Option<String> {
     task_state_governance_packet_reuse(task).map(|binding| binding.upstream_stage_key)
 }
 
+/// Returns the packet-binding reason recorded for governance packet reuse.
 pub fn task_state_governance_packet_binding_reason(task: &Task) -> Option<String> {
     task_state_governance_packet_reuse(task)
         .map(|binding| binding.binding_reason.as_str().to_string())
 }
 
+/// Formats governance packet provenance from optional source-stage and binding-reason fields.
 pub fn governance_packet_provenance_text(
     packet_source_stage: Option<&str>,
     packet_binding_reason: Option<&str>,
@@ -2119,14 +2192,17 @@ pub fn governance_packet_provenance_text(
     }
 }
 
+/// Returns the latest governance approval label from task context state.
 pub fn task_state_governance_approval_text(task: &Task) -> Option<String> {
     task_state_governed_stage(task).and_then(|record| encoded_text(&record.approval_state))
 }
 
+/// Returns the latest governance decision headline from task context state.
 pub fn task_state_governance_decision_headline(task: &Task) -> Option<String> {
     task_state_governance_decision(task).map(|decision| decision.rationale)
 }
 
+/// Returns the candidate governance actions recorded in task context state.
 pub fn task_state_governance_candidate_actions(task: &Task) -> Option<Vec<String>> {
     task_state_governance_decision(task)
         .map(|decision| {
@@ -2148,6 +2224,7 @@ pub fn task_state_governance_candidate_actions(task: &Task) -> Option<Vec<String
         })
 }
 
+/// Returns the generic next governance action for a known governance lifecycle state.
 pub fn governance_next_action_for_state(governance_state: Option<&str>) -> Option<String> {
     match governance_state {
         Some("awaiting_approval") => {
@@ -2160,6 +2237,7 @@ pub fn governance_next_action_for_state(governance_state: Option<&str>) -> Optio
     }
 }
 
+/// Returns the most authoritative next governance action recorded for the task.
 pub fn task_state_governance_next_action(task: &Task) -> Option<String> {
     if let Some(memory) = task_state_compacted_canon_memory(task)
         && let Some(next_action) = memory.next_action_text()
@@ -2171,28 +2249,34 @@ pub fn task_state_governance_next_action(task: &Task) -> Option<String> {
     governance_next_action_for_state(governance_state.as_deref())
 }
 
+/// Returns the latest compacted Canon memory snapshot from task context state.
 pub fn task_state_compacted_canon_memory(task: &Task) -> Option<CompactedCanonMemory> {
     task.context.latest_compacted_canon_memory().ok().flatten()
 }
 
+/// Returns the Canon-memory-backed context summary from task context state.
 pub fn task_state_canon_memory_context_summary(task: &Task) -> Option<String> {
     task_state_compacted_canon_memory(task)
         .map(|memory| format!("canon memory: {}", memory.summary_text()))
 }
 
+/// Returns the Canon-memory-backed context credibility label from task context state.
 pub fn task_state_canon_memory_context_credibility(task: &Task) -> Option<String> {
     task_state_compacted_canon_memory(task).map(|memory| memory.credibility.as_str().to_string())
 }
 
+/// Returns the Canon-memory-backed primary inputs from task context state.
 pub fn task_state_canon_memory_primary_inputs(task: &Task) -> Option<Vec<String>> {
     task_state_compacted_canon_memory(task)
         .and_then(|memory| (!memory.artifact_refs.is_empty()).then_some(memory.artifact_refs))
 }
 
+/// Returns the Canon-memory-backed provenance lines from task context state.
 pub fn task_state_canon_memory_provenance(task: &Task) -> Option<Vec<String>> {
     task_state_compacted_canon_memory(task).map(|memory| memory.provenance_lines())
 }
 
+/// Returns the Canon-memory-backed staleness reason from task context state.
 pub fn task_state_canon_memory_staleness_reason(task: &Task) -> Option<String> {
     task_state_compacted_canon_memory(task).and_then(|memory| {
         (memory.credibility != crate::domain::governance::MemoryCredibilityState::Credible)
@@ -2200,6 +2284,7 @@ pub fn task_state_canon_memory_staleness_reason(task: &Task) -> Option<String> {
     })
 }
 
+/// Returns a compact summary of the latest adaptive workspace slice.
 pub fn task_state_workspace_slice_summary(task: &Task) -> Option<String> {
     let slice = task.context.state.get("latest_workspace_slice")?;
     let selected_targets = slice.get("selected_targets")?.as_array()?;
@@ -2208,6 +2293,7 @@ pub fn task_state_workspace_slice_summary(task: &Task) -> Option<String> {
     if targets.is_empty() { None } else { Some(targets.join(", ")) }
 }
 
+/// Returns a compact summary of the latest adaptive attempt lineage.
 pub fn task_state_attempt_lineage_summary(task: &Task) -> Option<String> {
     let lineage = task.context.state.get("latest_attempt_lineage")?;
     let current = lineage.get("current_attempt_id")?.as_str()?;
