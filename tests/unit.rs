@@ -150,3 +150,6 @@ mod workspace_resolution;
 
 #[path = "unit/guidance_runtime.rs"]
 mod guidance_runtime;
+
+#[path = "unit/guidance_catalog_runtime.rs"]
+mod guidance_catalog_runtime;

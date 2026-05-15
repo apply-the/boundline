@@ -2,5 +2,5 @@
 title = "Systems Language Guidance"
 applies_to = ["planning", "implementation", "verification", "review"]
 roles = ["planner", "implementer", "verifier", "reviewer"]
-path = "../guidance/language-systems.md"
+path = "../guidance-catalog/guidance/language-systems.md"
 priority = "high"

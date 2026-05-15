@@ -2,52 +2,45 @@
 title = "Clean Code"
 applies_to = ["planning", "implementation", "verification", "review"]
 roles = ["planner", "implementer", "reviewer"]
-path = "../guidance/clean-code.md"
+path = "../guidance-catalog/guidance/clean-code.md"
 priority = "high"
 
 [guidance.architecture]
 title = "Architecture Guidance"
 applies_to = ["planning", "architecture", "review"]
 roles = ["planner", "architect", "reviewer"]
-path = "../guidance/architecture.md"
+path = "../guidance-catalog/guidance/architecture.md"
 priority = "medium"
 
 [guidance.security-boundaries]
 title = "Security And Boundary Guidance"
 applies_to = ["planning", "implementation", "verification", "review"]
 roles = ["planner", "implementer", "verifier", "reviewer"]
-path = "../guidance/security-boundaries.md"
+path = "../guidance-catalog/guidance/security-boundaries.md"
 priority = "high"
 
 [guidance.language-best-practices]
 title = "Cross-Language Engineering Guidance"
 applies_to = ["planning", "implementation", "verification", "review"]
 roles = ["planner", "implementer", "verifier", "reviewer"]
-path = "../guidance/language-core.md"
-priority = "medium"
-
-[guidance.framework-best-practices]
-title = "Cross-Framework Delivery Guidance"
-applies_to = ["planning", "implementation", "verification", "review"]
-roles = ["planner", "implementer", "verifier", "reviewer"]
-path = "../guidance/framework-core.md"
+path = "../guidance-catalog/guidance/language-core.md"
 priority = "medium"
 
 [guidance.testing-best-practices]
 title = "Cross-Framework Testing Strategy"
 applies_to = ["planning", "testing", "verification", "review"]
 roles = ["planner", "verifier", "reviewer"]
-path = "../guidance/testing-core.md"
+path = "../guidance-catalog/guidance/testing-core.md"
 priority = "high"
 
 [guardians.clean-code-safety]
-title = "Fail-Fast Shortcut Guardian"
-kind = "deterministic"
+title = "Clean Code Guardian"
+kind = "llm"
 applies_to = ["verification", "review"]
-rules = ["panic_prone_flow"]
-severity_floor = "error"
-command = "builtin:no-panic-flow"
-instruction = "../guardians/clean-code-safety.md"
+rules = ["intent_revealing_names", "no_mixed_responsibilities", "no_hidden_side_effects"]
+severity_floor = "warn"
+command = "builtin:clean-code"
+instruction = "../guidance-catalog/guardians/clean-code.md"
 
 [guardians.architecture-review]
 title = "Architecture Boundary Guardian"
@@ -55,7 +48,7 @@ kind = "llm"
 applies_to = ["planning", "architecture", "review"]
 rules = ["bounded_architecture"]
 severity_floor = "concern"
-instruction = "../guardians/architecture-review.md"
+instruction = "../guidance-catalog/guardians/architecture-boundary.md"
 
 [guardians.testing-evidence]
 title = "Testing Evidence Guardian"
@@ -64,7 +57,7 @@ applies_to = ["verification"]
 rules = ["verification_evidence"]
 severity_floor = "warn"
 command = "builtin:validation-evidence"
-instruction = "../guardians/testing-evidence.md"
+instruction = "../guidance-catalog/guardians/testability.md"
 
 [guardians.security-boundary-review]
 title = "Security Boundary Guardian"
@@ -72,4 +65,4 @@ kind = "llm"
 applies_to = ["implementation", "verification", "review"]
 rules = ["security_boundaries"]
 severity_floor = "warn"
-instruction = "../guardians/security-boundary-review.md"
+instruction = "../guidance-catalog/guardians/security-boundary.md"

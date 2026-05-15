@@ -2,12 +2,12 @@
 title = "Go Language Guidance"
 applies_to = ["planning", "implementation", "verification", "review"]
 roles = ["planner", "implementer", "verifier", "reviewer"]
-path = "../guidance/language-go.md"
+path = "../guidance-catalog/guidance/language-go.md"
 priority = "high"
 
 [guidance.testing-best-practices]
 title = "Go Testing Guidance"
 applies_to = ["planning", "testing", "verification", "review"]
 roles = ["planner", "verifier", "reviewer"]
-path = "../guidance/testing-go.md"
+path = "../guidance-catalog/guidance/testing-go.md"
 priority = "high"

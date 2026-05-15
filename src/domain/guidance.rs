@@ -7,6 +7,10 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::domain::configuration::RouteSlot;
+use crate::domain::guidance_catalog::{
+    CatalogAuthoritySource, CatalogGuardianDisposition, CatalogGuidanceStrength, CatalogPillar,
+    CatalogValidationFinding,
+};
 
 /// Lifecycle phases where guidance and guardians can participate in a bounded run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -233,6 +237,12 @@ pub struct GuidanceCapability {
     pub source_ref: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pack_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub catalog_pillar: Option<CatalogPillar>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub catalog_strength: Option<CatalogGuidanceStrength>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub catalog_authority_source: Option<CatalogAuthoritySource>,
 }
 
 impl GuidanceCapability {
@@ -281,6 +291,12 @@ pub struct GuardianCapability {
     pub source_ref: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pack_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub catalog_pillar: Option<CatalogPillar>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub catalog_default_disposition: Option<CatalogGuardianDisposition>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub catalog_authority_source: Option<CatalogAuthoritySource>,
 }
 
 impl GuardianCapability {
@@ -394,6 +410,12 @@ pub struct CapabilityResolutionRecord {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub skipped_sources: Vec<SkippedCapabilitySource>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub loaded_packs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skipped_packs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub validation_findings: Vec<CatalogValidationFinding>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub resolution_notes: Vec<String>,
     pub summary: String,
 }
@@ -506,6 +528,12 @@ pub struct GuidanceGuardianProjection {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capability_resolution_summary: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub loaded_packs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skipped_packs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub catalog_validation_findings: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub loaded_guidance_sources: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub skipped_guidance_sources: Vec<String>,
@@ -529,6 +557,9 @@ impl GuidanceGuardianProjection {
     /// Returns true when the projection carries no visible guidance or guardian story.
     pub fn is_empty(&self) -> bool {
         self.capability_resolution_summary.is_none()
+            && self.loaded_packs.is_empty()
+            && self.skipped_packs.is_empty()
+            && self.catalog_validation_findings.is_empty()
             && self.loaded_guidance_sources.is_empty()
             && self.skipped_guidance_sources.is_empty()
             && self.loaded_guardian_sources.is_empty()
@@ -596,6 +627,7 @@ pub enum GuidanceCapabilityError {
 #[cfg(test)]
 mod tests {
     use crate::domain::configuration::RouteSlot;
+    use crate::domain::guidance_catalog::CatalogValidationFinding;
 
     use super::{
         CapabilityPhase, CapabilityResolutionRecord, FindingConfidence, GuardianCapability,
@@ -715,6 +747,9 @@ mod tests {
             authority_source: GuidanceAuthoritySource::BuiltIn,
             source_ref: "assistant/guidance/solid.md".to_string(),
             pack_id: Some("engineering-foundations".to_string()),
+            catalog_pillar: None,
+            catalog_strength: None,
+            catalog_authority_source: None,
         };
 
         assert!(capability.validate().is_err());
@@ -732,6 +767,9 @@ mod tests {
             authority_source: GuidanceAuthoritySource::BuiltIn,
             source_ref: "assistant/guidance/solid.md".to_string(),
             pack_id: Some("engineering-foundations".to_string()),
+            catalog_pillar: None,
+            catalog_strength: None,
+            catalog_authority_source: None,
         };
 
         assert!(capability.validate().is_ok());
@@ -780,6 +818,9 @@ mod tests {
             authority_source: GuidanceAuthoritySource::BuiltIn,
             source_ref: "assistant/guardians/solid.toml".to_string(),
             pack_id: Some("engineering-foundations".to_string()),
+            catalog_pillar: None,
+            catalog_default_disposition: None,
+            catalog_authority_source: None,
         };
 
         assert!(guardian.validate().is_err());
@@ -799,6 +840,9 @@ mod tests {
             authority_source: GuidanceAuthoritySource::BuiltIn,
             source_ref: "assistant/guardians/solid.toml".to_string(),
             pack_id: Some("engineering-foundations".to_string()),
+            catalog_pillar: None,
+            catalog_default_disposition: None,
+            catalog_authority_source: None,
         };
 
         assert!(deterministic.validate().is_ok());
@@ -867,6 +911,16 @@ mod tests {
             loaded_guardians: vec!["solid_guardian".to_string()],
             loaded_sources: vec![loaded.clone()],
             skipped_sources: vec![skipped.clone()],
+            loaded_packs: vec!["assistant/packs/guidance-catalog".to_string()],
+            skipped_packs: vec![
+                "assistant/packs/legacy-pack (missing catalog-manifest.toml)".to_string(),
+            ],
+            validation_findings: vec![CatalogValidationFinding {
+                severity: crate::domain::guidance_catalog::CatalogValidationSeverity::Warning,
+                source_ref: "assistant/packs/guidance-catalog/catalog/guidance-index.toml"
+                    .to_string(),
+                message: "guidance.testing_core referenced a deprecated alias".to_string(),
+            }],
             resolution_notes: vec!["workspace override won".to_string()],
             summary: "loaded workspace guidance and guardian sources".to_string(),
         };

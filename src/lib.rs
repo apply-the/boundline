@@ -63,6 +63,15 @@ pub use domain::guidance::{
     GuardianKind, GuidanceAuthoritySource, GuidanceCapability, GuidanceCapabilityError,
     GuidanceGuardianProjection, GuidancePriority, LoadedCapabilitySource, SkippedCapabilitySource,
 };
+pub use domain::guidance_catalog::{
+    CatalogAuthorityDefaults, CatalogAuthoritySource, CatalogCompatibility,
+    CatalogGuardianDisposition, CatalogGuardianIndex, CatalogGuardianRuleSeed,
+    CatalogGuidanceEntry, CatalogGuidanceIndex, CatalogGuidanceStrength, CatalogIdentity,
+    CatalogLayout, CatalogLifecycleLabel, CatalogManifest, CatalogPackIdentity,
+    CatalogPackManifest, CatalogPillar, CatalogPillarSet, CatalogRuntimeRequirements,
+    CatalogTraceSettings, CatalogValidationFinding, CatalogValidationSeverity,
+    GuidanceCatalogError,
+};
 pub use domain::limits::{RunLimits, TerminalCondition};
 pub use domain::negotiation::{
     AcceptanceBoundary, NegotiatedDeliveryPacket, NegotiationConstraint, NegotiationConstraintKind,
@@ -108,6 +117,7 @@ pub use orchestrator::governance::{
     lifecycle_requires_refresh, narrowed_bounded_context, runtime_command_available,
     select_packet_reuse_binding, selected_stage_policy, set_lifecycle_awaiting_approval,
 };
+pub use orchestrator::guidance_catalog_runtime::{CatalogPackDiscovery, discover_catalog_packs};
 pub use orchestrator::guidance_runtime::{
     CapabilityResolution, GuardianExecutionOutcome, GuardianExecutionRequest,
     GuidanceRuntimeEvidence, compare_authority_precedence, execute_guardians_for_phase,

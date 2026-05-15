@@ -118,9 +118,6 @@ docs/
 ├── getting-started.md
 └── guides/
 
-roadmap/
-└── S2-1 - guidance-and-guardian-capabilities.md
-
 README.md
 CHANGELOG.md
 Cargo.toml

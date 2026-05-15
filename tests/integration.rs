@@ -186,3 +186,6 @@ mod cli_guardian_routing;
 
 #[path = "integration/cli_guidance_guardian_projection.rs"]
 mod cli_guidance_guardian_projection;
+
+#[path = "integration/cli_guidance_catalog.rs"]
+mod cli_guidance_catalog;

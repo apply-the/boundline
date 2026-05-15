@@ -4706,6 +4706,9 @@ mod tests {
         };
         let update = GuidanceGuardianProjection {
             capability_resolution_summary: Some("verification guidance selected".to_string()),
+            loaded_packs: Vec::new(),
+            skipped_packs: Vec::new(),
+            catalog_validation_findings: Vec::new(),
             loaded_guidance_sources: vec![".boundline/guidance/local.md".to_string()],
             skipped_guidance_sources: vec![
                 "assistant/packs/shared/guidance/clean-code.md (shadowed)".to_string(),

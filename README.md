@@ -19,6 +19,11 @@ through explicit sessions for planning, execution, inspection, recovery, and
 governed delivery when needed. Canon is optional: most users can ignore it
 unless they need governed stages or governed artifacts.
 
+In `0.55.0`, bundled guidance and guardian content also ships as catalog-aware
+packs under `assistant/packs/`, with explicit manifest and index contracts,
+canonical pillar taxonomy, and inspectable validation findings surfaced through
+`plan`, `status`, and `inspect`.
+
 ## Quick Path Brutale
 
 If Boundline is already installed, this is the shortest path to doing
@@ -205,6 +210,7 @@ printed restore command before making unrelated edits.
 - Quick start: this README plus [docs/getting-started.md](docs/getting-started.md)
 - Delivery model: [docs/delivery-model.md](docs/delivery-model.md)
 - Advanced architecture: [docs/architecture.md](docs/architecture.md)
+- Extending guidance and guardians: [docs/guides/extending-guidance-catalog.md](docs/guides/extending-guidance-catalog.md)
 - Assistant-specific command packs: [assistant/README.md](assistant/README.md)
 
 Stop here if all you need is install, verify, and run. Continue into
@@ -359,7 +365,7 @@ Boundline is the local delivery orchestrator. Canon is the governed packet runti
 - Canon governs packets, approvals, and governed artifacts when a bounded delivery phase crosses a governance boundary.
 - Large work is supported by decomposition, not by unbounded autonomy.
 
-The current release documents Canon `0.52.0` support on the
+The current release documents Canon `0.53.0` support on the
 `canon governance start|refresh|capabilities --json` `v1` adapter surface.
 
 ## Community And Support

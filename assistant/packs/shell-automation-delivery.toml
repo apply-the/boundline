@@ -2,5 +2,5 @@
 title = "Shell And Automation Guidance"
 applies_to = ["planning", "implementation", "verification", "review"]
 roles = ["planner", "implementer", "verifier", "reviewer"]
-path = "../guidance/language-shell-automation.md"
+path = "../guidance-catalog/guidance/language-shell-automation.md"
 priority = "high"

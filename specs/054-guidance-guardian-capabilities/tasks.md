@@ -150,7 +150,7 @@ description: "Task list for guidance and guardian capabilities implementation"
 
 **Purpose**: Finish documentation, code comments, lint, tests, and coverage
 
-- [x] T032 [P] Update operator-facing docs and roadmap in `/Users/rt/workspace/apply-the/boundline/docs/architecture.md`, `/Users/rt/workspace/apply-the/boundline/docs/configuration.md`, `/Users/rt/workspace/apply-the/boundline/docs/getting-started.md`, `/Users/rt/workspace/apply-the/boundline/README.md`, `/Users/rt/workspace/apply-the/boundline/ROADMAP.md`, and `/Users/rt/workspace/apply-the/boundline/roadmap/S2-1 - guidance-and-guardian-capabilities.md`
+- [x] T032 [P] Update operator-facing docs and roadmap in `/Users/rt/workspace/apply-the/boundline/docs/architecture.md`, `/Users/rt/workspace/apply-the/boundline/docs/configuration.md`, `/Users/rt/workspace/apply-the/boundline/docs/getting-started.md`, `/Users/rt/workspace/apply-the/boundline/README.md`, and `/Users/rt/workspace/apply-the/boundline/ROADMAP.md`
 - [x] T033 [P] Add concise code documentation in `/Users/rt/workspace/apply-the/boundline/src/domain/guidance.rs`, `/Users/rt/workspace/apply-the/boundline/src/orchestrator/guidance_runtime.rs`, and any other modified runtime files where source resolution or guardian ordering is non-obvious
 - [x] T034 Run `cargo fmt --all` in `/Users/rt/workspace/apply-the/boundline`
 - [x] T035 Fix all clippy warnings in modified code and run `cargo clippy --workspace --all-targets --all-features -- -D warnings` in `/Users/rt/workspace/apply-the/boundline`

@@ -11,6 +11,8 @@ pub mod flow_policy;
 pub mod follow_through;
 pub mod goal_plan;
 pub mod governance;
+pub mod guidance;
+pub mod guidance_catalog;
 pub mod limits;
 pub mod negotiation;
 pub mod plan;

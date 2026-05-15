@@ -2,19 +2,19 @@
 title = "PHP And Ruby Language Guidance"
 applies_to = ["planning", "implementation", "verification", "review"]
 roles = ["planner", "implementer", "verifier", "reviewer"]
-path = "../guidance/language-php-ruby.md"
+path = "../guidance-catalog/guidance/language-php-ruby.md"
 priority = "high"
 
 [guidance.framework-best-practices]
-title = "PHP And Ruby Service Framework Guidance"
+title = "Rails And Laravel Framework Guidance"
 applies_to = ["planning", "implementation", "verification", "review"]
 roles = ["planner", "implementer", "verifier", "reviewer"]
-path = "../guidance/framework-php-ruby-services.md"
+path = "../guidance-catalog/guidance/framework-rails-laravel.md"
 priority = "high"
 
 [guidance.testing-best-practices]
-title = "PHP And Ruby Testing Guidance"
+title = "Integration And E2E Testing Guidance"
 applies_to = ["planning", "testing", "verification", "review"]
 roles = ["planner", "verifier", "reviewer"]
-path = "../guidance/testing-php-ruby.md"
+path = "../guidance-catalog/guidance/testing-integration-e2e.md"
 priority = "high"

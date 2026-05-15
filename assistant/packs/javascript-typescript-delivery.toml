@@ -2,19 +2,41 @@
 title = "JavaScript And TypeScript Language Guidance"
 applies_to = ["planning", "implementation", "verification", "review"]
 roles = ["planner", "implementer", "verifier", "reviewer"]
-path = "../guidance/language-javascript-typescript.md"
+path = "../guidance-catalog/guidance/language-typescript-node.md"
 priority = "high"
 
 [guidance.framework-best-practices]
-title = "JavaScript Full-Stack Framework Guidance"
+title = "Node.js Service Framework Guidance"
 applies_to = ["planning", "implementation", "verification", "review"]
 roles = ["planner", "implementer", "verifier", "reviewer"]
-path = "../guidance/framework-javascript-fullstack.md"
+path = "../guidance-catalog/guidance/framework-node-services.md"
+priority = "high"
+
+[guidance.frontend-best-practices]
+title = "Frontend Framework Guidance"
+applies_to = ["planning", "implementation", "verification", "review"]
+roles = ["planner", "implementer", "verifier", "reviewer"]
+path = "../guidance-catalog/guidance/framework-frontend-modern.md"
 priority = "high"
 
 [guidance.testing-best-practices]
-title = "JavaScript And Frontend Testing Guidance"
+title = "TypeScript Testing Guidance"
 applies_to = ["planning", "testing", "verification", "review"]
 roles = ["planner", "verifier", "reviewer"]
-path = "../guidance/testing-javascript.md"
+path = "../guidance-catalog/guidance/testing-typescript.md"
 priority = "high"
+
+[guidance.testing-frontend]
+title = "Frontend Testing Guidance"
+applies_to = ["testing", "verification", "review"]
+roles = ["verifier", "reviewer"]
+path = "../guidance-catalog/guidance/testing-frontend.md"
+priority = "medium"
+
+[guardians.ts-runtime-validation]
+title = "TypeScript Runtime Validation Guardian"
+kind = "hybrid"
+applies_to = ["implementation", "verification"]
+rules = ["unchecked_external_json", "any_at_boundary"]
+severity_floor = "warn"
+instruction = "../guidance-catalog/guardians/ts-runtime-validation.md"

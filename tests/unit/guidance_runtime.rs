@@ -72,6 +72,9 @@ fn guardian(
         authority_source,
         source_ref: format!("assistant/guardians/{guardian_id}.toml"),
         pack_id: None,
+        catalog_pillar: None,
+        catalog_default_disposition: None,
+        catalog_authority_source: None,
     }
 }
 
@@ -263,13 +266,9 @@ fn guardian_execution_degrades_semantic_guards_when_validation_support_is_unavai
             .iter()
             .any(|line| line.contains("validation support is unavailable"))
     );
-    assert!(
-        outcome
-            .projection
-            .guardian_timeline
-            .iter()
-            .any(|line| line.contains("testing-evidence: degraded"))
-    );
+    assert!(outcome.projection.guardian_timeline.iter().any(|line| {
+        line.contains(": degraded (") && line.contains("validation support is unavailable")
+    }));
 }
 
 #[test]

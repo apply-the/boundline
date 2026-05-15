@@ -30,6 +30,9 @@ fn guidance_and_guardian_manifest_contract_uses_expected_fields() {
         authority_source: GuidanceAuthoritySource::SharedPack,
         source_ref: "assistant/packs/rust-foundations.toml".to_string(),
         pack_id: Some("rust-foundations".to_string()),
+        catalog_pillar: None,
+        catalog_strength: None,
+        catalog_authority_source: None,
     };
     let guardian = GuardianCapability {
         guardian_id: "rust.clean-code.guardian".to_string(),
@@ -43,6 +46,9 @@ fn guidance_and_guardian_manifest_contract_uses_expected_fields() {
         authority_source: GuidanceAuthoritySource::SharedPack,
         source_ref: "assistant/guardians/rust-clean-code.toml".to_string(),
         pack_id: Some("rust-foundations".to_string()),
+        catalog_pillar: None,
+        catalog_default_disposition: None,
+        catalog_authority_source: None,
     };
 
     let guidance_document = serde_json::to_value(&guidance).unwrap();
@@ -77,6 +83,11 @@ fn capability_resolution_contract_preserves_loaded_and_skipped_sources() {
             authority_source: GuidanceAuthoritySource::WorkspaceOverride,
             reason: "shadowed by runtime evidence".to_string(),
         }],
+        loaded_packs: vec!["assistant/packs/guidance-catalog".to_string()],
+        skipped_packs: vec![
+            "assistant/packs/legacy-pack (missing catalog-manifest.toml)".to_string(),
+        ],
+        validation_findings: Vec::new(),
         resolution_notes: vec![
             "workspace override skipped because runtime evidence selected the same capability id"
                 .to_string(),
@@ -112,6 +123,9 @@ fn goal_plan_and_trace_flatten_guidance_projection_fields() {
         capability_resolution_summary: Some(
             "guidance resolved for planning and verification".to_string(),
         ),
+        loaded_packs: vec!["assistant/packs/guidance-catalog".to_string()],
+        skipped_packs: Vec::new(),
+        catalog_validation_findings: Vec::new(),
         loaded_guidance_sources: vec!["assistant/guidance/rust-clean-code.md".to_string()],
         skipped_guidance_sources: vec![".boundline/guidance/legacy.md (shadowed)".to_string()],
         loaded_guardian_sources: vec!["assistant/guardians/rust-clean-code.toml".to_string()],
@@ -279,6 +293,7 @@ fn bundled_capability_packs_cover_multiple_technology_clusters() {
     entries.sort();
 
     for expected in [
+        "guidance-catalog",
         "engineering-foundations.toml",
         "rust-delivery.toml",
         "javascript-typescript-delivery.toml",
