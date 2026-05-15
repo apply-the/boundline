@@ -1,9 +1,9 @@
-# Configuration in Boundline 0.53.0
+# Configuration in Boundline 0.54.0
 
-Boundline `0.53.0` keeps a user-friendly setup and routing configuration surface
+Boundline `0.54.0` keeps a user-friendly setup and routing configuration surface
 for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
-The `0.53.0` release keeps configuration behavior stable while preserving the
+The `0.54.0` release keeps configuration behavior stable while preserving the
 same governed routing defaults across earlier `bug-fix:investigate` work,
 later verify-stage `security-assessment`, workflow-aware projection of the
 same bounded governance state, continuity-aware read-side follow-up, the
@@ -80,6 +80,10 @@ ranking, explicit adaptive exhaustion, or negotiation-state overrides.
 - `run`, `status`, `next`, and `inspect` now surface effective routing plus
 	assistant bindings, and native or compatibility traces persist the route
 	snapshot used during execution
+- workspace-local `.boundline/guidance/` and `.boundline/guardians/` can now
+	override bundled capability packs with explicit loaded and skipped-source
+	disclosure; capability precedence remains runtime-owned rather than a new
+	config key
 - `plan`, `run`, `status`, `next`, and `inspect` now surface selected domain
 	family, winning standards source, and any required external-input blocking
 	reason inside the bounded context story
@@ -190,6 +194,29 @@ may include persisted `effective_routing`, `assistant_bindings`,
 `runtime_capabilities`, `slot_effort_policies`,
 workspace-local routing defaults, workflow cues, or requested governance
 intent; it intentionally does not dump every possible config value.
+
+## Guidance And Guardian Overrides
+
+Guidance and guardian selection is mostly runtime-owned, but two repository-local
+inputs can change the capability set that `plan`, `run`, `status`, `next`, and
+`inspect` report:
+
+- `.boundline/guidance/*.md` adds high-precedence guidance overrides.
+- `.boundline/guardians/*.toml` adds high-precedence guardian overrides.
+
+These files are not a second routing layer. Boundline resolves them per lifecycle
+phase alongside optional Canon guidance and bundled `assistant/packs/*.toml`, then
+persists which sources loaded and which were skipped.
+
+Semantic guardians reuse the existing effective slot for the active phase:
+
+- planning and architecture use the planning slot
+- implementation uses the implementation slot
+- testing and verification use the verification slot
+- review uses the review slot
+
+If the winning route lacks validation support, Boundline records an explicit
+guardian degradation instead of silently skipping the check.
 
 ## Cluster workflow
 

@@ -1,3 +1,5 @@
+//! Task lifecycle models, run requests, and persisted task state.
+
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use thiserror::Error;
@@ -6,6 +8,7 @@ use crate::domain::limits::RunLimits;
 use crate::domain::plan::{Plan, PlanError};
 use crate::domain::task_context::{TaskContext, TaskContextError};
 
+/// Lifecycle status of a persisted task.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TaskStatus {
@@ -18,11 +21,13 @@ pub enum TaskStatus {
 }
 
 impl TaskStatus {
+    /// Returns true when the task is in a terminal state.
     pub fn is_terminal(self) -> bool {
         matches!(self, Self::Succeeded | Self::Failed | Self::Exhausted | Self::Aborted)
     }
 }
 
+/// Terminal reason persisted when a task stops.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TerminalReason {
     pub condition: crate::domain::limits::TerminalCondition,
@@ -32,6 +37,7 @@ pub struct TerminalReason {
 }
 
 impl TerminalReason {
+    /// Creates a new terminal reason.
     pub fn new(
         condition: crate::domain::limits::TerminalCondition,
         message: impl Into<String>,
@@ -41,6 +47,7 @@ impl TerminalReason {
     }
 }
 
+/// Why a clarification record was raised while preparing bounded work.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ClarificationReasonKind {
@@ -51,6 +58,7 @@ pub enum ClarificationReasonKind {
     UnboundedRequest,
 }
 
+/// Status of a clarification record.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ClarificationStatus {
@@ -59,6 +67,7 @@ pub enum ClarificationStatus {
     Exhausted,
 }
 
+/// Persisted clarification record attached to derived task preparation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClarificationRecord {
     pub clarification_id: String,
@@ -73,6 +82,7 @@ pub struct ClarificationRecord {
 }
 
 impl ClarificationRecord {
+    /// Returns a compact operator-facing headline for the clarification.
     pub fn headline(&self) -> String {
         match self.reason_kind {
             ClarificationReasonKind::MissingContext => {
@@ -94,6 +104,7 @@ impl ClarificationRecord {
     }
 }
 
+/// Intermediate bounded draft produced before a full task run request is built.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DerivedTaskDraft {
     pub draft_id: String,
@@ -108,6 +119,7 @@ pub struct DerivedTaskDraft {
     pub blocking_clarification_ref: Option<String>,
 }
 
+/// Request used to create a runnable task.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TaskRunRequest {
     pub goal: String,
@@ -120,6 +132,7 @@ pub struct TaskRunRequest {
 }
 
 impl TaskRunRequest {
+    /// Validates the task run request and nested run limits.
     pub fn validate(&self) -> Result<(), TaskRequestError> {
         if self.goal.trim().is_empty() {
             return Err(TaskRequestError::EmptyGoal);
@@ -137,6 +150,7 @@ impl TaskRunRequest {
     }
 }
 
+/// Terminal response returned after a task reaches a final state.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TaskRunResponse {
     pub task_id: String,
@@ -147,6 +161,7 @@ pub struct TaskRunResponse {
     pub trace_location: String,
 }
 
+/// Persisted task state used by compatibility execution.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Task {
     pub id: String,
@@ -163,6 +178,7 @@ pub struct Task {
 }
 
 impl Task {
+    /// Creates a new persisted task from a validated run request and plan.
     pub fn new(
         id: impl Into<String>,
         request: &TaskRunRequest,
@@ -194,15 +210,18 @@ impl Task {
         })
     }
 
+    /// Marks the task as running.
     pub fn mark_running(&mut self) {
         self.status = TaskStatus::Running;
     }
 
+    /// Applies terminal state and reason to the task.
     pub fn apply_terminal(&mut self, status: TaskStatus, reason: TerminalReason) {
         self.status = status;
         self.terminal_reason = Some(reason);
     }
 
+    /// Validates the persisted task snapshot and nested state.
     pub fn validate_persisted_state(&self) -> Result<(), TaskPersistenceError> {
         if self.id.trim().is_empty() {
             return Err(TaskPersistenceError::MissingTaskId);
@@ -244,6 +263,7 @@ impl Task {
     }
 }
 
+/// Errors raised while building a task run request or task.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum TaskRequestError {
     #[error("task goal must not be empty")]
@@ -272,6 +292,7 @@ impl From<TaskContextError> for TaskRequestError {
     }
 }
 
+/// Errors raised while validating persisted task state.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum TaskPersistenceError {
     #[error("task id must not be empty")]
@@ -292,4 +313,107 @@ pub enum TaskPersistenceError {
         "total_step_attempts {total_step_attempts} must be greater than or equal to retry_count {retry_count} and replan_count {replan_count}"
     )]
     InvalidAttemptCounters { total_step_attempts: usize, retry_count: usize, replan_count: usize },
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::{
+        ClarificationReasonKind, ClarificationRecord, ClarificationStatus, Task, TaskRunRequest,
+        TaskStatus, TerminalReason,
+    };
+    use crate::domain::limits::{RunLimits, TerminalCondition};
+    use crate::domain::plan::Plan;
+    use crate::domain::step::Step;
+
+    fn valid_request() -> TaskRunRequest {
+        TaskRunRequest {
+            goal: "implement bounded change".to_string(),
+            input: json!({"goal": "implement bounded change"}),
+            session_id: "session-1".to_string(),
+            workspace_ref: "/tmp/workspace".to_string(),
+            limits: RunLimits::default(),
+            initial_context: None,
+        }
+    }
+
+    fn valid_plan() -> Plan {
+        Plan::new(vec![Step::decision("decision-1", json!({"decision": "go"})).unwrap()]).unwrap()
+    }
+
+    #[test]
+    fn task_status_and_clarification_helpers_cover_all_variants() {
+        for status in [TaskStatus::Planned, TaskStatus::Running] {
+            assert!(!status.is_terminal());
+        }
+
+        for status in
+            [TaskStatus::Succeeded, TaskStatus::Failed, TaskStatus::Exhausted, TaskStatus::Aborted]
+        {
+            assert!(status.is_terminal());
+        }
+
+        let expected = [
+            (ClarificationReasonKind::MissingContext, "provide the missing business context"),
+            (ClarificationReasonKind::SourceConflict, "resolve the conflicting source material"),
+            (ClarificationReasonKind::MissingSource, "provide the missing authored source"),
+            (ClarificationReasonKind::UnsupportedSource, "replace the unsupported authored source"),
+            (
+                ClarificationReasonKind::UnboundedRequest,
+                "narrow the request to one bounded outcome",
+            ),
+        ];
+
+        for (reason_kind, fragment) in expected {
+            let record = ClarificationRecord {
+                clarification_id: format!("clarification-{fragment}"),
+                reason_kind,
+                prompt: "question".to_string(),
+                missing_fields: Vec::new(),
+                blocking_sources: Vec::new(),
+                turn_index: 0,
+                status: ClarificationStatus::Open,
+            };
+            assert!(record.headline().contains(fragment));
+        }
+    }
+
+    #[test]
+    fn task_validation_helpers_cover_request_and_persisted_state_paths() {
+        let request = valid_request();
+        assert!(request.validate().is_ok());
+
+        let mut invalid_request = request.clone();
+        invalid_request.goal = "   ".to_string();
+        assert!(invalid_request.validate().is_err());
+
+        let mut task = Task::new("task-1", &request, valid_plan()).unwrap();
+        assert!(task.validate_persisted_state().is_ok());
+
+        task.mark_running();
+        assert_eq!(task.status, TaskStatus::Running);
+
+        let success_reason = TerminalReason::new(
+            TerminalCondition::GoalSatisfied,
+            "completed",
+            Some(json!({"evidence": "tests"})),
+        );
+        task.apply_terminal(TaskStatus::Succeeded, success_reason.clone());
+        assert!(task.validate_persisted_state().is_ok());
+
+        task.terminal_reason = None;
+        assert!(task.validate_persisted_state().is_err());
+
+        task.status = TaskStatus::Running;
+        task.terminal_reason = Some(success_reason.clone());
+        assert!(task.validate_persisted_state().is_err());
+
+        task.status = TaskStatus::Failed;
+        task.terminal_reason = Some(success_reason);
+        task.total_step_attempts = 0;
+        task.retry_count = 1;
+        task.replan_count = 0;
+        assert!(task.validate_persisted_state().is_err());
+    }
 }

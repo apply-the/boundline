@@ -1,0 +1,20 @@
+[guidance.language-best-practices]
+title = "JavaScript And TypeScript Language Guidance"
+applies_to = ["planning", "implementation", "verification", "review"]
+roles = ["planner", "implementer", "verifier", "reviewer"]
+path = "../guidance/language-javascript-typescript.md"
+priority = "high"
+
+[guidance.framework-best-practices]
+title = "JavaScript Full-Stack Framework Guidance"
+applies_to = ["planning", "implementation", "verification", "review"]
+roles = ["planner", "implementer", "verifier", "reviewer"]
+path = "../guidance/framework-javascript-fullstack.md"
+priority = "high"
+
+[guidance.testing-best-practices]
+title = "JavaScript And Frontend Testing Guidance"
+applies_to = ["planning", "testing", "verification", "review"]
+roles = ["planner", "verifier", "reviewer"]
+path = "../guidance/testing-javascript.md"
+priority = "high"

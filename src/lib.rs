@@ -57,6 +57,12 @@ pub use domain::governance::{
     governed_stage_catalog, resolved_canon_mode, supported_canon_modes_for_stage,
     validate_canon_capabilities_for_mode,
 };
+pub use domain::guidance::{
+    CapabilityPhase, CapabilityResolutionRecord, FindingConfidence, GuardianCapability,
+    GuardianDisposition, GuardianExecutionRecord, GuardianExecutionState, GuardianFinding,
+    GuardianKind, GuidanceAuthoritySource, GuidanceCapability, GuidanceCapabilityError,
+    GuidanceGuardianProjection, GuidancePriority, LoadedCapabilitySource, SkippedCapabilitySource,
+};
 pub use domain::limits::{RunLimits, TerminalCondition};
 pub use domain::negotiation::{
     AcceptanceBoundary, NegotiatedDeliveryPacket, NegotiationConstraint, NegotiationConstraintKind,
@@ -101,6 +107,13 @@ pub use orchestrator::governance::{
     governance_state_patch, governed_document_ref_from_response, is_awaiting_approval_response,
     lifecycle_requires_refresh, narrowed_bounded_context, runtime_command_available,
     select_packet_reuse_binding, selected_stage_policy, set_lifecycle_awaiting_approval,
+};
+pub use orchestrator::guidance_runtime::{
+    CapabilityResolution, GuardianExecutionOutcome, GuardianExecutionRequest,
+    GuidanceRuntimeEvidence, compare_authority_precedence, execute_guardians_for_phase,
+    guardian_kind_requires_route, has_blocking_findings, order_guardians_for_execution,
+    planning_runtime_evidence, resolve_capabilities_for_phase,
+    should_short_circuit_semantic_guards,
 };
 pub use orchestrator::planner::{Planner, StaticPlanner};
 pub use orchestrator::{Orchestrator, OrchestratorError, SessionRuntime};

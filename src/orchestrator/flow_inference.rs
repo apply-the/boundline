@@ -14,6 +14,7 @@ const CHANGE_KEYWORDS: &[&str] =
 /// Keywords that map to the delivery flow.
 const DELIVERY_KEYWORDS: &[&str] = &["deliver", "release", "ship", "deploy", "complete", "launch"];
 
+/// Inputs used to infer a delivery flow from bounded planning evidence.
 #[derive(Debug, Clone, Copy)]
 pub struct FlowInferenceContext<'a> {
     pub goal_text: &'a str,
@@ -47,6 +48,8 @@ impl FlowCandidate {
     }
 }
 
+/// Infers a delivery flow from bounded planning context, workspace signals, and
+/// optional workflow progress.
 pub fn infer_flow_from_context(context: &FlowInferenceContext<'_>) -> Option<InferredFlow> {
     let bug_fix = score_bug_fix(context);
     let change = score_change(context);

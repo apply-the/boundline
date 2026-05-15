@@ -153,3 +153,6 @@ mod workflow_follow_through_command_contract;
 
 #[path = "contract/workflow_registry_guidance_contract.rs"]
 mod workflow_registry_guidance_contract;
+
+#[path = "contract/capability_manifest_contract.rs"]
+mod capability_manifest_contract;

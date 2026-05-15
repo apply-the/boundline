@@ -1,3 +1,5 @@
+//! Root CLI command surface and invocation-session bookkeeping.
+
 use std::{fmt, path::PathBuf};
 
 use clap::{Parser, Subcommand};
@@ -15,6 +17,7 @@ use super::{
     session, workflow, workspace as cli_workspace,
 };
 
+/// Top-level CLI parser for the Boundline executable.
 #[derive(Debug, Parser)]
 #[command(
     name = "boundline",
@@ -33,6 +36,7 @@ pub struct Cli {
     pub command: DeveloperCommand,
 }
 
+/// Stable command names used in output rendering and session tracking.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CommandName {
     Doctor,
@@ -86,6 +90,7 @@ impl fmt::Display for CommandName {
     }
 }
 
+/// Exit-status classification used by rendered host output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CommandExitStatus {
     Succeeded,
@@ -94,6 +99,7 @@ pub enum CommandExitStatus {
     TraceReadFailure,
 }
 
+/// Top-level developer commands exposed by the CLI.
 #[derive(Debug, Subcommand)]
 pub enum DeveloperCommand {
     Doctor {
@@ -314,6 +320,7 @@ pub enum DeveloperCommand {
     },
 }
 
+/// Workflow-specific subcommands.
 #[derive(Debug, Subcommand)]
 pub enum WorkflowSubcommand {
     List {
@@ -341,6 +348,7 @@ pub enum WorkflowSubcommand {
     },
 }
 
+/// Assistant asset installation subcommands.
 #[derive(Debug, Subcommand)]
 pub enum AssistantSubcommand {
     Install {
@@ -351,6 +359,7 @@ pub enum AssistantSubcommand {
     },
 }
 
+/// Checkpoint management subcommands.
 #[derive(Debug, Subcommand)]
 pub enum CheckpointSubcommand {
     List {
@@ -370,6 +379,7 @@ pub enum CheckpointSubcommand {
     },
 }
 
+/// Cluster management subcommands.
 #[derive(Debug, Subcommand)]
 pub enum ClusterSubcommand {
     Init {
@@ -390,6 +400,7 @@ pub enum ClusterSubcommand {
     },
 }
 
+/// Configuration inspection and mutation subcommands.
 #[derive(Debug, Subcommand)]
 pub enum ConfigSubcommand {
     Show {
@@ -557,6 +568,7 @@ pub enum ConfigSubcommand {
 }
 
 impl DeveloperCommand {
+    /// Returns the stable name for the selected top-level command.
     pub const fn name(&self) -> CommandName {
         match self {
             Self::Doctor { .. } => CommandName::Doctor,
@@ -581,6 +593,7 @@ impl DeveloperCommand {
     }
 }
 
+/// Session-scoped metadata captured for one CLI invocation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeveloperCommandSession {
     pub command_name: CommandName,
@@ -596,6 +609,7 @@ pub struct DeveloperCommandSession {
 }
 
 impl DeveloperCommandSession {
+    /// Builds invocation-session metadata from the parsed CLI command.
     pub fn from_command(command: &DeveloperCommand) -> Self {
         match command {
             DeveloperCommand::Doctor { workspace, install } => Self {
@@ -922,6 +936,7 @@ impl DeveloperCommandSession {
         }
     }
 
+    /// Validates the derived invocation-session metadata.
     pub fn validate(&self) -> Result<(), CliValidationError> {
         match self.command_name {
             CommandName::Doctor => {
@@ -986,6 +1001,7 @@ impl DeveloperCommandSession {
         Ok(())
     }
 
+    /// Completes the invocation session and returns the rendered command exit code.
     pub fn complete(
         &mut self,
         exit_status: CommandExitStatus,
@@ -998,6 +1014,7 @@ impl DeveloperCommandSession {
     }
 }
 
+/// Validation failures for derived CLI invocation state.
 #[derive(Debug, thiserror::Error, Clone, PartialEq, Eq)]
 pub enum CliValidationError {
     #[error("{0} requires --workspace")]
@@ -1064,6 +1081,7 @@ impl DispatchOutcome {
     }
 }
 
+/// Parses the CLI, dispatches the selected command, and returns the process exit code.
 pub fn execute() -> i32 {
     let cli = Cli::parse();
     let mut session = DeveloperCommandSession::from_command(&cli.command);

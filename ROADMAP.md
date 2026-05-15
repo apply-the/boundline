@@ -6,7 +6,7 @@ Canon is downstream from Boundline in this roadmap: Boundline thinks, decides, o
 
 Evolve Boundline into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.53.0
+## Current Status: v0.54.0
 
 Boundline now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -22,11 +22,26 @@ surface in place, with Canon-default governed setup, runtime selection, and
 assistant-surface alignment now carried through the same primary workflow. The
 operator entry path is now stack-neutral for empty, non-Rust, and mixed
 repositories, with a clearer first-run CLI UX. That baseline now extends into
-Canon-promoted project-memory reuse, while the current `0.53.0` work makes
-expert-pack selection explicit before planning: Boundline now records
-deterministic selected and rejected expert-pack candidates, suggested runtime
-roles, and Canon expertise-input provenance without giving Canon ownership of
-runtime choice.
+Canon-promoted project-memory reuse, while the current `0.54.0` work adds
+guidance and guardian capabilities across planning, implementation,
+verification, and review: Boundline now resolves shared and workspace-local
+guidance sources with explicit precedence, surfaces polyglot language,
+framework, and testing guidance packs, and persists guardian findings and
+degradations through session-native status and trace-backed flows.
+
+### Delivered in 0.54.0
+
+- Boundline now resolves clean-code, architecture, security, language,
+  framework, and testing guidance with explicit source precedence across
+  built-in packs, shared packs, workspace overrides, and optional Canon
+  governed inputs.
+- Assistant guidance packs are no longer Rust-only: the bundled surface now
+  covers shared engineering guidance plus JavaScript or TypeScript, Python,
+  JVM, .NET, Go, PHP or Ruby, mobile, systems, and shell or automation
+  delivery clusters.
+- Session-native `run` and `status` now persist and project guardian timelines,
+  findings, degradations, and blocking summaries instead of keeping them as
+  transient execution detail.
 
 ### Delivered in 0.53.0
 
@@ -604,12 +619,10 @@ folder. The S1 foundation is already being tracked in active
 the copied drafts below extend that baseline rather than replacing the current
 delivery line.
 
-- [S2: Domain Expert Packs And Runtime Role Composition](roadmap/S2%20-%20domain-expert-packs-and-runtime-role-selection-spec.md)
-  extends [`038-domain-agent-templates`](specs/038-domain-agent-templates/spec.md)
-  and active substrate work in
-  [`052-runtime-intelligence-substrate`](specs/052-runtime-intelligence-substrate/spec.md)
-  from bounded domain templates into installable expert packs, pack
-  resolution, and runtime role composition.
+- [S2.1: Guidance And Guardian Capabilities](roadmap/S2-1%20-%20guidance-and-guardian-capabilities.md)
+  extends the Expert Pack baseline from S2 into executable engineering
+  principles (Guidance) and automated verification rules (Guardians) across
+  architecture, design, and testing pillars.
 - [S3: Authority-Zoned Delivery Roles, Personas, And Review Councils](roadmap/S3%20-%20authority-zoned-delivery-roles-and-review-councils-spec.md)
   extends the bounded review-council baseline in
   [`007-multi-agent-review`](specs/007-multi-agent-review/spec.md) and
@@ -644,7 +657,7 @@ delivery line.
   but it is not duplicate scope.
 
 Coverage check: the delivered content already recorded in this roadmap is
-covered by the active spec set, not by these future drafts. The copied S2-S7
+covered by the active spec set, not by these future drafts. The copied S2.1-S7
 documents mostly extend the current line; the strongest direct overlap is at
 the dependency and foundation level rather than as duplicate roadmap scope.
 

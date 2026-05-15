@@ -1,0 +1,60 @@
+# Guardian Index
+# This index maps guardian IDs to pillars, lifecycle phases, candidate kinds, and rule groups.
+
+[guardian.clean_code]
+pillar = "clean-code"
+kind = "llm"
+rules = ["intent-revealing-names", "no-mixed-responsibilities", "no-hidden-side-effects", "no-primitive-obsession"]
+applies_to = ["implementation", "review", "refactor"]
+default_disposition = "concern"
+
+[guardian.architecture_boundary]
+pillar = "architecture"
+kind = "hybrid"
+rules = ["dependency-direction", "data-ownership-boundary", "public-contract-stability"]
+applies_to = ["architecture", "implementation", "review", "migration"]
+default_disposition = "warning"
+
+[guardian.testability]
+pillar = "testing"
+kind = "hybrid"
+rules = ["untestable-design", "missing-safety-net", "brittle-mocks"]
+applies_to = ["planning", "implementation", "testing", "review", "refactor"]
+default_disposition = "concern"
+
+[guardian.rust_zero_panic]
+pillar = "language"
+language = "rust"
+kind = "deterministic"
+rules = ["no-unwrap-in-domain-code", "no-expect-in-library-code", "no-panic-in-production-path"]
+applies_to = ["implementation", "review"]
+default_disposition = "warning"
+
+[guardian.ts_runtime_validation]
+pillar = "language"
+language = "typescript"
+kind = "hybrid"
+rules = ["unchecked-external-json", "any-at-boundary", "duplicated-schema-and-type"]
+applies_to = ["implementation", "review"]
+default_disposition = "concern"
+
+[guardian.observability]
+pillar = "operations"
+kind = "hybrid"
+rules = ["external-call-without-telemetry", "missing-correlation-id", "unstructured-log"]
+applies_to = ["implementation", "review", "incident"]
+default_disposition = "concern"
+
+[guardian.retry_safety]
+pillar = "operations"
+kind = "hybrid"
+rules = ["retry-without-idempotency", "infinite-retry", "retry-without-backoff"]
+applies_to = ["architecture", "implementation", "review", "migration"]
+default_disposition = "warning"
+
+[guardian.supply_chain]
+pillar = "supply-chain"
+kind = "hybrid"
+rules = ["dependency-manifest-without-lockfile-update", "license-unknown", "vulnerability-untriaged"]
+applies_to = ["implementation", "review", "supply-chain-analysis"]
+default_disposition = "warning"

@@ -147,3 +147,6 @@ mod canon_native_cli;
 
 #[path = "unit/workspace_resolution.rs"]
 mod workspace_resolution;
+
+#[path = "unit/guidance_runtime.rs"]
+mod guidance_runtime;

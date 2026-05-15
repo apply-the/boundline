@@ -1,9 +1,12 @@
+//! Negotiated delivery packets built from goals and authored briefs.
+
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::domain::brief::AuthoredBriefBundle;
 use crate::domain::trace::current_timestamp_millis;
 
+/// Resolution state of a negotiated delivery packet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NegotiationResolutionState {
@@ -24,6 +27,7 @@ impl NegotiationResolutionState {
     }
 }
 
+/// Kind of constraint captured during delivery negotiation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NegotiationConstraintKind {
@@ -35,6 +39,7 @@ pub enum NegotiationConstraintKind {
     Routing,
 }
 
+/// Source surface that contributed a negotiation constraint.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NegotiationConstraintSource {
@@ -45,6 +50,7 @@ pub enum NegotiationConstraintSource {
     Default,
 }
 
+/// State of one negotiation constraint.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NegotiationConstraintState {
@@ -54,6 +60,7 @@ pub enum NegotiationConstraintState {
     Satisfied,
 }
 
+/// Acceptance boundary summarizing the bounded outcome being negotiated.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AcceptanceBoundary {
     pub success_headline: String,
@@ -66,6 +73,7 @@ pub struct AcceptanceBoundary {
     pub bounded_scope_summary: String,
 }
 
+/// One constraint captured while negotiating a bounded delivery packet.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NegotiationConstraint {
     pub constraint_id: String,
@@ -76,6 +84,7 @@ pub struct NegotiationConstraint {
     pub blocks_planning: bool,
 }
 
+/// Tradeoff decision recorded when one constraint is prioritized over another.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TradeoffDecision {
     pub prioritized_constraint_id: String,
@@ -84,6 +93,7 @@ pub struct TradeoffDecision {
     pub surfaced_as_blocker: bool,
 }
 
+/// Negotiated packet used to carry bounded delivery intent into planning.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NegotiatedDeliveryPacket {
     pub negotiation_id: String,
@@ -103,6 +113,7 @@ pub struct NegotiatedDeliveryPacket {
 }
 
 impl NegotiatedDeliveryPacket {
+    /// Builds a default negotiated packet directly from the active goal.
     pub fn from_goal(session_id: &str, workspace_ref: &str, goal: &str) -> Self {
         let goal_summary = goal.trim().to_string();
         let acceptance_boundary = AcceptanceBoundary {
@@ -153,6 +164,7 @@ impl NegotiatedDeliveryPacket {
         }
     }
 
+    /// Builds a negotiated packet by enriching the goal with authored-brief evidence.
     pub fn from_authored_brief(
         session_id: &str,
         workspace_ref: &str,

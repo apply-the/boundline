@@ -1,0 +1,43 @@
+{
+  "resolution_id": "guidance-resolution-001",
+  "task_ref": "session:abc123",
+  "phase": "implementation",
+  "selected_guidance": [
+    {
+      "id": "guidance.clean_code",
+      "source": "shared-pack",
+      "strength": "recommended",
+      "path": "guidance/clean-code.md",
+      "reason": "applies to implementation and selected implementer role"
+    },
+    {
+      "id": "guidance.language_rust",
+      "source": "canon-governed",
+      "strength": "mandatory",
+      "path": "docs/project/language-rust.md",
+      "reason": "workspace contains Rust target and Canon-promoted Rust standard exists"
+    }
+  ],
+  "overrides": [
+    {
+      "id": "guidance.language_rust",
+      "overrode": "shared-pack",
+      "selected_source": "canon-governed",
+      "reason": "Canon-governed standard has higher external authority"
+    }
+  ],
+  "selected_guardians": [
+    {
+      "id": "guardian.rust_zero_panic",
+      "kind": "deterministic",
+      "reason": "Rust files changed in domain code"
+    },
+    {
+      "id": "guardian.clean_code",
+      "kind": "llm",
+      "reason": "implementation phase requires design-quality review"
+    }
+  ],
+  "canon_available": true,
+  "workspace_overrides_available": false
+}

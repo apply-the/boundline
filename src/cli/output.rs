@@ -1,3 +1,5 @@
+//! Operator-facing text and JSON renderers for CLI commands.
+
 use std::io::{self, IsTerminal};
 use std::path::Path;
 
@@ -18,6 +20,7 @@ use crate::domain::configuration::{
 };
 use crate::domain::follow_through::FollowThroughProjection;
 use crate::domain::goal_plan::GoalPlanFlowState;
+use crate::domain::guidance::GuidanceGuardianProjection;
 use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::session::RoutingOutcome;
 use crate::domain::session::{
@@ -50,6 +53,7 @@ fn checkpoint_projection_from_state(
     )
 }
 
+/// Exit-code families used by host-facing command wrappers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CommandExitCode {
     Success,
@@ -78,6 +82,7 @@ impl CommandExitCode {
     }
 }
 
+/// Structured host payload used when commands need machine-readable output.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct HostCommandEnvelope {
     pub command_name: String,
@@ -100,6 +105,7 @@ fn command_exit_status_label(status: CommandExitStatus) -> &'static str {
     }
 }
 
+/// Renders a command result as structured JSON for host integrations.
 pub fn render_host_command_json(
     command_name: &str,
     exit_status: CommandExitStatus,
@@ -130,10 +136,12 @@ pub fn render_host_command_json(
     }
 }
 
+/// Returns the default not-implemented message for a developer command.
 pub fn unimplemented_message(command: &DeveloperCommand) -> String {
     format!("`{}` is not implemented yet", command_name(command))
 }
 
+/// Returns the stable CLI command name used in output and host envelopes.
 pub fn command_name(command: &DeveloperCommand) -> &'static str {
     match command {
         DeveloperCommand::Doctor { .. } => "doctor",
@@ -157,6 +165,7 @@ pub fn command_name(command: &DeveloperCommand) -> &'static str {
     }
 }
 
+/// Renders the result of initializing a workspace cluster.
 pub fn render_cluster_init(cluster_id: &str, cluster_path: &str, members: &[String]) -> String {
     let mut lines = vec![
         "cluster: initialized".to_string(),
@@ -170,6 +179,7 @@ pub fn render_cluster_init(cluster_id: &str, cluster_path: &str, members: &[Stri
     lines.join("\n")
 }
 
+/// Renders the current status projection for a workspace cluster.
 pub fn render_cluster_status(report: &ClusterInspectReport) -> String {
     let mut lines = vec![
         "cluster: status".to_string(),
@@ -191,6 +201,7 @@ pub fn render_cluster_status(report: &ClusterInspectReport) -> String {
     lines.join("\n")
 }
 
+/// Renders the current inspect projection for a workspace cluster.
 pub fn render_cluster_inspect(report: &ClusterInspectReport) -> String {
     let mut lines = vec![
         "cluster: inspect".to_string(),
@@ -213,14 +224,17 @@ pub fn render_cluster_inspect(report: &ClusterInspectReport) -> String {
     lines.join("\n")
 }
 
+/// Returns the user-facing validation error message for CLI argument failures.
 pub fn validation_error_message(error: &CliValidationError) -> String {
     error.to_string()
 }
 
+/// Human-readable route summary shared by status and inspect surfaces.
 pub fn render_route_outcome(outcome: &RoutingOutcome) -> String {
     format!("routing: {} ({}) - {}", outcome.mode.as_str(), outcome.source.as_str(), outcome.reason)
 }
 
+/// Human-readable flow-state summary shared by status and inspect surfaces.
 pub fn render_goal_plan_flow_state(flow_state: &GoalPlanFlowState) -> String {
     format!("flow_state: {}", flow_state.summary_text())
 }
@@ -297,6 +311,7 @@ fn diagnostic_follow_up_actions(report: &DiagnosticsReport) -> Vec<String> {
     }
 }
 
+/// Renders doctor output for either a workspace or installation diagnostic run.
 pub fn render_diagnostics(report: &DiagnosticsReport) -> String {
     let readiness = if report.ready { "ready" } else { "not ready" };
     let subject = match report.subject {
@@ -353,6 +368,7 @@ pub fn render_diagnostics(report: &DiagnosticsReport) -> String {
     lines.join("\n")
 }
 
+/// Renders the result of a `run` command from the persisted trace and terminal response.
 pub fn render_run_trace(
     command_name: &str,
     trace: Option<&ExecutionTrace>,
@@ -900,6 +916,8 @@ pub fn render_run_trace(
     lines.join("\n")
 }
 
+/// Renders the persisted trace summary as operator-facing text without
+/// recomputing planning, routing, or guidance state.
 pub fn render_trace_summary(
     summary: &TraceSummaryView,
     inspection_target: &str,
@@ -968,6 +986,8 @@ pub fn render_trace_summary(
         &summary.context_provenance,
         summary.context_staleness_reason.as_deref(),
     );
+
+    lines.extend(render_guidance_projection_lines(&summary.guidance_guardian));
 
     if let Some(clarification_headline) = &summary.clarification_headline {
         lines.push(format!("clarification_headline: {clarification_headline}"));
@@ -1096,6 +1116,7 @@ pub fn render_trace_summary(
     lines.join("\n")
 }
 
+/// Renders an inspect failure while preserving the trace-resolution context.
 pub fn render_inspect_failure(
     inspection_target: &str,
     trace_ref: Option<&str>,
@@ -1122,6 +1143,7 @@ pub fn render_inspect_failure(
     lines.join("\n")
 }
 
+/// Shared prefix for session-status style projections.
 pub fn render_session_projection_prefix(view: &SessionStatusView) -> String {
     [
         render_route_outcome(&routing_outcome_for_status_view(view)),
@@ -1130,6 +1152,7 @@ pub fn render_session_projection_prefix(view: &SessionStatusView) -> String {
     .join("\n")
 }
 
+/// Renders the persisted session view as the operator-facing status surface.
 pub fn render_session_status(view: &SessionStatusView) -> String {
     let mut lines = vec![
         format!("session_id: {}", view.session_id),
@@ -1531,6 +1554,7 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
     lines.join("\n")
 }
 
+/// Renders the latest compatibility follow-up when no native session state is authoritative.
 pub fn render_compatibility_follow_up_status(
     workspace_ref: &str,
     continuity_authority: ContinuityAuthority,
@@ -1554,6 +1578,7 @@ pub fn render_compatibility_follow_up_status(
     lines.join("\n")
 }
 
+/// Renders a session-command failure with an optional suggested next command.
 pub fn render_session_error(action: &str, message: &str, next_command: Option<&str>) -> String {
     let mut lines = vec![format!("{action}: session error"), format!("reason: {message}")];
 
@@ -1564,6 +1589,79 @@ pub fn render_session_error(action: &str, message: &str, next_command: Option<&s
     lines.join("\n")
 }
 
+/// Converts the flattened guidance and guardian projection into compact summary
+/// lines for status and inspect output.
+pub fn render_guidance_projection_lines(
+    guidance_guardian: &GuidanceGuardianProjection,
+) -> Vec<String> {
+    let mut lines = Vec::new();
+
+    if let Some(summary) = &guidance_guardian.capability_resolution_summary {
+        lines.push(format!("guidance_resolution_summary: {summary}"));
+    }
+    if !guidance_guardian.loaded_guidance_sources.is_empty() {
+        lines.push(format!(
+            "loaded_guidance_sources: {}",
+            guidance_guardian.loaded_guidance_sources.join(", ")
+        ));
+    }
+    if !guidance_guardian.skipped_guidance_sources.is_empty() {
+        lines.push(format!(
+            "skipped_guidance_sources: {}",
+            guidance_guardian.skipped_guidance_sources.join(", ")
+        ));
+    }
+    if !guidance_guardian.loaded_guardian_sources.is_empty() {
+        lines.push(format!(
+            "loaded_guardian_sources: {}",
+            guidance_guardian.loaded_guardian_sources.join(", ")
+        ));
+    }
+    if !guidance_guardian.skipped_guardian_sources.is_empty() {
+        lines.push(format!(
+            "skipped_guardian_sources: {}",
+            guidance_guardian.skipped_guardian_sources.join(", ")
+        ));
+    }
+    if !guidance_guardian.guardian_timeline.is_empty() {
+        lines.push(format!(
+            "guardian_timeline: {}",
+            guidance_guardian.guardian_timeline.join(" | ")
+        ));
+    }
+    if let Some(summary) = &guidance_guardian.guardian_findings_summary {
+        lines.push(format!("guardian_findings_summary: {summary}"));
+    }
+    if !guidance_guardian.guardian_findings.is_empty() {
+        lines.push(format!(
+            "guardian_findings: {}",
+            guidance_guardian
+                .guardian_findings
+                .iter()
+                .map(|finding| format!(
+                    "{}:{}:{}",
+                    finding.guardian_id,
+                    finding.disposition.as_str(),
+                    finding.summary
+                ))
+                .collect::<Vec<_>>()
+                .join(" | ")
+        ));
+    }
+    if !guidance_guardian.guardian_degradations.is_empty() {
+        lines.push(format!(
+            "guardian_degradations: {}",
+            guidance_guardian.guardian_degradations.join(" | ")
+        ));
+    }
+    if let Some(outcome) = &guidance_guardian.guardian_blocking_outcome {
+        lines.push(format!("guardian_blocking_outcome: {outcome}"));
+    }
+
+    lines
+}
+
+/// Returns the next recommended command after a `run` response.
 pub const fn next_command_after_run(status: TaskStatus) -> &'static str {
     match status {
         TaskStatus::Succeeded => "/boundline-status",
@@ -1611,10 +1709,12 @@ fn adaptive_exhaustion_reason_summary(state: &serde_json::Map<String, Value>) ->
     state.get("latest_exhaustion_reason")?.as_str().map(str::to_string)
 }
 
+/// Returns the next recommended command after an `inspect` response.
 pub const fn next_command_after_inspect(_: TaskStatus) -> &'static str {
     "/boundline-next"
 }
 
+/// Returns the textual execution-condition label used by inspect output.
 pub fn trace_execution_condition_text(summary: &TraceSummaryView) -> String {
     let (kind, reason) = trace_execution_condition_parts(summary);
     format!("{kind} - {reason}")
@@ -2846,6 +2946,7 @@ mod tests {
         let summary = TraceSummaryView {
             trace_ref: "/tmp/workspace/.boundline/traces/task-output.json".to_string(),
             goal: "Render trace summary".to_string(),
+            guidance_guardian: crate::domain::guidance::GuidanceGuardianProjection::default(),
             negotiation_goal_summary: None,
             negotiation_resolution: None,
             negotiation_acceptance_boundary: None,
@@ -3385,6 +3486,7 @@ mod tests {
         let summary = TraceSummaryView {
             trace_ref: "/tmp/workspace/.boundline/traces/task-review-output.json".to_string(),
             goal: "Render trace summary".to_string(),
+            guidance_guardian: crate::domain::guidance::GuidanceGuardianProjection::default(),
             negotiation_goal_summary: None,
             negotiation_resolution: None,
             negotiation_acceptance_boundary: None,
@@ -3478,6 +3580,83 @@ mod tests {
         assert!(text.contains("execution_condition: blocked - escalation required: no declared continuation path remains"), "{text}");
         assert!(
             text.contains("follow_through_evidence_source: trace:delegation_packet:packet-2"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn render_trace_summary_includes_guidance_projection_lines() {
+        let summary = TraceSummaryView {
+            trace_ref: "/tmp/workspace/.boundline/traces/task-guidance.json".to_string(),
+            goal: "Render guidance trace summary".to_string(),
+            guidance_guardian: crate::domain::guidance::GuidanceGuardianProjection {
+                capability_resolution_summary: Some(
+                    "resolved 1 guidance capability entries from 1 source(s) for verification"
+                        .to_string(),
+                ),
+                loaded_guidance_sources: vec![
+                    "assistant/packs/shared/guidance/clean-code.md".to_string(),
+                ],
+                skipped_guidance_sources: vec![".canon/boundline/guidance (missing)".to_string()],
+                loaded_guardian_sources: vec![".boundline/guardians/verification.toml".to_string()],
+                skipped_guardian_sources: vec![
+                    "assistant/packs/shared/guardians/verification.toml (shadowed)".to_string(),
+                ],
+                guardian_timeline: vec!["verification_guardian: completed".to_string()],
+                guardian_findings_summary: Some(
+                    "1 guardian finding(s); blocking=false".to_string(),
+                ),
+                guardian_findings: vec![crate::domain::guidance::GuardianFinding {
+                    finding_id: "finding-1".to_string(),
+                    guardian_id: "verification_guardian".to_string(),
+                    rule_id: "verification".to_string(),
+                    disposition: crate::domain::guidance::GuardianDisposition::Warn,
+                    summary: "verification evidence is stale".to_string(),
+                    evidence_refs: vec!["tests/red_to_green.rs".to_string()],
+                    confidence: crate::domain::guidance::FindingConfidence::Medium,
+                    recommended_action: "rerun the bounded verification command".to_string(),
+                    authority_source:
+                        crate::domain::guidance::GuidanceAuthoritySource::WorkspaceOverride,
+                    source_ref: ".boundline/guardians/verification.toml".to_string(),
+                    phase: crate::domain::guidance::CapabilityPhase::Verification,
+                }],
+                guardian_degradations: vec!["verification route unavailable".to_string()],
+                guardian_blocking_outcome: Some(
+                    "guardian findings recorded without a blocking outcome".to_string(),
+                ),
+            },
+            terminal_status: TaskStatus::Succeeded,
+            terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None),
+            ..TraceSummaryView::default()
+        };
+
+        let text = render_trace_summary(&summary, "latest-workspace-trace", "/boundline-next");
+
+        assert!(text.contains("guidance_resolution_summary: resolved 1 guidance capability entries from 1 source(s) for verification"), "{text}");
+        assert!(
+            text.contains("loaded_guidance_sources: assistant/packs/shared/guidance/clean-code.md"),
+            "{text}"
+        );
+        assert!(
+            text.contains("loaded_guardian_sources: .boundline/guardians/verification.toml"),
+            "{text}"
+        );
+        assert!(text.contains("guardian_timeline: verification_guardian: completed"), "{text}");
+        assert!(
+            text.contains("guardian_findings_summary: 1 guardian finding(s); blocking=false"),
+            "{text}"
+        );
+        assert!(
+            text.contains(
+                "guardian_findings: verification_guardian:warn:verification evidence is stale"
+            ),
+            "{text}"
+        );
+        assert!(text.contains("guardian_degradations: verification route unavailable"), "{text}");
+        assert!(
+            text.contains(
+                "guardian_blocking_outcome: guardian findings recorded without a blocking outcome"
+            ),
             "{text}"
         );
     }

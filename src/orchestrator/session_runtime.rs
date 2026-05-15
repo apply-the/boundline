@@ -1,3 +1,6 @@
+//! Workspace-scoped session orchestration for planning, execution, governance,
+//! checkpoints, and persisted trace updates.
+
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
@@ -27,7 +30,7 @@ use crate::domain::configuration::{
     resolve_effective_routing, resolve_effective_runtime_capabilities,
     resolve_effective_slot_effort_policies,
 };
-use crate::domain::decision::Decision;
+use crate::domain::decision::{Decision, DecisionType};
 use crate::domain::flow::{FlowStepMetadata, built_in_flow, supported_flow_names_csv};
 use crate::domain::flow_policy::FlowPolicy;
 use crate::domain::goal_plan::GoalPlan;
@@ -37,6 +40,7 @@ use crate::domain::governance::{
     GovernanceRuntimeKind, GovernedStageRecord, MemoryCredibilityState, PacketReadiness,
     resolved_canon_mode,
 };
+use crate::domain::guidance::{CapabilityPhase, GuidanceGuardianProjection};
 use crate::domain::limits::{RunLimits, TerminalCondition};
 use crate::domain::negotiation::{NegotiatedDeliveryPacket, NegotiationResolutionState};
 use crate::domain::project_memory::{
@@ -68,6 +72,7 @@ use crate::fixture::{
 use crate::orchestrator::decision_loop::{DecisionLoop, LoopTerminal};
 use crate::orchestrator::goal_planner::{
     AuthoredInputDocument, GoalPlannerError, PlanningContextSources, build_goal_plan_with_sources,
+    collect_workspace_signals,
 };
 use crate::orchestrator::governance::{
     GovernanceStepDecision, append_governed_document_to_lifecycle, bounded_governance_context,
@@ -77,10 +82,16 @@ use crate::orchestrator::governance::{
     governed_document_ref_from_response, overlay_stage_policy_with_intent,
     requested_governance_intent, runtime_command_available, selected_stage_policy,
 };
+use crate::orchestrator::guidance_runtime::{
+    GuardianExecutionRequest, execute_guardians_for_phase,
+};
 use crate::orchestrator::recovery::{RecoveryDecision, decide_recovery};
 use crate::orchestrator::review_trace::{record_review_step_completed, record_review_step_started};
 use crate::orchestrator::terminal::{build_terminal_reason, task_status_for_condition};
 
+/// Workspace-scoped orchestrator that coordinates session persistence,
+/// checkpoint capture, trace updates, and the handoff between native and
+/// compatibility execution paths.
 #[derive(Debug, Clone)]
 pub struct SessionRuntime {
     workspace_ref: PathBuf,
@@ -94,6 +105,8 @@ struct DelegationTraceDetails {
     delegation: Option<DelegationStatusView>,
 }
 
+// Persisted goal-plan projection written into trace payloads so inspect can
+// reconstruct planning context, routing, and delegation without recomputing it.
 #[derive(Debug, Clone, Serialize)]
 struct GoalPlanTracePayload {
     plan_id: String,
@@ -253,6 +266,7 @@ fn project_scale_input_for_goal(goal: &str) -> Option<ProjectScaleInput> {
 }
 
 impl SessionRuntime {
+    /// Returns a runtime bound to one workspace and its persisted stores.
     pub fn for_workspace(workspace_ref: impl AsRef<Path>) -> Self {
         let workspace_ref = workspace_ref.as_ref().to_path_buf();
         Self {
@@ -263,26 +277,32 @@ impl SessionRuntime {
         }
     }
 
+    /// Returns the workspace this runtime operates on.
     pub fn workspace_ref(&self) -> &Path {
         &self.workspace_ref
     }
 
+    /// Returns the session store used by this runtime.
     pub fn session_store(&self) -> &FileSessionStore {
         &self.session_store
     }
 
+    /// Returns the checkpoint store used by this runtime.
     pub fn checkpoint_store(&self) -> &FileCheckpointStore {
         &self.checkpoint_store
     }
 
+    /// Returns the trace store used by this runtime.
     pub fn trace_store(&self) -> &FileTraceStore {
         &self.trace_store
     }
 
+    /// Loads the active workspace session, if one exists.
     pub fn load_session(&self) -> Result<Option<ActiveSessionRecord>, SessionRuntimeError> {
         self.session_store.load().map_err(SessionRuntimeError::SessionStore)
     }
 
+    /// Persists the active session snapshot.
     pub fn persist_session(
         &self,
         session: &ActiveSessionRecord,
@@ -290,14 +310,18 @@ impl SessionRuntime {
         self.session_store.persist(session).map_err(SessionRuntimeError::SessionStore)
     }
 
+    /// Clears the active workspace session.
     pub fn clear_session(&self) -> Result<(), SessionRuntimeError> {
         self.session_store.clear().map_err(SessionRuntimeError::SessionStore)
     }
 
+    /// Returns the latest persisted trace for the workspace, if available.
     pub fn latest_trace(&self) -> Result<Option<PathBuf>, SessionRuntimeError> {
         self.trace_store.latest().map_err(SessionRuntimeError::TraceStore)
     }
 
+    /// Captures a new goal into the session and resets any active execution
+    /// state so planning can restart from a clean bounded snapshot.
     pub fn capture_goal(
         &self,
         session: &mut ActiveSessionRecord,
@@ -432,6 +456,7 @@ impl SessionRuntime {
         Ok(())
     }
 
+    /// Prepares cluster-scoped state before a clustered run starts.
     pub fn prepare_cluster_run(
         &self,
         session: &mut ActiveSessionRecord,
@@ -450,6 +475,8 @@ impl SessionRuntime {
         Ok(())
     }
 
+    /// Returns true when the session is currently operating on a native goal
+    /// plan instead of a compatibility task.
     pub fn uses_native_goal_plan(
         &self,
         session: &ActiveSessionRecord,
@@ -457,6 +484,7 @@ impl SessionRuntime {
         Ok(session.goal_plan.is_some())
     }
 
+    /// Projects the effective routing outcome for the current session state.
     pub fn resolve_routing_outcome(
         &self,
         session: &ActiveSessionRecord,
@@ -464,6 +492,8 @@ impl SessionRuntime {
         Ok(crate::domain::session::routing_outcome(session))
     }
 
+    // Builds a compatibility task when fixture execution remains the
+    // authoritative runtime for the chosen flow.
     fn plan_compatibility_task(
         &self,
         session: &mut ActiveSessionRecord,
@@ -504,6 +534,8 @@ impl SessionRuntime {
         Ok(())
     }
 
+    // Builds or refreshes the native goal plan, preserving partial planning
+    // state when bounded context is still insufficient.
     fn plan_goal_plan(
         &self,
         session: &mut ActiveSessionRecord,
@@ -643,6 +675,9 @@ impl SessionRuntime {
         Ok(())
     }
 
+    /// Advances the active session by exactly one bounded step.
+    /// Flow-selected goal plans are bridged into compatibility tasks when a
+    /// fixture execution profile remains authoritative.
     pub fn execute_next_step(
         &self,
         session: &mut ActiveSessionRecord,
@@ -719,6 +754,9 @@ impl SessionRuntime {
         Ok(())
     }
 
+    /// Continues the active session until it reaches a terminal response.
+    /// Native goal-plan sessions use the native path; compatibility sessions
+    /// continue one fixture step at a time until terminal.
     pub fn run_to_terminal(
         &self,
         session: &mut ActiveSessionRecord,
@@ -745,6 +783,8 @@ impl SessionRuntime {
         }
     }
 
+    /// Refreshes governance state when a run is paused awaiting approval and a
+    /// governance runtime can provide a newer answer.
     pub fn refresh_governance_state(
         &self,
         session: &mut ActiveSessionRecord,
@@ -1322,6 +1362,27 @@ impl SessionRuntime {
             payload.insert("cluster_delivery_story".to_string(), json!(cluster_story));
             payload.insert("terminal_status".to_string(), json!(terminal_status));
             payload.insert("terminal_reason".to_string(), json!(terminal_reason.clone()));
+        }
+        if let Some(guardian_request) =
+            self.native_guardian_request(session, &goal_plan, decisions.as_slice())
+        {
+            let guardian_outcome =
+                execute_guardians_for_phase(&self.workspace_ref, &guardian_request);
+            Self::merge_guardian_projection(
+                &mut goal_plan.guidance_guardian,
+                &guardian_outcome.projection,
+            );
+            if let Some(event) = trace
+                .events
+                .iter_mut()
+                .rev()
+                .find(|event| event.event_type == TraceEventType::TerminalRecorded)
+            {
+                Self::append_guardian_projection_payload(
+                    &mut event.payload,
+                    &guardian_outcome.projection,
+                );
+            }
         }
         if let Some(checkpoint_projection) = input.checkpoint_projection.as_ref() {
             trace.record_event(
@@ -2190,16 +2251,37 @@ impl SessionRuntime {
                 );
                 task.context
                     .set_last_result(StepResultSummary::from_step(&task.plan.steps[step_index]));
+                let guardian_phase = Self::guardian_phase_for_step(session, step_index);
+                let guardian_request = self.guardian_request_for_step(
+                    session,
+                    task,
+                    &step_snapshot,
+                    guardian_phase,
+                    &result,
+                );
+                let guardian_outcome =
+                    execute_guardians_for_phase(&self.workspace_ref, &guardian_request);
+                if let Some(goal_plan) = session.goal_plan.as_mut() {
+                    Self::merge_guardian_projection(
+                        &mut goal_plan.guidance_guardian,
+                        &guardian_outcome.projection,
+                    );
+                }
+                let mut step_payload = json!({
+                    "attempt_id": attempt.attempt_id,
+                    "status": "succeeded",
+                    "output": output,
+                    "evidence": result.evidence,
+                });
+                Self::append_guardian_projection_payload(
+                    &mut step_payload,
+                    &guardian_outcome.projection,
+                );
                 trace.record_event(
                     TraceEventType::StepCompleted,
                     Some(step_snapshot.id.clone()),
                     task.plan.revision,
-                    json!({
-                        "attempt_id": attempt.attempt_id,
-                        "status": "succeeded",
-                        "output": output,
-                        "evidence": result.evidence,
-                    }),
+                    step_payload,
                 );
                 record_review_step_completed(
                     trace,
@@ -2403,6 +2485,291 @@ impl SessionRuntime {
                     }
                 }
             }
+        }
+    }
+
+    // Builds the guardian request from a fixture-style step result, preferring
+    // normalized changed-file state and then backfilling explicit evidence refs.
+    fn guardian_request_for_step(
+        &self,
+        session: &ActiveSessionRecord,
+        task: &Task,
+        step: &Step,
+        phase: CapabilityPhase,
+        result: &StepExecutionResult,
+    ) -> GuardianExecutionRequest {
+        let goal_text = session.goal.clone().unwrap_or_else(|| task.goal.clone());
+        let target_ref = step
+            .target_name
+            .clone()
+            .or_else(|| {
+                session
+                    .goal_plan
+                    .as_ref()
+                    .and_then(|goal_plan| goal_plan.tasks.get(task.plan.current_step_index))
+                    .map(|planned| planned.target.clone())
+            })
+            .unwrap_or_else(|| "workspace".to_string());
+        let changed_files = Self::changed_files_for_guardian(task, result, step, &target_ref);
+        let mut evidence_refs = changed_files.clone();
+        if let Some(target_name) = step.target_name.as_ref()
+            && !evidence_refs.iter().any(|reference| reference == target_name)
+        {
+            evidence_refs.push(target_name.clone());
+        }
+        if let Some(evidence) = result.evidence.as_ref() {
+            evidence_refs.push(evidence.to_string());
+        }
+
+        GuardianExecutionRequest {
+            goal_text,
+            target_ref,
+            phase,
+            evidence_refs,
+            changed_files,
+            workspace_signals: collect_workspace_signals(&self.workspace_ref),
+        }
+    }
+
+    // Reconstructs the same guardian request shape for native runs, where the
+    // authoritative evidence lives in persisted decisions instead of step payloads.
+    fn native_guardian_request(
+        &self,
+        session: &ActiveSessionRecord,
+        goal_plan: &GoalPlan,
+        decisions: &[Decision],
+    ) -> Option<GuardianExecutionRequest> {
+        // Native runs do not emit fixture step payloads, so reuse the guardian
+        // executor by deriving the same request shape from persisted decisions.
+        let phase = Self::guardian_phase_for_decisions(decisions)?;
+        let mut changed_files = decisions
+            .iter()
+            .filter(|decision| {
+                matches!(
+                    decision.decision_type,
+                    DecisionType::Code | DecisionType::Fix | DecisionType::Test
+                )
+            })
+            .map(|decision| decision.target.trim().to_string())
+            .filter(|target| !target.is_empty())
+            .collect::<Vec<_>>();
+        if changed_files.is_empty() {
+            changed_files = goal_plan
+                .tasks
+                .iter()
+                .map(|task| task.target.trim().to_string())
+                .filter(|target| !target.is_empty())
+                .collect();
+        }
+        if changed_files.is_empty() {
+            return None;
+        }
+        let mut unique_files = BTreeSet::new();
+        changed_files.retain(|target| unique_files.insert(target.clone()));
+
+        let target_ref = changed_files.first().cloned()?;
+        let mut seen_refs = BTreeSet::new();
+        let mut evidence_refs = Vec::new();
+        for changed_file in &changed_files {
+            if seen_refs.insert(changed_file.clone()) {
+                evidence_refs.push(changed_file.clone());
+            }
+        }
+        for decision in decisions {
+            if seen_refs.insert(decision.target.clone()) {
+                evidence_refs.push(decision.target.clone());
+            }
+            for evidence in &decision.evidence_inputs {
+                if seen_refs.insert(evidence.reference.clone()) {
+                    evidence_refs.push(evidence.reference.clone());
+                }
+            }
+            if let Some(tool_result) = decision.tool_result.as_ref()
+                && seen_refs.insert(tool_result.invocation.clone())
+            {
+                evidence_refs.push(tool_result.invocation.clone());
+            }
+        }
+
+        Some(GuardianExecutionRequest {
+            goal_text: session.goal.clone().unwrap_or_else(|| goal_plan.goal_text.clone()),
+            target_ref,
+            phase,
+            evidence_refs,
+            changed_files,
+            workspace_signals: collect_workspace_signals(&self.workspace_ref),
+        })
+    }
+
+    // Maps the planned step hint to the lifecycle phase used to resolve and run
+    // guidance or guardians after that step finishes.
+    fn guardian_phase_for_step(
+        session: &ActiveSessionRecord,
+        step_index: usize,
+    ) -> CapabilityPhase {
+        match session
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| goal_plan.tasks.get(step_index))
+            .and_then(|planned| planned.decision_type_hint)
+        {
+            Some(crate::domain::decision::DecisionType::Analyze) => CapabilityPhase::Planning,
+            Some(crate::domain::decision::DecisionType::Code)
+            | Some(crate::domain::decision::DecisionType::Fix) => CapabilityPhase::Implementation,
+            Some(crate::domain::decision::DecisionType::Test) => CapabilityPhase::Verification,
+            Some(crate::domain::decision::DecisionType::Replan) => CapabilityPhase::Review,
+            None => CapabilityPhase::Implementation,
+        }
+    }
+
+    // Native flows do not have an explicit step cursor, so infer the guardian
+    // phase from the latest persisted decision that materially changed the run.
+    fn guardian_phase_for_decisions(decisions: &[Decision]) -> Option<CapabilityPhase> {
+        decisions
+            .iter()
+            .rev()
+            .map(|decision| match decision.decision_type {
+                DecisionType::Analyze => Some(CapabilityPhase::Planning),
+                DecisionType::Code | DecisionType::Fix => Some(CapabilityPhase::Implementation),
+                DecisionType::Test => Some(CapabilityPhase::Verification),
+                DecisionType::Replan => Some(CapabilityPhase::Review),
+            })
+            .next()
+            .flatten()
+    }
+
+    fn changed_files_for_guardian(
+        task: &Task,
+        result: &StepExecutionResult,
+        step: &Step,
+        fallback_target: &str,
+    ) -> Vec<String> {
+        // Successful bounded work normalizes changed files under
+        // latest_changed_files; fall back only when that normalized view is absent.
+        for state_key in ["latest_changed_files", "changed_files"] {
+            if let Some(changed_files) = task.context.state.get(state_key).and_then(Value::as_array)
+            {
+                let files = changed_files
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(ToOwned::to_owned)
+                    .collect::<Vec<_>>();
+                if !files.is_empty() {
+                    return files;
+                }
+            }
+        }
+
+        if let Some(changed_files) = result
+            .evidence
+            .as_ref()
+            .and_then(|value| value.get("changed_files"))
+            .and_then(Value::as_array)
+        {
+            let files = changed_files
+                .iter()
+                .filter_map(Value::as_str)
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>();
+            if !files.is_empty() {
+                return files;
+            }
+        }
+
+        step.target_name
+            .clone()
+            .map(|target| vec![target])
+            .unwrap_or_else(|| vec![fallback_target.to_string()])
+    }
+
+    // Merge execution output into the flattened read-side projection while
+    // keeping planning-time guidance selection stable across later phases.
+    fn merge_guardian_projection(
+        projection: &mut GuidanceGuardianProjection,
+        update: &GuidanceGuardianProjection,
+    ) {
+        // Planning guidance stays stable once selected, while execution-phase
+        // guardian output should reflect the latest authoritative verification pass.
+        if projection.capability_resolution_summary.is_none() {
+            projection.capability_resolution_summary = update.capability_resolution_summary.clone();
+        }
+        if projection.loaded_guidance_sources.is_empty() {
+            projection.loaded_guidance_sources = update.loaded_guidance_sources.clone();
+        }
+        if projection.skipped_guidance_sources.is_empty() {
+            projection.skipped_guidance_sources = update.skipped_guidance_sources.clone();
+        }
+        projection.loaded_guardian_sources = update.loaded_guardian_sources.clone();
+        projection.skipped_guardian_sources = update.skipped_guardian_sources.clone();
+        projection.guardian_timeline = update.guardian_timeline.clone();
+        projection.guardian_findings_summary = update.guardian_findings_summary.clone();
+        projection.guardian_findings = update.guardian_findings.clone();
+        projection.guardian_degradations = update.guardian_degradations.clone();
+        projection.guardian_blocking_outcome = update.guardian_blocking_outcome.clone();
+    }
+
+    // Mirror the flattened projection into trace payloads so `inspect` can
+    // hydrate the same operator story without recomputing runtime resolution.
+    fn append_guardian_projection_payload(
+        payload: &mut Value,
+        projection: &GuidanceGuardianProjection,
+    ) {
+        let Some(object) = payload.as_object_mut() else {
+            return;
+        };
+        if let Some(summary) = projection.capability_resolution_summary.as_ref() {
+            object.insert(
+                "capability_resolution_summary".to_string(),
+                Value::String(summary.clone()),
+            );
+        }
+        if !projection.loaded_guidance_sources.is_empty() {
+            object.insert(
+                "loaded_guidance_sources".to_string(),
+                serde_json::to_value(&projection.loaded_guidance_sources).unwrap_or(Value::Null),
+            );
+        }
+        if !projection.skipped_guidance_sources.is_empty() {
+            object.insert(
+                "skipped_guidance_sources".to_string(),
+                serde_json::to_value(&projection.skipped_guidance_sources).unwrap_or(Value::Null),
+            );
+        }
+        if !projection.loaded_guardian_sources.is_empty() {
+            object.insert(
+                "loaded_guardian_sources".to_string(),
+                serde_json::to_value(&projection.loaded_guardian_sources).unwrap_or(Value::Null),
+            );
+        }
+        if !projection.skipped_guardian_sources.is_empty() {
+            object.insert(
+                "skipped_guardian_sources".to_string(),
+                serde_json::to_value(&projection.skipped_guardian_sources).unwrap_or(Value::Null),
+            );
+        }
+        if !projection.guardian_timeline.is_empty() {
+            object.insert(
+                "guardian_timeline".to_string(),
+                serde_json::to_value(&projection.guardian_timeline).unwrap_or(Value::Null),
+            );
+        }
+        if let Some(summary) = projection.guardian_findings_summary.as_ref() {
+            object.insert("guardian_findings_summary".to_string(), Value::String(summary.clone()));
+        }
+        if !projection.guardian_findings.is_empty() {
+            object.insert(
+                "guardian_findings".to_string(),
+                serde_json::to_value(&projection.guardian_findings).unwrap_or(Value::Null),
+            );
+        }
+        if !projection.guardian_degradations.is_empty() {
+            object.insert(
+                "guardian_degradations".to_string(),
+                serde_json::to_value(&projection.guardian_degradations).unwrap_or(Value::Null),
+            );
+        }
+        if let Some(outcome) = projection.guardian_blocking_outcome.as_ref() {
+            object.insert("guardian_blocking_outcome".to_string(), Value::String(outcome.clone()));
         }
     }
 
@@ -3111,6 +3478,8 @@ impl SessionRuntime {
         }
     }
 
+    // Loads the current trace when present; otherwise creates a new trace and
+    // records the initial task and flow-selection events.
     fn load_or_create_trace(
         &self,
         session: &mut ActiveSessionRecord,
@@ -3387,6 +3756,8 @@ impl SessionRuntime {
         }
     }
 
+    // Applies terminal state to task, trace, and session in one place so the
+    // persisted snapshot stays aligned across all operator surfaces.
     fn finalize_task(
         &self,
         session: &mut ActiveSessionRecord,
@@ -3431,6 +3802,8 @@ impl SessionRuntime {
         })
     }
 
+    // Persist twice so the stored trace payload also contains its own final
+    // trace location for downstream inspect and status rendering.
     fn persist_trace(&self, trace: &mut ExecutionTrace) -> Result<String, SessionRuntimeError> {
         let path = self.trace_store.persist(trace).map_err(SessionRuntimeError::TraceStore)?;
         let trace_location = path.to_string_lossy().into_owned();
@@ -3792,6 +4165,8 @@ struct GovernanceBlockContext {
     reason: String,
 }
 
+/// Errors surfaced while orchestrating session-native planning, execution,
+/// governance, checkpoints, and persisted trace/session updates.
 #[derive(Debug, Error)]
 pub enum SessionRuntimeError {
     #[error("session store operation failed: {0}")]
@@ -3869,20 +4244,30 @@ mod tests {
         project_scale_state_for_goal, session_status_for_task_status,
     };
     use crate::adapters::checkpoint_store::FileCheckpointStore;
+    use crate::adapters::config_store::FileConfigStore;
+    use crate::adapters::session_store::SessionStore;
     use crate::adapters::trace_store::TraceStore;
     use crate::domain::brief::normalize_inputs;
     use crate::domain::cluster::{ClusterSessionProjection, ClusteredExecutionKind};
-    use crate::domain::configuration::{RoutingConfig, RuntimeKind};
+    use crate::domain::configuration::{
+        CapabilityState, ConfigFile, EffortFallbackPolicy, EffortLevel, ModelRoute, RouteSlot,
+        RoutingConfig, RuntimeCapabilityProfile, RuntimeKind, SlotEffortPolicy,
+    };
+    use crate::domain::decision::{Decision, DecisionType, EvidenceRef};
     use crate::domain::execution::{
         ExecutionAttemptDefinition, ExecutionCommand, ExecutionFailureMode, WorkspaceChange,
         WorkspaceExecutionProfile,
     };
     use crate::domain::flow::{attach_stage_metadata, built_in_flow};
-    use crate::domain::goal_plan::{GoalPlan, PlannedTask};
+    use crate::domain::goal_plan::{GoalPlan, InferredFlow, PlannedTask};
     use crate::domain::governance::{
         ApprovalState, CanonMode, CanonRuntimeConfig, GovernanceLifecycleState, GovernanceProfile,
         GovernanceRuntimeKind, GovernedStageRecord, PacketReadiness, StageGovernancePolicy,
         SystemContextBinding,
+    };
+    use crate::domain::guidance::{
+        CapabilityPhase, FindingConfidence, GuardianDisposition, GuardianFinding,
+        GuidanceAuthoritySource, GuidanceGuardianProjection,
     };
     use crate::domain::limits::{RunLimits, TerminalCondition};
     use crate::domain::plan::Plan;
@@ -3894,9 +4279,12 @@ mod tests {
         ActiveSessionRecord, ContinuityAuthority, DelegationContinuityMode,
         DelegationContinuityState, SessionCommand, SessionStatus,
     };
-    use crate::domain::step::{ExecutionStatus, Recoverability, Step, StepStatus};
+    use crate::domain::step::{
+        ExecutionStatus, Recoverability, Step, StepExecutionResult, StepKind, StepStatus,
+    };
     use crate::domain::task::{Task, TaskRunRequest, TaskStatus, TerminalReason};
     use crate::domain::task_context::TaskContext;
+    use crate::domain::tool_result::ToolResult;
     use crate::domain::trace::{ExecutionTrace, TraceEventType};
     use crate::domain::workflow::ProjectScaleStageKind;
     use crate::fixture::FixtureRuntime;
@@ -4041,6 +4429,517 @@ mod tests {
 
     fn context() -> TaskContext {
         TaskContext::new("session-runtime", "/tmp/workspace", RunLimits::default(), Map::new())
+    }
+
+    fn save_local_routing(workspace: &Path, routing: RoutingConfig) {
+        FileConfigStore::for_workspace(workspace)
+            .save_local(&ConfigFile { version: 1, routing, canon: None })
+            .unwrap();
+    }
+
+    #[test]
+    fn guardian_phase_helpers_map_steps_and_decisions() {
+        let workspace = temp_workspace("boundline-runtime-guardian-phases");
+        let task = decision_task(workspace.to_string_lossy().as_ref(), json!({}));
+        let mut session = build_session(&workspace, task);
+        session.goal_plan = Some(
+            GoalPlan::new(
+                "Drive a session runtime branch",
+                vec![
+                    PlannedTask {
+                        task_id: "task-1".to_string(),
+                        description: "Investigate the problem".to_string(),
+                        target: "docs/brief.md".to_string(),
+                        expected_outcome: None,
+                        decision_type_hint: Some(DecisionType::Analyze),
+                    },
+                    PlannedTask {
+                        task_id: "task-2".to_string(),
+                        description: "Repair the implementation".to_string(),
+                        target: "src/lib.rs".to_string(),
+                        expected_outcome: None,
+                        decision_type_hint: Some(DecisionType::Code),
+                    },
+                    PlannedTask {
+                        task_id: "task-3".to_string(),
+                        description: "Verify the bounded change".to_string(),
+                        target: "tests/red_to_green.rs".to_string(),
+                        expected_outcome: None,
+                        decision_type_hint: Some(DecisionType::Test),
+                    },
+                    PlannedTask {
+                        task_id: "task-4".to_string(),
+                        description: "Replan the remaining work".to_string(),
+                        target: "plan.md".to_string(),
+                        expected_outcome: None,
+                        decision_type_hint: Some(DecisionType::Replan),
+                    },
+                ],
+            )
+            .unwrap(),
+        );
+
+        assert_eq!(SessionRuntime::guardian_phase_for_step(&session, 0), CapabilityPhase::Planning);
+        assert_eq!(
+            SessionRuntime::guardian_phase_for_step(&session, 1),
+            CapabilityPhase::Implementation
+        );
+        assert_eq!(
+            SessionRuntime::guardian_phase_for_step(&session, 2),
+            CapabilityPhase::Verification
+        );
+        assert_eq!(SessionRuntime::guardian_phase_for_step(&session, 3), CapabilityPhase::Review);
+
+        let decisions = vec![
+            Decision::new(
+                DecisionType::Analyze,
+                "docs/brief.md",
+                "collect bounded context",
+                "bounded context collected",
+                Vec::new(),
+            ),
+            Decision::new(
+                DecisionType::Test,
+                "tests/red_to_green.rs",
+                "verify the change",
+                "verification is recorded",
+                Vec::new(),
+            ),
+            Decision::new(
+                DecisionType::Replan,
+                "plan.md",
+                "tighten the next steps",
+                "review phase is active",
+                Vec::new(),
+            ),
+        ];
+
+        assert_eq!(
+            SessionRuntime::guardian_phase_for_decisions(&decisions),
+            Some(CapabilityPhase::Review)
+        );
+        assert_eq!(SessionRuntime::guardian_phase_for_decisions(&[]), None);
+    }
+
+    #[test]
+    fn changed_files_for_guardian_prefers_state_then_evidence_then_targets() {
+        let mut task = decision_task("/tmp/workspace", json!({}));
+        task.context.state.insert(
+            "latest_changed_files".to_string(),
+            json!(["src/lib.rs", "tests/red_to_green.rs"]),
+        );
+        let step = Step::new(
+            "step-state",
+            StepKind::Decision,
+            Some("src/from-step.rs".to_string()),
+            json!({}),
+        )
+        .unwrap();
+        let result = StepExecutionResult::success(json!({"ok": true}))
+            .with_evidence(json!({"changed_files": ["src/from-evidence.rs"]}));
+
+        assert_eq!(
+            SessionRuntime::changed_files_for_guardian(&task, &result, &step, "workspace"),
+            vec!["src/lib.rs".to_string(), "tests/red_to_green.rs".to_string()]
+        );
+
+        let task = decision_task("/tmp/workspace", json!({}));
+        let result = StepExecutionResult::success(json!({"ok": true}))
+            .with_evidence(json!({"changed_files": ["src/from-evidence.rs"]}));
+        assert_eq!(
+            SessionRuntime::changed_files_for_guardian(&task, &result, &step, "workspace"),
+            vec!["src/from-evidence.rs".to_string()]
+        );
+
+        let result = StepExecutionResult::success(json!({"ok": true}));
+        assert_eq!(
+            SessionRuntime::changed_files_for_guardian(&task, &result, &step, "workspace"),
+            vec!["src/from-step.rs".to_string()]
+        );
+
+        let fallback_step = Step::decision("step-fallback", json!({})).unwrap();
+        assert_eq!(
+            SessionRuntime::changed_files_for_guardian(
+                &task,
+                &result,
+                &fallback_step,
+                "src/fallback.rs"
+            ),
+            vec!["src/fallback.rs".to_string()]
+        );
+    }
+
+    #[test]
+    fn guardian_request_helpers_collect_targets_and_deduplicate_evidence() {
+        let workspace = temp_workspace("boundline-runtime-guardian-requests");
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::create_dir_all(workspace.join("tests")).unwrap();
+        fs::write(workspace.join("src/lib.rs"), "pub fn add() -> i32 { 2 }\n").unwrap();
+        fs::write(workspace.join("tests/red_to_green.rs"), "#[test]\nfn add() {}\n").unwrap();
+
+        let goal_plan = GoalPlan::new(
+            "Drive a session runtime branch",
+            vec![
+                PlannedTask {
+                    task_id: "task-1".to_string(),
+                    description: "Repair arithmetic".to_string(),
+                    target: "src/lib.rs".to_string(),
+                    expected_outcome: None,
+                    decision_type_hint: Some(DecisionType::Code),
+                },
+                PlannedTask {
+                    task_id: "task-2".to_string(),
+                    description: "Verify arithmetic".to_string(),
+                    target: "tests/red_to_green.rs".to_string(),
+                    expected_outcome: None,
+                    decision_type_hint: Some(DecisionType::Test),
+                },
+            ],
+        )
+        .unwrap();
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let mut session = build_session(
+            &workspace,
+            decision_task(workspace.to_string_lossy().as_ref(), json!({})),
+        );
+        session.goal = Some("Drive a session runtime branch".to_string());
+        session.goal_plan = Some(goal_plan.clone());
+
+        let mut code = Decision::new(
+            DecisionType::Code,
+            "src/lib.rs",
+            "repair arithmetic",
+            "implementation is updated",
+            vec![EvidenceRef::file("src/lib.rs")],
+        );
+        code.tool_result = Some(ToolResult::new("apply_patch", "apply_patch src/lib.rs", true, 10));
+
+        let mut test = Decision::new(
+            DecisionType::Test,
+            "tests/red_to_green.rs",
+            "verify the patch",
+            "tests are green",
+            vec![EvidenceRef::file("src/lib.rs"), EvidenceRef::tool_output("cargo test --quiet")],
+        );
+        test.tool_result = Some(ToolResult::new("cargo-test", "cargo test --quiet", true, 20));
+
+        let request = runtime
+            .native_guardian_request(&session, &goal_plan, &[code.clone(), test.clone()])
+            .unwrap();
+        assert_eq!(request.phase, CapabilityPhase::Verification);
+        assert_eq!(
+            request.changed_files,
+            vec!["src/lib.rs".to_string(), "tests/red_to_green.rs".to_string()]
+        );
+        assert_eq!(request.target_ref, "src/lib.rs");
+        assert_eq!(
+            request.evidence_refs.iter().filter(|reference| *reference == "src/lib.rs").count(),
+            1
+        );
+        assert!(request.evidence_refs.iter().any(|reference| reference == "cargo test --quiet"));
+        assert!(
+            request.evidence_refs.iter().any(|reference| reference == "apply_patch src/lib.rs")
+        );
+
+        let planning_request = runtime
+            .native_guardian_request(
+                &session,
+                &goal_plan,
+                &[Decision::new(
+                    DecisionType::Analyze,
+                    "docs/brief.md",
+                    "collect context",
+                    "planning evidence is recorded",
+                    Vec::new(),
+                )],
+            )
+            .unwrap();
+        assert_eq!(planning_request.phase, CapabilityPhase::Planning);
+        assert_eq!(
+            planning_request.changed_files,
+            vec!["src/lib.rs".to_string(), "tests/red_to_green.rs".to_string()]
+        );
+
+        let step = Step::decision("guardian-step", json!({})).unwrap();
+        let result = StepExecutionResult::success(json!({"ok": true}))
+            .with_evidence(json!({"changed_files": ["src/lib.rs"]}));
+        let task_ref = session.active_task.as_ref().unwrap();
+
+        session.goal = None;
+        let step_request = runtime.guardian_request_for_step(
+            &session,
+            task_ref,
+            &step,
+            CapabilityPhase::Implementation,
+            &result,
+        );
+        assert_eq!(step_request.goal_text, task_ref.goal);
+        assert_eq!(step_request.target_ref, "src/lib.rs");
+        assert_eq!(step_request.changed_files, vec!["src/lib.rs".to_string()]);
+        assert!(
+            step_request.evidence_refs.iter().any(|reference| reference.contains("changed_files"))
+        );
+    }
+
+    #[test]
+    fn guardian_projection_merge_and_payload_helpers_preserve_planning_fields() {
+        let finding = GuardianFinding {
+            finding_id: "finding-1".to_string(),
+            guardian_id: "verification_guardian".to_string(),
+            rule_id: "verification".to_string(),
+            disposition: GuardianDisposition::Warn,
+            summary: "verification evidence is stale".to_string(),
+            evidence_refs: vec!["tests/red_to_green.rs".to_string()],
+            confidence: FindingConfidence::Medium,
+            recommended_action: "rerun the bounded verification command".to_string(),
+            authority_source: GuidanceAuthoritySource::WorkspaceOverride,
+            source_ref: ".boundline/guardians/verification.toml".to_string(),
+            phase: CapabilityPhase::Verification,
+        };
+        let mut projection = GuidanceGuardianProjection {
+            capability_resolution_summary: Some("planning guidance selected".to_string()),
+            loaded_guidance_sources: vec![
+                "assistant/packs/shared/guidance/clean-code.md".to_string(),
+            ],
+            skipped_guidance_sources: vec![".canon/boundline/guidance (missing)".to_string()],
+            ..GuidanceGuardianProjection::default()
+        };
+        let update = GuidanceGuardianProjection {
+            capability_resolution_summary: Some("verification guidance selected".to_string()),
+            loaded_guidance_sources: vec![".boundline/guidance/local.md".to_string()],
+            skipped_guidance_sources: vec![
+                "assistant/packs/shared/guidance/clean-code.md (shadowed)".to_string(),
+            ],
+            loaded_guardian_sources: vec![".boundline/guardians/verification.toml".to_string()],
+            skipped_guardian_sources: vec![
+                "assistant/packs/shared/guardians/verification.toml (shadowed)".to_string(),
+            ],
+            guardian_timeline: vec!["verification_guardian: completed".to_string()],
+            guardian_findings_summary: Some("1 guardian finding(s); blocking=false".to_string()),
+            guardian_findings: vec![finding.clone()],
+            guardian_degradations: vec!["verification route unavailable".to_string()],
+            guardian_blocking_outcome: Some(
+                "guardian findings recorded without a blocking outcome".to_string(),
+            ),
+        };
+
+        SessionRuntime::merge_guardian_projection(&mut projection, &update);
+
+        assert_eq!(
+            projection.capability_resolution_summary.as_deref(),
+            Some("planning guidance selected")
+        );
+        assert_eq!(
+            projection.loaded_guidance_sources,
+            vec!["assistant/packs/shared/guidance/clean-code.md".to_string()]
+        );
+        assert_eq!(projection.loaded_guardian_sources, update.loaded_guardian_sources);
+        assert_eq!(projection.guardian_findings, vec![finding]);
+
+        let mut payload = json!({"existing": "value"});
+        SessionRuntime::append_guardian_projection_payload(&mut payload, &projection);
+        assert_eq!(payload["existing"], "value");
+        assert_eq!(payload["capability_resolution_summary"], "planning guidance selected");
+        assert_eq!(payload["guardian_findings_summary"], "1 guardian finding(s); blocking=false");
+        assert_eq!(payload["guardian_timeline"][0], "verification_guardian: completed");
+        assert_eq!(
+            payload["guardian_blocking_outcome"],
+            "guardian findings recorded without a blocking outcome"
+        );
+
+        let mut scalar_payload = json!("skip");
+        SessionRuntime::append_guardian_projection_payload(&mut scalar_payload, &projection);
+        assert_eq!(scalar_payload, json!("skip"));
+    }
+
+    #[test]
+    fn native_delegation_for_goal_plan_covers_mismatch_handoff_and_escalation_paths() {
+        let workspace = temp_workspace("boundline-runtime-native-delegation-paths");
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let goal_plan = GoalPlan::new(
+            "Drive a session runtime branch",
+            vec![PlannedTask {
+                task_id: "task-1".to_string(),
+                description: "Repair arithmetic".to_string(),
+                target: "src/lib.rs".to_string(),
+                expected_outcome: Some("tests pass".to_string()),
+                decision_type_hint: Some(DecisionType::Code),
+            }],
+        )
+        .unwrap()
+        .with_flow(InferredFlow {
+            flow_name: "bug-fix".to_string(),
+            confidence_reason: "flow confirmed for native routing".to_string(),
+            confirmed: true,
+        });
+
+        let mut mismatch = RoutingConfig::default();
+        mismatch.set_slot(
+            RouteSlot::Implementation,
+            ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-5.4".to_string() },
+        );
+        mismatch.assistant_runtimes = vec![RuntimeKind::Claude];
+        mismatch.set_runtime_capability(
+            RuntimeKind::Codex,
+            RuntimeCapabilityProfile {
+                continuation: CapabilityState::Supported,
+                resume: CapabilityState::Supported,
+                validation: CapabilityState::Supported,
+                handoff_target: CapabilityState::Supported,
+                escalation_context: CapabilityState::Supported,
+                notes: None,
+            },
+        );
+        save_local_routing(&workspace, mismatch);
+
+        let (packet, continuity) = runtime.native_delegation_for_goal_plan(&goal_plan).unwrap();
+        assert_eq!(packet.kind, crate::domain::session::DelegationPacketKind::Escalation);
+        assert_eq!(packet.target_owner, "operator");
+        assert_eq!(continuity.mode, DelegationContinuityMode::EscalationRequired);
+        assert!(continuity.evidence_summary.contains("available assistant runtimes are: claude"));
+
+        let mut handoff = RoutingConfig::default();
+        handoff.set_slot(
+            RouteSlot::Implementation,
+            ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-5.4".to_string() },
+        );
+        handoff.assistant_runtimes = vec![RuntimeKind::Codex, RuntimeKind::Claude];
+        handoff.set_runtime_capability(
+            RuntimeKind::Codex,
+            RuntimeCapabilityProfile {
+                continuation: CapabilityState::Unsupported,
+                resume: CapabilityState::Supported,
+                validation: CapabilityState::Supported,
+                handoff_target: CapabilityState::Unsupported,
+                escalation_context: CapabilityState::Supported,
+                notes: Some("implementation runtime cannot continue".to_string()),
+            },
+        );
+        handoff.set_runtime_capability(
+            RuntimeKind::Claude,
+            RuntimeCapabilityProfile {
+                continuation: CapabilityState::Supported,
+                resume: CapabilityState::Supported,
+                validation: CapabilityState::Supported,
+                handoff_target: CapabilityState::Supported,
+                escalation_context: CapabilityState::Supported,
+                notes: None,
+            },
+        );
+        handoff.set_slot_effort_policy(
+            RouteSlot::Implementation,
+            SlotEffortPolicy {
+                level: EffortLevel::High,
+                fallback: EffortFallbackPolicy::Preserve,
+                rationale: None,
+            },
+        );
+        save_local_routing(&workspace, handoff);
+
+        let (packet, continuity) = runtime.native_delegation_for_goal_plan(&goal_plan).unwrap();
+        assert_eq!(packet.kind, crate::domain::session::DelegationPacketKind::Handoff);
+        assert_eq!(packet.target_owner, "claude");
+        assert_eq!(continuity.mode, DelegationContinuityMode::HandoffRequired);
+        assert!(continuity.evidence_summary.contains("codex lacks continuation support"));
+
+        let mut escalation = RoutingConfig::default();
+        escalation.set_slot(
+            RouteSlot::Implementation,
+            ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-5.4".to_string() },
+        );
+        escalation.assistant_runtimes = vec![RuntimeKind::Codex];
+        escalation.set_runtime_capability(
+            RuntimeKind::Codex,
+            RuntimeCapabilityProfile {
+                continuation: CapabilityState::Unsupported,
+                resume: CapabilityState::Supported,
+                validation: CapabilityState::Supported,
+                handoff_target: CapabilityState::Unsupported,
+                escalation_context: CapabilityState::Supported,
+                notes: Some("operator escalation is still possible".to_string()),
+            },
+        );
+        escalation.set_slot_effort_policy(
+            RouteSlot::Implementation,
+            SlotEffortPolicy {
+                level: EffortLevel::High,
+                fallback: EffortFallbackPolicy::Preserve,
+                rationale: None,
+            },
+        );
+        save_local_routing(&workspace, escalation);
+
+        let (packet, continuity) = runtime.native_delegation_for_goal_plan(&goal_plan).unwrap();
+        assert_eq!(packet.kind, crate::domain::session::DelegationPacketKind::Escalation);
+        assert_eq!(packet.target_owner, "operator");
+        assert_eq!(continuity.mode, DelegationContinuityMode::EscalationRequired);
+        assert_eq!(continuity.next_command, "boundline inspect");
+    }
+
+    #[test]
+    fn runtime_store_helpers_and_compatibility_planning_cover_private_accessors() {
+        let workspace = write_execution_profile_workspace(
+            "boundline-runtime-store-helpers",
+            vec![ExecutionAttemptDefinition {
+                attempt_id: "fix-add".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left - right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+        );
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::write(workspace.join("src/lib.rs"), "left - right\n").unwrap();
+        let runtime = SessionRuntime::for_workspace(&workspace);
+
+        assert_eq!(runtime.workspace_ref(), workspace.as_path());
+        assert!(runtime.latest_trace().unwrap().is_none());
+
+        let session = build_session(
+            &workspace,
+            decision_task(workspace.to_string_lossy().as_ref(), json!({})),
+        );
+        runtime.persist_session(&session).unwrap();
+        assert!(runtime.session_store().load().unwrap().is_some());
+        assert!(runtime.load_session().unwrap().is_some());
+
+        let mut trace = ExecutionTrace::new("task-runtime-store", "session-runtime", "goal");
+        trace.terminal_status = Some(TaskStatus::Succeeded);
+        trace.terminal_reason =
+            Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None));
+        trace.ended_at = Some(trace.started_at + 1);
+        runtime.trace_store().persist(&trace).unwrap();
+        assert!(runtime.latest_trace().unwrap().is_some());
+
+        let mut missing_goal = build_session(
+            &workspace,
+            decision_task(workspace.to_string_lossy().as_ref(), json!({})),
+        );
+        missing_goal.goal = None;
+        assert!(matches!(
+            runtime.plan_compatibility_task(&mut missing_goal),
+            Err(super::SessionRuntimeError::MissingGoal)
+        ));
+
+        let mut planned = build_session(
+            &workspace,
+            decision_task(workspace.to_string_lossy().as_ref(), json!({})),
+        );
+        planned.goal = Some("Drive a session runtime branch".to_string());
+        planned.active_flow = Some(built_in_flow("bug-fix").unwrap().initial_state());
+        runtime.plan_compatibility_task(&mut planned).unwrap();
+        let active_task_id = planned.active_task.as_ref().unwrap().id.clone();
+        assert!(planned.goal_plan.is_none());
+        assert_eq!(planned.latest_status, SessionStatus::Planned);
+
+        runtime.ensure_flow_selected_compatibility_task(&mut planned).unwrap();
+        assert_eq!(planned.active_task.as_ref().unwrap().id, active_task_id);
+
+        runtime.clear_session().unwrap();
+        assert!(runtime.load_session().unwrap().is_none());
     }
 
     #[test]

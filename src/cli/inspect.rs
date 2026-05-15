@@ -1,3 +1,5 @@
+//! Trace inspection and summary rehydration for operator-facing CLI output.
+
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -10,6 +12,7 @@ use crate::cli::CommandExitStatus;
 use crate::cli::output;
 use crate::domain::cluster::ClusterDeliveryStory;
 use crate::domain::goal_plan::GoalPlanFlowState;
+use crate::domain::guidance::{GuardianFinding, GuidanceGuardianProjection};
 use crate::domain::limits::TerminalCondition;
 use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::session::{RoutingMode, RoutingOutcome, RoutingSource};
@@ -35,6 +38,8 @@ const KEY_SUMMARY: &str = "summary";
 const KEY_TARGET: &str = "target";
 const KEY_VOTE_RESOLUTION: &str = "vote_resolution";
 
+/// Result returned by `inspect` after loading a trace, summarizing it, and
+/// rendering the terminal-facing output.
 #[derive(Debug, Clone, PartialEq)]
 pub struct InspectCommandReport {
     pub exit_status: CommandExitStatus,
@@ -43,6 +48,7 @@ pub struct InspectCommandReport {
     pub trace_summary: Option<TraceSummaryView>,
 }
 
+/// Source used to resolve which trace `inspect` should open.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TraceResolutionTarget {
     ExplicitTrace,
@@ -60,6 +66,8 @@ impl TraceResolutionTarget {
     }
 }
 
+/// Loads the requested trace, summarizes persisted execution state, and renders
+/// the same flattened operator view used by the CLI.
 pub fn execute_inspect(
     trace: Option<&Path>,
     workspace: Option<&Path>,
@@ -84,6 +92,8 @@ pub fn execute_inspect(
     })
 }
 
+/// Renders a user-facing inspect failure using the same target-resolution rules
+/// as the successful path.
 pub fn render_error(
     trace: Option<&Path>,
     workspace: Option<&Path>,
@@ -115,6 +125,8 @@ pub fn render_error(
     )
 }
 
+/// Projects routing and optional flow state into the compact summary lines used
+/// by inspect-style output surfaces.
 pub fn render_inspection_routing_summary(
     outcome: &RoutingOutcome,
     flow_state: Option<&GoalPlanFlowState>,
@@ -126,6 +138,9 @@ pub fn render_inspection_routing_summary(
     lines
 }
 
+/// Rehydrates a persisted trace into the flattened `TraceSummaryView` consumed
+/// by CLI output. The function prefers persisted projection fields over
+/// recomputation so inspect explains exactly what the run recorded.
 pub fn summarize_trace(
     trace_ref: impl AsRef<Path>,
     trace: &ExecutionTrace,
@@ -154,6 +169,7 @@ pub fn summarize_trace(
     let mut context_primary_inputs: Vec<String> = Vec::new();
     let mut context_provenance: Vec<String> = Vec::new();
     let mut context_staleness_reason: Option<String> = None;
+    let mut guidance_guardian = GuidanceGuardianProjection::default();
     let mut governance_next_action: Option<String> = None;
     let mut decision_timeline: Vec<String> = Vec::new();
     let mut failure_evidence: Vec<String> = Vec::new();
@@ -171,6 +187,11 @@ pub fn summarize_trace(
     let mut review_timeline: Vec<String> = Vec::new();
 
     for event in &trace.events {
+        // Guidance and guardian projection is persisted incrementally across
+        // planning, execution, and verification events; inspect rebuilds the
+        // latest authoritative view by folding those payload snapshots.
+        merge_guidance_projection_from_payload(&mut guidance_guardian, &event.payload);
+
         if routing_projection.is_empty()
             && let Some(projection) = RoutingDecisionProjection::from_event_payload(&event.payload)
         {
@@ -841,6 +862,7 @@ pub fn summarize_trace(
         context_primary_inputs,
         context_provenance,
         context_staleness_reason,
+        guidance_guardian,
         clarification_headline,
         clarification_prompt,
         clarification_missing_fields,
@@ -867,6 +889,86 @@ pub fn summarize_trace(
     })
 }
 
+// Fold one event payload into the flattened guidance/guardian projection.
+// Planning-era fields latch on first value; execution-era fields are refreshed
+// whenever a later event publishes a newer non-empty snapshot.
+fn merge_guidance_projection_from_payload(
+    projection: &mut GuidanceGuardianProjection,
+    payload: &Value,
+) {
+    let Some(object) = payload.as_object() else {
+        return;
+    };
+
+    if projection.capability_resolution_summary.is_none() {
+        projection.capability_resolution_summary = object
+            .get("capability_resolution_summary")
+            .and_then(|value| value.as_str().map(str::to_string));
+    }
+    if projection.loaded_guidance_sources.is_empty() {
+        projection.loaded_guidance_sources = string_array_field(object, "loaded_guidance_sources");
+    }
+    if projection.skipped_guidance_sources.is_empty() {
+        projection.skipped_guidance_sources =
+            string_array_field(object, "skipped_guidance_sources");
+    }
+
+    let loaded_guardian_sources = string_array_field(object, "loaded_guardian_sources");
+    if !loaded_guardian_sources.is_empty() {
+        projection.loaded_guardian_sources = loaded_guardian_sources;
+    }
+
+    let skipped_guardian_sources = string_array_field(object, "skipped_guardian_sources");
+    if !skipped_guardian_sources.is_empty() {
+        projection.skipped_guardian_sources = skipped_guardian_sources;
+    }
+
+    let guardian_timeline = string_array_field(object, "guardian_timeline");
+    if !guardian_timeline.is_empty() {
+        projection.guardian_timeline = guardian_timeline;
+    }
+
+    if let Some(summary) =
+        object.get("guardian_findings_summary").and_then(|value| value.as_str().map(str::to_string))
+    {
+        projection.guardian_findings_summary = Some(summary);
+    }
+
+    if let Some(findings) = object
+        .get("guardian_findings")
+        .cloned()
+        .and_then(|value| serde_json::from_value::<Vec<GuardianFinding>>(value).ok())
+        && !findings.is_empty()
+    {
+        projection.guardian_findings = findings;
+    }
+
+    let guardian_degradations = string_array_field(object, "guardian_degradations");
+    if !guardian_degradations.is_empty() {
+        projection.guardian_degradations = guardian_degradations;
+    }
+
+    if let Some(outcome) =
+        object.get("guardian_blocking_outcome").and_then(|value| value.as_str().map(str::to_string))
+    {
+        projection.guardian_blocking_outcome = Some(outcome);
+    }
+}
+
+// Extract a string array from a JSON payload without failing the overall
+// inspection path when older or partial payloads omit the key.
+fn string_array_field(object: &serde_json::Map<String, Value>, key: &str) -> Vec<String> {
+    object
+        .get(key)
+        .and_then(Value::as_array)
+        .map(|items| {
+            items.iter().filter_map(|item| item.as_str().map(str::to_string)).collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+// Normalize decision-loop events into human-readable timeline lines while
+// preserving the persisted decision id, target, rationale, and evidence refs.
 fn decision_timeline_lines(
     event_type: TraceEventType,
     decision_id: Option<&str>,
@@ -964,6 +1066,8 @@ fn format_evidence_input(value: &serde_json::Value) -> Option<String> {
     Some(format!("{kind}:{reference}"))
 }
 
+// Load the requested trace using explicit trace path first, then active-session
+// trace ref, then the latest workspace trace.
 fn load_trace(
     trace: Option<&Path>,
     workspace: Option<&Path>,
@@ -999,6 +1103,8 @@ fn resolve_session_trace_ref(workspace: &Path) -> Result<Option<String>, Inspect
     }
 }
 
+/// Resolves which trace path `inspect` should open. Precedence is explicit
+/// `--trace`, then the active session trace ref, then the latest workspace trace.
 pub fn resolve_trace_path(
     trace: Option<&Path>,
     workspace: Option<&Path>,
@@ -1354,6 +1460,7 @@ fn parse_step_kind(raw: &str) -> Result<StepKind, TraceSummaryError> {
     }
 }
 
+/// Errors surfaced while resolving and loading traces for `inspect`.
 #[derive(Debug, Error)]
 pub enum InspectCommandError {
     #[error("inspect requires --trace or --workspace")]
@@ -1370,6 +1477,7 @@ pub enum InspectCommandError {
     Summary(#[from] TraceSummaryError),
 }
 
+/// Errors surfaced while rehydrating a persisted trace into a summary view.
 #[derive(Debug, Error)]
 pub enum TraceSummaryError {
     #[error("trace is missing a terminal status")]
@@ -1396,11 +1504,13 @@ mod tests {
 
     use super::{
         InspectCommandError, TraceResolutionTarget, TraceSummaryError, adaptive_evidence_lines,
-        corrected_command, decision_failure_evidence, failure_headline, governance_timeline_line,
-        inspection_target_for, parse_step_kind, render_error, resolve_session_trace_ref,
-        resolve_trace_path, review_timeline_line, success_headline, summarize_trace,
+        corrected_command, decision_failure_evidence, decision_timeline_lines, failure_headline,
+        governance_timeline_line, inspection_target_for, parse_step_kind, render_error,
+        resolve_session_trace_ref, resolve_trace_path, review_timeline_line, success_headline,
+        summarize_trace,
     };
     use crate::adapters::session_store::SessionStoreError;
+    use crate::adapters::trace_store::{FileTraceStore, TraceStore};
     use crate::domain::limits::TerminalCondition;
     use crate::domain::session::{ActiveSessionRecord, SessionStatus};
     use crate::domain::task::{TaskStatus, TerminalReason};
@@ -1484,6 +1594,282 @@ mod tests {
         assert_eq!(delegation.packet_id.as_deref(), Some("packet-1"));
         assert_eq!(delegation.target_owner.as_deref(), Some("codex"));
         assert!(delegation.headline.contains("handoff required"));
+    }
+
+    #[test]
+    fn summarize_trace_merges_guidance_projection_from_trace_payloads() {
+        let mut trace = terminal_trace();
+        trace.record_event(
+            TraceEventType::GoalPlanCreated,
+            None,
+            1,
+            json!({
+                "loaded_guidance_sources": [
+                    "assistant/packs/shared/guidance/clean-code.md",
+                    7
+                ],
+                "skipped_guidance_sources": [
+                    ".canon/boundline/guidance (missing)"
+                ],
+                "loaded_guardian_sources": [
+                    "assistant/packs/shared/guardians/verification.toml"
+                ],
+                "guardian_timeline": ["verification_guardian: planned"]
+            }),
+        );
+        trace.record_event(
+            TraceEventType::TerminalRecorded,
+            None,
+            2,
+            json!({
+                "capability_resolution_summary": "resolved 1 guidance capability entries from 1 source(s) for verification",
+                "loaded_guardian_sources": [".boundline/guardians/verification.toml"],
+                "skipped_guardian_sources": [
+                    "assistant/packs/shared/guardians/verification.toml (shadowed)"
+                ],
+                "guardian_timeline": ["verification_guardian: completed"],
+                "guardian_findings_summary": "1 guardian finding(s); blocking=false",
+                "guardian_findings": [{
+                    "finding_id": "finding-1",
+                    "guardian_id": "verification_guardian",
+                    "rule_id": "verification",
+                    "disposition": "warn",
+                    "summary": "verification evidence is stale",
+                    "evidence_refs": ["tests/red_to_green.rs"],
+                    "confidence": "medium",
+                    "recommended_action": "rerun the bounded verification command",
+                    "authority_source": "workspace_override",
+                    "source_ref": ".boundline/guardians/verification.toml",
+                    "phase": "verification"
+                }],
+                "guardian_degradations": ["verification route unavailable"],
+                "guardian_blocking_outcome": "guardian findings recorded without a blocking outcome"
+            }),
+        );
+
+        let summary = summarize_trace("/tmp/trace.json", &trace).unwrap();
+
+        assert_eq!(
+            summary.guidance_guardian.capability_resolution_summary.as_deref(),
+            Some("resolved 1 guidance capability entries from 1 source(s) for verification")
+        );
+        assert_eq!(
+            summary.guidance_guardian.loaded_guidance_sources,
+            vec!["assistant/packs/shared/guidance/clean-code.md".to_string()]
+        );
+        assert_eq!(
+            summary.guidance_guardian.loaded_guardian_sources,
+            vec![".boundline/guardians/verification.toml".to_string()]
+        );
+        assert_eq!(
+            summary.guidance_guardian.guardian_timeline,
+            vec!["verification_guardian: completed".to_string()]
+        );
+        assert_eq!(
+            summary.guidance_guardian.guardian_findings_summary.as_deref(),
+            Some("1 guardian finding(s); blocking=false")
+        );
+        assert_eq!(summary.guidance_guardian.guardian_findings.len(), 1);
+        assert_eq!(
+            summary.guidance_guardian.guardian_blocking_outcome.as_deref(),
+            Some("guardian findings recorded without a blocking outcome")
+        );
+    }
+
+    #[test]
+    fn summarize_trace_collects_task_started_and_goal_plan_input_projection() {
+        let mut trace = terminal_trace();
+        trace.record_event(
+            TraceEventType::TaskStarted,
+            None,
+            0,
+            json!({
+                "input": {
+                    "authored_input_summary": "authored brief narrowed to src/lib.rs",
+                    "authored_input_sources": ["brief.md", 7],
+                    "authored_input_deduplicated_sources": ["brief.md", "README.md"],
+                    "clarification_headline": "Need bounded scope",
+                    "clarification_prompt": "Confirm the failing file before planning",
+                    "clarification_missing_fields": ["target_file", true],
+                    "requested_governance_runtime": "canon",
+                    "requested_governance_risk": "medium",
+                    "requested_governance_zone": "engineering",
+                    "requested_governance_owner": "platform",
+                    "negotiation_goal_summary": "repair the failing arithmetic path",
+                    "negotiation_resolution": "accepted",
+                    "negotiation_acceptance_boundary": "bounded fix only",
+                    "context_summary": "bounded context from src/lib.rs",
+                    "context_credibility": "credible",
+                    "context_primary_inputs": ["src/lib.rs", false],
+                    "context_provenance": ["workspace_file: src/lib.rs", {"ignored": true}],
+                    "context_staleness_reason": "context snapshot is stale"
+                }
+            }),
+        );
+        trace.record_event(
+            TraceEventType::GoalPlanCreated,
+            None,
+            1,
+            json!({
+                "task_count": 2,
+                "goal": "Repair arithmetic",
+                "goal_plan_state": "confirmed",
+                "goal_plan_revision": 3,
+                "flow_state": "bug-fix/implement",
+                "verification_strategy": "cargo test --quiet",
+                "planning_rationale": "focus on src/lib.rs"
+            }),
+        );
+
+        let summary = summarize_trace("/tmp/trace.json", &trace).unwrap();
+
+        assert_eq!(
+            summary.authored_input_summary.as_deref(),
+            Some("authored brief narrowed to src/lib.rs")
+        );
+        assert_eq!(summary.authored_input_sources, vec!["brief.md".to_string()]);
+        assert_eq!(
+            summary.authored_input_deduplicated_sources,
+            vec!["brief.md".to_string(), "README.md".to_string()]
+        );
+        assert_eq!(summary.clarification_headline.as_deref(), Some("Need bounded scope"));
+        assert_eq!(
+            summary.clarification_prompt.as_deref(),
+            Some("Confirm the failing file before planning")
+        );
+        assert_eq!(summary.clarification_missing_fields, vec!["target_file".to_string()]);
+        assert_eq!(summary.requested_governance_runtime.as_deref(), Some("canon"));
+        assert_eq!(summary.requested_governance_risk.as_deref(), Some("medium"));
+        assert_eq!(summary.requested_governance_zone.as_deref(), Some("engineering"));
+        assert_eq!(summary.requested_governance_owner.as_deref(), Some("platform"));
+        assert_eq!(
+            summary.negotiation_goal_summary.as_deref(),
+            Some("repair the failing arithmetic path")
+        );
+        assert_eq!(summary.negotiation_resolution.as_deref(), Some("accepted"));
+        assert_eq!(summary.negotiation_acceptance_boundary.as_deref(), Some("bounded fix only"));
+        assert_eq!(summary.context_summary.as_deref(), Some("bounded context from src/lib.rs"));
+        assert_eq!(summary.context_credibility.as_deref(), Some("credible"));
+        assert_eq!(summary.context_primary_inputs, vec!["src/lib.rs".to_string()]);
+        assert_eq!(summary.context_provenance, vec!["workspace_file: src/lib.rs".to_string()]);
+        assert_eq!(summary.context_staleness_reason.as_deref(), Some("context snapshot is stale"));
+        assert_eq!(
+            summary.goal_plan_summary.as_deref(),
+            Some(
+                "2 bounded task(s) for Repair arithmetic [confirmed rev 3] | flow: bug-fix/implement | verification: cargo test --quiet | rationale: focus on src/lib.rs"
+            )
+        );
+    }
+
+    #[test]
+    fn decision_review_and_governance_helpers_cover_fallback_paths() {
+        let created = decision_timeline_lines(
+            TraceEventType::DecisionCreated,
+            Some("decision-1"),
+            &json!({
+                "status": "pending",
+                "selector": "modify",
+                "decision_type": "code",
+                "target": "src/lib.rs",
+                "rationale": "repair the failing implementation",
+                "expected_outcome": "tests pass",
+                "evidence_inputs": [
+                    {"kind": "file", "reference": "src/lib.rs"},
+                    {"kind": "tool_output", "reference": "cargo test --quiet"}
+                ]
+            }),
+        );
+        assert!(
+            created.contains(
+                &"decision: decision-1 modify (code) -> src/lib.rs [pending]".to_string()
+            )
+        );
+        assert!(created.contains(&"selector: modify".to_string()));
+        assert!(created.contains(&"rationale: repair the failing implementation".to_string()));
+        assert!(created.contains(&"verification_intent: tests pass".to_string()));
+        assert!(created.contains(
+            &"evidence_inputs: file:src/lib.rs, tool_output:cargo test --quiet".to_string()
+        ));
+
+        let recovered = decision_timeline_lines(
+            TraceEventType::DecisionRecovered,
+            Some("decision-1"),
+            &json!({"status": "recovered", "recovery_decision_id": "decision-2"}),
+        );
+        assert_eq!(
+            recovered,
+            vec!["decision_status: decision-1 recovered via decision-2".to_string()]
+        );
+
+        assert_eq!(
+            review_timeline_line(
+                TraceEventType::ReviewerCompleted,
+                &json!({"reviewer_id": "safety", "failure_reason": "tool crashed"}),
+            )
+            .as_deref(),
+            Some("reviewer safety failed: tool crashed")
+        );
+        assert_eq!(
+            review_timeline_line(
+                TraceEventType::ReviewVoteResolved,
+                &json!({"vote_resolution": {"decision": "accepted"}}),
+            )
+            .as_deref(),
+            Some("review_vote: {\"decision\":\"accepted\"}")
+        );
+        assert_eq!(
+            governance_timeline_line(
+                TraceEventType::GovernanceDecisionRecorded,
+                &json!({"blocked_reason": "approval missing"}),
+            )
+            .as_deref(),
+            Some("governance_decision_blocked: approval missing")
+        );
+
+        assert_eq!(
+            success_headline(&json!({"output": {"changed_files": ["src/lib.rs"]}}), 2),
+            "updated src/lib.rs after 2 attempt(s)"
+        );
+        assert_eq!(
+            decision_failure_evidence(
+                Some("decision-1"),
+                &json!({
+                    "target": "src/lib.rs",
+                    "action_result": {
+                        "tool_id": "cargo-test",
+                        "invocation": "cargo test --quiet",
+                        "success": false,
+                        "duration_ms": 12,
+                        "stdout": "",
+                        "stderr": "tests failed"
+                    }
+                }),
+            )
+            .as_deref(),
+            Some("decision-1 src/lib.rs: tests failed")
+        );
+    }
+
+    #[test]
+    fn trace_loading_helpers_cover_explicit_session_and_latest_workspace_paths() {
+        let workspace = temp_workspace("boundline-inspect-load-trace");
+        let trace_store = FileTraceStore::for_workspace(&workspace);
+        let trace_path = trace_store.persist(&terminal_trace()).unwrap();
+
+        let (target, latest_path) = resolve_trace_path(None, Some(&workspace), None).unwrap();
+        assert_eq!(target, TraceResolutionTarget::LatestWorkspaceTrace);
+        assert_eq!(latest_path, trace_path);
+
+        let (target, session_path) =
+            resolve_trace_path(None, Some(&workspace), Some("relative/trace.json")).unwrap();
+        assert_eq!(target, TraceResolutionTarget::SessionTraceRef);
+        assert_eq!(session_path, PathBuf::from("relative/trace.json"));
+
+        let (target, loaded_path, loaded_trace) =
+            super::load_trace(Some(trace_path.as_path()), Some(&workspace)).unwrap();
+        assert_eq!(target, TraceResolutionTarget::ExplicitTrace);
+        assert_eq!(loaded_path, trace_path);
+        assert_eq!(loaded_trace.goal, "Inspect trace");
     }
 
     #[test]

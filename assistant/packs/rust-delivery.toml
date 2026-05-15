@@ -1,0 +1,29 @@
+[guidance.language-best-practices]
+title = "Rust Language Guidance"
+applies_to = ["planning", "implementation", "verification"]
+roles = ["planner", "implementer", "verifier"]
+path = "../guidance/language-rust.md"
+priority = "high"
+
+[guidance.framework-best-practices]
+title = "Cargo Workspace Guidance"
+applies_to = ["planning", "implementation", "verification"]
+roles = ["planner", "implementer", "verifier"]
+path = "../guidance/framework-cargo.md"
+priority = "medium"
+
+[guidance.testing-best-practices]
+title = "Rust Testing Guidance"
+applies_to = ["planning", "testing", "verification"]
+roles = ["planner", "verifier"]
+path = "../guidance/testing-rust.md"
+priority = "high"
+
+[guardians.rust-language-safety]
+title = "Rust Language Safety Guardian"
+kind = "deterministic"
+applies_to = ["implementation", "verification"]
+rules = ["no_unwrap_expect"]
+severity_floor = "error"
+command = "builtin:no-unwrap-expect"
+instruction = "../guardians/rust-language-safety.md"

@@ -1,3 +1,5 @@
+//! Domain-family detection and external-context template models.
+
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -6,6 +8,7 @@ use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+/// Supported domain families used to tailor guidance and context assembly.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub enum DomainFamily {
@@ -124,6 +127,7 @@ impl DomainFamily {
     }
 }
 
+/// Supported kinds of external context that can be bound to a domain template.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub enum ExternalContextKind {
@@ -148,6 +152,7 @@ impl ExternalContextKind {
     }
 }
 
+/// Availability status of one resolved external-context binding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExternalContextStatus {
@@ -168,6 +173,7 @@ impl ExternalContextStatus {
     }
 }
 
+/// One configured external-context binding attached to a domain template.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExternalContextBinding {
     pub kind: ExternalContextKind,
@@ -179,6 +185,7 @@ pub struct ExternalContextBinding {
 }
 
 impl ExternalContextBinding {
+    /// Validates the external-context binding.
     pub fn validate(&self) -> Result<(), DomainTemplateError> {
         if self.reference.trim().is_empty() {
             return Err(DomainTemplateError::MissingExternalContextReference);
@@ -189,6 +196,7 @@ impl ExternalContextBinding {
         Ok(())
     }
 
+    /// Resolves the binding reference to a workspace-local path when possible.
     pub fn resolved_path(&self, workspace_ref: &Path) -> Option<PathBuf> {
         if has_external_scheme(&self.reference) {
             return None;
@@ -199,6 +207,7 @@ impl ExternalContextBinding {
         if candidate.is_absolute() { Some(candidate) } else { Some(workspace_ref.join(candidate)) }
     }
 
+    /// Computes the effective status of the binding for the selected target.
     pub fn status_for_target(
         &self,
         workspace_ref: &Path,
@@ -241,6 +250,7 @@ impl ExternalContextBinding {
     }
 }
 
+/// Persisted settings for one domain-family template.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct DomainTemplateSettings {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -252,6 +262,7 @@ pub struct DomainTemplateSettings {
 }
 
 impl DomainTemplateSettings {
+    /// Validates the domain-template settings.
     pub fn validate(&self) -> Result<(), DomainTemplateError> {
         if self.standards.as_deref().is_some_and(|value| value.trim().is_empty()) {
             return Err(DomainTemplateError::InvalidStandardsText);
@@ -265,6 +276,7 @@ impl DomainTemplateSettings {
     }
 }
 
+/// Credibility assigned to applied domain context.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AppliedDomainCredibility {
@@ -283,6 +295,7 @@ impl AppliedDomainCredibility {
     }
 }
 
+/// One external input carried into an applied domain-context summary.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppliedExternalContextInput {
     pub kind: ExternalContextKind,
@@ -294,6 +307,7 @@ pub struct AppliedExternalContextInput {
     pub detail: Option<String>,
 }
 
+/// Applied domain context selected for planning and guidance assembly.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppliedDomainContext {
     pub families: Vec<DomainFamily>,
@@ -311,6 +325,7 @@ pub struct AppliedDomainContext {
 }
 
 impl AppliedDomainContext {
+    /// Validates the applied domain context.
     pub fn validate(&self) -> Result<(), DomainTemplateError> {
         if self.summary.trim().is_empty() {
             return Err(DomainTemplateError::InvalidAppliedDomainSummary);
@@ -330,6 +345,7 @@ impl AppliedDomainContext {
     }
 }
 
+/// Detects likely domain families from workspace signals and an optional target.
 pub fn detect_domain_families(workspace_ref: &Path, target: Option<&str>) -> Vec<DomainFamily> {
     let mut families = BTreeSet::new();
 
@@ -544,6 +560,7 @@ fn has_external_scheme(reference: &str) -> bool {
         || reference.starts_with("canon:")
 }
 
+/// Validation errors for domain-template settings and applied domain context.
 #[derive(Debug, Error)]
 pub enum DomainTemplateError {
     #[error("standards text cannot be empty when provided")]
@@ -565,11 +582,129 @@ pub enum DomainTemplateError {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::thread;
+    use std::time::Duration;
 
     use super::{
         AppliedDomainContext, AppliedDomainCredibility, DomainFamily, DomainTemplateSettings,
         ExternalContextBinding, ExternalContextKind, ExternalContextStatus, detect_domain_families,
     };
+
+    static TEMP_DIR_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+    fn temp_workspace(name: &str) -> PathBuf {
+        let id = TEMP_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!("boundline-{name}-{id}"));
+        let _ = fs::remove_dir_all(&path);
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    #[test]
+    fn domain_family_metadata_is_defined_for_every_variant() {
+        let families = DomainFamily::all();
+        let names = families
+            .iter()
+            .map(|family| family.as_str())
+            .collect::<std::collections::BTreeSet<_>>();
+
+        assert_eq!(families.len(), 13);
+        assert_eq!(names.len(), families.len());
+
+        for family in families {
+            assert!(!family.as_str().is_empty());
+            assert!(!family.display_name().is_empty());
+            assert!(!family.built_in_summary().is_empty());
+        }
+    }
+
+    #[test]
+    fn external_context_helpers_cover_variants_and_resolution_paths() {
+        let workspace = temp_workspace("domain-template-external-context");
+        fs::create_dir_all(workspace.join("docs")).unwrap();
+        fs::create_dir_all(workspace.join("src")).unwrap();
+
+        let kinds = [
+            ExternalContextKind::DesignReference,
+            ExternalContextKind::DesignSystem,
+            ExternalContextKind::DesignTokens,
+            ExternalContextKind::PlatformGuidance,
+            ExternalContextKind::ApiContract,
+            ExternalContextKind::Custom,
+        ];
+        for kind in kinds {
+            assert!(!kind.as_str().is_empty());
+        }
+
+        let statuses = [
+            ExternalContextStatus::Used,
+            ExternalContextStatus::Unavailable,
+            ExternalContextStatus::Stale,
+            ExternalContextStatus::Skipped,
+        ];
+        for status in statuses {
+            assert!(!status.as_str().is_empty());
+        }
+
+        let relative = ExternalContextBinding {
+            kind: ExternalContextKind::DesignReference,
+            reference: "docs/reference.md".to_string(),
+            required: true,
+            notes: None,
+        };
+        assert_eq!(relative.resolved_path(&workspace), Some(workspace.join("docs/reference.md")));
+
+        let file_prefixed = ExternalContextBinding {
+            kind: ExternalContextKind::DesignSystem,
+            reference: "file:docs/system.md".to_string(),
+            required: false,
+            notes: None,
+        };
+        assert_eq!(file_prefixed.resolved_path(&workspace), Some(workspace.join("docs/system.md")));
+
+        let absolute_path = workspace.join("docs/absolute.md");
+        let absolute = ExternalContextBinding {
+            kind: ExternalContextKind::ApiContract,
+            reference: absolute_path.to_string_lossy().into_owned(),
+            required: false,
+            notes: None,
+        };
+        assert_eq!(absolute.resolved_path(&workspace), Some(absolute_path.clone()));
+
+        let external = ExternalContextBinding {
+            kind: ExternalContextKind::Custom,
+            reference: "https://example.com/spec".to_string(),
+            required: false,
+            notes: None,
+        };
+        assert_eq!(external.resolved_path(&workspace), None);
+        assert_eq!(
+            external.status_for_target(&workspace, Some("src/app.tsx")),
+            ExternalContextStatus::Used
+        );
+
+        fs::write(workspace.join("src/app.tsx"), "export const App = () => null;\n").unwrap();
+        thread::sleep(Duration::from_millis(20));
+        fs::write(workspace.join("docs/reference.md"), "reference\n").unwrap();
+        assert_eq!(relative.status_for_target(&workspace, None), ExternalContextStatus::Used);
+        assert_eq!(
+            relative.status_for_target(&workspace, Some("src/missing.tsx")),
+            ExternalContextStatus::Used
+        );
+        assert_eq!(
+            relative.status_for_target(&workspace, Some("src/app.tsx")),
+            ExternalContextStatus::Used
+        );
+
+        thread::sleep(Duration::from_millis(20));
+        fs::write(workspace.join("src/app.tsx"), "export const App = () => 'new';\n").unwrap();
+        assert_eq!(
+            relative.status_for_target(&workspace, Some("src/app.tsx")),
+            ExternalContextStatus::Stale
+        );
+    }
 
     #[test]
     fn settings_reject_blank_standards_and_notes() {
@@ -590,9 +725,173 @@ mod tests {
     }
 
     #[test]
+    fn domain_template_settings_and_applied_context_validate_expected_states() {
+        let settings = DomainTemplateSettings {
+            enabled: Some(true),
+            standards: Some("Prefer bounded UI changes".to_string()),
+            external_context_bindings: vec![ExternalContextBinding {
+                kind: ExternalContextKind::DesignSystem,
+                reference: "design/system.md".to_string(),
+                required: true,
+                notes: Some("Use shared spacing tokens".to_string()),
+            }],
+        };
+        assert!(settings.validate().is_ok());
+
+        let invalid_settings = DomainTemplateSettings {
+            enabled: Some(true),
+            standards: Some("valid".to_string()),
+            external_context_bindings: vec![ExternalContextBinding {
+                kind: ExternalContextKind::DesignReference,
+                reference: "   ".to_string(),
+                required: false,
+                notes: None,
+            }],
+        };
+        assert!(invalid_settings.validate().is_err());
+
+        let credible = AppliedDomainContext {
+            families: vec![DomainFamily::React, DomainFamily::WebUi],
+            summary: "credible context".to_string(),
+            credibility: AppliedDomainCredibility::Credible,
+            selected_target: "src/App.tsx".to_string(),
+            guidance_sources: vec!["workspace rules".to_string()],
+            external_inputs: Vec::new(),
+            governed_artifact_refs: Vec::new(),
+            blocking_reason: None,
+        };
+        assert!(credible.validate().is_ok());
+
+        let insufficient = AppliedDomainContext {
+            families: vec![DomainFamily::WebUi],
+            summary: "insufficient context".to_string(),
+            credibility: AppliedDomainCredibility::Insufficient,
+            selected_target: "src/App.tsx".to_string(),
+            guidance_sources: Vec::new(),
+            external_inputs: Vec::new(),
+            governed_artifact_refs: Vec::new(),
+            blocking_reason: None,
+        };
+        assert!(insufficient.validate().is_err());
+
+        let stale = AppliedDomainContext {
+            families: vec![DomainFamily::React],
+            summary: "stale context".to_string(),
+            credibility: AppliedDomainCredibility::Stale,
+            selected_target: "src/App.tsx".to_string(),
+            guidance_sources: Vec::new(),
+            external_inputs: Vec::new(),
+            governed_artifact_refs: Vec::new(),
+            blocking_reason: Some("design reference is older than target".to_string()),
+        };
+        assert!(stale.validate().is_ok());
+    }
+
+    #[test]
+    fn detect_domain_families_covers_workspace_markers_and_target_extensions() {
+        let workspace = temp_workspace("domain-template-detect-workspace");
+        fs::create_dir_all(workspace.join("android")).unwrap();
+        fs::create_dir_all(workspace.join("ios")).unwrap();
+        fs::write(workspace.join("Cargo.toml"), "[package]\nname = 'x'\nversion = '0.1.0'\n")
+            .unwrap();
+        fs::write(workspace.join("pom.xml"), "<project />\n").unwrap();
+        fs::write(workspace.join("Directory.Build.props"), "<Project />\n").unwrap();
+        fs::write(workspace.join("pyproject.toml"), "[project]\nname='x'\n").unwrap();
+        fs::write(workspace.join("Gemfile"), "source 'https://rubygems.org'\n").unwrap();
+        fs::write(workspace.join("composer.json"), "{}\n").unwrap();
+        fs::write(workspace.join("Package.swift"), "// swift package\n").unwrap();
+        fs::write(workspace.join("package.json"), r#"{"dependencies":{"koa":"1.0.0"}}"#).unwrap();
+
+        let workspace_families = detect_domain_families(&workspace, None);
+        assert!(workspace_families.contains(&DomainFamily::Systems));
+        assert!(workspace_families.contains(&DomainFamily::JvmService));
+        assert!(workspace_families.contains(&DomainFamily::DotNetService));
+        assert!(workspace_families.contains(&DomainFamily::PythonService));
+        assert!(workspace_families.contains(&DomainFamily::Ruby));
+        assert!(workspace_families.contains(&DomainFamily::Php));
+        assert!(workspace_families.contains(&DomainFamily::Mobile));
+        assert!(workspace_families.contains(&DomainFamily::NodeService));
+
+        assert_eq!(
+            detect_domain_families(&workspace, Some("src/lib.rs")),
+            vec![DomainFamily::Systems]
+        );
+        assert_eq!(
+            detect_domain_families(&workspace, Some("src/Main.java")),
+            vec![DomainFamily::JvmService]
+        );
+        assert_eq!(
+            detect_domain_families(&workspace, Some("android/MainActivity.kt")),
+            vec![DomainFamily::Mobile]
+        );
+        assert_eq!(
+            detect_domain_families(&workspace, Some("src/Program.cs")),
+            vec![DomainFamily::DotNetService]
+        );
+        assert_eq!(
+            detect_domain_families(&workspace, Some("src/service.py")),
+            vec![DomainFamily::PythonService]
+        );
+        assert_eq!(
+            detect_domain_families(&workspace, Some("analytics/notebook.py")),
+            vec![DomainFamily::Data]
+        );
+        assert_eq!(
+            detect_domain_families(&workspace, Some("db/report.sql")),
+            vec![DomainFamily::Data]
+        );
+        assert_eq!(
+            detect_domain_families(&workspace, Some("app/model.rb")),
+            vec![DomainFamily::Ruby]
+        );
+        assert_eq!(
+            detect_domain_families(&workspace, Some("public/index.php")),
+            vec![DomainFamily::Php]
+        );
+        assert_eq!(
+            detect_domain_families(&workspace, Some("mobile/App.swift")),
+            vec![DomainFamily::Mobile]
+        );
+        assert_eq!(detect_domain_families(&workspace, Some("notes.txt")), workspace_families);
+    }
+
+    #[test]
+    fn detect_domain_families_covers_frontend_and_backend_javascript_frameworks() {
+        let react_workspace = temp_workspace("domain-template-detect-react");
+        fs::write(
+            react_workspace.join("package.json"),
+            r#"{"dependencies":{"react":"18.0.0","express":"5.0.0"}}"#,
+        )
+        .unwrap();
+        let react_target = detect_domain_families(&react_workspace, Some("src/components/App.tsx"));
+        assert!(react_target.contains(&DomainFamily::React));
+        assert!(react_target.contains(&DomainFamily::WebUi));
+
+        let backend_target = detect_domain_families(&react_workspace, Some("src/server/api.ts"));
+        assert!(backend_target.contains(&DomainFamily::NodeService));
+        assert!(!backend_target.contains(&DomainFamily::WebUi));
+
+        let vue_workspace = temp_workspace("domain-template-detect-vue");
+        fs::write(vue_workspace.join("package.json"), r#"{"dependencies":{"vue":"3.0.0"}}"#)
+            .unwrap();
+        let vue_target = detect_domain_families(&vue_workspace, Some("frontend/client.ts"));
+        assert!(vue_target.contains(&DomainFamily::Vue));
+        assert!(vue_target.contains(&DomainFamily::WebUi));
+
+        let angular_workspace = temp_workspace("domain-template-detect-angular");
+        fs::write(
+            angular_workspace.join("package.json"),
+            r#"{"dependencies":{"angular":"18.0.0"}}"#,
+        )
+        .unwrap();
+        let angular_target = detect_domain_families(&angular_workspace, Some("src/app/main.ts"));
+        assert!(angular_target.contains(&DomainFamily::Angular));
+        assert!(angular_target.contains(&DomainFamily::WebUi));
+    }
+
+    #[test]
     fn detect_domain_families_prefers_target_and_workspace_hints() {
-        let workspace = std::env::temp_dir().join("boundline-domain-template-detect");
-        let _ = fs::remove_dir_all(&workspace);
+        let workspace = temp_workspace("domain-template-detect");
         fs::create_dir_all(workspace.join("src/components")).unwrap();
         fs::write(workspace.join("package.json"), r#"{"dependencies":{"react":"18.0.0"}}"#)
             .unwrap();
@@ -604,8 +903,7 @@ mod tests {
 
     #[test]
     fn detect_domain_families_covers_mixed_backend_and_dotnet_workspace_hints() {
-        let workspace = std::env::temp_dir().join("boundline-domain-template-mixed");
-        let _ = fs::remove_dir_all(&workspace);
+        let workspace = temp_workspace("domain-template-mixed");
         fs::create_dir_all(workspace.join("src/server")).unwrap();
         fs::write(
             workspace.join("package.json"),
@@ -624,8 +922,7 @@ mod tests {
 
     #[test]
     fn binding_status_detects_missing_and_stale_file_inputs() {
-        let workspace = std::env::temp_dir().join("boundline-domain-template-binding");
-        let _ = fs::remove_dir_all(&workspace);
+        let workspace = temp_workspace("domain-template-binding");
         fs::create_dir_all(workspace.join("src")).unwrap();
         fs::create_dir_all(workspace.join("design")).unwrap();
         fs::write(workspace.join("src/app.tsx"), "export const App = () => null;\n").unwrap();

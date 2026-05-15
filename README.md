@@ -35,8 +35,8 @@ planning stops and asks for clarification instead of guessing.
 
 ```bash
 cd <workspace>
+boundline doctor --install
 boundline init --assistant codex
-boundline doctor --workspace .
 boundline run --goal "Fix the failing add test"
 boundline status
 boundline inspect

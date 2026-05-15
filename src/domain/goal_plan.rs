@@ -1,4 +1,4 @@
-//! Goal-derived bounded task draft model (feature 013).
+//! Goal-plan domain models persisted across planning, status, and inspect.
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::domain::cluster::{ClusterDeliveryStory, ClusterSessionProjection};
 use crate::domain::decision::{DecisionType, EvidenceRef};
 use crate::domain::governance::CompactedCanonMemory;
+use crate::domain::guidance::GuidanceGuardianProjection;
 use crate::domain::session::{
     ContinuityAuthority, DelegationContinuityMode, DelegationContinuityState, DelegationPacket,
     DelegationPacketState,
@@ -14,7 +15,7 @@ use crate::domain::session::{
 use crate::domain::trace::current_timestamp_millis;
 use crate::domain::workflow::WorkflowProgressState;
 
-/// Status of a goal-derived plan.
+/// Lifecycle state of a persisted goal-derived plan proposal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GoalPlanStatus {
@@ -23,7 +24,7 @@ pub enum GoalPlanStatus {
     Superseded,
 }
 
-/// Workspace signals collected during plan derivation.
+/// Lightweight workspace signals collected during plan derivation.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkspaceSignals {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -34,6 +35,7 @@ pub struct WorkspaceSignals {
     pub has_tests: bool,
 }
 
+/// Credibility assigned to the bounded context pack that justified planning.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ContextPackCredibility {
@@ -52,6 +54,7 @@ impl ContextPackCredibility {
     }
 }
 
+/// Provenance category for one context input carried into goal planning.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ContextInputKind {
@@ -86,6 +89,8 @@ impl ContextInputKind {
     }
 }
 
+/// One bounded context input persisted with the plan so later surfaces can
+/// explain why a target was selected.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ContextInput {
     pub kind: ContextInputKind,
@@ -127,6 +132,8 @@ impl ContextInput {
     }
 }
 
+/// Bounded planning context assembled from workspace evidence plus optional
+/// authored, domain, and governance sources.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ContextPack {
     pub pack_id: String,
@@ -183,6 +190,7 @@ impl ContextPack {
     }
 }
 
+/// Whether expert-pack routing selected a domain pack for the current plan.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ExpertPackSelectionState {
@@ -199,6 +207,7 @@ impl ExpertPackSelectionState {
     }
 }
 
+/// Outcome assigned to one expert-pack signal during pack selection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ExpertPackSignalStatus {
@@ -217,6 +226,8 @@ impl ExpertPackSignalStatus {
     }
 }
 
+/// Whether a governed Canon expertise input was used or ignored during pack
+/// selection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum CanonExpertiseInputDisposition {
@@ -233,6 +244,7 @@ impl CanonExpertiseInputDisposition {
     }
 }
 
+/// One signal considered while selecting expert packs and runtime-role hints.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExpertPackSignal {
     pub kind: String,
@@ -255,6 +267,8 @@ impl ExpertPackSignal {
     }
 }
 
+/// Candidate expert pack that was considered but rejected with an explicit
+/// reason.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RejectedExpertCandidate {
     pub pack_id: String,
@@ -269,6 +283,8 @@ impl RejectedExpertCandidate {
     }
 }
 
+/// Persisted explanation of how a Canon expertise publication influenced expert
+/// pack selection.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CanonExpertiseInputConsideration {
     pub contract_version: String,
@@ -304,6 +320,8 @@ impl CanonExpertiseInputConsideration {
     }
 }
 
+/// Persisted result of expert-pack selection, including supporting and rejected
+/// signals so operator surfaces can explain why a pack did or did not win.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExpertPackSelectionOutcome {
     pub target_ref: String,
@@ -349,6 +367,7 @@ pub struct InferredFlow {
     pub confirmed: bool,
 }
 
+/// Persisted flow state projected from the goal plan into status and inspect.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GoalPlanFlowMode {
@@ -369,6 +388,7 @@ impl GoalPlanFlowMode {
     }
 }
 
+/// Flattened flow projection for operator-facing views.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GoalPlanFlowState {
     pub mode: GoalPlanFlowMode,
@@ -417,7 +437,8 @@ impl PlannedTask {
     }
 }
 
-/// A bounded task draft derived from goal, workspace, documents, and Canon artifacts.
+/// Persisted bounded task draft derived from goal text, workspace evidence,
+/// authored documents, governance context, and planning-time guidance.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GoalPlan {
     pub plan_id: String,
@@ -451,6 +472,9 @@ pub struct GoalPlan {
     pub compacted_canon_memory: Option<CompactedCanonMemory>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expert_selection: Option<ExpertPackSelectionOutcome>,
+    /// Flattened guidance and guardian projection reused by status and inspect.
+    #[serde(flatten)]
+    pub guidance_guardian: GuidanceGuardianProjection,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cluster_session_projection: Option<ClusterSessionProjection>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -476,6 +500,7 @@ const fn default_goal_plan_revision() -> usize {
 }
 
 impl GoalPlan {
+    /// Creates a new draft plan and validates the initial task set immediately.
     pub fn new(
         goal_text: impl Into<String>,
         tasks: Vec<PlannedTask>,
@@ -498,6 +523,7 @@ impl GoalPlan {
             workflow_progress: None,
             compacted_canon_memory: None,
             expert_selection: None,
+            guidance_guardian: GuidanceGuardianProjection::default(),
             cluster_session_projection: None,
             cluster_delivery_story: None,
             delegation_packet_history: Vec::new(),
@@ -513,6 +539,7 @@ impl GoalPlan {
         Ok(plan)
     }
 
+    /// Validates the persisted plan shape and nested projections.
     pub fn validate(&self) -> Result<(), GoalPlanError> {
         if self.goal_text.trim().is_empty() {
             return Err(GoalPlanError::MissingGoalText);
@@ -555,10 +582,12 @@ impl GoalPlan {
         Ok(())
     }
 
+    /// Returns true when the plan is still a proposal and requires explicit confirmation.
     pub fn requires_confirmation(&self) -> bool {
         self.status == GoalPlanStatus::Draft
     }
 
+    /// Human-readable proposal state used by operator-facing surfaces.
     pub fn proposal_state_text(&self) -> &'static str {
         match self.status {
             GoalPlanStatus::Draft => "proposed",
@@ -567,6 +596,7 @@ impl GoalPlan {
         }
     }
 
+    /// Confirms a draft plan and latches any inferred flow as confirmed.
     pub fn confirm(&mut self) -> Result<(), GoalPlanError> {
         if self.status != GoalPlanStatus::Draft {
             return Err(GoalPlanError::InvalidTransition {
@@ -582,6 +612,7 @@ impl GoalPlan {
         Ok(())
     }
 
+    /// Marks a confirmed plan as superseded by a later revision.
     pub fn supersede(&mut self) -> Result<(), GoalPlanError> {
         if self.status != GoalPlanStatus::Confirmed {
             return Err(GoalPlanError::InvalidTransition {
@@ -627,6 +658,7 @@ impl GoalPlan {
         self
     }
 
+    /// Returns the next monotonically increasing proposal revision number.
     pub fn next_revision(&self) -> usize {
         self.proposal_revision + 1
     }
@@ -665,6 +697,11 @@ impl GoalPlan {
         self
     }
 
+    pub fn with_guidance_guardian(mut self, guidance_guardian: GuidanceGuardianProjection) -> Self {
+        self.guidance_guardian = guidance_guardian;
+        self
+    }
+
     pub fn with_delegation_state(
         mut self,
         packet_history: Vec<DelegationPacket>,
@@ -693,6 +730,7 @@ impl GoalPlan {
         self.flow_skipped = true;
     }
 
+    /// Returns the flattened flow state projected into status and inspect views.
     pub fn flow_state(&self) -> GoalPlanFlowState {
         match self.flow.as_ref() {
             Some(flow) => GoalPlanFlowState {
@@ -818,6 +856,8 @@ impl GoalPlan {
         Ok(())
     }
 
+    /// Returns a compact context summary combining workspace context, Canon
+    /// memory, and expert selection when present.
     pub fn context_summary(&self) -> Option<String> {
         let base_summary = match (
             self.context_pack.as_ref().map(|pack| pack.summary.clone()),
@@ -846,10 +886,12 @@ impl GoalPlan {
         }
     }
 
+    /// Returns the credibility label for the persisted bounded context pack.
     pub fn context_credibility(&self) -> Option<String> {
         self.context_pack.as_ref().map(|pack| pack.credibility.as_str().to_string())
     }
 
+    /// Returns the most important context references that justified planning.
     pub fn context_primary_inputs(&self) -> Vec<String> {
         let mut inputs =
             self.context_pack.as_ref().map(ContextPack::primary_references).unwrap_or_default();
@@ -861,6 +903,7 @@ impl GoalPlan {
         inputs
     }
 
+    /// Returns operator-visible provenance lines for persisted planning context.
     pub fn context_provenance_lines(&self) -> Vec<String> {
         let mut lines =
             self.context_pack.as_ref().map(ContextPack::provenance_lines).unwrap_or_default();
@@ -899,6 +942,7 @@ impl GoalPlan {
     }
 }
 
+/// Validation failures for persisted goal-plan state.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum GoalPlanError {
     #[error("goal text must not be empty")]
@@ -953,6 +997,7 @@ mod tests {
         CanonEvidenceInspectSummary, CanonModeSummary, CanonResultActionSummary,
         CompactedCanonMemory, MemoryCredibilityState,
     };
+    use crate::domain::guidance::GuidanceGuardianProjection;
     use crate::domain::session::{
         ContinuityAuthority, DelegationContinuityMode, DelegationContinuityState, DelegationPacket,
         DelegationPacketKind, DelegationPacketState, StuckEvidenceMarker, StuckRecoveryAction,
@@ -993,6 +1038,23 @@ mod tests {
             stuck_marker: None,
             superseded_by_packet_id: None,
         }
+    }
+
+    #[test]
+    fn with_guidance_guardian_preserves_projection_fields() {
+        let projection = GuidanceGuardianProjection {
+            capability_resolution_summary: Some("resolved guidance for verification".to_string()),
+            loaded_guidance_sources: vec![
+                "assistant/packs/engineering-foundations.toml".to_string(),
+            ],
+            guardian_timeline: vec!["testing-evidence: completed".to_string()],
+            ..GuidanceGuardianProjection::default()
+        };
+
+        let plan = build_plan().with_guidance_guardian(projection.clone());
+
+        assert_eq!(plan.guidance_guardian, projection);
+        assert!(!plan.guidance_guardian.is_empty());
     }
 
     #[test]

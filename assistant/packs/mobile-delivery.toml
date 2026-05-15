@@ -1,0 +1,13 @@
+[guidance.framework-best-practices]
+title = "Mobile Framework Guidance"
+applies_to = ["planning", "implementation", "verification", "review"]
+roles = ["planner", "implementer", "verifier", "reviewer"]
+path = "../guidance/framework-mobile.md"
+priority = "high"
+
+[guidance.testing-best-practices]
+title = "Mobile Testing Guidance"
+applies_to = ["planning", "testing", "verification", "review"]
+roles = ["planner", "verifier", "reviewer"]
+path = "../guidance/testing-mobile.md"
+priority = "high"
