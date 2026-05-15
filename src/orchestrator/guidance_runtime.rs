@@ -2,6 +2,7 @@
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
+use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -17,10 +18,12 @@ use crate::domain::guidance::{
     GuardianKind, GuidanceAuthoritySource, GuidanceCapability, GuidanceGuardianProjection,
     GuidancePriority, LoadedCapabilitySource, SkippedCapabilitySource,
 };
+use crate::orchestrator::guidance_catalog_runtime::{CatalogPackDiscovery, discover_catalog_packs};
 use serde::Deserialize;
 
 const BUNDLED_ASSISTANT_DIR: &str = "assistant";
 const BUNDLED_PACKS_DIR: &str = "assistant/packs";
+const ASSISTANT_ROOT_OVERRIDE_ENV: &str = "BOUNDLINE_ASSISTANT_ROOT";
 const WORKSPACE_GUIDANCE_DIR: &str = ".boundline/guidance";
 const WORKSPACE_GUARDIANS_DIR: &str = ".boundline/guardians";
 const CANON_GUIDANCE_DIR: &str = ".canon/boundline/guidance";
@@ -135,7 +138,10 @@ pub fn resolve_capabilities_for_phase(
     let mut skipped_guidance_sources = Vec::new();
     let mut skipped_guardian_sources = Vec::new();
 
-    let (pack_guidance, pack_guardians, mut pack_skips) = discover_pack_capabilities(phase);
+    let pack_discovery = discover_pack_capabilities(phase);
+    let pack_guidance = pack_discovery.guidance.clone();
+    let pack_guardians = pack_discovery.guardians.clone();
+    let mut pack_skips = pack_discovery.skipped_sources.clone();
     skipped_guidance_sources.extend(pack_skips.clone());
     skipped_sources.append(&mut pack_skips);
 
@@ -149,12 +155,19 @@ pub fn resolve_capabilities_for_phase(
     skipped_guardian_sources.extend(workspace_guardian_skips.clone());
     skipped_sources.append(&mut workspace_guardian_skips);
 
-    let mut canon_skips = discover_optional_canon_guidance(workspace_ref);
+    let (canon_guidance, mut canon_skips) =
+        discover_optional_canon_guidance(workspace_ref, phase, &pack_guidance);
     skipped_guidance_sources.extend(canon_skips.clone());
     skipped_sources.append(&mut canon_skips);
 
-    let (guidance, mut precedence_skips) =
-        resolve_guidance_candidates(pack_guidance, workspace_guidance, evidence);
+    let (guidance, mut precedence_skips) = resolve_guidance_candidates(
+        workspace_guidance
+            .into_iter()
+            .chain(canon_guidance)
+            .chain(pack_guidance)
+            .collect::<Vec<_>>(),
+        evidence,
+    );
     skipped_guidance_sources.extend(precedence_skips.clone());
     skipped_sources.append(&mut precedence_skips);
 
@@ -181,6 +194,23 @@ pub fn resolve_capabilities_for_phase(
         ),
     };
 
+    let mut resolution_notes = pack_discovery.resolution_notes.clone();
+    if !pack_discovery.validation_findings.is_empty() {
+        resolution_notes.push(format!(
+            "{} catalog validation finding(s) were recorded during pack discovery",
+            pack_discovery.validation_findings.len()
+        ));
+    }
+    if guidance
+        .iter()
+        .any(|capability| capability.authority_source == GuidanceAuthoritySource::CanonGoverned)
+    {
+        resolution_notes.push(
+            "canon-governed guidance superseded lower-authority catalog-pack guidance where matching capability ids were present"
+                .to_string(),
+        );
+    }
+
     let record = CapabilityResolutionRecord {
         target_ref: evidence
             .selected_targets
@@ -199,12 +229,22 @@ pub fn resolve_capabilities_for_phase(
             })
             .collect(),
         skipped_sources,
-        resolution_notes: Vec::new(),
+        loaded_packs: pack_discovery.loaded_packs.clone(),
+        skipped_packs: pack_discovery.skipped_packs.clone(),
+        validation_findings: pack_discovery.validation_findings.clone(),
+        resolution_notes,
         summary: summary.clone(),
     };
 
     let projection = GuidanceGuardianProjection {
         capability_resolution_summary: Some(summary),
+        loaded_packs: pack_discovery.loaded_packs.clone(),
+        skipped_packs: pack_discovery.skipped_packs.clone(),
+        catalog_validation_findings: pack_discovery
+            .validation_findings
+            .iter()
+            .map(|finding| finding.display_line())
+            .collect(),
         loaded_guidance_sources,
         skipped_guidance_sources: skipped_guidance_sources
             .iter()
@@ -448,12 +488,11 @@ pub fn guardian_kind_requires_route(kind: GuardianKind) -> bool {
 }
 
 fn resolve_guidance_candidates(
-    pack_guidance: Vec<GuidanceCapability>,
-    workspace_guidance: Vec<GuidanceCapability>,
+    candidates: Vec<GuidanceCapability>,
     evidence: &GuidanceRuntimeEvidence,
 ) -> (Vec<GuidanceCapability>, Vec<SkippedCapabilitySource>) {
     let mut grouped = BTreeMap::<String, Vec<(GuidanceCapability, usize)>>::new();
-    for capability in workspace_guidance.into_iter().chain(pack_guidance) {
+    for capability in candidates {
         let score = guidance_relevance_score(&capability, evidence);
         grouped.entry(capability.capability_id.clone()).or_default().push((capability, score));
     }
@@ -498,22 +537,23 @@ fn resolve_guidance_candidates(
     (resolved.into_iter().map(|(capability, _)| capability).collect(), skipped)
 }
 
-fn discover_pack_capabilities(
-    phase: CapabilityPhase,
-) -> (Vec<GuidanceCapability>, Vec<GuardianCapability>, Vec<SkippedCapabilitySource>) {
+fn discover_pack_capabilities(phase: CapabilityPhase) -> CatalogPackDiscovery {
     let bundled_root = bundled_assistant_root();
     let packs_dir = bundled_root.join(BUNDLED_PACKS_DIR);
-    let mut guidance = Vec::new();
-    let mut guardians = Vec::new();
-    let mut skipped = Vec::new();
+    let mut discovery = discover_catalog_packs(
+        &packs_dir,
+        &bundled_root,
+        GuidanceAuthoritySource::SharedPack,
+        phase,
+    );
 
     let Ok(entries) = fs::read_dir(&packs_dir) else {
-        skipped.push(SkippedCapabilitySource {
+        discovery.skipped_sources.push(SkippedCapabilitySource {
             source_ref: BUNDLED_PACKS_DIR.to_string(),
             authority_source: GuidanceAuthoritySource::SharedPack,
             reason: "no bundled capability packs were available".to_string(),
         });
-        return (guidance, guardians, skipped);
+        return discovery;
     };
 
     let mut manifest_paths = entries
@@ -529,7 +569,7 @@ fn discover_pack_capabilities(
             manifest_path.file_stem().and_then(|value| value.to_str()).map(ToOwned::to_owned);
 
         let Ok(contents) = fs::read_to_string(&manifest_path) else {
-            skipped.push(SkippedCapabilitySource {
+            discovery.skipped_sources.push(SkippedCapabilitySource {
                 source_ref,
                 authority_source: GuidanceAuthoritySource::SharedPack,
                 reason: "failed to read bundled capability manifest".to_string(),
@@ -538,7 +578,7 @@ fn discover_pack_capabilities(
         };
 
         let Ok(manifest) = toml::from_str::<CapabilityPackManifest>(&contents) else {
-            skipped.push(SkippedCapabilitySource {
+            discovery.skipped_sources.push(SkippedCapabilitySource {
                 source_ref,
                 authority_source: GuidanceAuthoritySource::SharedPack,
                 reason: "failed to parse bundled capability manifest".to_string(),
@@ -553,7 +593,7 @@ fn discover_pack_capabilities(
                 continue;
             }
             let content_ref = display_relative_path(&bundled_root, &manifest_dir.join(&entry.path));
-            guidance.push(GuidanceCapability {
+            discovery.guidance.push(GuidanceCapability {
                 capability_id,
                 title: entry.title,
                 applies_to: entry.applies_to,
@@ -563,6 +603,9 @@ fn discover_pack_capabilities(
                 authority_source: GuidanceAuthoritySource::SharedPack,
                 source_ref: source_ref.clone(),
                 pack_id: pack_id.clone(),
+                catalog_pillar: None,
+                catalog_strength: None,
+                catalog_authority_source: None,
             });
         }
 
@@ -570,7 +613,7 @@ fn discover_pack_capabilities(
             if !entry.applies_to.contains(&phase) {
                 continue;
             }
-            guardians.push(GuardianCapability {
+            discovery.guardians.push(GuardianCapability {
                 guardian_id,
                 title: entry.title,
                 kind: entry.kind,
@@ -582,11 +625,14 @@ fn discover_pack_capabilities(
                 authority_source: GuidanceAuthoritySource::SharedPack,
                 source_ref: source_ref.clone(),
                 pack_id: pack_id.clone(),
+                catalog_pillar: None,
+                catalog_default_disposition: None,
+                catalog_authority_source: None,
             });
         }
     }
 
-    (guidance, guardians, skipped)
+    discovery
 }
 
 fn discover_workspace_guidance(
@@ -645,6 +691,9 @@ fn discover_workspace_guidance(
             authority_source: GuidanceAuthoritySource::WorkspaceOverride,
             source_ref,
             pack_id: None,
+            catalog_pillar: None,
+            catalog_strength: None,
+            catalog_authority_source: None,
         });
     }
 
@@ -706,6 +755,9 @@ fn discover_workspace_guardians(
                 authority_source: GuidanceAuthoritySource::WorkspaceOverride,
                 source_ref: source_ref.clone(),
                 pack_id: None,
+                catalog_pillar: None,
+                catalog_default_disposition: None,
+                catalog_authority_source: None,
             });
         }
     }
@@ -713,21 +765,134 @@ fn discover_workspace_guardians(
     (discovered, skipped)
 }
 
-fn discover_optional_canon_guidance(workspace_ref: &Path) -> Vec<SkippedCapabilitySource> {
+fn discover_optional_canon_guidance(
+    workspace_ref: &Path,
+    phase: CapabilityPhase,
+    pack_guidance: &[GuidanceCapability],
+) -> (Vec<GuidanceCapability>, Vec<SkippedCapabilitySource>) {
     let canon_guidance_dir = workspace_ref.join(CANON_GUIDANCE_DIR);
     if canon_guidance_dir.is_dir() {
-        return Vec::new();
+        let mut discovered = Vec::new();
+        let mut skipped = Vec::new();
+        let metadata = canon_guidance_metadata(pack_guidance);
+
+        let Ok(entries) = fs::read_dir(&canon_guidance_dir) else {
+            skipped.push(SkippedCapabilitySource {
+                source_ref: CANON_GUIDANCE_DIR.to_string(),
+                authority_source: GuidanceAuthoritySource::CanonGoverned,
+                reason: "failed to read governed guidance directory".to_string(),
+            });
+            return (discovered, skipped);
+        };
+
+        let mut paths = entries
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| path.extension().and_then(|value| value.to_str()) == Some("md"))
+            .collect::<Vec<_>>();
+        paths.sort();
+
+        for path in paths {
+            let source_ref = display_relative_path(workspace_ref, &path);
+            let Ok(contents) = fs::read_to_string(&path) else {
+                skipped.push(SkippedCapabilitySource {
+                    source_ref,
+                    authority_source: GuidanceAuthoritySource::CanonGoverned,
+                    reason: "failed to read governed guidance markdown".to_string(),
+                });
+                continue;
+            };
+
+            let key = normalized_identifier(
+                path.file_stem().and_then(|value| value.to_str()).unwrap_or("canon-guidance"),
+            );
+            let template = metadata.get(&key);
+            let capability_id = template
+                .map(|capability| capability.capability_id.clone())
+                .unwrap_or_else(|| key.replace('-', "_"));
+            let applies_to = template
+                .map(|capability| capability.applies_to.clone())
+                .unwrap_or_else(all_capability_phases);
+            if !applies_to.contains(&phase) {
+                continue;
+            }
+
+            discovered.push(GuidanceCapability {
+                capability_id,
+                title: markdown_title(&contents).unwrap_or_else(|| title_from_identifier(&key)),
+                applies_to,
+                roles: template.map(|capability| capability.roles.clone()).unwrap_or_else(|| {
+                    DEFAULT_WORKSPACE_GUIDANCE_ROLES
+                        .iter()
+                        .map(|role| (*role).to_string())
+                        .collect()
+                }),
+                content_ref: source_ref.clone(),
+                priority: template
+                    .map(|capability| capability.priority)
+                    .unwrap_or(GuidancePriority::High),
+                authority_source: GuidanceAuthoritySource::CanonGoverned,
+                source_ref,
+                pack_id: template.and_then(|capability| capability.pack_id.clone()),
+                catalog_pillar: template.and_then(|capability| capability.catalog_pillar),
+                catalog_strength: template.and_then(|capability| capability.catalog_strength),
+                catalog_authority_source: template
+                    .and_then(|capability| capability.catalog_authority_source),
+            });
+        }
+
+        return (discovered, skipped);
     }
 
-    vec![SkippedCapabilitySource {
-        source_ref: CANON_GUIDANCE_DIR.to_string(),
-        authority_source: GuidanceAuthoritySource::CanonGoverned,
-        reason: "no governed guidance discovered; continuing with local capability sources"
-            .to_string(),
-    }]
+    (
+        Vec::new(),
+        vec![SkippedCapabilitySource {
+            source_ref: CANON_GUIDANCE_DIR.to_string(),
+            authority_source: GuidanceAuthoritySource::CanonGoverned,
+            reason: "no governed guidance discovered; continuing with local capability sources"
+                .to_string(),
+        }],
+    )
+}
+
+fn canon_guidance_metadata(
+    pack_guidance: &[GuidanceCapability],
+) -> BTreeMap<String, GuidanceCapability> {
+    let mut metadata = BTreeMap::new();
+
+    for capability in pack_guidance {
+        metadata
+            .entry(normalized_identifier(&capability.capability_id))
+            .or_insert_with(|| capability.clone());
+
+        if let Some(stem) =
+            Path::new(&capability.content_ref).file_stem().and_then(|value| value.to_str())
+        {
+            metadata.entry(normalized_identifier(stem)).or_insert_with(|| capability.clone());
+        }
+    }
+
+    metadata
+}
+
+fn normalized_identifier(input: &str) -> String {
+    input
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() { ch.to_ascii_lowercase() } else { '-' })
+        .collect::<String>()
+        .split('-')
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
 }
 
 fn bundled_assistant_root() -> PathBuf {
+    if let Some(root) = env::var_os(ASSISTANT_ROOT_OVERRIDE_ENV).map(PathBuf::from)
+        && root.join(BUNDLED_ASSISTANT_DIR).is_dir()
+    {
+        return root;
+    }
+
     let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let repo_root = crate_root.join("../..");
     if repo_root.join(BUNDLED_ASSISTANT_DIR).is_dir() {
@@ -1189,11 +1354,12 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        GuardianEvaluation, SemanticRouteAvailability, compare_authority_precedence,
-        discover_optional_canon_guidance, discover_workspace_guardians,
-        discover_workspace_guidance, display_relative_path, evaluate_deterministic_guardian,
-        guardian_changed_files, guardian_kind_requires_route, guidance_relevance_score,
-        has_blocking_findings, markdown_title, normalize_finding_suffix,
+        GuardianEvaluation, SemanticRouteAvailability, blocking_outcome_text,
+        compare_authority_precedence, discover_optional_canon_guidance,
+        discover_workspace_guardians, discover_workspace_guidance, display_relative_path,
+        evaluate_deterministic_guardian, guardian_changed_files, guardian_findings_summary,
+        guardian_kind_requires_route, guidance_relevance_score, has_blocking_findings,
+        markdown_title, normalize_finding_suffix, normalized_identifier,
         order_guardians_for_execution, planning_runtime_evidence, resolve_capabilities_for_phase,
         resolve_guidance_candidates, route_slot_for_phase, semantic_route_availability,
         should_short_circuit_semantic_guards, skipped_source_line, title_from_identifier,
@@ -1217,6 +1383,9 @@ mod tests {
             authority_source,
             source_ref: format!("assistant/guardians/{guardian_id}.toml"),
             pack_id: None,
+            catalog_pillar: None,
+            catalog_default_disposition: None,
+            catalog_authority_source: None,
         }
     }
 
@@ -1288,6 +1457,9 @@ mod tests {
             authority_source: GuidanceAuthoritySource::WorkspaceOverride,
             source_ref: ".boundline/guidance/clean-code.md".to_string(),
             pack_id: None,
+            catalog_pillar: None,
+            catalog_strength: None,
+            catalog_authority_source: None,
         };
         let pack_capability = GuidanceCapability {
             capability_id: "clean-code".to_string(),
@@ -1299,6 +1471,9 @@ mod tests {
             authority_source: GuidanceAuthoritySource::SharedPack,
             source_ref: "assistant/packs/shared/pack.toml".to_string(),
             pack_id: Some("shared".to_string()),
+            catalog_pillar: None,
+            catalog_strength: None,
+            catalog_authority_source: None,
         };
         let evidence = super::GuidanceRuntimeEvidence {
             goal_text: "Tighten clean code guidance".to_string(),
@@ -1309,8 +1484,7 @@ mod tests {
         };
 
         let (resolved, skipped) = resolve_guidance_candidates(
-            vec![pack_capability],
-            vec![workspace_capability.clone()],
+            vec![pack_capability, workspace_capability.clone()],
             &evidence,
         );
 
@@ -1578,6 +1752,9 @@ mod tests {
             authority_source: GuidanceAuthoritySource::SharedPack,
             source_ref: "assistant/packs/rust/pack.toml".to_string(),
             pack_id: Some("rust".to_string()),
+            catalog_pillar: None,
+            catalog_strength: None,
+            catalog_authority_source: None,
         };
         let loosely_relevant = GuidanceCapability {
             capability_id: "review-handoff".to_string(),
@@ -1589,6 +1766,9 @@ mod tests {
             authority_source: GuidanceAuthoritySource::SharedPack,
             source_ref: "assistant/packs/shared/pack.toml".to_string(),
             pack_id: Some("shared".to_string()),
+            catalog_pillar: None,
+            catalog_strength: None,
+            catalog_authority_source: None,
         };
         let evidence = super::GuidanceRuntimeEvidence {
             goal_text: "Fix the failing Rust tests".to_string(),
@@ -1607,13 +1787,97 @@ mod tests {
     #[test]
     fn optional_canon_guidance_is_only_skipped_when_directory_is_missing() {
         let workspace = temp_workspace("guidance-runtime-canon-guidance");
+        let seed = GuidanceCapability {
+            capability_id: "clean_code".to_string(),
+            title: "Clean Code".to_string(),
+            applies_to: vec![CapabilityPhase::Planning],
+            roles: vec!["planner".to_string()],
+            content_ref: "assistant/packs/guidance-catalog/guidance/clean-code.md".to_string(),
+            priority: GuidancePriority::High,
+            authority_source: GuidanceAuthoritySource::SharedPack,
+            source_ref: "assistant/packs/guidance-catalog".to_string(),
+            pack_id: Some("boundline-guidance-catalog".to_string()),
+            catalog_pillar: None,
+            catalog_strength: None,
+            catalog_authority_source: None,
+        };
 
-        let skipped = discover_optional_canon_guidance(&workspace);
+        let (guidance, skipped) = discover_optional_canon_guidance(
+            &workspace,
+            CapabilityPhase::Planning,
+            std::slice::from_ref(&seed),
+        );
+        assert!(guidance.is_empty());
         assert_eq!(skipped.len(), 1);
         assert_eq!(skipped[0].source_ref, ".canon/boundline/guidance");
 
         fs::create_dir_all(workspace.join(".canon/boundline/guidance")).unwrap();
-        assert!(discover_optional_canon_guidance(&workspace).is_empty());
+        fs::write(
+            workspace.join(".canon/boundline/guidance/clean-code.md"),
+            "# Canon Clean Code\nPrefer the governed standard.\n",
+        )
+        .unwrap();
+
+        let (guidance, skipped) =
+            discover_optional_canon_guidance(&workspace, CapabilityPhase::Planning, &[seed]);
+        assert!(skipped.is_empty());
+        assert_eq!(guidance.len(), 1);
+        assert_eq!(guidance[0].authority_source, GuidanceAuthoritySource::CanonGoverned);
+        assert_eq!(guidance[0].title, "Canon Clean Code");
+    }
+
+    #[test]
+    fn canon_guidance_supersedes_catalog_pack_for_the_same_capability() {
+        let workspace = temp_workspace("guidance-runtime-canon-precedence");
+        fs::create_dir_all(workspace.join(".canon/boundline/guidance")).unwrap();
+        fs::write(
+            workspace.join(".canon/boundline/guidance/clean-code.md"),
+            "# Canon Clean Code\nPrefer the governed standard.\n",
+        )
+        .unwrap();
+
+        let pack_capability = GuidanceCapability {
+            capability_id: "clean_code".to_string(),
+            title: "Shared Clean Code".to_string(),
+            applies_to: vec![CapabilityPhase::Planning],
+            roles: vec!["planner".to_string()],
+            content_ref: "assistant/packs/guidance-catalog/guidance/clean-code.md".to_string(),
+            priority: GuidancePriority::High,
+            authority_source: GuidanceAuthoritySource::SharedPack,
+            source_ref: "assistant/packs/guidance-catalog".to_string(),
+            pack_id: Some("boundline-guidance-catalog".to_string()),
+            catalog_pillar: None,
+            catalog_strength: None,
+            catalog_authority_source: None,
+        };
+        let (canon_guidance, skipped) = discover_optional_canon_guidance(
+            &workspace,
+            CapabilityPhase::Planning,
+            std::slice::from_ref(&pack_capability),
+        );
+        assert!(skipped.is_empty());
+
+        let evidence = super::GuidanceRuntimeEvidence {
+            goal_text: "Honor the governed clean code standard".to_string(),
+            language: Some("rust".to_string()),
+            selected_targets: vec!["src/lib.rs".to_string()],
+            primary_inputs: vec!["src/lib.rs".to_string()],
+            has_tests: true,
+        };
+
+        let (resolved, skipped) = resolve_guidance_candidates(
+            vec![pack_capability, canon_guidance[0].clone()],
+            &evidence,
+        );
+
+        assert_eq!(resolved, canon_guidance);
+        assert_eq!(skipped.len(), 1);
+        assert!(skipped[0].source_ref.contains("assistant/packs/guidance-catalog"));
+        assert!(
+            skipped[0]
+                .reason
+                .contains("shadowed by clean_code from .canon/boundline/guidance/clean-code.md")
+        );
     }
 
     #[test]
@@ -1661,6 +1925,67 @@ mod tests {
             .unwrap();
         assert_eq!(capability.title, "Rust Testing");
         assert_eq!(capability.source_ref, ".boundline/guidance/rust-testing.md");
+    }
+
+    #[test]
+    fn workspace_override_discovery_loads_matching_guidance_and_guardians() {
+        let workspace = temp_workspace("guidance-runtime-workspace-overrides");
+        fs::create_dir_all(workspace.join(".boundline/guidance")).unwrap();
+        fs::create_dir_all(workspace.join(".boundline/guardians")).unwrap();
+        fs::write(
+            workspace.join(".boundline/guidance/clean-code.md"),
+            "# Workspace Clean Code\nPrefer the local rule.\n",
+        )
+        .unwrap();
+        fs::write(
+            workspace.join(".boundline/guardians/verification.toml"),
+            "[guardians.workspace-review]\ntitle = \"Workspace Review\"\nkind = \"hybrid\"\napplies_to = [\"review\"]\nrules = [\"workspace_review\"]\nseverity_floor = \"warn\"\ncommand = \"builtin:validation-evidence\"\ninstruction = \"../guardians/workspace-review.md\"\n",
+        )
+        .unwrap();
+
+        let (guidance, skipped_guidance) =
+            discover_workspace_guidance(&workspace, CapabilityPhase::Review);
+        let (guardians, skipped_guardians) =
+            discover_workspace_guardians(&workspace, CapabilityPhase::Review);
+
+        assert!(skipped_guidance.is_empty());
+        assert!(skipped_guardians.is_empty());
+        assert_eq!(guidance.len(), 1);
+        assert_eq!(guidance[0].title, "Workspace Clean Code");
+        assert_eq!(guidance[0].roles, vec!["planner", "implementer", "verifier", "reviewer"]);
+        assert_eq!(guidance[0].priority, GuidancePriority::High);
+        assert_eq!(guidance[0].authority_source, GuidanceAuthoritySource::WorkspaceOverride);
+        assert_eq!(guardians.len(), 1);
+        assert_eq!(guardians[0].guardian_id, "workspace-review");
+        assert_eq!(guardians[0].kind, GuardianKind::Hybrid);
+        assert_eq!(
+            guardians[0].instruction_ref.as_deref(),
+            Some("../guardians/workspace-review.md")
+        );
+    }
+
+    #[test]
+    fn optional_canon_guidance_uses_default_metadata_when_no_pack_template_matches() {
+        let workspace = temp_workspace("guidance-runtime-canon-fallback");
+        fs::create_dir_all(workspace.join(".canon/boundline/guidance")).unwrap();
+        fs::write(
+            workspace.join(".canon/boundline/guidance/custom-rule.md"),
+            "Prefer the governed fallback rule.\n",
+        )
+        .unwrap();
+
+        let (guidance, skipped) =
+            discover_optional_canon_guidance(&workspace, CapabilityPhase::Testing, &[]);
+
+        assert!(skipped.is_empty());
+        assert_eq!(guidance.len(), 1);
+        assert_eq!(guidance[0].capability_id, "custom_rule");
+        assert_eq!(guidance[0].title, "Custom Rule");
+        assert_eq!(guidance[0].priority, GuidancePriority::High);
+        assert_eq!(guidance[0].roles, vec!["planner", "implementer", "verifier", "reviewer"]);
+        assert!(guidance[0].applies_to.contains(&CapabilityPhase::Testing));
+        assert_eq!(guidance[0].authority_source, GuidanceAuthoritySource::CanonGoverned);
+        assert!(guidance[0].pack_id.is_none());
     }
 
     #[test]
@@ -1780,6 +2105,47 @@ mod tests {
         assert_eq!(
             semantic_route_availability(&workspace, CapabilityPhase::Review),
             SemanticRouteAvailability::Available(RouteSlot::Review)
+        );
+        assert_eq!(normalized_identifier("Clean Code.md"), "clean-code-md");
+        assert_eq!(title_from_identifier("clean-code.md"), "Clean Code Md");
+        assert_eq!(markdown_title("# Rust Rules\nMore text\n"), Some("Rust Rules".to_string()));
+        assert_eq!(markdown_title("No heading\n"), None);
+    }
+
+    #[test]
+    fn finding_helpers_report_summary_and_blocking_outcomes() {
+        let warning = GuardianFinding {
+            finding_id: "warn-1".to_string(),
+            guardian_id: "catalog_review".to_string(),
+            rule_id: "review".to_string(),
+            disposition: GuardianDisposition::Warn,
+            summary: "warning".to_string(),
+            evidence_refs: vec!["src/lib.rs".to_string()],
+            confidence: FindingConfidence::Medium,
+            recommended_action: "review it".to_string(),
+            authority_source: GuidanceAuthoritySource::SharedPack,
+            source_ref: "assistant/packs/guidance-catalog".to_string(),
+            phase: CapabilityPhase::Review,
+        };
+        let blocker = GuardianFinding {
+            disposition: GuardianDisposition::Block,
+            summary: "blocker".to_string(),
+            ..warning.clone()
+        };
+
+        assert_eq!(guardian_findings_summary(&[]), None);
+        assert_eq!(
+            guardian_findings_summary(std::slice::from_ref(&warning)).as_deref(),
+            Some("1 guardian finding(s); blocking=false")
+        );
+        assert_eq!(blocking_outcome_text(&[]), None);
+        assert_eq!(
+            blocking_outcome_text(&[warning]).as_deref(),
+            Some("guardian findings recorded without a blocking outcome")
+        );
+        assert_eq!(
+            blocking_outcome_text(&[blocker]).as_deref(),
+            Some("blocking deterministic findings stop redundant semantic guardians")
         );
     }
 }

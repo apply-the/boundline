@@ -1,9 +1,9 @@
-# Configuration in Boundline 0.54.0
+# Configuration in Boundline 0.55.0
 
-Boundline `0.54.0` keeps a user-friendly setup and routing configuration surface
+Boundline `0.55.0` keeps a user-friendly setup and routing configuration surface
 for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
-The `0.54.0` release keeps configuration behavior stable while preserving the
+The `0.55.0` release keeps configuration behavior stable while preserving the
 same governed routing defaults across earlier `bug-fix:investigate` work,
 later verify-stage `security-assessment`, workflow-aware projection of the
 same bounded governance state, continuity-aware read-side follow-up, the
@@ -84,6 +84,10 @@ ranking, explicit adaptive exhaustion, or negotiation-state overrides.
 	override bundled capability packs with explicit loaded and skipped-source
 	disclosure; capability precedence remains runtime-owned rather than a new
 	config key
+- bundled assistant guidance can now also arrive through directory-based catalog
+	packs under `assistant/packs/`, with `loaded_packs`, `skipped_packs`, and
+	`catalog_validation_findings` projected by `plan`, `status`, `next`, and
+	`inspect` instead of being hidden loader detail
 - `plan`, `run`, `status`, `next`, and `inspect` now surface selected domain
 	family, winning standards source, and any required external-input blocking
 	reason inside the bounded context story

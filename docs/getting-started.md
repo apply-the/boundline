@@ -160,7 +160,9 @@ evidence anchor.
 Read guidance and guardian output literally too:
 
 - `guidance_resolution_summary` tells you how many capability entries were resolved for the current phase.
+- `loaded_packs` and `skipped_packs` tell you which bundled catalog packs were accepted or rejected before precedence was applied.
 - `loaded_guidance_sources` and `loaded_guardian_sources` show which workspace overrides, Canon inputs, or bundled packs actually won precedence.
+- `catalog_validation_findings` calls out malformed catalog entries or missing referenced files instead of silently skipping them.
 - `guardian_timeline` shows whether each guardian completed, skipped, degraded, or failed.
 - `guardian_findings_summary`, `guardian_findings`, `guardian_degradations`, and `guardian_blocking_outcome` explain whether the bounded run still has verification concerns or an explicit stop condition.
 
@@ -270,7 +272,7 @@ Canon is not the product entrypoint. Boundline still owns orchestration, session
 state, planning, execution, and validation. Canon matters only when you enable
 governed routes, governed approvals, or governed artifact capture.
 
-The current Boundline release documents Canon `0.52.0` as the supported CLI target
+The current Boundline release documents Canon `0.53.0` as the supported CLI target
 for the machine-facing `canon governance start|refresh|capabilities --json`
 `v1` adapter surface. Install diagnostics keep that boundary explicit after
 install or upgrade.

@@ -90,7 +90,6 @@
 - `docs/architecture.md`
 - `docs/configuration.md`
 - `docs/getting-started.md`
-- `roadmap/S2-1 - guidance-and-guardian-capabilities.md`
 - `CHANGELOG.md`
 - `Cargo.toml`
 - `AGENTS.md`

@@ -1,0 +1,92 @@
+# Guidance Index
+# This index maps guidance files to pillars, lifecycle phases, and candidate consumers.
+
+[guidance.clean_code]
+path = "guidance/clean-code.md"
+pillar = "clean-code"
+strength = "recommended"
+applies_to = ["planning", "implementation", "review", "refactor"]
+roles = ["planner", "implementer", "reviewer"]
+
+[guidance.architecture]
+path = "guidance/architecture.md"
+pillar = "architecture"
+strength = "recommended"
+applies_to = ["system-shaping", "architecture", "backlog", "implementation", "review", "migration"]
+roles = ["architect", "planner", "reviewer"]
+
+[guidance.testing_core]
+path = "guidance/testing-core.md"
+pillar = "testing"
+strength = "recommended"
+applies_to = ["planning", "implementation", "testing", "verification", "review", "refactor"]
+roles = ["test-strategist", "implementer", "reviewer"]
+
+[guidance.language_rust]
+path = "guidance/language-rust.md"
+pillar = "language"
+language = "rust"
+strength = "recommended"
+applies_to = ["implementation", "testing", "review", "refactor"]
+roles = ["implementer", "reviewer"]
+
+[guidance.language_typescript_node]
+path = "guidance/language-typescript-node.md"
+pillar = "language"
+language = "typescript"
+strength = "recommended"
+applies_to = ["implementation", "testing", "review", "refactor"]
+roles = ["implementer", "reviewer"]
+
+[guidance.language_go]
+path = "guidance/language-go.md"
+pillar = "language"
+language = "go"
+strength = "recommended"
+applies_to = ["implementation", "testing", "review", "refactor"]
+roles = ["implementer", "reviewer"]
+
+[guidance.language_python]
+path = "guidance/language-python.md"
+pillar = "language"
+language = "python"
+strength = "recommended"
+applies_to = ["implementation", "testing", "review", "refactor"]
+roles = ["implementer", "reviewer"]
+
+[guidance.language_jvm]
+path = "guidance/language-jvm.md"
+pillar = "language"
+language = "java"
+strength = "recommended"
+applies_to = ["architecture", "implementation", "testing", "review", "refactor"]
+roles = ["implementer", "reviewer"]
+
+[guidance.language_dotnet]
+path = "guidance/language-dotnet.md"
+pillar = "language"
+language = "csharp"
+strength = "recommended"
+applies_to = ["architecture", "implementation", "testing", "review", "refactor"]
+roles = ["implementer", "reviewer"]
+
+[guidance.observability]
+path = "guidance/observability.md"
+pillar = "observability"
+strength = "recommended"
+applies_to = ["architecture", "implementation", "review", "verification", "incident"]
+roles = ["implementer", "reviewer", "operations-reviewer"]
+
+[guidance.resilience]
+path = "guidance/resilience.md"
+pillar = "resilience"
+strength = "recommended"
+applies_to = ["architecture", "implementation", "testing", "review", "migration"]
+roles = ["implementer", "reviewer", "operations-reviewer"]
+
+[guidance.supply_chain]
+path = "guidance/supply-chain.md"
+pillar = "supply-chain"
+strength = "recommended"
+applies_to = ["implementation", "review", "verification", "supply-chain-analysis"]
+roles = ["reviewer", "supply-chain-reviewer"]

@@ -156,3 +156,12 @@ mod workflow_registry_guidance_contract;
 
 #[path = "contract/capability_manifest_contract.rs"]
 mod capability_manifest_contract;
+
+#[path = "contract/catalog_manifest_contract.rs"]
+mod catalog_manifest_contract;
+
+#[path = "contract/guidance_index_contract.rs"]
+mod guidance_index_contract;
+
+#[path = "contract/guardian_index_contract.rs"]
+mod guardian_index_contract;

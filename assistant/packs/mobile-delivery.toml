@@ -2,12 +2,12 @@
 title = "Mobile Framework Guidance"
 applies_to = ["planning", "implementation", "verification", "review"]
 roles = ["planner", "implementer", "verifier", "reviewer"]
-path = "../guidance/framework-mobile.md"
+path = "../guidance-catalog/guidance/framework-mobile.md"
 priority = "high"
 
 [guidance.testing-best-practices]
-title = "Mobile Testing Guidance"
+title = "Frontend And Mobile Testing Guidance"
 applies_to = ["planning", "testing", "verification", "review"]
 roles = ["planner", "verifier", "reviewer"]
-path = "../guidance/testing-mobile.md"
+path = "../guidance-catalog/guidance/testing-frontend.md"
 priority = "high"

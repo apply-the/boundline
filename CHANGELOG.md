@@ -17,6 +17,30 @@ recorded workspace version.
 
 ## [Unreleased]
 
+## [0.55.0] - 2026-05-15
+
+Delivered specs:
+
+- `055` - Guidance Catalog And Guardian Rule Packs
+
+Highlights:
+
+- Added the guidance-catalog packaging, indexing, and validation slice so
+  Boundline can consume contract-validated guidance packs instead of only flat
+  pack manifests and loose Markdown collections.
+- Introduced canonical pillar taxonomy, authority metadata, lifecycle labels,
+  and normalized reference artifacts derived from the phase-7 roadmap addendum.
+- Expanded the bundled guardian catalog from 10 to 16 entries: added
+  python-type-safety, go-error-handling, api-contract-stability,
+  migration-safety, concurrency-safety, and data-validation guardians.
+- Added Dart language guidance and a dart-delivery pack for Flutter/Dart
+  projects.
+- Added ecosystem library recommendations to all language guidance files and
+  recommended tools to testing guidance files.
+- Added an extending-guidance-catalog guide documenting how to register new
+  languages, guardians, and delivery packs.
+- Bumped workspace version to `0.55.0` for the guidance-catalog feature branch.
+
 ## [0.54.0] - 2026-05-14
 
 Delivered specs:

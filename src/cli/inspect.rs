@@ -905,6 +905,16 @@ fn merge_guidance_projection_from_payload(
             .get("capability_resolution_summary")
             .and_then(|value| value.as_str().map(str::to_string));
     }
+    if projection.loaded_packs.is_empty() {
+        projection.loaded_packs = string_array_field(object, "loaded_packs");
+    }
+    if projection.skipped_packs.is_empty() {
+        projection.skipped_packs = string_array_field(object, "skipped_packs");
+    }
+    if projection.catalog_validation_findings.is_empty() {
+        projection.catalog_validation_findings =
+            string_array_field(object, "catalog_validation_findings");
+    }
     if projection.loaded_guidance_sources.is_empty() {
         projection.loaded_guidance_sources = string_array_field(object, "loaded_guidance_sources");
     }
@@ -1505,12 +1515,14 @@ mod tests {
     use super::{
         InspectCommandError, TraceResolutionTarget, TraceSummaryError, adaptive_evidence_lines,
         corrected_command, decision_failure_evidence, decision_timeline_lines, failure_headline,
-        governance_timeline_line, inspection_target_for, parse_step_kind, render_error,
-        resolve_session_trace_ref, resolve_trace_path, review_timeline_line, success_headline,
-        summarize_trace,
+        governance_timeline_line, inspection_target_for, merge_guidance_projection_from_payload,
+        parse_step_kind, render_error, resolve_session_trace_ref, resolve_trace_path,
+        review_timeline_line, reviewer_line, string_array_field, success_headline, summarize_trace,
+        synthesized_in_progress_reason,
     };
     use crate::adapters::session_store::SessionStoreError;
     use crate::adapters::trace_store::{FileTraceStore, TraceStore};
+    use crate::domain::guidance::GuidanceGuardianProjection;
     use crate::domain::limits::TerminalCondition;
     use crate::domain::session::{ActiveSessionRecord, SessionStatus};
     use crate::domain::task::{TaskStatus, TerminalReason};
@@ -1604,6 +1616,9 @@ mod tests {
             None,
             1,
             json!({
+                "loaded_packs": [
+                    "assistant/packs/guidance-catalog (pack=boundline-guidance-catalog, catalog=boundline-guidance-catalog)"
+                ],
                 "loaded_guidance_sources": [
                     "assistant/packs/shared/guidance/clean-code.md",
                     7
@@ -1623,6 +1638,9 @@ mod tests {
             2,
             json!({
                 "capability_resolution_summary": "resolved 1 guidance capability entries from 1 source(s) for verification",
+                "catalog_validation_findings": [
+                    "warning: assistant/packs/guidance-catalog/catalog/guidance-index.toml (legacy alias normalized)"
+                ],
                 "loaded_guardian_sources": [".boundline/guardians/verification.toml"],
                 "skipped_guardian_sources": [
                     "assistant/packs/shared/guardians/verification.toml (shadowed)"
@@ -1654,8 +1672,20 @@ mod tests {
             Some("resolved 1 guidance capability entries from 1 source(s) for verification")
         );
         assert_eq!(
+            summary.guidance_guardian.loaded_packs,
+            vec![
+                "assistant/packs/guidance-catalog (pack=boundline-guidance-catalog, catalog=boundline-guidance-catalog)".to_string()
+            ]
+        );
+        assert_eq!(
             summary.guidance_guardian.loaded_guidance_sources,
             vec!["assistant/packs/shared/guidance/clean-code.md".to_string()]
+        );
+        assert_eq!(
+            summary.guidance_guardian.catalog_validation_findings,
+            vec![
+                "warning: assistant/packs/guidance-catalog/catalog/guidance-index.toml (legacy alias normalized)".to_string()
+            ]
         );
         assert_eq!(
             summary.guidance_guardian.loaded_guardian_sources,
@@ -1674,6 +1704,75 @@ mod tests {
             summary.guidance_guardian.guardian_blocking_outcome.as_deref(),
             Some("guardian findings recorded without a blocking outcome")
         );
+    }
+
+    #[test]
+    fn merge_guidance_projection_preserves_existing_values_on_partial_payloads() {
+        let mut projection = GuidanceGuardianProjection {
+            capability_resolution_summary: Some("existing".to_string()),
+            loaded_packs: vec!["assistant/packs/guidance-catalog".to_string()],
+            skipped_packs: vec!["assistant/packs/legacy-pack (skipped)".to_string()],
+            catalog_validation_findings: vec!["warning: existing finding".to_string()],
+            loaded_guidance_sources: vec![".canon/boundline/guidance/clean-code.md".to_string()],
+            skipped_guidance_sources: vec!["assistant/packs/shared (shadowed)".to_string()],
+            ..GuidanceGuardianProjection::default()
+        };
+
+        merge_guidance_projection_from_payload(&mut projection, &json!(["not-an-object"]));
+        merge_guidance_projection_from_payload(
+            &mut projection,
+            &json!({
+                "loaded_packs": [],
+                "catalog_validation_findings": [],
+                "loaded_guardian_sources": ["assistant/packs/guidance-catalog/guardians/catalog-review.md"],
+                "guardian_timeline": ["catalog_review: completed"],
+                "guardian_degradations": ["verification route unavailable"],
+                "guardian_blocking_outcome": "guardian findings recorded without a blocking outcome"
+            }),
+        );
+
+        assert_eq!(projection.capability_resolution_summary.as_deref(), Some("existing"));
+        assert_eq!(projection.loaded_packs, vec!["assistant/packs/guidance-catalog".to_string()]);
+        assert_eq!(
+            projection.skipped_packs,
+            vec!["assistant/packs/legacy-pack (skipped)".to_string()]
+        );
+        assert_eq!(
+            projection.catalog_validation_findings,
+            vec!["warning: existing finding".to_string()]
+        );
+        assert_eq!(
+            projection.loaded_guardian_sources,
+            vec!["assistant/packs/guidance-catalog/guardians/catalog-review.md".to_string()]
+        );
+        assert_eq!(projection.guardian_timeline, vec!["catalog_review: completed".to_string()]);
+        assert_eq!(
+            projection.guardian_degradations,
+            vec!["verification route unavailable".to_string()]
+        );
+        assert_eq!(
+            projection.guardian_blocking_outcome.as_deref(),
+            Some("guardian findings recorded without a blocking outcome")
+        );
+    }
+
+    #[test]
+    fn string_array_field_filters_non_string_values() {
+        let payload = json!({
+            "loaded_packs": ["assistant/packs/guidance-catalog", 7, true, "assistant/packs/legacy"],
+            "missing": "not-an-array"
+        });
+        let object = payload.as_object().unwrap();
+
+        assert_eq!(
+            string_array_field(object, "loaded_packs"),
+            vec![
+                "assistant/packs/guidance-catalog".to_string(),
+                "assistant/packs/legacy".to_string(),
+            ]
+        );
+        assert!(string_array_field(object, "missing").is_empty());
+        assert!(string_array_field(object, "absent").is_empty());
     }
 
     #[test]
@@ -2380,6 +2479,36 @@ mod tests {
             governance_timeline_line(TraceEventType::GovernancePacketRejected, &json!({})),
             Some("governance_packet_rejected: packet rejected".to_string())
         );
+        assert_eq!(
+            governance_timeline_line(
+                TraceEventType::GovernanceSelected,
+                &json!({"stage_key": "bug-fix:review", "selected_runtime": "canon"}),
+            ),
+            Some("governance_selected: bug-fix:review -> canon".to_string())
+        );
+        assert_eq!(
+            governance_timeline_line(
+                TraceEventType::GovernanceStarted,
+                &json!({
+                    "stage_key": "bug-fix:review",
+                    "canon_mode": "direct",
+                    "run_ref": "canon-run-7",
+                    "packet_source_stage": "bug-fix:implement",
+                    "packet_binding_reason": "stage_context"
+                }),
+            ),
+            Some(
+                "governance_started: bug-fix:review (direct) [canon-run-7] from bug-fix:implement (stage_context)"
+                    .to_string(),
+            )
+        );
+        assert_eq!(
+            reviewer_line(&json!({
+                "reviewer_id": "safety",
+                "failure_reason": "tool timeout"
+            })),
+            Some("reviewer safety failed: tool timeout".to_string())
+        );
 
         assert_eq!(
             adaptive_evidence_lines(&json!({
@@ -2427,6 +2556,61 @@ mod tests {
                 3,
             ),
             "adaptive repair exhausted after 3 attempt(s): limits exhausted"
+        );
+    }
+
+    #[test]
+    fn inspect_helpers_cover_progress_and_fallback_paths() {
+        assert_eq!(
+            decision_timeline_lines(
+                TraceEventType::DecisionRecovered,
+                Some("decision-1"),
+                &json!({
+                    "status": "recovered",
+                    "target": "src/lib.rs",
+                    "recovery_decision_id": "decision-0"
+                }),
+            ),
+            vec!["decision_status: decision-1 recovered via decision-0".to_string()]
+        );
+        assert!(
+            decision_timeline_lines(TraceEventType::TerminalRecorded, None, &json!({})).is_empty()
+        );
+        assert_eq!(review_timeline_line(TraceEventType::TerminalRecorded, &json!({})), None);
+        assert_eq!(governance_timeline_line(TraceEventType::TerminalRecorded, &json!({})), None);
+
+        assert_eq!(
+            synthesized_in_progress_reason(Some("awaiting_approval")).message,
+            "governance approval is still pending"
+        );
+        assert_eq!(
+            synthesized_in_progress_reason(Some("blocked")).message,
+            "governed work is blocked pending intervention"
+        );
+        assert_eq!(
+            synthesized_in_progress_reason(Some("governed_ready")).message,
+            "governed work is ready for the next bounded step"
+        );
+        assert_eq!(synthesized_in_progress_reason(None).message, "trace is still in progress");
+
+        assert_eq!(
+            success_headline(
+                &json!({
+                    "output": {
+                        "workspace_slice": {"headline": "focused src/lib.rs"},
+                        "selection_evidence": {"reason": "closest failing target"}
+                    }
+                }),
+                1,
+            ),
+            "adaptive slice focused src/lib.rs: closest failing target"
+        );
+        assert_eq!(
+            success_headline(
+                &json!({"output": {"changed_files": ["src/lib.rs", "src/main.rs"]}}),
+                2,
+            ),
+            "updated src/lib.rs, src/main.rs after 2 attempt(s)"
         );
     }
 }

@@ -189,7 +189,7 @@ As a Boundline operator running a multi-step bounded delivery session that spans
 ## Assumptions
 
 - The existing expert pack infrastructure from S2 (Domain Expert Packs And Runtime Role Selection) provides the pack manifest format (`pack.toml`) and pack loading mechanism that this spec extends with guidance and guardian declarations.
-- Canon-governed standard artifacts follow a stable, discoverable path convention (e.g., `clean-code-guidelines.md`, `language-best-practices/`, `framework-best-practices/`, `testing-framework-best-practices/`) that Boundline can resolve without Canon-specific runtime APIs.
+- Canon-governed and bundled packaged standards follow stable, discoverable file-system conventions under `.canon/boundline/`, `.boundline/`, and `assistant/packs/guidance-catalog/` that Boundline can resolve without Canon-specific runtime APIs.
 - Deterministic guardians are invoked as external commands (shell scripts, binaries, linters) and communicate results through structured stdout or exit codes; Boundline does not embed third-party static analysis tools directly.
 - LLM guardians use the existing Boundline runtime routing for model selection, and route availability failures surface as explicit degraded outcomes instead of silent fallback behavior.
 - The engineering pillars referenced in the S2.1 roadmap draft (software design, domain modeling, error handling, language idioms, testing, UX, architecture) represent the initial content catalog; the first implementation slice does not require all pillars to be fully populated with guardian implementations.

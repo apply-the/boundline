@@ -26,6 +26,8 @@ pub mod goal_plan;
 pub mod governance;
 #[path = "../../../src/domain/guidance.rs"]
 pub mod guidance;
+#[path = "../../../src/domain/guidance_catalog.rs"]
+pub mod guidance_catalog;
 #[path = "../../../src/domain/limits.rs"]
 pub mod limits;
 #[path = "../../../src/domain/negotiation.rs"]

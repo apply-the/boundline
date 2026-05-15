@@ -1,0 +1,16 @@
+# Example Boundline Guidance Pack Manifest
+
+[pack]
+id = "boundline-guidance-catalog"
+version = "0.1.0"
+kind = "guidance-pack"
+description = "Baseline guidance and guardian rule catalog for Boundline."
+
+[compatibility]
+boundline = ">=0.55"
+canon_contract = ">=0.50"
+
+[authority]
+default_source = "shared-pack"
+default_strength = "recommended"
+canon_promotable = true

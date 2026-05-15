@@ -2,19 +2,19 @@
 title = "JVM Language Guidance"
 applies_to = ["planning", "implementation", "verification", "review"]
 roles = ["planner", "implementer", "verifier", "reviewer"]
-path = "../guidance/language-jvm.md"
+path = "../guidance-catalog/guidance/language-jvm.md"
 priority = "high"
 
 [guidance.framework-best-practices]
 title = "JVM Service Framework Guidance"
 applies_to = ["planning", "implementation", "verification", "review"]
 roles = ["planner", "implementer", "verifier", "reviewer"]
-path = "../guidance/framework-jvm-services.md"
+path = "../guidance-catalog/guidance/framework-jvm-services.md"
 priority = "high"
 
 [guidance.testing-best-practices]
 title = "JVM Testing Guidance"
 applies_to = ["planning", "testing", "verification", "review"]
 roles = ["planner", "verifier", "reviewer"]
-path = "../guidance/testing-jvm.md"
+path = "../guidance-catalog/guidance/testing-jvm.md"
 priority = "high"

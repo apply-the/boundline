@@ -6,7 +6,7 @@ Canon is downstream from Boundline in this roadmap: Boundline thinks, decides, o
 
 Evolve Boundline into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.54.0
+## Current Status: v0.55.0
 
 Boundline now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -22,12 +22,25 @@ surface in place, with Canon-default governed setup, runtime selection, and
 assistant-surface alignment now carried through the same primary workflow. The
 operator entry path is now stack-neutral for empty, non-Rust, and mixed
 repositories, with a clearer first-run CLI UX. That baseline now extends into
-Canon-promoted project-memory reuse, while the current `0.54.0` work adds
-guidance and guardian capabilities across planning, implementation,
-verification, and review: Boundline now resolves shared and workspace-local
-guidance sources with explicit precedence, surfaces polyglot language,
-framework, and testing guidance packs, and persists guardian findings and
-degradations through session-native status and trace-backed flows.
+Canon-promoted project-memory reuse. The `0.54.0` slice added guidance and
+guardian capabilities across planning, implementation, verification, and
+review. The current `0.55.0` work packages that guidance surface as a
+catalog-aware assistant pack with explicit manifests, canonical taxonomy,
+inspectable pack loading, and validation findings instead of relying only on
+flat pack manifests.
+
+### Delivered in 0.55.0
+
+- Boundline now discovers directory-based guidance catalog packs under
+  `assistant/packs/` alongside legacy flat `.toml` manifests, and it keeps
+  loaded packs, skipped packs, and validation findings explicit in the runtime
+  projection.
+- The bundled `assistant/packs/guidance-catalog/` surface carries normalized
+  manifest, guidance-index, and guardian-index contracts plus canonical pillar,
+  strength, and disposition vocabulary derived from the S2.1 phase-7 addendum.
+- Session-native `plan`, `status`, and `inspect` now surface catalog pack
+  discovery and validation as operator-visible state rather than hidden loader
+  behavior.
 
 ### Delivered in 0.54.0
 

@@ -1,0 +1,20 @@
+[guidance.language-best-practices]
+title = "Dart Language Guidance"
+applies_to = ["planning", "implementation", "verification", "review"]
+roles = ["planner", "implementer", "verifier", "reviewer"]
+path = "../guidance-catalog/guidance/language-dart.md"
+priority = "high"
+
+[guidance.framework-best-practices]
+title = "Mobile Framework Guidance"
+applies_to = ["planning", "implementation", "verification", "review"]
+roles = ["planner", "implementer", "verifier", "reviewer"]
+path = "../guidance-catalog/guidance/framework-mobile.md"
+priority = "high"
+
+[guidance.testing-best-practices]
+title = "Frontend And Widget Testing Guidance"
+applies_to = ["planning", "testing", "verification", "review"]
+roles = ["planner", "verifier", "reviewer"]
+path = "../guidance-catalog/guidance/testing-frontend.md"
+priority = "high"

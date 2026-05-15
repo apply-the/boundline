@@ -1599,6 +1599,18 @@ pub fn render_guidance_projection_lines(
     if let Some(summary) = &guidance_guardian.capability_resolution_summary {
         lines.push(format!("guidance_resolution_summary: {summary}"));
     }
+    if !guidance_guardian.loaded_packs.is_empty() {
+        lines.push(format!("loaded_packs: {}", guidance_guardian.loaded_packs.join(", ")));
+    }
+    if !guidance_guardian.skipped_packs.is_empty() {
+        lines.push(format!("skipped_packs: {}", guidance_guardian.skipped_packs.join(" | ")));
+    }
+    if !guidance_guardian.catalog_validation_findings.is_empty() {
+        lines.push(format!(
+            "catalog_validation_findings: {}",
+            guidance_guardian.catalog_validation_findings.join(" | ")
+        ));
+    }
     if !guidance_guardian.loaded_guidance_sources.is_empty() {
         lines.push(format!(
             "loaded_guidance_sources: {}",
@@ -3594,6 +3606,15 @@ mod tests {
                     "resolved 1 guidance capability entries from 1 source(s) for verification"
                         .to_string(),
                 ),
+                loaded_packs: vec![
+                    "assistant/packs/guidance-catalog (pack=boundline-guidance-catalog, catalog=boundline-guidance-catalog)".to_string(),
+                ],
+                skipped_packs: vec![
+                    "assistant/packs/legacy-pack (failed to read catalog manifest)".to_string(),
+                ],
+                catalog_validation_findings: vec![
+                    "warning: assistant/packs/guidance-catalog/catalog/guidance-index.toml (legacy alias normalized)".to_string(),
+                ],
                 loaded_guidance_sources: vec![
                     "assistant/packs/shared/guidance/clean-code.md".to_string(),
                 ],
@@ -3633,6 +3654,20 @@ mod tests {
         let text = render_trace_summary(&summary, "latest-workspace-trace", "/boundline-next");
 
         assert!(text.contains("guidance_resolution_summary: resolved 1 guidance capability entries from 1 source(s) for verification"), "{text}");
+        assert!(
+            text.contains("loaded_packs: assistant/packs/guidance-catalog (pack=boundline-guidance-catalog, catalog=boundline-guidance-catalog)"),
+            "{text}"
+        );
+        assert!(
+            text.contains(
+                "skipped_packs: assistant/packs/legacy-pack (failed to read catalog manifest)"
+            ),
+            "{text}"
+        );
+        assert!(
+            text.contains("catalog_validation_findings: warning: assistant/packs/guidance-catalog/catalog/guidance-index.toml (legacy alias normalized)"),
+            "{text}"
+        );
         assert!(
             text.contains("loaded_guidance_sources: assistant/packs/shared/guidance/clean-code.md"),
             "{text}"

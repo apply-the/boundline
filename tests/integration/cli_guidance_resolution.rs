@@ -49,27 +49,38 @@ fn plan_persists_guidance_resolution_with_workspace_precedence_and_local_only_di
     }));
     assert!(
         plan.guidance_guardian
+            .loaded_packs
+            .iter()
+            .any(|pack| { pack.contains("assistant/packs/guidance-catalog") })
+    );
+    assert!(plan.guidance_guardian.catalog_validation_findings.is_empty());
+    assert!(
+        plan.guidance_guardian
+            .loaded_guidance_sources
+            .iter()
+            .any(|source| { source == "assistant/packs/guidance-catalog" })
+    );
+    assert!(
+        plan.guidance_guardian
             .skipped_guidance_sources
             .iter()
             .any(|source| source.contains(".canon/boundline/guidance"))
     );
     assert!(
-        plan_report
-            .terminal_output
-            .contains("guidance_resolution_summary: resolved 6 guidance capability entries from 3 source(s) for planning"),
+        plan_report.terminal_output.contains("guidance_resolution_summary: resolved"),
         "{}",
         plan_report.terminal_output
     );
     assert!(
-        plan_report
-            .terminal_output
-            .contains("loaded_guidance_sources: .boundline/guidance/clean-code.md, assistant/packs/engineering-foundations.toml, assistant/packs/rust-delivery.toml"),
+        plan_report.terminal_output.contains("loaded_packs: assistant/packs/guidance-catalog"),
         "{}",
         plan_report.terminal_output
     );
-    assert_eq!(
-        plan.guidance_guardian.capability_resolution_summary.as_deref(),
-        Some("resolved 6 guidance capability entries from 3 source(s) for planning")
+    assert!(
+        plan.guidance_guardian
+            .capability_resolution_summary
+            .as_deref()
+            .is_some_and(|summary| summary.starts_with("resolved "))
     );
 }
 

@@ -20,7 +20,7 @@ Canon is not the orchestrator and not the product entrypoint. A Boundline instal
 can be perfectly usable without Canon when you stay on the default local and
 session-native routes.
 
-The current Boundline adapter documents Canon `0.52.0` support for the
+The current Boundline adapter documents Canon `0.53.0` support for the
 `canon governance start|refresh|capabilities --json` `v1` surface. That is a
 bounded compatibility target, not a claim of total Canon feature parity.
 
@@ -82,9 +82,12 @@ stop rather than pretend a plan is credible when the evidence is weak.
 The same bounded context pack also drives guidance and guardian selection.
 
 - `plan` resolves capability sources once per lifecycle phase and persists the authority story: workspace overrides under `.boundline/guidance/`, optional Canon guidance under `.canon/boundline/guidance/`, bundled assistant packs under `assistant/packs/`, and built-ins as the final fallback.
+- Bundled assistant packs can now be either legacy flat `.toml` manifests or directory-based catalog packs such as `assistant/packs/guidance-catalog/`. The catalog path adds explicit `pack.toml`, `catalog-manifest.toml`, guidance-index, and guardian-index contracts plus validation findings when the pack shape drifts.
 - Bundled packs now reuse shared capability ids across technology clusters. Boundline keeps shared engineering guidance in `assistant/guidance/`, then selects the best matching Rust, JavaScript or TypeScript, Python, JVM, .NET, Go, PHP or Ruby, mobile, systems, or shell pack from runtime evidence instead of loading one Rust-only surface everywhere.
 - `run` executes guardians on the same session-owned route. Deterministic guardians run first; hybrid and LLM guardians reuse the existing planning, implementation, verification, or review slot and degrade explicitly when the declared route cannot validate.
-- `status`, `next`, and `inspect` do not recompute that story. They project the persisted guidance summary, loaded and skipped sources, guardian timeline, findings summary, degradations, and blocking outcome from session state and traces.
+- `status`, `next`, and `inspect` do not recompute that story. They project the persisted guidance summary, loaded and skipped sources, loaded and skipped packs, catalog validation findings, guardian timeline, findings summary, degradations, and blocking outcome from session state and traces.
+
+To add new languages, guardians, or rules to the bundled catalog, see [guides/extending-guidance-catalog.md](guides/extending-guidance-catalog.md).
 
 ## Risk Review Boundaries
 

@@ -2,19 +2,19 @@
 title = ".NET Language Guidance"
 applies_to = ["planning", "implementation", "verification", "review"]
 roles = ["planner", "implementer", "verifier", "reviewer"]
-path = "../guidance/language-dotnet.md"
+path = "../guidance-catalog/guidance/language-dotnet.md"
 priority = "high"
 
 [guidance.framework-best-practices]
 title = ".NET Service Framework Guidance"
 applies_to = ["planning", "implementation", "verification", "review"]
 roles = ["planner", "implementer", "verifier", "reviewer"]
-path = "../guidance/framework-dotnet-services.md"
+path = "../guidance-catalog/guidance/framework-dotnet-services.md"
 priority = "high"
 
 [guidance.testing-best-practices]
 title = ".NET Testing Guidance"
 applies_to = ["planning", "testing", "verification", "review"]
 roles = ["planner", "verifier", "reviewer"]
-path = "../guidance/testing-dotnet.md"
+path = "../guidance-catalog/guidance/testing-dotnet.md"
 priority = "high"

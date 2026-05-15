@@ -8,6 +8,8 @@ pub mod flow_inference;
 pub mod goal_planner;
 #[path = "../../../src/orchestrator/governance.rs"]
 pub mod governance;
+#[path = "../../../src/orchestrator/guidance_catalog_runtime.rs"]
+pub mod guidance_catalog_runtime;
 #[path = "../../../src/orchestrator/guidance_runtime.rs"]
 pub mod guidance_runtime;
 #[path = "../../../src/orchestrator/planner.rs"]
