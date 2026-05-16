@@ -17,6 +17,25 @@ recorded workspace version.
 
 ## [Unreleased]
 
+## [0.56.0] - 2026-05-16
+
+Delivered specs:
+
+- `056` - Authority Zoned Councils
+
+Highlights:
+
+- Added typed authority council-profile and stop-semantics resolution aligned
+  to the first-slice Canon `authority-governance-v1` contract.
+- Added stage-aware authority control resolution, structured producer-response
+  review records, and explicit council assembly outcomes with quorum and
+  independence projection.
+- Surfaced review council profile, independence state, and stop semantics
+  through review trace payloads plus session-native `status` and `inspect`
+  output.
+- Bumped workspace version to `0.56.0` while keeping the verified Canon
+  compatibility target on `0.53.0`.
+
 ## [0.55.0] - 2026-05-15
 
 Delivered specs:

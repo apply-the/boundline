@@ -143,6 +143,27 @@ impl CanonMode {
     pub fn expected_document_refs(self, packet_ref: &str) -> Vec<String> {
         vec![format!("{}/{}", packet_ref.trim_end_matches('/'), self.primary_document_name())]
     }
+
+    /// Map a Canon mode to its minimum authority-zone floor per S3 §8.1.
+    pub const fn stage_authority_floor(self) -> CanonAuthorityZone {
+        match self {
+            Self::Discovery | Self::Requirements => CanonAuthorityZone::Green,
+            Self::SystemShaping
+            | Self::Architecture
+            | Self::Backlog
+            | Self::Change
+            | Self::Implementation
+            | Self::Refactor
+            | Self::Review
+            | Self::Verification
+            | Self::PrReview => CanonAuthorityZone::Yellow,
+            Self::Incident
+            | Self::Migration
+            | Self::SecurityAssessment
+            | Self::SystemAssessment
+            | Self::SupplyChainAnalysis => CanonAuthorityZone::Red,
+        }
+    }
 }
 
 impl std::fmt::Display for CanonMode {
@@ -686,6 +707,487 @@ pub enum PacketReadiness {
     Rejected,
 }
 
+pub const AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE: &str = "authority-governance-v1";
+const AUTHORITY_PROVENANCE_UNAVAILABLE: &str = "unavailable";
+
+/// Bounded council profile vocabulary defined by S3 §20.
+///
+/// The variants describe the minimum review-council shape required before a
+/// governed stage may advance.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CouncilProfile {
+    /// No review council is required for this authority posture.
+    None,
+    /// One qualified reviewer is sufficient.
+    LightSingle,
+    /// Two distinct reviewers are required.
+    YellowPair,
+    /// Five reviewers plus the stronger red-zone posture are required.
+    RedFive,
+    /// Automation must stop and hand off to a human-controlled path.
+    RestrictedManual,
+}
+
+impl CouncilProfile {
+    /// Returns the stable serialized identifier used in session state and traces.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::LightSingle => "light_single",
+            Self::YellowPair => "yellow_pair",
+            Self::RedFive => "red_five",
+            Self::RestrictedManual => "restricted_manual",
+        }
+    }
+}
+
+impl std::fmt::Display for CouncilProfile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Stop-semantics vocabulary defined by S3 §15.
+///
+/// These values describe what the operator is allowed to do next after the
+/// authority matrix and any structural gates are applied.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StopSemantics {
+    /// Delivery may continue without an extra governance step.
+    Proceed,
+    /// Delivery may continue, but the result should remain advisory.
+    ProceedWithAdvisory,
+    /// Delivery may continue, but the user should see an explicit warning.
+    ProceedWithWarning,
+    /// Delivery may continue in a degraded posture because stronger controls are unavailable.
+    DegradedProceed,
+    /// A review council must complete before the stage may proceed.
+    CouncilRequired,
+    /// Findings must be adjudicated before the stage may proceed.
+    AdjudicationRequired,
+    /// A human approval gate must be satisfied before the stage may proceed.
+    HumanGateRequired,
+    /// Automation must stop.
+    HardStop,
+}
+
+impl StopSemantics {
+    /// Returns the stable serialized identifier used in session state and traces.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Proceed => "proceed",
+            Self::ProceedWithAdvisory => "proceed_with_advisory",
+            Self::ProceedWithWarning => "proceed_with_warning",
+            Self::DegradedProceed => "degraded_proceed",
+            Self::CouncilRequired => "council_required",
+            Self::AdjudicationRequired => "adjudication_required",
+            Self::HumanGateRequired => "human_gate_required",
+            Self::HardStop => "hard_stop",
+        }
+    }
+
+    /// Reports whether the semantic requires delivery to stop immediately.
+    pub const fn is_hard_stop(self) -> bool {
+        matches!(self, Self::HardStop)
+    }
+}
+
+impl std::fmt::Display for StopSemantics {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CanonAuthorityZone {
+    /// Low-governance zone used for bounded, low-impact work.
+    Green,
+    /// Medium-governance zone used for bounded but review-relevant work.
+    Yellow,
+    /// High-governance zone used for system-wide or operationally sensitive work.
+    Red,
+    /// Explicit manual-only zone that prevents automated continuation.
+    Restricted,
+}
+
+impl CanonAuthorityZone {
+    /// Returns the stable serialized identifier used in Canon packets and projections.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Green => "green",
+            Self::Yellow => "yellow",
+            Self::Red => "red",
+            Self::Restricted => "restricted",
+        }
+    }
+
+    /// Numeric floor used by `effective_authority_floor` to compute the max.
+    const fn floor_rank(self) -> u8 {
+        match self {
+            Self::Green => 0,
+            Self::Yellow => 1,
+            Self::Red => 2,
+            Self::Restricted => 3,
+        }
+    }
+
+    /// Returns the higher-governance zone of two candidates.
+    const fn max(self, other: Self) -> Self {
+        if other.floor_rank() > self.floor_rank() { other } else { self }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CanonChangeClass {
+    /// Small, low-risk change bounded to a narrow delivery slice.
+    LowImpact,
+    /// Broader but still bounded change that needs extra review care.
+    BoundedImpact,
+    /// System-wide change that can affect multiple flows or contracts.
+    SystemicImpact,
+    /// Operationally critical change that should inherit the strongest floor.
+    CriticalOperations,
+}
+
+impl CanonChangeClass {
+    /// Returns the stable serialized identifier used in Canon packets and projections.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::LowImpact => "low-impact",
+            Self::BoundedImpact => "bounded-impact",
+            Self::SystemicImpact => "systemic-impact",
+            Self::CriticalOperations => "critical-operations",
+        }
+    }
+
+    /// Map change class to its minimum authority-zone floor per S3 §8.
+    pub const fn authority_floor(self) -> CanonAuthorityZone {
+        match self {
+            Self::LowImpact => CanonAuthorityZone::Green,
+            Self::BoundedImpact => CanonAuthorityZone::Yellow,
+            Self::SystemicImpact => CanonAuthorityZone::Yellow,
+            Self::CriticalOperations => CanonAuthorityZone::Red,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CanonIntendedPersona {
+    /// Product-facing strategy author.
+    ProductStrategist,
+    /// Architecture and system-shaping author.
+    SystemArchitect,
+    /// Delivery and implementation author.
+    DeliveryEngineer,
+    /// Verification-focused reviewer or owner.
+    VerificationLead,
+    /// Operations or risk-governance owner.
+    OperationsGovernor,
+    /// Domain boundary and stewardship owner.
+    DomainSteward,
+}
+
+impl CanonIntendedPersona {
+    /// Returns the stable serialized identifier used in Canon packets and projections.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ProductStrategist => "product-strategist",
+            Self::SystemArchitect => "system-architect",
+            Self::DeliveryEngineer => "delivery-engineer",
+            Self::VerificationLead => "verification-lead",
+            Self::OperationsGovernor => "operations-governor",
+            Self::DomainSteward => "domain-steward",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CanonRiskClass {
+    /// Low-risk work with limited blast radius.
+    LowImpact,
+    /// Bounded risk that still needs stronger review posture than green-only work.
+    BoundedImpact,
+    /// High-risk work with systemic consequences if it fails.
+    SystemicImpact,
+}
+
+impl CanonRiskClass {
+    /// Returns the stable serialized identifier used in Canon packets and projections.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::LowImpact => "low-impact",
+            Self::BoundedImpact => "bounded-impact",
+            Self::SystemicImpact => "systemic-impact",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CanonStageRoleHintKind {
+    ReviewerCapability,
+    ReviewPosture,
+    HumanGate,
+}
+
+impl CanonStageRoleHintKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ReviewerCapability => "reviewer-capability",
+            Self::ReviewPosture => "review-posture",
+            Self::HumanGate => "human-gate",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CanonStageRoleHint {
+    pub hint_kind: CanonStageRoleHintKind,
+    pub value: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rationale: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CanonAuthorityGovernanceV1Envelope {
+    pub contract_line: String,
+    pub authority_zone: CanonAuthorityZone,
+    pub change_class: CanonChangeClass,
+    pub intended_persona: CanonIntendedPersona,
+    pub approval_state: ApprovalState,
+    pub packet_readiness: PacketReadiness,
+    pub risk: CanonRiskClass,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub persona_anti_behaviors: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub primary_artifact: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub artifact_order: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub promotion_refs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stage_role_hints: Vec<CanonStageRoleHint>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuthorityControlResolution {
+    /// Stable control-class label used by operator-facing projections.
+    pub effective_control_class: String,
+    /// Minimum council profile required for the evaluated posture.
+    pub council_profile: CouncilProfile,
+    /// Stop semantic that determines whether delivery may continue.
+    pub stop_semantics: StopSemantics,
+}
+
+impl CanonAuthorityGovernanceV1Envelope {
+    /// Reports whether the packet advertises the currently supported authority contract line.
+    pub fn is_supported_contract_line(&self) -> bool {
+        self.contract_line == AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE
+    }
+
+    /// Resolves the effective control class, council profile, and stop semantics.
+    ///
+    /// When `stage` is available the resolution incorporates the stage
+    /// authority floor per S3 §8.1 and maps to the S3 §21 V1 matrix.
+    /// When `stage` is `None` the resolution uses only the Canon authority
+    /// zone and change class.
+    pub fn control_resolution_for_stage(
+        &self,
+        stage: Option<CanonMode>,
+    ) -> AuthorityControlResolution {
+        // Structural gates override the matrix.
+        if matches!(self.approval_state, ApprovalState::Requested)
+            || matches!(self.authority_zone, CanonAuthorityZone::Restricted)
+        {
+            return AuthorityControlResolution {
+                effective_control_class: "restricted_gate".to_string(),
+                council_profile: CouncilProfile::RestrictedManual,
+                stop_semantics: StopSemantics::HardStop,
+            };
+        }
+
+        if matches!(self.packet_readiness, PacketReadiness::Incomplete | PacketReadiness::Rejected)
+            || matches!(self.approval_state, ApprovalState::Rejected | ApprovalState::Expired)
+        {
+            return AuthorityControlResolution {
+                effective_control_class: "blocked_contract".to_string(),
+                council_profile: CouncilProfile::RestrictedManual,
+                stop_semantics: StopSemantics::HardStop,
+            };
+        }
+
+        // The first-slice roadmap matrix defines a few stage-specific outcomes
+        // that are more specific than the generic floor calculation.
+        if matches!(self.authority_zone, CanonAuthorityZone::Green)
+            && matches!(self.change_class, CanonChangeClass::LowImpact)
+        {
+            if matches!(stage, Some(CanonMode::Discovery | CanonMode::Requirements)) {
+                return AuthorityControlResolution {
+                    effective_control_class: "bounded_delivery".to_string(),
+                    council_profile: CouncilProfile::None,
+                    stop_semantics: StopSemantics::Proceed,
+                };
+            }
+
+            if matches!(stage, Some(CanonMode::Implementation | CanonMode::Refactor)) {
+                return AuthorityControlResolution {
+                    effective_control_class: "bounded_delivery".to_string(),
+                    council_profile: CouncilProfile::LightSingle,
+                    stop_semantics: StopSemantics::Proceed,
+                };
+            }
+        }
+
+        // Compute effective floor: max(authority_zone, change_class_floor, stage_floor).
+        let change_floor = self.change_class.authority_floor();
+        let stage_floor = stage.map_or(CanonAuthorityZone::Green, |m| m.stage_authority_floor());
+        let effective_zone = self.authority_zone.max(change_floor).max(stage_floor);
+
+        match effective_zone {
+            CanonAuthorityZone::Restricted => AuthorityControlResolution {
+                effective_control_class: "restricted_gate".to_string(),
+                council_profile: CouncilProfile::RestrictedManual,
+                stop_semantics: StopSemantics::HardStop,
+            },
+            CanonAuthorityZone::Red => AuthorityControlResolution {
+                effective_control_class: "advisory_only".to_string(),
+                council_profile: CouncilProfile::RedFive,
+                stop_semantics: StopSemantics::HumanGateRequired,
+            },
+            CanonAuthorityZone::Yellow => {
+                // Systemic or critical work inside the yellow band escalates to a
+                // stronger council while still remaining below the red human gate.
+                if matches!(
+                    self.change_class,
+                    CanonChangeClass::SystemicImpact | CanonChangeClass::CriticalOperations
+                ) {
+                    AuthorityControlResolution {
+                        effective_control_class: "council_review".to_string(),
+                        council_profile: CouncilProfile::RedFive,
+                        stop_semantics: StopSemantics::AdjudicationRequired,
+                    }
+                } else {
+                    AuthorityControlResolution {
+                        effective_control_class: "council_review".to_string(),
+                        council_profile: CouncilProfile::YellowPair,
+                        stop_semantics: StopSemantics::CouncilRequired,
+                    }
+                }
+            }
+            CanonAuthorityZone::Green => {
+                // Green zone: bounded-impact still needs a pair.
+                if matches!(self.change_class, CanonChangeClass::BoundedImpact) {
+                    AuthorityControlResolution {
+                        effective_control_class: "bounded_delivery".to_string(),
+                        council_profile: CouncilProfile::YellowPair,
+                        stop_semantics: StopSemantics::CouncilRequired,
+                    }
+                } else if stage.is_some() {
+                    // Stage present and green-floor: light review.
+                    AuthorityControlResolution {
+                        effective_control_class: "bounded_delivery".to_string(),
+                        council_profile: CouncilProfile::LightSingle,
+                        stop_semantics: StopSemantics::Proceed,
+                    }
+                } else {
+                    // No stage context: no council.
+                    AuthorityControlResolution {
+                        effective_control_class: "bounded_delivery".to_string(),
+                        council_profile: CouncilProfile::None,
+                        stop_semantics: StopSemantics::Proceed,
+                    }
+                }
+            }
+        }
+    }
+
+    /// Resolves authority controls without a stage-specific floor.
+    pub fn control_resolution(&self) -> AuthorityControlResolution {
+        self.control_resolution_for_stage(None)
+    }
+
+    /// Returns whether the current authority posture requires an immediate hard stop.
+    pub fn requires_hard_stop(&self) -> bool {
+        self.control_resolution().stop_semantics.is_hard_stop()
+    }
+
+    /// Builds the operator-facing reason string for a hard stop, when one exists.
+    pub fn hard_stop_reason(&self) -> Option<String> {
+        self.requires_hard_stop().then(|| {
+            let resolution = self.control_resolution();
+            format!(
+                "Canon authority {} with {} requires {}",
+                self.authority_zone.as_str(),
+                self.change_class.as_str(),
+                resolution.stop_semantics.as_str()
+            )
+        })
+    }
+
+    /// Renders a compact projection of the authority packet for session and trace views.
+    pub fn projection_lines(&self) -> Vec<String> {
+        let resolution = self.control_resolution();
+        let stage_role_hints = if self.stage_role_hints.is_empty() {
+            AUTHORITY_PROVENANCE_UNAVAILABLE.to_string()
+        } else {
+            self.stage_role_hints
+                .iter()
+                .map(|hint| format!("{}:{}", hint.hint_kind.as_str(), hint.value))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+
+        vec![
+            format!("authority_contract_line: {}", self.contract_line),
+            format!("authority_zone: {}", self.authority_zone.as_str()),
+            format!("authority_change_class: {}", self.change_class.as_str()),
+            format!("authority_intended_persona: {}", self.intended_persona.as_str()),
+            format!("authority_risk: {}", self.risk.as_str()),
+            format!("authority_control_class: {}", resolution.effective_control_class),
+            format!("authority_council_profile: {}", resolution.council_profile.as_str()),
+            format!("authority_stop_semantics: {}", resolution.stop_semantics.as_str()),
+            format!(
+                "authority_primary_artifact: {}",
+                self.primary_artifact
+                    .as_deref()
+                    .filter(|value| !value.trim().is_empty())
+                    .unwrap_or(AUTHORITY_PROVENANCE_UNAVAILABLE)
+            ),
+            format!(
+                "authority_artifact_order: {}",
+                if self.artifact_order.is_empty() {
+                    AUTHORITY_PROVENANCE_UNAVAILABLE.to_string()
+                } else {
+                    self.artifact_order.join(", ")
+                }
+            ),
+            format!(
+                "authority_promotion_refs: {}",
+                if self.promotion_refs.is_empty() {
+                    AUTHORITY_PROVENANCE_UNAVAILABLE.to_string()
+                } else {
+                    self.promotion_refs.join(", ")
+                }
+            ),
+            format!(
+                "authority_persona_anti_behaviors: {}",
+                if self.persona_anti_behaviors.is_empty() {
+                    AUTHORITY_PROVENANCE_UNAVAILABLE.to_string()
+                } else {
+                    self.persona_anti_behaviors.join(", ")
+                }
+            ),
+            format!("authority_stage_role_hints: {stage_role_hints}"),
+        ]
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CanonCapabilitySnapshot {
     pub canon_version: String,
@@ -822,6 +1324,8 @@ pub struct CompactedCanonMemory {
     pub recommended_next_action: Option<CanonRecommendedActionSummary>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evidence_summary: Option<CanonEvidenceInspectSummary>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub authority_provenance_lines: Vec<String>,
 }
 
 impl CompactedCanonMemory {
@@ -860,6 +1364,7 @@ impl CompactedCanonMemory {
         if let Some(reason_code) = self.reason_code.as_ref() {
             lines.push(format!("canon_memory_reason: {reason_code}"));
         }
+        lines.extend(self.authority_provenance_lines.clone());
         if let Some(next_action) = self.next_action_text() {
             lines.push(format!("canon_memory_next_action: {next_action}"));
         }
@@ -1004,6 +1509,8 @@ pub struct GovernedStagePacket {
     pub headline: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason_code: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authority_governance: Option<CanonAuthorityGovernanceV1Envelope>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1261,5 +1768,207 @@ mod tests {
             PacketReuseBindingReason::UpstreamStageContext.to_string(),
             "upstream_stage_context"
         );
+    }
+
+    #[test]
+    fn authority_governance_projection_lines_include_resolution_and_unavailable_markers() {
+        let envelope = CanonAuthorityGovernanceV1Envelope {
+            contract_line: AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE.to_string(),
+            authority_zone: CanonAuthorityZone::Yellow,
+            change_class: CanonChangeClass::SystemicImpact,
+            intended_persona: CanonIntendedPersona::SystemArchitect,
+            approval_state: ApprovalState::Granted,
+            packet_readiness: PacketReadiness::Reusable,
+            risk: CanonRiskClass::SystemicImpact,
+            persona_anti_behaviors: vec!["unbounded implementation detail".to_string()],
+            primary_artifact: Some("01-architecture-summary.md".to_string()),
+            artifact_order: vec!["01-architecture-summary.md".to_string()],
+            promotion_refs: Vec::new(),
+            stage_role_hints: Vec::new(),
+        };
+
+        let lines = envelope.projection_lines();
+
+        assert!(lines.contains(&"authority_control_class: council_review".to_string()));
+        assert!(lines.contains(&"authority_council_profile: red_five".to_string()));
+        assert!(lines.contains(&"authority_promotion_refs: unavailable".to_string()));
+        assert!(lines.contains(&"authority_stage_role_hints: unavailable".to_string()));
+    }
+
+    #[test]
+    fn authority_governance_requested_approval_resolves_to_restricted_gate() {
+        let envelope = CanonAuthorityGovernanceV1Envelope {
+            contract_line: AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE.to_string(),
+            authority_zone: CanonAuthorityZone::Restricted,
+            change_class: CanonChangeClass::BoundedImpact,
+            intended_persona: CanonIntendedPersona::DeliveryEngineer,
+            approval_state: ApprovalState::Requested,
+            packet_readiness: PacketReadiness::Incomplete,
+            risk: CanonRiskClass::BoundedImpact,
+            persona_anti_behaviors: Vec::new(),
+            primary_artifact: None,
+            artifact_order: Vec::new(),
+            promotion_refs: Vec::new(),
+            stage_role_hints: Vec::new(),
+        };
+
+        let resolution = envelope.control_resolution();
+
+        assert_eq!(resolution.effective_control_class, "restricted_gate");
+        assert_eq!(resolution.council_profile, CouncilProfile::RestrictedManual);
+        assert_eq!(resolution.stop_semantics, StopSemantics::HardStop);
+    }
+
+    #[test]
+    fn v1_matrix_green_low_impact_discovery_resolves_to_none_proceed() {
+        let envelope = CanonAuthorityGovernanceV1Envelope {
+            contract_line: AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE.to_string(),
+            authority_zone: CanonAuthorityZone::Green,
+            change_class: CanonChangeClass::LowImpact,
+            intended_persona: CanonIntendedPersona::DeliveryEngineer,
+            approval_state: ApprovalState::NotNeeded,
+            packet_readiness: PacketReadiness::Reusable,
+            risk: CanonRiskClass::LowImpact,
+            persona_anti_behaviors: Vec::new(),
+            primary_artifact: None,
+            artifact_order: Vec::new(),
+            promotion_refs: Vec::new(),
+            stage_role_hints: Vec::new(),
+        };
+
+        let resolution = envelope.control_resolution_for_stage(Some(CanonMode::Discovery));
+        assert_eq!(resolution.council_profile, CouncilProfile::None);
+        assert_eq!(resolution.stop_semantics, StopSemantics::Proceed);
+    }
+
+    #[test]
+    fn v1_matrix_green_low_impact_implementation_resolves_to_light_single_proceed() {
+        let envelope = CanonAuthorityGovernanceV1Envelope {
+            contract_line: AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE.to_string(),
+            authority_zone: CanonAuthorityZone::Green,
+            change_class: CanonChangeClass::LowImpact,
+            intended_persona: CanonIntendedPersona::DeliveryEngineer,
+            approval_state: ApprovalState::NotNeeded,
+            packet_readiness: PacketReadiness::Reusable,
+            risk: CanonRiskClass::LowImpact,
+            persona_anti_behaviors: Vec::new(),
+            primary_artifact: None,
+            artifact_order: Vec::new(),
+            promotion_refs: Vec::new(),
+            stage_role_hints: Vec::new(),
+        };
+
+        let resolution = envelope.control_resolution_for_stage(Some(CanonMode::Implementation));
+        assert_eq!(resolution.council_profile, CouncilProfile::LightSingle);
+        assert_eq!(resolution.stop_semantics, StopSemantics::Proceed);
+    }
+
+    #[test]
+    fn v1_matrix_yellow_systemic_architecture_resolves_to_red_five_adjudication() {
+        let envelope = CanonAuthorityGovernanceV1Envelope {
+            contract_line: AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE.to_string(),
+            authority_zone: CanonAuthorityZone::Yellow,
+            change_class: CanonChangeClass::SystemicImpact,
+            intended_persona: CanonIntendedPersona::SystemArchitect,
+            approval_state: ApprovalState::Granted,
+            packet_readiness: PacketReadiness::Reusable,
+            risk: CanonRiskClass::SystemicImpact,
+            persona_anti_behaviors: Vec::new(),
+            primary_artifact: None,
+            artifact_order: Vec::new(),
+            promotion_refs: Vec::new(),
+            stage_role_hints: Vec::new(),
+        };
+
+        let resolution = envelope.control_resolution_for_stage(Some(CanonMode::Architecture));
+        assert_eq!(resolution.council_profile, CouncilProfile::RedFive);
+        assert_eq!(resolution.stop_semantics, StopSemantics::AdjudicationRequired);
+    }
+
+    #[test]
+    fn v1_matrix_red_zone_migration_resolves_to_red_five_human_gate() {
+        let envelope = CanonAuthorityGovernanceV1Envelope {
+            contract_line: AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE.to_string(),
+            authority_zone: CanonAuthorityZone::Red,
+            change_class: CanonChangeClass::SystemicImpact,
+            intended_persona: CanonIntendedPersona::OperationsGovernor,
+            approval_state: ApprovalState::Granted,
+            packet_readiness: PacketReadiness::Reusable,
+            risk: CanonRiskClass::SystemicImpact,
+            persona_anti_behaviors: Vec::new(),
+            primary_artifact: None,
+            artifact_order: Vec::new(),
+            promotion_refs: Vec::new(),
+            stage_role_hints: Vec::new(),
+        };
+
+        let resolution = envelope.control_resolution_for_stage(Some(CanonMode::Migration));
+        assert_eq!(resolution.council_profile, CouncilProfile::RedFive);
+        assert_eq!(resolution.stop_semantics, StopSemantics::HumanGateRequired);
+    }
+
+    #[test]
+    fn v1_matrix_restricted_zone_resolves_to_restricted_manual_hard_stop() {
+        let envelope = CanonAuthorityGovernanceV1Envelope {
+            contract_line: AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE.to_string(),
+            authority_zone: CanonAuthorityZone::Restricted,
+            change_class: CanonChangeClass::CriticalOperations,
+            intended_persona: CanonIntendedPersona::OperationsGovernor,
+            approval_state: ApprovalState::Requested,
+            packet_readiness: PacketReadiness::Incomplete,
+            risk: CanonRiskClass::SystemicImpact,
+            persona_anti_behaviors: Vec::new(),
+            primary_artifact: None,
+            artifact_order: Vec::new(),
+            promotion_refs: Vec::new(),
+            stage_role_hints: Vec::new(),
+        };
+
+        let resolution = envelope.control_resolution_for_stage(Some(CanonMode::Incident));
+        assert_eq!(resolution.council_profile, CouncilProfile::RestrictedManual);
+        assert_eq!(resolution.stop_semantics, StopSemantics::HardStop);
+    }
+
+    #[test]
+    fn v1_matrix_stage_floor_escalates_green_zone_to_red() {
+        let envelope = CanonAuthorityGovernanceV1Envelope {
+            contract_line: AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE.to_string(),
+            authority_zone: CanonAuthorityZone::Green,
+            change_class: CanonChangeClass::LowImpact,
+            intended_persona: CanonIntendedPersona::DeliveryEngineer,
+            approval_state: ApprovalState::NotNeeded,
+            packet_readiness: PacketReadiness::Reusable,
+            risk: CanonRiskClass::LowImpact,
+            persona_anti_behaviors: Vec::new(),
+            primary_artifact: None,
+            artifact_order: Vec::new(),
+            promotion_refs: Vec::new(),
+            stage_role_hints: Vec::new(),
+        };
+
+        // SecurityAssessment has a red stage floor: green zone escalates.
+        let resolution = envelope.control_resolution_for_stage(Some(CanonMode::SecurityAssessment));
+        assert_eq!(resolution.council_profile, CouncilProfile::RedFive);
+        assert_eq!(resolution.stop_semantics, StopSemantics::HumanGateRequired);
+    }
+
+    #[test]
+    fn stage_authority_floor_maps_modes_to_expected_zones() {
+        assert_eq!(CanonMode::Discovery.stage_authority_floor(), CanonAuthorityZone::Green);
+        assert_eq!(CanonMode::Requirements.stage_authority_floor(), CanonAuthorityZone::Green);
+        assert_eq!(CanonMode::Implementation.stage_authority_floor(), CanonAuthorityZone::Yellow);
+        assert_eq!(CanonMode::Architecture.stage_authority_floor(), CanonAuthorityZone::Yellow);
+        assert_eq!(CanonMode::PrReview.stage_authority_floor(), CanonAuthorityZone::Yellow);
+        assert_eq!(CanonMode::Incident.stage_authority_floor(), CanonAuthorityZone::Red);
+        assert_eq!(CanonMode::Migration.stage_authority_floor(), CanonAuthorityZone::Red);
+        assert_eq!(CanonMode::SecurityAssessment.stage_authority_floor(), CanonAuthorityZone::Red);
+    }
+
+    #[test]
+    fn change_class_authority_floor_maps_to_expected_zones() {
+        assert_eq!(CanonChangeClass::LowImpact.authority_floor(), CanonAuthorityZone::Green);
+        assert_eq!(CanonChangeClass::BoundedImpact.authority_floor(), CanonAuthorityZone::Yellow);
+        assert_eq!(CanonChangeClass::SystemicImpact.authority_floor(), CanonAuthorityZone::Yellow);
+        assert_eq!(CanonChangeClass::CriticalOperations.authority_floor(), CanonAuthorityZone::Red);
     }
 }

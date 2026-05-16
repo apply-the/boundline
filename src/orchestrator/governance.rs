@@ -28,6 +28,8 @@ const GOVERNANCE_DOCUMENT_KIND_PROJECT_MEMORY_SURFACE: &str = "project-memory-su
 const GOVERNANCE_DOCUMENT_KIND_STAGE_BRIEF: &str = "stage-brief";
 const GOVERNANCE_STAGE_IMPLEMENT: &str = "implement";
 const GOVERNANCE_STAGE_VERIFY: &str = "verify";
+const AUTHORITY_CONTRACT_UNAVAILABLE_REASON_CODE: &str = "authority_contract_unavailable";
+const AUTHORITY_HARD_STOP_REASON_CODE: &str = "authority_hard_stop";
 
 pub fn governance_stage_key(flow_name: &str, stage_id: &str) -> String {
     format!("{}:{}", flow_name, stage_id)
@@ -616,6 +618,12 @@ pub fn compacted_canon_memory_from_response(
     let credibility = canon_memory_credibility(response.status, response.packet.as_ref());
     let recommended_next_action = canon_memory_recommended_action(response, credibility);
     let possible_actions = canon_memory_possible_actions(response, credibility);
+    let authority_provenance_lines = response
+        .packet
+        .as_ref()
+        .and_then(|packet| packet.authority_governance.as_ref())
+        .map(|authority| authority.projection_lines())
+        .unwrap_or_default();
 
     Some(CompactedCanonMemory {
         headline: response
@@ -639,6 +647,7 @@ pub fn compacted_canon_memory_from_response(
             closure_status: None,
             closure_findings: Vec::new(),
         }),
+        authority_provenance_lines,
     })
 }
 
@@ -667,7 +676,59 @@ pub fn compacted_canon_memory_for_block(
             target: None,
         }),
         evidence_summary: None,
+        authority_provenance_lines: Vec::new(),
     })
+}
+
+pub fn fail_closed_required_authority_response(
+    stage_key: &str,
+    policy: &StageGovernancePolicy,
+    runtime_kind: GovernanceRuntimeKind,
+    response: &GovernanceRuntimeResponse,
+) -> Option<GovernanceRuntimeResponse> {
+    if runtime_kind != GovernanceRuntimeKind::Canon
+        || !policy.required
+        || response.status != GovernanceLifecycleState::GovernedReady
+    {
+        return None;
+    }
+
+    let Some(authority) =
+        response.packet.as_ref().and_then(|packet| packet.authority_governance.as_ref())
+    else {
+        let mut blocked = response.clone();
+        blocked.status = GovernanceLifecycleState::Blocked;
+        blocked.reason_code = Some(AUTHORITY_CONTRACT_UNAVAILABLE_REASON_CODE.to_string());
+        blocked.message = format!(
+            "Canon authority-governance-v1 metadata is missing for required stage {stage_key}"
+        );
+        return Some(blocked);
+    };
+
+    let (reason_code, message) = if !authority.is_supported_contract_line() {
+        (
+            AUTHORITY_CONTRACT_UNAVAILABLE_REASON_CODE,
+            format!(
+                "Canon authority contract `{}` is unsupported for required stage {stage_key}",
+                authority.contract_line
+            ),
+        )
+    } else if authority.requires_hard_stop() {
+        (
+            AUTHORITY_HARD_STOP_REASON_CODE,
+            authority.hard_stop_reason().unwrap_or_else(|| {
+                format!("Canon authority-governance-v1 requires a hard stop for stage {stage_key}")
+            }),
+        )
+    } else {
+        return None;
+    };
+
+    let mut blocked = response.clone();
+    blocked.status = GovernanceLifecycleState::Blocked;
+    blocked.reason_code = Some(reason_code.to_string());
+    blocked.message = message;
+    Some(blocked)
 }
 
 fn canon_memory_credibility(
@@ -863,17 +924,20 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::{
-        GovernanceStateSelectionError, canon_memory_credibility, canon_memory_possible_actions,
-        canon_memory_recommended_action, compacted_canon_memory_for_block,
-        compacted_canon_memory_from_response, governance_input_documents,
+        AUTHORITY_CONTRACT_UNAVAILABLE_REASON_CODE, GovernanceStateSelectionError,
+        canon_memory_credibility, canon_memory_possible_actions, canon_memory_recommended_action,
+        compacted_canon_memory_for_block, compacted_canon_memory_from_response,
+        fail_closed_required_authority_response, governance_input_documents,
         optional_serialized_value, serialize_to_value,
     };
     use crate::adapters::governance_runtime::GovernanceInputDocument;
     use crate::adapters::governance_runtime::GovernanceRuntimeResponse;
     use crate::domain::governance::{
-        ApprovalState, CanonEvidenceInspectSummary, CanonRecommendedActionSummary,
-        CompactedCanonMemory, GovernanceLifecycleState, GovernanceRuntimeKind, GovernedStagePacket,
-        MemoryCredibilityState, PacketReadiness,
+        AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE, ApprovalState, CanonAuthorityGovernanceV1Envelope,
+        CanonAuthorityZone, CanonChangeClass, CanonEvidenceInspectSummary, CanonIntendedPersona,
+        CanonRecommendedActionSummary, CanonRiskClass, CompactedCanonMemory,
+        GovernanceLifecycleState, GovernanceRuntimeKind, GovernedStagePacket,
+        MemoryCredibilityState, PacketReadiness, StageGovernancePolicy,
     };
     use crate::domain::task_context::TaskContextError;
 
@@ -903,6 +967,23 @@ mod tests {
             missing_sections: Vec::new(),
             headline: "Verification packet ready".to_string(),
             reason_code: Some("packet_ready".to_string()),
+            authority_governance: None,
+        }
+    }
+
+    fn required_canon_policy() -> StageGovernancePolicy {
+        StageGovernancePolicy {
+            flow_name: "bug-fix".to_string(),
+            stage_id: "investigate".to_string(),
+            enabled: true,
+            required: true,
+            autopilot: false,
+            runtime: Some(GovernanceRuntimeKind::Canon),
+            canon_mode: None,
+            system_context: None,
+            risk: Some("medium".to_string()),
+            zone: Some("core".to_string()),
+            owner: Some("team-boundline".to_string()),
         }
     }
 
@@ -934,6 +1015,7 @@ mod tests {
                 closure_status: None,
                 closure_findings: Vec::new(),
             }),
+            authority_provenance_lines: Vec::new(),
         };
 
         let documents = governance_input_documents(&json!({}), Some(&memory));
@@ -981,6 +1063,112 @@ mod tests {
             })
         );
         assert_eq!(memory.possible_actions[0].action, "approve");
+    }
+
+    #[test]
+    fn compacted_canon_memory_from_response_projects_authority_provenance_lines() {
+        let mut governed_packet = packet(PacketReadiness::Reusable);
+        governed_packet.authority_governance = Some(CanonAuthorityGovernanceV1Envelope {
+            contract_line: AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE.to_string(),
+            authority_zone: CanonAuthorityZone::Yellow,
+            change_class: CanonChangeClass::SystemicImpact,
+            intended_persona: CanonIntendedPersona::SystemArchitect,
+            approval_state: ApprovalState::Granted,
+            packet_readiness: PacketReadiness::Reusable,
+            risk: CanonRiskClass::SystemicImpact,
+            persona_anti_behaviors: Vec::new(),
+            primary_artifact: Some("verification.md".to_string()),
+            artifact_order: vec!["verification.md".to_string()],
+            promotion_refs: Vec::new(),
+            stage_role_hints: Vec::new(),
+        });
+        let response = response(
+            GovernanceLifecycleState::GovernedReady,
+            "Canon packet ready",
+            Some(governed_packet),
+        );
+
+        let memory = compacted_canon_memory_from_response(
+            "change:verify",
+            GovernanceRuntimeKind::Canon,
+            &response,
+        )
+        .expect("Canon responses should compact into memory");
+
+        assert!(
+            memory
+                .authority_provenance_lines
+                .iter()
+                .any(|line| { line == "authority_contract_line: authority-governance-v1" })
+        );
+        assert!(
+            memory
+                .provenance_lines()
+                .iter()
+                .any(|line| line == "authority_control_class: council_review")
+        );
+    }
+
+    #[test]
+    fn fail_closed_required_authority_response_blocks_missing_metadata() {
+        let policy = required_canon_policy();
+        let response = response(
+            GovernanceLifecycleState::GovernedReady,
+            "Canon packet ready",
+            Some(packet(PacketReadiness::Reusable)),
+        );
+
+        let result = fail_closed_required_authority_response(
+            "bug-fix:investigate",
+            &policy,
+            GovernanceRuntimeKind::Canon,
+            &response,
+        )
+        .expect("missing authority metadata should fail closed");
+
+        assert_eq!(result.status, GovernanceLifecycleState::Blocked);
+        assert_eq!(result.reason_code.as_deref(), Some(AUTHORITY_CONTRACT_UNAVAILABLE_REASON_CODE));
+        assert!(result.message.contains("missing"));
+    }
+
+    #[test]
+    fn fail_closed_required_authority_response_blocks_unsupported_contract_line() {
+        let policy = required_canon_policy();
+        let mut governed_packet = packet(PacketReadiness::Reusable);
+        governed_packet.authority_governance = Some(CanonAuthorityGovernanceV1Envelope {
+            contract_line: format!("{}-next", AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE),
+            authority_zone: CanonAuthorityZone::Yellow,
+            change_class: CanonChangeClass::SystemicImpact,
+            intended_persona: CanonIntendedPersona::SystemArchitect,
+            approval_state: ApprovalState::NotNeeded,
+            packet_readiness: PacketReadiness::Reusable,
+            risk: CanonRiskClass::SystemicImpact,
+            persona_anti_behaviors: Vec::new(),
+            primary_artifact: None,
+            artifact_order: Vec::new(),
+            promotion_refs: Vec::new(),
+            stage_role_hints: Vec::new(),
+        });
+        let response = response(
+            GovernanceLifecycleState::GovernedReady,
+            "Canon packet ready",
+            Some(governed_packet),
+        );
+
+        let blocked = fail_closed_required_authority_response(
+            "bug-fix:investigate",
+            &policy,
+            GovernanceRuntimeKind::Canon,
+            &response,
+        )
+        .expect("unsupported contracts should fail closed");
+
+        assert_eq!(blocked.status, GovernanceLifecycleState::Blocked);
+        assert_eq!(
+            blocked.reason_code.as_deref(),
+            Some(AUTHORITY_CONTRACT_UNAVAILABLE_REASON_CODE)
+        );
+        assert!(blocked.message.contains("unsupported"));
     }
 
     #[test]

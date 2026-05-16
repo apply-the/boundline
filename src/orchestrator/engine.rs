@@ -692,6 +692,13 @@ where
         decision: Option<crate::domain::governance::AutopilotDecisionRecord>,
         response: crate::adapters::governance_runtime::GovernanceRuntimeResponse,
     ) -> Result<GovernanceStepDecision<String>, OrchestratorError> {
+        let response = crate::orchestrator::governance::fail_closed_required_authority_response(
+            &stage_key,
+            policy,
+            runtime_kind,
+            &response,
+        )
+        .unwrap_or(response);
         let packet_rejected = response.packet.as_ref().is_some_and(|packet| {
             matches!(packet.readiness, PacketReadiness::Incomplete | PacketReadiness::Rejected)
         });
@@ -771,6 +778,7 @@ where
                     "canon_memory_reason_code": compacted_canon_memory.as_ref().and_then(|memory| memory.reason_code.clone()),
                     "canon_memory_run_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.run_ref.clone()),
                     "canon_memory_packet_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.packet_ref.clone()),
+                    "authority_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.authority_provenance_lines.clone()).unwrap_or_default(),
                 }),
             );
         }
@@ -796,6 +804,7 @@ where
                         "canon_memory_reason_code": compacted_canon_memory.as_ref().and_then(|memory| memory.reason_code.clone()),
                         "canon_memory_run_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.run_ref.clone()),
                         "canon_memory_packet_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.packet_ref.clone()),
+                        "authority_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.authority_provenance_lines.clone()).unwrap_or_default(),
                         "canon_next_action": compacted_canon_memory.as_ref().and_then(|memory| memory.recommended_next_action.as_ref()).map(|action| format!("{}: {}", action.action, action.rationale)),
                     }),
                 );
@@ -820,6 +829,7 @@ where
                         "canon_memory_reason_code": compacted_canon_memory.as_ref().and_then(|memory| memory.reason_code.clone()),
                         "canon_memory_run_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.run_ref.clone()),
                         "canon_memory_packet_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.packet_ref.clone()),
+                        "authority_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.authority_provenance_lines.clone()).unwrap_or_default(),
                         "canon_next_action": compacted_canon_memory.as_ref().and_then(|memory| memory.recommended_next_action.as_ref()).map(|action| format!("{}: {}", action.action, action.rationale)),
                     }),
                 );
@@ -854,6 +864,7 @@ where
                         "canon_memory_reason_code": compacted_canon_memory.as_ref().and_then(|memory| memory.reason_code.clone()),
                         "canon_memory_run_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.run_ref.clone()),
                         "canon_memory_packet_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.packet_ref.clone()),
+                        "authority_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.authority_provenance_lines.clone()).unwrap_or_default(),
                         "canon_next_action": compacted_canon_memory.as_ref().and_then(|memory| memory.recommended_next_action.as_ref()).map(|action| format!("{}: {}", action.action, action.rationale)),
                     }),
                 );
@@ -930,6 +941,7 @@ where
                 "canon_memory_reason_code": compacted_canon_memory.as_ref().and_then(|memory| memory.reason_code.clone()),
                 "canon_memory_run_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.run_ref.clone()),
                 "canon_memory_packet_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.packet_ref.clone()),
+                "authority_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.authority_provenance_lines.clone()).unwrap_or_default(),
                 "canon_next_action": compacted_canon_memory.as_ref().and_then(|memory| memory.recommended_next_action.as_ref()).map(|action| format!("{}: {}", action.action, action.rationale)),
             }),
         );
@@ -1179,6 +1191,26 @@ mod tests {
             _failure: &StepExecutionResult,
         ) -> Result<Vec<Step>, PlanningError> {
             self.replan_result.clone()
+        }
+    }
+
+    fn reusable_canon_authority_envelope(
+        approval_state: ApprovalState,
+    ) -> crate::domain::governance::CanonAuthorityGovernanceV1Envelope {
+        crate::domain::governance::CanonAuthorityGovernanceV1Envelope {
+            contract_line: crate::domain::governance::AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE
+                .to_string(),
+            authority_zone: crate::domain::governance::CanonAuthorityZone::Green,
+            change_class: crate::domain::governance::CanonChangeClass::LowImpact,
+            intended_persona: crate::domain::governance::CanonIntendedPersona::DeliveryEngineer,
+            approval_state,
+            packet_readiness: PacketReadiness::Reusable,
+            risk: crate::domain::governance::CanonRiskClass::LowImpact,
+            persona_anti_behaviors: Vec::new(),
+            primary_artifact: None,
+            artifact_order: Vec::new(),
+            promotion_refs: Vec::new(),
+            stage_role_hints: Vec::new(),
         }
     }
 
@@ -1620,6 +1652,7 @@ mod tests {
                 missing_sections: vec!["substantive_body".to_string()],
                 headline: "rejected packet".to_string(),
                 reason_code: None,
+                authority_governance: None,
             }),
             reason_code: None,
             message: "local governance evaluated bug-fix:investigate".to_string(),
@@ -1749,6 +1782,9 @@ mod tests {
                 missing_sections: vec!["evidence".to_string()],
                 headline: "rejected discovery packet".to_string(),
                 reason_code: Some("packet_rejected".to_string()),
+                authority_governance: Some(reusable_canon_authority_envelope(
+                    ApprovalState::NotNeeded,
+                )),
             }),
             reason_code: Some("packet_rejected".to_string()),
             message: "canon packet rejected".to_string(),
@@ -1801,6 +1837,56 @@ mod tests {
             blocked_event.payload["canon_memory_packet_ref"],
             json!(".canon/runs/canon-run-2")
         );
+    }
+
+    #[test]
+    fn apply_governance_response_blocks_required_canon_stage_without_authority_metadata() {
+        let orchestrator = build_governed_orchestrator(true);
+        let mut task = build_governed_task();
+        let mut trace = ExecutionTrace::new("task-governed", "session-engine", "goal");
+        let step = task.plan.steps[0].clone();
+        let policy = build_governance_profile(true).stages[0].clone();
+        let response = crate::adapters::governance_runtime::GovernanceRuntimeResponse {
+            status: GovernanceLifecycleState::GovernedReady,
+            approval_state: ApprovalState::NotNeeded,
+            run_ref: Some("canon-run-3".to_string()),
+            packet: Some(crate::domain::governance::GovernedStagePacket {
+                packet_ref: ".canon/runs/canon-run-3".to_string(),
+                runtime: GovernanceRuntimeKind::Canon,
+                canon_mode: Some(CanonMode::Discovery),
+                expected_document_refs: vec![".canon/runs/canon-run-3/discovery.md".to_string()],
+                document_refs: vec![".canon/runs/canon-run-3/discovery.md".to_string()],
+                readiness: PacketReadiness::Reusable,
+                missing_sections: Vec::new(),
+                headline: "discovery packet ready".to_string(),
+                reason_code: Some("packet_ready".to_string()),
+                authority_governance: None,
+            }),
+            reason_code: Some("packet_ready".to_string()),
+            message: "canon packet ready".to_string(),
+        };
+
+        let result = orchestrator
+            .apply_governance_response(
+                &mut task,
+                &mut trace,
+                &step,
+                "bug-fix:investigate".to_string(),
+                &policy,
+                GovernanceRuntimeKind::Canon,
+                "attempt-authority-missing".to_string(),
+                None,
+                None,
+                response,
+            )
+            .unwrap();
+
+        // Required Canon stages fail closed when authority metadata is absent.
+        assert!(matches!(
+            result,
+            crate::orchestrator::governance::GovernanceStepDecision::Terminal(_)
+        ));
+        assert_eq!(task.status, TaskStatus::Failed);
     }
 
     #[test]
@@ -1942,7 +2028,7 @@ mod tests {
         fs::write(&document_path, "# Discovery\n\nCredible governed evidence.\n").unwrap();
         let script = write_shell_script(
             "engine-canon-runtime-command",
-            "#!/bin/sh\ncat >/dev/null\nprintf '%s' '{\"status\":\"governed_ready\",\"run_ref\":\"canon-run-1\",\"packet_ref\":\".canon/runs/canon-run-1\",\"expected_document_refs\":[\".canon/runs/canon-run-1/discovery.md\"],\"document_refs\":[\".canon/runs/canon-run-1/discovery.md\"],\"approval_state\":\"not_needed\",\"packet_readiness\":\"reusable\",\"missing_sections\":[],\"headline\":\"discovery packet ready\",\"reason_code\":\"packet_ready\",\"message\":\"Canon completed the governed stage\"}'\n",
+            "#!/bin/sh\ncat >/dev/null\nprintf '%s' '{\"status\":\"governed_ready\",\"run_ref\":\"canon-run-1\",\"packet_ref\":\".canon/runs/canon-run-1\",\"expected_document_refs\":[\".canon/runs/canon-run-1/discovery.md\"],\"document_refs\":[\".canon/runs/canon-run-1/discovery.md\"],\"approval_state\":\"not_needed\",\"packet_readiness\":\"reusable\",\"missing_sections\":[],\"authority_governance\":{\"contract_line\":\"authority-governance-v1\",\"authority_zone\":\"green\",\"change_class\":\"low-impact\",\"intended_persona\":\"delivery-engineer\",\"approval_state\":\"not_needed\",\"packet_readiness\":\"reusable\",\"risk\":\"low-impact\"},\"headline\":\"discovery packet ready\",\"reason_code\":\"packet_ready\",\"message\":\"Canon completed the governed stage\"}'\n",
         );
         let orchestrator = build_governed_orchestrator_for_stage(
             "investigate",

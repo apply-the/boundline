@@ -1,9 +1,9 @@
-# Configuration in Boundline 0.55.0
+# Configuration in Boundline 0.56.0
 
-Boundline `0.55.0` keeps a user-friendly setup and routing configuration surface
+Boundline `0.56.0` keeps a user-friendly setup and routing configuration surface
 for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
-The `0.55.0` release keeps configuration behavior stable while preserving the
+The `0.56.0` release keeps configuration behavior stable while preserving the
 same governed routing defaults across earlier `bug-fix:investigate` work,
 later verify-stage `security-assessment`, workflow-aware projection of the
 same bounded governance state, continuity-aware read-side follow-up, the
@@ -13,6 +13,10 @@ surface. Negotiation still does not
 introduce a separate config file or routing key: capture derives acceptance
 boundaries from direct goals, authored briefs, and governance intent, while
 `run`, `status`, `next`, and `inspect` simply project the resulting packet.
+
+The new authority-zoned council slice still follows the same rule: council
+profile, review independence, and review stop semantics are runtime-owned
+projection fields, not user-authored configuration keys.
 Context assembly also stays runtime-owned and inspectable rather than
 configuration-driven: planning derives one bounded context pack from workspace
 signals and persisted session evidence, while `run`, `status`, `next`, and

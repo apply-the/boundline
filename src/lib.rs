@@ -49,10 +49,12 @@ pub use domain::goal_plan::{
     ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan,
 };
 pub use domain::governance::{
-    ApprovalState, AutopilotAction, AutopilotDecisionRecord, CanonCapabilitySnapshot, CanonMode,
-    CanonRuntimeConfig, GovernanceLifecycleState, GovernanceProfile, GovernanceProfileError,
+    AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE, ApprovalState, AutopilotAction, AutopilotDecisionRecord,
+    CanonAuthorityGovernanceV1Envelope, CanonAuthorityZone, CanonCapabilitySnapshot,
+    CanonChangeClass, CanonIntendedPersona, CanonMode, CanonRiskClass, CanonRuntimeConfig,
+    CouncilProfile, GovernanceLifecycleState, GovernanceProfile, GovernanceProfileError,
     GovernanceRuntimeKind, GovernedStageCatalogEntry, GovernedStageCategory, GovernedStagePacket,
-    GovernedStageRecord, PacketReadiness, PacketReuseBinding, StageGovernancePolicy,
+    GovernedStageRecord, PacketReadiness, PacketReuseBinding, StageGovernancePolicy, StopSemantics,
     SystemContextBinding, autopilot_action_text, candidate_canon_modes, classify_packet_readiness,
     governed_stage_catalog, resolved_canon_mode, supported_canon_modes_for_stage,
     validate_canon_capabilities_for_mode,
@@ -84,11 +86,12 @@ pub use domain::project_index::{
     ProjectIndexSystem, resolve_project_doc_roots,
 };
 pub use domain::review::{
-    AdjudicationDefinition, ReviewOutcome, ReviewProfile, ReviewScenario, ReviewTrigger,
-    ReviewerDefinition, ReviewerDisposition, ReviewerFinding, ReviewerParticipation,
-    ReviewerParticipationStatus, VoteDecision, VoteResolution, VoteRuleDefinition, VoteStrategy,
-    VotingBoundaryDecision, VotingBoundaryInput, VotingBoundaryTrigger, VotingStageRisk,
-    voting_boundary_decision,
+    AdjudicationDefinition, CouncilAssemblyDecision, CouncilQuorumState, ReviewOutcome,
+    ReviewProfile, ReviewScenario, ReviewTrigger, ReviewerDefinition, ReviewerDisposition,
+    ReviewerFinding, ReviewerIndependenceState, ReviewerParticipation, ReviewerParticipationStatus,
+    VoteDecision, VoteResolution, VoteRuleDefinition, VoteStrategy, VotingBoundaryDecision,
+    VotingBoundaryInput, VotingBoundaryTrigger, VotingStageRisk, independence_guard,
+    resolve_council_assembly, voting_boundary_decision,
 };
 pub use domain::routing_decision::RoutingDecisionProjection;
 pub use domain::step::{

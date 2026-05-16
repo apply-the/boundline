@@ -5,6 +5,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::domain::governance::CouncilProfile;
+
 /// Conditions that can trigger a review flow.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -172,6 +174,86 @@ pub enum ReviewerDisposition {
     Block,
 }
 
+/// Finding severity per S3 §13 structured findings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FindingSeverity {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+impl FindingSeverity {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::Critical => "critical",
+        }
+    }
+}
+
+/// Confidence level attached to a reviewer finding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FindingConfidence {
+    Low,
+    Medium,
+    High,
+}
+
+impl FindingConfidence {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+        }
+    }
+}
+
+/// Producer response disposition per S3 §14 producer response protocol.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProducerResponseDisposition {
+    Accepted,
+    Rejected,
+    Deferred,
+}
+
+impl ProducerResponseDisposition {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Accepted => "accepted",
+            Self::Rejected => "rejected",
+            Self::Deferred => "deferred",
+        }
+    }
+}
+
+/// Adjudication decision outcome per S3 §15 stop semantics.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AdjudicationDecision {
+    Proceed,
+    Stop,
+    Escalate,
+    Remediate,
+}
+
+impl AdjudicationDecision {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Proceed => "proceed",
+            Self::Stop => "stop",
+            Self::Escalate => "escalate",
+            Self::Remediate => "remediate",
+        }
+    }
+}
+
 /// Strategy used to aggregate reviewer votes.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -207,6 +289,50 @@ pub enum ReviewerParticipationStatus {
     Completed,
     Failed,
     Omitted,
+}
+
+/// Independence result for the currently counted council members.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReviewerIndependenceState {
+    Passed,
+    Degraded,
+    Failed,
+}
+
+impl ReviewerIndependenceState {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Passed => "passed",
+            Self::Degraded => "degraded",
+            Self::Failed => "failed",
+        }
+    }
+
+    pub const fn blocks_progress(self) -> bool {
+        matches!(self, Self::Failed)
+    }
+}
+
+/// Whether the selected participants satisfy quorum for the current council profile.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CouncilQuorumState {
+    Met,
+    Unmet,
+}
+
+impl CouncilQuorumState {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Met => "met",
+            Self::Unmet => "unmet",
+        }
+    }
+
+    pub const fn blocks_progress(self) -> bool {
+        matches!(self, Self::Unmet)
+    }
 }
 
 /// One configured reviewer in a review profile.
@@ -247,9 +373,39 @@ pub struct ReviewerFinding {
     pub summary: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub details: Option<String>,
+    /// Runtime role of the reviewer (S3 §13).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_role: Option<String>,
+    /// Severity classification (S3 §13).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub severity: Option<FindingSeverity>,
+    /// Required action for concern or block findings (S3 §13).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub required_action: Option<String>,
+    /// Confidence of the finding (S3 §13).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<FindingConfidence>,
+    /// Evidence references (S3 §13).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evidence_refs: Vec<String>,
 }
 
 impl ReviewerFinding {
+    /// Create a minimal finding with only the required fields.
+    pub fn new(reviewer_id: String, disposition: ReviewerDisposition, summary: String) -> Self {
+        Self {
+            reviewer_id,
+            disposition,
+            summary,
+            details: None,
+            runtime_role: None,
+            severity: None,
+            required_action: None,
+            confidence: None,
+            evidence_refs: Vec::new(),
+        }
+    }
+
     /// Validates the finding against the configured reviewer set.
     pub fn validate(
         &self,
@@ -338,6 +494,25 @@ pub struct ReviewerParticipation {
     pub effective_route: Option<String>,
 }
 
+/// Persisted local council-assembly decision for one resolved review boundary.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CouncilAssemblyDecision {
+    pub profile: CouncilProfile,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mandatory_roles: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub selected_roles: Vec<String>,
+    pub independence_state: ReviewerIndependenceState,
+    pub quorum_state: CouncilQuorumState,
+    pub selection_summary: String,
+}
+
+impl CouncilAssemblyDecision {
+    pub const fn blocks_progress(&self) -> bool {
+        self.independence_state.blocks_progress() || self.quorum_state.blocks_progress()
+    }
+}
+
 /// Vote aggregation policy attached to a review profile.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct VoteRuleDefinition {
@@ -414,8 +589,6 @@ impl VoteRuleDefinition {
             })
             .collect::<Vec<_>>();
 
-        ensure_distinct_effective_routes(&participants)?;
-
         let decision = if self.reject_on_blocking && blocks > 0 {
             VoteDecision::Rejected
         } else if approvals * 2 > total {
@@ -451,10 +624,137 @@ fn effective_route_for_reviewer(
     })
 }
 
-fn ensure_distinct_effective_routes(
+/// Returns the reviewer independence result for the counted council members.
+///
+/// Vote resolution stays focused on tallying findings. Independence is enforced
+/// separately when a specific council profile is assembled.
+pub fn independence_guard(
     participants: &[ReviewerParticipation],
+    required_distinct_reviewers: usize,
+) -> ReviewerIndependenceState {
+    if required_distinct_reviewers == 0 {
+        return ReviewerIndependenceState::Passed;
+    }
+
+    let completed = participants
+        .iter()
+        .filter(|participant| participant.status == ReviewerParticipationStatus::Completed)
+        .collect::<Vec<_>>();
+    if completed.len() < required_distinct_reviewers {
+        return ReviewerIndependenceState::Failed;
+    }
+
+    let distinct_routes = completed
+        .iter()
+        .filter_map(|participant| participant.effective_route.as_deref())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .collect::<BTreeSet<_>>();
+
+    if distinct_routes.len() >= required_distinct_reviewers {
+        ReviewerIndependenceState::Passed
+    } else if required_distinct_reviewers == 1 {
+        ReviewerIndependenceState::Degraded
+    } else {
+        ReviewerIndependenceState::Failed
+    }
+}
+
+/// Resolves the local council-assembly decision for the selected participants.
+///
+/// The first slice uses the configured reviewer order as the deterministic
+/// mandatory-role contract because runtime-role selection remains local.
+pub fn resolve_council_assembly(
+    profile: CouncilProfile,
+    reviewers: &[ReviewerDefinition],
+    participants: &[ReviewerParticipation],
+) -> Result<CouncilAssemblyDecision, ReviewProfileError> {
+    let required_reviewers = required_reviewers_for_profile(profile);
+    if reviewers.len() < required_reviewers {
+        return Err(ReviewProfileError::InsufficientCouncilReviewers {
+            profile,
+            required: required_reviewers,
+            found: reviewers.len(),
+        });
+    }
+
+    let mandatory_roles = reviewers
+        .iter()
+        .take(required_reviewers)
+        .map(|reviewer| reviewer.role.clone())
+        .collect::<Vec<_>>();
+    let completed_reviewer_ids = participants
+        .iter()
+        .filter(|participant| participant.status == ReviewerParticipationStatus::Completed)
+        .map(|participant| participant.reviewer_id.as_str())
+        .collect::<BTreeSet<_>>();
+    let selected_roles = reviewers
+        .iter()
+        .filter(|reviewer| completed_reviewer_ids.contains(reviewer.reviewer_id.as_str()))
+        .map(|reviewer| reviewer.role.clone())
+        .collect::<Vec<_>>();
+    let completed_count = completed_reviewer_ids.len();
+    let quorum_state = if completed_count >= required_reviewers {
+        CouncilQuorumState::Met
+    } else {
+        CouncilQuorumState::Unmet
+    };
+    if quorum_state.blocks_progress() {
+        return Err(ReviewProfileError::InsufficientCouncilReviewers {
+            profile,
+            required: required_reviewers,
+            found: completed_count,
+        });
+    }
+
+    for mandatory_role in &mandatory_roles {
+        if !selected_roles.contains(mandatory_role) {
+            return Err(ReviewProfileError::MissingMandatoryReviewerRole {
+                profile,
+                role: mandatory_role.clone(),
+            });
+        }
+    }
+
+    ensure_effective_routes_present(participants, required_reviewers)?;
+    let independence_state = independence_guard(participants, required_reviewers);
+    if independence_state.blocks_progress() {
+        if let Some((first_reviewer, second_reviewer, route)) =
+            first_blocking_duplicate_route(participants, required_reviewers)
+        {
+            return Err(ReviewProfileError::DuplicateEffectiveReviewerRoute {
+                first_reviewer,
+                second_reviewer,
+                route,
+            });
+        }
+
+        return Err(ReviewProfileError::FailedReviewerIndependence(profile));
+    }
+
+    Ok(CouncilAssemblyDecision {
+        profile,
+        mandatory_roles,
+        selected_roles: selected_roles.clone(),
+        independence_state,
+        quorum_state,
+        selection_summary: format!(
+            "profile={} quorum={} independence={} selected_roles={}",
+            council_profile_id(profile),
+            quorum_state.as_str(),
+            independence_state.as_str(),
+            join_roles(&selected_roles)
+        ),
+    })
+}
+
+fn ensure_effective_routes_present(
+    participants: &[ReviewerParticipation],
+    required_reviewers: usize,
 ) -> Result<(), ReviewProfileError> {
-    let mut seen_routes = BTreeMap::<String, String>::new();
+    if required_reviewers <= 1 {
+        return Ok(());
+    }
 
     for participant in participants
         .iter()
@@ -467,19 +767,61 @@ fn ensure_distinct_effective_routes(
                 participant.reviewer_id.clone(),
             ));
         };
+        let _ = route;
+    }
+
+    Ok(())
+}
+
+fn first_blocking_duplicate_route(
+    participants: &[ReviewerParticipation],
+    required_distinct_reviewers: usize,
+) -> Option<(String, String, String)> {
+    if required_distinct_reviewers <= 1 {
+        return None;
+    }
+
+    let mut seen_routes = BTreeMap::<String, String>::new();
+    for participant in participants
+        .iter()
+        .filter(|participant| participant.status == ReviewerParticipationStatus::Completed)
+    {
+        let route = participant.effective_route.as_deref()?.trim();
+        if route.is_empty() {
+            continue;
+        }
 
         if let Some(first_reviewer) =
             seen_routes.insert(route.to_string(), participant.reviewer_id.clone())
         {
-            return Err(ReviewProfileError::DuplicateEffectiveReviewerRoute {
-                first_reviewer,
-                second_reviewer: participant.reviewer_id.clone(),
-                route: route.to_string(),
-            });
+            return Some((first_reviewer, participant.reviewer_id.clone(), route.to_string()));
         }
     }
 
-    Ok(())
+    None
+}
+
+fn required_reviewers_for_profile(profile: CouncilProfile) -> usize {
+    match profile {
+        CouncilProfile::None | CouncilProfile::RestrictedManual => 0,
+        CouncilProfile::LightSingle => 1,
+        CouncilProfile::YellowPair => 2,
+        CouncilProfile::RedFive => 5,
+    }
+}
+
+fn council_profile_id(profile: CouncilProfile) -> &'static str {
+    match profile {
+        CouncilProfile::None => "none",
+        CouncilProfile::LightSingle => "light_single",
+        CouncilProfile::YellowPair => "yellow_pair",
+        CouncilProfile::RedFive => "red_five",
+        CouncilProfile::RestrictedManual => "restricted_manual",
+    }
+}
+
+fn join_roles(roles: &[String]) -> String {
+    if roles.is_empty() { "none".to_string() } else { roles.join(", ") }
 }
 
 /// Optional adjudication configuration for tied or contested votes.
@@ -512,6 +854,25 @@ impl AdjudicationDefinition {
 
         Ok(())
     }
+}
+
+/// Producer-side response to a concern or blocking finding (S3 §14).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProducerResponse {
+    pub finding_id: String,
+    pub disposition: ProducerResponseDisposition,
+    pub rationale: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_action: Option<String>,
+}
+
+/// Persisted adjudication outcome for mixed or blocking council results.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdjudicationOutcome {
+    pub decision: AdjudicationDecision,
+    pub rationale: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unresolved_findings: Vec<String>,
 }
 
 /// Aggregated result of applying a vote rule to reviewer findings.
@@ -636,6 +997,12 @@ pub enum ReviewProfileError {
         second_reviewer: String,
         route: String,
     },
+    #[error("council profile '{profile}' requires {required} completed reviewers, found {found}")]
+    InsufficientCouncilReviewers { profile: CouncilProfile, required: usize, found: usize },
+    #[error("council profile '{profile}' requires mandatory reviewer role '{role}'")]
+    MissingMandatoryReviewerRole { profile: CouncilProfile, role: String },
+    #[error("council profile '{0}' failed reviewer independence")]
+    FailedReviewerIndependence(CouncilProfile),
     #[error(
         "scenario for trigger '{0:?}' cannot define an adjudication finding when adjudication is disabled"
     )]
@@ -671,18 +1038,16 @@ mod tests {
 
     fn sample_findings() -> Vec<ReviewerFinding> {
         vec![
-            ReviewerFinding {
-                reviewer_id: "safety".to_string(),
-                disposition: ReviewerDisposition::Approve,
-                summary: "No blocking issues".to_string(),
-                details: None,
-            },
-            ReviewerFinding {
-                reviewer_id: "maintainability".to_string(),
-                disposition: ReviewerDisposition::Approve,
-                summary: "Looks maintainable".to_string(),
-                details: None,
-            },
+            ReviewerFinding::new(
+                "safety".to_string(),
+                ReviewerDisposition::Approve,
+                "No blocking issues".to_string(),
+            ),
+            ReviewerFinding::new(
+                "maintainability".to_string(),
+                ReviewerDisposition::Approve,
+                "Looks maintainable".to_string(),
+            ),
         ]
     }
 
@@ -695,12 +1060,11 @@ mod tests {
         let scenario = ReviewScenario {
             trigger: ReviewTrigger::PrReady,
             findings: sample_findings(),
-            adjudication_finding: Some(ReviewerFinding {
-                reviewer_id: "arbiter".to_string(),
-                disposition: ReviewerDisposition::Approve,
-                summary: "Break the tie".to_string(),
-                details: None,
-            }),
+            adjudication_finding: Some(ReviewerFinding::new(
+                "arbiter".to_string(),
+                ReviewerDisposition::Approve,
+                "Break the tie".to_string(),
+            )),
         };
 
         assert!(scenario.validate(&triggers, &reviewer_ids, &adjudication).is_ok());
@@ -714,12 +1078,11 @@ mod tests {
         let scenario = ReviewScenario {
             trigger: ReviewTrigger::PrReady,
             findings: sample_findings(),
-            adjudication_finding: Some(ReviewerFinding {
-                reviewer_id: "arbiter".to_string(),
-                disposition: ReviewerDisposition::Approve,
-                summary: "Break the tie".to_string(),
-                details: None,
-            }),
+            adjudication_finding: Some(ReviewerFinding::new(
+                "arbiter".to_string(),
+                ReviewerDisposition::Approve,
+                "Break the tie".to_string(),
+            )),
         };
 
         let error = scenario.validate(&triggers, &reviewer_ids, &adjudication).unwrap_err();
@@ -758,24 +1121,21 @@ mod tests {
             },
         ];
         let findings = vec![
-            ReviewerFinding {
-                reviewer_id: "safety".to_string(),
-                disposition: ReviewerDisposition::Block,
-                summary: "Unsafe".to_string(),
-                details: None,
-            },
-            ReviewerFinding {
-                reviewer_id: "maintainability".to_string(),
-                disposition: ReviewerDisposition::Block,
-                summary: "Hard to maintain".to_string(),
-                details: None,
-            },
-            ReviewerFinding {
-                reviewer_id: "ux".to_string(),
-                disposition: ReviewerDisposition::Approve,
-                summary: "Looks fine from UX".to_string(),
-                details: None,
-            },
+            ReviewerFinding::new(
+                "safety".to_string(),
+                ReviewerDisposition::Block,
+                "Unsafe".to_string(),
+            ),
+            ReviewerFinding::new(
+                "maintainability".to_string(),
+                ReviewerDisposition::Block,
+                "Hard to maintain".to_string(),
+            ),
+            ReviewerFinding::new(
+                "ux".to_string(),
+                ReviewerDisposition::Approve,
+                "Looks fine from UX".to_string(),
+            ),
         ];
 
         let resolution =
@@ -810,18 +1170,16 @@ mod tests {
             },
         ];
         let findings = vec![
-            ReviewerFinding {
-                reviewer_id: "safety".to_string(),
-                disposition: ReviewerDisposition::Approve,
-                summary: "No blockers".to_string(),
-                details: None,
-            },
-            ReviewerFinding {
-                reviewer_id: "maintainability".to_string(),
-                disposition: ReviewerDisposition::Concern,
-                summary: "Watch maintainability".to_string(),
-                details: None,
-            },
+            ReviewerFinding::new(
+                "safety".to_string(),
+                ReviewerDisposition::Approve,
+                "No blockers".to_string(),
+            ),
+            ReviewerFinding::new(
+                "maintainability".to_string(),
+                ReviewerDisposition::Concern,
+                "Watch maintainability".to_string(),
+            ),
         ];
 
         let resolution =
@@ -836,7 +1194,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_requires_effective_route_for_completed_reviewers() {
+    fn resolve_preserves_missing_effective_route_for_completed_reviewers() {
         let reviewers = vec![
             ReviewerDefinition {
                 reviewer_id: "safety".to_string(),
@@ -851,16 +1209,17 @@ mod tests {
                 weight: 1,
             },
         ];
-        let findings = vec![ReviewerFinding {
-            reviewer_id: "safety".to_string(),
-            disposition: ReviewerDisposition::Approve,
-            summary: "No blockers".to_string(),
-            details: None,
-        }];
+        let findings = vec![ReviewerFinding::new(
+            "safety".to_string(),
+            ReviewerDisposition::Approve,
+            "No blockers".to_string(),
+        )];
 
-        let error = VoteRuleDefinition::default().resolve(&reviewers, &findings, None).unwrap_err();
+        let resolution =
+            VoteRuleDefinition::default().resolve(&reviewers, &findings, None).unwrap();
 
-        assert_eq!(error, ReviewProfileError::MissingEffectiveReviewerRoute("safety".to_string()));
+        assert_eq!(resolution.decision, VoteDecision::Accepted);
+        assert_eq!(resolution.participants[0].effective_route, None);
     }
 
     #[test]
@@ -921,15 +1280,34 @@ mod tests {
     }
 
     #[test]
-    fn resolve_rejects_duplicate_effective_routes() {
+    fn independence_guard_degrades_light_single_without_route() {
+        let participants = vec![ReviewerParticipation {
+            reviewer_id: "safety".to_string(),
+            status: ReviewerParticipationStatus::Completed,
+            reason: None,
+            effective_route: None,
+        }];
+
+        assert_eq!(independence_guard(&participants, 1), ReviewerIndependenceState::Degraded);
+    }
+
+    #[test]
+    fn resolve_council_assembly_rejects_duplicate_effective_routes() {
         let routes = BTreeMap::from([
             ("safety".to_string(), "copilot/gpt-5.5".to_string()),
             ("maintainability".to_string(), "copilot/gpt-5.5".to_string()),
         ]);
 
-        let error = VoteRuleDefinition::default()
+        let resolution = VoteRuleDefinition::default()
             .resolve(&sample_reviewers(), &sample_findings(), Some(&routes))
-            .unwrap_err();
+            .unwrap();
+
+        let error = resolve_council_assembly(
+            CouncilProfile::YellowPair,
+            &sample_reviewers(),
+            &resolution.participants,
+        )
+        .unwrap_err();
 
         assert!(matches!(
             error,
@@ -941,6 +1319,112 @@ mod tests {
                 && second_reviewer == "maintainability"
                 && route == "copilot/gpt-5.5"
         ));
+    }
+
+    #[test]
+    fn resolve_council_assembly_allows_extra_duplicate_routes_when_quorum_is_still_independent() {
+        let reviewers = vec![
+            ReviewerDefinition {
+                reviewer_id: "safety".to_string(),
+                role: "Safety".to_string(),
+                source: Some("copilot/gpt-5.5".to_string()),
+                weight: 1,
+            },
+            ReviewerDefinition {
+                reviewer_id: "maintainability".to_string(),
+                role: "Maintainability".to_string(),
+                source: Some("claude/sonnet-4.6".to_string()),
+                weight: 1,
+            },
+            ReviewerDefinition {
+                reviewer_id: "ux".to_string(),
+                role: "UX".to_string(),
+                source: Some("copilot/gpt-5.5".to_string()),
+                weight: 1,
+            },
+        ];
+        let findings = vec![
+            ReviewerFinding::new(
+                "safety".to_string(),
+                ReviewerDisposition::Approve,
+                "Looks safe".to_string(),
+            ),
+            ReviewerFinding::new(
+                "maintainability".to_string(),
+                ReviewerDisposition::Approve,
+                "Looks maintainable".to_string(),
+            ),
+            ReviewerFinding::new(
+                "ux".to_string(),
+                ReviewerDisposition::Approve,
+                "Looks fine".to_string(),
+            ),
+        ];
+
+        let resolution =
+            VoteRuleDefinition::default().resolve(&reviewers, &findings, None).unwrap();
+        let decision = resolve_council_assembly(
+            CouncilProfile::YellowPair,
+            &reviewers,
+            &resolution.participants,
+        )
+        .unwrap();
+
+        assert_eq!(decision.independence_state, ReviewerIndependenceState::Passed);
+        assert_eq!(decision.quorum_state, CouncilQuorumState::Met);
+        assert_eq!(
+            decision.mandatory_roles,
+            vec!["Safety".to_string(), "Maintainability".to_string()]
+        );
+    }
+
+    #[test]
+    fn resolve_council_assembly_rejects_missing_mandatory_roles() {
+        let reviewers = vec![
+            ReviewerDefinition {
+                reviewer_id: "safety".to_string(),
+                role: "Safety".to_string(),
+                source: Some("copilot/gpt-5.5".to_string()),
+                weight: 1,
+            },
+            ReviewerDefinition {
+                reviewer_id: "maintainability".to_string(),
+                role: "Maintainability".to_string(),
+                source: Some("claude/sonnet-4.6".to_string()),
+                weight: 1,
+            },
+            ReviewerDefinition {
+                reviewer_id: "ux".to_string(),
+                role: "UX".to_string(),
+                source: Some("gemini/gemini-2.5-pro".to_string()),
+                weight: 1,
+            },
+        ];
+        let participants = vec![
+            ReviewerParticipation {
+                reviewer_id: "safety".to_string(),
+                status: ReviewerParticipationStatus::Completed,
+                reason: None,
+                effective_route: Some("copilot/gpt-5.5".to_string()),
+            },
+            ReviewerParticipation {
+                reviewer_id: "ux".to_string(),
+                status: ReviewerParticipationStatus::Completed,
+                reason: None,
+                effective_route: Some("gemini/gemini-2.5-pro".to_string()),
+            },
+        ];
+
+        let error = resolve_council_assembly(CouncilProfile::YellowPair, &reviewers, &participants)
+            .unwrap_err();
+
+        assert_eq!(
+            error,
+            ReviewProfileError::MissingMandatoryReviewerRole {
+                profile: CouncilProfile::YellowPair,
+                role: "Maintainability".to_string(),
+            }
+        );
     }
 
     #[test]

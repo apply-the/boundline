@@ -4,9 +4,9 @@ This directory contains Markdown-based commands to run `boundline` from various 
 
 The primary delivery surface is session-native: `start -> capture -> plan -> run -> status -> next -> inspect` against `<workspace>/.boundline/session.json` and `<workspace>/.boundline/traces/`.
 
-In `0.55.0`, shell-enabled assistant flows should prefer `--json` for the session-native lifecycle commands plus `run`, `status`, `next`, and `inspect`. Treat `command_name`, `exit_status`, `rendered_output`, `trace_location`, `session_status`, and `trace_summary` as the authoritative host envelope when those fields are present, and use `rendered_output` only as the human-readable companion.
+In `0.56.0`, shell-enabled assistant flows should prefer `--json` for the session-native lifecycle commands plus `run`, `status`, `next`, and `inspect`. Treat `command_name`, `exit_status`, `rendered_output`, `trace_location`, `session_status`, and `trace_summary` as the authoritative host envelope when those fields are present, and use `rendered_output` only as the human-readable companion.
 
-In `0.55.0`, assistant plugin packages expose Boundline through `.claude-plugin/`,
+In `0.56.0`, assistant plugin packages expose Boundline through `.claude-plugin/`,
 `.codex-plugin/`, `.cursor-plugin/`, and `.copilot-prompts/`. Package commands
 use `/boundline:*` names and must preserve `.boundline/session.json`,
 CLI-reported `next_command`, and explicit blocked, clarification-required,
@@ -14,6 +14,11 @@ failed, exhausted, and terminal states. `/boundline:govern` is conditional:
 Canon governance is only visible when the workspace is configured for it or the
 user explicitly asks for governed delivery.
 Canon is the optional governed companion runtime.
+
+The same release adds explicit review-council projection fields such as
+`latest_review_council_profile`, `latest_review_independence_state`, and
+`latest_review_stop_semantics`. Preserve them exactly when present: they are the
+operator-facing explanation for why a bounded review can proceed, wait, or stop.
 
 In the same release, bundled guidance and guardian standards can arrive through
 directory-based catalog packs such as `assistant/packs/guidance-catalog/`.

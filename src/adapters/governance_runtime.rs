@@ -1,3 +1,4 @@
+use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -6,9 +7,9 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::domain::governance::{
-    ApprovalState, CanonCapabilitySnapshot, CanonMode, GovernanceLifecycleState,
-    GovernanceRuntimeKind, GovernedStagePacket, PacketReadiness, SystemContextBinding,
-    classify_packet_readiness, derived_packet_missing_sections,
+    ApprovalState, CanonAuthorityGovernanceV1Envelope, CanonCapabilitySnapshot, CanonMode,
+    GovernanceLifecycleState, GovernanceRuntimeKind, GovernedStagePacket, PacketReadiness,
+    SystemContextBinding, classify_packet_readiness, derived_packet_missing_sections,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -173,6 +174,7 @@ impl GovernanceRuntime for LocalGovernanceRuntime {
             missing_sections: Vec::new(),
             headline: format!("local governance packet ready for {}", request.stage_key),
             reason_code: None,
+            authority_governance: None,
         };
 
         let status = if packet.readiness == PacketReadiness::Reusable {
@@ -354,8 +356,23 @@ struct CanonCliWireResponse {
     pub headline: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason_code: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authority_governance: Option<CanonAuthorityGovernanceV1Envelope>,
     pub message: String,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+struct CanonPacketMetadataEnvelope {
+    pub metadata: CanonPacketMetadata,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+struct CanonPacketMetadata {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authority_governance: Option<CanonAuthorityGovernanceV1Envelope>,
+}
+
+const CANON_PACKET_METADATA_FILE_NAME: &str = "packet-metadata.json";
 
 fn request_kind_text(kind: GovernanceRequestKind) -> &'static str {
     match kind {
@@ -531,6 +548,12 @@ fn normalize_canon_response(
             &wire.missing_sections,
             wire.packet_readiness,
         );
+        let authority_governance = wire.authority_governance.clone().or_else(|| {
+            read_authority_governance_from_packet_metadata(
+                Path::new(&request.workspace_ref),
+                packet_ref,
+            )
+        });
 
         GovernedStagePacket {
             packet_ref: packet_ref.clone(),
@@ -542,6 +565,7 @@ fn normalize_canon_response(
             missing_sections,
             headline: wire.headline.clone().unwrap_or_else(|| wire.message.clone()),
             reason_code: wire.reason_code.clone(),
+            authority_governance,
         }
     });
 
@@ -562,6 +586,25 @@ fn normalize_canon_response(
         reason_code: wire.reason_code,
         message,
     }
+}
+
+fn read_authority_governance_from_packet_metadata(
+    workspace_ref: &Path,
+    packet_ref: &str,
+) -> Option<CanonAuthorityGovernanceV1Envelope> {
+    let path = packet_metadata_path(workspace_ref, packet_ref);
+    let contents = fs::read(path).ok()?;
+    let envelope = serde_json::from_slice::<CanonPacketMetadataEnvelope>(&contents).ok()?;
+    envelope.metadata.authority_governance
+}
+
+fn packet_metadata_path(workspace_ref: &Path, packet_ref: &str) -> PathBuf {
+    let packet_root = if Path::new(packet_ref).is_absolute() {
+        PathBuf::from(packet_ref)
+    } else {
+        workspace_ref.join(packet_ref)
+    };
+    packet_root.join(CANON_PACKET_METADATA_FILE_NAME)
 }
 
 fn blocked_canon_response(message: String) -> GovernanceRuntimeResponse {
@@ -611,7 +654,9 @@ mod tests {
         parse_canon_response, query_canon_capabilities,
     };
     use crate::domain::governance::{
-        ApprovalState, CanonMode, GovernanceLifecycleState, PacketReadiness, SystemContextBinding,
+        AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE, ApprovalState, CanonAuthorityZone, CanonChangeClass,
+        CanonIntendedPersona, CanonMode, CanonRiskClass, CanonStageRoleHintKind,
+        GovernanceLifecycleState, PacketReadiness, SystemContextBinding,
     };
 
     fn temp_workspace(prefix: &str) -> std::path::PathBuf {
@@ -683,6 +728,72 @@ mod tests {
     }
 
     #[test]
+    fn parse_canon_response_reads_authority_governance_from_packet_metadata() {
+        let workspace = temp_workspace("canon-governance-runtime-authority");
+        let packet_ref = "canon/run-789/verification";
+        let document_ref = format!("{packet_ref}/verification.md");
+        let document_path = workspace.join(&document_ref);
+        let metadata_path = workspace.join(packet_ref).join("packet-metadata.json");
+        fs::create_dir_all(document_path.parent().unwrap()).unwrap();
+        fs::write(&document_path, "# Verification\n\nCredible validation evidence.").unwrap();
+        fs::write(
+            &metadata_path,
+            serde_json::to_string_pretty(&serde_json::json!({
+                "run_id": "run-789",
+                "mode": "verification",
+                "metadata": {
+                    "authority_governance": {
+                        "contract_line": AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE,
+                        "authority_zone": "yellow",
+                        "change_class": "systemic-impact",
+                        "intended_persona": "system-architect",
+                        "approval_state": "granted",
+                        "packet_readiness": "reusable",
+                        "risk": "systemic-impact",
+                        "persona_anti_behaviors": ["unbounded implementation detail"],
+                        "primary_artifact": "verification.md",
+                        "artifact_order": ["verification.md"],
+                        "promotion_refs": ["canon://promotions/run-789"],
+                        "stage_role_hints": [
+                            {
+                                "hint_kind": "reviewer-capability",
+                                "value": "independent-review",
+                                "rationale": "Require independent validation"
+                            }
+                        ]
+                    }
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let request = request(workspace.to_string_lossy().as_ref());
+        let stdout = format!(
+            "{{\"status\":\"governed_ready\",\"approval_state\":\"granted\",\"message\":\"Canon verified the stage\",\"run_ref\":\"run-789\",\"packet_ref\":\"{packet_ref}\",\"expected_document_refs\":[\"{document_ref}\"],\"document_refs\":[\"{document_ref}\"],\"packet_readiness\":\"reusable\",\"headline\":\"Verification packet ready\",\"reason_code\":\"packet_ready\"}}"
+        );
+
+        let response = parse_canon_response(&request, stdout.as_bytes()).unwrap();
+        let packet = response.packet.expect("packet should be present");
+        let authority = packet.authority_governance.expect("authority should be present");
+
+        assert_eq!(authority.contract_line, AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE);
+        assert_eq!(authority.authority_zone, CanonAuthorityZone::Yellow);
+        assert_eq!(authority.change_class, CanonChangeClass::SystemicImpact);
+        assert_eq!(authority.intended_persona, CanonIntendedPersona::SystemArchitect);
+        assert_eq!(authority.risk, CanonRiskClass::SystemicImpact);
+        assert_eq!(authority.primary_artifact.as_deref(), Some("verification.md"));
+        assert_eq!(authority.stage_role_hints.len(), 1);
+        assert_eq!(
+            authority.stage_role_hints[0].hint_kind,
+            CanonStageRoleHintKind::ReviewerCapability
+        );
+        assert_eq!(authority.stage_role_hints[0].value, "independent-review");
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
     fn normalize_canon_response_blocks_non_reusable_ready_packet() {
         let workspace = temp_workspace("canon-governance-runtime-blocked");
         let request = request(workspace.to_string_lossy().as_ref());
@@ -697,6 +808,7 @@ mod tests {
             missing_sections: vec!["summary".to_string()],
             headline: Some("Verification packet incomplete".to_string()),
             reason_code: Some("missing_sections".to_string()),
+            authority_governance: None,
             message: "Canon produced an incomplete packet".to_string(),
         };
 

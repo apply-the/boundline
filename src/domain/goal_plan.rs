@@ -1217,6 +1217,7 @@ mod tests {
                 closure_status: None,
                 closure_findings: Vec::new(),
             }),
+            authority_provenance_lines: Vec::new(),
         });
 
         assert_eq!(
@@ -1406,6 +1407,7 @@ mod tests {
                 possible_actions: Vec::new(),
                 recommended_next_action: None,
                 evidence_summary: None,
+                authority_provenance_lines: Vec::new(),
             });
 
         assert_eq!(

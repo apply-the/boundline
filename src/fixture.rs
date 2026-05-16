@@ -2739,18 +2739,52 @@ fn resolve_review_vote(
         }
     };
 
-    if resolution
-        .participants
-        .iter()
-        .any(|participant| participant.status != ReviewerParticipationStatus::Completed)
-    {
-        return review_terminal_failure(
-            "incomplete_review_participation",
-            "one or more configured reviewers did not complete the review",
-            Some(trigger),
-            "review-voter",
-        );
-    }
+    let council_profile = active_review_council_profile(review, &request);
+    let stop_semantics = active_review_stop_semantics(council_profile, &request);
+    let council_decision = match crate::domain::review::resolve_council_assembly(
+        council_profile,
+        &review.reviewers,
+        &resolution.participants,
+    ) {
+        Ok(decision) => decision,
+        Err(
+            error @ (crate::domain::review::ReviewProfileError::MissingEffectiveReviewerRoute(_)
+            | crate::domain::review::ReviewProfileError::DuplicateEffectiveReviewerRoute {
+                ..
+            }
+            | crate::domain::review::ReviewProfileError::FailedReviewerIndependence(_)),
+        ) => {
+            return review_terminal_failure(
+                "non_independent_review_council",
+                format!("review council is not independent: {error}"),
+                Some(trigger),
+                "review-voter",
+            );
+        }
+        Err(
+            error @ (crate::domain::review::ReviewProfileError::InsufficientCouncilReviewers {
+                ..
+            }
+            | crate::domain::review::ReviewProfileError::MissingMandatoryReviewerRole {
+                ..
+            }),
+        ) => {
+            return review_terminal_failure(
+                "required_review_council_unavailable",
+                format!("required review council could not be assembled: {error}"),
+                Some(trigger),
+                "review-voter",
+            );
+        }
+        Err(error) => {
+            return review_terminal_failure(
+                "invalid_review_vote",
+                format!("review council could not be assembled: {error}"),
+                Some(trigger),
+                "review-voter",
+            );
+        }
+    };
 
     let mut state_patch = Map::new();
     state_patch.insert("latest_review_trigger".to_string(), json!(trigger));
@@ -2762,6 +2796,21 @@ fn resolve_review_vote(
         "latest_review_vote_resolution".to_string(),
         serde_json::to_value(&resolution).unwrap_or(Value::Null),
     );
+    state_patch.insert(
+        "latest_review_council_resolution".to_string(),
+        serde_json::to_value(&council_decision).unwrap_or(Value::Null),
+    );
+    state_patch
+        .insert("latest_review_council_profile".to_string(), json!(council_decision.profile));
+    state_patch.insert(
+        "latest_review_independence_state".to_string(),
+        json!(council_decision.independence_state),
+    );
+    state_patch.insert(
+        "latest_review_selection_summary".to_string(),
+        json!(council_decision.selection_summary),
+    );
+    state_patch.insert("latest_review_stop_semantics".to_string(), json!(stop_semantics));
     state_patch.insert("latest_review_vote".to_string(), json!(render_vote_summary(&resolution)));
     state_patch.insert("latest_review_vote_decision".to_string(), json!(resolution.decision));
 
@@ -2769,9 +2818,67 @@ fn resolve_review_vote(
         json!({
             "review_trigger": trigger,
             "vote": resolution,
+            "council": council_decision,
         }),
         state_patch,
     )
+}
+
+fn active_review_council_profile(
+    review: &ReviewProfile,
+    request: &StepExecutionRequest,
+) -> crate::domain::governance::CouncilProfile {
+    governed_council_profile_from_state(request).unwrap_or(match review.reviewers.len() {
+        0 => crate::domain::governance::CouncilProfile::None,
+        1 => crate::domain::governance::CouncilProfile::LightSingle,
+        2..=4 => crate::domain::governance::CouncilProfile::YellowPair,
+        _ => crate::domain::governance::CouncilProfile::RedFive,
+    })
+}
+
+fn governed_council_profile_from_state(
+    request: &StepExecutionRequest,
+) -> Option<crate::domain::governance::CouncilProfile> {
+    let packet =
+        request.task_snapshot.state.get("latest_governance_packet").cloned().and_then(|value| {
+            serde_json::from_value::<crate::domain::governance::GovernedStagePacket>(value).ok()
+        })?;
+    let authority = packet.authority_governance.as_ref()?;
+
+    Some(authority.control_resolution_for_stage(packet.canon_mode).council_profile)
+}
+
+fn active_review_stop_semantics(
+    council_profile: crate::domain::governance::CouncilProfile,
+    request: &StepExecutionRequest,
+) -> crate::domain::governance::StopSemantics {
+    governed_stop_semantics_from_state(request).unwrap_or(match council_profile {
+        crate::domain::governance::CouncilProfile::None
+        | crate::domain::governance::CouncilProfile::LightSingle => {
+            crate::domain::governance::StopSemantics::Proceed
+        }
+        crate::domain::governance::CouncilProfile::YellowPair => {
+            crate::domain::governance::StopSemantics::CouncilRequired
+        }
+        crate::domain::governance::CouncilProfile::RedFive => {
+            crate::domain::governance::StopSemantics::HumanGateRequired
+        }
+        crate::domain::governance::CouncilProfile::RestrictedManual => {
+            crate::domain::governance::StopSemantics::HardStop
+        }
+    })
+}
+
+fn governed_stop_semantics_from_state(
+    request: &StepExecutionRequest,
+) -> Option<crate::domain::governance::StopSemantics> {
+    let packet =
+        request.task_snapshot.state.get("latest_governance_packet").cloned().and_then(|value| {
+            serde_json::from_value::<crate::domain::governance::GovernedStagePacket>(value).ok()
+        })?;
+    let authority = packet.authority_governance.as_ref()?;
+
+    Some(authority.control_resolution_for_stage(packet.canon_mode).stop_semantics)
 }
 
 fn finalize_workspace_review(
@@ -3472,36 +3579,32 @@ mod tests {
                 ReviewScenario {
                     trigger: ReviewTrigger::PrReady,
                     findings: vec![
-                        ReviewerFinding {
-                            reviewer_id: "safety".to_string(),
-                            disposition: ReviewerDisposition::Approve,
-                            summary: "No blocking issues".to_string(),
-                            details: None,
-                        },
-                        ReviewerFinding {
-                            reviewer_id: "maintainability".to_string(),
-                            disposition: ReviewerDisposition::Approve,
-                            summary: "Looks ready".to_string(),
-                            details: None,
-                        },
+                        ReviewerFinding::new(
+                            "safety".to_string(),
+                            ReviewerDisposition::Approve,
+                            "No blocking issues".to_string(),
+                        ),
+                        ReviewerFinding::new(
+                            "maintainability".to_string(),
+                            ReviewerDisposition::Approve,
+                            "Looks ready".to_string(),
+                        ),
                     ],
                     adjudication_finding: None,
                 },
                 ReviewScenario {
                     trigger: ReviewTrigger::ValidationFailed,
                     findings: vec![
-                        ReviewerFinding {
-                            reviewer_id: "safety".to_string(),
-                            disposition: ReviewerDisposition::Block,
-                            summary: "Validation still fails".to_string(),
-                            details: None,
-                        },
-                        ReviewerFinding {
-                            reviewer_id: "maintainability".to_string(),
-                            disposition: ReviewerDisposition::Concern,
-                            summary: "Retry after a fix".to_string(),
-                            details: None,
-                        },
+                        ReviewerFinding::new(
+                            "safety".to_string(),
+                            ReviewerDisposition::Block,
+                            "Validation still fails".to_string(),
+                        ),
+                        ReviewerFinding::new(
+                            "maintainability".to_string(),
+                            ReviewerDisposition::Concern,
+                            "Retry after a fix".to_string(),
+                        ),
                     ],
                     adjudication_finding: None,
                 },
@@ -3902,12 +4005,11 @@ mod tests {
         let review = profile.review.as_mut().unwrap();
         review.adjudication.enabled = true;
         review.adjudication.reviewer_id = Some("arbiter".to_string());
-        review.scenarios[0].adjudication_finding = Some(ReviewerFinding {
-            reviewer_id: "arbiter".to_string(),
-            disposition: ReviewerDisposition::Concern,
-            summary: "Needs one more human look".to_string(),
-            details: None,
-        });
+        review.scenarios[0].adjudication_finding = Some(ReviewerFinding::new(
+            "arbiter".to_string(),
+            ReviewerDisposition::Concern,
+            "Needs one more human look".to_string(),
+        ));
 
         let steps = build_review_steps_for_attempt(
             &profile,
@@ -4135,6 +4237,18 @@ mod tests {
             result.state_patch.as_ref().unwrap()["latest_review_vote_decision"],
             json!(VoteDecision::Accepted)
         );
+        assert_eq!(
+            result.state_patch.as_ref().unwrap()["latest_review_council_profile"],
+            json!(crate::domain::governance::CouncilProfile::YellowPair)
+        );
+        assert_eq!(
+            result.state_patch.as_ref().unwrap()["latest_review_independence_state"],
+            json!(crate::domain::review::ReviewerIndependenceState::Passed)
+        );
+        assert_eq!(
+            result.state_patch.as_ref().unwrap()["latest_review_stop_semantics"],
+            json!(crate::domain::governance::StopSemantics::CouncilRequired)
+        );
     }
 
     #[test]
@@ -4179,12 +4293,11 @@ mod tests {
 
         let mut missing_finding_profile = profile.clone();
         missing_finding_profile.review.as_mut().unwrap().scenarios[0].findings =
-            vec![ReviewerFinding {
-                reviewer_id: "maintainability".to_string(),
-                disposition: ReviewerDisposition::Approve,
-                summary: "Looks ready".to_string(),
-                details: None,
-            }];
+            vec![ReviewerFinding::new(
+                "maintainability".to_string(),
+                ReviewerDisposition::Approve,
+                "Looks ready".to_string(),
+            )];
         let missing_finding = review_workspace_fixture(
             &missing_finding_profile,
             request_with_state(json!({"reviewer_id": "safety"}), 1, state),
@@ -4201,12 +4314,11 @@ mod tests {
         let review = profile.review.as_mut().unwrap();
         review.adjudication.enabled = true;
         review.adjudication.reviewer_id = Some("arbiter".to_string());
-        review.scenarios[0].adjudication_finding = Some(ReviewerFinding {
-            reviewer_id: "arbiter".to_string(),
-            disposition: ReviewerDisposition::Concern,
-            summary: "Needs explicit adjudication".to_string(),
-            details: None,
-        });
+        review.scenarios[0].adjudication_finding = Some(ReviewerFinding::new(
+            "arbiter".to_string(),
+            ReviewerDisposition::Concern,
+            "Needs explicit adjudication".to_string(),
+        ));
 
         let mut state = Map::new();
         state.insert("next_review_trigger".to_string(), json!(ReviewTrigger::PrReady));
@@ -4247,12 +4359,11 @@ mod tests {
         invalid_state.insert("next_review_trigger".to_string(), json!(ReviewTrigger::PrReady));
         invalid_state.insert(
             "latest_review_findings".to_string(),
-            serde_json::to_value(vec![ReviewerFinding {
-                reviewer_id: "ghost".to_string(),
-                disposition: ReviewerDisposition::Approve,
-                summary: "Unknown reviewer".to_string(),
-                details: None,
-            }])
+            serde_json::to_value(vec![ReviewerFinding::new(
+                "ghost".to_string(),
+                ReviewerDisposition::Approve,
+                "Unknown reviewer".to_string(),
+            )])
             .unwrap(),
         );
         let invalid_vote =
@@ -4270,7 +4381,7 @@ mod tests {
         );
         let incomplete =
             resolve_review_vote(&profile, request_with_state(json!({}), 1, incomplete_state));
-        assert_eq!(incomplete.error.as_ref().unwrap().code, "incomplete_review_participation");
+        assert_eq!(incomplete.error.as_ref().unwrap().code, "required_review_council_unavailable");
     }
 
     #[test]
@@ -4300,6 +4411,52 @@ mod tests {
         let result = resolve_review_vote(&profile, request_with_state(json!({}), 1, state));
 
         assert_eq!(result.error.as_ref().unwrap().code, "non_independent_review_council");
+    }
+
+    #[test]
+    fn resolve_review_vote_rejects_missing_mandatory_role_for_pair_council() {
+        let mut profile = sample_review_profile(ExecutionCommand {
+            program: "cargo".to_string(),
+            args: vec!["test".to_string(), "--quiet".to_string()],
+        });
+        profile.review.as_mut().unwrap().reviewers.push(ReviewerDefinition {
+            reviewer_id: "ux".to_string(),
+            role: "UX".to_string(),
+            source: Some("gemini/gemini-2.5-pro".to_string()),
+            weight: 1,
+        });
+
+        let mut state = Map::new();
+        state.insert("next_review_trigger".to_string(), json!(ReviewTrigger::PrReady));
+        state.insert(
+            "latest_review_findings".to_string(),
+            serde_json::to_value(vec![
+                ReviewerFinding::new(
+                    "safety".to_string(),
+                    ReviewerDisposition::Approve,
+                    "Looks safe".to_string(),
+                ),
+                ReviewerFinding::new(
+                    "ux".to_string(),
+                    ReviewerDisposition::Approve,
+                    "Looks fine".to_string(),
+                ),
+            ])
+            .unwrap(),
+        );
+        state.insert(
+            "routing_projection".to_string(),
+            json!({
+                "effective_routing": [
+                    "reviewer:safety=copilot/gpt-5.5 [workspace]",
+                    "reviewer:ux=gemini/gemini-2.5-pro [workspace]"
+                ]
+            }),
+        );
+
+        let result = resolve_review_vote(&profile, request_with_state(json!({}), 1, state));
+
+        assert_eq!(result.error.as_ref().unwrap().code, "required_review_council_unavailable");
     }
 
     #[test]
@@ -4345,12 +4502,11 @@ mod tests {
         );
         block_state.insert(
             "latest_review_adjudication".to_string(),
-            serde_json::to_value(ReviewerFinding {
-                reviewer_id: "arbiter".to_string(),
-                disposition: ReviewerDisposition::Block,
-                summary: "Blocking concern".to_string(),
-                details: None,
-            })
+            serde_json::to_value(ReviewerFinding::new(
+                "arbiter".to_string(),
+                ReviewerDisposition::Block,
+                "Blocking concern".to_string(),
+            ))
             .unwrap(),
         );
         let block = super::finalize_workspace_review(
@@ -4367,12 +4523,11 @@ mod tests {
         );
         concern_state.insert(
             "latest_review_adjudication".to_string(),
-            serde_json::to_value(ReviewerFinding {
-                reviewer_id: "arbiter".to_string(),
-                disposition: ReviewerDisposition::Concern,
-                summary: "Escalate for follow-up".to_string(),
-                details: None,
-            })
+            serde_json::to_value(ReviewerFinding::new(
+                "arbiter".to_string(),
+                ReviewerDisposition::Concern,
+                "Escalate for follow-up".to_string(),
+            ))
             .unwrap(),
         );
         let concern = super::finalize_workspace_review(
@@ -4691,6 +4846,7 @@ mod tests {
                 missing_sections: Vec::new(),
                 headline: "investigation packet ready".to_string(),
                 reason_code: None,
+                authority_governance: None,
             })
             .unwrap(),
         );

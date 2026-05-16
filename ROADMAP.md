@@ -6,7 +6,7 @@ Canon is downstream from Boundline in this roadmap: Boundline thinks, decides, o
 
 Evolve Boundline into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.55.0
+## Current Status: v0.56.0
 
 Boundline now has its core session-native orchestration baseline, bounded workflow
 follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -22,12 +22,22 @@ surface in place, with Canon-default governed setup, runtime selection, and
 assistant-surface alignment now carried through the same primary workflow. The
 operator entry path is now stack-neutral for empty, non-Rust, and mixed
 repositories, with a clearer first-run CLI UX. That baseline now extends into
-Canon-promoted project-memory reuse. The `0.54.0` slice added guidance and
-guardian capabilities across planning, implementation, verification, and
-review. The current `0.55.0` work packages that guidance surface as a
-catalog-aware assistant pack with explicit manifests, canonical taxonomy,
-inspectable pack loading, and validation findings instead of relying only on
-flat pack manifests.
+Canon-promoted project-memory reuse, catalog-aware guidance packs, and the new
+authority-zoned council slice. The current `0.56.0` work makes authority
+control resolution, council assembly posture, and review stop semantics
+explicit in the same session-native and trace-native projection surfaces that
+already carry bounded planning and governance evidence.
+
+### Delivered in 0.56.0
+
+- Boundline now resolves Canon `authority-governance-v1` packets into explicit
+  control class, council profile, and stop semantics with stage-aware floors.
+- Review vote handling now separates tallying from council assembly, so quorum,
+  reviewer independence, and mandatory-role availability are projected as
+  explicit operator-facing review state.
+- Session-native `status`, `next`, and `inspect` now surface review council
+  profile, independence state, selection summary, and stop semantics alongside
+  the existing governance and catalog evidence.
 
 ### Delivered in 0.55.0
 

@@ -1044,6 +1044,30 @@ pub(crate) fn build_status_view_with_follow_up(
                 .get("latest_review_outcome")
                 .and_then(|value| value.as_str().map(str::to_string))
         }),
+        latest_review_council_profile: record.active_task.as_ref().and_then(|task| {
+            task.context
+                .state
+                .get("latest_review_council_profile")
+                .and_then(|value| value.as_str().map(str::to_string))
+        }),
+        latest_review_independence_state: record.active_task.as_ref().and_then(|task| {
+            task.context
+                .state
+                .get("latest_review_independence_state")
+                .and_then(|value| value.as_str().map(str::to_string))
+        }),
+        latest_review_stop_semantics: record.active_task.as_ref().and_then(|task| {
+            task.context
+                .state
+                .get("latest_review_stop_semantics")
+                .and_then(|value| value.as_str().map(str::to_string))
+        }),
+        latest_review_selection_summary: record.active_task.as_ref().and_then(|task| {
+            task.context
+                .state
+                .get("latest_review_selection_summary")
+                .and_then(|value| value.as_str().map(str::to_string))
+        }),
         latest_review_headline: record.active_task.as_ref().and_then(review_headline_from_task),
         latest_governance_stage: record
             .active_task
@@ -2080,6 +2104,21 @@ fn red_to_green_addition() {
             status.terminal_output
         );
         assert!(
+            status.terminal_output.contains("latest_review_council_profile: yellow_pair"),
+            "{}",
+            status.terminal_output
+        );
+        assert!(
+            status.terminal_output.contains("latest_review_independence_state: passed"),
+            "{}",
+            status.terminal_output
+        );
+        assert!(
+            status.terminal_output.contains("latest_review_stop_semantics: council_required"),
+            "{}",
+            status.terminal_output
+        );
+        assert!(
             status
                 .terminal_output
                 .contains("latest_review_headline: maintainability approve: Ready to ship"),
@@ -2359,6 +2398,7 @@ fn red_to_green_addition() {
                     },
                 ),
                 evidence_summary: None,
+                authority_provenance_lines: Vec::new(),
             })
             .unwrap();
         let record = crate::domain::session::ActiveSessionRecord {
