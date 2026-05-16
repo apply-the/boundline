@@ -7,11 +7,11 @@
 
 ```bash
 cd /tmp/boundline-governed-security
-cargo run --bin boundline -- start --workspace .
-cargo run --bin boundline -- capture --workspace . --goal "fix the credential leak in the API handler"
-cargo run --bin boundline -- flow bug-fix --workspace .
-cargo run --bin boundline -- plan --workspace .
-cargo run --bin boundline -- run --workspace .
+cargo run --bin boundline -- start
+cargo run --bin boundline -- capture --goal "fix the credential leak in the API handler"
+cargo run --bin boundline -- flow bug-fix
+cargo run --bin boundline -- plan
+cargo run --bin boundline -- run
 ```
 
 **Expected**:
@@ -22,9 +22,9 @@ cargo run --bin boundline -- run --workspace .
 
 ```bash
 cd /tmp/boundline-governed-security
-cargo run --bin boundline -- status --workspace .
-cargo run --bin boundline -- next --workspace .
-cargo run --bin boundline -- inspect --workspace .
+cargo run --bin boundline -- status
+cargo run --bin boundline -- next
+cargo run --bin boundline -- inspect
 ```
 
 **Expected**:
@@ -35,7 +35,7 @@ cargo run --bin boundline -- inspect --workspace .
 
 ```bash
 cd /tmp/boundline-governed-security-invalid
-cargo run --bin boundline -- run --workspace .
+cargo run --bin boundline -- run
 ```
 
 **Expected**:

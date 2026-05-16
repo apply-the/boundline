@@ -78,6 +78,12 @@ ranking, explicit adaptive exhaustion, or negotiation-state overrides.
 - `config show --scope effective` now exposes the resolved slot route, source,
 	assistant binding, declared runtime capability summary, and declared effort
 	policy for each bounded slot
+
+When you already run Boundline inside the target repository, you can usually
+omit `--workspace`: the CLI prefers the nearest initialized `.boundline/`
+ancestor, then the nearest `.git/` root, and only then falls back to the
+current working directory. Keep `--workspace <path>` for commands that intentionally
+target another repository or a primary cluster workspace.
 - `config show --scope effective` now also exposes active domain templates,
 	winning standards layers, and bound external context references with their
 	source authority
@@ -116,7 +122,6 @@ Canon-default behavior is workspace-local. `boundline init` can write the
 
 ```bash
 boundline init \
-  --workspace <workspace> \
   --canon-mode-selection auto-confirm \
   --risk medium \
   --zone engineering \
@@ -138,8 +143,8 @@ default_owner = "platform"
 Change the preference later with:
 
 ```bash
-boundline config set-canon --workspace <workspace> --mode-selection auto
-boundline config show --workspace <workspace> --scope workspace
+boundline config set-canon --scope workspace --mode-selection auto
+boundline config show --scope workspace
 ```
 
 Valid mode-selection values are `manual`, `auto-confirm`, and `auto`. The
@@ -171,7 +176,7 @@ review = "review_triggered"
 governance = "governance_required"
 ```
 
-Use `boundline workflow list --workspace <workspace>` to render the discovered
+Use `boundline workflow list` to render the discovered
 workflow names, phase chains, summary text, and invocation guidance. If
 `summary` or `recommended_when` are omitted, Boundline falls back to the workflow
 name plus declared phases. The registry remains bounded: no branching, loops,
@@ -188,7 +193,7 @@ Boundline resolves each routing slot with this order:
 4. global config
 5. built-in defaults
 
-Use `boundline config show --scope effective --workspace <workspace> --cluster <primary-workspace>` to inspect
+Use `boundline config show --scope effective --cluster <primary-workspace>` to inspect
 resolved values and their source.
 
 The effective view is now the operator-facing source of truth for backend
@@ -260,15 +265,14 @@ boundline inspect --cluster <primary-workspace>
 ## Init workflow
 
 ```bash
-boundline init --workspace <workspace>
-boundline doctor --workspace <workspace>
+boundline init
+boundline doctor
 ```
 
 Optional domain bootstrap:
 
 ```bash
 boundline init \
-	--workspace <workspace> \
 	--assistant codex \
 	--domain systems \
 	--domain react \
@@ -281,7 +285,7 @@ Assistant bootstrap accepts Claude, Copilot, Codex, and Gemini. If no explicit
 `--route` values are supplied, init seeds planning, implementation,
 verification, and review from the selected assistant's maintained default model
 catalog and reports the result in `route_setup`, including seeded slots,
-explicit overrides, and `inspect_or_edit: boundline config show --workspace ...`.
+explicit overrides, and `inspect_or_edit: boundline config show..`.
 Explicit routes remain authoritative for their slots, and missing slots are
 still backfilled from assistant defaults. Guided init now lists supported slots
 inline, explains that blank input is allowed when assistant defaults can seed
@@ -321,7 +325,7 @@ Available starting templates:
 
 Templates are only starting points for the generated compatibility execution profile.
 
-- Need a different starting point later: rerun `boundline init --workspace <workspace> --force --template <bug-fix|change|delivery>`
+- Need a different starting point later: rerun `boundline init --force --template <bug-fix|change|delivery>`
 - Need another task of the same type: do not rerun init; start a new session and capture a new goal
 - Need something custom: edit `<workspace>/.boundline/execution.json` directly when you intentionally want compatibility behavior
 
@@ -333,8 +337,8 @@ optional compatibility profile, while `boundline flow` selects the current sessi
 ### Show
 
 ```bash
-boundline config show --workspace <workspace> --scope effective
-boundline config show --workspace <workspace> --scope workspace
+boundline config show --scope effective
+boundline config show --scope workspace
 boundline config show --cluster <primary-workspace> --scope cluster
 boundline config show --scope global
 ```
@@ -344,51 +348,51 @@ boundline config show --scope global
 ```bash
 boundline config set --scope global --slot planning --runtime codex --model gpt-5-codex
 boundline config set --cluster <primary-workspace> --scope cluster --slot planning --runtime codex --model gpt-5-codex
-boundline config set --workspace <workspace> --scope workspace --slot verification --runtime copilot --model gpt-5.4
+boundline config set --scope workspace --slot verification --runtime copilot --model gpt-5.4
 ```
 
 ### Set review-role routes
 
 ```bash
-boundline config set --workspace <workspace> --scope workspace --reviewer safety --runtime claude --model sonnet-4
-boundline config set --workspace <workspace> --scope workspace --adjudicator --runtime codex --model gpt-5-codex
+boundline config set --scope workspace --reviewer safety --runtime claude --model sonnet-4
+boundline config set --scope workspace --adjudicator --runtime codex --model gpt-5-codex
 ```
 
 ### Set runtime capability profiles
 
 ```bash
-boundline config set-capability --workspace <workspace> --scope workspace --runtime claude --continuation unsupported --resume unsupported --validation supported --handoff-target unsupported --escalation-context supported --notes "requires a handoff for bounded continuation"
+boundline config set-capability --scope workspace --runtime claude --continuation unsupported --resume unsupported --validation supported --handoff-target unsupported --escalation-context supported --notes "requires a handoff for bounded continuation"
 ```
 
 ### Set slot effort policy
 
 ```bash
-boundline config set-effort --workspace <workspace> --scope workspace --slot implementation --level high --fallback preserve --rationale "keep implementation on the highest-effort bounded path"
+boundline config set-effort --scope workspace --slot implementation --level high --fallback preserve --rationale "keep implementation on the highest-effort bounded path"
 ```
 
 ### Set domain templates
 
 ```bash
-boundline config set-domain --workspace <workspace> --scope workspace --family react --enable --standards "follow the shared UI system"
+boundline config set-domain --scope workspace --family react --enable --standards "follow the shared UI system"
 boundline config set-domain --cluster <primary-workspace> --scope cluster --family systems --enable
-boundline config unset-domain --workspace <workspace> --scope workspace --family react
+boundline config unset-domain --scope workspace --family react
 ```
 
 ### Bind external context inputs
 
 ```bash
-boundline config bind-context --workspace <workspace> --scope workspace --family react --kind design-system --reference mcp:design-system --required
-boundline config bind-context --workspace <workspace> --scope workspace --family react --kind design-reference --reference design/reference.md
-boundline config unbind-context --workspace <workspace> --scope workspace --family react --kind design-system --reference mcp:design-system
+boundline config bind-context --scope workspace --family react --kind design-system --reference mcp:design-system --required
+boundline config bind-context --scope workspace --family react --kind design-reference --reference design/reference.md
+boundline config unbind-context --scope workspace --family react --kind design-system --reference mcp:design-system
 ```
 
 ### Unset values
 
 ```bash
-boundline config unset --workspace <workspace> --scope workspace --slot planning
+boundline config unset --scope workspace --slot planning
 boundline config unset --cluster <primary-workspace> --scope cluster --slot planning
-boundline config unset --workspace <workspace> --scope workspace --reviewer safety
-boundline config unset-domain --workspace <workspace> --scope workspace --family react
+boundline config unset --scope workspace --reviewer safety
+boundline config unset-domain --scope workspace --family react
 ```
 
 ## Runtime support

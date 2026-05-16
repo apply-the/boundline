@@ -10,15 +10,18 @@ use thiserror::Error;
 use crate::domain::governance::{
     ApprovalState, AutopilotAction, AutopilotDecisionRecord, CanonEvidenceInspectSummary,
     CanonMode, CanonPossibleActionSummary, CanonRecommendedActionSummary, CompactedCanonMemory,
-    GovernanceLifecycleState, GovernanceProfile, GovernanceRuntimeKind, GovernedStagePacket,
-    GovernedStageRecord, MemoryCredibilityState, PacketReadiness, PacketReuseBinding,
-    PacketReuseBindingReason, StageGovernancePolicy, candidate_canon_modes, resolved_canon_mode,
-    supported_canon_modes_for_stage,
+    GovernanceLifecycleState, GovernanceProfile, GovernanceRolloutProfile, GovernanceRuntimeKind,
+    GovernanceRuntimeState, GovernanceStartupContext, GovernedStagePacket, GovernedStageRecord,
+    MemoryCredibilityState, PacketReadiness, PacketReuseBinding, PacketReuseBindingReason,
+    StageGovernancePolicy, candidate_canon_modes, resolve_governance_startup_posture,
+    resolved_canon_mode, supported_canon_modes_for_stage,
 };
 use crate::domain::task_context::{
-    LATEST_COMPACTED_CANON_MEMORY_KEY, LATEST_GOVERNANCE_DECISION_KEY,
-    LATEST_GOVERNANCE_PACKET_KEY, LATEST_GOVERNANCE_PACKET_REUSE_KEY, LATEST_GOVERNANCE_STAGE_KEY,
-    TaskContext, TaskContextError,
+    LATEST_COMPACTED_CANON_MEMORY_KEY, LATEST_GOVERNANCE_APPROVAL_PROVENANCE_KEY,
+    LATEST_GOVERNANCE_CONTRACT_LINES_KEY, LATEST_GOVERNANCE_DECISION_KEY,
+    LATEST_GOVERNANCE_PACKET_KEY, LATEST_GOVERNANCE_PACKET_REUSE_KEY, LATEST_GOVERNANCE_REASON_KEY,
+    LATEST_GOVERNANCE_ROLLOUT_PROFILE_KEY, LATEST_GOVERNANCE_RUNTIME_STATE_KEY,
+    LATEST_GOVERNANCE_STAGE_KEY, TaskContext, TaskContextError,
 };
 
 const GOVERNANCE_DOCUMENT_KIND_AUTHORED_BRIEF: &str = "authored-brief";
@@ -29,6 +32,7 @@ const GOVERNANCE_DOCUMENT_KIND_STAGE_BRIEF: &str = "stage-brief";
 const GOVERNANCE_STAGE_IMPLEMENT: &str = "implement";
 const GOVERNANCE_STAGE_VERIFY: &str = "verify";
 const AUTHORITY_CONTRACT_UNAVAILABLE_REASON_CODE: &str = "authority_contract_unavailable";
+const ADAPTIVE_CONTRACT_UNAVAILABLE_REASON_CODE: &str = "adaptive_contract_unavailable";
 const AUTHORITY_HARD_STOP_REASON_CODE: &str = "authority_hard_stop";
 
 pub fn governance_stage_key(flow_name: &str, stage_id: &str) -> String {
@@ -567,6 +571,7 @@ pub fn governance_state_patch(
     packet_reuse: Option<&PacketReuseBinding>,
     decision: Option<&AutopilotDecisionRecord>,
     compacted_canon_memory: Option<&CompactedCanonMemory>,
+    projection: &GovernanceProjectionSnapshot,
 ) -> Result<Map<String, Value>, GovernanceStatePatchError> {
     let mut patch = Map::new();
     patch.insert(
@@ -589,8 +594,177 @@ pub fn governance_state_patch(
         LATEST_COMPACTED_CANON_MEMORY_KEY.to_string(),
         optional_serialized_value(LATEST_COMPACTED_CANON_MEMORY_KEY, compacted_canon_memory)?,
     );
+    patch.insert(
+        LATEST_GOVERNANCE_RUNTIME_STATE_KEY.to_string(),
+        serialize_to_value(LATEST_GOVERNANCE_RUNTIME_STATE_KEY, &projection.runtime_state)?,
+    );
+    patch.insert(
+        LATEST_GOVERNANCE_ROLLOUT_PROFILE_KEY.to_string(),
+        serialize_to_value(LATEST_GOVERNANCE_ROLLOUT_PROFILE_KEY, &projection.rollout_profile)?,
+    );
+    patch
+        .insert(LATEST_GOVERNANCE_REASON_KEY.to_string(), Value::String(projection.reason.clone()));
+    patch.insert(
+        LATEST_GOVERNANCE_CONTRACT_LINES_KEY.to_string(),
+        serialize_to_value(LATEST_GOVERNANCE_CONTRACT_LINES_KEY, &projection.contract_lines)?,
+    );
+    patch.insert(
+        LATEST_GOVERNANCE_APPROVAL_PROVENANCE_KEY.to_string(),
+        Value::String(projection.approval_provenance.clone()),
+    );
 
     Ok(patch)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GovernanceProjectionSnapshot {
+    pub runtime_state: GovernanceRuntimeState,
+    pub rollout_profile: GovernanceRolloutProfile,
+    pub reason: String,
+    pub contract_lines: Vec<String>,
+    pub approval_provenance: String,
+}
+
+pub fn governance_projection_snapshot(
+    context: &TaskContext,
+    stage_key: &str,
+    packet: Option<&GovernedStagePacket>,
+    approval_state: ApprovalState,
+) -> Result<GovernanceProjectionSnapshot, GovernanceStatePatchError> {
+    let current_state = current_runtime_state_for_stage(context, stage_key)?;
+    let adaptive = supported_adaptive_envelope(packet);
+    let requested_profile =
+        adaptive.map(|envelope| GovernanceRolloutProfile::from(envelope.rollout_profile));
+    let operator_approved_profile = matches!(approval_state, ApprovalState::Granted)
+        .then_some(requested_profile)
+        .flatten()
+        .filter(|profile| *profile != GovernanceRolloutProfile::Minimal);
+    let posture = resolve_governance_startup_posture(GovernanceStartupContext {
+        current_state: current_state.unwrap_or(GovernanceRuntimeState::Advisory),
+        requested_profile,
+        operator_approved_profile,
+        low_trust_surface: current_state.is_none(),
+    });
+    let runtime_state = adaptive
+        .filter(|envelope| {
+            envelope.rollout_profile
+                == crate::domain::governance::CanonAdaptiveRolloutProfile::Minimal
+        })
+        .map(|envelope| GovernanceRuntimeState::from(envelope.governance_state))
+        .unwrap_or(posture.runtime_state);
+
+    Ok(GovernanceProjectionSnapshot {
+        runtime_state,
+        rollout_profile: posture.rollout_profile,
+        reason: governance_projection_reason(adaptive, posture.rollout_profile, approval_state),
+        contract_lines: governance_contract_lines(packet),
+        approval_provenance: governance_approval_provenance(
+            adaptive,
+            posture.rollout_profile,
+            approval_state,
+        ),
+    })
+}
+
+fn current_runtime_state_for_stage(
+    context: &TaskContext,
+    stage_key: &str,
+) -> Result<Option<GovernanceRuntimeState>, GovernanceStatePatchError> {
+    let latest_stage = context
+        .latest_governance_stage()
+        .map_err(|error| GovernanceStatePatchError::TaskContext(error.to_string()))?;
+    if latest_stage.as_ref().map(|record| record.stage_key.as_str()) != Some(stage_key) {
+        return Ok(None);
+    }
+
+    Ok(context
+        .state
+        .get(LATEST_GOVERNANCE_RUNTIME_STATE_KEY)
+        .and_then(Value::as_str)
+        .and_then(parse_runtime_state))
+}
+
+fn parse_runtime_state(value: &str) -> Option<GovernanceRuntimeState> {
+    match value {
+        "advisory" => Some(GovernanceRuntimeState::Advisory),
+        "catch" => Some(GovernanceRuntimeState::Catch),
+        "rule" => Some(GovernanceRuntimeState::Rule),
+        "hook" => Some(GovernanceRuntimeState::Hook),
+        _ => None,
+    }
+}
+
+fn supported_adaptive_envelope(
+    packet: Option<&GovernedStagePacket>,
+) -> Option<&crate::domain::governance::CanonAdaptiveGovernanceV1Envelope> {
+    packet
+        .and_then(|packet| packet.adaptive_governance.as_ref())
+        .filter(|adaptive| adaptive.is_supported_contract_line())
+}
+
+fn governance_projection_reason(
+    adaptive: Option<&crate::domain::governance::CanonAdaptiveGovernanceV1Envelope>,
+    rollout_profile: GovernanceRolloutProfile,
+    approval_state: ApprovalState,
+) -> String {
+    if let Some(adaptive) = adaptive {
+        if let Some(rationale) =
+            adaptive.state_rationale.as_deref().filter(|value| !value.trim().is_empty())
+        {
+            return rationale.to_string();
+        }
+        if let Some(rationale) =
+            adaptive.profile_rationale.as_deref().filter(|value| !value.trim().is_empty())
+        {
+            return rationale.to_string();
+        }
+        if rollout_profile == GovernanceRolloutProfile::Minimal
+            && adaptive.rollout_profile
+                == crate::domain::governance::CanonAdaptiveRolloutProfile::Minimal
+        {
+            return "startup posture seeded from adaptive companion".to_string();
+        }
+    }
+
+    if matches!(approval_state, ApprovalState::Granted)
+        && rollout_profile != GovernanceRolloutProfile::Minimal
+    {
+        return "startup posture activated approved adaptive companion".to_string();
+    }
+
+    "startup posture defaulted locally for low-trust surface".to_string()
+}
+
+fn governance_contract_lines(packet: Option<&GovernedStagePacket>) -> Vec<String> {
+    let authority_line = packet
+        .and_then(|packet| packet.authority_governance.as_ref())
+        .map(|authority| format!("authority_contract_line: {}", authority.contract_line))
+        .unwrap_or_else(|| "authority_contract_line: unavailable".to_string());
+    let adaptive_line = supported_adaptive_envelope(packet)
+        .map(|adaptive| format!("adaptive_contract_line: {}", adaptive.contract_line))
+        .unwrap_or_else(|| "adaptive_contract_line: unavailable".to_string());
+
+    vec![authority_line, adaptive_line]
+}
+
+fn governance_approval_provenance(
+    adaptive: Option<&crate::domain::governance::CanonAdaptiveGovernanceV1Envelope>,
+    rollout_profile: GovernanceRolloutProfile,
+    approval_state: ApprovalState,
+) -> String {
+    if matches!(approval_state, ApprovalState::Requested) {
+        return "stronger posture remained inactive because operator approval is still requested"
+            .to_string();
+    }
+
+    if matches!(approval_state, ApprovalState::Granted)
+        && adaptive.is_some()
+        && rollout_profile != GovernanceRolloutProfile::Minimal
+    {
+        return "operator approval activated the requested stronger posture".to_string();
+    }
+
+    "approval not required".to_string()
 }
 
 pub fn compacted_canon_memory_from_response(
@@ -624,6 +798,17 @@ pub fn compacted_canon_memory_from_response(
         .and_then(|packet| packet.authority_governance.as_ref())
         .map(|authority| authority.projection_lines())
         .unwrap_or_default();
+    let adaptive_provenance_lines = response
+        .packet
+        .as_ref()
+        .map(|packet| {
+            packet
+                .adaptive_governance
+                .as_ref()
+                .map(|adaptive| adaptive.projection_lines())
+                .unwrap_or_else(|| vec!["adaptive_contract_line: unavailable".to_string()])
+        })
+        .unwrap_or_default();
 
     Some(CompactedCanonMemory {
         headline: response
@@ -648,6 +833,7 @@ pub fn compacted_canon_memory_from_response(
             closure_findings: Vec::new(),
         }),
         authority_provenance_lines,
+        adaptive_provenance_lines,
     })
 }
 
@@ -677,6 +863,7 @@ pub fn compacted_canon_memory_for_block(
         }),
         evidence_summary: None,
         authority_provenance_lines: Vec::new(),
+        adaptive_provenance_lines: Vec::new(),
     })
 }
 
@@ -687,47 +874,89 @@ pub fn fail_closed_required_authority_response(
     response: &GovernanceRuntimeResponse,
 ) -> Option<GovernanceRuntimeResponse> {
     if runtime_kind != GovernanceRuntimeKind::Canon
-        || !policy.required
         || response.status != GovernanceLifecycleState::GovernedReady
     {
         return None;
     }
 
-    let Some(authority) =
-        response.packet.as_ref().and_then(|packet| packet.authority_governance.as_ref())
-    else {
+    if policy.required {
+        let Some(authority) =
+            response.packet.as_ref().and_then(|packet| packet.authority_governance.as_ref())
+        else {
+            let mut blocked = response.clone();
+            blocked.status = GovernanceLifecycleState::Blocked;
+            blocked.reason_code = Some(AUTHORITY_CONTRACT_UNAVAILABLE_REASON_CODE.to_string());
+            blocked.message = format!(
+                "Canon authority-governance-v1 metadata is missing for required stage {stage_key}"
+            );
+            return Some(blocked);
+        };
+
+        let (reason_code, message) = if !authority.is_supported_contract_line() {
+            (
+                AUTHORITY_CONTRACT_UNAVAILABLE_REASON_CODE,
+                format!(
+                    "Canon authority contract `{}` is unsupported for required stage {stage_key}",
+                    authority.contract_line
+                ),
+            )
+        } else if authority.requires_hard_stop() {
+            (
+                AUTHORITY_HARD_STOP_REASON_CODE,
+                authority.hard_stop_reason().unwrap_or_else(|| {
+                    format!(
+                        "Canon authority-governance-v1 requires a hard stop for stage {stage_key}"
+                    )
+                }),
+            )
+        } else {
+            ("", String::new())
+        };
+
+        if !reason_code.is_empty() {
+            let mut blocked = response.clone();
+            blocked.status = GovernanceLifecycleState::Blocked;
+            blocked.reason_code = Some(reason_code.to_string());
+            blocked.message = message;
+            return Some(blocked);
+        }
+    }
+
+    if !policy.require_adaptive_companion {
+        return None;
+    }
+
+    let Some(packet) = response.packet.as_ref() else {
         let mut blocked = response.clone();
         blocked.status = GovernanceLifecycleState::Blocked;
-        blocked.reason_code = Some(AUTHORITY_CONTRACT_UNAVAILABLE_REASON_CODE.to_string());
+        blocked.reason_code = Some(ADAPTIVE_CONTRACT_UNAVAILABLE_REASON_CODE.to_string());
         blocked.message = format!(
-            "Canon authority-governance-v1 metadata is missing for required stage {stage_key}"
+            "Canon adaptive-governance-v1 metadata is missing for required stage {stage_key}"
         );
         return Some(blocked);
     };
 
-    let (reason_code, message) = if !authority.is_supported_contract_line() {
-        (
-            AUTHORITY_CONTRACT_UNAVAILABLE_REASON_CODE,
-            format!(
-                "Canon authority contract `{}` is unsupported for required stage {stage_key}",
-                authority.contract_line
-            ),
-        )
-    } else if authority.requires_hard_stop() {
-        (
-            AUTHORITY_HARD_STOP_REASON_CODE,
-            authority.hard_stop_reason().unwrap_or_else(|| {
-                format!("Canon authority-governance-v1 requires a hard stop for stage {stage_key}")
-            }),
-        )
-    } else {
-        return None;
+    let Some(adaptive) = packet.adaptive_governance.as_ref() else {
+        let mut blocked = response.clone();
+        blocked.status = GovernanceLifecycleState::Blocked;
+        blocked.reason_code = Some(ADAPTIVE_CONTRACT_UNAVAILABLE_REASON_CODE.to_string());
+        blocked.message = format!(
+            "Canon adaptive-governance-v1 metadata is unavailable for required stage {stage_key}"
+        );
+        return Some(blocked);
     };
+
+    if adaptive.is_supported_contract_line() {
+        return None;
+    }
 
     let mut blocked = response.clone();
     blocked.status = GovernanceLifecycleState::Blocked;
-    blocked.reason_code = Some(reason_code.to_string());
-    blocked.message = message;
+    blocked.reason_code = Some(ADAPTIVE_CONTRACT_UNAVAILABLE_REASON_CODE.to_string());
+    blocked.message = format!(
+        "Canon adaptive contract `{}` is unsupported for required stage {stage_key}",
+        adaptive.contract_line
+    );
     Some(blocked)
 }
 
@@ -850,6 +1079,8 @@ fn serialize_to_value<T: Serialize>(
 pub enum GovernanceStatePatchError {
     #[error("failed to serialize governance state '{key}': {message}")]
     Serialization { key: String, message: String },
+    #[error("failed to read governance state from task context: {0}")]
+    TaskContext(String),
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -924,17 +1155,19 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::{
-        AUTHORITY_CONTRACT_UNAVAILABLE_REASON_CODE, GovernanceStateSelectionError,
-        canon_memory_credibility, canon_memory_possible_actions, canon_memory_recommended_action,
-        compacted_canon_memory_for_block, compacted_canon_memory_from_response,
-        fail_closed_required_authority_response, governance_input_documents,
-        optional_serialized_value, serialize_to_value,
+        ADAPTIVE_CONTRACT_UNAVAILABLE_REASON_CODE, AUTHORITY_CONTRACT_UNAVAILABLE_REASON_CODE,
+        GovernanceStateSelectionError, canon_memory_credibility, canon_memory_possible_actions,
+        canon_memory_recommended_action, compacted_canon_memory_for_block,
+        compacted_canon_memory_from_response, fail_closed_required_authority_response,
+        governance_input_documents, optional_serialized_value, serialize_to_value,
     };
     use crate::adapters::governance_runtime::GovernanceInputDocument;
     use crate::adapters::governance_runtime::GovernanceRuntimeResponse;
     use crate::domain::governance::{
-        AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE, ApprovalState, CanonAuthorityGovernanceV1Envelope,
-        CanonAuthorityZone, CanonChangeClass, CanonEvidenceInspectSummary, CanonIntendedPersona,
+        ADAPTIVE_GOVERNANCE_V1_CONTRACT_LINE, AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE, ApprovalState,
+        CanonAdaptiveGovernanceState, CanonAdaptiveGovernanceV1Envelope,
+        CanonAdaptiveRolloutProfile, CanonAuthorityGovernanceV1Envelope, CanonAuthorityZone,
+        CanonChangeClass, CanonEvidenceInspectSummary, CanonIntendedPersona,
         CanonRecommendedActionSummary, CanonRiskClass, CompactedCanonMemory,
         GovernanceLifecycleState, GovernanceRuntimeKind, GovernedStagePacket,
         MemoryCredibilityState, PacketReadiness, StageGovernancePolicy,
@@ -968,6 +1201,7 @@ mod tests {
             headline: "Verification packet ready".to_string(),
             reason_code: Some("packet_ready".to_string()),
             authority_governance: None,
+            adaptive_governance: None,
         }
     }
 
@@ -978,6 +1212,7 @@ mod tests {
             enabled: true,
             required: true,
             autopilot: false,
+            require_adaptive_companion: false,
             runtime: Some(GovernanceRuntimeKind::Canon),
             canon_mode: None,
             system_context: None,
@@ -1016,6 +1251,7 @@ mod tests {
                 closure_findings: Vec::new(),
             }),
             authority_provenance_lines: Vec::new(),
+            adaptive_provenance_lines: Vec::new(),
         };
 
         let documents = governance_input_documents(&json!({}), Some(&memory));
@@ -1066,7 +1302,7 @@ mod tests {
     }
 
     #[test]
-    fn compacted_canon_memory_from_response_projects_authority_provenance_lines() {
+    fn compacted_canon_memory_from_response_projects_canon_contract_provenance_lines() {
         let mut governed_packet = packet(PacketReadiness::Reusable);
         governed_packet.authority_governance = Some(CanonAuthorityGovernanceV1Envelope {
             contract_line: AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE.to_string(),
@@ -1081,6 +1317,13 @@ mod tests {
             artifact_order: vec!["verification.md".to_string()],
             promotion_refs: Vec::new(),
             stage_role_hints: Vec::new(),
+        });
+        governed_packet.adaptive_governance = Some(CanonAdaptiveGovernanceV1Envelope {
+            contract_line: ADAPTIVE_GOVERNANCE_V1_CONTRACT_LINE.to_string(),
+            governance_state: CanonAdaptiveGovernanceState::Rule,
+            rollout_profile: CanonAdaptiveRolloutProfile::Governed,
+            state_rationale: Some("approval required".to_string()),
+            profile_rationale: Some("yellow zone packet".to_string()),
         });
         let response = response(
             GovernanceLifecycleState::GovernedReady,
@@ -1103,9 +1346,21 @@ mod tests {
         );
         assert!(
             memory
+                .adaptive_provenance_lines
+                .iter()
+                .any(|line| line == "adaptive_contract_line: adaptive-governance-v1")
+        );
+        assert!(
+            memory
                 .provenance_lines()
                 .iter()
                 .any(|line| line == "authority_control_class: council_review")
+        );
+        assert!(
+            memory
+                .provenance_lines()
+                .iter()
+                .any(|line| line == "adaptive_rollout_profile: governed")
         );
     }
 
@@ -1169,6 +1424,44 @@ mod tests {
             Some(AUTHORITY_CONTRACT_UNAVAILABLE_REASON_CODE)
         );
         assert!(blocked.message.contains("unsupported"));
+    }
+
+    #[test]
+    fn fail_closed_required_authority_response_blocks_missing_adaptive_companion_when_required() {
+        let mut policy = required_canon_policy();
+        policy.require_adaptive_companion = true;
+        let mut governed_packet = packet(PacketReadiness::Reusable);
+        governed_packet.authority_governance = Some(CanonAuthorityGovernanceV1Envelope {
+            contract_line: AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE.to_string(),
+            authority_zone: CanonAuthorityZone::Yellow,
+            change_class: CanonChangeClass::SystemicImpact,
+            intended_persona: CanonIntendedPersona::SystemArchitect,
+            approval_state: ApprovalState::Granted,
+            packet_readiness: PacketReadiness::Reusable,
+            risk: CanonRiskClass::SystemicImpact,
+            persona_anti_behaviors: Vec::new(),
+            primary_artifact: None,
+            artifact_order: Vec::new(),
+            promotion_refs: Vec::new(),
+            stage_role_hints: Vec::new(),
+        });
+        let response = response(
+            GovernanceLifecycleState::GovernedReady,
+            "Canon packet ready",
+            Some(governed_packet),
+        );
+
+        let blocked = fail_closed_required_authority_response(
+            "bug-fix:investigate",
+            &policy,
+            GovernanceRuntimeKind::Canon,
+            &response,
+        )
+        .expect("missing adaptive companion should fail closed when required");
+
+        assert_eq!(blocked.status, GovernanceLifecycleState::Blocked);
+        assert_eq!(blocked.reason_code.as_deref(), Some(ADAPTIVE_CONTRACT_UNAVAILABLE_REASON_CODE));
+        assert!(blocked.message.contains("adaptive-governance-v1"));
     }
 
     #[test]

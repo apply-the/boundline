@@ -42,7 +42,7 @@ Governance state MUST NOT imply that Canon owns the per-action control loop.
 
 **Given** a workspace with a ready session-native plan and an existing `.boundline/execution.json`
 
-**When** the operator runs `boundline status --workspace .`
+**When** the operator runs `boundline status`
 
 **Then** Boundline projects:
 
@@ -66,7 +66,7 @@ Governance state MUST NOT imply that Canon owns the per-action control loop.
 
 **Given** a native session that is waiting on stage-boundary governance approval
 
-**When** the operator runs `boundline status --workspace .`
+**When** the operator runs `boundline status`
 
 **Then** Boundline projects:
 

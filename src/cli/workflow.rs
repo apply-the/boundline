@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use crate::cli::inspect;
 use crate::cli::session::build_status_view;
+use crate::cli::workspace as cli_workspace;
 use crate::cli::{CommandExitStatus, output};
 use crate::domain::limits::TerminalCondition;
 use crate::domain::session::{
@@ -758,14 +759,7 @@ fn initialize_session(workspace: &Path) -> ActiveSessionRecord {
 }
 
 fn resolve_workspace(workspace: Option<&Path>) -> Result<PathBuf, WorkflowCommandError> {
-    let workspace = match workspace {
-        Some(path) => path.to_path_buf(),
-        None => std::env::current_dir()
-            .map_err(|error| WorkflowCommandError::WorkspaceResolution(error.to_string()))?,
-    };
-
-    workspace
-        .canonicalize()
+    cli_workspace::resolve_workspace(workspace)
         .map_err(|error| WorkflowCommandError::WorkspaceResolution(error.to_string()))
 }
 

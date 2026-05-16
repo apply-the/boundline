@@ -1,8 +1,9 @@
+use std::fs;
 use std::path::Path;
 
 use crate::workspace_fixture::{
     run_boundline_in, temp_canon_governance_workspace, temp_canon_packet_rejection_workspace,
-    terminal_text,
+    temp_canon_unsupported_companion_workspace, terminal_text,
 };
 
 fn bootstrap_bug_fix(workspace: &Path) {
@@ -70,6 +71,12 @@ fn canon_governance_workspace_projects_governed_stage_lineage_on_native_goal_pla
         inspect_text.contains("governance_started: bug-fix:implement (implementation)"),
         "{inspect_text}"
     );
+
+    let session = fs::read_to_string(workspace.join(".boundline/session.json")).unwrap();
+    assert!(session.contains("\"adaptive_governance\""), "{session}");
+    assert!(session.contains("\"contract_line\": \"adaptive-governance-v1\""), "{session}");
+    assert!(session.contains("\"governance_state\": \"advisory\""), "{session}");
+    assert!(session.contains("\"rollout_profile\": \"minimal\""), "{session}");
 }
 
 #[test]
@@ -106,5 +113,31 @@ fn canon_governance_rejected_workspace_surfaces_explicit_governance_block_state(
             "governance_blocked: governance packet was Rejected for stage bug-fix:investigate"
         ),
         "{inspect_text}"
+    );
+}
+
+#[test]
+fn canon_governance_workspace_drops_unsupported_adaptive_companion_but_keeps_baseline() {
+    let workspace =
+        temp_canon_unsupported_companion_workspace("boundline-canon-unsupported-companion-flow");
+    bootstrap_bug_fix(&workspace);
+
+    let run = run_boundline_in(&workspace, &["run"]);
+    let run_text = terminal_text(&run);
+    assert_eq!(run.status.code(), Some(0), "{run_text}");
+    assert!(run_text.contains("governance_completed: discovery packet ready"), "{run_text}");
+
+    let session = fs::read_to_string(workspace.join(".boundline/session.json")).unwrap();
+    assert!(
+        session.contains("\"authority_governance\""),
+        "expected baseline authority contract in session: {session}"
+    );
+    assert!(
+        !session.contains("adaptive-governance-v2"),
+        "unsupported companion should not persist into session: {session}"
+    );
+    assert!(
+        !session.contains("\"adaptive_governance\""),
+        "unsupported companion should be treated as unavailable: {session}"
     );
 }

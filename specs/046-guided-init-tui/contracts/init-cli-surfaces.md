@@ -23,7 +23,7 @@ Rules:
 The default human bootstrap path is:
 
 ```bash
-boundline init --workspace <workspace>
+boundline init
 ```
 
 Guided init MUST provide bounded terminal interaction for these decisions:
@@ -56,7 +56,6 @@ Automation MUST remain available through explicit flags:
 
 ```bash
 boundline init \
-  --workspace <workspace> \
   --non-interactive \
   --canon-mode-selection <manual|auto-confirm|auto> \
   --assistant <runtime> \

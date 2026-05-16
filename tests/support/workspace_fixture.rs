@@ -253,6 +253,13 @@ pub fn temp_canon_security_approval_workspace(prefix: &str) -> PathBuf {
     create_canon_governance_fixture_workspace(prefix, CanonFixtureScenario::VerifySecurityApproval)
 }
 
+pub fn temp_canon_unsupported_companion_workspace(prefix: &str) -> PathBuf {
+    create_canon_governance_fixture_workspace(
+        prefix,
+        CanonFixtureScenario::UnsupportedAdaptiveCompanion,
+    )
+}
+
 pub fn temp_workflow_layer_workspace(prefix: &str) -> PathBuf {
     create_workflow_fixture_workspace(prefix, VALID_WORKFLOWS_TOML, false)
 }
@@ -702,6 +709,7 @@ enum CanonFixtureScenario {
     AutopilotBlocked,
     VerifySecurityReusable,
     VerifySecurityApproval,
+    UnsupportedAdaptiveCompanion,
 }
 
 fn create_canon_governance_fixture_workspace(
@@ -735,6 +743,7 @@ fn create_canon_governance_fixture_workspace(
                 CanonFixtureScenario::AutopilotBlocked => "canon-autopilot-blocked-execution",
                 CanonFixtureScenario::VerifySecurityReusable => "canon-security-assessment-execution",
                 CanonFixtureScenario::VerifySecurityApproval => "canon-security-approval-execution",
+                CanonFixtureScenario::UnsupportedAdaptiveCompanion => "canon-unsupported-companion-execution",
             },
             "read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
             "validation_command": {
@@ -831,7 +840,10 @@ fn canon_governance_profile(command: &str, scenario: CanonFixtureScenario) -> se
     };
 
     let mut stages = vec![investigate_policy];
-    if matches!(scenario, CanonFixtureScenario::Reusable) {
+    if matches!(
+        scenario,
+        CanonFixtureScenario::Reusable | CanonFixtureScenario::UnsupportedAdaptiveCompanion
+    ) {
         stages.push(serde_json::json!({
             "flow_name": "bug-fix",
             "stage_id": "implement",
@@ -922,7 +934,7 @@ case "$request" in
     headline="discovery packet ready"
     ;;
 esac
-printf '{"status":"governed_ready","run_ref":"%s","packet_ref":"%s","expected_document_refs":["%s"],"document_refs":["%s"],"approval_state":"not_needed","packet_readiness":"reusable","missing_sections":[],"authority_governance":{"contract_line":"authority-governance-v1","authority_zone":"green","change_class":"low-impact","intended_persona":"delivery-engineer","approval_state":"not_needed","packet_readiness":"reusable","risk":"low-impact"},"headline":"%s","message":"Canon completed the governed stage"}' "$run_ref" "$packet_ref" "$document_ref" "$document_ref" "$headline"
+printf '{"status":"governed_ready","run_ref":"%s","packet_ref":"%s","expected_document_refs":["%s"],"document_refs":["%s"],"approval_state":"not_needed","packet_readiness":"reusable","missing_sections":[],"authority_governance":{"contract_line":"authority-governance-v1","authority_zone":"green","change_class":"low-impact","intended_persona":"delivery-engineer","approval_state":"not_needed","packet_readiness":"reusable","risk":"low-impact"},"adaptive_governance":{"contract_line":"adaptive-governance-v1","governance_state":"advisory","rollout_profile":"minimal"},"headline":"%s","message":"Canon completed the governed stage"}' "$run_ref" "$packet_ref" "$document_ref" "$document_ref" "$headline"
 "#
         }
         CanonFixtureScenario::RejectedPacket => {
@@ -974,6 +986,26 @@ case "$request" in
         printf '{"status":"awaiting_approval","run_ref":"canon-run-security-approval","packet_ref":".canon/runs/canon-run-security-approval","expected_document_refs":[".canon/runs/canon-run-security-approval/security-assessment.md"],"document_refs":[],"approval_state":"requested","packet_readiness":"pending","missing_sections":[],"headline":"awaiting security approval","message":"Canon is waiting for security approval"}'
         ;;
 esac
+"#
+        }
+        CanonFixtureScenario::UnsupportedAdaptiveCompanion => {
+            r#"#!/bin/sh
+request=$(cat)
+case "$request" in
+    *'"mode":"implementation"'*)
+        run_ref="canon-run-implement"
+        packet_ref=".canon/runs/canon-run-implement"
+        document_ref="$packet_ref/implementation.md"
+        headline="implementation packet ready"
+        ;;
+    *)
+        run_ref="canon-run-investigate"
+        packet_ref=".canon/runs/canon-run-investigate"
+        document_ref="$packet_ref/discovery.md"
+        headline="discovery packet ready"
+        ;;
+esac
+printf '{"status":"governed_ready","run_ref":"%s","packet_ref":"%s","expected_document_refs":["%s"],"document_refs":["%s"],"approval_state":"not_needed","packet_readiness":"reusable","missing_sections":[],"authority_governance":{"contract_line":"authority-governance-v1","authority_zone":"green","change_class":"low-impact","intended_persona":"delivery-engineer","approval_state":"not_needed","packet_readiness":"reusable","risk":"low-impact"},"adaptive_governance":{"contract_line":"adaptive-governance-v2","governance_state":"advisory","rollout_profile":"minimal"},"headline":"%s","message":"Canon completed the governed stage"}' "$run_ref" "$packet_ref" "$document_ref" "$document_ref" "$headline"
 "#
         }
     };

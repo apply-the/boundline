@@ -7,11 +7,11 @@
 
 ```bash
 cd /tmp/boundline-session-compatibility-continuity
-cargo run --bin boundline -- start --workspace .
-cargo run --bin boundline -- capture --workspace . --goal "Fix the failing add test"
-cargo run --bin boundline -- plan --workspace . --flow bug-fix
-cargo run --bin boundline -- run --workspace . --goal "Fix the failing add test"
-cargo run --bin boundline -- status --workspace .
+cargo run --bin boundline -- start
+cargo run --bin boundline -- capture --goal "Fix the failing add test"
+cargo run --bin boundline -- plan --flow bug-fix
+cargo run --bin boundline -- run --goal "Fix the failing add test"
+cargo run --bin boundline -- status
 ```
 
 **Expected**:
@@ -23,9 +23,9 @@ cargo run --bin boundline -- status --workspace .
 
 ```bash
 cd /tmp/boundline-session-compatibility-continuity
-cargo run --bin boundline -- run --workspace . --goal "Fix the failing add test"
-cargo run --bin boundline -- next --workspace .
-cargo run --bin boundline -- inspect --workspace .
+cargo run --bin boundline -- run --goal "Fix the failing add test"
+cargo run --bin boundline -- next
+cargo run --bin boundline -- inspect
 ```
 
 **Expected**:
@@ -37,12 +37,12 @@ cargo run --bin boundline -- inspect --workspace .
 
 ```bash
 cd /tmp/boundline-session-compatibility-continuity
-cargo run --bin boundline -- run --workspace . --goal "Recover after adaptive validation points to helper.rs"
-cargo run --bin boundline -- inspect --workspace .
-cargo run --bin boundline -- start --workspace .
-cargo run --bin boundline -- capture --workspace . --goal "Recover after adaptive validation points to helper.rs"
-cargo run --bin boundline -- plan --workspace . --flow bug-fix
-cargo run --bin boundline -- run --workspace .
+cargo run --bin boundline -- run --goal "Recover after adaptive validation points to helper.rs"
+cargo run --bin boundline -- inspect
+cargo run --bin boundline -- start
+cargo run --bin boundline -- capture --goal "Recover after adaptive validation points to helper.rs"
+cargo run --bin boundline -- plan --flow bug-fix
+cargo run --bin boundline -- run
 ```
 
 **Expected**:

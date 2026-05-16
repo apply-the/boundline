@@ -119,7 +119,7 @@ companion.
 **Acceptance Scenarios**:
 
 1. **Given** the `0.41.0` workspace layout, **When** a maintainer runs repo-root
-  commands such as `cargo run --bin boundline -- status --workspace .` or
+  commands such as `cargo run --bin boundline -- status` or
   `cargo test --workspace`, **Then** the product surface behaves the same while
   the crate boundaries are explicit.
 2. **Given** the updated README and architecture docs, **When** a new operator

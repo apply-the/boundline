@@ -38,6 +38,23 @@ fn governance_session_contract_native_run_projects_fixture_governance_fields() {
     assert!(status_text.contains("latest_governance_stage: bug-fix:implement"), "{status_text}");
     assert!(status_text.contains("latest_governance_runtime: canon"), "{status_text}");
     assert!(status_text.contains("latest_governance_mode: implementation"), "{status_text}");
+    assert!(status_text.contains("latest_governance_runtime_state: advisory"), "{status_text}");
+    assert!(status_text.contains("latest_governance_rollout_profile: minimal"), "{status_text}");
+    assert!(
+        status_text
+            .contains("latest_governance_reason: startup posture seeded from adaptive companion"),
+        "{status_text}"
+    );
+    assert!(
+        status_text.contains(
+            "latest_governance_contract_lines: authority_contract_line: authority-governance-v1 | adaptive_contract_line: adaptive-governance-v1"
+        ),
+        "{status_text}"
+    );
+    assert!(
+        status_text.contains("latest_governance_approval_provenance: approval not required"),
+        "{status_text}"
+    );
     assert!(
         status_text.contains("latest_governance_run_ref: canon-run-implement"),
         "{status_text}"
@@ -94,6 +111,20 @@ fn governance_session_contract_surfaces_security_assessment_fields_on_native_rou
     assert!(status_text.contains("latest_validation_status: passed"), "{status_text}");
     assert!(status_text.contains("latest_governance_stage: bug-fix:verify"), "{status_text}");
     assert!(status_text.contains("latest_governance_mode: security-assessment"), "{status_text}");
+    assert!(status_text.contains("latest_governance_runtime_state: advisory"), "{status_text}");
+    assert!(status_text.contains("latest_governance_rollout_profile: minimal"), "{status_text}");
+    assert!(
+        status_text.contains(
+            "latest_governance_reason: startup posture defaulted locally for low-trust surface"
+        ),
+        "{status_text}"
+    );
+    assert!(
+        status_text.contains(
+            "latest_governance_contract_lines: authority_contract_line: authority-governance-v1 | adaptive_contract_line: unavailable"
+        ),
+        "{status_text}"
+    );
     assert!(
         status_text.contains("latest_governance_packet_ref: .canon/runs/canon-run-security"),
         "{status_text}"

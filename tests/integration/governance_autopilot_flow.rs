@@ -108,6 +108,16 @@ fn governance_autopilot_flow_selects_mode_and_refreshes_after_approval() {
         refreshed_text.contains("latest_governance_packet_ref: .canon/runs/canon-run-approval"),
         "{refreshed_text}"
     );
+
+    let session = fs::read_to_string(workspace.join(".boundline/session.json")).unwrap();
+    assert!(
+        session.contains("\"authority_governance\""),
+        "baseline authority contract should persist after approval refresh: {session}"
+    );
+    assert!(
+        !session.contains("\"adaptive_governance\""),
+        "baseline-only Canon responses should not synthesize the optional companion: {session}"
+    );
 }
 
 #[test]

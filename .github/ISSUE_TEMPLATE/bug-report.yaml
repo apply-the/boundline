@@ -17,7 +17,7 @@ body:
     attributes:
       label: Description
       description: Summarize the failure and why it matters.
-      placeholder: e.g. `boundline workflow run governed-delivery --workspace .` stops after planning even though confirmation and validation are present.
+      placeholder: e.g. `boundline workflow run governed-delivery` stops after planning even though confirmation and validation are present.
     validations:
       required: true
   - type: textarea

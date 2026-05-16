@@ -41,13 +41,13 @@ Create `.boundline/execution.json` in a small Rust workspace:
 1. Execute a delivery run against the workspace:
 
    ```bash
-   cargo run --bin boundline -- run --goal "Fix the failing add test" --workspace <workspace>
+   cargo run --bin boundline -- run --goal "Fix the failing add test"
    ```
 
 2. Inspect the latest trace:
 
    ```bash
-   cargo run --bin boundline -- inspect --workspace <workspace>
+   cargo run --bin boundline -- inspect
    ```
 
 Expected outcome:
@@ -62,22 +62,22 @@ Expected outcome:
 1. Start and capture a goal:
 
    ```bash
-   cargo run --bin boundline -- start --workspace <workspace>
-   cargo run --bin boundline -- capture --workspace <workspace> --goal "Fix the failing add test"
+   cargo run --bin boundline -- start
+   cargo run --bin boundline -- capture --goal "Fix the failing add test"
    ```
 
 2. Plan and run the task:
 
    ```bash
-   cargo run --bin boundline -- plan --workspace <workspace>
-   cargo run --bin boundline -- run --workspace <workspace>
+   cargo run --bin boundline -- plan
+   cargo run --bin boundline -- run
    ```
 
 3. Inspect status:
 
    ```bash
-   cargo run --bin boundline -- status --workspace <workspace>
-   cargo run --bin boundline -- next --workspace <workspace>
+   cargo run --bin boundline -- status
+   cargo run --bin boundline -- next
    ```
 
 Expected outcome:

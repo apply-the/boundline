@@ -184,6 +184,14 @@ pub struct TraceSummaryView {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub governance_timeline: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub governance_runtime_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub governance_rollout_profile: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub governance_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub governance_approval_provenance: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub governance_next_action: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delegation: Option<DelegationStatusView>,
@@ -232,6 +240,10 @@ impl Default for TraceSummaryView {
             executed_steps: Vec::new(),
             recovery_events: Vec::new(),
             governance_timeline: Vec::new(),
+            governance_runtime_state: None,
+            governance_rollout_profile: None,
+            governance_reason: None,
+            governance_approval_provenance: None,
             governance_next_action: None,
             delegation: None,
             review_timeline: Vec::new(),

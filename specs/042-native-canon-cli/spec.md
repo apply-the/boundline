@@ -232,7 +232,7 @@ When a CLI or assistant command omits `--workspace`, Boundline resolves the
 workspace in this order:
 
 1. Use the explicit `--workspace <path>` when supplied.
-2. Search upward from the current directory for an existing `.boundline/`
+2. Search upward from the current working directory for an existing `.boundline/`
    directory and use that directory's parent.
 3. Search upward for the nearest git root and use that root.
 4. Fall back to the current working directory when no git root exists.
@@ -453,7 +453,7 @@ every point.
 - **FR-005c**: All Canon mode-selection and assistant/model routing settings in
   this feature MUST be workspace-local.  When `--workspace` is omitted,
   Boundline MUST resolve the workspace from an existing `.boundline/` parent,
-  nearest git root, or current directory, in that order, and MUST surface the
+  nearest git root, or current working directory, in that order, and MUST surface the
   resolved workspace before mutating files.
 - **FR-006**: System MUST stop explicitly when governed work cannot proceed due
   to missing governance metadata, insufficient bounded context, unsupported

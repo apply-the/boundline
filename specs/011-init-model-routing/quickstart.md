@@ -13,13 +13,12 @@
 
 ```bash
 cargo run --bin boundline -- init \
-  --workspace <workspace> \
   --template bug-fix \
   --assistant claude \
   --assistant copilot \
   --yes
 
-cargo run --bin boundline -- doctor --workspace <workspace>
+cargo run --bin boundline -- doctor
 ```
 
 Expected outcome:
@@ -38,14 +37,12 @@ cargo run --bin boundline -- config set \
   --model sonnet-4
 
 cargo run --bin boundline -- config set \
-  --workspace <workspace> \
   --scope workspace \
   --slot planning \
   --runtime codex \
   --model gpt-5-codex
 
 cargo run --bin boundline -- config show \
-  --workspace <workspace> \
   --scope effective
 ```
 
@@ -60,28 +57,24 @@ Expected outcome:
 
 ```bash
 cargo run --bin boundline -- config set \
-  --workspace <workspace> \
   --scope workspace \
   --reviewer safety \
   --runtime copilot \
   --model gpt-5.4
 
 cargo run --bin boundline -- config set \
-  --workspace <workspace> \
   --scope workspace \
   --reviewer maintainability \
   --runtime claude \
   --model sonnet-4
 
 cargo run --bin boundline -- config set \
-  --workspace <workspace> \
   --scope workspace \
   --adjudicator \
   --runtime codex \
   --model gpt-5-codex
 
 cargo run --bin boundline -- config show \
-  --workspace <workspace> \
   --scope effective
 ```
 
@@ -95,7 +88,6 @@ Expected outcome:
 
 ```bash
 cargo run --bin boundline -- init \
-  --workspace <workspace> \
   --template change
 ```
 

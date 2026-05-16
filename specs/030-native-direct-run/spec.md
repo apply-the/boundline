@@ -3,7 +3,7 @@
 **Feature Branch**: `030-native-direct-run`  
 **Created**: 2026-05-02  
 **Status**: Draft  
-**Input**: User description: "Make the direct boundline run --workspace <workspace> --goal <goal> command bootstrap and execute the session-native goal-plan route by default so the primary delivery story no longer depends on the explicit fixture-backed compatibility path. Keep explicit compatibility execution as a subordinate opt-in path. Include version bump, impacted docs and changelog, coverage above 95% for modified Rust files, clippy cleanup, and cargo fmt."
+**Input**: User description: "Make the direct boundline run --goal <goal> command bootstrap and execute the session-native goal-plan route by default so the primary delivery story no longer depends on the explicit fixture-backed compatibility path. Keep explicit compatibility execution as a subordinate opt-in path. Include version bump, impacted docs and changelog, coverage above 95% for modified Rust files, clippy cleanup, and cargo fmt."
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -30,7 +30,7 @@ depending on the explicit compatibility path. If direct `run --goal` still goes
 through compatibility by default, Boundline's primary product surface remains split.
 
 **Independent Test**: In a representative Rust workspace with a failing test,
-run `boundline run --workspace <workspace> --goal "Fix the failing add test"` and
+run `boundline run --goal "Fix the failing add test"` and
 verify that the command completes on the native goal-plan route, mutates the
 workspace, records decisions and traces, and leaves `status`, `next`, and
 `inspect` usable from the persisted session.
@@ -144,7 +144,7 @@ formatting results.
 
 ### Functional Requirements
 
-- **FR-001**: System MUST let `boundline run --workspace <workspace> --goal <goal>`
+- **FR-001**: System MUST let `boundline run --goal <goal>`
   enter the primary session-native delivery path without requiring a prior
   manual `start`, `capture`, or `plan` command sequence.
 - **FR-002**: System MUST persist the same core native session state a manual
@@ -218,7 +218,7 @@ formatting results.
 ### Measurable Outcomes
 
 - **SC-001**: In representative Rust workspaces with no active session,
-  100% of direct `run --workspace <workspace> --goal <goal>` executions use the
+  100% of direct `run --goal <goal>` executions use the
   native goal-plan route by default instead of the explicit compatibility path.
 - **SC-002**: In representative direct-run scenarios, operators can reach a
   persisted session, changed files, validation outcome, and usable `status` or

@@ -3,11 +3,12 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 use boundline::{
-    AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE, ApprovalState, CanonAuthorityZone, CanonChangeClass,
-    CanonCliRuntime, CanonIntendedPersona, CanonRiskClass, GovernanceBoundedContext,
-    GovernanceInputDocument, GovernanceLifecycleState, GovernanceRequestKind, GovernanceRuntime,
-    GovernanceRuntimeKind, GovernanceRuntimeRequest, LocalGovernanceRuntime, PacketReadiness,
-    SystemContextBinding, classify_packet_readiness,
+    ADAPTIVE_GOVERNANCE_V1_CONTRACT_LINE, AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE, ApprovalState,
+    CanonAdaptiveGovernanceState, CanonAdaptiveRolloutProfile, CanonAuthorityZone,
+    CanonChangeClass, CanonCliRuntime, CanonIntendedPersona, CanonRiskClass,
+    GovernanceBoundedContext, GovernanceInputDocument, GovernanceLifecycleState,
+    GovernanceRequestKind, GovernanceRuntime, GovernanceRuntimeKind, GovernanceRuntimeRequest,
+    LocalGovernanceRuntime, PacketReadiness, SystemContextBinding, classify_packet_readiness,
 };
 use uuid::Uuid;
 
@@ -199,23 +200,68 @@ fn canon_cli_runtime_reads_inline_authority_governance_fields() {
     );
     let script = write_canon_stub(
         "boundline-canon-inline-authority-command",
-        "{\"status\":\"governed_ready\",\"run_ref\":\"canon-run-inline\",\"packet_ref\":\".canon/runs/canon-run-inline\",\"expected_document_refs\":[\".canon/runs/canon-run-inline/discovery.md\"],\"document_refs\":[\".canon/runs/canon-run-inline/discovery.md\"],\"approval_state\":\"not_needed\",\"packet_readiness\":\"reusable\",\"missing_sections\":[],\"authority_governance\":{\"contract_line\":\"authority-governance-v1\",\"authority_zone\":\"yellow\",\"change_class\":\"systemic-impact\",\"intended_persona\":\"system-architect\",\"approval_state\":\"not_needed\",\"packet_readiness\":\"reusable\",\"risk\":\"systemic-impact\"},\"headline\":\"discovery packet ready\",\"message\":\"Canon completed the governed stage\"}",
+        "{\"status\":\"governed_ready\",\"run_ref\":\"canon-run-inline\",\"packet_ref\":\".canon/runs/canon-run-inline\",\"expected_document_refs\":[\".canon/runs/canon-run-inline/discovery.md\"],\"document_refs\":[\".canon/runs/canon-run-inline/discovery.md\"],\"approval_state\":\"not_needed\",\"packet_readiness\":\"reusable\",\"missing_sections\":[],\"authority_governance\":{\"contract_line\":\"authority-governance-v1\",\"authority_zone\":\"yellow\",\"change_class\":\"systemic-impact\",\"intended_persona\":\"system-architect\",\"approval_state\":\"not_needed\",\"packet_readiness\":\"reusable\",\"risk\":\"systemic-impact\"},\"adaptive_governance\":{\"contract_line\":\"adaptive-governance-v1\",\"governance_state\":\"rule\",\"rollout_profile\":\"governed\"},\"headline\":\"discovery packet ready\",\"message\":\"Canon completed the governed stage\"}",
     );
     let runtime = CanonCliRuntime::new(script.to_string_lossy().into_owned())
         .with_working_directory(&workspace);
 
     let response = runtime.execute(&canon_request(&workspace)).unwrap();
-    let authority = response
-        .packet
-        .expect("packet should be present")
-        .authority_governance
-        .expect("authority should be present");
+    let packet = response.packet.expect("packet should be present");
+    let authority = packet.authority_governance.expect("authority should be present");
 
     assert_eq!(authority.contract_line, AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE);
     assert_eq!(authority.authority_zone, CanonAuthorityZone::Yellow);
     assert_eq!(authority.change_class, CanonChangeClass::SystemicImpact);
     assert_eq!(authority.intended_persona, CanonIntendedPersona::SystemArchitect);
     assert_eq!(authority.risk, CanonRiskClass::SystemicImpact);
+    let adaptive = packet.adaptive_governance.expect("adaptive companion should be present");
+    assert_eq!(adaptive.contract_line, ADAPTIVE_GOVERNANCE_V1_CONTRACT_LINE);
+    assert_eq!(adaptive.governance_state, CanonAdaptiveGovernanceState::Rule);
+    assert_eq!(adaptive.rollout_profile, CanonAdaptiveRolloutProfile::Governed);
+}
+
+#[test]
+fn canon_cli_runtime_keeps_baseline_when_companion_is_absent() {
+    let workspace = temp_workspace("boundline-canon-baseline-only");
+    write_workspace_file(
+        &workspace,
+        ".canon/runs/canon-run-baseline/discovery.md",
+        "# Discovery\n\nCaptured authority-semantic context without the optional companion.\n",
+    );
+    let script = write_canon_stub(
+        "boundline-canon-baseline-only-command",
+        "{\"status\":\"governed_ready\",\"run_ref\":\"canon-run-baseline\",\"packet_ref\":\".canon/runs/canon-run-baseline\",\"expected_document_refs\":[\".canon/runs/canon-run-baseline/discovery.md\"],\"document_refs\":[\".canon/runs/canon-run-baseline/discovery.md\"],\"approval_state\":\"not_needed\",\"packet_readiness\":\"reusable\",\"missing_sections\":[],\"authority_governance\":{\"contract_line\":\"authority-governance-v1\",\"authority_zone\":\"yellow\",\"change_class\":\"systemic-impact\",\"intended_persona\":\"system-architect\",\"approval_state\":\"not_needed\",\"packet_readiness\":\"reusable\",\"risk\":\"systemic-impact\"},\"headline\":\"discovery packet ready\",\"message\":\"Canon completed the governed stage\"}",
+    );
+    let runtime = CanonCliRuntime::new(script.to_string_lossy().into_owned())
+        .with_working_directory(&workspace);
+
+    let response = runtime.execute(&canon_request(&workspace)).unwrap();
+    let packet = response.packet.expect("packet should be present");
+
+    assert!(packet.authority_governance.is_some());
+    assert!(packet.adaptive_governance.is_none());
+}
+
+#[test]
+fn canon_cli_runtime_treats_unsupported_companion_contract_as_absent() {
+    let workspace = temp_workspace("boundline-canon-unsupported-companion");
+    write_workspace_file(
+        &workspace,
+        ".canon/runs/canon-run-unsupported/discovery.md",
+        "# Discovery\n\nCaptured authority-semantic context with an unsupported companion.\n",
+    );
+    let script = write_canon_stub(
+        "boundline-canon-unsupported-companion-command",
+        "{\"status\":\"governed_ready\",\"run_ref\":\"canon-run-unsupported\",\"packet_ref\":\".canon/runs/canon-run-unsupported\",\"expected_document_refs\":[\".canon/runs/canon-run-unsupported/discovery.md\"],\"document_refs\":[\".canon/runs/canon-run-unsupported/discovery.md\"],\"approval_state\":\"not_needed\",\"packet_readiness\":\"reusable\",\"missing_sections\":[],\"authority_governance\":{\"contract_line\":\"authority-governance-v1\",\"authority_zone\":\"yellow\",\"change_class\":\"systemic-impact\",\"intended_persona\":\"system-architect\",\"approval_state\":\"not_needed\",\"packet_readiness\":\"reusable\",\"risk\":\"systemic-impact\"},\"adaptive_governance\":{\"contract_line\":\"adaptive-governance-v2\",\"governance_state\":\"rule\",\"rollout_profile\":\"governed\"},\"headline\":\"discovery packet ready\",\"message\":\"Canon completed the governed stage\"}",
+    );
+    let runtime = CanonCliRuntime::new(script.to_string_lossy().into_owned())
+        .with_working_directory(&workspace);
+
+    let response = runtime.execute(&canon_request(&workspace)).unwrap();
+    let packet = response.packet.expect("packet should be present");
+
+    assert!(packet.authority_governance.is_some());
+    assert!(packet.adaptive_governance.is_none());
 }
 
 #[test]

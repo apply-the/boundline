@@ -18,7 +18,7 @@ can be inspected or changed later.
 the first-run path depends on tribal knowledge such as route slot names or
 model syntax, Boundline feels opaque before any bounded work begins.
 
-**Independent Test**: Run guided `boundline init --workspace .` in a fresh Git
+**Independent Test**: Run guided `boundline init` in a fresh Git
 repository with a user who has not read the docs. The user must be able to
 finish initialization using only the interactive prompt text and resulting
 summary output.

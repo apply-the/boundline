@@ -20,6 +20,7 @@ use super::assistant_assets::{
 };
 use crate::adapters::config_store::{ConfigStoreError, FileConfigStore};
 use crate::cli::CommandExitStatus;
+use crate::cli::workspace as cli_workspace;
 use crate::domain::configuration::{
     CanonPreferences, InitTemplate, ModelRoute, RouteSlot, RuntimeKind, built_in_default_route,
     seeded_routes_for_assistants,
@@ -998,13 +999,22 @@ fn resolve_workspace_root(workspace: &Path) -> Result<PathBuf, InitCommandError>
         return Ok(workspace.to_path_buf());
     }
 
+    let resolve_from = |root: &Path| -> Result<PathBuf, InitCommandError> {
+        if workspace == Path::new(".") {
+            return cli_workspace::discover_workspace_root(root)
+                .map_err(|error| InitCommandError::WorkspaceResolution(error.to_string()));
+        }
+
+        Ok(join_workspace_root(root, workspace))
+    };
+
     match std::env::current_dir() {
-        Ok(current_dir) => Ok(join_workspace_root(&current_dir, workspace)),
+        Ok(current_dir) => resolve_from(&current_dir),
         Err(source) => {
             if let Some(pwd) = std::env::var_os("PWD") {
                 let pwd = PathBuf::from(pwd);
                 if pwd.is_absolute() && pwd.is_dir() {
-                    return Ok(join_workspace_root(&pwd, workspace));
+                    return resolve_from(&pwd);
                 }
             }
 
@@ -2010,6 +2020,8 @@ pub enum InitCommandError {
         "current working directory is unavailable while resolving workspace {workspace}: {source}. Rerun from an existing directory or pass --workspace /absolute/path"
     )]
     CurrentDirectoryUnavailable { workspace: PathBuf, source: std::io::Error },
+    #[error("failed to resolve the init workspace: {0}")]
+    WorkspaceResolution(String),
     #[error("failed to write file {path}: {source}")]
     WriteFile { path: PathBuf, source: std::io::Error },
     #[error("failed to read file {path}: {source}")]
@@ -3534,7 +3546,8 @@ mod tests {
 
         let resolved = resolve_workspace_root(Path::new(".")).unwrap();
 
-        assert_eq!(resolved, fallback_workspace);
+        let expected = fallback_workspace.canonicalize().unwrap_or(fallback_workspace);
+        assert_eq!(resolved, expected);
     }
 
     #[test]

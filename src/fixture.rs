@@ -4847,6 +4847,7 @@ mod tests {
                 headline: "investigation packet ready".to_string(),
                 reason_code: None,
                 authority_governance: None,
+                adaptive_governance: None,
             })
             .unwrap(),
         );

@@ -49,15 +49,20 @@ pub use domain::goal_plan::{
     ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan,
 };
 pub use domain::governance::{
-    AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE, ApprovalState, AutopilotAction, AutopilotDecisionRecord,
+    ADAPTIVE_GOVERNANCE_V1_CONTRACT_LINE, AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE, ApprovalState,
+    AutopilotAction, AutopilotDecisionRecord, CanonAdaptiveGovernanceState,
+    CanonAdaptiveGovernanceV1Envelope, CanonAdaptiveRolloutProfile,
     CanonAuthorityGovernanceV1Envelope, CanonAuthorityZone, CanonCapabilitySnapshot,
     CanonChangeClass, CanonIntendedPersona, CanonMode, CanonRiskClass, CanonRuntimeConfig,
-    CouncilProfile, GovernanceLifecycleState, GovernanceProfile, GovernanceProfileError,
-    GovernanceRuntimeKind, GovernedStageCatalogEntry, GovernedStageCategory, GovernedStagePacket,
-    GovernedStageRecord, PacketReadiness, PacketReuseBinding, StageGovernancePolicy, StopSemantics,
-    SystemContextBinding, autopilot_action_text, candidate_canon_modes, classify_packet_readiness,
-    governed_stage_catalog, resolved_canon_mode, supported_canon_modes_for_stage,
-    validate_canon_capabilities_for_mode,
+    CouncilProfile, GovernanceDegradationMode, GovernanceLifecycleState,
+    GovernancePostureResolution, GovernanceProfile, GovernanceProfileError,
+    GovernanceRolloutProfile, GovernanceRuntimeKind, GovernanceRuntimeState,
+    GovernanceStartupContext, GovernanceTransitionDirection, GovernedStageCatalogEntry,
+    GovernedStageCategory, GovernedStagePacket, GovernedStageRecord, PacketReadiness,
+    PacketReuseBinding, StageGovernancePolicy, StopSemantics, SystemContextBinding,
+    autopilot_action_text, candidate_canon_modes, classify_packet_readiness,
+    governed_stage_catalog, resolve_governance_startup_posture, resolved_canon_mode,
+    supported_canon_modes_for_stage, validate_canon_capabilities_for_mode,
 };
 pub use domain::guidance::{
     CapabilityPhase, CapabilityResolutionRecord, FindingConfidence, GuardianCapability,

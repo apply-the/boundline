@@ -16,6 +16,7 @@ fn canon_policy(
         enabled: true,
         required: false,
         autopilot: true,
+        require_adaptive_companion: false,
         runtime,
         canon_mode,
         system_context: None,

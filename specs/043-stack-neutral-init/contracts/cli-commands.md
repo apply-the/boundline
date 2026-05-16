@@ -1,6 +1,6 @@
 # CLI Contract: Stack-Neutral Entry And Assistant Defaults
 
-## `boundline doctor --workspace <workspace>`
+## `boundline doctor`
 
 ### Input expectations
 
@@ -13,7 +13,7 @@
 - If blocked, reports only the concrete blocking reasons that prevent native entry.
 - If ready, does not imply a stack choice that planning has not yet made.
 
-## `boundline init --workspace <workspace> --assistant <runtime>`
+## `boundline init --assistant <runtime>`
 
 ### Input expectations
 
@@ -27,7 +27,7 @@
 - Distinguishes seeded defaults from explicit overrides.
 - Reports any hygiene files created or updated, or why a candidate hygiene pack was skipped.
 
-## `boundline config show --workspace <workspace> --scope effective`
+## `boundline config show --scope effective`
 
 ### Output expectations
 

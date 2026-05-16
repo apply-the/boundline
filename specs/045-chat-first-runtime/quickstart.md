@@ -11,7 +11,7 @@ output mode on the existing session-native and inspection commands.
 2. Run:
 
    ```bash
-   cargo run --bin boundline -- start --workspace <workspace> --json
+   cargo run --bin boundline -- start --json
    ```
 
 3. Verify the command exits successfully and returns:
@@ -26,10 +26,10 @@ output mode on the existing session-native and inspection commands.
 1. Run:
 
    ```bash
-   cargo run --bin boundline -- capture --workspace <workspace> --goal "Fix the failing add test" --json
-   cargo run --bin boundline -- plan --workspace <workspace> --json
-   cargo run --bin boundline -- status --workspace <workspace> --json
-   cargo run --bin boundline -- next --workspace <workspace> --json
+   cargo run --bin boundline -- capture --goal "Fix the failing add test" --json
+   cargo run --bin boundline -- plan --json
+   cargo run --bin boundline -- status --json
+   cargo run --bin boundline -- next --json
    ```
 
 2. Verify the structured payload preserves:
@@ -44,8 +44,8 @@ output mode on the existing session-native and inspection commands.
 1. Run:
 
    ```bash
-   cargo run --bin boundline -- run --workspace <workspace> --json
-   cargo run --bin boundline -- inspect --workspace <workspace> --json
+   cargo run --bin boundline -- run --json
+   cargo run --bin boundline -- inspect --json
    ```
 
 2. Verify the payload preserves:

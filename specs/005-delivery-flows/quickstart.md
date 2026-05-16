@@ -43,7 +43,7 @@
 
    ```bash
    cargo run --bin boundline -- status
-   cargo run --bin boundline -- inspect --workspace .
+   cargo run --bin boundline -- inspect
    ```
 
 Expected outcome:

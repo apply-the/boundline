@@ -93,12 +93,12 @@ Create `.boundline/execution.json` in a small Rust workspace:
 1. Start a workspace session:
 
    ```bash
-   cargo run --bin boundline -- start --workspace <workspace>
-   cargo run --bin boundline -- capture --workspace <workspace> --goal "Fix the failing add test"
-   cargo run --bin boundline -- flow bug-fix --workspace <workspace>
-   cargo run --bin boundline -- plan --workspace <workspace>
-   cargo run --bin boundline -- step --workspace <workspace>
-   cargo run --bin boundline -- status --workspace <workspace>
+   cargo run --bin boundline -- start
+   cargo run --bin boundline -- capture --goal "Fix the failing add test"
+   cargo run --bin boundline -- flow bug-fix
+   cargo run --bin boundline -- plan
+   cargo run --bin boundline -- step
+   cargo run --bin boundline -- status
    ```
 
 2. Configure the current governed stage for `runtime = local` or make Canon unavailable while the stage is not marked `required`.
@@ -116,8 +116,8 @@ Expected outcome:
 3. Inspect the results:
 
    ```bash
-   cargo run --bin boundline -- run --workspace <workspace>
-   cargo run --bin boundline -- inspect --workspace <workspace>
+   cargo run --bin boundline -- run
+   cargo run --bin boundline -- inspect
    ```
 
 Expected outcome:

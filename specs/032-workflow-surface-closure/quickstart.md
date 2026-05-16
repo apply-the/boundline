@@ -11,7 +11,7 @@ and keep explicit compatibility follow-up visibly subordinate.
 ## 1. Discover the bounded workflow entrypoints
 
 ```bash
-cargo run --bin boundline -- workflow list --workspace <workspace>
+cargo run --bin boundline -- workflow list
 ```
 
 Expected behavior:
@@ -25,7 +25,7 @@ Expected behavior:
 ## 2. Start a named workflow on the primary Boundline path
 
 ```bash
-cargo run --bin boundline -- workflow run governed-delivery --workspace <workspace> --goal "Fix the failing add test"
+cargo run --bin boundline -- workflow run governed-delivery --goal "Fix the failing add test"
 ```
 
 Expected behavior:
@@ -39,7 +39,7 @@ Expected behavior:
 ## 3. Inspect routing and binding from workflow follow-through
 
 ```bash
-cargo run --bin boundline -- workflow status --workspace <workspace>
+cargo run --bin boundline -- workflow status
 ```
 
 Expected behavior:
@@ -53,8 +53,8 @@ Expected behavior:
 ## 4. Resume or inspect without changing products
 
 ```bash
-cargo run --bin boundline -- workflow resume --workspace <workspace>
-cargo run --bin boundline -- workflow inspect --workspace <workspace>
+cargo run --bin boundline -- workflow resume
+cargo run --bin boundline -- workflow inspect
 ```
 
 Expected behavior:
@@ -67,8 +67,8 @@ Expected behavior:
 ## 5. Keep explicit compatibility follow-up visibly subordinate
 
 ```bash
-cargo run --bin boundline -- run --workspace <workspace> --goal "Fix the failing add test" --compatibility
-cargo run --bin boundline -- inspect --workspace <workspace>
+cargo run --bin boundline -- run --goal "Fix the failing add test" --compatibility
+cargo run --bin boundline -- inspect
 ```
 
 Expected behavior:

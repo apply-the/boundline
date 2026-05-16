@@ -8,6 +8,7 @@ use crate::adapters::checkpoint_store::{
 };
 use crate::adapters::cluster_store::{ClusterStoreError, FileClusterStore};
 use crate::cli::CommandExitStatus;
+use crate::cli::workspace as cli_workspace;
 use crate::domain::checkpoint::{
     CheckpointManifest, CheckpointRestoreMode, CheckpointRestoreOutcome,
 };
@@ -166,13 +167,9 @@ fn resolve_checkpoint_target(
 }
 
 fn resolve_workspace(workspace: Option<&Path>) -> Result<PathBuf, CheckpointCommandError> {
-    let candidate = match workspace {
-        Some(path) if path.is_absolute() => path.to_path_buf(),
-        Some(path) => std::env::current_dir()?.join(path),
-        None => std::env::current_dir()?,
-    };
-
-    Ok(candidate.canonicalize().unwrap_or(candidate))
+    cli_workspace::resolve_workspace(workspace).map_err(|error| {
+        CheckpointCommandError::WorkspaceResolution(std::io::Error::other(error.to_string()))
+    })
 }
 
 fn load_cluster_group_manifests(

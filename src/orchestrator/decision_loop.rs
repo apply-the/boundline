@@ -1201,6 +1201,7 @@ mod tests {
             recommended_next_action: None,
             evidence_summary: None,
             authority_provenance_lines: Vec::new(),
+            adaptive_provenance_lines: Vec::new(),
         };
         assert_eq!(
             select_action_selector(
@@ -1331,6 +1332,7 @@ mod tests {
             }),
             evidence_summary: None,
             authority_provenance_lines: Vec::new(),
+            adaptive_provenance_lines: Vec::new(),
         });
         let loop_runner = crate::orchestrator::decision_loop::DecisionLoop::new(
             AgentRegistry::new(),
@@ -1376,6 +1378,7 @@ mod tests {
             possible_actions: Vec::new(),
             recommended_next_action: None,
             authority_provenance_lines: Vec::new(),
+            adaptive_provenance_lines: Vec::new(),
             evidence_summary: Some(crate::domain::governance::CanonEvidenceInspectSummary {
                 execution_posture: Some("paused".to_string()),
                 carried_forward_items: Vec::new(),

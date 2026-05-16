@@ -8,6 +8,8 @@ pub enum WorkspaceResolutionError {
     CurrentDir(#[from] std::io::Error),
     #[error("ambiguous workspace: multiple .boundline/ directories found above {0}")]
     Ambiguous(PathBuf),
+    #[error("workspace not found or not a directory: {0}")]
+    NotFound(PathBuf),
 }
 
 /// Resolve the workspace directory using the spec-required strategy:
@@ -17,43 +19,55 @@ pub enum WorkspaceResolutionError {
 /// 3. Search upward for the nearest `.git/` (git root) directory; use its parent.
 /// 4. Fall back to the current working directory.
 pub fn resolve_workspace(workspace: Option<&Path>) -> Result<PathBuf, WorkspaceResolutionError> {
-    // 1. Explicit workspace.
-    if let Some(path) = workspace {
+    // Treat `.` the same as omitting the flag so commands default to the repo root.
+    if let Some(path) = workspace
+        && path != Path::new(".")
+    {
         let abs = if path.is_absolute() {
             path.to_path_buf()
         } else {
             std::env::current_dir()?.join(path)
         };
-        return Ok(abs.canonicalize().unwrap_or(abs));
+        let resolved = abs.canonicalize().unwrap_or_else(|_| abs.clone());
+        if !resolved.is_dir() {
+            return Err(WorkspaceResolutionError::NotFound(resolved));
+        }
+        return Ok(resolved);
     }
 
     let cwd = std::env::current_dir()?;
 
+    discover_workspace_root(&cwd)
+}
+
+pub fn discover_workspace_root(start: &Path) -> Result<PathBuf, WorkspaceResolutionError> {
+    let start = start.canonicalize().unwrap_or_else(|_| start.to_path_buf());
+
     // 2. Upward search for `.boundline/` directory.
-    let boundline_candidates = search_upward_all(&cwd, ".boundline");
+    let boundline_candidates = search_upward_all_dirs(&start, ".boundline");
     if boundline_candidates.len() > 1 {
-        return Err(WorkspaceResolutionError::Ambiguous(cwd));
+        return Err(WorkspaceResolutionError::Ambiguous(start));
     }
     if let Some(found) = boundline_candidates.into_iter().next() {
         return Ok(found);
     }
 
-    // 3. Upward search for `.git/` directory (git root).
-    if let Some(found) = search_upward(&cwd, ".git") {
+    // 3. Upward search for the nearest `.git` entry (directory or worktree file).
+    if let Some(found) = search_upward_entry(&start, ".git") {
         return Ok(found);
     }
 
     // 4. Fall back to CWD.
-    Ok(cwd)
+    Ok(start)
 }
 
-/// Walk upward from `start` looking for a child directory named `target`.
+/// Walk upward from `start` looking for any child entry named `target`.
 /// Returns the parent directory that contains `target`, if found.
-fn search_upward(start: &Path, target: &str) -> Option<PathBuf> {
+fn search_upward_entry(start: &Path, target: &str) -> Option<PathBuf> {
     let mut current = start.to_path_buf();
     loop {
         let candidate = current.join(target);
-        if candidate.is_dir() {
+        if candidate.exists() {
             return Some(current);
         }
         if !current.pop() {
@@ -62,7 +76,7 @@ fn search_upward(start: &Path, target: &str) -> Option<PathBuf> {
     }
 }
 
-fn search_upward_all(start: &Path, target: &str) -> Vec<PathBuf> {
+fn search_upward_all_dirs(start: &Path, target: &str) -> Vec<PathBuf> {
     let mut current = start.to_path_buf();
     let mut matches = Vec::new();
     loop {
@@ -73,5 +87,74 @@ fn search_upward_all(start: &Path, target: &str) -> Vec<PathBuf> {
         if !current.pop() {
             return matches;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use tempfile::tempdir;
+
+    use super::{discover_workspace_root, resolve_workspace};
+
+    struct CurrentDirGuard {
+        original: std::path::PathBuf,
+    }
+
+    impl CurrentDirGuard {
+        fn change_to(path: &std::path::Path) -> Self {
+            let original = std::env::current_dir().unwrap();
+            std::env::set_current_dir(path).unwrap();
+            Self { original }
+        }
+    }
+
+    impl Drop for CurrentDirGuard {
+        fn drop(&mut self) {
+            std::env::set_current_dir(&self.original).unwrap();
+        }
+    }
+
+    #[test]
+    fn discover_workspace_root_prefers_boundline_root_over_git_root() {
+        let temp = tempdir().unwrap();
+        let git_root = temp.path().join("repo");
+        let workspace_root = git_root.join("nested");
+        let child = workspace_root.join("src/subdir");
+        fs::create_dir_all(workspace_root.join(".boundline")).unwrap();
+        fs::create_dir_all(git_root.join(".git")).unwrap();
+        fs::create_dir_all(&child).unwrap();
+
+        let resolved = discover_workspace_root(&child).unwrap();
+
+        assert_eq!(resolved, workspace_root.canonicalize().unwrap());
+    }
+
+    #[test]
+    fn discover_workspace_root_accepts_git_worktree_marker_files() {
+        let temp = tempdir().unwrap();
+        let git_root = temp.path().join("repo");
+        let child = git_root.join("crates/canon-cli");
+        fs::create_dir_all(&child).unwrap();
+        fs::write(git_root.join(".git"), "gitdir: /tmp/worktree\n").unwrap();
+
+        let resolved = discover_workspace_root(&child).unwrap();
+
+        assert_eq!(resolved, git_root.canonicalize().unwrap());
+    }
+
+    #[test]
+    fn resolve_workspace_treats_dot_as_repo_discovery() {
+        let temp = tempdir().unwrap();
+        let git_root = temp.path().join("repo");
+        let child = git_root.join("src/subdir");
+        fs::create_dir_all(&child).unwrap();
+        fs::create_dir_all(git_root.join(".git")).unwrap();
+        let _current_dir_guard = CurrentDirGuard::change_to(&child);
+
+        let resolved = resolve_workspace(Some(std::path::Path::new("."))).unwrap();
+
+        assert_eq!(resolved, git_root.canonicalize().unwrap());
     }
 }

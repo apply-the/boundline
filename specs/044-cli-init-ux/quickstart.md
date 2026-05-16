@@ -3,7 +3,7 @@
 ## Scenario 1: Guided init explains optional routes
 
 ```bash
-cargo run --bin boundline -- init --workspace <workspace>
+cargo run --bin boundline -- init
 ```
 
 Expected outcome:
@@ -17,7 +17,6 @@ Expected outcome:
 
 ```bash
 cargo run --bin boundline -- init \
-  --workspace <workspace> \
   --assistant copilot \
   --route planning=copilot:gpt-4o
 ```
@@ -32,7 +31,6 @@ Expected outcome:
 
 ```bash
 cargo run --bin boundline -- init \
-  --workspace <workspace> \
   --assistant copilot \
   --route planning-copilot-gpt-4o
 ```
@@ -48,7 +46,6 @@ Expected outcome:
 
 ```bash
 cargo run --bin boundline -- init \
-  --workspace <workspace> \
   --assistant copilot
 ```
 
@@ -62,7 +59,7 @@ Expected outcome when assistant assets already exist:
 
 ```bash
 cargo run --bin boundline -- doctor --install
-cargo run --bin boundline -- doctor --workspace <workspace>
+cargo run --bin boundline -- doctor
 ```
 
 Expected outcome:

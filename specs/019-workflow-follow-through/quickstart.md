@@ -7,9 +7,9 @@
 
 ```bash
 cd /tmp/boundline-workflow-follow-through
-cargo run --bin boundline -- workflow run governed-delivery --workspace .
-cargo run --bin boundline -- workflow resume --workspace .
-cargo run --bin boundline -- workflow inspect --workspace .
+cargo run --bin boundline -- workflow run governed-delivery
+cargo run --bin boundline -- workflow resume
+cargo run --bin boundline -- workflow inspect
 ```
 
 **Expected**:
@@ -21,9 +21,9 @@ cargo run --bin boundline -- workflow inspect --workspace .
 
 ```bash
 cd /tmp/boundline-workflow-follow-through
-cargo run --bin boundline -- workflow list --workspace .
-cargo run --bin boundline -- workflow run governed-delivery --workspace .
-cargo run --bin boundline -- workflow status --workspace .
+cargo run --bin boundline -- workflow list
+cargo run --bin boundline -- workflow run governed-delivery
+cargo run --bin boundline -- workflow status
 ```
 
 **Expected**:
@@ -36,7 +36,7 @@ cargo run --bin boundline -- workflow status --workspace .
 ```bash
 cd /tmp/boundline-workflow-follow-through
 cat .boundline/workflows.toml
-cargo run --bin boundline -- workflow list --workspace .
+cargo run --bin boundline -- workflow list
 ```
 
 **Expected**:

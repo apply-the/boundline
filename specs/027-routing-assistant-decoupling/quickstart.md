@@ -14,7 +14,6 @@ Set the implementation slot for the current workspace:
 
 ```bash
 cargo run --bin boundline -- config set \
-  --workspace <workspace> \
   --scope workspace \
   --slot implementation \
   --runtime codex \
@@ -37,7 +36,7 @@ cargo run --bin boundline -- config set \
 ## 2. Inspect the effective routing decision
 
 ```bash
-cargo run --bin boundline -- config show --workspace <workspace> --scope effective
+cargo run --bin boundline -- config show --scope effective
 ```
 
 Expected behavior:
@@ -50,10 +49,10 @@ Expected behavior:
 ## 3. Run the existing session-native workflow
 
 ```bash
-cargo run --bin boundline -- start --workspace <workspace>
-cargo run --bin boundline -- capture --workspace <workspace> --goal "Summarize routing ownership while updating backend binding"
-cargo run --bin boundline -- plan --workspace <workspace>
-cargo run --bin boundline -- run --workspace <workspace>
+cargo run --bin boundline -- start
+cargo run --bin boundline -- capture --goal "Summarize routing ownership while updating backend binding"
+cargo run --bin boundline -- plan
+cargo run --bin boundline -- run
 ```
 
 Expected behavior:
@@ -66,9 +65,9 @@ Expected behavior:
 ## 4. Continue with runtime follow-up surfaces
 
 ```bash
-cargo run --bin boundline -- status --workspace <workspace>
-cargo run --bin boundline -- next --workspace <workspace>
-cargo run --bin boundline -- inspect --workspace <workspace>
+cargo run --bin boundline -- status
+cargo run --bin boundline -- next
+cargo run --bin boundline -- inspect
 ```
 
 Expected behavior:

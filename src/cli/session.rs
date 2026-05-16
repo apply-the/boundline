@@ -16,6 +16,7 @@ use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStor
 use crate::cli::CommandExitStatus;
 use crate::cli::inspect::summarize_trace;
 use crate::cli::output;
+use crate::cli::workspace as cli_workspace;
 use crate::domain::cluster::ClusterSessionProjection;
 use crate::domain::decision::ActionSelector;
 use crate::domain::governance::GovernanceRuntimeKind;
@@ -28,14 +29,16 @@ use crate::domain::session::{
     task_state_attempt_lineage_summary, task_state_canon_memory_context_credibility,
     task_state_canon_memory_context_summary, task_state_canon_memory_primary_inputs,
     task_state_canon_memory_provenance, task_state_canon_memory_staleness_reason,
-    task_state_governance_approval_text, task_state_governance_blocked_reason,
-    task_state_governance_candidate_actions, task_state_governance_canon_run_ref,
+    task_state_governance_approval_provenance, task_state_governance_approval_text,
+    task_state_governance_blocked_reason, task_state_governance_candidate_actions,
+    task_state_governance_canon_run_ref, task_state_governance_contract_lines,
     task_state_governance_decision_headline, task_state_governance_mode_text,
     task_state_governance_next_action, task_state_governance_packet_binding_reason,
     task_state_governance_packet_ref, task_state_governance_packet_source_stage,
-    task_state_governance_runtime_text, task_state_governance_stage_key,
-    task_state_governance_state_text, task_state_string, task_state_strings,
-    task_state_workspace_slice_summary,
+    task_state_governance_reason, task_state_governance_rollout_profile_text,
+    task_state_governance_runtime_state_text, task_state_governance_runtime_text,
+    task_state_governance_stage_key, task_state_governance_state_text, task_state_string,
+    task_state_strings, task_state_workspace_slice_summary,
 };
 use crate::domain::task::TaskStatus;
 use crate::domain::trace::{TraceSummaryView, current_timestamp_millis};
@@ -352,7 +355,9 @@ pub fn execute_step_with_target(
         return Err(SessionCommandError::MissingPlannedTask);
     }
 
-    if runtime.refresh_governance_state(&mut record).map_err(map_runtime_error)? {
+    if runtime.refresh_governance_state(&mut record).map_err(map_runtime_error)?
+        && governance_refresh_requires_pause(&record)
+    {
         runtime.persist_session(&record).map_err(map_runtime_error)?;
         let view = build_status_view(
             &record,
@@ -404,8 +409,8 @@ pub fn execute_run_with_target(
         return Err(SessionCommandError::MissingPlannedTask);
     }
 
-    if !uses_native_goal_plan
-        && runtime.refresh_governance_state(&mut record).map_err(map_runtime_error)?
+    if runtime.refresh_governance_state(&mut record).map_err(map_runtime_error)?
+        && governance_refresh_requires_pause(&record)
     {
         runtime.persist_session(&record).map_err(map_runtime_error)?;
         let view = build_status_view(
@@ -562,8 +567,14 @@ pub fn execute_next_with_target(
     cluster: Option<&Path>,
 ) -> Result<SessionCommandReport, SessionCommandError> {
     let workspace = resolve_session_target(workspace, cluster, "next")?.owner_workspace;
+    let runtime = SessionRuntime::for_workspace(&workspace);
     match load_active_session(&workspace) {
-        Ok(record) => {
+        Ok(mut record) => {
+            let refreshed =
+                runtime.refresh_governance_state(&mut record).map_err(map_runtime_error)?;
+            if refreshed {
+                runtime.persist_session(&record).map_err(map_runtime_error)?;
+            }
             let next_command =
                 suggested_next_command(&record).ok_or(SessionCommandError::NotImplemented {
                     command_name: "next",
@@ -579,12 +590,13 @@ pub fn execute_next_with_target(
                 Some(next_command.clone()),
                 if let Some(follow_up) = &compatibility_follow_up {
                     format!(
-                        "next recommended command for the active session is `{next_command}`; latest compatibility follow-up remains {} via `{}`",
+                        "{}; latest compatibility follow-up remains {} via `{}`",
+                        next_command_summary(&next_command, refreshed),
                         follow_up.follow_up_mode.as_str(),
                         follow_up.next_command
                     )
                 } else {
-                    format!("next recommended command for the active session is `{next_command}`")
+                    next_command_summary(&next_command, refreshed)
                 },
                 compatibility_follow_up,
             );
@@ -649,13 +661,9 @@ pub fn render_error(command_name: &str, error: &SessionCommandError) -> String {
 }
 
 fn resolve_workspace(workspace: Option<&Path>) -> Result<PathBuf, SessionCommandError> {
-    let candidate = match workspace {
-        Some(path) if path.is_absolute() => path.to_path_buf(),
-        Some(path) => std::env::current_dir()?.join(path),
-        None => std::env::current_dir()?,
-    };
-
-    Ok(candidate.canonicalize().unwrap_or(candidate))
+    cli_workspace::resolve_workspace(workspace).map_err(|error| {
+        SessionCommandError::WorkspaceResolution(std::io::Error::other(error.to_string()))
+    })
 }
 
 fn resolve_session_target(
@@ -1089,6 +1097,26 @@ pub(crate) fn build_status_view_with_follow_up(
             .active_task
             .as_ref()
             .and_then(task_state_governance_state_text),
+        latest_governance_runtime_state: record
+            .active_task
+            .as_ref()
+            .and_then(task_state_governance_runtime_state_text),
+        latest_governance_rollout_profile: record
+            .active_task
+            .as_ref()
+            .and_then(task_state_governance_rollout_profile_text),
+        latest_governance_reason: record
+            .active_task
+            .as_ref()
+            .and_then(task_state_governance_reason),
+        latest_governance_contract_lines: record
+            .active_task
+            .as_ref()
+            .and_then(task_state_governance_contract_lines),
+        latest_governance_approval_provenance: record
+            .active_task
+            .as_ref()
+            .and_then(task_state_governance_approval_provenance),
         latest_governance_blocked_reason: record
             .active_task
             .as_ref()
@@ -1315,6 +1343,24 @@ fn suggested_next_command(record: &ActiveSessionRecord) -> Option<String> {
             latest_checkpoint_restore_command.or_else(|| Some("boundline inspect".to_string()))
         }
         SessionStatus::Invalid => Some("boundline start".to_string()),
+    }
+}
+
+fn governance_refresh_requires_pause(record: &ActiveSessionRecord) -> bool {
+    record
+        .active_task
+        .as_ref()
+        .and_then(task_state_governance_state_text)
+        .is_some_and(|state| matches!(state.as_str(), "awaiting_approval" | "blocked" | "failed"))
+}
+
+fn next_command_summary(next_command: &str, refreshed: bool) -> String {
+    if refreshed {
+        format!(
+            "refreshed governance approval state; next recommended command for the active session is `{next_command}`"
+        )
+    } else {
+        format!("next recommended command for the active session is `{next_command}`")
     }
 }
 
@@ -2399,6 +2445,7 @@ fn red_to_green_addition() {
                 ),
                 evidence_summary: None,
                 authority_provenance_lines: Vec::new(),
+                adaptive_provenance_lines: Vec::new(),
             })
             .unwrap();
         let record = crate::domain::session::ActiveSessionRecord {

@@ -78,8 +78,8 @@ use crate::orchestrator::governance::{
     GovernanceStepDecision, append_governed_document_to_lifecycle, bounded_governance_context,
     build_autopilot_decision, clarification_prompt_from_response, compacted_canon_memory_for_block,
     compacted_canon_memory_from_response, enrich_bounded_context_with_accumulated,
-    governance_input_documents, governance_stage_key, governance_state_patch,
-    governed_document_ref_from_response, overlay_stage_policy_with_intent,
+    governance_input_documents, governance_projection_snapshot, governance_stage_key,
+    governance_state_patch, governed_document_ref_from_response, overlay_stage_policy_with_intent,
     requested_governance_intent, runtime_command_available, selected_stage_policy,
 };
 use crate::orchestrator::guidance_runtime::{
@@ -1063,6 +1063,7 @@ impl SessionRuntime {
                     closure_findings: Vec::new(),
                 }),
             authority_provenance_lines: Vec::new(),
+            adaptive_provenance_lines: Vec::new(),
         })
     }
 
@@ -1493,14 +1494,23 @@ impl SessionRuntime {
             session.negotiation_packet.as_ref(),
         )
         .map_err(SessionRuntimeError::FixtureRuntime)?;
-        let plan = build_fixture_plan_for_goal(&self.workspace_ref, Some(active_flow), &goal)
-            .map_err(SessionRuntimeError::FixtureRuntime)?;
-        let mut task = Task::new(Uuid::new_v4().to_string(), &request, plan)
-            .map_err(SessionRuntimeError::TaskRequest)?;
+        let mut task = if let Some(active_task) = session
+            .active_task
+            .as_ref()
+            .filter(|task| task.goal == goal && !task.status.is_terminal())
+        {
+            active_task.clone()
+        } else {
+            let plan = build_fixture_plan_for_goal(&self.workspace_ref, Some(active_flow), &goal)
+                .map_err(SessionRuntimeError::FixtureRuntime)?;
+            Task::new(Uuid::new_v4().to_string(), &request, plan)
+                .map_err(SessionRuntimeError::TaskRequest)?
+        };
         let mut governance_trace = self.build_goal_plan_trace(&session.session_id, goal_plan);
         let mut saw_governance = false;
+        let start_step_index = task.plan.current_step_index;
 
-        for step_index in 0..task.plan.steps.len() {
+        for step_index in start_step_index..task.plan.steps.len() {
             task.plan.current_step_index = step_index;
             let step = task.plan.steps[step_index].clone();
             let Some(metadata) = FlowStepMetadata::from_step(&step)
@@ -2853,6 +2863,15 @@ impl SessionRuntime {
             return Ok(GovernanceStepDecision::Continue);
         }
 
+        if matches!(request_kind, GovernanceRequestKind::Start)
+            && existing_record.as_ref().is_some_and(|record| {
+                record.stage_key == stage_key
+                    && record.lifecycle_state == GovernanceLifecycleState::GovernedReady
+            })
+        {
+            return Ok(GovernanceStepDecision::Continue);
+        }
+
         let existing_packet = task
             .context
             .latest_governance_packet()
@@ -3282,12 +3301,20 @@ impl SessionRuntime {
         };
         let compacted_canon_memory =
             compacted_canon_memory_from_response(&stage_key, runtime_kind, &response);
+        let projection = governance_projection_snapshot(
+            &task.context,
+            &stage_key,
+            response.packet.as_ref(),
+            response.approval_state,
+        )
+        .map_err(|error| SessionRuntimeError::GovernancePatch(error.to_string()))?;
         let patch = governance_state_patch(
             &record,
             response.packet.as_ref(),
             packet_reuse.as_ref(),
             decision.as_ref(),
             compacted_canon_memory.as_ref(),
+            &projection,
         )
         .map_err(|error| SessionRuntimeError::GovernancePatch(error.to_string()))?;
         task.context.apply_state_patch(&patch);
@@ -3307,7 +3334,13 @@ impl SessionRuntime {
                     "reason": blocked_reason.as_deref().unwrap_or(&response.message),
                     "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
                     "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason),
+                    "latest_governance_runtime_state": projection.runtime_state,
+                    "latest_governance_rollout_profile": projection.rollout_profile,
+                    "latest_governance_reason": projection.reason.clone(),
+                    "latest_governance_contract_lines": projection.contract_lines.clone(),
+                    "latest_governance_approval_provenance": projection.approval_provenance.clone(),
                     "authority_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.authority_provenance_lines.clone()).unwrap_or_default(),
+                    "adaptive_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.adaptive_provenance_lines.clone()).unwrap_or_default(),
                 }),
             );
         }
@@ -3327,7 +3360,13 @@ impl SessionRuntime {
                         "headline": response.packet.as_ref().map(|packet| packet.headline.clone()).unwrap_or_else(|| response.message.clone()),
                         "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
                         "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason),
+                        "latest_governance_runtime_state": projection.runtime_state,
+                        "latest_governance_rollout_profile": projection.rollout_profile,
+                        "latest_governance_reason": projection.reason.clone(),
+                        "latest_governance_contract_lines": projection.contract_lines.clone(),
+                        "latest_governance_approval_provenance": projection.approval_provenance.clone(),
                         "authority_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.authority_provenance_lines.clone()).unwrap_or_default(),
+                        "adaptive_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.adaptive_provenance_lines.clone()).unwrap_or_default(),
                     }),
                 );
                 let trace_location = self.persist_trace(trace)?;
@@ -3363,7 +3402,13 @@ impl SessionRuntime {
                         "run_ref": response.run_ref,
                         "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
                         "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason),
+                        "latest_governance_runtime_state": projection.runtime_state,
+                        "latest_governance_rollout_profile": projection.rollout_profile,
+                        "latest_governance_reason": projection.reason.clone(),
+                        "latest_governance_contract_lines": projection.contract_lines.clone(),
+                        "latest_governance_approval_provenance": projection.approval_provenance.clone(),
                         "authority_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.authority_provenance_lines.clone()).unwrap_or_default(),
+                        "adaptive_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.adaptive_provenance_lines.clone()).unwrap_or_default(),
                     }),
                 );
                 let trace_location = self.persist_trace(trace)?;
@@ -3387,7 +3432,13 @@ impl SessionRuntime {
                         "packet_ref": response.packet.as_ref().map(|packet| packet.packet_ref.clone()),
                         "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
                         "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason),
+                        "latest_governance_runtime_state": projection.runtime_state,
+                        "latest_governance_rollout_profile": projection.rollout_profile,
+                        "latest_governance_reason": projection.reason.clone(),
+                        "latest_governance_contract_lines": projection.contract_lines.clone(),
+                        "latest_governance_approval_provenance": projection.approval_provenance.clone(),
                         "authority_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.authority_provenance_lines.clone()).unwrap_or_default(),
+                        "adaptive_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.adaptive_provenance_lines.clone()).unwrap_or_default(),
                     }),
                 );
                 let trace_location = self.persist_trace(trace)?;
@@ -3448,12 +3499,20 @@ impl SessionRuntime {
         };
         let compacted_canon_memory =
             compacted_canon_memory_for_block(&block.stage_key, block.runtime, &block.reason);
+        let projection = governance_projection_snapshot(
+            &task.context,
+            &block.stage_key,
+            None,
+            ApprovalState::NotNeeded,
+        )
+        .map_err(|error| SessionRuntimeError::GovernancePatch(error.to_string()))?;
         let patch = governance_state_patch(
             &record,
             None,
             None,
             decision.as_ref(),
             compacted_canon_memory.as_ref(),
+            &projection,
         )
         .map_err(|error| SessionRuntimeError::GovernancePatch(error.to_string()))?;
         task.context.apply_state_patch(&patch);
@@ -3466,6 +3525,11 @@ impl SessionRuntime {
                 "runtime": block.runtime,
                 "required": block.required,
                 "reason": block.reason,
+                "latest_governance_runtime_state": projection.runtime_state,
+                "latest_governance_rollout_profile": projection.rollout_profile,
+                "latest_governance_reason": projection.reason.clone(),
+                "latest_governance_contract_lines": projection.contract_lines.clone(),
+                "latest_governance_approval_provenance": projection.approval_provenance.clone(),
             }),
         );
         let trace_location = self.persist_trace(trace)?;
@@ -6223,6 +6287,7 @@ mod tests {
                     enabled: true,
                     required: false,
                     autopilot: false,
+                    require_adaptive_companion: false,
                     runtime: Some(GovernanceRuntimeKind::Canon),
                     canon_mode: Some(CanonMode::Discovery),
                     system_context: Some(SystemContextBinding::Existing),
@@ -6515,6 +6580,7 @@ mod tests {
                     enabled: true,
                     required: false,
                     autopilot: false,
+                    require_adaptive_companion: false,
                     runtime: Some(GovernanceRuntimeKind::Local),
                     canon_mode: None,
                     system_context: Some(SystemContextBinding::Existing),
@@ -6651,6 +6717,7 @@ mod tests {
                     enabled: true,
                     required: true,
                     autopilot: false,
+                    require_adaptive_companion: false,
                     runtime: Some(GovernanceRuntimeKind::Canon),
                     canon_mode: Some(CanonMode::Discovery),
                     system_context: Some(SystemContextBinding::Existing),
@@ -6750,6 +6817,7 @@ mod tests {
             enabled: true,
             required: true,
             autopilot: false,
+            require_adaptive_companion: false,
             runtime: Some(GovernanceRuntimeKind::Canon),
             canon_mode: Some(CanonMode::Discovery),
             system_context: Some(SystemContextBinding::Existing),
@@ -6832,6 +6900,7 @@ mod tests {
                     enabled: true,
                     required: true,
                     autopilot: false,
+                    require_adaptive_companion: false,
                     runtime: Some(GovernanceRuntimeKind::Canon),
                     canon_mode: None,
                     system_context: Some(SystemContextBinding::Existing),

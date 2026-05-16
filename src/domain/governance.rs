@@ -506,6 +506,8 @@ pub struct StageGovernancePolicy {
     pub required: bool,
     #[serde(default)]
     pub autopilot: bool,
+    #[serde(default)]
+    pub require_adaptive_companion: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime: Option<GovernanceRuntimeKind>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -708,7 +710,8 @@ pub enum PacketReadiness {
 }
 
 pub const AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE: &str = "authority-governance-v1";
-const AUTHORITY_PROVENANCE_UNAVAILABLE: &str = "unavailable";
+pub const ADAPTIVE_GOVERNANCE_V1_CONTRACT_LINE: &str = "adaptive-governance-v1";
+const CANON_PROVENANCE_UNAVAILABLE: &str = "unavailable";
 
 /// Bounded council profile vocabulary defined by S3 §20.
 ///
@@ -795,6 +798,231 @@ impl StopSemantics {
 }
 
 impl std::fmt::Display for StopSemantics {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Runtime-owned governance posture for a governed boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum GovernanceRuntimeState {
+    Advisory,
+    Catch,
+    Rule,
+    Hook,
+}
+
+impl GovernanceRuntimeState {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Advisory => "advisory",
+            Self::Catch => "catch",
+            Self::Rule => "rule",
+            Self::Hook => "hook",
+        }
+    }
+
+    const fn strength_rank(self) -> u8 {
+        match self {
+            Self::Advisory => 0,
+            Self::Catch => 1,
+            Self::Rule => 2,
+            Self::Hook => 3,
+        }
+    }
+
+    /// Classify the directional change between two runtime postures.
+    pub const fn transition_direction_to(self, next: Self) -> GovernanceTransitionDirection {
+        if self.strength_rank() == next.strength_rank() {
+            GovernanceTransitionDirection::NoChange
+        } else if self.strength_rank() < next.strength_rank() {
+            GovernanceTransitionDirection::Promote
+        } else {
+            GovernanceTransitionDirection::Downgrade
+        }
+    }
+}
+
+impl std::fmt::Display for GovernanceRuntimeState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl From<CanonAdaptiveGovernanceState> for GovernanceRuntimeState {
+    fn from(value: CanonAdaptiveGovernanceState) -> Self {
+        match value {
+            CanonAdaptiveGovernanceState::Advisory => Self::Advisory,
+            CanonAdaptiveGovernanceState::Catch => Self::Catch,
+            CanonAdaptiveGovernanceState::Rule => Self::Rule,
+            CanonAdaptiveGovernanceState::Hook => Self::Hook,
+        }
+    }
+}
+
+/// Direction of change between two runtime governance postures.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GovernanceTransitionDirection {
+    NoChange,
+    Promote,
+    Downgrade,
+}
+
+impl GovernanceTransitionDirection {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::NoChange => "no_change",
+            Self::Promote => "promote",
+            Self::Downgrade => "downgrade",
+        }
+    }
+}
+
+impl std::fmt::Display for GovernanceTransitionDirection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Operator-visible maturity profile for progressive governance adoption.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum GovernanceRolloutProfile {
+    Minimal,
+    Guided,
+    Governed,
+    Strict,
+}
+
+impl GovernanceRolloutProfile {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Minimal => "minimal",
+            Self::Guided => "guided",
+            Self::Governed => "governed",
+            Self::Strict => "strict",
+        }
+    }
+
+    /// Returns the baseline runtime posture implied by the maturity profile
+    /// before local evidence or policy changes it.
+    pub const fn baseline_runtime_state(self) -> GovernanceRuntimeState {
+        match self {
+            Self::Minimal => GovernanceRuntimeState::Advisory,
+            Self::Guided => GovernanceRuntimeState::Catch,
+            Self::Governed => GovernanceRuntimeState::Rule,
+            Self::Strict => GovernanceRuntimeState::Hook,
+        }
+    }
+}
+
+impl std::fmt::Display for GovernanceRolloutProfile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl From<CanonAdaptiveRolloutProfile> for GovernanceRolloutProfile {
+    fn from(value: CanonAdaptiveRolloutProfile) -> Self {
+        match value {
+            CanonAdaptiveRolloutProfile::Minimal => Self::Minimal,
+            CanonAdaptiveRolloutProfile::Guided => Self::Guided,
+            CanonAdaptiveRolloutProfile::Governed => Self::Governed,
+            CanonAdaptiveRolloutProfile::Strict => Self::Strict,
+        }
+    }
+}
+
+/// Pure inputs for resolving the startup governance posture of one boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GovernanceStartupContext {
+    pub current_state: GovernanceRuntimeState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_profile: Option<GovernanceRolloutProfile>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operator_approved_profile: Option<GovernanceRolloutProfile>,
+    #[serde(default)]
+    pub low_trust_surface: bool,
+}
+
+/// Pure resolution result for startup governance posture before runtime evidence modifies it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GovernancePostureResolution {
+    pub runtime_state: GovernanceRuntimeState,
+    pub rollout_profile: GovernanceRolloutProfile,
+    pub transition_direction: GovernanceTransitionDirection,
+}
+
+/// Resolve the startup governance posture for a boundary.
+///
+/// Newly enabled and low-trust surfaces default to `minimal` / `advisory`
+/// unless a stronger rollout profile has been explicitly approved. A stronger
+/// requested profile alone does not activate a stronger startup posture.
+pub fn resolve_governance_startup_posture(
+    context: GovernanceStartupContext,
+) -> GovernancePostureResolution {
+    let rollout_profile = context
+        .operator_approved_profile
+        .or(match context.requested_profile {
+            Some(GovernanceRolloutProfile::Minimal) => Some(GovernanceRolloutProfile::Minimal),
+            _ => None,
+        })
+        .unwrap_or(GovernanceRolloutProfile::Minimal);
+
+    let runtime_state = if context.low_trust_surface && context.operator_approved_profile.is_none()
+    {
+        GovernanceRuntimeState::Advisory
+    } else {
+        rollout_profile.baseline_runtime_state()
+    };
+
+    GovernancePostureResolution {
+        runtime_state,
+        rollout_profile,
+        transition_direction: context.current_state.transition_direction_to(runtime_state),
+    }
+}
+
+/// Explicit degraded runtime outcomes used by S4 before escalation or stop.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GovernanceDegradationMode {
+    AdvisoryFallback,
+    SmallerCouncil,
+    HumanGate,
+    ReducedAutonomy,
+    VerificationOnly,
+    ExecutionBlock,
+}
+
+impl GovernanceDegradationMode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::AdvisoryFallback => "advisory_fallback",
+            Self::SmallerCouncil => "smaller_council",
+            Self::HumanGate => "human_gate",
+            Self::ReducedAutonomy => "reduced_autonomy",
+            Self::VerificationOnly => "verification_only",
+            Self::ExecutionBlock => "execution_block",
+        }
+    }
+
+    /// Maps S4 degradation outcomes onto the existing S3 stop-semantics vocabulary.
+    pub const fn mapped_stop_semantics(self) -> StopSemantics {
+        match self {
+            Self::AdvisoryFallback => StopSemantics::ProceedWithAdvisory,
+            Self::SmallerCouncil => StopSemantics::CouncilRequired,
+            Self::HumanGate => StopSemantics::HumanGateRequired,
+            Self::ReducedAutonomy => StopSemantics::ProceedWithWarning,
+            Self::VerificationOnly => StopSemantics::DegradedProceed,
+            Self::ExecutionBlock => StopSemantics::HardStop,
+        }
+    }
+}
+
+impl std::fmt::Display for GovernanceDegradationMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.as_str())
     }
@@ -943,6 +1171,87 @@ impl CanonStageRoleHintKind {
             Self::ReviewPosture => "review-posture",
             Self::HumanGate => "human-gate",
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CanonAdaptiveGovernanceState {
+    Advisory,
+    Catch,
+    Rule,
+    Hook,
+}
+
+impl CanonAdaptiveGovernanceState {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Advisory => "advisory",
+            Self::Catch => "catch",
+            Self::Rule => "rule",
+            Self::Hook => "hook",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CanonAdaptiveRolloutProfile {
+    Minimal,
+    Guided,
+    Governed,
+    Strict,
+}
+
+impl CanonAdaptiveRolloutProfile {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Minimal => "minimal",
+            Self::Guided => "guided",
+            Self::Governed => "governed",
+            Self::Strict => "strict",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CanonAdaptiveGovernanceV1Envelope {
+    pub contract_line: String,
+    pub governance_state: CanonAdaptiveGovernanceState,
+    pub rollout_profile: CanonAdaptiveRolloutProfile,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state_rationale: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_rationale: Option<String>,
+}
+
+impl CanonAdaptiveGovernanceV1Envelope {
+    /// Reports whether the packet advertises the currently supported adaptive contract line.
+    pub fn is_supported_contract_line(&self) -> bool {
+        self.contract_line == ADAPTIVE_GOVERNANCE_V1_CONTRACT_LINE
+    }
+
+    /// Renders a compact projection of the adaptive companion for session and trace views.
+    pub fn projection_lines(&self) -> Vec<String> {
+        vec![
+            format!("adaptive_contract_line: {}", self.contract_line),
+            format!("adaptive_governance_state: {}", self.governance_state.as_str()),
+            format!("adaptive_rollout_profile: {}", self.rollout_profile.as_str()),
+            format!(
+                "adaptive_state_rationale: {}",
+                self.state_rationale
+                    .as_deref()
+                    .filter(|value| !value.trim().is_empty())
+                    .unwrap_or(CANON_PROVENANCE_UNAVAILABLE)
+            ),
+            format!(
+                "adaptive_profile_rationale: {}",
+                self.profile_rationale
+                    .as_deref()
+                    .filter(|value| !value.trim().is_empty())
+                    .unwrap_or(CANON_PROVENANCE_UNAVAILABLE)
+            ),
+        ]
     }
 }
 
@@ -1134,7 +1443,7 @@ impl CanonAuthorityGovernanceV1Envelope {
     pub fn projection_lines(&self) -> Vec<String> {
         let resolution = self.control_resolution();
         let stage_role_hints = if self.stage_role_hints.is_empty() {
-            AUTHORITY_PROVENANCE_UNAVAILABLE.to_string()
+            CANON_PROVENANCE_UNAVAILABLE.to_string()
         } else {
             self.stage_role_hints
                 .iter()
@@ -1157,12 +1466,12 @@ impl CanonAuthorityGovernanceV1Envelope {
                 self.primary_artifact
                     .as_deref()
                     .filter(|value| !value.trim().is_empty())
-                    .unwrap_or(AUTHORITY_PROVENANCE_UNAVAILABLE)
+                    .unwrap_or(CANON_PROVENANCE_UNAVAILABLE)
             ),
             format!(
                 "authority_artifact_order: {}",
                 if self.artifact_order.is_empty() {
-                    AUTHORITY_PROVENANCE_UNAVAILABLE.to_string()
+                    CANON_PROVENANCE_UNAVAILABLE.to_string()
                 } else {
                     self.artifact_order.join(", ")
                 }
@@ -1170,7 +1479,7 @@ impl CanonAuthorityGovernanceV1Envelope {
             format!(
                 "authority_promotion_refs: {}",
                 if self.promotion_refs.is_empty() {
-                    AUTHORITY_PROVENANCE_UNAVAILABLE.to_string()
+                    CANON_PROVENANCE_UNAVAILABLE.to_string()
                 } else {
                     self.promotion_refs.join(", ")
                 }
@@ -1178,7 +1487,7 @@ impl CanonAuthorityGovernanceV1Envelope {
             format!(
                 "authority_persona_anti_behaviors: {}",
                 if self.persona_anti_behaviors.is_empty() {
-                    AUTHORITY_PROVENANCE_UNAVAILABLE.to_string()
+                    CANON_PROVENANCE_UNAVAILABLE.to_string()
                 } else {
                     self.persona_anti_behaviors.join(", ")
                 }
@@ -1326,6 +1635,8 @@ pub struct CompactedCanonMemory {
     pub evidence_summary: Option<CanonEvidenceInspectSummary>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub authority_provenance_lines: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub adaptive_provenance_lines: Vec<String>,
 }
 
 impl CompactedCanonMemory {
@@ -1365,6 +1676,7 @@ impl CompactedCanonMemory {
             lines.push(format!("canon_memory_reason: {reason_code}"));
         }
         lines.extend(self.authority_provenance_lines.clone());
+        lines.extend(self.adaptive_provenance_lines.clone());
         if let Some(next_action) = self.next_action_text() {
             lines.push(format!("canon_memory_next_action: {next_action}"));
         }
@@ -1511,6 +1823,8 @@ pub struct GovernedStagePacket {
     pub reason_code: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authority_governance: Option<CanonAuthorityGovernanceV1Envelope>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub adaptive_governance: Option<CanonAdaptiveGovernanceV1Envelope>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
