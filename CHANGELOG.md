@@ -17,6 +17,33 @@ recorded workspace version.
 
 ## [Unreleased]
 
+## [0.57.0] - 2026-05-16
+
+Delivered specs:
+
+- `057` - Adaptive Governance
+
+Highlights:
+
+- Added the full adaptive governance model (S4) with `GovernanceRuntimeState`
+  stages (Advisory, Catch, Rule, Hook) and `GovernanceRolloutProfile` variants
+  (minimal, guided, governed, strict).
+- Introduced `GovernanceDegradationMode`, `GovernancePostureResolution`,
+  `GovernanceTransitionDirection`, and `GovernanceStartupContext` types.
+- Added `resolve_governance_posture_from_context` to derive the active posture
+  from workspace and session evidence.
+- Surfaced active governance state through `status`, `next`, `inspect`, and
+  trace projection alongside existing bounded planning and review evidence.
+- Added four new docs: `adaptive-governance`, `control-graduation-model`,
+  `degradation-and-escalation`, and `runtime-confidence-and-calibration`.
+- Refactored `SessionStatusView::validate` into 12 focused private helpers to
+  reduce complexity (see `TD-001-complexity-hotspots.md`).
+- Hardened workspace resolution with an explicit `NotFound` error for missing
+  `--workspace` paths.
+- Retired the S3 and S4 roadmap spec files; `ROADMAP.md` now marks S4 as
+  fully delivered.
+- Bumped workspace version to `0.57.0`.
+
 ## [0.56.0] - 2026-05-16
 
 Delivered specs:
