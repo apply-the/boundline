@@ -39,7 +39,7 @@ workflow: governed-delivery
 workflow_phase: govern
 routing: native (goal_plan) - goal plan is ready for native execution
 execution_condition: waiting - governance approval is still required before workflow progression can continue
-next_command: boundline workflow resume --workspace .
+next_command: boundline workflow resume
 ```
 
 ### Governance blocked explicitly
@@ -49,5 +49,5 @@ workflow: governed-delivery
 workflow_phase: govern
 routing: native (goal_plan) - goal plan is ready for native execution
 execution_condition: blocked - governance cannot continue until the required approval state is resolved
-next_command: boundline workflow inspect --workspace .
+next_command: boundline workflow inspect
 ```

@@ -178,7 +178,8 @@ Highlights:
 Highlights:
 
 - Fix guided `boundline init` so fresh workspaces create `.boundline/` before
-  writing execution and config files, including the `--workspace .` path.
+  writing execution and config files, including repo-discovery flows that omit
+  an explicit workspace override.
 - Seed guided no-assistant route selection from the bundled catalog defaults
   instead of starting every slot unset.
 - Expand the bundled GitHub Copilot runtime catalog to include Anthropic and
@@ -491,12 +492,12 @@ Delivered specs:
 
 Highlights:
 
-- Make direct `boundline run --workspace <workspace> --goal ...` bootstrap the
+- Make direct `boundline run --goal ...` bootstrap the
   native session route by default, including negotiated capture, executable
   planning, decision-loop execution, and persisted follow-up through `status`,
   `next`, and `inspect`.
 - Preserve declarative execution profiles as an explicit subordinate route via
-  `boundline run --compatibility --workspace <workspace> --goal ...`, and block
+  `boundline run --compatibility --goal ...`, and block
   native direct run from silently overwriting meaningful active session state.
 - Update README, configuration, getting-started, assistant guidance, roadmap,
   contributor docs, and changelog for the release.

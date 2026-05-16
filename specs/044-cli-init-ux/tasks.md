@@ -32,7 +32,7 @@
 
 **Goal**: Make guided and help-based init self-explanatory for assistant selection, route syntax, and default behavior.
 
-**Independent Test**: A first-run operator can complete `boundline init --workspace <workspace>` or inspect `boundline init --help` without consulting external docs for route syntax or defaults.
+**Independent Test**: A first-run operator can complete `boundline init` or inspect `boundline init --help` without consulting external docs for route syntax or defaults.
 
 ### Tests for User Story 1
 

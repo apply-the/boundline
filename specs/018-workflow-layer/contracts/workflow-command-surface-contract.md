@@ -44,7 +44,7 @@ workflow: default
 workflow_phase: plan
 routing: native (goal_plan) - goal plan is ready for native execution
 execution_condition: waiting - planning still needs confirmed input before execution can continue
-next_command: boundline workflow resume --workspace .
+next_command: boundline workflow resume
 ```
 
 ### Invalid workflow definition
@@ -54,5 +54,5 @@ workflow: invalid-flow
 workflow_phase: blocked
 routing: blocked (session_state) - workflow definition is not valid for session-native execution
 execution_condition: blocked - unsupported workflow phase ordering
-next_command: boundline workflow inspect --workspace .
+next_command: boundline workflow inspect
 ```

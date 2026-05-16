@@ -147,43 +147,25 @@ pub fn summarize_trace(
 ) -> Result<TraceSummaryView, TraceSummaryError> {
     let persisted_terminal_status = trace.terminal_status;
     let persisted_terminal_reason = trace.terminal_reason.clone();
-    let mut authored_input_summary: Option<String> = None;
-    let mut authored_input_sources: Vec<String> = Vec::new();
-    let mut authored_input_deduplicated_sources: Vec<String> = Vec::new();
-    let mut clarification_headline: Option<String> = None;
-    let mut clarification_prompt: Option<String> = None;
-    let mut clarification_missing_fields: Vec<String> = Vec::new();
-    let mut requested_governance_runtime: Option<String> = None;
-    let mut requested_governance_risk: Option<String> = None;
-    let mut requested_governance_zone: Option<String> = None;
-    let mut requested_governance_owner: Option<String> = None;
-    let mut negotiation_goal_summary: Option<String> = None;
-    let mut negotiation_resolution: Option<String> = None;
-    let mut negotiation_acceptance_boundary: Option<String> = None;
+    let mut input_projection = TraceInputProjection::default();
     let mut cluster_delivery_story: Option<ClusterDeliveryStory> = None;
     let mut routing_summary: Option<String> = None;
     let mut routing_projection = RoutingDecisionProjection::default();
     let mut goal_plan_summary: Option<String> = None;
-    let mut context_summary: Option<String> = None;
-    let mut context_credibility: Option<String> = None;
-    let mut context_primary_inputs: Vec<String> = Vec::new();
-    let mut context_provenance: Vec<String> = Vec::new();
-    let mut context_staleness_reason: Option<String> = None;
+    let mut context_projection = TraceContextProjection::default();
     let mut guidance_guardian = GuidanceGuardianProjection::default();
-    let mut governance_next_action: Option<String> = None;
+    let mut governance_projection = TraceGovernanceProjection::default();
     let mut decision_timeline: Vec<String> = Vec::new();
     let mut failure_evidence: Vec<String> = Vec::new();
     let mut adaptive_evidence: Vec<String> = Vec::new();
     let mut latest_checkpoint_id: Option<String> = None;
     let mut latest_checkpoint_scope: Option<String> = None;
     let mut latest_checkpoint_restore_command: Option<String> = None;
-    let mut latest_governance_state: Option<String> = None;
     let mut delegation: Option<crate::domain::session::DelegationStatusView> = None;
     let mut saw_native_routing_signal = false;
     let mut step_indexes: HashMap<String, usize> = HashMap::new();
     let mut executed_steps: Vec<TraceStepSummary> = Vec::new();
     let mut recovery_events: Vec<TraceRecoveryEvent> = Vec::new();
-    let mut governance_timeline: Vec<String> = Vec::new();
     let mut review_timeline: Vec<String> = Vec::new();
 
     for event in &trace.events {
@@ -212,167 +194,8 @@ pub fn summarize_trace(
 
         match event.event_type {
             TraceEventType::TaskStarted => {
-                if authored_input_summary.is_none() {
-                    authored_input_summary = event
-                        .payload
-                        .get("input")
-                        .and_then(|input| input.get("authored_input_summary"))
-                        .and_then(|value| value.as_str().map(str::to_string));
-                }
-                if authored_input_sources.is_empty() {
-                    authored_input_sources = event
-                        .payload
-                        .get("input")
-                        .and_then(|input| input.get("authored_input_sources"))
-                        .and_then(|value| value.as_array())
-                        .map(|items| {
-                            items
-                                .iter()
-                                .filter_map(|item| item.as_str().map(str::to_string))
-                                .collect::<Vec<_>>()
-                        })
-                        .unwrap_or_default();
-                }
-                if authored_input_deduplicated_sources.is_empty() {
-                    authored_input_deduplicated_sources = event
-                        .payload
-                        .get("input")
-                        .and_then(|input| input.get("authored_input_deduplicated_sources"))
-                        .and_then(|value| value.as_array())
-                        .map(|items| {
-                            items
-                                .iter()
-                                .filter_map(|item| item.as_str().map(str::to_string))
-                                .collect::<Vec<_>>()
-                        })
-                        .unwrap_or_default();
-                }
-                if clarification_headline.is_none() {
-                    clarification_headline = event
-                        .payload
-                        .get("input")
-                        .and_then(|input| input.get("clarification_headline"))
-                        .and_then(|value| value.as_str().map(str::to_string));
-                }
-                if clarification_prompt.is_none() {
-                    clarification_prompt = event
-                        .payload
-                        .get("input")
-                        .and_then(|input| input.get("clarification_prompt"))
-                        .and_then(|value| value.as_str().map(str::to_string));
-                }
-                if clarification_missing_fields.is_empty() {
-                    clarification_missing_fields = event
-                        .payload
-                        .get("input")
-                        .and_then(|input| input.get("clarification_missing_fields"))
-                        .and_then(|value| value.as_array())
-                        .map(|items| {
-                            items
-                                .iter()
-                                .filter_map(|item| item.as_str().map(str::to_string))
-                                .collect::<Vec<_>>()
-                        })
-                        .unwrap_or_default();
-                }
-                if requested_governance_runtime.is_none() {
-                    requested_governance_runtime = event
-                        .payload
-                        .get("input")
-                        .and_then(|input| input.get("requested_governance_runtime"))
-                        .and_then(|value| value.as_str().map(str::to_string));
-                }
-                if requested_governance_risk.is_none() {
-                    requested_governance_risk = event
-                        .payload
-                        .get("input")
-                        .and_then(|input| input.get("requested_governance_risk"))
-                        .and_then(|value| value.as_str().map(str::to_string));
-                }
-                if requested_governance_zone.is_none() {
-                    requested_governance_zone = event
-                        .payload
-                        .get("input")
-                        .and_then(|input| input.get("requested_governance_zone"))
-                        .and_then(|value| value.as_str().map(str::to_string));
-                }
-                if requested_governance_owner.is_none() {
-                    requested_governance_owner = event
-                        .payload
-                        .get("input")
-                        .and_then(|input| input.get("requested_governance_owner"))
-                        .and_then(|value| value.as_str().map(str::to_string));
-                }
-                if negotiation_goal_summary.is_none() {
-                    negotiation_goal_summary = event
-                        .payload
-                        .get("input")
-                        .and_then(|input| input.get("negotiation_goal_summary"))
-                        .and_then(|value| value.as_str().map(str::to_string));
-                }
-                if negotiation_resolution.is_none() {
-                    negotiation_resolution = event
-                        .payload
-                        .get("input")
-                        .and_then(|input| input.get("negotiation_resolution"))
-                        .and_then(|value| value.as_str().map(str::to_string));
-                }
-                if negotiation_acceptance_boundary.is_none() {
-                    negotiation_acceptance_boundary = event
-                        .payload
-                        .get("input")
-                        .and_then(|input| input.get("negotiation_acceptance_boundary"))
-                        .and_then(|value| value.as_str().map(str::to_string));
-                }
-                if context_summary.is_none() {
-                    context_summary = event
-                        .payload
-                        .get("input")
-                        .and_then(|input| input.get("context_summary"))
-                        .and_then(|value| value.as_str().map(str::to_string));
-                }
-                if context_credibility.is_none() {
-                    context_credibility = event
-                        .payload
-                        .get("input")
-                        .and_then(|input| input.get("context_credibility"))
-                        .and_then(|value| value.as_str().map(str::to_string));
-                }
-                if context_primary_inputs.is_empty() {
-                    context_primary_inputs = event
-                        .payload
-                        .get("input")
-                        .and_then(|input| input.get("context_primary_inputs"))
-                        .and_then(|value| value.as_array())
-                        .map(|items| {
-                            items
-                                .iter()
-                                .filter_map(|item| item.as_str().map(str::to_string))
-                                .collect::<Vec<_>>()
-                        })
-                        .unwrap_or_default();
-                }
-                if context_provenance.is_empty() {
-                    context_provenance = event
-                        .payload
-                        .get("input")
-                        .and_then(|input| input.get("context_provenance"))
-                        .and_then(|value| value.as_array())
-                        .map(|items| {
-                            items
-                                .iter()
-                                .filter_map(|item| item.as_str().map(str::to_string))
-                                .collect::<Vec<_>>()
-                        })
-                        .unwrap_or_default();
-                }
-                if context_staleness_reason.is_none() {
-                    context_staleness_reason = event
-                        .payload
-                        .get("input")
-                        .and_then(|input| input.get("context_staleness_reason"))
-                        .and_then(|value| value.as_str().map(str::to_string));
-                }
+                input_projection.merge_task_started_payload(&event.payload);
+                context_projection.merge_task_started_payload(&event.payload);
             }
             TraceEventType::TerminalRecorded => {
                 cluster_delivery_story = event
@@ -526,139 +349,11 @@ pub fn summarize_trace(
             | TraceEventType::GovernanceBlocked
             | TraceEventType::GovernancePacketRejected => {
                 saw_native_routing_signal = true;
-                match event.event_type {
-                    TraceEventType::GovernanceAwaitingApproval => {
-                        latest_governance_state = Some("awaiting_approval".to_string());
-                    }
-                    TraceEventType::GovernanceCompleted => {
-                        latest_governance_state = Some("governed_ready".to_string());
-                    }
-                    TraceEventType::GovernanceBlocked
-                    | TraceEventType::GovernancePacketRejected => {
-                        latest_governance_state = Some("blocked".to_string());
-                    }
-                    _ => {}
-                }
-                if context_summary.is_none() {
-                    context_summary = event
-                        .payload
-                        .get("canon_memory_summary")
-                        .and_then(|value| value.as_str().map(str::to_string));
-                }
-                if context_credibility.is_none() {
-                    context_credibility = event
-                        .payload
-                        .get("canon_memory_credibility")
-                        .and_then(|value| value.as_str().map(str::to_string));
-                }
-                if context_primary_inputs.is_empty() {
-                    context_primary_inputs = event
-                        .payload
-                        .get("document_refs")
-                        .and_then(|value| value.as_array())
-                        .map(|items| {
-                            items
-                                .iter()
-                                .filter_map(|item| item.as_str().map(str::to_string))
-                                .collect::<Vec<_>>()
-                        })
-                        .unwrap_or_default();
-                }
-                if let Some(canon_memory_summary) =
-                    event.payload.get("canon_memory_summary").and_then(|value| value.as_str())
-                {
-                    let line = format!("canon_memory: {canon_memory_summary}");
-                    if !context_provenance.contains(&line) {
-                        context_provenance.push(line);
-                    }
-                }
-                if let Some(canon_memory_compatibility) =
-                    event.payload.get("canon_memory_compatibility").and_then(|value| value.as_str())
-                {
-                    let line = format!("canon_memory_compatibility: {canon_memory_compatibility}");
-                    if !context_provenance.contains(&line) {
-                        context_provenance.push(line);
-                    }
-                }
-                if let Some(canon_memory_run_ref) = event
-                    .payload
-                    .get("canon_memory_run_ref")
-                    .or_else(|| event.payload.get("run_ref"))
-                    .and_then(|value| value.as_str())
-                {
-                    let line = format!("canon_memory_run_ref: {canon_memory_run_ref}");
-                    if !context_provenance.contains(&line) {
-                        context_provenance.push(line);
-                    }
-                }
-                if let Some(canon_memory_packet_ref) = event
-                    .payload
-                    .get("canon_memory_packet_ref")
-                    .or_else(|| event.payload.get("packet_ref"))
-                    .and_then(|value| value.as_str())
-                {
-                    let line = format!("canon_memory_packet: {canon_memory_packet_ref}");
-                    if !context_provenance.contains(&line) {
-                        context_provenance.push(line);
-                    }
-                }
-                if let Some(canon_memory_reason_code) =
-                    event.payload.get("canon_memory_reason_code").and_then(|value| value.as_str())
-                {
-                    let line = format!("canon_memory_reason: {canon_memory_reason_code}");
-                    if !context_provenance.contains(&line) {
-                        context_provenance.push(line);
-                    }
-                }
-                if let Some(canon_next_action) =
-                    event.payload.get("canon_next_action").and_then(|value| value.as_str())
-                {
-                    let line = format!("canon_memory_next_action: {canon_next_action}");
-                    if !context_provenance.contains(&line) {
-                        context_provenance.push(line);
-                    }
-                }
-                if let Some(authority_provenance_lines) = event
-                    .payload
-                    .get("authority_provenance_lines")
-                    .and_then(|value| value.as_array())
-                {
-                    for line in authority_provenance_lines
-                        .iter()
-                        .filter_map(|item| item.as_str().map(str::to_string))
-                    {
-                        if !context_provenance.contains(&line) {
-                            context_provenance.push(line);
-                        }
-                    }
-                }
-                if context_staleness_reason.is_none()
-                    && event
-                        .payload
-                        .get("canon_memory_credibility")
-                        .and_then(|value| value.as_str())
-                        .is_some_and(|credibility| credibility != "credible")
-                {
-                    context_staleness_reason = event
-                        .payload
-                        .get("reason")
-                        .and_then(|value| value.as_str().map(str::to_string))
-                        .or_else(|| {
-                            event
-                                .payload
-                                .get("canon_memory_summary")
-                                .and_then(|value| value.as_str().map(str::to_string))
-                        });
-                }
-                if governance_next_action.is_none() {
-                    governance_next_action = event
-                        .payload
-                        .get("canon_next_action")
-                        .and_then(|value| value.as_str().map(str::to_string));
-                }
-                if let Some(line) = governance_timeline_line(event.event_type, &event.payload) {
-                    governance_timeline.push(line);
-                }
+                governance_projection.merge_event(
+                    event.event_type,
+                    &event.payload,
+                    &mut context_projection,
+                );
             }
             TraceEventType::ReviewStarted
             | TraceEventType::ReviewTriggerIgnored
@@ -728,68 +423,8 @@ pub fn summarize_trace(
                         "{task_count} bounded task(s) for {goal}{state_suffix}{flow_suffix}{verification_suffix}{rationale_suffix}"
                     ));
                 }
-                if negotiation_goal_summary.is_none() {
-                    negotiation_goal_summary = event
-                        .payload
-                        .get("negotiation_goal_summary")
-                        .and_then(|value| value.as_str().map(str::to_string));
-                }
-                if negotiation_resolution.is_none() {
-                    negotiation_resolution = event
-                        .payload
-                        .get("negotiation_resolution")
-                        .and_then(|value| value.as_str().map(str::to_string));
-                }
-                if negotiation_acceptance_boundary.is_none() {
-                    negotiation_acceptance_boundary = event
-                        .payload
-                        .get("negotiation_acceptance_boundary")
-                        .and_then(|value| value.as_str().map(str::to_string));
-                }
-                if context_summary.is_none() {
-                    context_summary = event
-                        .payload
-                        .get("context_summary")
-                        .and_then(|value| value.as_str().map(str::to_string));
-                }
-                if context_credibility.is_none() {
-                    context_credibility = event
-                        .payload
-                        .get("context_credibility")
-                        .and_then(|value| value.as_str().map(str::to_string));
-                }
-                if context_primary_inputs.is_empty() {
-                    context_primary_inputs = event
-                        .payload
-                        .get("context_primary_inputs")
-                        .and_then(|value| value.as_array())
-                        .map(|items| {
-                            items
-                                .iter()
-                                .filter_map(|item| item.as_str().map(str::to_string))
-                                .collect::<Vec<_>>()
-                        })
-                        .unwrap_or_default();
-                }
-                if context_provenance.is_empty() {
-                    context_provenance = event
-                        .payload
-                        .get("context_provenance")
-                        .and_then(|value| value.as_array())
-                        .map(|items| {
-                            items
-                                .iter()
-                                .filter_map(|item| item.as_str().map(str::to_string))
-                                .collect::<Vec<_>>()
-                        })
-                        .unwrap_or_default();
-                }
-                if context_staleness_reason.is_none() {
-                    context_staleness_reason = event
-                        .payload
-                        .get("context_staleness_reason")
-                        .and_then(|value| value.as_str().map(str::to_string));
-                }
+                input_projection.merge_goal_plan_payload(&event.payload);
+                context_projection.merge_goal_plan_payload(&event.payload);
             }
             TraceEventType::FlowInferred => {
                 if let Some(flow_name) =
@@ -845,10 +480,12 @@ pub fn summarize_trace(
         match (persisted_terminal_status, persisted_terminal_reason) {
             (Some(terminal_status), Some(terminal_reason)) => (terminal_status, terminal_reason),
             (None, None) => {
-                if latest_governance_state.is_some() {
+                if governance_projection.latest_state.is_some() {
                     (
                         TaskStatus::Running,
-                        synthesized_in_progress_reason(latest_governance_state.as_deref()),
+                        synthesized_in_progress_reason(
+                            governance_projection.latest_state.as_deref(),
+                        ),
                     )
                 } else {
                     return Err(TraceSummaryError::MissingTerminalStatus);
@@ -861,29 +498,29 @@ pub fn summarize_trace(
     Ok(TraceSummaryView {
         trace_ref: trace_ref.as_ref().to_string_lossy().into_owned(),
         goal: trace.goal.clone(),
-        negotiation_goal_summary,
-        negotiation_resolution,
-        negotiation_acceptance_boundary,
+        negotiation_goal_summary: input_projection.negotiation_goal_summary,
+        negotiation_resolution: input_projection.negotiation_resolution,
+        negotiation_acceptance_boundary: input_projection.negotiation_acceptance_boundary,
         cluster_delivery_story,
         routing_summary,
         routing_projection,
         goal_plan_summary,
-        authored_input_summary,
-        authored_input_sources,
-        authored_input_deduplicated_sources,
-        context_summary,
-        context_credibility,
-        context_primary_inputs,
-        context_provenance,
-        context_staleness_reason,
+        authored_input_summary: input_projection.authored_input_summary,
+        authored_input_sources: input_projection.authored_input_sources,
+        authored_input_deduplicated_sources: input_projection.authored_input_deduplicated_sources,
+        context_summary: context_projection.summary,
+        context_credibility: context_projection.credibility,
+        context_primary_inputs: context_projection.primary_inputs,
+        context_provenance: context_projection.provenance,
+        context_staleness_reason: context_projection.staleness_reason,
         guidance_guardian,
-        clarification_headline,
-        clarification_prompt,
-        clarification_missing_fields,
-        requested_governance_runtime,
-        requested_governance_risk,
-        requested_governance_zone,
-        requested_governance_owner,
+        clarification_headline: input_projection.clarification_headline,
+        clarification_prompt: input_projection.clarification_prompt,
+        clarification_missing_fields: input_projection.clarification_missing_fields,
+        requested_governance_runtime: input_projection.requested_governance_runtime,
+        requested_governance_risk: input_projection.requested_governance_risk,
+        requested_governance_zone: input_projection.requested_governance_zone,
+        requested_governance_owner: input_projection.requested_governance_owner,
         decision_timeline,
         failure_evidence,
         adaptive_evidence,
@@ -892,9 +529,14 @@ pub fn summarize_trace(
         latest_checkpoint_restore_command,
         executed_steps,
         recovery_events,
-        governance_timeline,
-        governance_next_action: governance_next_action
-            .or_else(|| governance_next_action_for_state(latest_governance_state.as_deref())),
+        governance_timeline: governance_projection.timeline,
+        governance_runtime_state: governance_projection.runtime_state,
+        governance_rollout_profile: governance_projection.rollout_profile,
+        governance_reason: governance_projection.reason,
+        governance_approval_provenance: governance_projection.approval_provenance,
+        governance_next_action: governance_projection.next_action.or_else(|| {
+            governance_next_action_for_state(governance_projection.latest_state.as_deref())
+        }),
         delegation,
         review_timeline,
         terminal_status,
@@ -977,6 +619,298 @@ fn merge_guidance_projection_from_payload(
     {
         projection.guardian_blocking_outcome = Some(outcome);
     }
+}
+
+#[derive(Debug, Default)]
+struct TraceInputProjection {
+    authored_input_summary: Option<String>,
+    authored_input_sources: Vec<String>,
+    authored_input_deduplicated_sources: Vec<String>,
+    clarification_headline: Option<String>,
+    clarification_prompt: Option<String>,
+    clarification_missing_fields: Vec<String>,
+    requested_governance_runtime: Option<String>,
+    requested_governance_risk: Option<String>,
+    requested_governance_zone: Option<String>,
+    requested_governance_owner: Option<String>,
+    negotiation_goal_summary: Option<String>,
+    negotiation_resolution: Option<String>,
+    negotiation_acceptance_boundary: Option<String>,
+}
+
+impl TraceInputProjection {
+    fn merge_task_started_payload(&mut self, payload: &Value) {
+        if self.authored_input_summary.is_none() {
+            self.authored_input_summary =
+                nested_payload_string(payload, "input", "authored_input_summary");
+        }
+        if self.authored_input_sources.is_empty() {
+            self.authored_input_sources =
+                nested_payload_string_array(payload, "input", "authored_input_sources");
+        }
+        if self.authored_input_deduplicated_sources.is_empty() {
+            self.authored_input_deduplicated_sources = nested_payload_string_array(
+                payload,
+                "input",
+                "authored_input_deduplicated_sources",
+            );
+        }
+        if self.clarification_headline.is_none() {
+            self.clarification_headline =
+                nested_payload_string(payload, "input", "clarification_headline");
+        }
+        if self.clarification_prompt.is_none() {
+            self.clarification_prompt =
+                nested_payload_string(payload, "input", "clarification_prompt");
+        }
+        if self.clarification_missing_fields.is_empty() {
+            self.clarification_missing_fields =
+                nested_payload_string_array(payload, "input", "clarification_missing_fields");
+        }
+        if self.requested_governance_runtime.is_none() {
+            self.requested_governance_runtime =
+                nested_payload_string(payload, "input", "requested_governance_runtime");
+        }
+        if self.requested_governance_risk.is_none() {
+            self.requested_governance_risk =
+                nested_payload_string(payload, "input", "requested_governance_risk");
+        }
+        if self.requested_governance_zone.is_none() {
+            self.requested_governance_zone =
+                nested_payload_string(payload, "input", "requested_governance_zone");
+        }
+        if self.requested_governance_owner.is_none() {
+            self.requested_governance_owner =
+                nested_payload_string(payload, "input", "requested_governance_owner");
+        }
+        if self.negotiation_goal_summary.is_none() {
+            self.negotiation_goal_summary =
+                nested_payload_string(payload, "input", "negotiation_goal_summary");
+        }
+        if self.negotiation_resolution.is_none() {
+            self.negotiation_resolution =
+                nested_payload_string(payload, "input", "negotiation_resolution");
+        }
+        if self.negotiation_acceptance_boundary.is_none() {
+            self.negotiation_acceptance_boundary =
+                nested_payload_string(payload, "input", "negotiation_acceptance_boundary");
+        }
+    }
+
+    fn merge_goal_plan_payload(&mut self, payload: &Value) {
+        if self.negotiation_goal_summary.is_none() {
+            self.negotiation_goal_summary = payload_string(payload, "negotiation_goal_summary");
+        }
+        if self.negotiation_resolution.is_none() {
+            self.negotiation_resolution = payload_string(payload, "negotiation_resolution");
+        }
+        if self.negotiation_acceptance_boundary.is_none() {
+            self.negotiation_acceptance_boundary =
+                payload_string(payload, "negotiation_acceptance_boundary");
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct TraceContextProjection {
+    summary: Option<String>,
+    credibility: Option<String>,
+    primary_inputs: Vec<String>,
+    provenance: Vec<String>,
+    staleness_reason: Option<String>,
+}
+
+impl TraceContextProjection {
+    fn merge_task_started_payload(&mut self, payload: &Value) {
+        if self.summary.is_none() {
+            self.summary = nested_payload_string(payload, "input", "context_summary");
+        }
+        if self.credibility.is_none() {
+            self.credibility = nested_payload_string(payload, "input", "context_credibility");
+        }
+        if self.primary_inputs.is_empty() {
+            self.primary_inputs =
+                nested_payload_string_array(payload, "input", "context_primary_inputs");
+        }
+        if self.provenance.is_empty() {
+            self.provenance = nested_payload_string_array(payload, "input", "context_provenance");
+        }
+        if self.staleness_reason.is_none() {
+            self.staleness_reason =
+                nested_payload_string(payload, "input", "context_staleness_reason");
+        }
+    }
+
+    fn merge_goal_plan_payload(&mut self, payload: &Value) {
+        if self.summary.is_none() {
+            self.summary = payload_string(payload, "context_summary");
+        }
+        if self.credibility.is_none() {
+            self.credibility = payload_string(payload, "context_credibility");
+        }
+        if self.primary_inputs.is_empty() {
+            self.primary_inputs = payload_string_array(payload, "context_primary_inputs");
+        }
+        if self.provenance.is_empty() {
+            self.provenance = payload_string_array(payload, "context_provenance");
+        }
+        if self.staleness_reason.is_none() {
+            self.staleness_reason = payload_string(payload, "context_staleness_reason");
+        }
+    }
+
+    fn merge_governance_payload(&mut self, payload: &Value) {
+        if self.summary.is_none() {
+            self.summary = payload_string(payload, "canon_memory_summary");
+        }
+        if self.credibility.is_none() {
+            self.credibility = payload_string(payload, "canon_memory_credibility");
+        }
+        if self.primary_inputs.is_empty() {
+            self.primary_inputs = payload_string_array(payload, "document_refs");
+        }
+
+        self.push_optional_line(
+            payload_string(payload, "canon_memory_summary")
+                .map(|value| format!("canon_memory: {value}")),
+        );
+        self.push_optional_line(
+            payload_string(payload, "canon_memory_compatibility")
+                .map(|value| format!("canon_memory_compatibility: {value}")),
+        );
+        self.push_optional_line(
+            payload_string(payload, "canon_memory_run_ref")
+                .or_else(|| payload_string(payload, "run_ref"))
+                .map(|value| format!("canon_memory_run_ref: {value}")),
+        );
+        self.push_optional_line(
+            payload_string(payload, "canon_memory_packet_ref")
+                .or_else(|| payload_string(payload, "packet_ref"))
+                .map(|value| format!("canon_memory_packet: {value}")),
+        );
+        self.push_optional_line(
+            payload_string(payload, "canon_memory_reason_code")
+                .map(|value| format!("canon_memory_reason: {value}")),
+        );
+        self.push_optional_line(
+            payload_string(payload, "canon_next_action")
+                .map(|value| format!("canon_memory_next_action: {value}")),
+        );
+
+        for line in payload_string_array(payload, "authority_provenance_lines") {
+            self.push_line(line);
+        }
+        for line in payload_string_array(payload, "adaptive_provenance_lines") {
+            self.push_line(line);
+        }
+
+        if self.staleness_reason.is_none()
+            && payload_string(payload, "canon_memory_credibility")
+                .is_some_and(|credibility| credibility != "credible")
+        {
+            self.staleness_reason = payload_string(payload, "reason")
+                .or_else(|| payload_string(payload, "canon_memory_summary"));
+        }
+    }
+
+    fn push_optional_line(&mut self, line: Option<String>) {
+        if let Some(line) = line {
+            self.push_line(line);
+        }
+    }
+
+    fn push_line(&mut self, line: String) {
+        if !self.provenance.contains(&line) {
+            self.provenance.push(line);
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct TraceGovernanceProjection {
+    latest_state: Option<String>,
+    next_action: Option<String>,
+    runtime_state: Option<String>,
+    rollout_profile: Option<String>,
+    reason: Option<String>,
+    approval_provenance: Option<String>,
+    timeline: Vec<String>,
+}
+
+impl TraceGovernanceProjection {
+    fn merge_event(
+        &mut self,
+        event_type: TraceEventType,
+        payload: &Value,
+        context_projection: &mut TraceContextProjection,
+    ) {
+        match event_type {
+            TraceEventType::GovernanceAwaitingApproval => {
+                self.latest_state = Some("awaiting_approval".to_string());
+            }
+            TraceEventType::GovernanceCompleted => {
+                self.latest_state = Some("governed_ready".to_string());
+            }
+            TraceEventType::GovernanceBlocked | TraceEventType::GovernancePacketRejected => {
+                self.latest_state = Some("blocked".to_string());
+            }
+            _ => {}
+        }
+
+        context_projection.merge_governance_payload(payload);
+
+        if self.next_action.is_none() {
+            self.next_action = payload_string(payload, "canon_next_action");
+        }
+        if self.runtime_state.is_none() {
+            self.runtime_state = payload_string(payload, "latest_governance_runtime_state");
+        }
+        if self.rollout_profile.is_none() {
+            self.rollout_profile = payload_string(payload, "latest_governance_rollout_profile");
+        }
+        if self.reason.is_none() {
+            self.reason = payload_string(payload, "latest_governance_reason");
+        }
+        if self.approval_provenance.is_none() {
+            self.approval_provenance =
+                payload_string(payload, "latest_governance_approval_provenance");
+        }
+        if let Some(line) = governance_timeline_line(event_type, payload) {
+            self.timeline.push(line);
+        }
+    }
+}
+
+fn payload_string(payload: &Value, key: &str) -> Option<String> {
+    payload.get(key).and_then(|value| value.as_str().map(str::to_string))
+}
+
+fn payload_string_array(payload: &Value, key: &str) -> Vec<String> {
+    payload
+        .get(key)
+        .and_then(Value::as_array)
+        .map(|items| {
+            items.iter().filter_map(|item| item.as_str().map(str::to_string)).collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+fn nested_payload_string(payload: &Value, container: &str, key: &str) -> Option<String> {
+    payload
+        .get(container)
+        .and_then(|value| value.get(key))
+        .and_then(|value| value.as_str().map(str::to_string))
+}
+
+fn nested_payload_string_array(payload: &Value, container: &str, key: &str) -> Vec<String> {
+    payload
+        .get(container)
+        .and_then(|value| value.get(key))
+        .and_then(Value::as_array)
+        .map(|items| {
+            items.iter().filter_map(|item| item.as_str().map(str::to_string)).collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
 }
 
 // Extract a string array from a JSON payload without failing the overall
@@ -2356,7 +2290,8 @@ mod tests {
                 "canon_memory_compatibility": "warning",
                 "canon_memory_reason_code": "refresh_required",
                 "canon_next_action": "refresh: refresh the governed packet and reassess its credibility",
-                "authority_provenance_lines": ["authority_control_class: council_review"]
+                "authority_provenance_lines": ["authority_control_class: council_review"],
+                "adaptive_provenance_lines": ["adaptive_contract_line: adaptive-governance-v1"]
             }),
         );
 
@@ -2386,6 +2321,11 @@ mod tests {
             summary
                 .context_provenance
                 .contains(&"authority_control_class: council_review".to_string())
+        );
+        assert!(
+            summary
+                .context_provenance
+                .contains(&"adaptive_contract_line: adaptive-governance-v1".to_string())
         );
         assert_eq!(summary.context_staleness_reason.as_deref(), Some("refresh_required"));
         assert_eq!(

@@ -35,7 +35,7 @@
 
 **Goal**: Replace fragile freeform guided prompts with a navigable init wizard plus top-level version support.
 
-**Independent Test**: Run `boundline --version` and complete guided `boundline init --workspace <workspace>` in an empty workspace using navigation and selection prompts, then confirm the summary and verify written outputs.
+**Independent Test**: Run `boundline --version` and complete guided `boundline init` in an empty workspace using navigation and selection prompts, then confirm the summary and verify written outputs.
 
 ### Tests for User Story 1
 

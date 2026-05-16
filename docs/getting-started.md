@@ -64,7 +64,7 @@ If the install is not ready, follow the printed action exactly and rerun
 ### 3. Verify The Workspace
 
 ```bash
-boundline doctor --workspace <workspace>
+boundline doctor
 ```
 
 This checks that the repository exists, is writable, and has the local state
@@ -100,7 +100,6 @@ the first run:
 
 ```bash
 boundline init \
-  --workspace <workspace> \
   --canon-mode-selection auto-confirm \
   --risk medium \
   --zone engineering \
@@ -116,19 +115,19 @@ confidence is high enough. All settings are written under
 `<workspace>/.boundline/config.toml`; no global Canon preferences are used.
 
 ```bash
-boundline start --workspace <workspace>
-boundline capture --workspace <workspace> --goal "Fix the failing add test"
-boundline plan --workspace <workspace>
-boundline plan --workspace <workspace> --confirm
-boundline run --workspace <workspace>
-boundline status --workspace <workspace>
-boundline inspect --workspace <workspace>
+boundline start
+boundline capture --goal "Fix the failing add test"
+boundline plan
+boundline plan --confirm
+boundline run
+boundline status
+boundline inspect
 ```
 
 The direct path can ingest authored documents and forward them to Canon:
 
 ```bash
-boundline run --workspace <workspace> \
+boundline run \
   --goal "Shape onboarding requirements" \
   --brief docs/prd.md \
   --brief docs/architecture.md
@@ -180,7 +179,7 @@ files, assistant setup, route defaults, or domain-template hygiene before the
 first session:
 
 ```bash
-boundline init --workspace <workspace> --assistant codex
+boundline init --assistant codex
 ```
 
 `--template` is optional. The built-in starting templates are `bug-fix`,
@@ -192,7 +191,7 @@ planning, implementation, verification, and review routes with deterministic
 model defaults unless you supply explicit `--route SLOT=RUNTIME:MODEL`
 overrides.
 
-If you use guided `boundline init --workspace <workspace>` without flags, the
+If you use guided `boundline init` without flags, the
 prompts now list supported assistants and supported route slots directly in the
 terminal, explain when blank input is allowed, and show a valid route example
 such as `planning=copilot:gpt-5.4`. Successful init output reports the result
@@ -203,7 +202,6 @@ If you need domain defaults at bootstrap time, seed them explicitly:
 
 ```bash
 boundline init \
-  --workspace <workspace> \
   --domain systems \
   --domain react \
   --domain-standard "react=follow the shared UI system" \
@@ -223,7 +221,7 @@ matter before the run:
 
 ```bash
 boundline config set --scope global --slot planning --runtime codex --model gpt-5-codex
-boundline config set --workspace <workspace> --scope workspace --reviewer safety --runtime copilot --model gpt-5.4
+boundline config set --scope workspace --reviewer safety --runtime copilot --model gpt-5.4
 boundline config show --workspace <workspace> --scope effective
 ```
 
@@ -236,11 +234,11 @@ If the workspace defines `.boundline/workflows.toml`, you can use a named entryp
 without leaving the same session-owned runtime:
 
 ```bash
-boundline workflow list --workspace <workspace>
-boundline workflow run governed-delivery --workspace <workspace> --goal "Fix the failing add test"
-boundline workflow status --workspace <workspace>
-boundline workflow resume --workspace <workspace>
-boundline workflow inspect --workspace <workspace>
+boundline workflow list
+boundline workflow run governed-delivery --goal "Fix the failing add test"
+boundline workflow status
+boundline workflow resume
+boundline workflow inspect
 ```
 
 The workflow layer is intentionally thin. It reuses the same capture, plan,

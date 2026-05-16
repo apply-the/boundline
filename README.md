@@ -5,7 +5,7 @@
 [![CI](https://github.com/apply-the/boundline/actions/workflows/ci.yml/badge.svg)](https://github.com/apply-the/boundline/actions/workflows/ci.yml)
 [![Lint](https://github.com/apply-the/boundline/actions/workflows/lint.yml/badge.svg)](https://github.com/apply-the/boundline/actions/workflows/lint.yml)
 [![Vulnerabilities](https://github.com/apply-the/boundline/actions/workflows/vulnerabilities.yml/badge.svg)](https://github.com/apply-the/boundline/actions/workflows/vulnerabilities.yml)
-[![Coverage](https://codecov.io/gh/apply-the/boundline/graph/badge.svg)](https://codecov.io/gh/apply-the/boundline)
+[![Quality](https://github.com/apply-the/boundline/actions/workflows/quality.yml/badge.svg)](https://github.com/apply-the/boundline/actions/workflows/quality.yml)
 
 **Boundline is a local delivery orchestrator for bounded engineering work, from idea intake to verified code changes.**
 It applies risk-triggered review councils, authority-zone-aware stop semantics, and explicit admission control at every delivery boundary.
@@ -30,8 +30,10 @@ If Boundline is already installed, this is the shortest path to doing
 something useful:
 
 When you already run these commands from inside the target workspace,
-`--workspace .` is optional for `init`, `start`, `capture`, `plan`, `run`,
-`status`, and `inspect`.
+Boundline resolves the workspace automatically: it prefers the nearest
+initialized `.boundline/` ancestor, then the nearest `.git/` root, and only
+then falls back to the current working directory. Use `--workspace <path>` only when
+you need to target a different repository explicitly.
 
 On an empty or lightly prepared repository, `boundline run` can still
 bootstrap a first bounded change, but only when the goal is specific enough to
@@ -283,8 +285,8 @@ Advanced execution-profile workflows are documented outside this README.
 | Command | Use it for |
 | --- | --- |
 | `boundline doctor --install` | Verify the installed Boundline plus Canon pairing |
-| `boundline doctor --workspace <workspace>` | Check that a workspace is ready |
-| `boundline run --workspace <workspace> --goal "..."` | Fastest way to do something useful |
+| `boundline doctor` | Check that a workspace is ready |
+| `boundline run --goal "..."` | Fastest way to do something useful |
 | `boundline start` | Open or reset the active session |
 | `boundline capture --goal "..."` | Save the goal or brief into the session |
 | `boundline flow bug-fix|change|delivery` | Force the change type instead of inferring it |
@@ -344,8 +346,8 @@ boundline run
 Run a named workflow when the repo defines one:
 
 ```bash
-boundline workflow list --workspace .
-boundline workflow run governed-delivery --workspace . --goal "Fix the failing add test"
+boundline workflow list
+boundline workflow run governed-delivery --goal "Fix the failing add test"
 ```
 
 Use a cluster when one change spans multiple repos:

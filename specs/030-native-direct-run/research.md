@@ -5,7 +5,7 @@
 
 ## R1: Make direct `run --goal` native-first by default
 
-**Decision**: Treat direct `boundline run --workspace <workspace> --goal <goal>` as
+**Decision**: Treat direct `boundline run --goal <goal>` as
 an entry to the existing session-native goal-plan path by default.
 
 **Rationale**: The current product contradiction is that the one-command run

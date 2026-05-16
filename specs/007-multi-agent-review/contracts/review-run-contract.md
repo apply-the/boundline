@@ -7,13 +7,13 @@ Define the minimum observable behavior of `boundline run` when the bounded revie
 ## Invocation
 
 ```bash
-cargo run --bin boundline -- run --goal "<goal>" --workspace <workspace>
+cargo run --bin boundline -- run --goal "<goal>"
 ```
 
 or, after a planned session exists:
 
 ```bash
-cargo run --bin boundline -- run --workspace <workspace>
+cargo run --bin boundline -- run
 ```
 
 ## Success contract

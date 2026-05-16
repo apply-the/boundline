@@ -58,5 +58,5 @@ next_command: boundline status
 routing: blocked (session_state) - session cannot continue with the requested governed analysis
 selected_canon_mode: security-assessment
 execution_condition: blocked - the requested Canon mode is not supported for this stage
-next_command: boundline inspect --workspace .
+next_command: boundline inspect
 ```

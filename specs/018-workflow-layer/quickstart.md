@@ -7,7 +7,7 @@
 
 ```bash
 cd /tmp/boundline-workflow-layer
-cargo run --bin boundline -- workflow run default --workspace .
+cargo run --bin boundline -- workflow run default
 ```
 
 **Expected**:
@@ -19,9 +19,9 @@ cargo run --bin boundline -- workflow run default --workspace .
 
 ```bash
 cd /tmp/boundline-workflow-layer
-cargo run --bin boundline -- workflow status --workspace .
-cargo run --bin boundline -- workflow resume --workspace .
-cargo run --bin boundline -- workflow inspect --workspace .
+cargo run --bin boundline -- workflow status
+cargo run --bin boundline -- workflow resume
+cargo run --bin boundline -- workflow inspect
 ```
 
 **Expected**:
@@ -33,7 +33,7 @@ cargo run --bin boundline -- workflow inspect --workspace .
 
 ```bash
 cd /tmp/boundline-workflow-layer-invalid
-cargo run --bin boundline -- workflow run invalid-flow --workspace .
+cargo run --bin boundline -- workflow run invalid-flow
 ```
 
 **Expected**:

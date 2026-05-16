@@ -42,7 +42,7 @@
 
 ## Decision 6: Use latest-trace inspection as the status and next-step evidence source
 
-- **Decision**: Have assistant `status`, `next`, and fallback inspection paths rely on `boundline inspect --workspace <workspace>` when no explicit trace path is provided, and `boundline inspect --trace <trace>` when a concrete trace reference is available.
+- **Decision**: Have assistant `status`, `next`, and fallback inspection paths rely on `boundline inspect` when no explicit trace path is provided, and `boundline inspect --trace <trace>` when a concrete trace reference is available.
 - **Rationale**: The existing inspect command already exposes the most useful evidence for follow-up routing: terminal status, recovery events, and readable step summaries. Reusing it avoids a second status backend.
 - **Alternatives considered**:
   - Create a separate status data format: rejected because it duplicates the readable trace-summary surface that already exists.

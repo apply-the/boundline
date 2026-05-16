@@ -14,7 +14,7 @@
       "id": "/boundline:start",
       "label": "start",
       "purpose": "Open or reset the active Boundline session for a workspace.",
-      "boundlineCommand": "cargo run --bin boundline -- start --workspace <workspace> --json",
+      "boundlineCommand": "cargo run --bin boundline -- start --json",
       "skillRefs": {
         "claude": "assistant/claude/commands/boundline-start.md",
         "codex": "assistant/codex/commands/boundline-start.md",
@@ -26,7 +26,7 @@
       "id": "/boundline:capture",
       "label": "capture",
       "purpose": "Persist a goal or brief into the active session.",
-      "boundlineCommand": "cargo run --bin boundline -- capture --workspace <workspace> --goal <goal> --json",
+      "boundlineCommand": "cargo run --bin boundline -- capture --goal <goal> --json",
       "skillRefs": {
         "claude": "assistant/claude/commands/boundline-capture.md",
         "codex": "assistant/codex/commands/boundline-capture.md",
@@ -38,7 +38,7 @@
       "id": "/boundline:plan",
       "label": "plan",
       "purpose": "Ask Boundline to propose or confirm a bounded implementation plan.",
-      "boundlineCommand": "cargo run --bin boundline -- plan --workspace <workspace> --json",
+      "boundlineCommand": "cargo run --bin boundline -- plan --json",
       "skillRefs": {
         "claude": "assistant/claude/commands/boundline-plan.md",
         "codex": "assistant/codex/commands/boundline-plan.md",
@@ -50,7 +50,7 @@
       "id": "/boundline:continue",
       "label": "continue",
       "purpose": "Continue only from the active Boundline session source of truth.",
-      "boundlineCommand": "cargo run --bin boundline -- continue --workspace <workspace> --json",
+      "boundlineCommand": "cargo run --bin boundline -- continue --json",
       "skillRefs": {
         "claude": "assistant/claude/commands/boundline-next.md",
         "codex": "assistant/codex/commands/boundline-next.md",
@@ -62,7 +62,7 @@
       "id": "/boundline:run",
       "label": "run",
       "purpose": "Run the next bounded action through the real Boundline runtime.",
-      "boundlineCommand": "cargo run --bin boundline -- run --workspace <workspace> --json",
+      "boundlineCommand": "cargo run --bin boundline -- run --json",
       "skillRefs": {
         "claude": "assistant/claude/commands/boundline-run.md",
         "codex": "assistant/codex/commands/boundline-run.md",
@@ -74,7 +74,7 @@
       "id": "/boundline:status",
       "label": "status",
       "purpose": "Report the active session state and current next action.",
-      "boundlineCommand": "cargo run --bin boundline -- status --workspace <workspace> --json",
+      "boundlineCommand": "cargo run --bin boundline -- status --json",
       "skillRefs": {
         "claude": "assistant/claude/commands/boundline-status.md",
         "codex": "assistant/codex/commands/boundline-status.md",
@@ -86,7 +86,7 @@
       "id": "/boundline:inspect",
       "label": "inspect",
       "purpose": "Inspect the latest authoritative Boundline trace and session evidence.",
-      "boundlineCommand": "cargo run --bin boundline -- inspect --workspace <workspace> --json",
+      "boundlineCommand": "cargo run --bin boundline -- inspect --json",
       "skillRefs": {
         "claude": "assistant/claude/commands/boundline-inspect.md",
         "codex": "assistant/codex/commands/boundline-inspect.md",
@@ -98,7 +98,7 @@
       "id": "/boundline:recover",
       "label": "recover",
       "purpose": "Recover from blocked or failed session state using CLI-reported guidance.",
-      "boundlineCommand": "cargo run --bin boundline -- status --workspace <workspace> --json",
+      "boundlineCommand": "cargo run --bin boundline -- status --json",
       "skillRefs": {
         "claude": "assistant/claude/commands/boundline-recover.md",
         "codex": "assistant/codex/commands/boundline-recover.md",
@@ -110,7 +110,7 @@
       "id": "/boundline:govern",
       "label": "govern",
       "purpose": "Use optional Canon governance only when configured for the active Boundline session.",
-      "boundlineCommand": "cargo run --bin boundline -- config show --workspace <workspace> --scope workspace --json",
+      "boundlineCommand": "cargo run --bin boundline -- config show --scope workspace --json",
       "conditional": true,
       "skillRefs": {
         "claude": "assistant/claude/commands/boundline-govern.md",

@@ -2063,6 +2063,7 @@ mod tests {
                     }),
                     evidence_summary: None,
                     authority_provenance_lines: Vec::new(),
+                    adaptive_provenance_lines: Vec::new(),
                 }),
                 ..PlanningContextSources::default()
             },
@@ -2371,6 +2372,7 @@ mod tests {
                     }),
                     evidence_summary: None,
                     authority_provenance_lines: Vec::new(),
+                    adaptive_provenance_lines: Vec::new(),
                 }),
                 ..PlanningContextSources::default()
             },
@@ -2420,6 +2422,7 @@ mod tests {
                     }),
                     evidence_summary: None,
                     authority_provenance_lines: Vec::new(),
+                    adaptive_provenance_lines: Vec::new(),
                 }),
                 ..PlanningContextSources::default()
             },
@@ -2486,6 +2489,7 @@ mod tests {
                     recommended_next_action: None,
                     evidence_summary: None,
                     authority_provenance_lines: Vec::new(),
+                    adaptive_provenance_lines: Vec::new(),
                 }),
                 ..PlanningContextSources::default()
             },

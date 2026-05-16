@@ -16,7 +16,7 @@ bringing Canon inside one real delivery loop.
 
 ### Contract
 
-- `boundline run --workspace <workspace> --goal <goal>` remains the primary entry.
+- `boundline run --goal <goal>` remains the primary entry.
 - The run output must keep governance activity visible on the same operator
   surface through `governance_selected`, `governance_started`, and
   `governance_completed` events where applicable.

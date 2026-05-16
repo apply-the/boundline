@@ -12,7 +12,7 @@ cargo init --name test-project
 echo 'fn broken() { panic!("fix me"); }' > src/lib.rs
 
 # Start a session and capture a goal
-boundline start --workspace .
+boundline start
 boundline capture --goal "fix the broken function in src/lib.rs"
 
 # Plan from goal
@@ -43,7 +43,7 @@ cat .boundline/session.json | jq '.status'
 
 ```bash
 cd /tmp/test-workspace
-boundline start --workspace .
+boundline start
 boundline capture --goal "add input validation to the parse function"
 boundline plan
 ```
@@ -62,13 +62,13 @@ cat .boundline/session.json | jq '.goal_plan'
 
 ```bash
 # Bug-fix goal
-boundline start --workspace .
+boundline start
 boundline capture --goal "fix the failing test in auth.rs"
 boundline plan
 # Expected: proposes bug-fix flow
 
 # Change goal
-boundline start --workspace .
+boundline start
 boundline capture --goal "add a new validation layer to the API"
 boundline plan
 # Expected: proposes change flow
@@ -94,7 +94,7 @@ boundline run
 ## Test Scenario 5: Decision Verification Failure and Recovery (US1 edge case)
 
 ```bash
-boundline start --workspace .
+boundline start
 boundline capture --goal "fix the broken test"
 boundline plan
 boundline run

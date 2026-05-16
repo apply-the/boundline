@@ -33,13 +33,13 @@ Create `.boundline/execution.json` in a small Rust workspace:
 1. Execute a delivery run against the workspace:
 
    ```bash
-   cargo run --bin boundline -- run --goal "Fix the failing add test" --workspace <workspace>
+   cargo run --bin boundline -- run --goal "Fix the failing add test"
    ```
 
 2. Inspect the latest trace:
 
    ```bash
-   cargo run --bin boundline -- inspect --workspace <workspace>
+   cargo run --bin boundline -- inspect
    ```
 
 Expected outcome:

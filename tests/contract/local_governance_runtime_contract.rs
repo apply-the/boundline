@@ -51,4 +51,6 @@ fn local_governance_runtime_contract_returns_reusable_packet_shape() {
     assert_eq!(packet.expected_document_refs.len(), 1);
     assert_eq!(packet.document_refs, packet.expected_document_refs);
     assert!(packet.packet_ref.contains("bug-fix-investigate"));
+    assert!(packet.authority_governance.is_none());
+    assert!(packet.adaptive_governance.is_none());
 }

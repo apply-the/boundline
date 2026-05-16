@@ -36,7 +36,7 @@ routing: native (goal_plan) - goal plan is ready for native execution
 latest_governance_stage: bug-fix:investigate
 latest_governance_state: awaiting_approval
 latest_governance_mode: discovery
-next_command: boundline run --workspace .
+next_command: boundline run
 ```
 
 ### Governed investigate blocked explicitly
@@ -46,5 +46,5 @@ routing: native (goal_plan) - goal plan is ready for native execution
 latest_governance_stage: bug-fix:investigate
 latest_governance_state: blocked
 execution_condition: blocked - governance blocked stage bug-fix:investigate
-next_command: boundline inspect --workspace .
+next_command: boundline inspect
 ```

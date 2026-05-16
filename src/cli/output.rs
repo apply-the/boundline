@@ -644,6 +644,18 @@ pub fn render_run_trace(
                     }
                 }
             }
+            if let Some(adaptive_provenance_lines) =
+                event.payload.get("adaptive_provenance_lines").and_then(Value::as_array)
+            {
+                for line in adaptive_provenance_lines
+                    .iter()
+                    .filter_map(|item| item.as_str().map(str::to_string))
+                {
+                    if !context_provenance.contains(&line) {
+                        context_provenance.push(line);
+                    }
+                }
+            }
             if context_staleness_reason.is_none()
                 && event
                     .payload
@@ -1088,6 +1100,22 @@ pub fn render_trace_summary(
 
     lines.extend(summary.governance_timeline.iter().cloned());
 
+    if let Some(governance_runtime_state) = &summary.governance_runtime_state {
+        lines.push(format!("governance_runtime_state: {governance_runtime_state}"));
+    }
+
+    if let Some(governance_rollout_profile) = &summary.governance_rollout_profile {
+        lines.push(format!("governance_rollout_profile: {governance_rollout_profile}"));
+    }
+
+    if let Some(governance_reason) = &summary.governance_reason {
+        lines.push(format!("governance_reason: {governance_reason}"));
+    }
+
+    if let Some(governance_approval_provenance) = &summary.governance_approval_provenance {
+        lines.push(format!("governance_approval_provenance: {governance_approval_provenance}"));
+    }
+
     if let Some(governance_next_action) = &summary.governance_next_action {
         lines.push(format!("governance_next_action: {governance_next_action}"));
     }
@@ -1471,6 +1499,36 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
 
     if let Some(latest_governance_state) = &view.latest_governance_state {
         lines.push(format!("latest_governance_state: {latest_governance_state}"));
+    }
+
+    if let Some(latest_governance_runtime_state) = &view.latest_governance_runtime_state {
+        lines.push(format!("latest_governance_runtime_state: {latest_governance_runtime_state}"));
+    }
+
+    if let Some(latest_governance_rollout_profile) = &view.latest_governance_rollout_profile {
+        lines.push(format!(
+            "latest_governance_rollout_profile: {latest_governance_rollout_profile}"
+        ));
+    }
+
+    if let Some(latest_governance_reason) = &view.latest_governance_reason {
+        lines.push(format!("latest_governance_reason: {latest_governance_reason}"));
+    }
+
+    if let Some(latest_governance_contract_lines) = &view.latest_governance_contract_lines
+        && !latest_governance_contract_lines.is_empty()
+    {
+        lines.push(format!(
+            "latest_governance_contract_lines: {}",
+            latest_governance_contract_lines.join(" | ")
+        ));
+    }
+
+    if let Some(latest_governance_approval_provenance) = &view.latest_governance_approval_provenance
+    {
+        lines.push(format!(
+            "latest_governance_approval_provenance: {latest_governance_approval_provenance}"
+        ));
     }
 
     if let Some(latest_governance_blocked_reason) = &view.latest_governance_blocked_reason {
@@ -3044,6 +3102,10 @@ mod tests {
                 },
             ],
             governance_timeline: Vec::new(),
+            governance_runtime_state: None,
+            governance_rollout_profile: None,
+            governance_reason: None,
+            governance_approval_provenance: None,
             governance_next_action: None,
             delegation: None,
             review_timeline: Vec::new(),
@@ -3136,6 +3198,11 @@ mod tests {
             latest_governance_mode: None,
             latest_governance_run_ref: None,
             latest_governance_state: None,
+            latest_governance_runtime_state: None,
+            latest_governance_rollout_profile: None,
+            latest_governance_reason: None,
+            latest_governance_contract_lines: None,
+            latest_governance_approval_provenance: None,
             latest_governance_blocked_reason: None,
             latest_governance_packet_ref: None,
             latest_governance_packet_source_stage: None,
@@ -3289,7 +3356,8 @@ mod tests {
                 "canon_memory_compatibility": "warning",
                 "canon_memory_reason_code": "refresh_required",
                 "canon_next_action": "refresh: refresh the governed packet and reassess its credibility",
-                "authority_provenance_lines": ["authority_control_class: council_review"]
+                "authority_provenance_lines": ["authority_control_class: council_review"],
+                "adaptive_provenance_lines": ["adaptive_contract_line: adaptive-governance-v1"]
             }),
         );
 
@@ -3328,6 +3396,7 @@ mod tests {
         assert!(text.contains("canon_memory_packet: .canon/runs/run-8"), "{text}");
         assert!(text.contains("canon_memory_reason: refresh_required"), "{text}");
         assert!(text.contains("authority_control_class: council_review"), "{text}");
+        assert!(text.contains("adaptive_contract_line: adaptive-governance-v1"), "{text}");
         assert!(
             text.contains(
                 "canon_memory_next_action: refresh: refresh the governed packet and reassess its credibility"
@@ -3421,6 +3490,11 @@ mod tests {
             latest_governance_mode: Some("implementation".to_string()),
             latest_governance_run_ref: Some("canon-run-1".to_string()),
             latest_governance_state: Some("awaiting_approval".to_string()),
+            latest_governance_runtime_state: None,
+            latest_governance_rollout_profile: None,
+            latest_governance_reason: None,
+            latest_governance_contract_lines: None,
+            latest_governance_approval_provenance: None,
             latest_governance_blocked_reason: None,
             latest_governance_packet_ref: Some(".canon/runs/canon-run-1".to_string()),
             latest_governance_packet_source_stage: Some("bug-fix:investigate".to_string()),
@@ -3587,6 +3661,10 @@ mod tests {
                 "governance_selected: bug-fix:implement -> canon".to_string(),
                 "governance_awaiting_approval: bug-fix:implement (requested)".to_string(),
             ],
+            governance_runtime_state: None,
+            governance_rollout_profile: None,
+            governance_reason: None,
+            governance_approval_provenance: None,
             governance_next_action: Some(
                 "wait for approval and rerun boundline status".to_string(),
             ),

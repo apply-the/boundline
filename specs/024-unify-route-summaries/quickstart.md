@@ -27,9 +27,9 @@ cargo run --bin boundline -- workflow run governed-delivery
 cargo run --bin boundline -- status
 cargo run --bin boundline -- next
 cargo run --bin boundline -- inspect
-cargo run --bin boundline -- run --workspace . --goal "Compatibility route check"
+cargo run --bin boundline -- run --goal "Compatibility route check"
 cargo run --bin boundline -- status
-cargo run --bin boundline -- inspect --workspace .
+cargo run --bin boundline -- inspect
 ```
 
 ## Expected CLI Behavior

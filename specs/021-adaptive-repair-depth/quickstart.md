@@ -7,9 +7,9 @@
 
 ```bash
 cd /tmp/boundline-adaptive-repair-depth
-cargo run --bin boundline -- run --goal "Recover after adaptive validation points to a different file" --workspace .
-cargo run --bin boundline -- status --workspace .
-cargo run --bin boundline -- inspect --workspace .
+cargo run --bin boundline -- run --goal "Recover after adaptive validation points to a different file"
+cargo run --bin boundline -- status
+cargo run --bin boundline -- inspect
 ```
 
 **Expected**:
@@ -21,9 +21,9 @@ cargo run --bin boundline -- inspect --workspace .
 
 ```bash
 cd /tmp/boundline-adaptive-repair-depth
-cargo run --bin boundline -- workflow list --workspace .
-cargo run --bin boundline -- run --goal "Recover after adaptive validation points to a different file" --workspace .
-cargo run --bin boundline -- next --workspace .
+cargo run --bin boundline -- workflow list
+cargo run --bin boundline -- run --goal "Recover after adaptive validation points to a different file"
+cargo run --bin boundline -- next
 ```
 
 **Expected**:
@@ -35,8 +35,8 @@ cargo run --bin boundline -- next --workspace .
 
 ```bash
 cd /tmp/boundline-adaptive-repair-depth
-cargo run --bin boundline -- run --goal "Fail after no adaptive candidate remains" --workspace .
-cargo run --bin boundline -- inspect --workspace .
+cargo run --bin boundline -- run --goal "Fail after no adaptive candidate remains"
+cargo run --bin boundline -- inspect
 ```
 
 **Expected**:

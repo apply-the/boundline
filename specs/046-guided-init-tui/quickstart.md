@@ -22,7 +22,7 @@ bootstrap, non-interactive parity, custom routing, and progress feedback.
 2. Run:
 
    ```bash
-   cargo run --bin boundline -- init --workspace <workspace>
+   cargo run --bin boundline -- init
    ```
 
 3. In the guided flow:
@@ -51,7 +51,6 @@ bootstrap, non-interactive parity, custom routing, and progress feedback.
 
    ```bash
    cargo run --bin boundline -- init \
-     --workspace <workspace> \
      --non-interactive \
      --canon-mode-selection auto-confirm \
      --assistant copilot \

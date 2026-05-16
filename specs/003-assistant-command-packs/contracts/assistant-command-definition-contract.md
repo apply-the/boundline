@@ -21,13 +21,13 @@ Every command file MUST include these sections, using assistant-appropriate word
 
 | Assistant Command | Direct Backend | Notes |
 |-------------------|----------------|-------|
-| `boundline-start` | `boundline doctor --workspace <workspace>` when workspace is known | Establishes readiness and missing context; may remain routing-only until workspace is provided |
+| `boundline-start` | `boundline doctor` when workspace is known | Establishes readiness and missing context; may remain routing-only until workspace is provided |
 | `boundline-plan` | None required | Clarifies or bounds the goal, then routes to `boundline-run` |
 | `boundline-step` | None required | Advances the workflow by selecting one explicit next action from current context or latest inspection evidence |
-| `boundline-run` | `boundline run --workspace <workspace> --goal <goal>` | Primary execution path |
-| `boundline-status` | `boundline inspect --workspace <workspace>` | Uses latest trace in the workspace to summarize current status |
-| `boundline-next` | `boundline inspect --workspace <workspace>` when evidence is needed | Uses latest trace plus current context to recommend the next command |
-| `boundline-inspect` | `boundline inspect --trace <trace>` or `boundline inspect --workspace <workspace>` | Explicit inspection path |
+| `boundline-run` | `boundline run --goal <goal>` | Primary execution path |
+| `boundline-status` | `boundline inspect` | Uses latest trace in the workspace to summarize current status |
+| `boundline-next` | `boundline inspect` when evidence is needed | Uses latest trace plus current context to recommend the next command |
+| `boundline-inspect` | `boundline inspect --trace <trace>` or `boundline inspect` | Explicit inspection path |
 
 ## Output Interpretation Guarantees
 

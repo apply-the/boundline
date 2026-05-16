@@ -2,7 +2,7 @@
 
 ## Guided Init Prompt Contract
 
-`boundline init --workspace <workspace>` in guided mode must expose these user
+`boundline init` in guided mode must expose these user
 visible guarantees:
 
 1. Assistant selection prompt lists supported values inline.

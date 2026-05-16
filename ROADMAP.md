@@ -26,7 +26,11 @@ Canon-promoted project-memory reuse, catalog-aware guidance packs, and the new
 authority-zoned council slice. The current `0.56.0` work makes authority
 control resolution, council assembly posture, and review stop semantics
 explicit in the same session-native and trace-native projection surfaces that
-already carry bounded planning and governance evidence.
+already carry bounded planning and governance evidence. The S4 adaptive
+governance layer is now fully delivered: governance maturity stages
+(advisory, catch, rule, hook), rollout profiles, posture resolution,
+degradation modes, and the paired Boundline and Canon governance-semantics
+docs are all in place.
 
 ### Delivered in 0.56.0
 
@@ -124,7 +128,7 @@ already carry bounded planning and governance evidence.
 ### Delivered in 0.49.1
 
 - Guided `boundline init` now scaffolds `.boundline/` reliably before writing
-  release-critical workspace files, including relative `--workspace .` flows.
+  release-critical workspace files, including default repo-discovery flows.
 - Guided route review now starts from bundled catalog defaults when no
   assistant surfaces are selected, instead of presenting all slots unset.
 - The bundled Copilot runtime catalog now exposes Anthropic and Gemini models
@@ -171,8 +175,8 @@ already carry bounded planning and governance evidence.
   slots, blank/default behavior, and a valid `SLOT=RUNTIME:MODEL` example
   directly in the terminal and in `init --help`
 - init success and preview output now group route setup, assistant scaffolding,
-  and next-step guidance around `boundline config show --workspace ...` and
-  `boundline doctor --workspace ...`
+  and next-step guidance around `boundline config show..` and
+  `boundline doctor..`
 - `boundline doctor` now groups summary, checks, and actions so first-run
   readiness output is easier to scan without losing plain-text semantics
 
@@ -646,18 +650,6 @@ delivery line.
   extends the Expert Pack baseline from S2 into executable engineering
   principles (Guidance) and automated verification rules (Guardians) across
   architecture, design, and testing pillars.
-- [S3: Authority-Zoned Delivery Roles, Personas, And Review Councils](roadmap/S3%20-%20authority-zoned-delivery-roles-and-review-councils-spec.md)
-  extends the bounded review-council baseline in
-  [`007-multi-agent-review`](specs/007-multi-agent-review/spec.md) and
-  [`047-catalog-voting-inputs`](specs/047-catalog-voting-inputs/spec.md)
-  into authority zones, personas, and admission-control posture.
-- [S4: Control Graduation And Adaptive Governance](roadmap/S4%20-%20control-graduation-and-adaptive-governance-spec.md)
-  extends adaptive execution and recovery depth from
-  [`008-adaptive-execution-engine`](specs/008-adaptive-execution-engine/spec.md),
-  [`021-adaptive-repair-depth`](specs/021-adaptive-repair-depth/spec.md), and
-  [`023-broaden-bounded-adaptive-repair`](specs/023-broaden-bounded-adaptive-repair/spec.md)
-  into calibrated governance progression, degradation, and control
-  graduation.
 - [S5: Advanced Context Intelligence](roadmap/S5%20-%20advanced-context-intelligence.md)
   and
   [S5.addendum: Advanced Context Intelligence Technology Evaluation](roadmap/S5.addendum%20-%20advanced-context-intelligence-technology-evaluation.md)
@@ -670,8 +662,9 @@ delivery line.
 - [S6: Advanced Multi-Agent Reasoning Profiles](roadmap/S6%20-%20advanced-multi-agent-reasoning-profiles-spec.md)
   is intentionally future-facing rather than already covered by the active
   roadmap; it builds on the review-council baseline in
-  [`007-multi-agent-review`](specs/007-multi-agent-review/spec.md) after S3
-  and S4 make councils operationally credible.
+  [`007-multi-agent-review`](specs/007-multi-agent-review/spec.md) after the
+  delivered `0.56.0` authority-zoned council baseline and the delivered S4
+  adaptive governance layer make councils operationally credible.
 - [S7: Assistant Delight And Cognitive Affordance Layer](roadmap/S7%20-%20assistant-delight-and-cognitive-affordance-layer.md)
   complements assistant/package and operator-surface work in
   [`048-assistant-plugin-packages`](specs/048-assistant-plugin-packages/spec.md),

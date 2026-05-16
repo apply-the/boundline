@@ -9,11 +9,11 @@
 cd /tmp/runtime-refoundation-workspace
 cargo init --lib runtime-refoundation-workspace
 
-cargo run --bin boundline -- start --workspace .
-cargo run --bin boundline -- capture --workspace . --goal "fix the failing add test"
-cargo run --bin boundline -- plan --workspace . --flow bug-fix
-cargo run --bin boundline -- run --workspace .
-cargo run --bin boundline -- inspect --workspace .
+cargo run --bin boundline -- start
+cargo run --bin boundline -- capture --goal "fix the failing add test"
+cargo run --bin boundline -- plan --flow bug-fix
+cargo run --bin boundline -- run
+cargo run --bin boundline -- inspect
 ```
 
 **Expected**:
@@ -25,10 +25,10 @@ cargo run --bin boundline -- inspect --workspace .
 
 ```bash
 cd /tmp/runtime-refoundation-workspace
-cargo run --bin boundline -- start --workspace .
-cargo run --bin boundline -- capture --workspace . --goal "fix the failing auth test"
-cargo run --bin boundline -- plan --workspace .
-cargo run --bin boundline -- run --workspace .
+cargo run --bin boundline -- start
+cargo run --bin boundline -- capture --goal "fix the failing auth test"
+cargo run --bin boundline -- plan
+cargo run --bin boundline -- run
 ```
 
 **Expected**:
@@ -40,12 +40,12 @@ cargo run --bin boundline -- run --workspace .
 
 ```bash
 cd /tmp/runtime-refoundation-workspace
-cargo run --bin boundline -- start --workspace .
-cargo run --bin boundline -- capture --workspace . --goal "repair the broken parser behavior"
-cargo run --bin boundline -- plan --workspace . --no-flow
-cargo run --bin boundline -- run --workspace .
-cargo run --bin boundline -- status --workspace .
-cargo run --bin boundline -- inspect --workspace .
+cargo run --bin boundline -- start
+cargo run --bin boundline -- capture --goal "repair the broken parser behavior"
+cargo run --bin boundline -- plan --no-flow
+cargo run --bin boundline -- run
+cargo run --bin boundline -- status
+cargo run --bin boundline -- inspect
 ```
 
 **Expected**:
@@ -66,7 +66,7 @@ cat > .boundline/execution.json <<'EOF'
 }
 EOF
 
-cargo run --bin boundline -- run --workspace .
+cargo run --bin boundline -- run
 ```
 
 **Expected**:
@@ -85,9 +85,9 @@ cat > .canon/requirements.md <<'EOF'
 - preserve auditability
 EOF
 
-cargo run --bin boundline -- start --workspace .
-cargo run --bin boundline -- capture --workspace . --goal "implement a bounded workspace summary"
-cargo run --bin boundline -- plan --workspace . --no-flow
+cargo run --bin boundline -- start
+cargo run --bin boundline -- capture --goal "implement a bounded workspace summary"
+cargo run --bin boundline -- plan --no-flow
 ```
 
 **Expected**:

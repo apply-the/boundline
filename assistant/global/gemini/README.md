@@ -15,7 +15,7 @@ authoritative; `.boundline/session.json` is the active session source of truth
 after initialization.
 
 Fallback CLI:
-- `boundline init --workspace <workspace> --assistant gemini`
-- `boundline doctor --workspace <workspace>`
-- `boundline status --workspace <workspace>`
-- `boundline continue --workspace <workspace>`
+- `boundline init --assistant gemini`
+- `boundline doctor`
+- `boundline status`
+- `boundline continue`

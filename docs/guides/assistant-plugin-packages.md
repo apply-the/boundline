@@ -50,15 +50,15 @@ Every supported package exposes or documents these namespaced commands:
 
 | Chat Command | Runtime Surface | Notes |
 |--------------|-----------------|-------|
-| `/boundline:start` | `boundline start --workspace <workspace> --json` | Opens or resets the active session. |
-| `/boundline:capture` | `boundline capture --workspace <workspace> --goal ... --json` | Persists goal or brief input into the active session. |
-| `/boundline:plan` | `boundline plan --workspace <workspace> --json` | Produces or reports a bounded plan proposal; confirmation remains explicit. |
-| `/boundline:run` | `boundline run --workspace <workspace> --json` | Runs the next bounded action through the real runtime. |
-| `/boundline:status` | `boundline status --workspace <workspace> --json` | Reports current state and `next_command`. |
-| `/boundline:continue` | `boundline continue --workspace <workspace> --json` | Continues only from `.boundline/session.json`; reports init/start guidance when no session exists. |
-| `/boundline:inspect` | `boundline inspect --workspace <workspace> --json` | Reads authoritative trace and session evidence. |
-| `/boundline:recover` | `boundline status --workspace <workspace> --json` then CLI-reported recovery command | Starts from runtime state and uses `next_command`, `corrected_command`, or checkpoint restore guidance. |
-| `/boundline:govern` | `boundline govern --workspace <workspace> --mode <mode> --json` | Single governed stage surface for Canon modes; use without `--mode` to list choices. |
+| `/boundline:start` | `boundline start --json` | Opens or resets the active session. |
+| `/boundline:capture` | `boundline capture --goal ... --json` | Persists goal or brief input into the active session. |
+| `/boundline:plan` | `boundline plan --json` | Produces or reports a bounded plan proposal; confirmation remains explicit. |
+| `/boundline:run` | `boundline run --json` | Runs the next bounded action through the real runtime. |
+| `/boundline:status` | `boundline status --json` | Reports current state and `next_command`. |
+| `/boundline:continue` | `boundline continue --json` | Continues only from `.boundline/session.json`; reports init/start guidance when no session exists. |
+| `/boundline:inspect` | `boundline inspect --json` | Reads authoritative trace and session evidence. |
+| `/boundline:recover` | `boundline status --json` then CLI-reported recovery command | Starts from runtime state and uses `next_command`, `corrected_command`, or checkpoint restore guidance. |
+| `/boundline:govern` | `boundline govern --mode <mode> --json` | Single governed stage surface for Canon modes; use without `--mode` to list choices. |
 
 ## State Handling
 
@@ -66,9 +66,9 @@ Commands must surface blocked, clarification-required, failed, exhausted, and te
 
 Before workspace init, global commands must not assume `.boundline/session.json`
 exists. `/boundline:status` and `/boundline:continue` should report that no
-active session is available and point to `boundline init --workspace
-<workspace>` or `boundline start --workspace <workspace>` depending on whether
-the workspace has already been initialized.
+active session is available and point to `boundline init` or `boundline start`
+depending on whether the workspace has already been initialized. Use
+`--workspace <path>` only when the host is targeting a different repository.
 
 ## Validation
 

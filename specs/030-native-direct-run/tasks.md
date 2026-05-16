@@ -51,7 +51,7 @@ story in this slice
 entry that reaches real workspace mutation and trace-backed follow-up in one
 command.
 
-**Independent Test**: Run `boundline run --workspace <workspace> --goal "Fix the failing add test"` in a representative Rust workspace with no active session and confirm native routing, changed files, validation, decisions, and persisted follow-up through `status` and `inspect`.
+**Independent Test**: Run `boundline run --goal "Fix the failing add test"` in a representative Rust workspace with no active session and confirm native routing, changed files, validation, decisions, and persisted follow-up through `status` and `inspect`.
 
 ### Tests for User Story 1
 

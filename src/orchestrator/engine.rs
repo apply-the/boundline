@@ -23,9 +23,9 @@ use crate::domain::trace::{ExecutionTrace, TraceEventType, current_timestamp_mil
 use crate::orchestrator::governance::{
     GovernanceStepDecision, bounded_governance_context, build_autopilot_decision,
     compacted_canon_memory_for_block, compacted_canon_memory_from_response,
-    governance_input_documents, governance_stage_key, governance_state_patch,
-    overlay_stage_policy_with_intent, requested_governance_intent, runtime_command_available,
-    selected_stage_policy,
+    governance_input_documents, governance_projection_snapshot, governance_stage_key,
+    governance_state_patch, overlay_stage_policy_with_intent, requested_governance_intent,
+    runtime_command_available, selected_stage_policy,
 };
 use crate::orchestrator::planner::{Planner, PlanningError};
 use crate::orchestrator::recovery::{RecoveryDecision, decide_recovery};
@@ -747,12 +747,20 @@ where
         };
         let compacted_canon_memory =
             compacted_canon_memory_from_response(&stage_key, runtime_kind, &response);
+        let projection = governance_projection_snapshot(
+            &task.context,
+            &stage_key,
+            response.packet.as_ref(),
+            response.approval_state,
+        )
+        .map_err(|error| OrchestratorError::GovernancePatch(error.to_string()))?;
         let patch = governance_state_patch(
             &record,
             response.packet.as_ref(),
             packet_reuse.as_ref(),
             decision.as_ref(),
             compacted_canon_memory.as_ref(),
+            &projection,
         )
         .map_err(|error| OrchestratorError::GovernancePatch(error.to_string()))?;
         task.context.apply_state_patch(&patch);
@@ -772,6 +780,11 @@ where
                     "reason": blocked_reason.as_deref().unwrap_or(&response.message),
                     "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
                     "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason),
+                    "latest_governance_runtime_state": projection.runtime_state,
+                    "latest_governance_rollout_profile": projection.rollout_profile,
+                    "latest_governance_reason": projection.reason.clone(),
+                    "latest_governance_contract_lines": projection.contract_lines.clone(),
+                    "latest_governance_approval_provenance": projection.approval_provenance.clone(),
                     "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
                     "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
                     "canon_memory_compatibility": compacted_canon_memory.as_ref().map(|memory| memory.compatibility_state().to_string()),
@@ -779,6 +792,7 @@ where
                     "canon_memory_run_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.run_ref.clone()),
                     "canon_memory_packet_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.packet_ref.clone()),
                     "authority_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.authority_provenance_lines.clone()).unwrap_or_default(),
+                    "adaptive_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.adaptive_provenance_lines.clone()).unwrap_or_default(),
                 }),
             );
         }
@@ -798,6 +812,11 @@ where
                         "headline": response.packet.as_ref().map(|packet| packet.headline.clone()).unwrap_or_else(|| response.message.clone()),
                         "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
                         "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason),
+                        "latest_governance_runtime_state": projection.runtime_state,
+                        "latest_governance_rollout_profile": projection.rollout_profile,
+                        "latest_governance_reason": projection.reason.clone(),
+                        "latest_governance_contract_lines": projection.contract_lines.clone(),
+                        "latest_governance_approval_provenance": projection.approval_provenance.clone(),
                         "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
                         "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
                         "canon_memory_compatibility": compacted_canon_memory.as_ref().map(|memory| memory.compatibility_state().to_string()),
@@ -805,6 +824,7 @@ where
                         "canon_memory_run_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.run_ref.clone()),
                         "canon_memory_packet_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.packet_ref.clone()),
                         "authority_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.authority_provenance_lines.clone()).unwrap_or_default(),
+                        "adaptive_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.adaptive_provenance_lines.clone()).unwrap_or_default(),
                         "canon_next_action": compacted_canon_memory.as_ref().and_then(|memory| memory.recommended_next_action.as_ref()).map(|action| format!("{}: {}", action.action, action.rationale)),
                     }),
                 );
@@ -823,6 +843,11 @@ where
                         "run_ref": response.run_ref,
                         "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
                         "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason),
+                        "latest_governance_runtime_state": projection.runtime_state,
+                        "latest_governance_rollout_profile": projection.rollout_profile,
+                        "latest_governance_reason": projection.reason.clone(),
+                        "latest_governance_contract_lines": projection.contract_lines.clone(),
+                        "latest_governance_approval_provenance": projection.approval_provenance.clone(),
                         "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
                         "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
                         "canon_memory_compatibility": compacted_canon_memory.as_ref().map(|memory| memory.compatibility_state().to_string()),
@@ -830,6 +855,7 @@ where
                         "canon_memory_run_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.run_ref.clone()),
                         "canon_memory_packet_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.packet_ref.clone()),
                         "authority_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.authority_provenance_lines.clone()).unwrap_or_default(),
+                        "adaptive_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.adaptive_provenance_lines.clone()).unwrap_or_default(),
                         "canon_next_action": compacted_canon_memory.as_ref().and_then(|memory| memory.recommended_next_action.as_ref()).map(|action| format!("{}: {}", action.action, action.rationale)),
                     }),
                 );
@@ -858,6 +884,11 @@ where
                         "packet_ref": response.packet.as_ref().map(|packet| packet.packet_ref.clone()),
                         "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
                         "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason),
+                        "latest_governance_runtime_state": projection.runtime_state,
+                        "latest_governance_rollout_profile": projection.rollout_profile,
+                        "latest_governance_reason": projection.reason.clone(),
+                        "latest_governance_contract_lines": projection.contract_lines.clone(),
+                        "latest_governance_approval_provenance": projection.approval_provenance.clone(),
                         "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
                         "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
                         "canon_memory_compatibility": compacted_canon_memory.as_ref().map(|memory| memory.compatibility_state().to_string()),
@@ -865,6 +896,7 @@ where
                         "canon_memory_run_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.run_ref.clone()),
                         "canon_memory_packet_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.packet_ref.clone()),
                         "authority_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.authority_provenance_lines.clone()).unwrap_or_default(),
+                        "adaptive_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.adaptive_provenance_lines.clone()).unwrap_or_default(),
                         "canon_next_action": compacted_canon_memory.as_ref().and_then(|memory| memory.recommended_next_action.as_ref()).map(|action| format!("{}: {}", action.action, action.rationale)),
                     }),
                 );
@@ -917,12 +949,20 @@ where
         };
         let compacted_canon_memory =
             compacted_canon_memory_for_block(&block.stage_key, block.runtime, &block.reason);
+        let projection = governance_projection_snapshot(
+            &task.context,
+            &block.stage_key,
+            None,
+            ApprovalState::NotNeeded,
+        )
+        .map_err(|error| OrchestratorError::GovernancePatch(error.to_string()))?;
         let patch = governance_state_patch(
             &record,
             None,
             None,
             decision.as_ref(),
             compacted_canon_memory.as_ref(),
+            &projection,
         )
         .map_err(|error| OrchestratorError::GovernancePatch(error.to_string()))?;
         task.context.apply_state_patch(&patch);
@@ -935,6 +975,11 @@ where
                 "runtime": block.runtime,
                 "required": block.required,
                 "reason": block.reason,
+                "latest_governance_runtime_state": projection.runtime_state,
+                "latest_governance_rollout_profile": projection.rollout_profile,
+                "latest_governance_reason": projection.reason.clone(),
+                "latest_governance_contract_lines": projection.contract_lines.clone(),
+                "latest_governance_approval_provenance": projection.approval_provenance.clone(),
                 "canon_memory_summary": compacted_canon_memory.as_ref().map(|memory| memory.summary_text()),
                 "canon_memory_credibility": compacted_canon_memory.as_ref().map(|memory| memory.credibility.as_str().to_string()),
                 "canon_memory_compatibility": compacted_canon_memory.as_ref().map(|memory| memory.compatibility_state().to_string()),
@@ -942,6 +987,7 @@ where
                 "canon_memory_run_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.run_ref.clone()),
                 "canon_memory_packet_ref": compacted_canon_memory.as_ref().and_then(|memory| memory.packet_ref.clone()),
                 "authority_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.authority_provenance_lines.clone()).unwrap_or_default(),
+                "adaptive_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.adaptive_provenance_lines.clone()).unwrap_or_default(),
                 "canon_next_action": compacted_canon_memory.as_ref().and_then(|memory| memory.recommended_next_action.as_ref()).map(|action| format!("{}: {}", action.action, action.rationale)),
             }),
         );
@@ -1315,6 +1361,7 @@ mod tests {
                 enabled: true,
                 required,
                 autopilot: false,
+                require_adaptive_companion: false,
                 runtime: Some(GovernanceRuntimeKind::Canon),
                 canon_mode,
                 system_context: Some(SystemContextBinding::Existing),
@@ -1653,6 +1700,7 @@ mod tests {
                 headline: "rejected packet".to_string(),
                 reason_code: None,
                 authority_governance: None,
+                adaptive_governance: None,
             }),
             reason_code: None,
             message: "local governance evaluated bug-fix:investigate".to_string(),
@@ -1785,6 +1833,7 @@ mod tests {
                 authority_governance: Some(reusable_canon_authority_envelope(
                     ApprovalState::NotNeeded,
                 )),
+                adaptive_governance: None,
             }),
             reason_code: Some("packet_rejected".to_string()),
             message: "canon packet rejected".to_string(),
@@ -1861,6 +1910,7 @@ mod tests {
                 headline: "discovery packet ready".to_string(),
                 reason_code: Some("packet_ready".to_string()),
                 authority_governance: None,
+                adaptive_governance: None,
             }),
             reason_code: Some("packet_ready".to_string()),
             message: "canon packet ready".to_string(),

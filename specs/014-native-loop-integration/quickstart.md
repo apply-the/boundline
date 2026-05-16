@@ -9,9 +9,9 @@
 cd /tmp/native-loop-workspace
 cargo init --lib native-loop-workspace
 
-cargo run --bin boundline -- start --workspace .
-cargo run --bin boundline -- capture --workspace . --goal "fix the broken add function"
-cargo run --bin boundline -- plan --workspace .
+cargo run --bin boundline -- start
+cargo run --bin boundline -- capture --goal "fix the broken add function"
+cargo run --bin boundline -- plan
 ```
 
 **Expected**:
@@ -23,8 +23,8 @@ cargo run --bin boundline -- plan --workspace .
 
 ```bash
 cd /tmp/native-loop-workspace
-cargo run --bin boundline -- run --workspace .
-cargo run --bin boundline -- inspect --workspace .
+cargo run --bin boundline -- run
+cargo run --bin boundline -- inspect
 ```
 
 **Expected**:
@@ -45,7 +45,7 @@ cat > .boundline/execution.json <<'EOF'
 }
 EOF
 
-cargo run --bin boundline -- run --workspace .
+cargo run --bin boundline -- run
 ```
 
 **Expected**:
@@ -56,10 +56,10 @@ cargo run --bin boundline -- run --workspace .
 
 ```bash
 cd /tmp/native-loop-workspace
-cargo run --bin boundline -- start --workspace .
-cargo run --bin boundline -- capture --workspace . --goal "fix the failing auth test"
-cargo run --bin boundline -- plan --workspace .
-cargo run --bin boundline -- run --workspace .
+cargo run --bin boundline -- start
+cargo run --bin boundline -- capture --goal "fix the failing auth test"
+cargo run --bin boundline -- plan
+cargo run --bin boundline -- run
 ```
 
 **Expected**:

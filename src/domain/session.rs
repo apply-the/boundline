@@ -21,8 +21,11 @@ use crate::domain::governance::{
 use crate::domain::negotiation::NegotiatedDeliveryPacket;
 use crate::domain::task::{Task, TaskPersistenceError, TaskStatus, TerminalReason};
 use crate::domain::task_context::{
+    LATEST_GOVERNANCE_APPROVAL_PROVENANCE_KEY, LATEST_GOVERNANCE_CONTRACT_LINES_KEY,
     LATEST_GOVERNANCE_DECISION_KEY, LATEST_GOVERNANCE_PACKET_KEY,
-    LATEST_GOVERNANCE_PACKET_REUSE_KEY, LATEST_GOVERNANCE_STAGE_KEY,
+    LATEST_GOVERNANCE_PACKET_REUSE_KEY, LATEST_GOVERNANCE_REASON_KEY,
+    LATEST_GOVERNANCE_ROLLOUT_PROFILE_KEY, LATEST_GOVERNANCE_RUNTIME_STATE_KEY,
+    LATEST_GOVERNANCE_STAGE_KEY,
 };
 use crate::domain::trace::current_timestamp_millis;
 use crate::domain::workflow::{ProjectScalePath, WorkflowProgressState};
@@ -899,6 +902,16 @@ pub struct SessionStatusView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_governance_state: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_governance_runtime_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_governance_rollout_profile: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_governance_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_governance_contract_lines: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_governance_approval_provenance: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_governance_blocked_reason: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_governance_packet_ref: Option<String>,
@@ -1019,6 +1032,11 @@ impl Default for SessionStatusView {
             latest_governance_mode: None,
             latest_governance_run_ref: None,
             latest_governance_state: None,
+            latest_governance_runtime_state: None,
+            latest_governance_rollout_profile: None,
+            latest_governance_reason: None,
+            latest_governance_contract_lines: None,
+            latest_governance_approval_provenance: None,
             latest_governance_blocked_reason: None,
             latest_governance_packet_ref: None,
             latest_governance_packet_source_stage: None,
@@ -1051,34 +1069,56 @@ impl SessionStatusView {
     /// Validates that the flattened status view matches the authoritative
     /// session record it was projected from.
     pub fn validate(&self, record: &ActiveSessionRecord) -> Result<(), SessionValidationError> {
+        self.validate_identity(record)?;
+        self.validate_negotiation(record)?;
+        self.validate_context(record)?;
+        self.validate_flow(record)?;
+        self.validate_trace_and_decisions(record)?;
+        self.validate_authored_brief(record)?;
+        self.validate_task_state(record)?;
+        self.validate_governance(record)?;
+        self.validate_project_scale(record)?;
+        self.validate_voting(record)?;
+        self.validate_invariants()?;
+        self.validate_active_task_plan(record)?;
+        Ok(())
+    }
+
+    fn validate_identity(
+        &self,
+        record: &ActiveSessionRecord,
+    ) -> Result<(), SessionValidationError> {
         if self.session_id != record.session_id {
             return Err(SessionValidationError::StatusViewSessionMismatch {
                 expected: record.session_id.clone(),
                 actual: self.session_id.clone(),
             });
         }
-
         if self.workspace_ref != record.workspace_ref {
             return Err(SessionValidationError::StatusViewWorkspaceMismatch {
                 expected: record.workspace_ref.clone(),
                 actual: self.workspace_ref.clone(),
             });
         }
-
         if self.latest_status != record.latest_status {
             return Err(SessionValidationError::StatusViewStatusMismatch {
                 expected: record.latest_status,
                 actual: self.latest_status,
             });
         }
-
         if self.goal != record.goal {
             return Err(SessionValidationError::StatusViewGoalMismatch {
                 expected: record.goal.clone(),
                 actual: self.goal.clone(),
             });
         }
+        Ok(())
+    }
 
+    fn validate_negotiation(
+        &self,
+        record: &ActiveSessionRecord,
+    ) -> Result<(), SessionValidationError> {
         let expected_negotiation_goal_summary =
             record.negotiation_packet.as_ref().map(|packet| packet.goal_summary.clone());
         if self.negotiation_goal_summary != expected_negotiation_goal_summary {
@@ -1087,7 +1127,6 @@ impl SessionStatusView {
                 actual: self.negotiation_goal_summary.clone(),
             });
         }
-
         let expected_negotiation_resolution = record
             .negotiation_packet
             .as_ref()
@@ -1098,7 +1137,6 @@ impl SessionStatusView {
                 actual: self.negotiation_resolution.clone(),
             });
         }
-
         let expected_negotiation_acceptance_boundary = record
             .negotiation_packet
             .as_ref()
@@ -1109,7 +1147,10 @@ impl SessionStatusView {
                 actual: self.negotiation_acceptance_boundary.clone(),
             });
         }
+        Ok(())
+    }
 
+    fn validate_context(&self, record: &ActiveSessionRecord) -> Result<(), SessionValidationError> {
         let expected_context_summary =
             record.goal_plan.as_ref().and_then(|goal_plan| goal_plan.context_summary()).or_else(
                 || record.active_task.as_ref().and_then(task_state_canon_memory_context_summary),
@@ -1120,7 +1161,6 @@ impl SessionStatusView {
                 actual: self.context_summary.clone(),
             });
         }
-
         let expected_context_credibility = record
             .goal_plan
             .as_ref()
@@ -1134,7 +1174,6 @@ impl SessionStatusView {
                 actual: self.context_credibility.clone(),
             });
         }
-
         let expected_context_primary_inputs = record
             .goal_plan
             .as_ref()
@@ -1151,7 +1190,6 @@ impl SessionStatusView {
                 actual: self.context_primary_inputs.clone(),
             });
         }
-
         let expected_context_provenance = record
             .goal_plan
             .as_ref()
@@ -1166,7 +1204,6 @@ impl SessionStatusView {
                 actual: self.context_provenance.clone(),
             });
         }
-
         let expected_context_staleness_reason = record
             .goal_plan
             .as_ref()
@@ -1182,7 +1219,10 @@ impl SessionStatusView {
                 actual: self.context_staleness_reason.clone(),
             });
         }
+        Ok(())
+    }
 
+    fn validate_flow(&self, record: &ActiveSessionRecord) -> Result<(), SessionValidationError> {
         let expected_flow = record.active_flow.as_ref().map(|flow| flow.flow_name.clone());
         if self.active_flow != expected_flow {
             return Err(SessionValidationError::StatusViewFlowMismatch {
@@ -1190,7 +1230,6 @@ impl SessionStatusView {
                 actual: self.active_flow.clone(),
             });
         }
-
         let expected_flow_state =
             record.goal_plan.as_ref().map(|goal_plan| goal_plan.flow_state().summary_text());
         if self.flow_state != expected_flow_state {
@@ -1199,7 +1238,6 @@ impl SessionStatusView {
                 actual: self.flow_state.clone(),
             });
         }
-
         let expected_active_workflow = record.active_workflow_name();
         if self.active_workflow != expected_active_workflow {
             return Err(SessionValidationError::StatusViewWorkflowMismatch {
@@ -1207,7 +1245,6 @@ impl SessionStatusView {
                 actual: self.active_workflow.clone(),
             });
         }
-
         let expected_workflow_phase = record.active_workflow_phase_text();
         if self.workflow_phase != expected_workflow_phase {
             return Err(SessionValidationError::StatusViewWorkflowPhaseMismatch {
@@ -1215,7 +1252,6 @@ impl SessionStatusView {
                 actual: self.workflow_phase.clone(),
             });
         }
-
         let expected_workflow_next_action = record.active_workflow_next_action();
         if self.workflow_next_action != expected_workflow_next_action {
             return Err(SessionValidationError::StatusViewWorkflowNextActionMismatch {
@@ -1223,7 +1259,6 @@ impl SessionStatusView {
                 actual: self.workflow_next_action.clone(),
             });
         }
-
         let expected_stage_id =
             record.active_flow.as_ref().map(|flow| flow.current_stage_id.clone());
         if self.current_stage_id != expected_stage_id {
@@ -1232,7 +1267,6 @@ impl SessionStatusView {
                 actual: self.current_stage_id.clone(),
             });
         }
-
         let expected_delegation = delegation_status_view(record);
         if self.delegation != expected_delegation {
             return Err(SessionValidationError::StatusViewDelegationMismatch {
@@ -1240,7 +1274,6 @@ impl SessionStatusView {
                 actual: self.delegation.clone().map(Box::new),
             });
         }
-
         let expected_stage_index = record.active_flow.as_ref().map(|flow| flow.current_stage_index);
         if self.current_stage_index != expected_stage_index {
             return Err(SessionValidationError::StatusViewStageIndexMismatch {
@@ -1248,7 +1281,6 @@ impl SessionStatusView {
                 actual: self.current_stage_index,
             });
         }
-
         let expected_total_stages = record.active_flow.as_ref().map(|flow| flow.total_stages);
         if self.total_stages != expected_total_stages {
             return Err(SessionValidationError::StatusViewStageCountMismatch {
@@ -1256,14 +1288,19 @@ impl SessionStatusView {
                 actual: self.total_stages,
             });
         }
+        Ok(())
+    }
 
+    fn validate_trace_and_decisions(
+        &self,
+        record: &ActiveSessionRecord,
+    ) -> Result<(), SessionValidationError> {
         if self.latest_trace_ref != record.latest_trace_ref {
             return Err(SessionValidationError::StatusViewTraceMismatch {
                 expected: record.latest_trace_ref.clone(),
                 actual: self.latest_trace_ref.clone(),
             });
         }
-
         let expected_latest_decision_status = record
             .decisions
             .last()
@@ -1274,7 +1311,6 @@ impl SessionStatusView {
                 actual: self.latest_decision_status.clone(),
             });
         }
-
         let expected_latest_decision_target =
             record.decisions.last().map(|decision| decision.target.clone());
         if self.latest_decision_target != expected_latest_decision_target {
@@ -1283,27 +1319,13 @@ impl SessionStatusView {
                 actual: self.latest_decision_target.clone(),
             });
         }
+        Ok(())
+    }
 
-        let expected_changed_files = record
-            .active_task
-            .as_ref()
-            .and_then(|task| task_state_strings(task, "latest_changed_files"));
-        if self.latest_changed_files != expected_changed_files {
-            return Err(SessionValidationError::StatusViewChangedFilesMismatch {
-                expected: expected_changed_files,
-                actual: self.latest_changed_files.clone(),
-            });
-        }
-
-        let expected_workspace_slice =
-            record.active_task.as_ref().and_then(task_state_workspace_slice_summary);
-        if self.latest_workspace_slice != expected_workspace_slice {
-            return Err(SessionValidationError::StatusViewWorkspaceSliceMismatch {
-                expected: expected_workspace_slice,
-                actual: self.latest_workspace_slice.clone(),
-            });
-        }
-
+    fn validate_authored_brief(
+        &self,
+        record: &ActiveSessionRecord,
+    ) -> Result<(), SessionValidationError> {
         let expected_authored_input_deduplicated_sources =
             record.authored_brief.as_ref().and_then(|bundle| {
                 let labels = bundle.deduplicated_source_labels();
@@ -1318,7 +1340,6 @@ impl SessionStatusView {
                 },
             );
         }
-
         let expected_clarification_headline =
             record.authored_brief.as_ref().and_then(|bundle| bundle.clarification_headline());
         if self.clarification_headline != expected_clarification_headline {
@@ -1327,7 +1348,6 @@ impl SessionStatusView {
                 actual: self.clarification_headline.clone(),
             });
         }
-
         let expected_clarification_prompt =
             record.authored_brief.as_ref().and_then(|bundle| bundle.clarification_prompt());
         if self.clarification_prompt != expected_clarification_prompt {
@@ -1336,7 +1356,6 @@ impl SessionStatusView {
                 actual: self.clarification_prompt.clone(),
             });
         }
-
         let expected_clarification_missing_fields =
             record.authored_brief.as_ref().and_then(|bundle| bundle.clarification_missing_fields());
         if self.clarification_missing_fields != expected_clarification_missing_fields {
@@ -1345,7 +1364,31 @@ impl SessionStatusView {
                 actual: self.clarification_missing_fields.clone(),
             });
         }
+        Ok(())
+    }
 
+    fn validate_task_state(
+        &self,
+        record: &ActiveSessionRecord,
+    ) -> Result<(), SessionValidationError> {
+        let expected_changed_files = record
+            .active_task
+            .as_ref()
+            .and_then(|task| task_state_strings(task, "latest_changed_files"));
+        if self.latest_changed_files != expected_changed_files {
+            return Err(SessionValidationError::StatusViewChangedFilesMismatch {
+                expected: expected_changed_files,
+                actual: self.latest_changed_files.clone(),
+            });
+        }
+        let expected_workspace_slice =
+            record.active_task.as_ref().and_then(task_state_workspace_slice_summary);
+        if self.latest_workspace_slice != expected_workspace_slice {
+            return Err(SessionValidationError::StatusViewWorkspaceSliceMismatch {
+                expected: expected_workspace_slice,
+                actual: self.latest_workspace_slice.clone(),
+            });
+        }
         let expected_selection_headline = record
             .active_task
             .as_ref()
@@ -1356,7 +1399,6 @@ impl SessionStatusView {
                 actual: self.latest_selection_headline.clone(),
             });
         }
-
         let expected_attempt_lineage =
             record.active_task.as_ref().and_then(task_state_attempt_lineage_summary);
         if self.latest_attempt_lineage != expected_attempt_lineage {
@@ -1365,7 +1407,6 @@ impl SessionStatusView {
                 actual: self.latest_attempt_lineage.clone(),
             });
         }
-
         let expected_validation_status = record
             .active_task
             .as_ref()
@@ -1376,7 +1417,6 @@ impl SessionStatusView {
                 actual: self.latest_validation_status.clone(),
             });
         }
-
         let expected_review_trigger = record
             .active_task
             .as_ref()
@@ -1387,7 +1427,6 @@ impl SessionStatusView {
                 actual: self.latest_review_trigger.clone(),
             });
         }
-
         let expected_review_vote = record
             .active_task
             .as_ref()
@@ -1398,7 +1437,6 @@ impl SessionStatusView {
                 actual: self.latest_review_vote.clone(),
             });
         }
-
         let expected_review_outcome = record
             .active_task
             .as_ref()
@@ -1409,7 +1447,6 @@ impl SessionStatusView {
                 actual: self.latest_review_outcome.clone(),
             });
         }
-
         let expected_review_headline =
             record.active_task.as_ref().and_then(task_state_review_headline);
         if self.latest_review_headline != expected_review_headline {
@@ -1418,7 +1455,13 @@ impl SessionStatusView {
                 actual: self.latest_review_headline.clone(),
             });
         }
+        Ok(())
+    }
 
+    fn validate_governance(
+        &self,
+        record: &ActiveSessionRecord,
+    ) -> Result<(), SessionValidationError> {
         let expected_governance_stage =
             record.active_task.as_ref().and_then(task_state_governance_stage_key);
         if self.latest_governance_stage != expected_governance_stage {
@@ -1427,7 +1470,6 @@ impl SessionStatusView {
                 actual: self.latest_governance_stage.clone(),
             });
         }
-
         let expected_governance_runtime =
             record.active_task.as_ref().and_then(task_state_governance_runtime_text);
         if self.latest_governance_runtime != expected_governance_runtime {
@@ -1436,7 +1478,6 @@ impl SessionStatusView {
                 actual: self.latest_governance_runtime.clone(),
             });
         }
-
         let expected_governance_mode =
             record.active_task.as_ref().and_then(task_state_governance_mode_text);
         if self.latest_governance_mode != expected_governance_mode {
@@ -1445,7 +1486,6 @@ impl SessionStatusView {
                 actual: self.latest_governance_mode.clone(),
             });
         }
-
         let expected_governance_run_ref =
             record.active_task.as_ref().and_then(task_state_governance_canon_run_ref);
         if self.latest_governance_run_ref != expected_governance_run_ref {
@@ -1454,7 +1494,6 @@ impl SessionStatusView {
                 actual: self.latest_governance_run_ref.clone(),
             });
         }
-
         let expected_governance_state =
             record.active_task.as_ref().and_then(task_state_governance_state_text);
         if self.latest_governance_state != expected_governance_state {
@@ -1463,7 +1502,6 @@ impl SessionStatusView {
                 actual: self.latest_governance_state.clone(),
             });
         }
-
         let expected_governance_blocked_reason =
             record.active_task.as_ref().and_then(task_state_governance_blocked_reason);
         if self.latest_governance_blocked_reason != expected_governance_blocked_reason {
@@ -1472,7 +1510,6 @@ impl SessionStatusView {
                 actual: self.latest_governance_blocked_reason.clone(),
             });
         }
-
         let expected_governance_packet_ref =
             record.active_task.as_ref().and_then(task_state_governance_packet_ref);
         if self.latest_governance_packet_ref != expected_governance_packet_ref {
@@ -1481,7 +1518,6 @@ impl SessionStatusView {
                 actual: self.latest_governance_packet_ref.clone(),
             });
         }
-
         let expected_governance_packet_source_stage =
             record.active_task.as_ref().and_then(task_state_governance_packet_source_stage);
         if self.latest_governance_packet_source_stage != expected_governance_packet_source_stage {
@@ -1490,7 +1526,6 @@ impl SessionStatusView {
                 actual: self.latest_governance_packet_source_stage.clone(),
             });
         }
-
         let expected_governance_packet_binding_reason =
             record.active_task.as_ref().and_then(task_state_governance_packet_binding_reason);
         if self.latest_governance_packet_binding_reason != expected_governance_packet_binding_reason
@@ -1500,7 +1535,6 @@ impl SessionStatusView {
                 actual: self.latest_governance_packet_binding_reason.clone(),
             });
         }
-
         let expected_governance_approval =
             record.active_task.as_ref().and_then(task_state_governance_approval_text);
         if self.latest_governance_approval != expected_governance_approval {
@@ -1509,7 +1543,6 @@ impl SessionStatusView {
                 actual: self.latest_governance_approval.clone(),
             });
         }
-
         let expected_governance_decision =
             record.active_task.as_ref().and_then(task_state_governance_decision_headline);
         if self.latest_governance_decision != expected_governance_decision {
@@ -1518,7 +1551,6 @@ impl SessionStatusView {
                 actual: self.latest_governance_decision.clone(),
             });
         }
-
         let expected_governance_candidates =
             record.active_task.as_ref().and_then(task_state_governance_candidate_actions);
         if self.latest_governance_candidates != expected_governance_candidates {
@@ -1527,7 +1559,6 @@ impl SessionStatusView {
                 actual: self.latest_governance_candidates.clone(),
             });
         }
-
         let expected_governance_next_action =
             record.active_task.as_ref().and_then(task_state_governance_next_action);
         if self.governance_next_action != expected_governance_next_action {
@@ -1536,7 +1567,13 @@ impl SessionStatusView {
                 actual: self.governance_next_action.clone(),
             });
         }
+        Ok(())
+    }
 
+    fn validate_project_scale(
+        &self,
+        record: &ActiveSessionRecord,
+    ) -> Result<(), SessionValidationError> {
         let expected_project_scale_path =
             record.project_scale.as_ref().map(|state| state.path.stage_names());
         if self.project_scale_path != expected_project_scale_path {
@@ -1545,7 +1582,6 @@ impl SessionStatusView {
                 actual: self.project_scale_path.clone(),
             });
         }
-
         let expected_project_scale_stage =
             record.project_scale.as_ref().and_then(ProjectScaleSessionState::active_stage_text);
         if self.project_scale_current_stage != expected_project_scale_stage {
@@ -1554,7 +1590,6 @@ impl SessionStatusView {
                 actual: self.project_scale_current_stage.clone(),
             });
         }
-
         let expected_project_scale_next =
             record.project_scale.as_ref().map(|state| state.next_action.clone());
         if self.project_scale_next_action != expected_project_scale_next {
@@ -1563,7 +1598,6 @@ impl SessionStatusView {
                 actual: self.project_scale_next_action.clone(),
             });
         }
-
         let expected_project_scale_checkpoints = record.project_scale.as_ref().and_then(|state| {
             (!state.checkpoint_refs.is_empty()).then_some(state.checkpoint_refs.clone())
         });
@@ -1573,7 +1607,10 @@ impl SessionStatusView {
                 actual: self.project_scale_checkpoint_refs.clone(),
             });
         }
+        Ok(())
+    }
 
+    fn validate_voting(&self, record: &ActiveSessionRecord) -> Result<(), SessionValidationError> {
         let expected_vote = record.latest_voting.as_ref();
         if self.latest_voting_trigger != expected_vote.map(|vote| vote.trigger.clone()) {
             return Err(SessionValidationError::StatusViewVotingTriggerMismatch {
@@ -1615,23 +1652,30 @@ impl SessionStatusView {
                 actual: self.latest_voting_next_action.clone(),
             });
         }
+        Ok(())
+    }
 
+    fn validate_invariants(&self) -> Result<(), SessionValidationError> {
         if self.explanation.trim().is_empty() {
             return Err(SessionValidationError::MissingStatusExplanation);
         }
-
         if let Some(governance_next_action) = &self.governance_next_action
             && governance_next_action.trim().is_empty()
         {
             return Err(SessionValidationError::MissingGovernanceNextAction);
         }
-
         if let Some(next_command) = &self.next_command
             && next_command.trim().is_empty()
         {
             return Err(SessionValidationError::MissingNextCommand);
         }
+        Ok(())
+    }
 
+    fn validate_active_task_plan(
+        &self,
+        record: &ActiveSessionRecord,
+    ) -> Result<(), SessionValidationError> {
         if let Some(task) = &record.active_task {
             let expected_index = task.plan.current_step_index;
             if self.current_step_index != Some(expected_index) {
@@ -1640,7 +1684,6 @@ impl SessionStatusView {
                     actual: self.current_step_index,
                 });
             }
-
             let expected_step_id = task.plan.current_step().map(|step| step.id.clone());
             if self.current_step_id != expected_step_id {
                 return Err(SessionValidationError::StatusViewStepIdMismatch {
@@ -1648,7 +1691,6 @@ impl SessionStatusView {
                     actual: self.current_step_id.clone(),
                 });
             }
-
             if self.plan_revision != Some(task.plan.revision) {
                 return Err(SessionValidationError::StatusViewPlanRevisionMismatch {
                     expected: Some(task.plan.revision),
@@ -1656,7 +1698,6 @@ impl SessionStatusView {
                 });
             }
         }
-
         Ok(())
     }
 }
@@ -2159,6 +2200,31 @@ pub fn task_state_governance_state_text(task: &Task) -> Option<String> {
     task_state_governed_stage(task).and_then(|record| encoded_text(&record.lifecycle_state))
 }
 
+/// Returns the latest runtime-owned governance posture label from task context state.
+pub fn task_state_governance_runtime_state_text(task: &Task) -> Option<String> {
+    task_state_string(task, LATEST_GOVERNANCE_RUNTIME_STATE_KEY)
+}
+
+/// Returns the latest operator-visible rollout profile from task context state.
+pub fn task_state_governance_rollout_profile_text(task: &Task) -> Option<String> {
+    task_state_string(task, LATEST_GOVERNANCE_ROLLOUT_PROFILE_KEY)
+}
+
+/// Returns the latest governance posture rationale from task context state.
+pub fn task_state_governance_reason(task: &Task) -> Option<String> {
+    task_state_string(task, LATEST_GOVERNANCE_REASON_KEY)
+}
+
+/// Returns the latest contract-line projection for governance posture.
+pub fn task_state_governance_contract_lines(task: &Task) -> Option<Vec<String>> {
+    task_state_strings(task, LATEST_GOVERNANCE_CONTRACT_LINES_KEY)
+}
+
+/// Returns the latest approval provenance for the current governance posture.
+pub fn task_state_governance_approval_provenance(task: &Task) -> Option<String> {
+    task_state_string(task, LATEST_GOVERNANCE_APPROVAL_PROVENANCE_KEY)
+}
+
 /// Returns the latest governance blocked reason, falling back to Canon-memory
 /// staleness when that is the authoritative blocker.
 pub fn task_state_governance_blocked_reason(task: &Task) -> Option<String> {
@@ -2545,6 +2611,11 @@ mod tests {
             latest_governance_mode: None,
             latest_governance_run_ref: None,
             latest_governance_state: None,
+            latest_governance_runtime_state: None,
+            latest_governance_rollout_profile: None,
+            latest_governance_reason: None,
+            latest_governance_contract_lines: None,
+            latest_governance_approval_provenance: None,
             latest_governance_blocked_reason: None,
             latest_governance_packet_ref: None,
             latest_governance_packet_source_stage: None,
@@ -2632,6 +2703,7 @@ mod tests {
                 headline: "governed discovery packet".to_string(),
                 reason_code: None,
                 authority_governance: None,
+                adaptive_governance: None,
             })
             .unwrap();
         task.context
@@ -2695,6 +2767,14 @@ mod tests {
         view.latest_governance_mode = super::task_state_governance_mode_text(task);
         view.latest_governance_run_ref = super::task_state_governance_canon_run_ref(task);
         view.latest_governance_state = super::task_state_governance_state_text(task);
+        view.latest_governance_runtime_state =
+            super::task_state_governance_runtime_state_text(task);
+        view.latest_governance_rollout_profile =
+            super::task_state_governance_rollout_profile_text(task);
+        view.latest_governance_reason = super::task_state_governance_reason(task);
+        view.latest_governance_contract_lines = super::task_state_governance_contract_lines(task);
+        view.latest_governance_approval_provenance =
+            super::task_state_governance_approval_provenance(task);
         view.latest_governance_blocked_reason = super::task_state_governance_blocked_reason(task);
         view.latest_governance_packet_ref = super::task_state_governance_packet_ref(task);
         view.latest_governance_packet_source_stage =
@@ -2794,6 +2874,43 @@ mod tests {
             Some("same_stage_rerun".to_string())
         );
         assert_eq!(super::governance_packet_provenance_text(None, None), None);
+    }
+
+    #[test]
+    fn task_state_canon_memory_provenance_includes_adaptive_lines() {
+        let mut task = build_task("/tmp/workspace");
+        task.context
+            .set_latest_compacted_canon_memory(&crate::domain::governance::CompactedCanonMemory {
+                headline: "Canon verification packet".to_string(),
+                credibility: crate::domain::governance::MemoryCredibilityState::Stale,
+                stage_key: Some("change:verify".to_string()),
+                run_ref: Some("run-10".to_string()),
+                packet_ref: Some(".canon/runs/run-10".to_string()),
+                reason_code: Some("refresh_required".to_string()),
+                artifact_refs: vec![".canon/runs/run-10/verification.md".to_string()],
+                mode_summary: None,
+                possible_actions: Vec::new(),
+                recommended_next_action: None,
+                evidence_summary: None,
+                authority_provenance_lines: vec![
+                    "authority_contract_line: authority-governance-v1".to_string(),
+                ],
+                adaptive_provenance_lines: vec![
+                    "adaptive_contract_line: adaptive-governance-v1".to_string(),
+                ],
+            })
+            .unwrap();
+
+        let provenance = super::task_state_canon_memory_provenance(&task).unwrap();
+
+        assert!(
+            provenance
+                .iter()
+                .any(|line| line == "authority_contract_line: authority-governance-v1")
+        );
+        assert!(
+            provenance.iter().any(|line| line == "adaptive_contract_line: adaptive-governance-v1")
+        );
     }
 
     #[test]

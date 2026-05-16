@@ -10,7 +10,7 @@ evidence, and explicit stop conditions when delivery is not credible.
 ## 1. Run one governed delivery flow on the primary path
 
 ```bash
-cargo run --bin boundline -- run --workspace <workspace> --goal "Fix the failing add test"
+cargo run --bin boundline -- run --goal "Fix the failing add test"
 ```
 
 Expected behavior:
@@ -22,9 +22,9 @@ Expected behavior:
 ## 2. Inspect the same governed follow-through story
 
 ```bash
-cargo run --bin boundline -- status --workspace <workspace>
-cargo run --bin boundline -- next --workspace <workspace>
-cargo run --bin boundline -- inspect --workspace <workspace>
+cargo run --bin boundline -- status
+cargo run --bin boundline -- next
+cargo run --bin boundline -- inspect
 ```
 
 Expected behavior:
@@ -36,7 +36,7 @@ Expected behavior:
 ## 3. Stop explicitly when governance or delivery evidence blocks completion
 
 ```bash
-cargo run --bin boundline -- run --workspace <workspace> --goal "Fix the failing add test"
+cargo run --bin boundline -- run --goal "Fix the failing add test"
 ```
 
 Expected behavior in blocked scenarios:
@@ -48,7 +48,7 @@ Expected behavior in blocked scenarios:
 ## 4. Keep explicit compatibility subordinate
 
 ```bash
-cargo run --bin boundline -- run --workspace <workspace> --goal "Fix the failing add test" --compatibility
+cargo run --bin boundline -- run --goal "Fix the failing add test" --compatibility
 ```
 
 Expected behavior:

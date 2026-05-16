@@ -11,13 +11,12 @@
 ## Scenario 1: Start a bug fix from direct text only
 
 ```bash
-cargo run --bin boundline -- start --workspace <workspace>
+cargo run --bin boundline -- start
 cargo run --bin boundline -- capture \
-  --workspace <workspace> \
   --goal "Fix the flaky login retry test in the auth flow"
-cargo run --bin boundline -- flow bug-fix --workspace <workspace>
-cargo run --bin boundline -- plan --workspace <workspace>
-cargo run --bin boundline -- status --workspace <workspace>
+cargo run --bin boundline -- flow bug-fix
+cargo run --bin boundline -- plan
+cargo run --bin boundline -- status
 ```
 
 Expected outcome:
@@ -29,15 +28,14 @@ Expected outcome:
 ## Scenario 2: Reuse multiple Markdown briefs and referenced workspace documents
 
 ```bash
-cargo run --bin boundline -- start --workspace <workspace>
+cargo run --bin boundline -- start
 cargo run --bin boundline -- capture \
-  --workspace <workspace> \
   --goal "Implement caching for search results using docs/architecture/search-cache.md and docs/bugs/cache-regression.md" \
   --brief docs/architecture/search-cache.md \
   --brief docs/bugs/cache-regression.md
-cargo run --bin boundline -- flow change --workspace <workspace>
-cargo run --bin boundline -- plan --workspace <workspace>
-cargo run --bin boundline -- inspect --workspace <workspace>
+cargo run --bin boundline -- flow change
+cargo run --bin boundline -- plan
+cargo run --bin boundline -- inspect
 ```
 
 Expected outcome:
@@ -49,19 +47,18 @@ Expected outcome:
 ## Scenario 3: Start a governed change from human business values
 
 ```bash
-cargo run --bin boundline -- start --workspace <workspace>
+cargo run --bin boundline -- start
 cargo run --bin boundline -- capture \
-  --workspace <workspace> \
   --goal "Prepare the payments retry change for the next release" \
   --brief docs/payments/retry-brief.md \
   --governance canon \
   --risk medium \
   --zone payments \
   --owner platform
-cargo run --bin boundline -- flow change --workspace <workspace>
-cargo run --bin boundline -- plan --workspace <workspace>
-cargo run --bin boundline -- run --workspace <workspace>
-cargo run --bin boundline -- status --workspace <workspace>
+cargo run --bin boundline -- flow change
+cargo run --bin boundline -- plan
+cargo run --bin boundline -- run
+cargo run --bin boundline -- status
 ```
 
 Expected outcome:
@@ -73,11 +70,10 @@ Expected outcome:
 ## Scenario 4: Explicit clarification for an unbounded request
 
 ```bash
-cargo run --bin boundline -- start --workspace <workspace>
+cargo run --bin boundline -- start
 cargo run --bin boundline -- capture \
-  --workspace <workspace> \
   --goal "Improve the platform docs and fix whatever tests are broken"
-cargo run --bin boundline -- plan --workspace <workspace>
+cargo run --bin boundline -- plan
 ```
 
 Expected outcome:

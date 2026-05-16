@@ -7,12 +7,12 @@
 
 ```bash
 cd /tmp/boundline-governed-stage-depth
-cargo run --bin boundline -- start --workspace .
-cargo run --bin boundline -- capture --workspace . --goal "Fix the failing add test"
-cargo run --bin boundline -- flow bug-fix --workspace .
-cargo run --bin boundline -- plan --workspace .
-cargo run --bin boundline -- run --workspace .
-cargo run --bin boundline -- status --workspace .
+cargo run --bin boundline -- start
+cargo run --bin boundline -- capture --goal "Fix the failing add test"
+cargo run --bin boundline -- flow bug-fix
+cargo run --bin boundline -- plan
+cargo run --bin boundline -- run
+cargo run --bin boundline -- status
 ```
 
 **Expected**:
@@ -24,9 +24,9 @@ cargo run --bin boundline -- status --workspace .
 
 ```bash
 cd /tmp/boundline-governed-stage-depth
-cargo run --bin boundline -- status --workspace .
-cargo run --bin boundline -- next --workspace .
-cargo run --bin boundline -- run --workspace .
+cargo run --bin boundline -- status
+cargo run --bin boundline -- next
+cargo run --bin boundline -- run
 ```
 
 **Expected**:
@@ -38,9 +38,9 @@ cargo run --bin boundline -- run --workspace .
 
 ```bash
 cd /tmp/boundline-governed-stage-depth
-cargo run --bin boundline -- workflow run governed-delivery --workspace . --goal "Fix the failing add test"
-cargo run --bin boundline -- workflow status --workspace .
-cargo run --bin boundline -- workflow inspect --workspace .
+cargo run --bin boundline -- workflow run governed-delivery --goal "Fix the failing add test"
+cargo run --bin boundline -- workflow status
+cargo run --bin boundline -- workflow inspect
 ```
 
 **Expected**:

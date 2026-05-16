@@ -9,21 +9,25 @@ use boundline::domain::governance::{
 use boundline::domain::limits::RunLimits;
 use boundline::domain::task_context::TaskContext;
 use boundline::domain::task_context::{
-    LATEST_GOVERNANCE_DECISION_KEY, LATEST_GOVERNANCE_PACKET_KEY,
-    LATEST_GOVERNANCE_PACKET_REUSE_KEY, LATEST_GOVERNANCE_STAGE_KEY,
+    LATEST_GOVERNANCE_CONTRACT_LINES_KEY, LATEST_GOVERNANCE_DECISION_KEY,
+    LATEST_GOVERNANCE_PACKET_KEY, LATEST_GOVERNANCE_PACKET_REUSE_KEY, LATEST_GOVERNANCE_REASON_KEY,
+    LATEST_GOVERNANCE_STAGE_KEY,
 };
 use boundline::orchestrator::governance::{
-    governance_input_documents, overlay_stage_policy_with_intent, requested_governance_intent,
+    GovernanceProjectionSnapshot, governance_input_documents, overlay_stage_policy_with_intent,
+    requested_governance_intent,
 };
 use boundline::{
     ApprovalState, AuthoredBriefBundle, AutopilotAction, AutopilotDecisionRecord, CanonMode,
-    CanonRuntimeConfig, GovernanceBoundedContext, GovernanceIntent, GovernanceLifecycleState,
-    GovernanceProfile, GovernanceRuntimeKind, GovernedStagePacket, GovernedStageRecord,
-    InputSourceKind, InputSourceReference, PacketReadiness, PacketReuseBinding,
-    SUPPORTED_CANON_VERSION, StageGovernancePolicy, SystemContextBinding, autopilot_action_text,
-    bounded_reused_packets, build_autopilot_decision, classify_packet_readiness,
-    escalation_target_stage_key, governance_stage_key, governance_state_patch,
-    narrowed_bounded_context, select_packet_reuse_binding, selected_stage_policy,
+    CanonRuntimeConfig, GovernanceBoundedContext, GovernanceDegradationMode, GovernanceIntent,
+    GovernanceLifecycleState, GovernanceProfile, GovernanceRolloutProfile, GovernanceRuntimeKind,
+    GovernanceRuntimeState, GovernanceStartupContext, GovernanceTransitionDirection,
+    GovernedStagePacket, GovernedStageRecord, InputSourceKind, InputSourceReference,
+    PacketReadiness, PacketReuseBinding, SUPPORTED_CANON_VERSION, StageGovernancePolicy,
+    StopSemantics, SystemContextBinding, autopilot_action_text, bounded_reused_packets,
+    build_autopilot_decision, classify_packet_readiness, escalation_target_stage_key,
+    governance_stage_key, governance_state_patch, narrowed_bounded_context,
+    resolve_governance_startup_posture, select_packet_reuse_binding, selected_stage_policy,
     supported_canon_modes_for_stage,
 };
 use serde_json::json;
@@ -52,6 +56,7 @@ fn sample_policy() -> StageGovernancePolicy {
         enabled: true,
         required: false,
         autopilot: false,
+        require_adaptive_companion: false,
         runtime: Some(GovernanceRuntimeKind::Local),
         canon_mode: None,
         system_context: None,
@@ -78,6 +83,7 @@ fn sample_canon_policy(flow_name: &str, stage_id: &str, mode: CanonMode) -> Stag
         enabled: true,
         required: false,
         autopilot: false,
+        require_adaptive_companion: false,
         runtime: Some(GovernanceRuntimeKind::Canon),
         canon_mode: Some(mode),
         system_context: Some(SystemContextBinding::Existing),
@@ -243,6 +249,7 @@ fn canon_helper_summaries_render_expected_text() {
         recommended_next_action: None,
         evidence_summary: None,
         authority_provenance_lines: Vec::new(),
+        adaptive_provenance_lines: Vec::new(),
     };
 
     assert_eq!(
@@ -253,6 +260,112 @@ fn canon_helper_summaries_render_expected_text() {
     assert!(memory.summary_text().contains("Canon verification packet is still credible"));
     assert_eq!(MemoryCredibilityState::Stale.as_str(), "stale");
     assert_eq!(autopilot_action_text(AutopilotAction::AwaitApproval), "await_approval");
+}
+
+#[test]
+fn governance_runtime_state_transition_helpers_classify_direction() {
+    assert_eq!(
+        GovernanceRuntimeState::Advisory.transition_direction_to(GovernanceRuntimeState::Rule),
+        GovernanceTransitionDirection::Promote
+    );
+    assert_eq!(
+        GovernanceRuntimeState::Hook.transition_direction_to(GovernanceRuntimeState::Catch),
+        GovernanceTransitionDirection::Downgrade
+    );
+    assert_eq!(
+        GovernanceRuntimeState::Catch.transition_direction_to(GovernanceRuntimeState::Catch),
+        GovernanceTransitionDirection::NoChange
+    );
+}
+
+#[test]
+fn governance_rollout_profile_baseline_state_matches_maturity() {
+    assert_eq!(
+        GovernanceRolloutProfile::Minimal.baseline_runtime_state(),
+        GovernanceRuntimeState::Advisory
+    );
+    assert_eq!(
+        GovernanceRolloutProfile::Guided.baseline_runtime_state(),
+        GovernanceRuntimeState::Catch
+    );
+    assert_eq!(
+        GovernanceRolloutProfile::Governed.baseline_runtime_state(),
+        GovernanceRuntimeState::Rule
+    );
+    assert_eq!(
+        GovernanceRolloutProfile::Strict.baseline_runtime_state(),
+        GovernanceRuntimeState::Hook
+    );
+}
+
+#[test]
+fn governance_degradation_modes_map_to_existing_stop_semantics() {
+    assert_eq!(
+        GovernanceDegradationMode::AdvisoryFallback.mapped_stop_semantics(),
+        StopSemantics::ProceedWithAdvisory
+    );
+    assert_eq!(
+        GovernanceDegradationMode::SmallerCouncil.mapped_stop_semantics(),
+        StopSemantics::CouncilRequired
+    );
+    assert_eq!(
+        GovernanceDegradationMode::HumanGate.mapped_stop_semantics(),
+        StopSemantics::HumanGateRequired
+    );
+    assert_eq!(
+        GovernanceDegradationMode::ReducedAutonomy.mapped_stop_semantics(),
+        StopSemantics::ProceedWithWarning
+    );
+    assert_eq!(
+        GovernanceDegradationMode::VerificationOnly.mapped_stop_semantics(),
+        StopSemantics::DegradedProceed
+    );
+    assert_eq!(
+        GovernanceDegradationMode::ExecutionBlock.mapped_stop_semantics(),
+        StopSemantics::HardStop
+    );
+}
+
+#[test]
+fn governance_startup_posture_defaults_to_advisory_for_low_trust_surfaces() {
+    let resolution = resolve_governance_startup_posture(GovernanceStartupContext {
+        current_state: GovernanceRuntimeState::Advisory,
+        requested_profile: None,
+        operator_approved_profile: None,
+        low_trust_surface: true,
+    });
+
+    assert_eq!(resolution.rollout_profile, GovernanceRolloutProfile::Minimal);
+    assert_eq!(resolution.runtime_state, GovernanceRuntimeState::Advisory);
+    assert_eq!(resolution.transition_direction, GovernanceTransitionDirection::NoChange);
+}
+
+#[test]
+fn governance_startup_posture_keeps_requested_stronger_profile_advisory_without_approval() {
+    let resolution = resolve_governance_startup_posture(GovernanceStartupContext {
+        current_state: GovernanceRuntimeState::Advisory,
+        requested_profile: Some(GovernanceRolloutProfile::Governed),
+        operator_approved_profile: None,
+        low_trust_surface: false,
+    });
+
+    assert_eq!(resolution.rollout_profile, GovernanceRolloutProfile::Minimal);
+    assert_eq!(resolution.runtime_state, GovernanceRuntimeState::Advisory);
+    assert_eq!(resolution.transition_direction, GovernanceTransitionDirection::NoChange);
+}
+
+#[test]
+fn governance_startup_posture_promotes_when_stronger_profile_is_explicitly_approved() {
+    let resolution = resolve_governance_startup_posture(GovernanceStartupContext {
+        current_state: GovernanceRuntimeState::Advisory,
+        requested_profile: Some(GovernanceRolloutProfile::Governed),
+        operator_approved_profile: Some(GovernanceRolloutProfile::Governed),
+        low_trust_surface: false,
+    });
+
+    assert_eq!(resolution.rollout_profile, GovernanceRolloutProfile::Governed);
+    assert_eq!(resolution.runtime_state, GovernanceRuntimeState::Rule);
+    assert_eq!(resolution.transition_direction, GovernanceTransitionDirection::Promote);
 }
 
 #[test]
@@ -282,6 +395,7 @@ fn governance_state_patch_writes_all_present_entries() {
         headline: "local packet".to_string(),
         reason_code: None,
         authority_governance: None,
+        adaptive_governance: None,
     };
     let reuse = PacketReuseBinding {
         upstream_stage_key: "bug-fix:investigate".to_string(),
@@ -300,9 +414,26 @@ fn governance_state_patch_writes_all_present_entries() {
         rationale: "discovery best matches investigate".to_string(),
         blocked_reason: None,
     };
+    let projection = GovernanceProjectionSnapshot {
+        runtime_state: GovernanceRuntimeState::Advisory,
+        rollout_profile: GovernanceRolloutProfile::Minimal,
+        reason: "startup posture defaulted locally for low-trust surface".to_string(),
+        contract_lines: vec![
+            "authority_contract_line: unavailable".to_string(),
+            "adaptive_contract_line: unavailable".to_string(),
+        ],
+        approval_provenance: "approval not required".to_string(),
+    };
 
-    let patch = governance_state_patch(&record, Some(&packet), Some(&reuse), Some(&decision), None)
-        .unwrap();
+    let patch = governance_state_patch(
+        &record,
+        Some(&packet),
+        Some(&reuse),
+        Some(&decision),
+        None,
+        &projection,
+    )
+    .unwrap();
 
     assert_eq!(patch[LATEST_GOVERNANCE_STAGE_KEY]["stage_key"], "bug-fix:investigate");
     assert_eq!(patch[LATEST_GOVERNANCE_PACKET_KEY]["packet_ref"], packet.packet_ref);
@@ -311,11 +442,24 @@ fn governance_state_patch_writes_all_present_entries() {
         serde_json::json!(reuse.binding_reason)
     );
     assert_eq!(patch[LATEST_GOVERNANCE_DECISION_KEY]["decision_id"], "decision-1");
+    assert_eq!(patch[LATEST_GOVERNANCE_REASON_KEY], json!(projection.reason));
+    assert_eq!(patch[LATEST_GOVERNANCE_CONTRACT_LINES_KEY], json!(projection.contract_lines));
 }
 
 #[test]
 fn governance_state_patch_omits_optional_entries_when_absent() {
-    let patch = governance_state_patch(&sample_record(), None, None, None, None).unwrap();
+    let projection = GovernanceProjectionSnapshot {
+        runtime_state: GovernanceRuntimeState::Advisory,
+        rollout_profile: GovernanceRolloutProfile::Minimal,
+        reason: "startup posture defaulted locally for low-trust surface".to_string(),
+        contract_lines: vec![
+            "authority_contract_line: unavailable".to_string(),
+            "adaptive_contract_line: unavailable".to_string(),
+        ],
+        approval_provenance: "approval not required".to_string(),
+    };
+    let patch =
+        governance_state_patch(&sample_record(), None, None, None, None, &projection).unwrap();
 
     assert!(patch.contains_key(LATEST_GOVERNANCE_STAGE_KEY));
     assert!(patch[LATEST_GOVERNANCE_PACKET_KEY].is_null());
@@ -516,6 +660,7 @@ fn governance_profile_validation_accepts_canon_defaults_for_single_mode_stage() 
             enabled: true,
             required: false,
             autopilot: false,
+            require_adaptive_companion: false,
             runtime: Some(GovernanceRuntimeKind::Canon),
             canon_mode: None,
             system_context: None,
@@ -615,6 +760,7 @@ fn autopilot_selects_security_assessment_first_for_verification_stage() {
         enabled: true,
         required: false,
         autopilot: true,
+        require_adaptive_companion: false,
         runtime: Some(GovernanceRuntimeKind::Canon),
         canon_mode: None,
         system_context: Some(SystemContextBinding::Existing),
@@ -712,6 +858,7 @@ fn governance_reuse_binding_uses_immediate_upstream_stage_context() {
             headline: "investigation packet ready".to_string(),
             reason_code: None,
             authority_governance: None,
+            adaptive_governance: None,
         })
         .unwrap();
     let metadata = FlowStepMetadata {
@@ -769,6 +916,7 @@ fn governance_reuse_binding_supports_same_stage_rerun() {
             headline: "implementation packet ready".to_string(),
             reason_code: None,
             authority_governance: None,
+            adaptive_governance: None,
         })
         .unwrap();
     let metadata = FlowStepMetadata {
@@ -944,6 +1092,7 @@ fn autopilot_escalates_pr_review_from_verification_stage() {
         enabled: true,
         required: false,
         autopilot: true,
+        require_adaptive_companion: false,
         runtime: Some(GovernanceRuntimeKind::Canon),
         canon_mode: Some(CanonMode::Verification),
         system_context: Some(SystemContextBinding::Existing),

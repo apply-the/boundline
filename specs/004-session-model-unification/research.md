@@ -43,10 +43,10 @@
   - Overload the existing `run` and `inspect` commands with hidden session behavior only: rejected because the user would still lack explicit `start`, `capture`, and `next` lifecycle entry points.
   - Make assistant-only commands reuse hidden session state while leaving CLI unchanged: rejected because the feature must unify, not split, interaction models.
 
-## Decision 6: Resolve the workspace from the current directory by default, with optional explicit override
+## Decision 6: Resolve the workspace from the nearest initialized or Git repository root by default, with optional explicit override
 
-- **Decision**: Session-backed commands operate against the current working directory by default and may allow an explicit workspace override when necessary.
-- **Rationale**: The feature aims to reduce repeated parameter passing and make chat-first workflows natural. Defaulting to the current workspace lets `boundline start`, `boundline plan`, and follow-up assistant-invoked commands work naturally from the repository root while still leaving room for explicit targeting when a user needs it.
+- **Decision**: Session-backed commands operate against the nearest initialized `.boundline/` ancestor, then the nearest Git root, and only then the current working directory; they may still allow an explicit workspace override when necessary.
+- **Rationale**: The feature aims to reduce repeated parameter passing and make chat-first workflows natural. Defaulting to the effective repository root lets `boundline start`, `boundline plan`, and follow-up assistant-invoked commands work naturally from subdirectories while still leaving room for explicit targeting when a user needs it.
 - **Alternatives considered**:
   - Require `--workspace` on every session command: rejected because it preserves the repetitive UX this feature is meant to remove.
   - Infer workspace from the latest trace only: rejected because the session itself must be the authoritative interaction anchor.

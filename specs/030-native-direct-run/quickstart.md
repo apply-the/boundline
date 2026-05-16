@@ -11,7 +11,7 @@ through the existing CLI surfaces.
 ## 1. Start from one direct native run command
 
 ```bash
-cargo run --bin boundline -- run --workspace <workspace> --goal "Fix the failing add test"
+cargo run --bin boundline -- run --goal "Fix the failing add test"
 ```
 
 Expected behavior:
@@ -23,9 +23,9 @@ Expected behavior:
 ## 2. Continue from persisted native session state
 
 ```bash
-cargo run --bin boundline -- status --workspace <workspace>
-cargo run --bin boundline -- next --workspace <workspace>
-cargo run --bin boundline -- inspect --workspace <workspace>
+cargo run --bin boundline -- status
+cargo run --bin boundline -- next
+cargo run --bin boundline -- inspect
 ```
 
 Expected behavior:
@@ -36,7 +36,7 @@ Expected behavior:
 ## 3. Keep compatibility execution explicit
 
 ```bash
-cargo run --bin boundline -- run --workspace <workspace> --goal "Fix the failing add test" --compatibility
+cargo run --bin boundline -- run --goal "Fix the failing add test" --compatibility
 ```
 
 Expected behavior:
@@ -47,9 +47,9 @@ Expected behavior:
 ## 4. Protect active session state
 
 ```bash
-cargo run --bin boundline -- start --workspace <workspace>
-cargo run --bin boundline -- capture --workspace <workspace> --goal "Fix the failing add test"
-cargo run --bin boundline -- run --workspace <workspace> --goal "Ship the checkout change"
+cargo run --bin boundline -- start
+cargo run --bin boundline -- capture --goal "Fix the failing add test"
+cargo run --bin boundline -- run --goal "Ship the checkout change"
 ```
 
 Expected behavior:

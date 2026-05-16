@@ -349,7 +349,7 @@ If host platforms do not support global commands, Boundline must provide a docum
 
 ```text
 boundline assistant install --host <host> --scope user
-boundline init --workspace .
+boundline init
 ```
 
 ---

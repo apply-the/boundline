@@ -11,10 +11,10 @@ reusing persisted session and trace evidence.
 ## 1. Start a bounded session-native workflow
 
 ```bash
-cargo run --bin boundline -- start --workspace <workspace>
-cargo run --bin boundline -- capture --workspace <workspace> --goal "Fix the failing add test"
-cargo run --bin boundline -- plan --workspace <workspace>
-cargo run --bin boundline -- run --workspace <workspace>
+cargo run --bin boundline -- start
+cargo run --bin boundline -- capture --goal "Fix the failing add test"
+cargo run --bin boundline -- plan
+cargo run --bin boundline -- run
 ```
 
 Expected behavior:
@@ -26,8 +26,8 @@ Expected behavior:
 ## 2. Check guided follow-through on status and next
 
 ```bash
-cargo run --bin boundline -- status --workspace <workspace>
-cargo run --bin boundline -- next --workspace <workspace>
+cargo run --bin boundline -- status
+cargo run --bin boundline -- next
 ```
 
 Expected behavior:
@@ -41,8 +41,8 @@ Expected behavior:
 ## 3. Reuse continuity after reload or inspect-only follow-up
 
 ```bash
-cargo run --bin boundline -- status --workspace <workspace>
-cargo run --bin boundline -- inspect --workspace <workspace>
+cargo run --bin boundline -- status
+cargo run --bin boundline -- inspect
 ```
 
 Expected behavior:
@@ -54,9 +54,9 @@ Expected behavior:
 ## 4. Preserve explicit compatibility authority
 
 ```bash
-cargo run --bin boundline -- run --workspace <workspace> --goal "Fix the failing add test"
-cargo run --bin boundline -- next --workspace <workspace>
-cargo run --bin boundline -- inspect --workspace <workspace>
+cargo run --bin boundline -- run --goal "Fix the failing add test"
+cargo run --bin boundline -- next
+cargo run --bin boundline -- inspect
 ```
 
 Expected behavior:
