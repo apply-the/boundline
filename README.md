@@ -19,10 +19,10 @@ through explicit sessions for planning, execution, inspection, recovery, and
 governed delivery when needed. Canon is optional: most users can ignore it
 unless they need governed stages or governed artifacts.
 
-In `0.55.0`, bundled guidance and guardian content also ships as catalog-aware
-packs under `assistant/packs/`, with explicit manifest and index contracts,
-canonical pillar taxonomy, and inspectable validation findings surfaced through
-`plan`, `status`, and `inspect`.
+In `0.56.0`, governed review councils also persist explicit council profile,
+independence state, and stop semantics alongside the existing guidance catalog
+surfaces, so `status`, `next`, and `inspect` can explain both authority posture
+and review posture from the same bounded session state.
 
 ## Quick Path Brutale
 
@@ -209,6 +209,9 @@ printed restore command before making unrelated edits.
 
 - Quick start: this README plus [docs/getting-started.md](docs/getting-started.md)
 - Delivery model: [docs/delivery-model.md](docs/delivery-model.md)
+- Authority zones and stop semantics: [docs/authority-zones-and-stop-semantics.md](docs/authority-zones-and-stop-semantics.md)
+- Review council algorithms: [docs/review-council-algorithms.md](docs/review-council-algorithms.md)
+- Council adoption guide: [docs/council-adoption-guide.md](docs/council-adoption-guide.md)
 - Advanced architecture: [docs/architecture.md](docs/architecture.md)
 - Extending guidance and guardians: [docs/guides/extending-guidance-catalog.md](docs/guides/extending-guidance-catalog.md)
 - Assistant-specific command packs: [assistant/README.md](assistant/README.md)

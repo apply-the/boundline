@@ -618,6 +618,20 @@ pub fn summarize_trace(
                         context_provenance.push(line);
                     }
                 }
+                if let Some(authority_provenance_lines) = event
+                    .payload
+                    .get("authority_provenance_lines")
+                    .and_then(|value| value.as_array())
+                {
+                    for line in authority_provenance_lines
+                        .iter()
+                        .filter_map(|item| item.as_str().map(str::to_string))
+                    {
+                        if !context_provenance.contains(&line) {
+                            context_provenance.push(line);
+                        }
+                    }
+                }
                 if context_staleness_reason.is_none()
                     && event
                         .payload
@@ -2341,7 +2355,8 @@ mod tests {
                 "canon_memory_credibility": "stale",
                 "canon_memory_compatibility": "warning",
                 "canon_memory_reason_code": "refresh_required",
-                "canon_next_action": "refresh: refresh the governed packet and reassess its credibility"
+                "canon_next_action": "refresh: refresh the governed packet and reassess its credibility",
+                "authority_provenance_lines": ["authority_control_class: council_review"]
             }),
         );
 
@@ -2366,6 +2381,11 @@ mod tests {
             summary
                 .context_provenance
                 .contains(&"canon_memory_packet: .canon/runs/run-7".to_string())
+        );
+        assert!(
+            summary
+                .context_provenance
+                .contains(&"authority_control_class: council_review".to_string())
         );
         assert_eq!(summary.context_staleness_reason.as_deref(), Some("refresh_required"));
         assert_eq!(

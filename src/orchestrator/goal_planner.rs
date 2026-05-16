@@ -2062,6 +2062,7 @@ mod tests {
                         target: None,
                     }),
                     evidence_summary: None,
+                    authority_provenance_lines: Vec::new(),
                 }),
                 ..PlanningContextSources::default()
             },
@@ -2369,6 +2370,7 @@ mod tests {
                         target: None,
                     }),
                     evidence_summary: None,
+                    authority_provenance_lines: Vec::new(),
                 }),
                 ..PlanningContextSources::default()
             },
@@ -2417,6 +2419,7 @@ mod tests {
                         target: Some(".canon/runs/run-2/verification.md".to_string()),
                     }),
                     evidence_summary: None,
+                    authority_provenance_lines: Vec::new(),
                 }),
                 ..PlanningContextSources::default()
             },
@@ -2482,6 +2485,7 @@ mod tests {
                     possible_actions: Vec::new(),
                     recommended_next_action: None,
                     evidence_summary: None,
+                    authority_provenance_lines: Vec::new(),
                 }),
                 ..PlanningContextSources::default()
             },

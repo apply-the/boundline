@@ -27,12 +27,7 @@ fn reviewers() -> Vec<ReviewerDefinition> {
 }
 
 fn finding(reviewer_id: &str, disposition: ReviewerDisposition) -> ReviewerFinding {
-    ReviewerFinding {
-        reviewer_id: reviewer_id.to_string(),
-        disposition,
-        summary: format!("{reviewer_id} summary"),
-        details: None,
-    }
+    ReviewerFinding::new(reviewer_id.to_string(), disposition, format!("{reviewer_id} summary"))
 }
 
 #[test]

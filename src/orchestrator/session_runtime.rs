@@ -1062,6 +1062,7 @@ impl SessionRuntime {
                     closure_status: None,
                     closure_findings: Vec::new(),
                 }),
+            authority_provenance_lines: Vec::new(),
         })
     }
 
@@ -3225,6 +3226,14 @@ impl SessionRuntime {
             });
         }
 
+        let response = crate::orchestrator::governance::fail_closed_required_authority_response(
+            &stage_key,
+            policy,
+            runtime_kind,
+            &response,
+        )
+        .unwrap_or(response);
+
         let packet_rejected = response.packet.as_ref().is_some_and(|packet| {
             matches!(packet.readiness, PacketReadiness::Incomplete | PacketReadiness::Rejected)
         });
@@ -3298,6 +3307,7 @@ impl SessionRuntime {
                     "reason": blocked_reason.as_deref().unwrap_or(&response.message),
                     "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
                     "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason),
+                    "authority_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.authority_provenance_lines.clone()).unwrap_or_default(),
                 }),
             );
         }
@@ -3317,6 +3327,7 @@ impl SessionRuntime {
                         "headline": response.packet.as_ref().map(|packet| packet.headline.clone()).unwrap_or_else(|| response.message.clone()),
                         "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
                         "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason),
+                        "authority_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.authority_provenance_lines.clone()).unwrap_or_default(),
                     }),
                 );
                 let trace_location = self.persist_trace(trace)?;
@@ -3352,6 +3363,7 @@ impl SessionRuntime {
                         "run_ref": response.run_ref,
                         "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
                         "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason),
+                        "authority_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.authority_provenance_lines.clone()).unwrap_or_default(),
                     }),
                 );
                 let trace_location = self.persist_trace(trace)?;
@@ -3375,6 +3387,7 @@ impl SessionRuntime {
                         "packet_ref": response.packet.as_ref().map(|packet| packet.packet_ref.clone()),
                         "packet_source_stage": packet_reuse.as_ref().map(|binding| binding.upstream_stage_key.clone()),
                         "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason),
+                        "authority_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.authority_provenance_lines.clone()).unwrap_or_default(),
                     }),
                 );
                 let trace_location = self.persist_trace(trace)?;

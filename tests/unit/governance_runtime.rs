@@ -3,10 +3,11 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 use boundline::{
-    ApprovalState, CanonCliRuntime, GovernanceBoundedContext, GovernanceInputDocument,
-    GovernanceLifecycleState, GovernanceRequestKind, GovernanceRuntime, GovernanceRuntimeKind,
-    GovernanceRuntimeRequest, LocalGovernanceRuntime, PacketReadiness, SystemContextBinding,
-    classify_packet_readiness,
+    AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE, ApprovalState, CanonAuthorityZone, CanonChangeClass,
+    CanonCliRuntime, CanonIntendedPersona, CanonRiskClass, GovernanceBoundedContext,
+    GovernanceInputDocument, GovernanceLifecycleState, GovernanceRequestKind, GovernanceRuntime,
+    GovernanceRuntimeKind, GovernanceRuntimeRequest, LocalGovernanceRuntime, PacketReadiness,
+    SystemContextBinding, classify_packet_readiness,
 };
 use uuid::Uuid;
 
@@ -186,6 +187,75 @@ fn canon_cli_runtime_parses_start_response_into_a_reusable_packet() {
     assert_eq!(packet.runtime, GovernanceRuntimeKind::Canon);
     assert_eq!(packet.readiness, PacketReadiness::Reusable);
     assert_eq!(packet.canon_mode, Some(boundline::CanonMode::Discovery));
+}
+
+#[test]
+fn canon_cli_runtime_reads_inline_authority_governance_fields() {
+    let workspace = temp_workspace("boundline-canon-inline-authority");
+    write_workspace_file(
+        &workspace,
+        ".canon/runs/canon-run-inline/discovery.md",
+        "# Discovery\n\nCaptured authority-semantic context.\n",
+    );
+    let script = write_canon_stub(
+        "boundline-canon-inline-authority-command",
+        "{\"status\":\"governed_ready\",\"run_ref\":\"canon-run-inline\",\"packet_ref\":\".canon/runs/canon-run-inline\",\"expected_document_refs\":[\".canon/runs/canon-run-inline/discovery.md\"],\"document_refs\":[\".canon/runs/canon-run-inline/discovery.md\"],\"approval_state\":\"not_needed\",\"packet_readiness\":\"reusable\",\"missing_sections\":[],\"authority_governance\":{\"contract_line\":\"authority-governance-v1\",\"authority_zone\":\"yellow\",\"change_class\":\"systemic-impact\",\"intended_persona\":\"system-architect\",\"approval_state\":\"not_needed\",\"packet_readiness\":\"reusable\",\"risk\":\"systemic-impact\"},\"headline\":\"discovery packet ready\",\"message\":\"Canon completed the governed stage\"}",
+    );
+    let runtime = CanonCliRuntime::new(script.to_string_lossy().into_owned())
+        .with_working_directory(&workspace);
+
+    let response = runtime.execute(&canon_request(&workspace)).unwrap();
+    let authority = response
+        .packet
+        .expect("packet should be present")
+        .authority_governance
+        .expect("authority should be present");
+
+    assert_eq!(authority.contract_line, AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE);
+    assert_eq!(authority.authority_zone, CanonAuthorityZone::Yellow);
+    assert_eq!(authority.change_class, CanonChangeClass::SystemicImpact);
+    assert_eq!(authority.intended_persona, CanonIntendedPersona::SystemArchitect);
+    assert_eq!(authority.risk, CanonRiskClass::SystemicImpact);
+}
+
+#[test]
+fn canon_cli_runtime_treats_malformed_authority_metadata_as_absent() {
+    let workspace = temp_workspace("boundline-canon-malformed-authority");
+    write_workspace_file(
+        &workspace,
+        ".canon/runs/canon-run-malformed/discovery.md",
+        "# Discovery\n\nCaptured authority-semantic context.\n",
+    );
+    write_workspace_file(
+        &workspace,
+        ".canon/runs/canon-run-malformed/packet-metadata.json",
+        r#"{
+  "run_id": "canon-run-malformed",
+  "mode": "discovery",
+  "metadata": {
+    "authority_governance": {
+      "contract_line": "authority-governance-v1",
+      "authority_zone": "yellow",
+      "change_class": "systemic-impact",
+      "intended_persona": "system-architect",
+      "approval_state": "not_needed",
+      "packet_readiness": "reusable"
+    }
+  }
+}"#,
+    );
+    let script = write_canon_stub(
+        "boundline-canon-malformed-authority-command",
+        "{\"status\":\"governed_ready\",\"run_ref\":\"canon-run-malformed\",\"packet_ref\":\".canon/runs/canon-run-malformed\",\"expected_document_refs\":[\".canon/runs/canon-run-malformed/discovery.md\"],\"document_refs\":[\".canon/runs/canon-run-malformed/discovery.md\"],\"approval_state\":\"not_needed\",\"packet_readiness\":\"reusable\",\"missing_sections\":[],\"headline\":\"discovery packet ready\",\"message\":\"Canon completed the governed stage\"}",
+    );
+    let runtime = CanonCliRuntime::new(script.to_string_lossy().into_owned())
+        .with_working_directory(&workspace);
+
+    let response = runtime.execute(&canon_request(&workspace)).unwrap();
+    let packet = response.packet.expect("packet should be present");
+
+    assert_eq!(response.status, GovernanceLifecycleState::GovernedReady);
+    assert!(packet.authority_governance.is_none());
 }
 
 #[test]

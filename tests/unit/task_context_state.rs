@@ -87,6 +87,7 @@ fn task_context_round_trips_governance_state_records() {
         missing_sections: Vec::new(),
         headline: "local packet".to_string(),
         reason_code: None,
+        authority_governance: None,
     };
     let reuse = PacketReuseBinding {
         upstream_stage_key: "bug-fix:investigate".to_string(),
@@ -166,6 +167,7 @@ fn task_context_round_trips_canon_snapshot_and_compacted_memory() {
         possible_actions: Vec::new(),
         recommended_next_action: None,
         evidence_summary: None,
+        authority_provenance_lines: Vec::new(),
     };
 
     context.set_latest_canon_capability_snapshot(&snapshot).unwrap();

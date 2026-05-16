@@ -922,13 +922,13 @@ case "$request" in
     headline="discovery packet ready"
     ;;
 esac
-printf '{"status":"governed_ready","run_ref":"%s","packet_ref":"%s","expected_document_refs":["%s"],"document_refs":["%s"],"approval_state":"not_needed","packet_readiness":"reusable","missing_sections":[],"headline":"%s","message":"Canon completed the governed stage"}' "$run_ref" "$packet_ref" "$document_ref" "$document_ref" "$headline"
+printf '{"status":"governed_ready","run_ref":"%s","packet_ref":"%s","expected_document_refs":["%s"],"document_refs":["%s"],"approval_state":"not_needed","packet_readiness":"reusable","missing_sections":[],"authority_governance":{"contract_line":"authority-governance-v1","authority_zone":"green","change_class":"low-impact","intended_persona":"delivery-engineer","approval_state":"not_needed","packet_readiness":"reusable","risk":"low-impact"},"headline":"%s","message":"Canon completed the governed stage"}' "$run_ref" "$packet_ref" "$document_ref" "$document_ref" "$headline"
 "#
         }
         CanonFixtureScenario::RejectedPacket => {
             r#"#!/bin/sh
 cat >/dev/null
-printf '{"status":"governed_ready","run_ref":"canon-run-investigate","packet_ref":".canon/runs/canon-run-investigate","expected_document_refs":[".canon/runs/canon-run-investigate/discovery.md"],"document_refs":[".canon/runs/canon-run-investigate/discovery.md"],"approval_state":"not_needed","packet_readiness":"reusable","missing_sections":[],"headline":"discovery packet pending","message":"Canon completed the governed stage"}'
+printf '{"status":"governed_ready","run_ref":"canon-run-investigate","packet_ref":".canon/runs/canon-run-investigate","expected_document_refs":[".canon/runs/canon-run-investigate/discovery.md"],"document_refs":[".canon/runs/canon-run-investigate/discovery.md"],"approval_state":"not_needed","packet_readiness":"reusable","missing_sections":[],"authority_governance":{"contract_line":"authority-governance-v1","authority_zone":"green","change_class":"low-impact","intended_persona":"delivery-engineer","approval_state":"not_needed","packet_readiness":"reusable","risk":"low-impact"},"headline":"discovery packet pending","message":"Canon completed the governed stage"}'
 "#
         }
         CanonFixtureScenario::Approval => {
@@ -938,7 +938,7 @@ case "$request" in
   *'"request_kind":"refresh"'*)
     state=$(cat .canon/approval-state.txt 2>/dev/null | tr -d '\n')
     if [ "$state" = "granted" ]; then
-      printf '{"status":"governed_ready","run_ref":"canon-run-approval","packet_ref":".canon/runs/canon-run-approval","expected_document_refs":[".canon/runs/canon-run-approval/discovery.md"],"document_refs":[".canon/runs/canon-run-approval/discovery.md"],"approval_state":"granted","packet_readiness":"reusable","missing_sections":[],"headline":"approval granted packet ready","message":"Canon approval granted"}'
+            printf '{"status":"governed_ready","run_ref":"canon-run-approval","packet_ref":".canon/runs/canon-run-approval","expected_document_refs":[".canon/runs/canon-run-approval/discovery.md"],"document_refs":[".canon/runs/canon-run-approval/discovery.md"],"approval_state":"granted","packet_readiness":"reusable","missing_sections":[],"authority_governance":{"contract_line":"authority-governance-v1","authority_zone":"green","change_class":"low-impact","intended_persona":"delivery-engineer","approval_state":"granted","packet_readiness":"reusable","risk":"low-impact"},"headline":"approval granted packet ready","message":"Canon approval granted"}'
     else
       printf '{"status":"awaiting_approval","run_ref":"canon-run-approval","packet_ref":".canon/runs/canon-run-approval","expected_document_refs":[".canon/runs/canon-run-approval/discovery.md"],"document_refs":[],"approval_state":"requested","packet_readiness":"pending","missing_sections":[],"headline":"awaiting approval","message":"Canon is waiting for approval"}'
     fi
@@ -955,7 +955,7 @@ esac
         CanonFixtureScenario::VerifySecurityReusable => {
             r#"#!/bin/sh
 cat >/dev/null
-printf '{"status":"governed_ready","run_ref":"canon-run-security","packet_ref":".canon/runs/canon-run-security","expected_document_refs":[".canon/runs/canon-run-security/security-assessment.md"],"document_refs":[".canon/runs/canon-run-security/security-assessment.md"],"approval_state":"not_needed","packet_readiness":"reusable","missing_sections":[],"headline":"security assessment packet ready","message":"Canon completed the governed security assessment"}'
+printf '{"status":"governed_ready","run_ref":"canon-run-security","packet_ref":".canon/runs/canon-run-security","expected_document_refs":[".canon/runs/canon-run-security/security-assessment.md"],"document_refs":[".canon/runs/canon-run-security/security-assessment.md"],"approval_state":"not_needed","packet_readiness":"reusable","missing_sections":[],"authority_governance":{"contract_line":"authority-governance-v1","authority_zone":"green","change_class":"low-impact","intended_persona":"delivery-engineer","approval_state":"not_needed","packet_readiness":"reusable","risk":"low-impact"},"headline":"security assessment packet ready","message":"Canon completed the governed security assessment"}'
 "#
         }
         CanonFixtureScenario::VerifySecurityApproval => {
@@ -965,7 +965,7 @@ case "$request" in
     *'"request_kind":"refresh"'*)
         state=$(cat .canon/approval-state.txt 2>/dev/null | tr -d '\n')
         if [ "$state" = "granted" ]; then
-            printf '{"status":"governed_ready","run_ref":"canon-run-security-approval","packet_ref":".canon/runs/canon-run-security-approval","expected_document_refs":[".canon/runs/canon-run-security-approval/security-assessment.md"],"document_refs":[".canon/runs/canon-run-security-approval/security-assessment.md"],"approval_state":"granted","packet_readiness":"reusable","missing_sections":[],"headline":"security assessment approval granted","message":"Canon approval granted for the governed security assessment"}'
+            printf '{"status":"governed_ready","run_ref":"canon-run-security-approval","packet_ref":".canon/runs/canon-run-security-approval","expected_document_refs":[".canon/runs/canon-run-security-approval/security-assessment.md"],"document_refs":[".canon/runs/canon-run-security-approval/security-assessment.md"],"approval_state":"granted","packet_readiness":"reusable","missing_sections":[],"authority_governance":{"contract_line":"authority-governance-v1","authority_zone":"green","change_class":"low-impact","intended_persona":"delivery-engineer","approval_state":"granted","packet_readiness":"reusable","risk":"low-impact"},"headline":"security assessment approval granted","message":"Canon approval granted for the governed security assessment"}'
         else
             printf '{"status":"awaiting_approval","run_ref":"canon-run-security-approval","packet_ref":".canon/runs/canon-run-security-approval","expected_document_refs":[".canon/runs/canon-run-security-approval/security-assessment.md"],"document_refs":[],"approval_state":"requested","packet_readiness":"pending","missing_sections":[],"headline":"awaiting security approval","message":"Canon is waiting for security approval"}'
         fi

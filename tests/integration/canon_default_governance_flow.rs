@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-use boundline::SUPPORTED_CANON_VERSION;
+use boundline::{AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE, SUPPORTED_CANON_VERSION};
 
 use crate::workspace_fixture::{run_boundline_in, temp_fixture_workspace, terminal_text};
 
@@ -35,6 +35,41 @@ fn temp_no_canon_config_workspace(prefix: &str) -> std::path::PathBuf {
     fs::write(boundline_dir.join("config.toml"), "").unwrap();
 
     workspace
+}
+
+fn governed_ready_response(
+    run_ref: &str,
+    packet_ref: &str,
+    document_ref: &str,
+    headline: &str,
+    message: &str,
+) -> String {
+    serde_json::json!({
+        "status": "governed_ready",
+        "approval_state": "granted",
+        "run_ref": run_ref,
+        "packet_ref": packet_ref,
+        "expected_document_refs": [document_ref],
+        "document_refs": [document_ref],
+        "packet_readiness": "reusable",
+        "missing_sections": [],
+        "headline": headline,
+        "authority_governance": {
+            "contract_line": AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE,
+            "authority_zone": "green",
+            "change_class": "low-impact",
+            "intended_persona": "delivery-engineer",
+            "approval_state": "granted",
+            "packet_readiness": "reusable",
+            "risk": "low-impact",
+            "persona_anti_behaviors": [],
+            "artifact_order": [],
+            "promotion_refs": [],
+            "stage_role_hints": []
+        },
+        "message": message
+    })
+    .to_string()
 }
 
 #[cfg(unix)]
@@ -372,11 +407,17 @@ fn run_with_briefs_assembles_canon_governance_start_request() {
     fs::write(docs_dir.join("prd.md"), "# Product Brief\n\nBuild a task management API").unwrap();
     fs::write(docs_dir.join("arch.md"), "# Architecture\n\nMicroservices with REST endpoints")
         .unwrap();
-    let response = r#"{"status":"governed_ready","approval_state":"not_needed","run_ref":"run-inputs-001","packet_ref":".canon/runs/run-inputs-001","expected_document_refs":[".canon/runs/run-inputs-001/discovery.md"],"document_refs":[".canon/runs/run-inputs-001/discovery.md"],"packet_readiness":"reusable","missing_sections":[],"headline":"discovery packet ready","message":"Canon completed discovery"}"#;
+    let response = governed_ready_response(
+        "run-inputs-001",
+        ".canon/runs/run-inputs-001",
+        ".canon/runs/run-inputs-001/discovery.md",
+        "discovery packet ready",
+        "Canon completed discovery",
+    );
     fs::create_dir_all(workspace.join(".canon/runs/run-inputs-001")).unwrap();
     fs::write(workspace.join(".canon/runs/run-inputs-001/discovery.md"), "# Discovery\n\nReady\n")
         .unwrap();
-    let canon_path = write_capturing_canon_on_path("brief-assembly", &workspace, response);
+    let canon_path = write_capturing_canon_on_path("brief-assembly", &workspace, &response);
     write_canon_execution_profile(&workspace, &canon_path.join("canon"));
 
     let output = run_boundline_in_with_path(
@@ -422,8 +463,20 @@ fn run_with_briefs_assembles_canon_governance_start_request() {
 #[cfg(unix)]
 fn multi_stage_canon_run_reuses_prior_governed_packet() {
     let workspace = temp_canon_default_workspace("multi-stage-reuse");
-    let first_response = r#"{"status":"governed_ready","approval_state":"not_needed","run_ref":"run-stage-001","packet_ref":".canon/runs/run-stage-001","expected_document_refs":[".canon/runs/run-stage-001/discovery.md"],"document_refs":[".canon/runs/run-stage-001/discovery.md"],"packet_readiness":"reusable","missing_sections":[],"headline":"discovery packet ready","message":"Canon completed discovery"}"#;
-    let second_response = r#"{"status":"governed_ready","approval_state":"not_needed","run_ref":"run-stage-002","packet_ref":".canon/runs/run-stage-002","expected_document_refs":[".canon/runs/run-stage-002/implementation.md"],"document_refs":[".canon/runs/run-stage-002/implementation.md"],"packet_readiness":"reusable","missing_sections":[],"headline":"implementation packet ready","message":"Canon completed implementation"}"#;
+    let first_response = governed_ready_response(
+        "run-stage-001",
+        ".canon/runs/run-stage-001",
+        ".canon/runs/run-stage-001/discovery.md",
+        "discovery packet ready",
+        "Canon completed discovery",
+    );
+    let second_response = governed_ready_response(
+        "run-stage-002",
+        ".canon/runs/run-stage-002",
+        ".canon/runs/run-stage-002/implementation.md",
+        "implementation packet ready",
+        "Canon completed implementation",
+    );
     fs::create_dir_all(workspace.join(".canon/runs/run-stage-001")).unwrap();
     fs::create_dir_all(workspace.join(".canon/runs/run-stage-002")).unwrap();
     fs::write(
@@ -439,8 +492,8 @@ fn multi_stage_canon_run_reuses_prior_governed_packet() {
     let canon_path = write_multi_stage_capturing_canon_on_path(
         "multi-stage-reuse",
         &workspace,
-        first_response,
-        second_response,
+        &first_response,
+        &second_response,
     );
     write_two_stage_canon_execution_profile(&workspace, &canon_path.join("canon"));
 

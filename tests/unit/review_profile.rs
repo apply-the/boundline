@@ -25,18 +25,16 @@ fn sample_profile() -> ReviewProfile {
         scenarios: vec![ReviewScenario {
             trigger: ReviewTrigger::PrReady,
             findings: vec![
-                ReviewerFinding {
-                    reviewer_id: "safety".to_string(),
-                    disposition: ReviewerDisposition::Approve,
-                    summary: "No blocking issues".to_string(),
-                    details: None,
-                },
-                ReviewerFinding {
-                    reviewer_id: "maintainability".to_string(),
-                    disposition: ReviewerDisposition::Concern,
-                    summary: "Minor cleanup follow-up".to_string(),
-                    details: None,
-                },
+                ReviewerFinding::new(
+                    "safety".to_string(),
+                    ReviewerDisposition::Approve,
+                    "No blocking issues".to_string(),
+                ),
+                ReviewerFinding::new(
+                    "maintainability".to_string(),
+                    ReviewerDisposition::Concern,
+                    "Minor cleanup follow-up".to_string(),
+                ),
             ],
             adjudication_finding: None,
         }],
@@ -153,12 +151,11 @@ fn review_profile_validation_rejects_duplicate_adjudicator_and_duplicate_scenari
     );
 
     let mut profile = sample_profile();
-    profile.scenarios[0].adjudication_finding = Some(ReviewerFinding {
-        reviewer_id: "safety".to_string(),
-        disposition: ReviewerDisposition::Approve,
-        summary: "ok".to_string(),
-        details: None,
-    });
+    profile.scenarios[0].adjudication_finding = Some(ReviewerFinding::new(
+        "safety".to_string(),
+        ReviewerDisposition::Approve,
+        "ok".to_string(),
+    ));
     assert_eq!(
         profile.validate().unwrap_err(),
         ReviewProfileError::UnexpectedAdjudicationFinding(ReviewTrigger::PrReady)

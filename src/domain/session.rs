@@ -879,6 +879,14 @@ pub struct SessionStatusView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_review_outcome: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_review_council_profile: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_review_independence_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_review_stop_semantics: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_review_selection_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_review_headline: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_governance_stage: Option<String>,
@@ -1001,6 +1009,10 @@ impl Default for SessionStatusView {
             latest_review_trigger: None,
             latest_review_vote: None,
             latest_review_outcome: None,
+            latest_review_council_profile: None,
+            latest_review_independence_state: None,
+            latest_review_stop_semantics: None,
+            latest_review_selection_summary: None,
             latest_review_headline: None,
             latest_governance_stage: None,
             latest_governance_runtime: None,
@@ -2523,6 +2535,10 @@ mod tests {
             latest_review_trigger: None,
             latest_review_vote: None,
             latest_review_outcome: None,
+            latest_review_council_profile: None,
+            latest_review_independence_state: None,
+            latest_review_stop_semantics: None,
+            latest_review_selection_summary: None,
             latest_review_headline: None,
             latest_governance_stage: None,
             latest_governance_runtime: None,
@@ -2615,6 +2631,7 @@ mod tests {
                 missing_sections: Vec::new(),
                 headline: "governed discovery packet".to_string(),
                 reason_code: None,
+                authority_governance: None,
             })
             .unwrap();
         task.context

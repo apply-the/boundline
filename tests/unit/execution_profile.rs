@@ -111,18 +111,16 @@ fn execution_profile_validation_accepts_optional_review_configuration() {
         scenarios: vec![ReviewScenario {
             trigger: ReviewTrigger::PrReady,
             findings: vec![
-                ReviewerFinding {
-                    reviewer_id: "safety".to_string(),
-                    disposition: ReviewerDisposition::Approve,
-                    summary: "No blocking issues".to_string(),
-                    details: None,
-                },
-                ReviewerFinding {
-                    reviewer_id: "maintainability".to_string(),
-                    disposition: ReviewerDisposition::Concern,
-                    summary: "Minor cleanup".to_string(),
-                    details: None,
-                },
+                ReviewerFinding::new(
+                    "safety".to_string(),
+                    ReviewerDisposition::Approve,
+                    "No blocking issues".to_string(),
+                ),
+                ReviewerFinding::new(
+                    "maintainability".to_string(),
+                    ReviewerDisposition::Concern,
+                    "Minor cleanup".to_string(),
+                ),
             ],
             adjudication_finding: None,
         }],

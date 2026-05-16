@@ -632,6 +632,18 @@ pub fn render_run_trace(
                     context_provenance.push(line);
                 }
             }
+            if let Some(authority_provenance_lines) =
+                event.payload.get("authority_provenance_lines").and_then(Value::as_array)
+            {
+                for line in authority_provenance_lines
+                    .iter()
+                    .filter_map(|item| item.as_str().map(str::to_string))
+                {
+                    if !context_provenance.contains(&line) {
+                        context_provenance.push(line);
+                    }
+                }
+            }
             if context_staleness_reason.is_none()
                 && event
                     .payload
@@ -1421,6 +1433,22 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
         lines.push(format!("latest_review_outcome: {latest_review_outcome}"));
     }
 
+    if let Some(latest_review_council_profile) = &view.latest_review_council_profile {
+        lines.push(format!("latest_review_council_profile: {latest_review_council_profile}"));
+    }
+
+    if let Some(latest_review_independence_state) = &view.latest_review_independence_state {
+        lines.push(format!("latest_review_independence_state: {latest_review_independence_state}"));
+    }
+
+    if let Some(latest_review_stop_semantics) = &view.latest_review_stop_semantics {
+        lines.push(format!("latest_review_stop_semantics: {latest_review_stop_semantics}"));
+    }
+
+    if let Some(latest_review_selection_summary) = &view.latest_review_selection_summary {
+        lines.push(format!("latest_review_selection_summary: {latest_review_selection_summary}"));
+    }
+
     if let Some(latest_review_headline) = &view.latest_review_headline {
         lines.push(format!("latest_review_headline: {latest_review_headline}"));
     }
@@ -2078,6 +2106,10 @@ fn session_route_owner(view: &SessionStatusView) -> &'static str {
     if view.latest_review_trigger.is_some()
         || view.latest_review_vote.is_some()
         || view.latest_review_outcome.is_some()
+        || view.latest_review_council_profile.is_some()
+        || view.latest_review_independence_state.is_some()
+        || view.latest_review_stop_semantics.is_some()
+        || view.latest_review_selection_summary.is_some()
         || view.latest_review_headline.is_some()
     {
         return "review";
@@ -3094,6 +3126,10 @@ mod tests {
             latest_review_trigger: None,
             latest_review_vote: None,
             latest_review_outcome: None,
+            latest_review_council_profile: None,
+            latest_review_independence_state: None,
+            latest_review_stop_semantics: None,
+            latest_review_selection_summary: None,
             latest_review_headline: None,
             latest_governance_stage: None,
             latest_governance_runtime: None,
@@ -3252,7 +3288,8 @@ mod tests {
                 "canon_memory_credibility": "stale",
                 "canon_memory_compatibility": "warning",
                 "canon_memory_reason_code": "refresh_required",
-                "canon_next_action": "refresh: refresh the governed packet and reassess its credibility"
+                "canon_next_action": "refresh: refresh the governed packet and reassess its credibility",
+                "authority_provenance_lines": ["authority_control_class: council_review"]
             }),
         );
 
@@ -3290,6 +3327,7 @@ mod tests {
         assert!(text.contains("canon_memory_run_ref: run-8"), "{text}");
         assert!(text.contains("canon_memory_packet: .canon/runs/run-8"), "{text}");
         assert!(text.contains("canon_memory_reason: refresh_required"), "{text}");
+        assert!(text.contains("authority_control_class: council_review"), "{text}");
         assert!(
             text.contains(
                 "canon_memory_next_action: refresh: refresh the governed packet and reassess its credibility"
@@ -3370,6 +3408,13 @@ mod tests {
                 "strategy=majority approvals=2 concerns=0 blocks=0 decision=accepted".to_string(),
             ),
             latest_review_outcome: Some("accepted".to_string()),
+            latest_review_council_profile: Some("yellow_pair".to_string()),
+            latest_review_independence_state: Some("passed".to_string()),
+            latest_review_stop_semantics: Some("council_required".to_string()),
+            latest_review_selection_summary: Some(
+                "profile=yellow_pair quorum=met independence=passed selected_roles=Safety, Maintainability"
+                    .to_string(),
+            ),
             latest_review_headline: Some("safety approve: No blockers".to_string()),
             latest_governance_stage: Some("bug-fix:implement".to_string()),
             latest_governance_runtime: Some("canon".to_string()),
@@ -3426,6 +3471,15 @@ mod tests {
         assert!(text.contains("latest_review_trigger: pr_ready"), "{text}");
         assert!(text.contains("latest_review_vote: strategy=majority approvals=2 concerns=0 blocks=0 decision=accepted"), "{text}");
         assert!(text.contains("latest_review_outcome: accepted"), "{text}");
+        assert!(text.contains("latest_review_council_profile: yellow_pair"), "{text}");
+        assert!(text.contains("latest_review_independence_state: passed"), "{text}");
+        assert!(text.contains("latest_review_stop_semantics: council_required"), "{text}");
+        assert!(
+            text.contains(
+                "latest_review_selection_summary: profile=yellow_pair quorum=met independence=passed selected_roles=Safety, Maintainability"
+            ),
+            "{text}"
+        );
         assert!(text.contains("latest_review_headline: safety approve: No blockers"), "{text}");
         assert!(text.contains("latest_governance_mode: implementation"), "{text}");
         assert!(text.contains("latest_governance_run_ref: canon-run-1"), "{text}");

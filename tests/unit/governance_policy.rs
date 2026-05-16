@@ -242,6 +242,7 @@ fn canon_helper_summaries_render_expected_text() {
         possible_actions: Vec::new(),
         recommended_next_action: None,
         evidence_summary: None,
+        authority_provenance_lines: Vec::new(),
     };
 
     assert_eq!(
@@ -280,6 +281,7 @@ fn governance_state_patch_writes_all_present_entries() {
         missing_sections: Vec::new(),
         headline: "local packet".to_string(),
         reason_code: None,
+        authority_governance: None,
     };
     let reuse = PacketReuseBinding {
         upstream_stage_key: "bug-fix:investigate".to_string(),
@@ -709,6 +711,7 @@ fn governance_reuse_binding_uses_immediate_upstream_stage_context() {
             missing_sections: Vec::new(),
             headline: "investigation packet ready".to_string(),
             reason_code: None,
+            authority_governance: None,
         })
         .unwrap();
     let metadata = FlowStepMetadata {
@@ -765,6 +768,7 @@ fn governance_reuse_binding_supports_same_stage_rerun() {
             missing_sections: Vec::new(),
             headline: "implementation packet ready".to_string(),
             reason_code: None,
+            authority_governance: None,
         })
         .unwrap();
     let metadata = FlowStepMetadata {
