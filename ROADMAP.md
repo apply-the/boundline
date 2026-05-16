@@ -653,29 +653,41 @@ delivery line.
 - [S5: Advanced Context Intelligence](roadmap/S5%20-%20advanced-context-intelligence.md)
   and
   [S5.addendum: Advanced Context Intelligence Technology Evaluation](roadmap/S5.addendum%20-%20advanced-context-intelligence-technology-evaluation.md)
-  are not already covered by an active delivery slice; they build on
+  are now being tracked in active
+  [`058-advanced-context-intelligence`](specs/058-advanced-context-intelligence/spec.md)
+  as the V1 baseline: `SQLite + FTS5 + structured indexes`. They build on
   [`033-context-assembly-foundation`](specs/033-context-assembly-foundation/spec.md),
   [`040-context-selection-hardening`](specs/040-context-selection-hardening/spec.md),
   and [`052-runtime-intelligence-substrate`](specs/052-runtime-intelligence-substrate/spec.md)
   with optional semantic retrieval, graph projection, and local-first index
   technology evaluation.
+- [S5.v2: Advanced Context Intelligence Semantic Acceleration](roadmap/S5.v2%20-%20advanced-context-intelligence-semantic-acceleration.md)
+  extends the active S5 V1 slice with optional `sqlite-vec`-backed local
+  semantic acceleration on the same workspace-local SQLite index. It is
+  sequenced after S5 V1 and before S6 and S7 so later reasoning and
+  assistant-affordance layers build on stable, explainable semantic retrieval
+  instead of provider-specific heuristics.
 - [S6: Advanced Multi-Agent Reasoning Profiles](roadmap/S6%20-%20advanced-multi-agent-reasoning-profiles-spec.md)
   is intentionally future-facing rather than already covered by the active
   roadmap; it builds on the review-council baseline in
   [`007-multi-agent-review`](specs/007-multi-agent-review/spec.md) after the
-  delivered `0.56.0` authority-zoned council baseline and the delivered S4
-  adaptive governance layer make councils operationally credible.
+  delivered `0.56.0` authority-zoned council baseline, the delivered S4
+  adaptive governance layer, and the planned S5.v2 semantic-acceleration layer
+  make councils operationally and contextually credible.
 - [S7: Assistant Delight And Cognitive Affordance Layer](roadmap/S7%20-%20assistant-delight-and-cognitive-affordance-layer.md)
   complements assistant/package and operator-surface work in
   [`048-assistant-plugin-packages`](specs/048-assistant-plugin-packages/spec.md),
   [`049-project-scale-delivery-ux`](specs/049-project-scale-delivery-ux/spec.md),
   and [`051-delivery-control-consumer`](specs/051-delivery-control-consumer/spec.md),
-  but it is not duplicate scope.
+  but it is not duplicate scope. It should follow S5.v2 and S6 on the roadmap
+  so the delight layer can surface both semantic-retrieval and reasoning-profile
+  outputs on stable runtime surfaces.
 
 Coverage check: the delivered content already recorded in this roadmap is
 covered by the active spec set, not by these future drafts. The copied S2.1-S7
-documents mostly extend the current line; the strongest direct overlap is at
-the dependency and foundation level rather than as duplicate roadmap scope.
+documents mostly extend the current line; S5 base is now being pulled into the
+active `058-advanced-context-intelligence` slice, while S5.v2, S6, and S7
+remain forward-looking extensions rather than duplicate roadmap scope.
 
 ### Sequencing rule
 
