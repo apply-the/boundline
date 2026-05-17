@@ -5,7 +5,10 @@
 [![CI](https://github.com/apply-the/boundline/actions/workflows/ci.yml/badge.svg)](https://github.com/apply-the/boundline/actions/workflows/ci.yml)
 [![Lint](https://github.com/apply-the/boundline/actions/workflows/lint.yml/badge.svg)](https://github.com/apply-the/boundline/actions/workflows/lint.yml)
 [![Vulnerabilities](https://github.com/apply-the/boundline/actions/workflows/vulnerabilities.yml/badge.svg)](https://github.com/apply-the/boundline/actions/workflows/vulnerabilities.yml)
-[![Quality](https://github.com/apply-the/boundline/actions/workflows/quality.yml/badge.svg)](https://github.com/apply-the/boundline/actions/workflows/quality.yml)
+[![Coverage](https://codecov.io/gh/apply-the/boundline/branch/main/graph/badge.svg)](https://codecov.io/gh/apply-the/boundline)
+[![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=apply-the_boundline&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=apply-the_boundline)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=apply-the_boundline&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=apply-the_boundline)
+[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=apply-the_boundline&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=apply-the_boundline)
 
 **Boundline is a local delivery orchestrator for bounded engineering work, from idea intake to verified code changes.**
 It applies risk-triggered review councils, authority-zone-aware stop semantics, and explicit admission control at every delivery boundary.
@@ -18,6 +21,13 @@ Point it at a workspace, give it an idea, brief, or bounded goal, then move
 through explicit sessions for planning, execution, inspection, recovery, and
 governed delivery when needed. Canon is optional: most users can ignore it
 unless they need governed stages or governed artifacts.
+
+In `0.58.0`, Boundline also persists advanced-context retrieval state through
+goal plans, session status, and trace summaries. The S5 V1 baseline uses one
+workspace-local SQLite + FTS5 index plus structured fallback ordering, keeps
+retrieved evidence non-authoritative, and exposes selected evidence,
+relationships, impact findings, and degraded reasons through `status` and
+`inspect`.
 
 In `0.56.0`, governed review councils also persist explicit council profile,
 independence state, and stop semantics alongside the existing guidance catalog

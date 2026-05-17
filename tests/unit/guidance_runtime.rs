@@ -43,6 +43,7 @@ fn sample_context_pack(target: &str) -> ContextPack {
             primary: true,
         }],
         selected_targets: vec![target.to_string()],
+        advanced_context: None,
         staleness_reason: None,
     }
 }

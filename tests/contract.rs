@@ -124,6 +124,12 @@ mod decision_loop_contract;
 #[path = "contract/goal_plan_contract.rs"]
 mod goal_plan_contract;
 
+#[path = "contract/context_intelligence_consumer_contract.rs"]
+mod context_intelligence_consumer_contract;
+
+#[path = "contract/context_intelligence_projection_contract.rs"]
+mod context_intelligence_projection_contract;
+
 #[path = "contract/negotiated_capture_contract.rs"]
 mod negotiated_capture_contract;
 

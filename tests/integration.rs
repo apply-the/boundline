@@ -133,6 +133,15 @@ mod cluster_delivery_blocked;
 #[path = "integration/session_native_flow.rs"]
 mod session_native_flow;
 
+#[path = "integration/context_intelligence_flow.rs"]
+mod context_intelligence_flow;
+
+#[path = "integration/context_intelligence_impact_flow.rs"]
+mod context_intelligence_impact_flow;
+
+#[path = "integration/context_intelligence_remote_policy.rs"]
+mod context_intelligence_remote_policy;
+
 #[path = "integration/fixture_compat_flow.rs"]
 mod fixture_compat_flow;
 

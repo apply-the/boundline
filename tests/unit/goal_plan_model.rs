@@ -217,6 +217,7 @@ fn with_context_pack_sets_summary_and_primary_inputs() {
             primary: true,
         }],
         selected_targets: vec!["src/lib.rs".to_string()],
+        advanced_context: None,
         staleness_reason: None,
     };
 
@@ -245,6 +246,7 @@ fn goal_plan_validation_rejects_credible_context_without_primary_inputs() {
             credibility: ContextPackCredibility::Credible,
             inputs: Vec::new(),
             selected_targets: Vec::new(),
+            advanced_context: None,
             staleness_reason: None,
         })
         .validate()
@@ -269,6 +271,7 @@ fn goal_plan_validation_rejects_stale_context_without_reason() {
                 primary: false,
             }],
             selected_targets: Vec::new(),
+            advanced_context: None,
             staleness_reason: None,
         })
         .validate()
@@ -341,6 +344,7 @@ fn context_input_and_flow_state_helpers_cover_remaining_goal_plan_branches() {
         credibility: ContextPackCredibility::Credible,
         inputs: vec![input],
         selected_targets: vec!["src/lib.rs".to_string()],
+        advanced_context: None,
         staleness_reason: None,
     };
     assert!(context_pack.validate().is_ok());

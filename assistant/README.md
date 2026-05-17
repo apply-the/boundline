@@ -4,6 +4,13 @@ This directory contains Markdown-based commands to run `boundline` from various 
 
 The primary delivery surface is session-native: `start -> capture -> plan -> run -> status -> next -> inspect` against `<workspace>/.boundline/session.json` and `<workspace>/.boundline/traces/`.
 
+In `0.58.0`, shell-enabled assistant flows should preserve advanced-context
+projection fields exactly when they appear on `plan`, `status`, and `inspect`:
+`retrieval_mode`, `retrieval_state`, `retrieval_index_state`, selected
+evidence, relationship lines, impact findings, and any explicit disabled or
+degraded reason. These fields explain the S5 V1 local SQLite + FTS5 retrieval
+baseline and must not be paraphrased away.
+
 In `0.56.0`, shell-enabled assistant flows should prefer `--json` for the session-native lifecycle commands plus `run`, `status`, `next`, and `inspect`. Treat `command_name`, `exit_status`, `rendered_output`, `trace_location`, `session_status`, and `trace_summary` as the authoritative host envelope when those fields are present, and use `rendered_output` only as the human-readable companion.
 
 In `0.56.0`, assistant plugin packages expose Boundline through `.claude-plugin/`,

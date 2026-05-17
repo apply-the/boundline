@@ -13,6 +13,14 @@ use boundline::cli::{
     Cli, CliValidationError, CommandExitStatus, CommandName, DeveloperCommand,
     DeveloperCommandSession,
 };
+use boundline::domain::brief::normalize_inputs;
+use boundline::domain::context_intelligence::{
+    AdvancedContextProjection, AuthorityRank, CandidateSelectionState, ImpactAnalysisFinding,
+    ImpactFindingKind, ImpactFindingSeverity, ImpactFindingStatus, RelationshipCredibilityState,
+    RelationshipKind, RelationshipProjection, RemoteTransmissionPolicyState,
+    RetrievalCompatibilityState, RetrievalIndexState, RetrievalMode, RetrievalSourceKind,
+    RetrievalStalenessState, RetrievalState, RetrievedEvidenceCandidate,
+};
 use boundline::domain::execution::{
     ExecutionAttemptDefinition, ExecutionCommand, ExecutionFailureMode, ExecutionProfileError,
     WorkspaceChange, WorkspaceExecutionProfile,
@@ -22,6 +30,7 @@ use boundline::domain::flow::{
     supported_flow_names_csv,
 };
 use boundline::domain::limits::{RunLimits, TerminalCondition};
+use boundline::domain::negotiation::NegotiationResolutionState;
 use boundline::domain::plan::{Plan, PlanError, PlanStatus};
 use boundline::domain::session::{
     ActiveSessionRecord, SessionCommand, SessionStatus, SessionStatusView, SessionTransition,
@@ -187,6 +196,48 @@ fn build_status_view(record: &ActiveSessionRecord) -> SessionStatusView {
         next_command: Some("boundline step".to_string()),
         explanation: "session state is internally consistent".to_string(),
         ..Default::default()
+    }
+}
+
+fn sample_advanced_context() -> AdvancedContextProjection {
+    AdvancedContextProjection {
+        query_id: "query-session".to_string(),
+        retrieval_mode: RetrievalMode::Local,
+        retrieval_state: RetrievalState::Selected,
+        retrieval_index_state: RetrievalIndexState::Ready,
+        budgets: Default::default(),
+        remote_policy_state: RemoteTransmissionPolicyState::LocalOnly,
+        used_remote: false,
+        terminal_reason: None,
+        selected_evidence: vec![RetrievedEvidenceCandidate {
+            candidate_id: "candidate-1".to_string(),
+            source_kind: RetrievalSourceKind::WorkspaceFile,
+            source_ref: "src/lib.rs".to_string(),
+            authority_rank: AuthorityRank::Structured,
+            selection_state: CandidateSelectionState::Selected,
+            selection_reason: "goal keyword matched the implementation surface".to_string(),
+            provenance_summary: "workspace file selected through local retrieval".to_string(),
+            compatibility_state: RetrievalCompatibilityState::Compatible,
+            staleness_state: RetrievalStalenessState::Fresh,
+        }],
+        rejected_candidates: Vec::new(),
+        relationships: vec![RelationshipProjection {
+            relationship_id: "relationship-1".to_string(),
+            subject_ref: "src/lib.rs".to_string(),
+            relationship_kind: RelationshipKind::ExercisesTest,
+            credibility_state: RelationshipCredibilityState::Credible,
+            explanation: "the matching test file names the same target".to_string(),
+            supporting_candidate_ids: vec!["candidate-1".to_string()],
+        }],
+        impact_findings: vec![ImpactAnalysisFinding {
+            finding_id: "finding-1".to_string(),
+            finding_kind: ImpactFindingKind::MissingTest,
+            subject_ref: "tests/lib.rs".to_string(),
+            status: ImpactFindingStatus::Open,
+            severity: ImpactFindingSeverity::Medium,
+            recommended_follow_up: "add or refresh the focused regression test".to_string(),
+            supporting_relationship_ids: vec!["relationship-1".to_string()],
+        }],
     }
 }
 
@@ -1014,6 +1065,34 @@ fn session_validation_transition_and_status_view_cover_mismatch_paths() {
 }
 
 #[test]
+fn session_status_view_tracks_latest_advanced_context_snapshot() {
+    let workspace = "/tmp/session-status-advanced-context";
+    let mut record = build_planned_record(workspace);
+    let expected_advanced_context = sample_advanced_context();
+    record
+        .active_task
+        .as_mut()
+        .unwrap()
+        .context
+        .set_latest_advanced_context(&expected_advanced_context)
+        .unwrap();
+
+    let mut matching_status = build_status_view(&record);
+    matching_status.advanced_context = Some(expected_advanced_context.clone());
+    matching_status.validate(&record).unwrap();
+
+    let mut wrong_status = build_status_view(&record);
+    wrong_status.advanced_context = Some(AdvancedContextProjection {
+        query_id: "query-session-mismatch".to_string(),
+        ..expected_advanced_context
+    });
+    assert!(matches!(
+        wrong_status.validate(&record).unwrap_err(),
+        SessionValidationError::StatusViewAdvancedContextMismatch { .. }
+    ));
+}
+
+#[test]
 fn inspect_summary_and_session_commands_cover_additional_error_paths() {
     let trace = ExecutionTrace::new("task-1", "session-1", "Summarize me");
     assert!(matches!(
@@ -1263,4 +1342,79 @@ fn session_runtime_public_error_paths_cover_missing_goal_task_and_terminal_short
     no_next_step.active_task = Some(no_next_step_task);
     let response = runtime.run_to_terminal(&mut no_next_step).unwrap();
     assert_eq!(response.terminal_status, TaskStatus::Failed);
+}
+
+#[test]
+fn session_runtime_capture_goal_uses_authored_brief_packet_projection() {
+    let workspace = temp_workspace("boundline-runtime-authored-brief-capture");
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let authored_brief = normalize_inputs(
+        &workspace,
+        Some("Improve the platform docs and fix whatever tests are broken"),
+        &[],
+    )
+    .unwrap();
+    let expected_summary = authored_brief.summary_text();
+    let expected_headline = authored_brief.clarification_headline();
+
+    let mut session = build_started_session(&workspace);
+    session.authored_brief = Some(authored_brief);
+
+    runtime
+        .capture_goal(&mut session, "Improve the platform docs and fix whatever tests are broken")
+        .unwrap();
+
+    let packet = session.negotiation_packet.expect("capture should persist a negotiation packet");
+    assert_eq!(packet.source_summary, expected_summary);
+    assert_eq!(packet.clarification_headline, expected_headline);
+    assert_eq!(packet.resolution_state, NegotiationResolutionState::PendingClarification);
+}
+
+#[test]
+fn session_runtime_blocks_planning_when_authored_brief_needs_clarification() {
+    let workspace = temp_workspace("boundline-runtime-authored-brief-clarification");
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let authored_brief = normalize_inputs(
+        &workspace,
+        Some("Improve the platform docs and fix whatever tests are broken"),
+        &[],
+    )
+    .unwrap();
+    let expected_headline = authored_brief
+        .clarification_headline()
+        .expect("broad authored brief should request clarification");
+    let expected_prompt = authored_brief
+        .clarification_prompt()
+        .expect("broad authored brief should carry a clarification prompt");
+
+    let mut session = build_goal_captured_session(&workspace);
+    session.goal = Some(authored_brief.render_goal_text());
+    session.authored_brief = Some(authored_brief);
+    session.negotiation_packet = None;
+
+    let error = runtime.plan_task(&mut session, None, false).unwrap_err();
+    assert!(matches!(
+        error,
+        SessionRuntimeError::ClarificationRequired { headline, prompt }
+            if headline == expected_headline && prompt == expected_prompt
+    ));
+}
+
+#[test]
+fn session_runtime_confirms_goal_plan_for_selected_flow_when_context_is_sufficient() {
+    let workspace = write_execution_workspace(
+        "boundline-runtime-flow-selected-compat",
+        vec![success_attempt()],
+    );
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut session = build_goal_captured_session(&workspace);
+    session.goal = Some("Fix the failing add test".to_string());
+
+    runtime.select_flow(&mut session, "bug-fix").unwrap();
+    runtime.plan_task(&mut session, None, false).unwrap();
+
+    assert_eq!(session.latest_status, SessionStatus::Planned);
+    assert_eq!(session.active_flow.as_ref().map(|flow| flow.flow_name.as_str()), Some("bug-fix"));
+    assert!(session.active_task.is_none());
+    assert!(session.goal_plan.is_some());
 }

@@ -7,6 +7,9 @@ use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::domain::context_intelligence::{
+    RemoteTransmissionPolicyState, RetrievalBudgets, RetrievalMode,
+};
 use crate::domain::domain_templates::{
     DomainFamily, DomainTemplateSettings, ExternalContextBinding,
 };
@@ -244,6 +247,81 @@ impl SlotEffortPolicy {
     }
 }
 
+/// Typed advanced-context retrieval policy layered through configuration precedence.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdvancedContextConfig {
+    #[serde(default = "default_retrieval_mode")]
+    pub retrieval_mode: RetrievalMode,
+    #[serde(default = "default_remote_policy_state")]
+    pub remote_policy: RemoteTransmissionPolicyState,
+    #[serde(default)]
+    pub budgets: RetrievalBudgets,
+}
+
+impl Default for AdvancedContextConfig {
+    fn default() -> Self {
+        Self {
+            retrieval_mode: default_retrieval_mode(),
+            remote_policy: default_remote_policy_state(),
+            budgets: RetrievalBudgets::default(),
+        }
+    }
+}
+
+impl AdvancedContextConfig {
+    /// Validates the advanced-context retrieval policy.
+    pub fn validate(&self) -> Result<(), ConfigurationError> {
+        self.budgets
+            .validate()
+            .map_err(|error| ConfigurationError::InvalidAdvancedContextConfig(error.to_string()))?;
+
+        if self.retrieval_mode == RetrievalMode::Remote {
+            return Err(ConfigurationError::InvalidAdvancedContextConfig(
+                "remote retrieval mode is not supported in the local-only V1 engine".to_string(),
+            ));
+        }
+
+        if self.remote_policy == RemoteTransmissionPolicyState::RemoteAllowed {
+            return Err(ConfigurationError::InvalidAdvancedContextConfig(
+                "remote transmission is not supported in the local-only V1 engine".to_string(),
+            ));
+        }
+
+        if self.retrieval_mode == RetrievalMode::Disabled
+            && self.remote_policy != RemoteTransmissionPolicyState::Blocked
+        {
+            return Err(ConfigurationError::InvalidAdvancedContextConfig(
+                "disabled retrieval requires blocked remote policy".to_string(),
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Returns a compact human-readable summary of the policy.
+    pub fn summary_text(&self) -> String {
+        format!(
+            "mode={}, remote_policy={}, budgets=refinement:{}, refresh:{}, depth:{}, expansion:{}, traversal:{}, evidence:{}",
+            self.retrieval_mode.as_str(),
+            self.remote_policy.as_str(),
+            self.budgets.refinement_budget,
+            self.budgets.refresh_budget,
+            self.budgets.depth_limit,
+            self.budgets.expansion_limit,
+            self.budgets.traversal_limit,
+            self.budgets.evidence_limit,
+        )
+    }
+}
+
+const fn default_retrieval_mode() -> RetrievalMode {
+    RetrievalMode::Local
+}
+
+const fn default_remote_policy_state() -> RemoteTransmissionPolicyState {
+    RemoteTransmissionPolicyState::LocalOnly
+}
+
 /// Concrete runtime and model selected for a route slot.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ModelRoute {
@@ -282,6 +360,8 @@ pub struct RoutingConfig {
     pub runtime_capabilities: BTreeMap<RuntimeKind, RuntimeCapabilityProfile>,
     #[serde(default)]
     pub slot_effort_policies: BTreeMap<RouteSlot, SlotEffortPolicy>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub advanced_context: Option<AdvancedContextConfig>,
     #[serde(default)]
     pub domain_templates: BTreeMap<DomainFamily, DomainTemplateSettings>,
 }
@@ -316,6 +396,10 @@ impl RoutingConfig {
         }
 
         for policy in self.slot_effort_policies.values() {
+            policy.validate()?;
+        }
+
+        if let Some(policy) = self.advanced_context.as_ref() {
             policy.validate()?;
         }
 
@@ -498,6 +582,13 @@ pub struct SourcedSlotEffortPolicy {
     pub source: ValueSource,
 }
 
+/// Advanced-context policy annotated with its value source.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourcedAdvancedContextConfig {
+    pub policy: AdvancedContextConfig,
+    pub source: ValueSource,
+}
+
 /// Domain standards layer annotated with its value source.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourcedDomainStandardsLayer {
@@ -655,6 +746,39 @@ pub fn resolve_effective_runtime_capabilities(
             sourced.map(|profile| (runtime, profile))
         })
         .collect()
+}
+
+/// Resolves the effective advanced-context retrieval policy across config layers.
+pub fn resolve_effective_advanced_context_config(
+    workspace: Option<&RoutingConfig>,
+    cluster: Option<&RoutingConfig>,
+    global: Option<&RoutingConfig>,
+) -> SourcedAdvancedContextConfig {
+    if let Some(policy) = workspace.and_then(|cfg| cfg.advanced_context.as_ref()) {
+        return SourcedAdvancedContextConfig {
+            policy: policy.clone(),
+            source: ValueSource::Workspace,
+        };
+    }
+
+    if let Some(policy) = cluster.and_then(|cfg| cfg.advanced_context.as_ref()) {
+        return SourcedAdvancedContextConfig {
+            policy: policy.clone(),
+            source: ValueSource::Cluster,
+        };
+    }
+
+    if let Some(policy) = global.and_then(|cfg| cfg.advanced_context.as_ref()) {
+        return SourcedAdvancedContextConfig {
+            policy: policy.clone(),
+            source: ValueSource::Global,
+        };
+    }
+
+    SourcedAdvancedContextConfig {
+        policy: AdvancedContextConfig::default(),
+        source: ValueSource::BuiltIn,
+    }
 }
 
 /// Resolves effective slot effort policies across config layers.
@@ -838,6 +962,8 @@ pub enum ConfigurationError {
     InvalidRuntimeCapability(String),
     #[error("invalid slot effort policy: {0}")]
     InvalidSlotEffortPolicy(String),
+    #[error("invalid advanced-context policy: {0}")]
+    InvalidAdvancedContextConfig(String),
     #[error("invalid domain template settings: {0}")]
     InvalidDomainTemplate(String),
 }
@@ -846,17 +972,21 @@ pub enum ConfigurationError {
 mod tests {
     use std::collections::BTreeMap;
 
+    use crate::domain::context_intelligence::{
+        RemoteTransmissionPolicyState, RetrievalBudgets, RetrievalMode,
+    };
     use crate::domain::domain_templates::{
         DomainFamily, DomainTemplateSettings, ExternalContextBinding, ExternalContextKind,
     };
 
     use super::{
-        CapabilityState, ConfigurationError, EffortFallbackPolicy, EffortLevel, ModelRoute,
-        ResolvedDomainTemplate, RouteSlot, RoutingConfig, RoutingOverrides,
-        RuntimeCapabilityProfile, RuntimeKind, SlotEffortPolicy, ValueSource,
-        assistant_default_model_route, resolve_effective_domain_templates,
-        resolve_effective_routing, resolve_effective_runtime_capabilities,
-        resolve_effective_slot_effort_policies, seeded_routes_for_assistants,
+        AdvancedContextConfig, CapabilityState, ConfigurationError, EffortFallbackPolicy,
+        EffortLevel, ModelRoute, ResolvedDomainTemplate, RouteSlot, RoutingConfig,
+        RoutingOverrides, RuntimeCapabilityProfile, RuntimeKind, SlotEffortPolicy, ValueSource,
+        assistant_default_model_route, resolve_effective_advanced_context_config,
+        resolve_effective_domain_templates, resolve_effective_routing,
+        resolve_effective_runtime_capabilities, resolve_effective_slot_effort_policies,
+        seeded_routes_for_assistants,
     };
 
     #[test]
@@ -908,6 +1038,47 @@ mod tests {
         let resolved = resolve_effective_routing(&cli, Some(&workspace), None, Some(&global));
         assert_eq!(resolved.planning.source, ValueSource::Cli);
         assert_eq!(resolved.planning.route.runtime, RuntimeKind::Gemini);
+    }
+
+    #[test]
+    fn advanced_context_policy_rejects_remote_v1_settings() {
+        let error = AdvancedContextConfig {
+            retrieval_mode: RetrievalMode::Remote,
+            remote_policy: RemoteTransmissionPolicyState::RemoteAllowed,
+            budgets: RetrievalBudgets::default(),
+        }
+        .validate()
+        .unwrap_err();
+
+        match error {
+            ConfigurationError::InvalidAdvancedContextConfig(message) => {
+                assert!(message.contains("remote retrieval mode"));
+            }
+            other => panic!("unexpected error: {other}"),
+        }
+    }
+
+    #[test]
+    fn advanced_context_policy_prefers_workspace_over_global() {
+        let workspace = RoutingConfig {
+            advanced_context: Some(AdvancedContextConfig {
+                retrieval_mode: RetrievalMode::Disabled,
+                remote_policy: RemoteTransmissionPolicyState::Blocked,
+                budgets: RetrievalBudgets::default(),
+            }),
+            ..RoutingConfig::default()
+        };
+        let global = RoutingConfig {
+            advanced_context: Some(AdvancedContextConfig::default()),
+            ..RoutingConfig::default()
+        };
+
+        let resolved =
+            resolve_effective_advanced_context_config(Some(&workspace), None, Some(&global));
+
+        assert_eq!(resolved.source, ValueSource::Workspace);
+        assert_eq!(resolved.policy.retrieval_mode, RetrievalMode::Disabled);
+        assert_eq!(resolved.policy.remote_policy, RemoteTransmissionPolicyState::Blocked);
     }
 
     #[test]

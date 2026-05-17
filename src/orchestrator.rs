@@ -3,6 +3,7 @@ pub mod engine;
 pub mod flow_inference;
 pub mod goal_planner;
 pub mod governance;
+pub mod context_intelligence;
 pub mod guidance_catalog_runtime;
 pub mod guidance_runtime;
 pub mod planner;

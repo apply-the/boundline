@@ -1,6 +1,6 @@
 [metadata]
 source_label = "bundled"
-catalog_version = "0.56.0"
+catalog_version = "0.58.0"
 updated_at = "2026-05-16"
 
 [[runtimes]]

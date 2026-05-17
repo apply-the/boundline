@@ -73,8 +73,8 @@ mod project_scale_path_policy;
 #[path = "unit/voting_boundary_policy.rs"]
 mod voting_boundary_policy;
 
-#[path = "unit/coverage_additional.rs"]
-mod coverage_additional;
+#[path = "unit/session_cli_runtime.rs"]
+mod session_cli_runtime;
 
 #[path = "unit/distribution_diagnostics.rs"]
 mod distribution_diagnostics;
@@ -147,6 +147,12 @@ mod canon_native_cli;
 
 #[path = "unit/workspace_resolution.rs"]
 mod workspace_resolution;
+
+#[path = "unit/context_intelligence_state.rs"]
+mod context_intelligence_state;
+
+#[path = "unit/context_intelligence_projection.rs"]
+mod context_intelligence_projection;
 
 #[path = "unit/guidance_runtime.rs"]
 mod guidance_runtime;

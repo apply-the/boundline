@@ -1,3 +1,5 @@
+#[path = "../../../src/orchestrator/context_intelligence.rs"]
+pub mod context_intelligence;
 #[path = "../../../src/orchestrator/decision_loop.rs"]
 pub mod decision_loop;
 #[path = "../../../src/orchestrator/engine.rs"]

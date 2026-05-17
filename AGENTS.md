@@ -84,6 +84,8 @@ Auto-generated from all feature plans. Last updated: 2026-05-16
 - Repository-managed built-in guidance and guardian assets under `assistant/`, workspace-local overrides under `.boundline/guidance/` and `.boundline/guardians/`, existing workspace-local `.boundline/session.json` and `.boundline/traces/`, and optional Canon-governed repo-visible standards discovered through existing project-memory and governed-artifact surfaces (054-guidance-guardian-capabilities)
 - Rust 1.95.0, edition 2024 + Existing workspace dependencies `clap`, `dialoguer`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, and Rust standard-library collections, filesystem, path, and process APIs; no new runtime dependencies planned for this slice (057-adaptive-governance)
 - Workspace-local `.boundline/session.json`, persisted traces under `.boundline/traces/`, optional `.boundline/execution.json` and `.boundline/config.toml`, plus Canon-governed packet metadata already consumed through the governance runtime boundary (057-adaptive-governance)
+- Rust 1.95.0, edition 2024 + Existing workspace dependencies `clap`, `dialoguer`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, and Rust standard-library filesystem, path, collections, and process APIs, plus one embedded SQLite binding with FTS5 support for the workspace-local retrieval index; no external graph or vector service is required for the first slice (058-advanced-context-intelligence)
+- Existing workspace-local `.boundline/session.json`, `.boundline/traces/`, `.boundline/config.toml`, and Canon-promoted project-memory artifacts, plus a workspace-local retrieval index at `.boundline/context-intelligence/retrieval-index.sqlite3` for searchable document and evidence state (058-advanced-context-intelligence)
 
 - Rust 1.95.0, edition 2024 + Rust standard library plus `serde`, `serde_json`, `thiserror`, `tracing`, and `uuid` for structured state, trace serialization, error handling, instrumentation, and stable identifiers (001-delivery-orchestrator-core)
 
@@ -112,9 +114,9 @@ Crate versioning follows Semantic Versioning.
 Before 1.0.0, breaking changes MAY occur in minor versions.
 
 ## Recent Changes
+- 058-advanced-context-intelligence: Added Rust 1.95.0, edition 2024 + Existing workspace dependencies `clap`, `dialoguer`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, and Rust standard-library filesystem, path, collections, and process APIs, plus one embedded SQLite binding with FTS5 support for the workspace-local retrieval index; no external graph or vector service is required for the first slice
 - 057-adaptive-governance: Added Rust 1.95.0, edition 2024 + Existing workspace dependencies `clap`, `dialoguer`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, and Rust standard-library collections, filesystem, path, and process APIs; no new runtime dependencies planned for this slice
 - 054-guidance-guardian-capabilities: Added Rust 1.95.0, edition 2024 + Existing workspace dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `toml`, `uuid`, and Rust standard-library collections, filesystem, path, and process APIs; no new runtime dependencies planned for this slice
-- 051-delivery-control-consumer: Added Rust 1.95.0, Edition 2024 + `clap`, `dialoguer`, `serde`, `serde_json`,
 
 
 <!-- MANUAL ADDITIONS START -->

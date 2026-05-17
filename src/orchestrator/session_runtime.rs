@@ -30,6 +30,7 @@ use crate::domain::configuration::{
     resolve_effective_routing, resolve_effective_runtime_capabilities,
     resolve_effective_slot_effort_policies,
 };
+use crate::domain::context_intelligence::AdvancedContextProjection;
 use crate::domain::decision::{Decision, DecisionType};
 use crate::domain::flow::{FlowStepMetadata, built_in_flow, supported_flow_names_csv};
 use crate::domain::flow_policy::FlowPolicy;
@@ -115,6 +116,8 @@ struct GoalPlanTracePayload {
     goal_plan_state: String,
     goal_plan_revision: usize,
     flow_state: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    advanced_context: Option<AdvancedContextProjection>,
     planning_rationale: Option<String>,
     verification_strategy: Option<String>,
     negotiation_goal_summary: Option<String>,
@@ -147,6 +150,10 @@ impl GoalPlanTracePayload {
             goal_plan_state: goal_plan.proposal_state_text().to_string(),
             goal_plan_revision: goal_plan.proposal_revision,
             flow_state: goal_plan.flow_state().summary_text(),
+            advanced_context: goal_plan
+                .context_pack
+                .as_ref()
+                .and_then(|context_pack| context_pack.advanced_context.clone()),
             planning_rationale: goal_plan.planning_rationale.clone(),
             verification_strategy: goal_plan.verification_strategy.clone(),
             negotiation_goal_summary: goal_plan.negotiation_goal_summary.clone(),
@@ -1463,6 +1470,17 @@ impl SessionRuntime {
         if let Some(memory) = goal_plan.compacted_canon_memory.as_ref() {
             context
                 .set_latest_compacted_canon_memory(memory)
+                .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?;
+        }
+        // Carry the advanced-context retrieval story into task state so later
+        // status projections remain stable after execution begins.
+        if let Some(advanced_context) = goal_plan
+            .context_pack
+            .as_ref()
+            .and_then(|context_pack| context_pack.advanced_context.as_ref())
+        {
+            context
+                .set_latest_advanced_context(advanced_context)
                 .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?;
         }
         if let Some(story) = goal_plan.cluster_delivery_story.as_ref() {

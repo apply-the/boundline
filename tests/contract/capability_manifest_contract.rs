@@ -196,6 +196,7 @@ fn workspace_override_precedence_is_disclosed_in_resolution_projection() {
             primary: true,
         }],
         selected_targets: vec!["src/lib.rs".to_string()],
+        advanced_context: None,
         staleness_reason: None,
     };
     let signals = boundline::domain::goal_plan::WorkspaceSignals {
@@ -256,6 +257,7 @@ fn invalid_workspace_guardian_override_is_reported_as_skipped_source() {
             primary: true,
         }],
         selected_targets: vec!["src/lib.rs".to_string()],
+        advanced_context: None,
         staleness_reason: None,
     };
     let signals = boundline::domain::goal_plan::WorkspaceSignals {
@@ -341,6 +343,7 @@ fn javascript_workspace_prefers_javascript_delivery_pack() {
             primary: true,
         }],
         selected_targets: vec!["src/app.tsx".to_string()],
+        advanced_context: None,
         staleness_reason: None,
     };
     let signals = boundline::domain::goal_plan::WorkspaceSignals {

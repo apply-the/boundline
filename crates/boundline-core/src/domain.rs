@@ -6,6 +6,8 @@ pub mod checkpoint;
 pub mod cluster;
 #[path = "../../../src/domain/configuration.rs"]
 pub mod configuration;
+#[path = "../../../src/domain/context_intelligence.rs"]
+pub mod context_intelligence;
 #[path = "../../../src/domain/decision.rs"]
 pub mod decision;
 #[path = "../../../src/domain/distribution.rs"]

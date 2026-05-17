@@ -17,6 +17,28 @@ recorded workspace version.
 
 ## [Unreleased]
 
+## [0.58.0] - 2026-05-16
+
+Delivered specs:
+
+- `058` - Advanced Context Intelligence
+
+Highlights:
+
+- Added the S5 V1 local advanced-context baseline with a workspace-local
+  SQLite + FTS5 retrieval index and structured fallback ordering for bounded
+  context assembly.
+- Introduced typed advanced-context projection state for selected evidence,
+  relationships, impact findings, retrieval budgets, and degraded or terminal
+  outcomes.
+- Persisted advanced-context output through goal plans, task context, session
+  status, trace summaries, and CLI `status` or `inspect` rendering.
+- Added typed configuration for disabled or local advanced-context policy and
+  surfaced the effective policy through `boundline config show`.
+- Realigned the 058 feature spec and implementation plan to the S5 V1 local
+  SQLite + FTS5 baseline while deferring semantic acceleration to S5.v2.
+- Bumped workspace version to `0.58.0`.
+
 ## [0.57.0] - 2026-05-16
 
 Delivered specs:

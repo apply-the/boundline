@@ -11,6 +11,7 @@ use crate::adapters::trace_store::{FileTraceStore, TraceStore, TraceStoreError};
 use crate::cli::CommandExitStatus;
 use crate::cli::output;
 use crate::domain::cluster::ClusterDeliveryStory;
+use crate::domain::context_intelligence::AdvancedContextProjection;
 use crate::domain::goal_plan::GoalPlanFlowState;
 use crate::domain::guidance::{GuardianFinding, GuidanceGuardianProjection};
 use crate::domain::limits::TerminalCondition;
@@ -29,6 +30,10 @@ const UNKNOWN_DECISION_ID: &str = "unknown-decision";
 const UNKNOWN_TARGET: &str = "unknown";
 const KEY_ACTION_RESULT: &str = "action_result";
 const KEY_FAILURE_REASON: &str = "failure_reason";
+
+fn advanced_context_from_payload(payload: &Value) -> Option<AdvancedContextProjection> {
+    payload.get("advanced_context").cloned().and_then(|value| serde_json::from_value(value).ok())
+}
 const KEY_FINDING: &str = "finding";
 const KEY_REVIEW_OUTCOME: &str = "review_outcome";
 const KEY_REVIEW_TRIGGER: &str = "review_trigger";
@@ -152,6 +157,7 @@ pub fn summarize_trace(
     let mut routing_summary: Option<String> = None;
     let mut routing_projection = RoutingDecisionProjection::default();
     let mut goal_plan_summary: Option<String> = None;
+    let mut advanced_context: Option<AdvancedContextProjection> = None;
     let mut context_projection = TraceContextProjection::default();
     let mut guidance_guardian = GuidanceGuardianProjection::default();
     let mut governance_projection = TraceGovernanceProjection::default();
@@ -399,6 +405,8 @@ pub fn summarize_trace(
                             )
                         })
                         .unwrap_or_default();
+                    advanced_context =
+                        advanced_context.or_else(|| advanced_context_from_payload(&event.payload));
                     let flow_suffix = event
                         .payload
                         .get("flow_state")
@@ -498,6 +506,7 @@ pub fn summarize_trace(
     Ok(TraceSummaryView {
         trace_ref: trace_ref.as_ref().to_string_lossy().into_owned(),
         goal: trace.goal.clone(),
+        advanced_context,
         negotiation_goal_summary: input_projection.negotiation_goal_summary,
         negotiation_resolution: input_projection.negotiation_resolution,
         negotiation_acceptance_boundary: input_projection.negotiation_acceptance_boundary,

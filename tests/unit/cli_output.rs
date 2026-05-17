@@ -27,6 +27,13 @@ use boundline::domain::cluster::{
     WorkspaceParticipationKind, WorkspaceParticipationRecord,
 };
 use boundline::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
+use boundline::domain::context_intelligence::{
+    AdvancedContextProjection, AuthorityRank, CandidateSelectionState, ImpactAnalysisFinding,
+    ImpactFindingKind, ImpactFindingSeverity, ImpactFindingStatus, RelationshipCredibilityState,
+    RelationshipKind, RelationshipProjection, RemoteTransmissionPolicyState,
+    RetrievalCompatibilityState, RetrievalIndexState, RetrievalMode, RetrievalSourceKind,
+    RetrievalStalenessState, RetrievalState, RetrievedEvidenceCandidate,
+};
 use boundline::domain::goal_plan::{GoalPlanFlowMode, GoalPlanFlowState};
 use boundline::domain::governance::GovernanceRuntimeKind;
 use boundline::domain::limits::{RunLimits, TerminalCondition};
@@ -44,6 +51,49 @@ use boundline::domain::trace::{
 use serde_json::Map;
 use serde_json::json;
 use uuid::Uuid;
+
+/// Builds one stable advanced-context projection for renderer and inspect tests.
+fn sample_advanced_context() -> AdvancedContextProjection {
+    AdvancedContextProjection {
+        query_id: "query-render".to_string(),
+        retrieval_mode: RetrievalMode::Local,
+        retrieval_state: RetrievalState::Selected,
+        retrieval_index_state: RetrievalIndexState::Ready,
+        budgets: Default::default(),
+        remote_policy_state: RemoteTransmissionPolicyState::LocalOnly,
+        used_remote: false,
+        terminal_reason: None,
+        selected_evidence: vec![RetrievedEvidenceCandidate {
+            candidate_id: "candidate-1".to_string(),
+            source_kind: RetrievalSourceKind::WorkspaceFile,
+            source_ref: "src/context_router.rs".to_string(),
+            authority_rank: AuthorityRank::Structured,
+            selection_state: CandidateSelectionState::Selected,
+            selection_reason: "goal keyword matched the implementation surface".to_string(),
+            provenance_summary: "workspace file selected through local retrieval".to_string(),
+            compatibility_state: RetrievalCompatibilityState::Compatible,
+            staleness_state: RetrievalStalenessState::Fresh,
+        }],
+        rejected_candidates: Vec::new(),
+        relationships: vec![RelationshipProjection {
+            relationship_id: "relationship-1".to_string(),
+            subject_ref: "src/context_router.rs".to_string(),
+            relationship_kind: RelationshipKind::ExercisesTest,
+            credibility_state: RelationshipCredibilityState::Credible,
+            explanation: "the matching test file names the same target".to_string(),
+            supporting_candidate_ids: vec!["candidate-1".to_string()],
+        }],
+        impact_findings: vec![ImpactAnalysisFinding {
+            finding_id: "finding-1".to_string(),
+            finding_kind: ImpactFindingKind::MissingTest,
+            subject_ref: "tests/context_router.rs".to_string(),
+            status: ImpactFindingStatus::Open,
+            severity: ImpactFindingSeverity::Medium,
+            recommended_follow_up: "add or refresh the focused regression test".to_string(),
+            supporting_relationship_ids: vec!["relationship-1".to_string()],
+        }],
+    }
+}
 
 #[test]
 fn exit_codes_match_the_command_contract() {
@@ -1054,6 +1104,7 @@ fn render_session_status_surfaces_context_projection() {
         workspace_ref: "/tmp/session-context".to_string(),
         goal: Some("Plan with bounded context".to_string()),
         latest_status: SessionStatus::Planned,
+        advanced_context: Some(sample_advanced_context()),
         context_summary: Some("bounded context from 1 primary input(s)".to_string()),
         context_credibility: Some("credible".to_string()),
         context_primary_inputs: Some(vec!["src/context_router.rs".to_string()]),
@@ -1072,6 +1123,14 @@ fn render_session_status_surfaces_context_projection() {
     assert!(rendered.contains("context_credibility: credible"));
     assert!(rendered.contains("context_primary_inputs: src/context_router.rs"));
     assert!(rendered.contains("context_provenance: workspace_file: src/context_router.rs"));
+    assert!(rendered.contains("retrieval_mode: local"));
+    assert!(rendered.contains("retrieval_state: selected"));
+    assert!(rendered.contains(
+        "selected_evidence: src/context_router.rs [workspace_file] goal keyword matched the implementation surface"
+    ));
+    assert!(rendered.contains(
+        "impact_finding: tests/context_router.rs [missing_test] add or refresh the focused regression test"
+    ));
 }
 
 #[test]
@@ -1273,7 +1332,8 @@ fn summarize_trace_uses_goal_plan_projection_and_decision_evidence_fallbacks() {
             "context_credibility": "stale",
             "context_primary_inputs": ["src/lib.rs"],
             "context_provenance": ["workspace_file: src/lib.rs (failing test target) [source=workspace_scan]"],
-            "context_staleness_reason": "trace snapshot is stale"
+            "context_staleness_reason": "trace snapshot is stale",
+            "advanced_context": sample_advanced_context()
         }),
         recorded_at: 0,
     });
@@ -1334,6 +1394,10 @@ fn summarize_trace_uses_goal_plan_projection_and_decision_evidence_fallbacks() {
         ]
     );
     assert_eq!(summary.context_staleness_reason.as_deref(), Some("trace snapshot is stale"));
+    assert_eq!(
+        summary.advanced_context.as_ref().map(AdvancedContextProjection::selected_evidence_count),
+        Some(1)
+    );
     assert!(
         summary
             .decision_timeline
@@ -1362,6 +1426,44 @@ fn summarize_trace_uses_goal_plan_projection_and_decision_evidence_fallbacks() {
             .any(|line| { line == "decision_status: decision-1 recovered via decision-2" })
     );
     assert_eq!(summary.failure_evidence, vec!["decision-1 src/lib.rs: test failed".to_string()]);
+
+    let rendered = render_trace_summary(&summary, "explicit-trace", "/boundline-next");
+    assert!(rendered.contains("retrieval_mode: local"), "{rendered}");
+    assert!(
+        rendered.contains(
+            "selected_evidence: src/context_router.rs [workspace_file] goal keyword matched the implementation surface"
+        ),
+        "{rendered}"
+    );
+}
+
+#[test]
+fn summarize_trace_extracts_advanced_context_from_goal_plan_payload() {
+    use boundline::domain::trace::TraceEvent;
+
+    let mut trace = ExecutionTrace::new("task-advanced-context", "session", "Inspect summary");
+    trace.terminal_status = Some(TaskStatus::Succeeded);
+    trace.terminal_reason =
+        Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "completed", None));
+    trace.events.push(TraceEvent {
+        event_id: "goal-plan".to_string(),
+        event_type: TraceEventType::GoalPlanCreated,
+        step_id: None,
+        plan_revision: 0,
+        payload: json!({
+            "task_count": 1,
+            "goal": "Inspect summary",
+            "advanced_context": sample_advanced_context()
+        }),
+        recorded_at: 0,
+    });
+
+    let summary = summarize_trace(PathBuf::from("/tmp/trace.json"), &trace).unwrap();
+
+    assert_eq!(
+        summary.advanced_context.as_ref().map(AdvancedContextProjection::selected_evidence_count),
+        Some(1)
+    );
 }
 
 #[test]

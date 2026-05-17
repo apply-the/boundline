@@ -6,31 +6,50 @@ Canon is downstream from Boundline in this roadmap: Boundline thinks, decides, o
 
 Evolve Boundline into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.56.0
+## Current Status: v0.58.0
 
-Boundline now has its core session-native orchestration baseline, bounded workflow
-follow-through, deeper governed-stage plus adaptive slices, explicit
-continuity between session-native and compatibility follow-up, stronger
-route-summary plus config projection, bounded multi-workspace clustered
-delivery, negotiated delivery modeling, inspectable routing plus assistant
-decoupling, guided decision follow-through, evidence-aligned next-command
-selection, credible governed delivery completion, final product-surface
-closure, explicit bounded context assembly, decision-driven bounded action
-selection, evidence-driven dynamic planning, Canon-grounded structured
-memory, bounded delegated execution, and a release-aligned distribution
-surface in place, with Canon-default governed setup, runtime selection, and
-assistant-surface alignment now carried through the same primary workflow. The
-operator entry path is now stack-neutral for empty, non-Rust, and mixed
-repositories, with a clearer first-run CLI UX. That baseline now extends into
-Canon-promoted project-memory reuse, catalog-aware guidance packs, and the new
-authority-zoned council slice. The current `0.56.0` work makes authority
-control resolution, council assembly posture, and review stop semantics
-explicit in the same session-native and trace-native projection surfaces that
-already carry bounded planning and governance evidence. The S4 adaptive
-governance layer is now fully delivered: governance maturity stages
-(advisory, catch, rule, hook), rollout profiles, posture resolution,
-degradation modes, and the paired Boundline and Canon governance-semantics
-docs are all in place.
+Boundline now has its core session-native orchestration baseline, bounded
+workflow follow-through, deeper governed-stage plus adaptive slices, explicit
+continuity between session-native and compatibility follow-up, stronger route
+summary plus config projection, bounded multi-workspace clustered delivery,
+negotiated delivery modeling, inspectable routing plus assistant decoupling,
+guided decision follow-through, evidence-aligned next-command selection,
+credible governed delivery completion, final product-surface closure, explicit
+bounded context assembly, decision-driven bounded action selection,
+evidence-driven dynamic planning, Canon-grounded structured memory, bounded
+delegated execution, and a release-aligned distribution surface in place, with
+Canon-default governed setup, runtime selection, and assistant-surface
+alignment now carried through the same primary workflow. The operator entry
+path is now stack-neutral for empty, non-Rust, and mixed repositories, with a
+clearer first-run CLI UX. That baseline now extends into Canon-promoted
+project-memory reuse, catalog-aware guidance packs, authority-zoned review,
+adaptive governance, and the S5 V1 advanced-context slice. The current
+`0.58.0` work adds workspace-local SQLite + FTS5 retrieval, structured fallback
+ordering, explicit selected-evidence provenance, and explainable relationship
+plus impact projection so local-first context expansion remains visible,
+bounded, and non-authoritative.
+
+### Delivered in 0.58.0
+
+- Boundline now assembles one typed advanced-context projection with
+  workspace-local SQLite + FTS5 retrieval, structured fallback ordering, and
+  Canon-consumer compatibility checks.
+- Session-native `plan`, `status`, and `inspect` now surface retrieval mode,
+  selected evidence, relationships, impact findings, bounded budgets, and
+  degraded reasons instead of keeping advanced-context selection implicit.
+- Configuration now exposes a typed disabled-versus-local retrieval policy,
+  with explicit rejection of unsupported remote retrieval or transmission in
+  the S5 V1 baseline.
+
+### Delivered in 0.57.0
+
+- Boundline now resolves adaptive governance posture, rollout profile,
+  degradation mode, and startup context into one explicit runtime state.
+- Session-native `status`, `next`, and `inspect` now surface governance stage,
+  rollout posture, and degradation semantics alongside existing review and
+  planning evidence.
+- The paired adaptive-governance documentation set is now in place across the
+  roadmap and governance reference docs, so the S4 layer is fully delivered.
 
 ### Delivered in 0.56.0
 
@@ -653,29 +672,41 @@ delivery line.
 - [S5: Advanced Context Intelligence](roadmap/S5%20-%20advanced-context-intelligence.md)
   and
   [S5.addendum: Advanced Context Intelligence Technology Evaluation](roadmap/S5.addendum%20-%20advanced-context-intelligence-technology-evaluation.md)
-  are not already covered by an active delivery slice; they build on
+  are now being tracked in active
+  [`058-advanced-context-intelligence`](specs/058-advanced-context-intelligence/spec.md)
+  as the V1 baseline: `SQLite + FTS5 + structured indexes`. They build on
   [`033-context-assembly-foundation`](specs/033-context-assembly-foundation/spec.md),
   [`040-context-selection-hardening`](specs/040-context-selection-hardening/spec.md),
   and [`052-runtime-intelligence-substrate`](specs/052-runtime-intelligence-substrate/spec.md)
   with optional semantic retrieval, graph projection, and local-first index
   technology evaluation.
+- [S5.v2: Advanced Context Intelligence Semantic Acceleration](roadmap/S5.v2%20-%20advanced-context-intelligence-semantic-acceleration.md)
+  extends the active S5 V1 slice with optional `sqlite-vec`-backed local
+  semantic acceleration on the same workspace-local SQLite index. It is
+  sequenced after S5 V1 and before S6 and S7 so later reasoning and
+  assistant-affordance layers build on stable, explainable semantic retrieval
+  instead of provider-specific heuristics.
 - [S6: Advanced Multi-Agent Reasoning Profiles](roadmap/S6%20-%20advanced-multi-agent-reasoning-profiles-spec.md)
   is intentionally future-facing rather than already covered by the active
   roadmap; it builds on the review-council baseline in
   [`007-multi-agent-review`](specs/007-multi-agent-review/spec.md) after the
-  delivered `0.56.0` authority-zoned council baseline and the delivered S4
-  adaptive governance layer make councils operationally credible.
+  delivered `0.56.0` authority-zoned council baseline, the delivered S4
+  adaptive governance layer, and the planned S5.v2 semantic-acceleration layer
+  make councils operationally and contextually credible.
 - [S7: Assistant Delight And Cognitive Affordance Layer](roadmap/S7%20-%20assistant-delight-and-cognitive-affordance-layer.md)
   complements assistant/package and operator-surface work in
   [`048-assistant-plugin-packages`](specs/048-assistant-plugin-packages/spec.md),
   [`049-project-scale-delivery-ux`](specs/049-project-scale-delivery-ux/spec.md),
   and [`051-delivery-control-consumer`](specs/051-delivery-control-consumer/spec.md),
-  but it is not duplicate scope.
+  but it is not duplicate scope. It should follow S5.v2 and S6 on the roadmap
+  so the delight layer can surface both semantic-retrieval and reasoning-profile
+  outputs on stable runtime surfaces.
 
 Coverage check: the delivered content already recorded in this roadmap is
 covered by the active spec set, not by these future drafts. The copied S2.1-S7
-documents mostly extend the current line; the strongest direct overlap is at
-the dependency and foundation level rather than as duplicate roadmap scope.
+documents mostly extend the current line; S5 base is now being pulled into the
+active `058-advanced-context-intelligence` slice, while S5.v2, S6, and S7
+remain forward-looking extensions rather than duplicate roadmap scope.
 
 ### Sequencing rule
 

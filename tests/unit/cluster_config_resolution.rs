@@ -1,6 +1,9 @@
 use boundline::domain::configuration::{
-    ModelRoute, RoutingConfig, RoutingOverrides, RuntimeKind, ValueSource,
-    resolve_effective_routing,
+    AdvancedContextConfig, ModelRoute, RoutingConfig, RoutingOverrides, RuntimeKind, ValueSource,
+    resolve_effective_advanced_context_config, resolve_effective_routing,
+};
+use boundline::domain::context_intelligence::{
+    RemoteTransmissionPolicyState, RetrievalBudgets, RetrievalMode,
 };
 
 #[test]
@@ -52,4 +55,102 @@ fn effective_routing_prefers_workspace_over_cluster() {
     );
     assert_eq!(resolved.verification.source, ValueSource::Workspace);
     assert_eq!(resolved.verification.route.runtime, RuntimeKind::Copilot);
+}
+
+#[test]
+fn effective_advanced_context_prefers_nearest_config_scope() {
+    let workspace_policy = AdvancedContextConfig {
+        retrieval_mode: RetrievalMode::Disabled,
+        remote_policy: RemoteTransmissionPolicyState::Blocked,
+        budgets: RetrievalBudgets { depth_limit: 3, ..RetrievalBudgets::default() },
+    };
+    let cluster_policy = AdvancedContextConfig {
+        retrieval_mode: RetrievalMode::Local,
+        remote_policy: RemoteTransmissionPolicyState::LocalOnly,
+        budgets: RetrievalBudgets { depth_limit: 5, ..RetrievalBudgets::default() },
+    };
+    let global_policy = AdvancedContextConfig {
+        retrieval_mode: RetrievalMode::Local,
+        remote_policy: RemoteTransmissionPolicyState::Blocked,
+        budgets: RetrievalBudgets { depth_limit: 7, ..RetrievalBudgets::default() },
+    };
+
+    let resolved = resolve_effective_advanced_context_config(
+        Some(&RoutingConfig {
+            advanced_context: Some(workspace_policy.clone()),
+            ..RoutingConfig::default()
+        }),
+        Some(&RoutingConfig {
+            advanced_context: Some(cluster_policy.clone()),
+            ..RoutingConfig::default()
+        }),
+        Some(&RoutingConfig {
+            advanced_context: Some(global_policy.clone()),
+            ..RoutingConfig::default()
+        }),
+    );
+    assert_eq!(resolved.source, ValueSource::Workspace);
+    assert_eq!(resolved.policy, workspace_policy);
+
+    let resolved = resolve_effective_advanced_context_config(
+        None,
+        Some(&RoutingConfig {
+            advanced_context: Some(cluster_policy.clone()),
+            ..RoutingConfig::default()
+        }),
+        Some(&RoutingConfig {
+            advanced_context: Some(global_policy.clone()),
+            ..RoutingConfig::default()
+        }),
+    );
+    assert_eq!(resolved.source, ValueSource::Cluster);
+    assert_eq!(resolved.policy, cluster_policy);
+
+    let resolved = resolve_effective_advanced_context_config(
+        None,
+        None,
+        Some(&RoutingConfig {
+            advanced_context: Some(global_policy.clone()),
+            ..RoutingConfig::default()
+        }),
+    );
+    assert_eq!(resolved.source, ValueSource::Global);
+    assert_eq!(resolved.policy, global_policy);
+
+    let resolved = resolve_effective_advanced_context_config(None, None, None);
+    assert_eq!(resolved.source, ValueSource::BuiltIn);
+    assert_eq!(resolved.policy, AdvancedContextConfig::default());
+}
+
+#[test]
+fn advanced_context_config_rejects_unsupported_remote_combinations() {
+    let remote_mode = AdvancedContextConfig {
+        retrieval_mode: RetrievalMode::Remote,
+        remote_policy: RemoteTransmissionPolicyState::LocalOnly,
+        budgets: RetrievalBudgets::default(),
+    };
+    assert_eq!(
+        remote_mode.validate().unwrap_err().to_string(),
+        "invalid advanced-context policy: remote retrieval mode is not supported in the local-only V1 engine"
+    );
+
+    let remote_allowed = AdvancedContextConfig {
+        retrieval_mode: RetrievalMode::Local,
+        remote_policy: RemoteTransmissionPolicyState::RemoteAllowed,
+        budgets: RetrievalBudgets::default(),
+    };
+    assert_eq!(
+        remote_allowed.validate().unwrap_err().to_string(),
+        "invalid advanced-context policy: remote transmission is not supported in the local-only V1 engine"
+    );
+
+    let disabled_with_local_policy = AdvancedContextConfig {
+        retrieval_mode: RetrievalMode::Disabled,
+        remote_policy: RemoteTransmissionPolicyState::LocalOnly,
+        budgets: RetrievalBudgets::default(),
+    };
+    assert_eq!(
+        disabled_with_local_policy.validate().unwrap_err().to_string(),
+        "invalid advanced-context policy: disabled retrieval requires blocked remote policy"
+    );
 }
