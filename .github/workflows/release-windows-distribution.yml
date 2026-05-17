@@ -59,7 +59,10 @@ jobs:
         with:
           toolchain: 1.95.0
           targets: x86_64-pc-windows-msvc
-      - uses: Swatinem/rust-cache@v2
+      # Keep the Windows bundle path independent from optional cache restore
+      # instability on hosted runners.
+      - if: runner.os != 'Windows'
+        uses: Swatinem/rust-cache@v2
       - run: cargo build --locked --release --bin boundline --target x86_64-pc-windows-msvc
       - name: Assemble Boundline + Canon Windows bundle
         shell: pwsh
