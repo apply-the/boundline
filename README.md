@@ -29,6 +29,15 @@ retrieved evidence non-authoritative, and exposes selected evidence,
 relationships, impact findings, and degraded reasons through `status` and
 `inspect`.
 
+The active S5.v2 semantic-acceleration slice stays local and optional. When a
+workspace opts into `boundline config set-semantic-acceleration --scope
+workspace --policy local`, Boundline refreshes bounded semantic chunks on the
+same retrieval index, can expand or rerank the V1 candidate set, and surfaces
+`semantic_policy_state`, `semantic_capability_state`, `hybrid_outcome`, match
+origin, and rejected semantic candidates through `plan`, `status`, and
+`inspect`. When the local semantic capability is unavailable or degraded,
+Boundline falls back explicitly to the V1 path instead of hiding the skip.
+
 In `0.56.0`, governed review councils also persist explicit council profile,
 independence state, and stop semantics alongside the existing guidance catalog
 surfaces, so `status`, `next`, and `inspect` can explain both authority posture

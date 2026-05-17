@@ -9,9 +9,9 @@ use thiserror::Error;
 
 use crate::domain::governance::{
     ApprovalState, CanonAdaptiveGovernanceV1Envelope, CanonAuthorityGovernanceV1Envelope,
-    CanonCapabilitySnapshot, CanonMode, GovernanceLifecycleState, GovernanceRuntimeKind,
-    GovernedStagePacket, PacketReadiness, SystemContextBinding, classify_packet_readiness,
-    derived_packet_missing_sections,
+    CanonCapabilitySnapshot, CanonMode, CanonSemanticArtifactDescriptorV1Envelope,
+    GovernanceLifecycleState, GovernanceRuntimeKind, GovernedStagePacket, PacketReadiness,
+    SystemContextBinding, classify_packet_readiness, derived_packet_missing_sections,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -178,6 +178,7 @@ impl GovernanceRuntime for LocalGovernanceRuntime {
             reason_code: None,
             authority_governance: None,
             adaptive_governance: None,
+            semantic_descriptor: None,
         };
 
         let status = if packet.readiness == PacketReadiness::Reusable {
@@ -352,6 +353,7 @@ struct CanonCliWireResponse {
     pub reason_code: Option<String>,
     pub authority_governance: Option<CanonAuthorityGovernanceV1Envelope>,
     pub adaptive_governance: Option<CanonAdaptiveGovernanceV1Envelope>,
+    pub semantic_descriptor: Option<CanonSemanticArtifactDescriptorV1Envelope>,
     pub message: String,
 }
 
@@ -383,6 +385,7 @@ struct CanonCliWireResponseCore {
 struct CanonPacketMetadata {
     pub authority_governance: Option<CanonAuthorityGovernanceV1Envelope>,
     pub adaptive_governance: Option<CanonAdaptiveGovernanceV1Envelope>,
+    pub semantic_descriptor: Option<CanonSemanticArtifactDescriptorV1Envelope>,
 }
 
 const CANON_PACKET_METADATA_FILE_NAME: &str = "packet-metadata.json";
@@ -550,6 +553,8 @@ fn parse_canon_response(
         authority_governance: deserialize_optional_json_field(&raw, "authority_governance"),
         adaptive_governance: deserialize_optional_json_field(&raw, "adaptive_governance")
             .filter(CanonAdaptiveGovernanceV1Envelope::is_supported_contract_line),
+        semantic_descriptor: deserialize_optional_json_field(&raw, "semantic_descriptor")
+            .filter(CanonSemanticArtifactDescriptorV1Envelope::is_supported_contract_line),
         message: core.message,
     };
     Some(normalize_canon_response(request, wire))
@@ -586,6 +591,10 @@ fn normalize_canon_response(
             read_canon_packet_metadata(Path::new(&request.workspace_ref), packet_ref)
                 .and_then(|metadata| metadata.adaptive_governance)
         });
+        let semantic_descriptor = wire.semantic_descriptor.clone().or_else(|| {
+            read_canon_packet_metadata(Path::new(&request.workspace_ref), packet_ref)
+                .and_then(|metadata| metadata.semantic_descriptor)
+        });
 
         GovernedStagePacket {
             packet_ref: packet_ref.clone(),
@@ -599,6 +608,7 @@ fn normalize_canon_response(
             reason_code: wire.reason_code.clone(),
             authority_governance,
             adaptive_governance,
+            semantic_descriptor,
         }
     });
 
@@ -634,6 +644,8 @@ fn read_canon_packet_metadata(
         authority_governance: deserialize_optional_json_field(metadata, "authority_governance"),
         adaptive_governance: deserialize_optional_json_field(metadata, "adaptive_governance")
             .filter(CanonAdaptiveGovernanceV1Envelope::is_supported_contract_line),
+        semantic_descriptor: deserialize_optional_json_field(metadata, "semantic_descriptor")
+            .filter(CanonSemanticArtifactDescriptorV1Envelope::is_supported_contract_line),
     })
 }
 
@@ -702,8 +714,10 @@ mod tests {
     use crate::domain::governance::{
         ADAPTIVE_GOVERNANCE_V1_CONTRACT_LINE, AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE, ApprovalState,
         CanonAdaptiveGovernanceState, CanonAdaptiveRolloutProfile, CanonAuthorityZone,
-        CanonChangeClass, CanonIntendedPersona, CanonMode, CanonRiskClass, CanonStageRoleHintKind,
-        GovernanceLifecycleState, PacketReadiness, SystemContextBinding,
+        CanonChangeClass, CanonIntendedPersona, CanonMode, CanonRiskClass,
+        CanonSemanticEligibilityState, CanonSemanticProvenanceBoundary, CanonStageRoleHintKind,
+        GovernanceLifecycleState, PacketReadiness, SEMANTIC_ARTIFACT_DESCRIPTOR_V1_CONTRACT_LINE,
+        SystemContextBinding,
     };
 
     fn temp_workspace(prefix: &str) -> std::path::PathBuf {
@@ -775,6 +789,36 @@ mod tests {
     }
 
     #[test]
+    fn parse_canon_response_reads_inline_semantic_descriptor() {
+        let workspace = temp_workspace("canon-governance-runtime-inline-semantic");
+        let packet_ref = "canon/run-124/verification";
+        let document_ref = format!("{packet_ref}/verification.md");
+        let document_path = workspace.join(&document_ref);
+        fs::create_dir_all(document_path.parent().unwrap()).unwrap();
+        fs::write(&document_path, "# Verification\n\nCredible validation evidence.").unwrap();
+
+        let request = request(workspace.to_string_lossy().as_ref());
+        let stdout = format!(
+            "{{\"status\":\"governed_ready\",\"approval_state\":\"granted\",\"message\":\"Canon verified the stage\",\"run_ref\":\"run-124\",\"packet_ref\":\"{packet_ref}\",\"expected_document_refs\":[\"{document_ref}\"],\"document_refs\":[\"{document_ref}\"],\"packet_readiness\":\"reusable\",\"headline\":\"Verification packet ready\",\"reason_code\":\"packet_ready\",\"semantic_descriptor\":{{\"semantic_contract_line\":\"{SEMANTIC_ARTIFACT_DESCRIPTOR_V1_CONTRACT_LINE}\",\"semantic_eligibility\":\"eligible\",\"semantic_provenance_boundary\":\"surface\",\"semantic_provenance_ref\":\"{document_ref}\",\"semantic_labels\":[\"verification\"]}}}}"
+        );
+
+        let response = parse_canon_response(&request, stdout.as_bytes()).unwrap();
+        let packet = response.packet.expect("packet should be present");
+        let semantic = packet.semantic_descriptor.expect("semantic descriptor should be present");
+
+        assert_eq!(semantic.semantic_contract_line, SEMANTIC_ARTIFACT_DESCRIPTOR_V1_CONTRACT_LINE);
+        assert_eq!(semantic.semantic_eligibility, CanonSemanticEligibilityState::Eligible);
+        assert_eq!(
+            semantic.semantic_provenance_boundary,
+            Some(CanonSemanticProvenanceBoundary::Surface)
+        );
+        assert_eq!(semantic.semantic_provenance_ref.as_deref(), Some(document_ref.as_str()));
+        assert_eq!(semantic.semantic_labels, vec!["verification".to_string()]);
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
     fn parse_canon_response_reads_authority_governance_from_packet_metadata() {
         let workspace = temp_workspace("canon-governance-runtime-authority");
         let packet_ref = "canon/run-789/verification";
@@ -813,6 +857,13 @@ mod tests {
                         "contract_line": ADAPTIVE_GOVERNANCE_V1_CONTRACT_LINE,
                         "governance_state": "rule",
                         "rollout_profile": "governed"
+                    },
+                    "semantic_descriptor": {
+                        "semantic_contract_line": SEMANTIC_ARTIFACT_DESCRIPTOR_V1_CONTRACT_LINE,
+                        "semantic_eligibility": "eligible",
+                        "semantic_provenance_boundary": "managed_block",
+                        "semantic_provenance_ref": "docs/project/operational-context.md#managed-block-1",
+                        "semantic_labels": ["project-memory", "operational-context"]
                     }
                 }
             }))
@@ -845,6 +896,21 @@ mod tests {
         assert_eq!(adaptive.contract_line, ADAPTIVE_GOVERNANCE_V1_CONTRACT_LINE);
         assert_eq!(adaptive.governance_state, CanonAdaptiveGovernanceState::Rule);
         assert_eq!(adaptive.rollout_profile, CanonAdaptiveRolloutProfile::Governed);
+        let semantic = packet.semantic_descriptor.expect("semantic descriptor should be present");
+        assert_eq!(semantic.semantic_contract_line, SEMANTIC_ARTIFACT_DESCRIPTOR_V1_CONTRACT_LINE);
+        assert_eq!(semantic.semantic_eligibility, CanonSemanticEligibilityState::Eligible);
+        assert_eq!(
+            semantic.semantic_provenance_boundary,
+            Some(CanonSemanticProvenanceBoundary::ManagedBlock)
+        );
+        assert_eq!(
+            semantic.semantic_provenance_ref.as_deref(),
+            Some("docs/project/operational-context.md#managed-block-1")
+        );
+        assert_eq!(
+            semantic.semantic_labels,
+            vec!["project-memory".to_string(), "operational-context".to_string()]
+        );
 
         fs::remove_dir_all(workspace).unwrap();
     }
@@ -914,6 +980,7 @@ mod tests {
             reason_code: Some("missing_sections".to_string()),
             authority_governance: None,
             adaptive_governance: None,
+            semantic_descriptor: None,
             message: "Canon produced an incomplete packet".to_string(),
         };
 

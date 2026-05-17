@@ -15,11 +15,13 @@ use boundline::cli::{
 };
 use boundline::domain::brief::normalize_inputs;
 use boundline::domain::context_intelligence::{
-    AdvancedContextProjection, AuthorityRank, CandidateSelectionState, ImpactAnalysisFinding,
-    ImpactFindingKind, ImpactFindingSeverity, ImpactFindingStatus, RelationshipCredibilityState,
-    RelationshipKind, RelationshipProjection, RemoteTransmissionPolicyState,
-    RetrievalCompatibilityState, RetrievalIndexState, RetrievalMode, RetrievalSourceKind,
-    RetrievalStalenessState, RetrievalState, RetrievedEvidenceCandidate,
+    AdvancedContextProjection, AuthorityRank, CandidateSelectionState, HybridOutcome,
+    ImpactAnalysisFinding, ImpactFindingKind, ImpactFindingSeverity, ImpactFindingStatus,
+    RelationshipCredibilityState, RelationshipKind, RelationshipProjection,
+    RemoteTransmissionPolicyState, RetrievalCompatibilityState, RetrievalIndexState,
+    RetrievalMatchOrigin, RetrievalMode, RetrievalSourceKind, RetrievalStalenessState,
+    RetrievalState, RetrievedEvidenceCandidate, SemanticCapabilityState, SemanticPolicyState,
+    SemanticTraceEventKind, SemanticTraceRecord,
 };
 use boundline::domain::execution::{
     ExecutionAttemptDefinition, ExecutionCommand, ExecutionFailureMode, ExecutionProfileError,
@@ -29,6 +31,7 @@ use boundline::domain::flow::{
     FlowStepMetadata, FlowValidationError, SessionFlowState, attach_stage_metadata, built_in_flow,
     supported_flow_names_csv,
 };
+use boundline::domain::governance::CanonSemanticProvenanceBoundary;
 use boundline::domain::limits::{RunLimits, TerminalCondition};
 use boundline::domain::negotiation::NegotiationResolutionState;
 use boundline::domain::plan::{Plan, PlanError, PlanStatus};
@@ -205,6 +208,9 @@ fn sample_advanced_context() -> AdvancedContextProjection {
         retrieval_mode: RetrievalMode::Local,
         retrieval_state: RetrievalState::Selected,
         retrieval_index_state: RetrievalIndexState::Ready,
+        semantic_policy_state: SemanticPolicyState::Disabled,
+        semantic_capability_state: SemanticCapabilityState::Unsupported,
+        hybrid_outcome: HybridOutcome::BaselineOnly,
         budgets: Default::default(),
         remote_policy_state: RemoteTransmissionPolicyState::LocalOnly,
         used_remote: false,
@@ -214,13 +220,19 @@ fn sample_advanced_context() -> AdvancedContextProjection {
             source_kind: RetrievalSourceKind::WorkspaceFile,
             source_ref: "src/lib.rs".to_string(),
             authority_rank: AuthorityRank::Structured,
+            match_origin: RetrievalMatchOrigin::Fts,
             selection_state: CandidateSelectionState::Selected,
             selection_reason: "goal keyword matched the implementation surface".to_string(),
             provenance_summary: "workspace file selected through local retrieval".to_string(),
             compatibility_state: RetrievalCompatibilityState::Compatible,
             staleness_state: RetrievalStalenessState::Fresh,
+            lexical_score: None,
+            semantic_score: None,
+            canon_semantic_contract_line: None,
+            canon_semantic_provenance_ref: None,
         }],
         rejected_candidates: Vec::new(),
+        semantic_trace_records: Vec::new(),
         relationships: vec![RelationshipProjection {
             relationship_id: "relationship-1".to_string(),
             subject_ref: "src/lib.rs".to_string(),
@@ -1077,6 +1089,15 @@ fn session_status_view_tracks_latest_advanced_context_snapshot() {
         .set_latest_advanced_context(&expected_advanced_context)
         .unwrap();
 
+    let persisted_advanced_context =
+        record.active_task.as_ref().unwrap().context.latest_advanced_context().unwrap().unwrap();
+    assert_eq!(persisted_advanced_context.semantic_policy_state, SemanticPolicyState::Disabled);
+    assert_eq!(
+        persisted_advanced_context.semantic_capability_state,
+        SemanticCapabilityState::Unsupported
+    );
+    assert_eq!(persisted_advanced_context.hybrid_outcome, HybridOutcome::BaselineOnly);
+
     let mut matching_status = build_status_view(&record);
     matching_status.advanced_context = Some(expected_advanced_context.clone());
     matching_status.validate(&record).unwrap();
@@ -1090,6 +1111,78 @@ fn session_status_view_tracks_latest_advanced_context_snapshot() {
         wrong_status.validate(&record).unwrap_err(),
         SessionValidationError::StatusViewAdvancedContextMismatch { .. }
     ));
+}
+
+#[test]
+fn session_status_view_preserves_canon_semantic_skip_reason_snapshot() {
+    let workspace = "/tmp/session-status-canon-semantic";
+    let mut record = build_planned_record(workspace);
+    let mut expected_advanced_context = sample_advanced_context();
+    expected_advanced_context.semantic_policy_state = SemanticPolicyState::Local;
+    expected_advanced_context.semantic_capability_state = SemanticCapabilityState::Ready;
+    expected_advanced_context.hybrid_outcome = HybridOutcome::BaselineOnly;
+    expected_advanced_context.rejected_candidates = vec![RetrievedEvidenceCandidate {
+        candidate_id: "candidate-canon-skipped".to_string(),
+        source_kind: RetrievalSourceKind::CanonArtifact,
+        source_ref: ".canon/excluded-guidance.md".to_string(),
+        authority_rank: AuthorityRank::Canon,
+        match_origin: RetrievalMatchOrigin::StructuredFallback,
+        selection_state: CandidateSelectionState::Rejected,
+        selection_reason:
+            "Canon semantic compatibility skipped the artifact: excluded by Canon semantic policy"
+                .to_string(),
+        provenance_summary: "excluded canon artifact surfaced through session state".to_string(),
+        compatibility_state: RetrievalCompatibilityState::PolicyBlocked,
+        staleness_state: RetrievalStalenessState::Fresh,
+        lexical_score: None,
+        semantic_score: None,
+        canon_semantic_contract_line: Some("v1".to_string()),
+        canon_semantic_provenance_ref: Some(
+            ".canon/excluded-guidance.md#section:overview".to_string(),
+        ),
+    }];
+    expected_advanced_context.semantic_trace_records = vec![SemanticTraceRecord {
+        record_id: "trace-canon-skip".to_string(),
+        event_kind: SemanticTraceEventKind::CanonArtifactSkipped,
+        candidate_ref: Some(".canon/excluded-guidance.md".to_string()),
+        match_origin: None,
+        compatibility_state: Some(RetrievalCompatibilityState::PolicyBlocked),
+        semantic_score: None,
+        canon_artifact_class: Some("stable".to_string()),
+        canon_semantic_contract_line: Some("v1".to_string()),
+        canon_semantic_provenance_boundary: Some(CanonSemanticProvenanceBoundary::Section),
+        canon_semantic_provenance_ref: Some(
+            ".canon/excluded-guidance.md#section:overview".to_string(),
+        ),
+        reason: "excluded by Canon semantic policy".to_string(),
+    }];
+
+    record
+        .active_task
+        .as_mut()
+        .unwrap()
+        .context
+        .set_latest_advanced_context(&expected_advanced_context)
+        .unwrap();
+
+    let mut matching_status = build_status_view(&record);
+    matching_status.advanced_context = Some(expected_advanced_context.clone());
+    matching_status.validate(&record).unwrap();
+
+    let preserved = matching_status.advanced_context.expect("advanced context snapshot");
+    assert_eq!(
+        preserved.rejected_candidates[0].compatibility_state,
+        RetrievalCompatibilityState::PolicyBlocked
+    );
+    assert!(
+        preserved.rejected_candidates[0]
+            .selection_reason
+            .contains("excluded by Canon semantic policy")
+    );
+    assert_eq!(
+        preserved.semantic_trace_records[0].event_kind,
+        SemanticTraceEventKind::CanonArtifactSkipped
+    );
 }
 
 #[test]

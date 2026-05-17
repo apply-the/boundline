@@ -1071,6 +1071,7 @@ impl SessionRuntime {
                 }),
             authority_provenance_lines: Vec::new(),
             adaptive_provenance_lines: Vec::new(),
+            semantic_provenance_lines: Vec::new(),
         })
     }
 

@@ -2,7 +2,10 @@ use std::path::PathBuf;
 
 use boundline::adapters::session_store::{FileSessionStore, SessionStore};
 use boundline::cli::session::{execute_capture, execute_plan, execute_start};
-use boundline::domain::context_intelligence::{RemoteTransmissionPolicyState, RetrievalMode};
+use boundline::domain::context_intelligence::{
+    HybridOutcome, RemoteTransmissionPolicyState, RetrievalMatchOrigin, RetrievalMode,
+    SemanticCapabilityState, SemanticPolicyState,
+};
 
 use crate::workspace_fixture::temp_fixture_workspace;
 
@@ -39,6 +42,9 @@ fn advanced_context_consumer_contract_persists_local_only_projection_shape() {
 
     assert_eq!(advanced_context.retrieval_mode, RetrievalMode::Local);
     assert_eq!(advanced_context.remote_policy_state, RemoteTransmissionPolicyState::LocalOnly);
+    assert_eq!(advanced_context.semantic_policy_state, SemanticPolicyState::Disabled);
+    assert_eq!(advanced_context.semantic_capability_state, SemanticCapabilityState::Unsupported);
+    assert_eq!(advanced_context.hybrid_outcome, HybridOutcome::BaselineOnly);
     assert!(!advanced_context.used_remote);
     assert!(
         advanced_context
@@ -57,6 +63,17 @@ fn advanced_context_consumer_contract_persists_local_only_projection_shape() {
     let serialized = serde_json::to_value(advanced_context).unwrap();
     let object = serialized.as_object().unwrap();
     assert_eq!(object.get("retrieval_mode").unwrap().as_str(), Some("local"));
+    assert_eq!(object.get("semantic_policy_state").unwrap().as_str(), Some("disabled"));
+    assert_eq!(object.get("semantic_capability_state").unwrap().as_str(), Some("unsupported"));
+    assert_eq!(object.get("hybrid_outcome").unwrap().as_str(), Some("baseline_only"));
     assert!(object.contains_key("selected_evidence"));
+    let selected_evidence = object
+        .get("selected_evidence")
+        .and_then(|value| value.as_array())
+        .expect("selected evidence array");
+    assert!(selected_evidence.iter().any(|candidate| {
+        candidate.get("match_origin").and_then(|value| value.as_str())
+            == Some(RetrievalMatchOrigin::Fts.as_str())
+    }));
     assert!(object.contains_key("relationships"));
 }

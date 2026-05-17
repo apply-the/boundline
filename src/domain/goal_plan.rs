@@ -1231,6 +1231,7 @@ mod tests {
             }),
             authority_provenance_lines: Vec::new(),
             adaptive_provenance_lines: Vec::new(),
+            semantic_provenance_lines: Vec::new(),
         });
 
         assert_eq!(
@@ -1427,6 +1428,7 @@ mod tests {
                 evidence_summary: None,
                 authority_provenance_lines: Vec::new(),
                 adaptive_provenance_lines: Vec::new(),
+                semantic_provenance_lines: Vec::new(),
             });
 
         assert_eq!(

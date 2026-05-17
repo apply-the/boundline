@@ -414,3 +414,141 @@ pub enum ExecutionProfileError {
     #[error("governance profile is invalid: {0}")]
     InvalidGovernanceProfile(#[from] GovernanceProfileError),
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::governance::{GovernanceRuntimeKind, StageGovernancePolicy};
+    use crate::domain::review::{AdjudicationDefinition, ReviewProfile, VoteRuleDefinition};
+
+    fn valid_profile() -> WorkspaceExecutionProfile {
+        WorkspaceExecutionProfile {
+            name: "demo-profile".to_string(),
+            read_targets: vec!["src/lib.rs".to_string()],
+            validation_command: ExecutionCommand {
+                program: "cargo".to_string(),
+                args: vec!["test".to_string()],
+            },
+            attempts: vec![ExecutionAttemptDefinition {
+                attempt_id: "attempt-1".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Replan,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "old".to_string(),
+                    replace: "new".to_string(),
+                }],
+            }],
+            adaptive: None,
+            limits: RunLimits::default(),
+            governance: None,
+            review: None,
+            legacy_source: None,
+        }
+    }
+
+    #[test]
+    fn adaptive_change_kind_strings_cover_all_variants() {
+        assert_eq!(AdaptiveChangeKind::ArithmeticSwap.as_str(), "arithmetic_swap");
+        assert_eq!(AdaptiveChangeKind::ComparisonFlip.as_str(), "comparison_flip");
+        assert_eq!(AdaptiveChangeKind::BooleanFlip.as_str(), "boolean_flip");
+        assert_eq!(AdaptiveChangeKind::OrderingBoundaryFlip.as_str(), "ordering_boundary_flip");
+        assert_eq!(AdaptiveChangeKind::ResultStatusFlip.as_str(), "result_status_flip");
+        assert_eq!(AdaptiveChangeKind::NumericLiteralFlip.as_str(), "numeric_literal_flip");
+    }
+
+    #[test]
+    fn adaptive_profile_rejects_missing_read_targets_and_invalid_preferences() {
+        let adaptive = AdaptiveExecutionProfile {
+            max_selected_targets: 1,
+            max_generated_attempts: 1,
+            path_preferences: Vec::new(),
+            allowed_change_kinds: Vec::new(),
+        };
+        assert!(matches!(
+            adaptive.validate(&[]),
+            Err(ExecutionProfileError::MissingAdaptiveReadTargets)
+        ));
+
+        let blank_preference = AdaptiveExecutionProfile {
+            path_preferences: vec![" ".to_string()],
+            ..adaptive.clone()
+        };
+        assert!(matches!(
+            blank_preference.validate(&["src/lib.rs".to_string()]),
+            Err(ExecutionProfileError::InvalidAdaptivePathPreference(preference))
+                if preference == " "
+        ));
+
+        let parent_preference = AdaptiveExecutionProfile {
+            path_preferences: vec!["../outside.rs".to_string()],
+            ..adaptive
+        };
+        assert!(matches!(
+            parent_preference.validate(&["src/lib.rs".to_string()]),
+            Err(ExecutionProfileError::InvalidAdaptivePathPreference(preference))
+                if preference == "../outside.rs"
+        ));
+    }
+
+    #[test]
+    fn workspace_execution_profile_surfaces_invalid_review_and_governance_profiles() {
+        let invalid_review = ReviewProfile {
+            triggers: Vec::new(),
+            reviewers: Vec::new(),
+            vote_rule: VoteRuleDefinition::default(),
+            adjudication: AdjudicationDefinition::default(),
+            scenarios: Vec::new(),
+        };
+        let review_error =
+            WorkspaceExecutionProfile { review: Some(invalid_review), ..valid_profile() }
+                .validate()
+                .unwrap_err();
+        assert!(matches!(review_error, ExecutionProfileError::InvalidReviewProfile(_)));
+
+        let invalid_governance = GovernanceProfile {
+            default_runtime: GovernanceRuntimeKind::Canon,
+            canon: None,
+            stages: vec![StageGovernancePolicy {
+                flow_name: "bug-fix".to_string(),
+                stage_id: "investigate".to_string(),
+                enabled: false,
+                required: false,
+                autopilot: false,
+                require_adaptive_companion: false,
+                runtime: None,
+                canon_mode: None,
+                system_context: None,
+                risk: None,
+                zone: None,
+                owner: None,
+            }],
+        };
+        let governance_error =
+            WorkspaceExecutionProfile { governance: Some(invalid_governance), ..valid_profile() }
+                .validate()
+                .unwrap_err();
+        assert!(matches!(governance_error, ExecutionProfileError::InvalidGovernanceProfile(_)));
+    }
+
+    #[test]
+    fn serde_defaults_cover_failure_mode_and_adaptive_limits() {
+        let attempt: ExecutionAttemptDefinition = toml::from_str(
+            r#"
+attempt_id = "attempt-defaults"
+
+[[changes]]
+path = "src/lib.rs"
+find = "old"
+replace = "new"
+"#,
+        )
+        .unwrap();
+        assert_eq!(attempt.failure_mode, ExecutionFailureMode::Replan);
+
+        let adaptive: AdaptiveExecutionProfile =
+            toml::from_str("path_preferences = [\"src/lib.rs\"]").unwrap();
+        assert_eq!(adaptive.max_selected_targets, 1);
+        assert_eq!(adaptive.max_generated_attempts, 4);
+    }
+}

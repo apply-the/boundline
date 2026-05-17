@@ -1,6 +1,8 @@
 use boundline::domain::configuration::{
-    AdvancedContextConfig, ModelRoute, RoutingConfig, RoutingOverrides, RuntimeKind, ValueSource,
+    AdvancedContextConfig, ModelRoute, RoutingConfig, RoutingOverrides, RuntimeKind,
+    SemanticAccelerationPolicy, SemanticAccelerationPolicyState, ValueSource,
     resolve_effective_advanced_context_config, resolve_effective_routing,
+    resolve_effective_semantic_acceleration_config,
 };
 use boundline::domain::context_intelligence::{
     RemoteTransmissionPolicyState, RetrievalBudgets, RetrievalMode,
@@ -153,4 +155,41 @@ fn advanced_context_config_rejects_unsupported_remote_combinations() {
         disabled_with_local_policy.validate().unwrap_err().to_string(),
         "invalid advanced-context policy: disabled retrieval requires blocked remote policy"
     );
+}
+
+#[test]
+fn effective_semantic_acceleration_prefers_nearest_config_scope() {
+    let workspace_policy =
+        SemanticAccelerationPolicy { policy: SemanticAccelerationPolicyState::Local };
+    let cluster_policy =
+        SemanticAccelerationPolicy { policy: SemanticAccelerationPolicyState::Disabled };
+
+    let resolved = resolve_effective_semantic_acceleration_config(
+        Some(&RoutingConfig {
+            semantic_acceleration: Some(workspace_policy.clone()),
+            ..RoutingConfig::default()
+        }),
+        Some(&RoutingConfig {
+            semantic_acceleration: Some(cluster_policy.clone()),
+            ..RoutingConfig::default()
+        }),
+        None,
+    );
+    assert_eq!(resolved.source, ValueSource::Workspace);
+    assert_eq!(resolved.policy, workspace_policy);
+
+    let resolved = resolve_effective_semantic_acceleration_config(
+        None,
+        Some(&RoutingConfig {
+            semantic_acceleration: Some(cluster_policy.clone()),
+            ..RoutingConfig::default()
+        }),
+        None,
+    );
+    assert_eq!(resolved.source, ValueSource::Cluster);
+    assert_eq!(resolved.policy, cluster_policy);
+
+    let resolved = resolve_effective_semantic_acceleration_config(None, None, None);
+    assert_eq!(resolved.source, ValueSource::BuiltIn);
+    assert_eq!(resolved.policy, SemanticAccelerationPolicy::default());
 }

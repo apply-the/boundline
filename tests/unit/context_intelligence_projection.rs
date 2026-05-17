@@ -1,11 +1,51 @@
+use std::ffi::OsString;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Mutex;
 
+use boundline::domain::configuration::{AdvancedContextConfig, SemanticAccelerationPolicyState};
 use boundline::domain::context_intelligence::{
-    ImpactFindingKind, RelationshipKind, RetrievalMode, RetrievalState,
+    HybridOutcome, ImpactFindingKind, RelationshipKind, RetrievalBudgets, RetrievalMode,
+    RetrievalState, SemanticPolicyState,
+};
+use boundline::domain::goal_plan::{ContextInput, ContextInputKind};
+use boundline::orchestrator::context_intelligence::{
+    AdvancedContextBuildState, build_advanced_context_projection,
 };
 use boundline::orchestrator::goal_planner::{PlanningContextSources, build_context_pack};
 use uuid::Uuid;
+
+const SEMANTIC_VECTOR_STATE_OVERRIDE_ENV: &str = "BOUNDLINE_SEMANTIC_VECTOR_STATE_OVERRIDE";
+const SEMANTIC_VECTOR_STATE_READY_VALUE: &str = "ready";
+
+static SEMANTIC_VECTOR_STATE_OVERRIDE_LOCK: Mutex<()> = Mutex::new(());
+
+struct EnvVarGuard {
+    name: &'static str,
+    previous: Option<OsString>,
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        if let Some(previous) = &self.previous {
+            unsafe {
+                std::env::set_var(self.name, previous);
+            }
+        } else {
+            unsafe {
+                std::env::remove_var(self.name);
+            }
+        }
+    }
+}
+
+fn set_env_var(name: &'static str, value: &str) -> EnvVarGuard {
+    let previous = std::env::var_os(name);
+    unsafe {
+        std::env::set_var(name, value);
+    }
+    EnvVarGuard { name, previous }
+}
 
 /// Creates a temporary workspace root for bounded context-intelligence tests.
 fn temp_workspace(prefix: &str) -> PathBuf {
@@ -133,4 +173,127 @@ fn build_context_pack_respects_disabled_advanced_context_policy() {
             .as_deref()
             .is_some_and(|reason| reason.contains("disabled by configuration"))
     );
+}
+
+#[test]
+fn build_context_pack_surfaces_local_semantic_acceleration_policy() {
+    let workspace = temp_workspace("boundline-context-intelligence-semantic-local");
+    fs::create_dir_all(workspace.join(".boundline")).unwrap();
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::write(
+        workspace.join("src/lib.rs"),
+        "pub fn add(left: i32, right: i32) -> i32 { left + right }\n",
+    )
+    .unwrap();
+    fs::write(
+        workspace.join(".boundline/config.toml"),
+        concat!(
+            "version = 1\n\n",
+            "[routing.advanced_context]\n",
+            "retrieval_mode = \"local\"\n",
+            "remote_policy = \"local_only\"\n\n",
+            "[routing.semantic_acceleration]\n",
+            "policy = \"local\"\n",
+        ),
+    )
+    .unwrap();
+
+    let context_pack = build_context_pack(
+        "Fix the add implementation",
+        &workspace,
+        &PlanningContextSources::default(),
+    );
+    let advanced_context = context_pack.advanced_context.expect("advanced context projection");
+
+    assert_eq!(advanced_context.retrieval_mode, RetrievalMode::Local);
+    assert_eq!(advanced_context.semantic_policy_state, SemanticPolicyState::Local);
+    assert_eq!(advanced_context.hybrid_outcome, HybridOutcome::Skipped);
+    assert!(advanced_context.terminal_reason.as_deref().is_some_and(|reason| {
+        reason.contains("semantic acceleration")
+            || reason.contains("semantic refresh")
+            || reason.contains("sqlite-vec")
+    }));
+}
+
+#[test]
+fn build_context_pack_records_semantic_selection_and_rejection_annotations() {
+    let _guard =
+        SEMANTIC_VECTOR_STATE_OVERRIDE_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _env_guard =
+        set_env_var(SEMANTIC_VECTOR_STATE_OVERRIDE_ENV, SEMANTIC_VECTOR_STATE_READY_VALUE);
+    let workspace = temp_workspace("boundline-context-intelligence-semantic-annotations");
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::write(
+        workspace.join("src/lib.rs"),
+        concat!("pub fn planner() -> bool {\n", "    true\n", "}\n",),
+    )
+    .unwrap();
+    fs::write(
+        workspace.join("src/semantic.rs"),
+        "pub fn reconcileConfigState() -> bool { true }\n",
+    )
+    .unwrap();
+    fs::write(
+        workspace.join("src/alternate.rs"),
+        "pub fn reconcilePlanningConfiguration() -> bool { true }\n",
+    )
+    .unwrap();
+    let advanced_context = build_advanced_context_projection(
+        "planner reconcile configuration state",
+        &workspace,
+        &[
+            ContextInput {
+                kind: ContextInputKind::WorkspaceFile,
+                reference: "src/lib.rs".to_string(),
+                rationale: "selected bounded implementation surface".to_string(),
+                source: "workspace_scan".to_string(),
+                primary: true,
+            },
+            ContextInput {
+                kind: ContextInputKind::WorkspaceFile,
+                reference: "src/semantic.rs".to_string(),
+                rationale: "related implementation surface".to_string(),
+                source: "workspace_scan".to_string(),
+                primary: false,
+            },
+            ContextInput {
+                kind: ContextInputKind::WorkspaceFile,
+                reference: "src/alternate.rs".to_string(),
+                rationale: "alternate related implementation surface".to_string(),
+                source: "workspace_scan".to_string(),
+                primary: false,
+            },
+        ],
+        &[],
+        AdvancedContextBuildState {
+            credibility: boundline::domain::goal_plan::ContextPackCredibility::Credible,
+            staleness_reason: None,
+            semantic_policy: SemanticAccelerationPolicyState::Local,
+        },
+        &AdvancedContextConfig {
+            budgets: RetrievalBudgets {
+                evidence_limit: 2,
+                expansion_limit: 4,
+                ..RetrievalBudgets::default()
+            },
+            ..AdvancedContextConfig::default()
+        },
+    );
+
+    assert_eq!(advanced_context.semantic_policy_state, SemanticPolicyState::Local);
+    assert_eq!(advanced_context.hybrid_outcome, HybridOutcome::Expanded);
+    assert_eq!(advanced_context.semantic_selected_count(), 1);
+    assert_eq!(advanced_context.semantic_rejected_count(), 1);
+    assert!(advanced_context.selected_evidence.iter().any(|candidate| {
+        candidate.match_origin.as_str() == "semantic_expand"
+            && candidate.semantic_score.is_some()
+            && candidate.selection_reason.contains("expanded the V1 candidate set")
+    }));
+    assert!(advanced_context.rejected_candidates.iter().any(|candidate| {
+        candidate.match_origin.as_str() == "semantic_expand"
+            && candidate.semantic_score.is_some()
+            && candidate
+                .selection_reason
+                .contains("bounded evidence limit kept the V1 set unchanged")
+    }));
 }

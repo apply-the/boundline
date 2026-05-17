@@ -6,7 +6,7 @@ Canon is downstream from Boundline in this roadmap: Boundline thinks, decides, o
 
 Evolve Boundline into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.58.0
+## Current Status: v0.59.0
 
 Boundline now has its core session-native orchestration baseline, bounded
 workflow follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -23,11 +23,23 @@ alignment now carried through the same primary workflow. The operator entry
 path is now stack-neutral for empty, non-Rust, and mixed repositories, with a
 clearer first-run CLI UX. That baseline now extends into Canon-promoted
 project-memory reuse, catalog-aware guidance packs, authority-zoned review,
-adaptive governance, and the S5 V1 advanced-context slice. The current
-`0.58.0` work adds workspace-local SQLite + FTS5 retrieval, structured fallback
-ordering, explicit selected-evidence provenance, and explainable relationship
-plus impact projection so local-first context expansion remains visible,
-bounded, and non-authoritative.
+adaptive governance, and the S5 advanced-context stack. The current `0.59.0`
+work adds the first local semantic acceleration slice on top of the shipped V1
+SQLite + FTS5 baseline, preserving semantic policy and capability state,
+hybrid outcome selection, Canon compatibility reasoning, and typed semantic
+trace records on the normal `plan`, `status`, and `inspect` surfaces.
+
+### Delivered in 0.59.0
+
+- Boundline now refreshes local semantic chunks on the shared retrieval index
+  and can expand or rerank the V1 candidate set when local semantic capability
+  is ready.
+- Session-native `plan`, `status`, and `inspect` now surface semantic policy,
+  capability, hybrid outcome, match origin, rejected candidates, and typed
+  semantic trace records through the normal advanced-context projection path.
+- Canon semantic compatibility is now explicit in the same projection, with
+  contract-line, provenance, and skip reasons preserved for compatible and
+  rejected Canon artifacts.
 
 ### Delivered in 0.58.0
 
@@ -663,50 +675,42 @@ The next forward-looking roadmap drafts now live in the repo-local `roadmap/`
 folder. The S1 foundation is already being tracked in active
 [`052-runtime-intelligence-substrate`](specs/052-runtime-intelligence-substrate/spec.md);
 the copied drafts below extend that baseline rather than replacing the current
-delivery line.
+delivery line. The retired S5 and S5.v2 roadmap drafts are now covered by the
+active [`058-advanced-context-intelligence`](specs/058-advanced-context-intelligence/spec.md)
+and [`059-semantic-acceleration`](specs/059-semantic-acceleration/spec.md)
+feature lines instead of separate forward-looking roadmap files.
 
 - [S2.1: Guidance And Guardian Capabilities](roadmap/S2-1%20-%20guidance-and-guardian-capabilities.md)
   extends the Expert Pack baseline from S2 into executable engineering
   principles (Guidance) and automated verification rules (Guardians) across
   architecture, design, and testing pillars.
-- [S5: Advanced Context Intelligence](roadmap/S5%20-%20advanced-context-intelligence.md)
-  and
-  [S5.addendum: Advanced Context Intelligence Technology Evaluation](roadmap/S5.addendum%20-%20advanced-context-intelligence-technology-evaluation.md)
-  are now being tracked in active
-  [`058-advanced-context-intelligence`](specs/058-advanced-context-intelligence/spec.md)
-  as the V1 baseline: `SQLite + FTS5 + structured indexes`. They build on
-  [`033-context-assembly-foundation`](specs/033-context-assembly-foundation/spec.md),
-  [`040-context-selection-hardening`](specs/040-context-selection-hardening/spec.md),
-  and [`052-runtime-intelligence-substrate`](specs/052-runtime-intelligence-substrate/spec.md)
-  with optional semantic retrieval, graph projection, and local-first index
-  technology evaluation.
-- [S5.v2: Advanced Context Intelligence Semantic Acceleration](roadmap/S5.v2%20-%20advanced-context-intelligence-semantic-acceleration.md)
-  extends the active S5 V1 slice with optional `sqlite-vec`-backed local
-  semantic acceleration on the same workspace-local SQLite index. It is
-  sequenced after S5 V1 and before S6 and S7 so later reasoning and
-  assistant-affordance layers build on stable, explainable semantic retrieval
-  instead of provider-specific heuristics.
 - [S6: Advanced Multi-Agent Reasoning Profiles](roadmap/S6%20-%20advanced-multi-agent-reasoning-profiles-spec.md)
   is intentionally future-facing rather than already covered by the active
   roadmap; it builds on the review-council baseline in
   [`007-multi-agent-review`](specs/007-multi-agent-review/spec.md) after the
   delivered `0.56.0` authority-zoned council baseline, the delivered S4
-  adaptive governance layer, and the planned S5.v2 semantic-acceleration layer
-  make councils operationally and contextually credible.
+  adaptive governance layer, and the active S5 advanced-context plus semantic-
+  acceleration lines make councils operationally and contextually credible.
 - [S7: Assistant Delight And Cognitive Affordance Layer](roadmap/S7%20-%20assistant-delight-and-cognitive-affordance-layer.md)
   complements assistant/package and operator-surface work in
   [`048-assistant-plugin-packages`](specs/048-assistant-plugin-packages/spec.md),
   [`049-project-scale-delivery-ux`](specs/049-project-scale-delivery-ux/spec.md),
   and [`051-delivery-control-consumer`](specs/051-delivery-control-consumer/spec.md),
-  but it is not duplicate scope. It should follow S5.v2 and S6 on the roadmap
-  so the delight layer can surface both semantic-retrieval and reasoning-profile
-  outputs on stable runtime surfaces.
+  but it is not duplicate scope. It should follow the active S5 semantic-
+  retrieval line and S6 on the roadmap so the delight layer can surface both
+  semantic-retrieval and reasoning-profile outputs on stable runtime surfaces.
+- [S8: Interactive Delivery Dashboard (iocraft)](roadmap/S8%20-%20interactive-delivery-dashboard-iocraft.md)
+  introduces a dedicated `boundline-dashboard` crate using the `iocraft`
+  framework to provide a real-time, high-density visualization of the Pilot Loop,
+  session state, and governance posture. It moves beyond linear CLI output to
+  provide a modern, React-like interactive experience for complex delivery
+  monitoring.
 
 Coverage check: the delivered content already recorded in this roadmap is
-covered by the active spec set, not by these future drafts. The copied S2.1-S7
-documents mostly extend the current line; S5 base is now being pulled into the
-active `058-advanced-context-intelligence` slice, while S5.v2, S6, and S7
-remain forward-looking extensions rather than duplicate roadmap scope.
+covered by the active spec set, not by these future drafts. The copied S2.1,
+S6, and S7 documents mostly extend the current line; the S5 base and S5.v2
+semantic-acceleration work now live in the active `058-advanced-context-intelligence`
+and `059-semantic-acceleration` slices rather than duplicate roadmap files.
 
 ### Sequencing rule
 

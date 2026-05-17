@@ -17,6 +17,33 @@ recorded workspace version.
 
 ## [Unreleased]
 
+Highlights:
+
+- No unreleased entries yet.
+
+## [0.59.0] - 2026-05-17
+
+Delivered specs:
+
+- `059` - Semantic Acceleration
+
+Highlights:
+
+- Added the first bounded S5.v2 semantic-acceleration runtime slice on top of
+  the shipped advanced-context baseline: Boundline now refreshes semantic
+  chunks on the shared retrieval index and can expand or rerank the V1
+  candidate set when local semantic capability is ready.
+- Surfaced semantic policy, capability, hybrid outcome, match origin, and
+  rejected semantic candidates through the normal `plan`, `status`, trace, and
+  `inspect` projection path instead of a separate report.
+- Added typed semantic trace records plus explicit Canon compatibility and skip
+  reasons, while preserving Canon contract line and provenance metadata on the
+  normal projection path.
+- Refreshed focused coverage and validation evidence for the semantic runtime,
+  including owner-local LCOV attribution for the retrieval, domain, and CLI
+  output files.
+- Bumped workspace version to `0.59.0`.
+
 ## [0.58.0] - 2026-05-16
 
 Delivered specs:

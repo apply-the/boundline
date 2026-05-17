@@ -18,7 +18,9 @@ use crate::domain::configuration::{
     ModelRoute, RoutingConfig, RoutingOverrides, resolve_effective_routing,
     resolve_effective_runtime_capabilities, resolve_effective_slot_effort_policies,
 };
-use crate::domain::context_intelligence::AdvancedContextProjection;
+use crate::domain::context_intelligence::{
+    AdvancedContextProjection, RetrievedEvidenceCandidate, SemanticTraceRecord,
+};
 use crate::domain::follow_through::FollowThroughProjection;
 use crate::domain::goal_plan::GoalPlanFlowState;
 use crate::domain::guidance::GuidanceGuardianProjection;
@@ -286,19 +288,33 @@ fn push_advanced_context_lines(
         "retrieval_index_state: {}",
         advanced_context.retrieval_index_state.as_str()
     ));
+    lines.push(format!(
+        "semantic_policy_state: {}",
+        advanced_context.semantic_policy_state.as_str()
+    ));
+    lines.push(format!(
+        "semantic_capability_state: {}",
+        advanced_context.semantic_capability_state.as_str()
+    ));
+    lines.push(format!("hybrid_outcome: {}", advanced_context.hybrid_outcome.as_str()));
     if let Some(terminal_reason) = advanced_context.terminal_reason.as_deref() {
         lines.push(format!("retrieval_terminal_reason: {terminal_reason}"));
     }
     lines.push(format!("selected_evidence_count: {}", advanced_context.selected_evidence_count()));
+    lines.push(format!("semantic_selected_count: {}", advanced_context.semantic_selected_count()));
+    lines.push(format!("semantic_rejected_count: {}", advanced_context.semantic_rejected_count()));
     lines.push(format!("impact_finding_count: {}", advanced_context.impact_finding_count()));
 
     for candidate in &advanced_context.selected_evidence {
-        lines.push(format!(
-            "selected_evidence: {} [{}] {}",
-            candidate.source_ref,
-            candidate.source_kind.as_str(),
-            candidate.selection_reason
-        ));
+        lines.push(format_candidate_line("selected_evidence", candidate));
+    }
+
+    for candidate in &advanced_context.rejected_candidates {
+        lines.push(format_candidate_line("rejected_candidate", candidate));
+    }
+
+    for record in &advanced_context.semantic_trace_records {
+        lines.push(format_semantic_trace_line(record));
     }
 
     for relationship in &advanced_context.relationships {
@@ -318,6 +334,72 @@ fn push_advanced_context_lines(
             finding.recommended_follow_up
         ));
     }
+}
+
+fn format_candidate_line(prefix: &str, candidate: &RetrievedEvidenceCandidate) -> String {
+    let mut line = format!(
+        "{prefix}: {} [{}] origin={}{} {}",
+        candidate.source_ref,
+        candidate.source_kind.as_str(),
+        candidate.match_origin.as_str(),
+        candidate_score_suffix(candidate),
+        candidate.selection_reason
+    );
+    if let (Some(contract_line), Some(provenance_ref)) = (
+        candidate.canon_semantic_contract_line.as_deref(),
+        candidate.canon_semantic_provenance_ref.as_deref(),
+    ) {
+        line.push_str(&format!(
+            " canon_contract={} canon_provenance={}",
+            contract_line, provenance_ref
+        ));
+    }
+    if candidate.compatibility_state.as_str() != "compatible" {
+        line.push_str(&format!(" compatibility={}", candidate.compatibility_state.as_str()));
+    }
+    line
+}
+
+fn format_semantic_trace_line(record: &SemanticTraceRecord) -> String {
+    let mut line = format!("semantic_trace: {}", record.event_kind.as_str());
+    if let Some(candidate_ref) = record.candidate_ref.as_deref() {
+        line.push_str(&format!(" ref={candidate_ref}"));
+    }
+    if let Some(match_origin) = record.match_origin {
+        line.push_str(&format!(" origin={}", match_origin.as_str()));
+    }
+    if let Some(compatibility_state) = record.compatibility_state {
+        line.push_str(&format!(" compatibility={}", compatibility_state.as_str()));
+    }
+    if let Some(semantic_score) = record.semantic_score {
+        line.push_str(&format!(" semantic_score={:.3}", semantic_score.as_raw()));
+    }
+    if let Some(artifact_class) = record.canon_artifact_class.as_deref() {
+        line.push_str(&format!(" canon_artifact_class={artifact_class}"));
+    }
+    if let Some(contract_line) = record.canon_semantic_contract_line.as_deref() {
+        line.push_str(&format!(" canon_contract={contract_line}"));
+    }
+    if let Some(boundary) = record.canon_semantic_provenance_boundary {
+        line.push_str(&format!(" canon_boundary={}", boundary.as_str()));
+    }
+    if let Some(provenance_ref) = record.canon_semantic_provenance_ref.as_deref() {
+        line.push_str(&format!(" canon_provenance={provenance_ref}"));
+    }
+    line.push(' ');
+    line.push_str(&record.reason);
+    line
+}
+
+fn candidate_score_suffix(candidate: &RetrievedEvidenceCandidate) -> String {
+    let mut suffix = String::new();
+    if let Some(lexical_score) = candidate.lexical_score {
+        suffix.push_str(&format!(" lexical_score={:.3}", lexical_score.as_raw()));
+    }
+    if let Some(semantic_score) = candidate.semantic_score {
+        suffix.push_str(&format!(" semantic_score={:.3}", semantic_score.as_raw()));
+    }
+    suffix
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -700,6 +782,18 @@ pub fn render_run_trace(
                 event.payload.get("adaptive_provenance_lines").and_then(Value::as_array)
             {
                 for line in adaptive_provenance_lines
+                    .iter()
+                    .filter_map(|item| item.as_str().map(str::to_string))
+                {
+                    if !context_provenance.contains(&line) {
+                        context_provenance.push(line);
+                    }
+                }
+            }
+            if let Some(semantic_provenance_lines) =
+                event.payload.get("semantic_provenance_lines").and_then(Value::as_array)
+            {
+                for line in semantic_provenance_lines
                     .iter()
                     .filter_map(|item| item.as_str().map(str::to_string))
                 {
@@ -2785,9 +2879,9 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::{
-        command_name, governance_event_line, render_diagnostics, render_host_command_json,
-        render_run_execution_condition, render_run_trace, render_session_status,
-        render_trace_summary, review_event_line, reviewer_event_line,
+        command_name, governance_event_line, push_advanced_context_lines, render_diagnostics,
+        render_host_command_json, render_run_execution_condition, render_run_trace,
+        render_session_status, render_trace_summary, review_event_line, reviewer_event_line,
         session_execution_condition_parts, trace_execution_condition_parts,
     };
     use crate::cli::CommandExitStatus;
@@ -2799,6 +2893,13 @@ mod tests {
         AssistantSubcommand, CheckpointSubcommand, ClusterSubcommand, ConfigSubcommand,
         DeveloperCommand,
     };
+    use crate::domain::context_intelligence::{
+        AdvancedContextProjection, AuthorityRank, CandidateSelectionState, HybridOutcome,
+        RemoteTransmissionPolicyState, RetrievalCompatibilityState, RetrievalIndexState,
+        RetrievalMatchOrigin, RetrievalMode, RetrievalScore, RetrievalSourceKind,
+        RetrievalStalenessState, RetrievalState, RetrievedEvidenceCandidate,
+        SemanticCapabilityState, SemanticPolicyState, SemanticTraceEventKind, SemanticTraceRecord,
+    };
     use crate::domain::governance::CanonMode;
     use crate::domain::limits::{RunLimits, TerminalCondition};
     use crate::domain::routing_decision::RoutingDecisionProjection;
@@ -2809,6 +2910,90 @@ mod tests {
     use crate::domain::trace::{
         ExecutionTrace, TraceEventType, TraceRecoveryEvent, TraceStepSummary, TraceSummaryView,
     };
+
+    #[test]
+    fn push_advanced_context_lines_surfaces_semantic_summary() {
+        let advanced_context = AdvancedContextProjection {
+            query_id: "query-output-semantic".to_string(),
+            retrieval_mode: RetrievalMode::Local,
+            retrieval_state: RetrievalState::Selected,
+            retrieval_index_state: RetrievalIndexState::Ready,
+            semantic_policy_state: SemanticPolicyState::Local,
+            semantic_capability_state: SemanticCapabilityState::Ready,
+            hybrid_outcome: HybridOutcome::Expanded,
+            budgets: Default::default(),
+            remote_policy_state: RemoteTransmissionPolicyState::LocalOnly,
+            used_remote: false,
+            terminal_reason: Some(
+                "semantic expansion selected one additional bounded evidence candidate".to_string(),
+            ),
+            selected_evidence: vec![RetrievedEvidenceCandidate {
+                candidate_id: "candidate-output-semantic".to_string(),
+                source_kind: RetrievalSourceKind::WorkspaceFile,
+                source_ref: "src/lib.rs".to_string(),
+                authority_rank: AuthorityRank::Structured,
+                match_origin: RetrievalMatchOrigin::Fts,
+                selection_state: CandidateSelectionState::Selected,
+                selection_reason: "goal keyword matched the implementation surface".to_string(),
+                provenance_summary: "workspace file selected through local retrieval".to_string(),
+                compatibility_state: RetrievalCompatibilityState::Compatible,
+                staleness_state: RetrievalStalenessState::Fresh,
+                lexical_score: None,
+                semantic_score: None,
+                canon_semantic_contract_line: None,
+                canon_semantic_provenance_ref: None,
+            }],
+            rejected_candidates: vec![RetrievedEvidenceCandidate {
+                candidate_id: "candidate-output-rejected".to_string(),
+                source_kind: RetrievalSourceKind::WorkspaceFile,
+                source_ref: "src/semantic.rs".to_string(),
+                authority_rank: AuthorityRank::Structured,
+                match_origin: RetrievalMatchOrigin::SemanticExpand,
+                selection_state: CandidateSelectionState::Rejected,
+                selection_reason: "semantic similarity found the candidate but the bounded evidence limit kept the V1 set unchanged".to_string(),
+                provenance_summary: "workspace file evaluated through semantic expansion".to_string(),
+                compatibility_state: RetrievalCompatibilityState::Compatible,
+                staleness_state: RetrievalStalenessState::Fresh,
+                lexical_score: None,
+                semantic_score: RetrievalScore::from_raw(0.812),
+                canon_semantic_contract_line: None,
+                canon_semantic_provenance_ref: None,
+            }],
+            semantic_trace_records: vec![SemanticTraceRecord {
+                record_id: "trace-output-semantic".to_string(),
+                event_kind: SemanticTraceEventKind::CandidateRejected,
+                candidate_ref: Some("src/semantic.rs".to_string()),
+                match_origin: Some(RetrievalMatchOrigin::SemanticExpand),
+                compatibility_state: Some(RetrievalCompatibilityState::Compatible),
+                semantic_score: RetrievalScore::from_raw(0.812),
+                canon_artifact_class: None,
+                canon_semantic_contract_line: None,
+                canon_semantic_provenance_boundary: None,
+                canon_semantic_provenance_ref: None,
+                reason:
+                    "semantic similarity found the candidate but the bounded evidence limit kept the V1 set unchanged"
+                        .to_string(),
+            }],
+            relationships: Vec::new(),
+            impact_findings: Vec::new(),
+        };
+        let mut lines = Vec::new();
+
+        push_advanced_context_lines(&mut lines, Some(&advanced_context));
+
+        assert!(lines.iter().any(|line| line == "semantic_policy_state: local"));
+        assert!(lines.iter().any(|line| line == "semantic_capability_state: ready"));
+        assert!(lines.iter().any(|line| line == "hybrid_outcome: expanded"));
+        assert!(lines.iter().any(|line| {
+            line == "selected_evidence: src/lib.rs [workspace_file] origin=fts goal keyword matched the implementation surface"
+        }));
+        assert!(lines.iter().any(|line| {
+            line == "rejected_candidate: src/semantic.rs [workspace_file] origin=semantic_expand semantic_score=0.812 semantic similarity found the candidate but the bounded evidence limit kept the V1 set unchanged"
+        }));
+        assert!(lines.iter().any(|line| {
+            line == "semantic_trace: candidate_rejected ref=src/semantic.rs origin=semantic_expand compatibility=compatible semantic_score=0.812 semantic similarity found the candidate but the bounded evidence limit kept the V1 set unchanged"
+        }));
+    }
 
     #[test]
     fn host_command_json_covers_exit_status_labels_and_optional_payloads() {
@@ -2857,6 +3042,71 @@ mod tests {
         assert_eq!(
             parsed["trace_summary"]["trace_ref"],
             "/tmp/workspace/.boundline/traces/task.json"
+        );
+    }
+
+    #[test]
+    fn output_covers_canon_semantic_evidence_metadata_and_empty_section_paths() {
+        use crate::domain::context_intelligence::RetrievalBudgets;
+        use crate::domain::governance::CanonSemanticProvenanceBoundary;
+
+        // Evidence candidate with both canon semantic metadata fields set covers lines 348-355.
+        let advanced_context = AdvancedContextProjection {
+            query_id: "query-output-canon-meta".to_string(),
+            retrieval_mode: RetrievalMode::Local,
+            retrieval_state: RetrievalState::Selected,
+            retrieval_index_state: RetrievalIndexState::Ready,
+            semantic_policy_state: SemanticPolicyState::Local,
+            semantic_capability_state: SemanticCapabilityState::Ready,
+            hybrid_outcome: HybridOutcome::Expanded,
+            budgets: RetrievalBudgets::default(),
+            remote_policy_state: RemoteTransmissionPolicyState::LocalOnly,
+            used_remote: false,
+            terminal_reason: Some("expanded".to_string()),
+            selected_evidence: vec![RetrievedEvidenceCandidate {
+                candidate_id: "candidate-canon-meta".to_string(),
+                source_kind: RetrievalSourceKind::WorkspaceFile,
+                source_ref: "src/lib.rs".to_string(),
+                authority_rank: AuthorityRank::Canon,
+                match_origin: RetrievalMatchOrigin::SemanticExpand,
+                selection_state: CandidateSelectionState::Selected,
+                selection_reason: "canon semantic match".to_string(),
+                provenance_summary: "canon artifact matched semantic query".to_string(),
+                compatibility_state: RetrievalCompatibilityState::Compatible,
+                staleness_state: RetrievalStalenessState::Fresh,
+                lexical_score: None,
+                semantic_score: RetrievalScore::from_raw(0.91),
+                canon_semantic_contract_line: Some("v1".to_string()),
+                canon_semantic_provenance_ref: Some(".canon/arch.md".to_string()),
+            }],
+            rejected_candidates: Vec::new(),
+            semantic_trace_records: vec![SemanticTraceRecord {
+                record_id: "trace-output-canon".to_string(),
+                event_kind: SemanticTraceEventKind::CandidateExpanded,
+                candidate_ref: Some("src/lib.rs".to_string()),
+                match_origin: Some(RetrievalMatchOrigin::SemanticExpand),
+                compatibility_state: Some(RetrievalCompatibilityState::Compatible),
+                semantic_score: RetrievalScore::from_raw(0.91),
+                canon_artifact_class: Some("stable".to_string()),
+                canon_semantic_contract_line: Some("v1".to_string()),
+                canon_semantic_provenance_boundary: Some(
+                    CanonSemanticProvenanceBoundary::ManagedBlock,
+                ),
+                canon_semantic_provenance_ref: Some(".canon/arch.md".to_string()),
+                reason: "canon evidence expanded the bounded set".to_string(),
+            }],
+            relationships: Vec::new(),
+            impact_findings: Vec::new(),
+        };
+        let mut lines = Vec::new();
+        push_advanced_context_lines(&mut lines, Some(&advanced_context));
+        assert!(
+            lines.iter().any(|line| line.contains("canon_contract=v1")),
+            "missing canon_contract in: {lines:?}"
+        );
+        assert!(
+            lines.iter().any(|line| line.contains("canon_provenance=.canon/arch.md")),
+            "missing canon_provenance in: {lines:?}"
         );
     }
 

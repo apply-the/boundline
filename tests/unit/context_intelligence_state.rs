@@ -1,10 +1,11 @@
 use boundline::domain::context_intelligence::{
     AdvancedContextProjection, AuthorityRank, CandidateSelectionState, ContextIntelligenceError,
-    ImpactAnalysisFinding, ImpactFindingKind, ImpactFindingSeverity, ImpactFindingStatus,
-    RelationshipCredibilityState, RelationshipKind, RelationshipProjection,
+    HybridOutcome, ImpactAnalysisFinding, ImpactFindingKind, ImpactFindingSeverity,
+    ImpactFindingStatus, RelationshipCredibilityState, RelationshipKind, RelationshipProjection,
     RemoteTransmissionPolicyState, RetrievalBudgets, RetrievalCompatibilityState,
-    RetrievalIndexState, RetrievalMode, RetrievalSourceKind, RetrievalStalenessState,
-    RetrievalState, RetrievedEvidenceCandidate,
+    RetrievalIndexState, RetrievalMatchOrigin, RetrievalMode, RetrievalSourceKind,
+    RetrievalStalenessState, RetrievalState, RetrievedEvidenceCandidate, SemanticCapabilityState,
+    SemanticChunkState, SemanticPolicyState, VectorExtensionState,
 };
 
 /// Builds one selected evidence candidate for projection validation tests.
@@ -14,11 +15,16 @@ fn selected_candidate() -> RetrievedEvidenceCandidate {
         source_kind: RetrievalSourceKind::WorkspaceFile,
         source_ref: "src/lib.rs".to_string(),
         authority_rank: AuthorityRank::Structured,
+        match_origin: RetrievalMatchOrigin::Fts,
         selection_state: CandidateSelectionState::Selected,
         selection_reason: "goal keyword matched the implementation surface".to_string(),
         provenance_summary: "workspace file selected through local retrieval".to_string(),
         compatibility_state: RetrievalCompatibilityState::Compatible,
         staleness_state: RetrievalStalenessState::Fresh,
+        lexical_score: None,
+        semantic_score: None,
+        canon_semantic_contract_line: None,
+        canon_semantic_provenance_ref: None,
     }
 }
 
@@ -54,12 +60,16 @@ fn advanced_context_projection_accepts_selected_local_evidence() {
         retrieval_mode: RetrievalMode::Local,
         retrieval_state: RetrievalState::Selected,
         retrieval_index_state: RetrievalIndexState::Ready,
+        semantic_policy_state: SemanticPolicyState::Disabled,
+        semantic_capability_state: SemanticCapabilityState::Unsupported,
+        hybrid_outcome: HybridOutcome::BaselineOnly,
         budgets: Default::default(),
         remote_policy_state: RemoteTransmissionPolicyState::LocalOnly,
         used_remote: false,
         terminal_reason: None,
         selected_evidence: vec![selected_candidate()],
         rejected_candidates: Vec::new(),
+        semantic_trace_records: Vec::new(),
         relationships: vec![projected_relationship()],
         impact_findings: vec![projected_finding()],
     };
@@ -77,12 +87,16 @@ fn advanced_context_projection_requires_terminal_reason_for_non_selected_state()
         retrieval_mode: RetrievalMode::Disabled,
         retrieval_state: RetrievalState::Degraded,
         retrieval_index_state: RetrievalIndexState::Insufficient,
+        semantic_policy_state: SemanticPolicyState::Disabled,
+        semantic_capability_state: SemanticCapabilityState::Unsupported,
+        hybrid_outcome: HybridOutcome::BaselineOnly,
         budgets: Default::default(),
         remote_policy_state: RemoteTransmissionPolicyState::Blocked,
         used_remote: false,
         terminal_reason: None,
         selected_evidence: Vec::new(),
         rejected_candidates: Vec::new(),
+        semantic_trace_records: Vec::new(),
         relationships: Vec::new(),
         impact_findings: Vec::new(),
     };
@@ -120,6 +134,57 @@ fn context_intelligence_variants_expose_stable_labels() {
         (RetrievalIndexState::Stale, "stale"),
         (RetrievalIndexState::Building, "building"),
         (RetrievalIndexState::Insufficient, "insufficient"),
+    ] {
+        assert_eq!(state.as_str(), label);
+    }
+
+    for (state, label) in
+        [(SemanticPolicyState::Disabled, "disabled"), (SemanticPolicyState::Local, "local")]
+    {
+        assert_eq!(state.as_str(), label);
+    }
+
+    for (state, label) in [
+        (SemanticCapabilityState::Ready, "ready"),
+        (SemanticCapabilityState::Unavailable, "unavailable"),
+        (SemanticCapabilityState::Unsupported, "unsupported"),
+        (SemanticCapabilityState::Degraded, "degraded"),
+    ] {
+        assert_eq!(state.as_str(), label);
+    }
+
+    for (outcome, label) in [
+        (HybridOutcome::BaselineOnly, "baseline_only"),
+        (HybridOutcome::Expanded, "expanded"),
+        (HybridOutcome::Reranked, "reranked"),
+        (HybridOutcome::Skipped, "skipped"),
+        (HybridOutcome::Fallback, "fallback"),
+    ] {
+        assert_eq!(outcome.as_str(), label);
+    }
+
+    for (state, label) in [
+        (SemanticChunkState::Pending, "pending"),
+        (SemanticChunkState::Ready, "ready"),
+        (SemanticChunkState::Stale, "stale"),
+        (SemanticChunkState::Blocked, "blocked"),
+    ] {
+        assert_eq!(state.as_str(), label);
+    }
+
+    for (origin, label) in [
+        (RetrievalMatchOrigin::Fts, "fts"),
+        (RetrievalMatchOrigin::SemanticExpand, "semantic_expand"),
+        (RetrievalMatchOrigin::SemanticRerank, "semantic_rerank"),
+        (RetrievalMatchOrigin::StructuredFallback, "structured_fallback"),
+    ] {
+        assert_eq!(origin.as_str(), label);
+    }
+    for (state, label) in [
+        (VectorExtensionState::Ready, "ready"),
+        (VectorExtensionState::Missing, "missing"),
+        (VectorExtensionState::Unsupported, "unsupported"),
+        (VectorExtensionState::Stale, "stale"),
     ] {
         assert_eq!(state.as_str(), label);
     }
@@ -224,6 +289,33 @@ fn context_intelligence_variants_expose_stable_labels() {
     ] {
         assert_eq!(severity.as_str(), label);
     }
+}
+
+#[test]
+fn retrieved_candidate_requires_semantic_score_for_semantic_match_origins() {
+    let mut candidate = selected_candidate();
+    candidate.match_origin = RetrievalMatchOrigin::SemanticExpand;
+
+    assert_eq!(
+        candidate.validate().unwrap_err(),
+        ContextIntelligenceError::MissingSemanticScore {
+            candidate_id: "candidate-1".to_string(),
+            match_origin: RetrievalMatchOrigin::SemanticExpand,
+        }
+    );
+}
+
+#[test]
+fn retrieved_candidate_rejects_partial_canon_semantic_metadata() {
+    let mut candidate = selected_candidate();
+    candidate.canon_semantic_contract_line = Some("v1".to_string());
+
+    assert_eq!(
+        candidate.validate().unwrap_err(),
+        ContextIntelligenceError::IncompleteCanonSemanticMetadata {
+            candidate_id: "candidate-1".to_string(),
+        }
+    );
 }
 
 #[test]
@@ -341,12 +433,16 @@ fn advanced_context_projection_rejects_invalid_runtime_state() {
         retrieval_mode: RetrievalMode::Local,
         retrieval_state: RetrievalState::Selected,
         retrieval_index_state: RetrievalIndexState::Ready,
+        semantic_policy_state: SemanticPolicyState::Disabled,
+        semantic_capability_state: SemanticCapabilityState::Unsupported,
+        hybrid_outcome: HybridOutcome::BaselineOnly,
         budgets: Default::default(),
         remote_policy_state: RemoteTransmissionPolicyState::LocalOnly,
         used_remote: false,
         terminal_reason: None,
         selected_evidence: vec![selected_candidate()],
         rejected_candidates: Vec::new(),
+        semantic_trace_records: Vec::new(),
         relationships: vec![projected_relationship()],
         impact_findings: vec![projected_finding()],
     };
@@ -372,6 +468,26 @@ fn advanced_context_projection_rejects_invalid_runtime_state() {
     assert_eq!(
         blocked_remote_usage.validate().unwrap_err(),
         ContextIntelligenceError::BlockedRemoteUsage
+    );
+
+    let mut disabled_policy_with_expansion = projection.clone();
+    disabled_policy_with_expansion.hybrid_outcome = HybridOutcome::Expanded;
+    assert_eq!(
+        disabled_policy_with_expansion.validate().unwrap_err(),
+        ContextIntelligenceError::InvalidSemanticHybridOutcome {
+            policy_state: SemanticPolicyState::Disabled,
+            hybrid_outcome: HybridOutcome::Expanded,
+        }
+    );
+
+    let mut missing_semantic_terminal_reason = projection.clone();
+    missing_semantic_terminal_reason.hybrid_outcome = HybridOutcome::Skipped;
+    missing_semantic_terminal_reason.selected_evidence.clear();
+    assert_eq!(
+        missing_semantic_terminal_reason.validate().unwrap_err(),
+        ContextIntelligenceError::MissingSemanticTerminalReason {
+            hybrid_outcome: HybridOutcome::Skipped,
+        }
     );
 
     let mut invalid_nested_candidate = projection;

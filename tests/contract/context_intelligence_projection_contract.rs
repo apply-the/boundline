@@ -54,7 +54,13 @@ fn advanced_context_projection_contract_surfaces_local_projection_lines() {
 
     for output in [plan.terminal_output.as_str(), status.terminal_output.as_str()] {
         assert!(output.contains("retrieval_mode: local"), "{output}");
+        assert!(output.contains("semantic_policy_state: disabled"), "{output}");
+        assert!(output.contains("semantic_capability_state: unsupported"), "{output}");
+        assert!(output.contains("hybrid_outcome: baseline_only"), "{output}");
         assert!(output.contains("selected_evidence_count:"), "{output}");
+        assert!(output.contains("semantic_selected_count: 0"), "{output}");
+        assert!(output.contains("semantic_rejected_count: 0"), "{output}");
+        assert!(output.contains("origin=fts"), "{output}");
         assert!(output.contains("relationship: src/lib.rs [requires_evidence]"), "{output}");
         assert!(output.contains("impact_finding: tests/lib.rs [missing_test]"), "{output}");
     }

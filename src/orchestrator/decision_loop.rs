@@ -164,6 +164,10 @@ where
                     .context_pack
                     .as_ref()
                     .and_then(|pack| pack.staleness_reason.clone()),
+                "advanced_context": plan
+                    .context_pack
+                    .as_ref()
+                    .and_then(|pack| pack.advanced_context.clone()),
                 "routing_projection": workspace_routing_projection(Path::new(workspace_ref)),
                 "canon_memory_summary": plan
                     .compacted_canon_memory
@@ -1202,6 +1206,7 @@ mod tests {
             evidence_summary: None,
             authority_provenance_lines: Vec::new(),
             adaptive_provenance_lines: Vec::new(),
+            semantic_provenance_lines: Vec::new(),
         };
         assert_eq!(
             select_action_selector(
@@ -1333,6 +1338,7 @@ mod tests {
             evidence_summary: None,
             authority_provenance_lines: Vec::new(),
             adaptive_provenance_lines: Vec::new(),
+            semantic_provenance_lines: Vec::new(),
         });
         let loop_runner = crate::orchestrator::decision_loop::DecisionLoop::new(
             AgentRegistry::new(),
@@ -1379,6 +1385,7 @@ mod tests {
             recommended_next_action: None,
             authority_provenance_lines: Vec::new(),
             adaptive_provenance_lines: Vec::new(),
+            semantic_provenance_lines: Vec::new(),
             evidence_summary: Some(crate::domain::governance::CanonEvidenceInspectSummary {
                 execution_posture: Some("paused".to_string()),
                 carried_forward_items: Vec::new(),

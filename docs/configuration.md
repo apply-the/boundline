@@ -63,7 +63,7 @@ ranking, explicit adaptive exhaustion, or negotiation-state overrides.
 - default `boundline plan` now creates one evidence-driven proposal and `boundline plan --confirm` confirms it; planning lifecycle state is session-owned rather than config-owned
 - bounded `bug-fix` and `change` completion now requires both material change evidence and passed validation on the native and governed session path
 - `boundline config` manages runtime/model routing defaults, runtime capability profiles, slot effort policy, and domain-template settings for planning, implementation, verification, review, and other bounded slots
-- `boundline config show` now also surfaces the effective advanced-context retrieval policy used by the S5 V1 local SQLite + FTS5 retrieval baseline
+- `boundline config show` now also surfaces the effective advanced-context retrieval policy used by the S5 V1 local SQLite + FTS5 retrieval baseline plus the dedicated `semantic_acceleration` opt-in for S5.v2 local semantic expansion
 - `boundline cluster` registers bounded multi-workspace membership and aggregated inspection
 - negotiated delivery modeling stays session-owned and trace-projected; there is no new negotiation-specific key in `config.toml` or `.boundline/execution.json`
 - context-pack assembly and credibility projection stay session-owned and trace-projected; there is no new context-specific key in `config.toml` or `.boundline/execution.json`
@@ -144,6 +144,29 @@ evidence_limit = 6
 	rejected during config validation rather than silently downgraded.
 - `boundline config show --scope effective` renders the resolved advanced-
 	context policy alongside route, capability, and effort precedence.
+
+## Semantic Acceleration Policy
+
+Semantic acceleration stays additive to the V1 advanced-context baseline. The
+new policy does not replace `advanced_context` and does not reinterpret the V1
+retrieval mode. Instead, it records a separate opt-in that the runtime can use
+to attempt local semantic expansion or reranking while still falling back to
+the V1 path when needed.
+
+```toml
+[routing.semantic_acceleration]
+policy = "disabled"
+```
+
+- `policy = "disabled"` is the safe built-in default when no explicit opt-in
+	exists.
+- `policy = "local"` enables the local semantic-acceleration path for the
+	resolved scope without changing the V1 `advanced_context` baseline.
+- `boundline config set-semantic-acceleration --scope workspace --policy local`
+	updates the dedicated semantic policy surface.
+- `boundline config show --scope effective` renders the resolved semantic
+	acceleration policy and its winning precedence source beside the V1 advanced-
+	context policy.
 
 ## Canon Workspace Preferences
 

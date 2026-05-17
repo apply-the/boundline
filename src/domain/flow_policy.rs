@@ -163,3 +163,34 @@ pub enum FlowPolicyError {
     #[error("stage `{stage_id}` must have at least one allowed decision type")]
     NoAllowedDecisions { stage_id: String },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::FlowPolicy;
+    use crate::domain::decision::DecisionType;
+    use crate::domain::flow::{FlowDefinition, FlowStageDefinition};
+
+    const CUSTOM_STAGES: [FlowStageDefinition; 1] =
+        [FlowStageDefinition { id: "custom-stage", display_name: "Custom Stage" }];
+
+    #[test]
+    fn fallback_stage_mapping_allows_all_decision_types_for_custom_flows() {
+        let flow = FlowDefinition {
+            name: "custom-flow",
+            display_name: "Custom Flow",
+            stages: &CUSTOM_STAGES,
+        };
+
+        let policy = FlowPolicy::from_definition(&flow);
+
+        for decision in [
+            DecisionType::Analyze,
+            DecisionType::Code,
+            DecisionType::Test,
+            DecisionType::Fix,
+            DecisionType::Replan,
+        ] {
+            assert!(policy.is_allowed(decision), "fallback policy should allow {decision:?}");
+        }
+    }
+}

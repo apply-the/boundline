@@ -28,11 +28,13 @@ use boundline::domain::cluster::{
 };
 use boundline::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
 use boundline::domain::context_intelligence::{
-    AdvancedContextProjection, AuthorityRank, CandidateSelectionState, ImpactAnalysisFinding,
-    ImpactFindingKind, ImpactFindingSeverity, ImpactFindingStatus, RelationshipCredibilityState,
-    RelationshipKind, RelationshipProjection, RemoteTransmissionPolicyState,
-    RetrievalCompatibilityState, RetrievalIndexState, RetrievalMode, RetrievalSourceKind,
-    RetrievalStalenessState, RetrievalState, RetrievedEvidenceCandidate,
+    AdvancedContextProjection, AuthorityRank, CandidateSelectionState, HybridOutcome,
+    ImpactAnalysisFinding, ImpactFindingKind, ImpactFindingSeverity, ImpactFindingStatus,
+    RelationshipCredibilityState, RelationshipKind, RelationshipProjection,
+    RemoteTransmissionPolicyState, RetrievalCompatibilityState, RetrievalIndexState,
+    RetrievalMatchOrigin, RetrievalMode, RetrievalScore, RetrievalSourceKind,
+    RetrievalStalenessState, RetrievalState, RetrievedEvidenceCandidate, SemanticCapabilityState,
+    SemanticPolicyState,
 };
 use boundline::domain::goal_plan::{GoalPlanFlowMode, GoalPlanFlowState};
 use boundline::domain::governance::GovernanceRuntimeKind;
@@ -59,6 +61,9 @@ fn sample_advanced_context() -> AdvancedContextProjection {
         retrieval_mode: RetrievalMode::Local,
         retrieval_state: RetrievalState::Selected,
         retrieval_index_state: RetrievalIndexState::Ready,
+        semantic_policy_state: SemanticPolicyState::Disabled,
+        semantic_capability_state: SemanticCapabilityState::Unsupported,
+        hybrid_outcome: HybridOutcome::BaselineOnly,
         budgets: Default::default(),
         remote_policy_state: RemoteTransmissionPolicyState::LocalOnly,
         used_remote: false,
@@ -68,13 +73,19 @@ fn sample_advanced_context() -> AdvancedContextProjection {
             source_kind: RetrievalSourceKind::WorkspaceFile,
             source_ref: "src/context_router.rs".to_string(),
             authority_rank: AuthorityRank::Structured,
+            match_origin: RetrievalMatchOrigin::Fts,
             selection_state: CandidateSelectionState::Selected,
             selection_reason: "goal keyword matched the implementation surface".to_string(),
             provenance_summary: "workspace file selected through local retrieval".to_string(),
             compatibility_state: RetrievalCompatibilityState::Compatible,
             staleness_state: RetrievalStalenessState::Fresh,
+            lexical_score: None,
+            semantic_score: None,
+            canon_semantic_contract_line: None,
+            canon_semantic_provenance_ref: None,
         }],
         rejected_candidates: Vec::new(),
+        semantic_trace_records: Vec::new(),
         relationships: vec![RelationshipProjection {
             relationship_id: "relationship-1".to_string(),
             subject_ref: "src/context_router.rs".to_string(),
@@ -1125,11 +1136,55 @@ fn render_session_status_surfaces_context_projection() {
     assert!(rendered.contains("context_provenance: workspace_file: src/context_router.rs"));
     assert!(rendered.contains("retrieval_mode: local"));
     assert!(rendered.contains("retrieval_state: selected"));
+    assert!(rendered.contains("semantic_policy_state: disabled"));
+    assert!(rendered.contains("semantic_capability_state: unsupported"));
+    assert!(rendered.contains("hybrid_outcome: baseline_only"));
     assert!(rendered.contains(
-        "selected_evidence: src/context_router.rs [workspace_file] goal keyword matched the implementation surface"
+        "selected_evidence: src/context_router.rs [workspace_file] origin=fts goal keyword matched the implementation surface"
     ));
     assert!(rendered.contains(
         "impact_finding: tests/context_router.rs [missing_test] add or refresh the focused regression test"
+    ));
+}
+
+#[test]
+fn render_session_status_surfaces_rejected_semantic_candidates() {
+    let mut advanced_context = sample_advanced_context();
+    advanced_context.semantic_policy_state = SemanticPolicyState::Local;
+    advanced_context.semantic_capability_state = SemanticCapabilityState::Ready;
+    advanced_context.hybrid_outcome = HybridOutcome::Expanded;
+    advanced_context.rejected_candidates.push(RetrievedEvidenceCandidate {
+        candidate_id: "candidate-rejected-1".to_string(),
+        source_kind: RetrievalSourceKind::WorkspaceFile,
+        source_ref: "src/semantic.rs".to_string(),
+        authority_rank: AuthorityRank::Structured,
+        match_origin: RetrievalMatchOrigin::SemanticExpand,
+        selection_state: CandidateSelectionState::Rejected,
+        selection_reason: "semantic similarity found the candidate but the bounded evidence limit kept the V1 set unchanged".to_string(),
+        provenance_summary: "workspace file evaluated through semantic expansion".to_string(),
+        compatibility_state: RetrievalCompatibilityState::Compatible,
+        staleness_state: RetrievalStalenessState::Fresh,
+        lexical_score: None,
+        semantic_score: RetrievalScore::from_raw(0.812),
+        canon_semantic_contract_line: None,
+        canon_semantic_provenance_ref: None,
+    });
+
+    let view = SessionStatusView {
+        session_id: "session-context-status-rejected".to_string(),
+        workspace_ref: "/tmp/session-context".to_string(),
+        goal: Some("Plan with bounded context".to_string()),
+        latest_status: SessionStatus::Planned,
+        advanced_context: Some(advanced_context),
+        explanation: "session is ready to execute the bounded plan".to_string(),
+        ..Default::default()
+    };
+
+    let rendered = render_session_status(&view);
+
+    assert!(rendered.contains("semantic_rejected_count: 1"));
+    assert!(rendered.contains(
+        "rejected_candidate: src/semantic.rs [workspace_file] origin=semantic_expand semantic_score=0.812 semantic similarity found the candidate but the bounded evidence limit kept the V1 set unchanged"
     ));
 }
 
@@ -1429,9 +1484,10 @@ fn summarize_trace_uses_goal_plan_projection_and_decision_evidence_fallbacks() {
 
     let rendered = render_trace_summary(&summary, "explicit-trace", "/boundline-next");
     assert!(rendered.contains("retrieval_mode: local"), "{rendered}");
+    assert!(rendered.contains("semantic_policy_state: disabled"), "{rendered}");
     assert!(
         rendered.contains(
-            "selected_evidence: src/context_router.rs [workspace_file] goal keyword matched the implementation surface"
+            "selected_evidence: src/context_router.rs [workspace_file] origin=fts goal keyword matched the implementation surface"
         ),
         "{rendered}"
     );

@@ -1525,4 +1525,131 @@ mod tests {
             assert!(decision.blocks_continuation_until_resolved);
         }
     }
+
+    #[test]
+    fn review_string_helpers_and_council_flags_cover_local_branches() {
+        assert_eq!(FindingSeverity::Low.as_str(), "low");
+        assert_eq!(FindingSeverity::Medium.as_str(), "medium");
+        assert_eq!(FindingSeverity::High.as_str(), "high");
+        assert_eq!(FindingSeverity::Critical.as_str(), "critical");
+
+        assert_eq!(FindingConfidence::Low.as_str(), "low");
+        assert_eq!(FindingConfidence::Medium.as_str(), "medium");
+        assert_eq!(FindingConfidence::High.as_str(), "high");
+
+        assert_eq!(ProducerResponseDisposition::Accepted.as_str(), "accepted");
+        assert_eq!(ProducerResponseDisposition::Rejected.as_str(), "rejected");
+        assert_eq!(ProducerResponseDisposition::Deferred.as_str(), "deferred");
+
+        assert_eq!(AdjudicationDecision::Proceed.as_str(), "proceed");
+        assert_eq!(AdjudicationDecision::Stop.as_str(), "stop");
+        assert_eq!(AdjudicationDecision::Escalate.as_str(), "escalate");
+        assert_eq!(AdjudicationDecision::Remediate.as_str(), "remediate");
+
+        assert_eq!(ReviewerIndependenceState::Passed.as_str(), "passed");
+        assert_eq!(ReviewerIndependenceState::Degraded.as_str(), "degraded");
+        assert_eq!(ReviewerIndependenceState::Failed.as_str(), "failed");
+        assert!(!ReviewerIndependenceState::Passed.blocks_progress());
+        assert!(ReviewerIndependenceState::Failed.blocks_progress());
+
+        assert_eq!(CouncilQuorumState::Met.as_str(), "met");
+        assert_eq!(CouncilQuorumState::Unmet.as_str(), "unmet");
+        assert!(!CouncilQuorumState::Met.blocks_progress());
+        assert!(CouncilQuorumState::Unmet.blocks_progress());
+
+        assert!(
+            CouncilAssemblyDecision {
+                profile: CouncilProfile::YellowPair,
+                mandatory_roles: vec!["Safety".to_string()],
+                selected_roles: vec!["Safety".to_string()],
+                independence_state: ReviewerIndependenceState::Failed,
+                quorum_state: CouncilQuorumState::Met,
+                selection_summary: "summary".to_string(),
+            }
+            .blocks_progress()
+        );
+        assert!(
+            CouncilAssemblyDecision {
+                profile: CouncilProfile::YellowPair,
+                mandatory_roles: vec!["Safety".to_string()],
+                selected_roles: vec!["Safety".to_string()],
+                independence_state: ReviewerIndependenceState::Passed,
+                quorum_state: CouncilQuorumState::Unmet,
+                selection_summary: "summary".to_string(),
+            }
+            .blocks_progress()
+        );
+
+        assert_eq!(required_reviewers_for_profile(CouncilProfile::None), 0);
+        assert_eq!(required_reviewers_for_profile(CouncilProfile::LightSingle), 1);
+        assert_eq!(required_reviewers_for_profile(CouncilProfile::YellowPair), 2);
+        assert_eq!(required_reviewers_for_profile(CouncilProfile::RedFive), 5);
+        assert_eq!(required_reviewers_for_profile(CouncilProfile::RestrictedManual), 0);
+
+        assert_eq!(council_profile_id(CouncilProfile::RestrictedManual), "restricted_manual");
+        assert_eq!(join_roles(&[]), "none");
+        assert_eq!(join_roles(&["Safety".to_string(), "UX".to_string()]), "Safety, UX");
+    }
+
+    #[test]
+    fn review_resolution_error_paths_cover_unknown_reviewers_and_route_guards() {
+        let unknown_reviewer_error =
+            VoteRuleDefinition { strategy: VoteStrategy::Weighted, reject_on_blocking: false }
+                .resolve(
+                    &sample_reviewers(),
+                    &[ReviewerFinding::new(
+                        "unknown".to_string(),
+                        ReviewerDisposition::Approve,
+                        "No blockers".to_string(),
+                    )],
+                    None,
+                )
+                .unwrap_err();
+        assert_eq!(
+            unknown_reviewer_error,
+            ReviewProfileError::UnknownFindingReviewer("unknown".to_string())
+        );
+
+        assert_eq!(independence_guard(&[], 0), ReviewerIndependenceState::Passed);
+        assert_eq!(first_blocking_duplicate_route(&[], 1), None);
+
+        let insufficient_reviewers = resolve_council_assembly(
+            CouncilProfile::YellowPair,
+            &[sample_reviewers()[0].clone()],
+            &[],
+        )
+        .unwrap_err();
+        assert_eq!(
+            insufficient_reviewers,
+            ReviewProfileError::InsufficientCouncilReviewers {
+                profile: CouncilProfile::YellowPair,
+                required: 2,
+                found: 1,
+            }
+        );
+
+        let missing_route = resolve_council_assembly(
+            CouncilProfile::YellowPair,
+            &sample_reviewers(),
+            &[
+                ReviewerParticipation {
+                    reviewer_id: "safety".to_string(),
+                    status: ReviewerParticipationStatus::Completed,
+                    reason: None,
+                    effective_route: None,
+                },
+                ReviewerParticipation {
+                    reviewer_id: "maintainability".to_string(),
+                    status: ReviewerParticipationStatus::Completed,
+                    reason: None,
+                    effective_route: Some("claude/sonnet-4.6".to_string()),
+                },
+            ],
+        )
+        .unwrap_err();
+        assert_eq!(
+            missing_route,
+            ReviewProfileError::MissingEffectiveReviewerRoute("safety".to_string())
+        );
+    }
 }
