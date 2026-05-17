@@ -142,6 +142,21 @@ mod context_intelligence_impact_flow;
 #[path = "integration/context_intelligence_remote_policy.rs"]
 mod context_intelligence_remote_policy;
 
+#[path = "integration/context_intelligence_semantic_fallback.rs"]
+mod context_intelligence_semantic_fallback;
+
+#[path = "integration/context_intelligence_semantic_flow.rs"]
+mod context_intelligence_semantic_flow;
+
+#[path = "integration/context_intelligence_canon_semantic_flow.rs"]
+mod context_intelligence_canon_semantic_flow;
+
+#[path = "integration/context_intelligence_semantic_inspect.rs"]
+mod context_intelligence_semantic_inspect;
+
+#[path = "integration/context_intelligence_semantic_recall.rs"]
+mod context_intelligence_semantic_recall;
+
 #[path = "integration/fixture_compat_flow.rs"]
 mod fixture_compat_flow;
 

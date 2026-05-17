@@ -1,12 +1,15 @@
 //! Root CLI command surface and invocation-session bookkeeping.
 
-use std::{fmt, path::PathBuf};
+use std::{
+    fmt,
+    path::{Path, PathBuf},
+};
 
 use clap::{Parser, Subcommand};
 
 use crate::domain::configuration::{
     CapabilityState, ConfigShowScope, ConfigWriteScope, EffortFallbackPolicy, EffortLevel,
-    InitTemplate, RouteSlot, RuntimeKind,
+    InitTemplate, RouteSlot, RuntimeKind, SemanticAccelerationPolicyState,
 };
 use crate::domain::domain_templates::{DomainFamily, ExternalContextKind};
 use crate::domain::governance::{CanonMode, CanonModeSelectionPreference, GovernanceRuntimeKind};
@@ -457,6 +460,16 @@ pub enum ConfigSubcommand {
         #[arg(long = "mode-selection", value_enum)]
         mode_selection: CanonModeSelectionPreference,
     },
+    SetSemanticAcceleration {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long)]
+        cluster: Option<PathBuf>,
+        #[arg(long)]
+        scope: ConfigWriteScope,
+        #[arg(long)]
+        policy: SemanticAccelerationPolicyState,
+    },
     Unset {
         #[arg(long)]
         workspace: Option<PathBuf>,
@@ -891,6 +904,7 @@ impl DeveloperCommandSession {
                     ConfigSubcommand::Show { workspace, cluster, .. }
                     | ConfigSubcommand::Set { workspace, cluster, .. }
                     | ConfigSubcommand::SetCapability { workspace, cluster, .. }
+                    | ConfigSubcommand::SetSemanticAcceleration { workspace, cluster, .. }
                     | ConfigSubcommand::Unset { workspace, cluster, .. }
                     | ConfigSubcommand::UnsetCapability { workspace, cluster, .. }
                     | ConfigSubcommand::SetEffort { workspace, cluster, .. }
@@ -1139,255 +1153,220 @@ pub fn execute() -> i32 {
 fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
     match command {
         DeveloperCommand::Doctor { workspace, install } => {
-            let report = if *install {
-                diagnostics::diagnose_installation()
-            } else {
-                let Some(workspace) = workspace.as_ref() else {
-                    return DispatchOutcome::text(
-                        CommandExitStatus::InvalidInvocation,
-                        output::validation_error_message(&CliValidationError::MissingWorkspaceRef(
-                            CommandName::Doctor,
-                        )),
-                        None,
-                    );
-                };
-                diagnostics::diagnose_workspace(workspace)
-            };
-            DispatchOutcome::text(
-                if report.ready {
-                    CommandExitStatus::Succeeded
-                } else {
-                    CommandExitStatus::InvalidInvocation
-                },
+            dispatch_doctor_command(workspace.as_deref(), *install)
+        }
+        DeveloperCommand::Run { .. } => dispatch_run_command(command),
+        DeveloperCommand::Workflow { command } => dispatch_workflow_command(command),
+        DeveloperCommand::Checkpoint { command } => dispatch_checkpoint_command(command),
+        DeveloperCommand::Inspect { trace, workspace, cluster } => {
+            dispatch_inspect_command(trace.as_deref(), workspace.as_deref(), cluster.as_deref())
+        }
+        DeveloperCommand::Start { .. }
+        | DeveloperCommand::Capture { .. }
+        | DeveloperCommand::Flow { .. }
+        | DeveloperCommand::Plan { .. }
+        | DeveloperCommand::Step { .. }
+        | DeveloperCommand::Status { .. }
+        | DeveloperCommand::Next { .. }
+        | DeveloperCommand::Continue { .. } => dispatch_session_command(command),
+        DeveloperCommand::Govern { .. } => dispatch_govern_command(command),
+        DeveloperCommand::Assistant { command } => dispatch_assistant_command(command),
+        DeveloperCommand::Init { .. } => dispatch_init_command(command),
+        DeveloperCommand::Config { command } => dispatch_config_command(command),
+        DeveloperCommand::Cluster { command } => dispatch_cluster_command(command),
+    }
+}
+
+fn dispatch_doctor_command(workspace: Option<&Path>, install: bool) -> DispatchOutcome {
+    let report = if install {
+        diagnostics::diagnose_installation()
+    } else {
+        let Some(workspace) = workspace else {
+            return DispatchOutcome::text(
+                CommandExitStatus::InvalidInvocation,
+                output::validation_error_message(&CliValidationError::MissingWorkspaceRef(
+                    CommandName::Doctor,
+                )),
+                None,
+            );
+        };
+        diagnostics::diagnose_workspace(workspace)
+    };
+    DispatchOutcome::text(
+        if report.ready {
+            CommandExitStatus::Succeeded
+        } else {
+            CommandExitStatus::InvalidInvocation
+        },
+        output::render_diagnostics(&report),
+        None,
+    )
+}
+
+fn dispatch_run_command(command: &DeveloperCommand) -> DispatchOutcome {
+    let DeveloperCommand::Run {
+        workspace,
+        cluster,
+        goal,
+        compatibility,
+        brief,
+        governance,
+        risk,
+        zone,
+        owner,
+        mode,
+        no_canon,
+    } = command
+    else {
+        return dispatch_internal_command_mismatch(CommandName::Run);
+    };
+    let custom = *compatibility
+        || goal.is_some()
+        || !brief.is_empty()
+        || governance.is_some()
+        || risk.is_some()
+        || zone.is_some()
+        || owner.is_some()
+        || mode.is_some()
+        || *no_canon;
+    if custom {
+        let resolved_workspace = match cli_workspace::resolve_workspace(workspace.as_deref()) {
+            Ok(workspace) => workspace,
+            Err(error) => {
+                return DispatchOutcome::text(
+                    CommandExitStatus::InvalidInvocation,
+                    format!("workspace resolution failed: {error}"),
+                    None,
+                );
+            }
+        };
+        let workspace = &resolved_workspace;
+        if !workspace.is_dir() {
+            return DispatchOutcome::text(
+                CommandExitStatus::InvalidInvocation,
+                output::validation_error_message(&CliValidationError::MissingWorkspaceRef(
+                    CommandName::Run,
+                )),
+                None,
+            );
+        }
+        let report = if *compatibility {
+            diagnostics::diagnose_workspace(workspace)
+        } else {
+            diagnostics::diagnose_native_direct_run_workspace(workspace)
+        };
+        if !report.ready {
+            return DispatchOutcome::text(
+                CommandExitStatus::InvalidInvocation,
                 output::render_diagnostics(&report),
                 None,
+            );
+        }
+
+        let result = if *compatibility {
+            run::execute_custom_run(
+                workspace,
+                goal.as_deref(),
+                brief,
+                *governance,
+                risk.as_deref(),
+                zone.as_deref(),
+                owner.as_deref(),
+            )
+        } else {
+            run::execute_native_direct_run(
+                workspace,
+                goal.as_deref(),
+                brief,
+                *governance,
+                risk.as_deref(),
+                zone.as_deref(),
+                owner.as_deref(),
+                *mode,
+                *no_canon,
+            )
+        };
+
+        match result {
+            Ok(report) => DispatchOutcome::from_run_report(report),
+            Err(error) => {
+                DispatchOutcome::text(CommandExitStatus::InvalidInvocation, error.to_string(), None)
+            }
+        }
+    } else {
+        dispatch_session_result(
+            CommandName::Run,
+            session::execute_run_with_target(workspace.as_deref(), cluster.as_deref()),
+        )
+    }
+}
+
+fn dispatch_workflow_command(command: &WorkflowSubcommand) -> DispatchOutcome {
+    let result = match command {
+        WorkflowSubcommand::List { workspace } => workflow::execute_list(workspace.as_deref()),
+        WorkflowSubcommand::Run { name, workspace, goal } => {
+            workflow::execute_run(workspace.as_deref(), name, goal.as_deref())
+        }
+        WorkflowSubcommand::Status { workspace } => workflow::execute_status(workspace.as_deref()),
+        WorkflowSubcommand::Resume { workspace } => workflow::execute_resume(workspace.as_deref()),
+        WorkflowSubcommand::Inspect { workspace } => {
+            workflow::execute_inspect(workspace.as_deref())
+        }
+    };
+    dispatch_prefixed_result(CommandName::Workflow, result, |report| {
+        DispatchOutcome::text(report.exit_status, report.terminal_output, None)
+    })
+}
+
+fn dispatch_checkpoint_command(command: &CheckpointSubcommand) -> DispatchOutcome {
+    let result = match command {
+        CheckpointSubcommand::List { workspace, cluster } => {
+            checkpoint::execute_list(workspace.as_deref(), cluster.as_deref())
+        }
+        CheckpointSubcommand::Restore { checkpoint_id, workspace, cluster, force } => {
+            checkpoint::execute_restore(
+                checkpoint_id,
+                workspace.as_deref(),
+                cluster.as_deref(),
+                *force,
             )
         }
-        DeveloperCommand::Run {
-            workspace,
-            cluster,
-            goal,
-            compatibility,
-            brief,
-            governance,
-            risk,
-            zone,
-            owner,
-            mode,
-            no_canon,
-        } => {
-            let custom = *compatibility
-                || goal.is_some()
-                || !brief.is_empty()
-                || governance.is_some()
-                || risk.is_some()
-                || zone.is_some()
-                || owner.is_some()
-                || mode.is_some()
-                || *no_canon;
-            if custom {
-                let resolved_workspace =
-                    match cli_workspace::resolve_workspace(workspace.as_deref()) {
-                        Ok(workspace) => workspace,
-                        Err(error) => {
-                            return DispatchOutcome::text(
-                                CommandExitStatus::InvalidInvocation,
-                                format!("workspace resolution failed: {error}"),
-                                None,
-                            );
-                        }
-                    };
-                let workspace = &resolved_workspace;
-                if !workspace.is_dir() {
-                    return DispatchOutcome::text(
-                        CommandExitStatus::InvalidInvocation,
-                        output::validation_error_message(&CliValidationError::MissingWorkspaceRef(
-                            CommandName::Run,
-                        )),
-                        None,
-                    );
-                }
-                let report = if *compatibility {
-                    diagnostics::diagnose_workspace(workspace)
-                } else {
-                    diagnostics::diagnose_native_direct_run_workspace(workspace)
-                };
-                if !report.ready {
-                    return DispatchOutcome::text(
-                        CommandExitStatus::InvalidInvocation,
-                        output::render_diagnostics(&report),
-                        None,
-                    );
-                }
+    };
+    dispatch_prefixed_result(CommandName::Checkpoint, result, |report| {
+        DispatchOutcome::text(report.exit_status, report.terminal_output, None)
+    })
+}
 
-                let result = if *compatibility {
-                    run::execute_custom_run(
-                        workspace,
-                        goal.as_deref(),
-                        brief,
-                        *governance,
-                        risk.as_deref(),
-                        zone.as_deref(),
-                        owner.as_deref(),
-                    )
-                } else {
-                    run::execute_native_direct_run(
-                        workspace,
-                        goal.as_deref(),
-                        brief,
-                        *governance,
-                        risk.as_deref(),
-                        zone.as_deref(),
-                        owner.as_deref(),
-                        *mode,
-                        *no_canon,
-                    )
-                };
+fn dispatch_inspect_command(
+    trace: Option<&Path>,
+    workspace: Option<&Path>,
+    cluster: Option<&Path>,
+) -> DispatchOutcome {
+    let default_workspace = if trace.is_none() && workspace.is_none() && cluster.is_none() {
+        std::env::current_dir().ok()
+    } else {
+        None
+    };
+    let workspace_ref = workspace.or(cluster).or(default_workspace.as_deref());
+    match inspect::execute_inspect(trace, workspace_ref) {
+        Ok(report) => DispatchOutcome::from_inspect_report(report),
+        Err(error) => DispatchOutcome::text(
+            match error {
+                inspect::InspectCommandError::InvalidSession(_) => CommandExitStatus::NonSuccess,
+                _ => CommandExitStatus::TraceReadFailure,
+            },
+            inspect::render_error(trace, workspace_ref, &error),
+            None,
+        ),
+    }
+}
 
-                match result {
-                    Ok(report) => DispatchOutcome::from_run_report(report),
-                    Err(error) => DispatchOutcome::text(
-                        CommandExitStatus::InvalidInvocation,
-                        error.to_string(),
-                        None,
-                    ),
-                }
-            } else {
-                match session::execute_run_with_target(workspace.as_deref(), cluster.as_deref()) {
-                    Ok(report) => DispatchOutcome::from_session_report(report),
-                    Err(error) => DispatchOutcome::text(
-                        CommandExitStatus::NonSuccess,
-                        session::render_error(command.name().as_str(), &error),
-                        None,
-                    ),
-                }
-            }
-        }
-        DeveloperCommand::Workflow { command } => match command {
-            WorkflowSubcommand::List { workspace } => {
-                match workflow::execute_list(workspace.as_deref()) {
-                    Ok(report) => {
-                        DispatchOutcome::text(report.exit_status, report.terminal_output, None)
-                    }
-                    Err(error) => DispatchOutcome::text(
-                        CommandExitStatus::NonSuccess,
-                        format!("workflow error: {error}"),
-                        None,
-                    ),
-                }
-            }
-            WorkflowSubcommand::Run { name, workspace, goal } => {
-                match workflow::execute_run(workspace.as_deref(), name, goal.as_deref()) {
-                    Ok(report) => {
-                        DispatchOutcome::text(report.exit_status, report.terminal_output, None)
-                    }
-                    Err(error) => DispatchOutcome::text(
-                        CommandExitStatus::NonSuccess,
-                        format!("workflow error: {error}"),
-                        None,
-                    ),
-                }
-            }
-            WorkflowSubcommand::Status { workspace } => {
-                match workflow::execute_status(workspace.as_deref()) {
-                    Ok(report) => {
-                        DispatchOutcome::text(report.exit_status, report.terminal_output, None)
-                    }
-                    Err(error) => DispatchOutcome::text(
-                        CommandExitStatus::NonSuccess,
-                        format!("workflow error: {error}"),
-                        None,
-                    ),
-                }
-            }
-            WorkflowSubcommand::Resume { workspace } => {
-                match workflow::execute_resume(workspace.as_deref()) {
-                    Ok(report) => {
-                        DispatchOutcome::text(report.exit_status, report.terminal_output, None)
-                    }
-                    Err(error) => DispatchOutcome::text(
-                        CommandExitStatus::NonSuccess,
-                        format!("workflow error: {error}"),
-                        None,
-                    ),
-                }
-            }
-            WorkflowSubcommand::Inspect { workspace } => {
-                match workflow::execute_inspect(workspace.as_deref()) {
-                    Ok(report) => {
-                        DispatchOutcome::text(report.exit_status, report.terminal_output, None)
-                    }
-                    Err(error) => DispatchOutcome::text(
-                        CommandExitStatus::NonSuccess,
-                        format!("workflow error: {error}"),
-                        None,
-                    ),
-                }
-            }
-        },
-        DeveloperCommand::Checkpoint { command } => match command {
-            CheckpointSubcommand::List { workspace, cluster } => {
-                match checkpoint::execute_list(workspace.as_deref(), cluster.as_deref()) {
-                    Ok(report) => {
-                        DispatchOutcome::text(report.exit_status, report.terminal_output, None)
-                    }
-                    Err(error) => DispatchOutcome::text(
-                        CommandExitStatus::NonSuccess,
-                        format!("checkpoint error: {error}"),
-                        None,
-                    ),
-                }
-            }
-            CheckpointSubcommand::Restore { checkpoint_id, workspace, cluster, force } => {
-                match checkpoint::execute_restore(
-                    checkpoint_id,
-                    workspace.as_deref(),
-                    cluster.as_deref(),
-                    *force,
-                ) {
-                    Ok(report) => {
-                        DispatchOutcome::text(report.exit_status, report.terminal_output, None)
-                    }
-                    Err(error) => DispatchOutcome::text(
-                        CommandExitStatus::NonSuccess,
-                        format!("checkpoint error: {error}"),
-                        None,
-                    ),
-                }
-            }
-        },
-        DeveloperCommand::Inspect { trace, workspace, cluster } => {
-            let default_workspace = if trace.is_none() && workspace.is_none() && cluster.is_none() {
-                std::env::current_dir().ok()
-            } else {
-                None
-            };
-            let workspace_ref =
-                workspace.as_deref().or(cluster.as_deref()).or(default_workspace.as_deref());
-            match inspect::execute_inspect(trace.as_deref(), workspace_ref) {
-                Ok(report) => DispatchOutcome::from_inspect_report(report),
-                Err(error) => DispatchOutcome::text(
-                    match error {
-                        inspect::InspectCommandError::InvalidSession(_) => {
-                            CommandExitStatus::NonSuccess
-                        }
-                        _ => CommandExitStatus::TraceReadFailure,
-                    },
-                    inspect::render_error(trace.as_deref(), workspace_ref, &error),
-                    None,
-                ),
-            }
-        }
-        DeveloperCommand::Start { workspace, cluster } => {
-            match session::execute_start_with_target(workspace.as_deref(), cluster.as_deref()) {
-                Ok(report) => DispatchOutcome::from_session_report(report),
-                Err(error) => DispatchOutcome::text(
-                    CommandExitStatus::NonSuccess,
-                    session::render_error(command.name().as_str(), &error),
-                    None,
-                ),
-            }
-        }
+fn dispatch_session_command(command: &DeveloperCommand) -> DispatchOutcome {
+    match command {
+        DeveloperCommand::Start { workspace, cluster } => dispatch_session_result(
+            CommandName::Start,
+            session::execute_start_with_target(workspace.as_deref(), cluster.as_deref()),
+        ),
         DeveloperCommand::Capture {
             workspace,
             cluster,
@@ -1397,8 +1376,9 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
             risk,
             zone,
             owner,
-        } => {
-            match session::execute_capture_with_target(
+        } => dispatch_session_result(
+            CommandName::Capture,
+            session::execute_capture_with_target(
                 workspace.as_deref(),
                 cluster.as_deref(),
                 goal.as_deref(),
@@ -1407,396 +1387,357 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                 risk.as_deref(),
                 zone.as_deref(),
                 owner.as_deref(),
-            ) {
-                Ok(report) => DispatchOutcome::from_session_report(report),
-                Err(error) => DispatchOutcome::text(
-                    CommandExitStatus::NonSuccess,
-                    session::render_error(command.name().as_str(), &error),
-                    None,
-                ),
-            }
-        }
-        DeveloperCommand::Flow { name, workspace, cluster } => {
-            match session::execute_flow_with_target(workspace.as_deref(), cluster.as_deref(), name)
-            {
-                Ok(report) => DispatchOutcome::from_session_report(report),
-                Err(error) => DispatchOutcome::text(
-                    CommandExitStatus::NonSuccess,
-                    session::render_error(command.name().as_str(), &error),
-                    None,
-                ),
-            }
-        }
+            ),
+        ),
+        DeveloperCommand::Flow { name, workspace, cluster } => dispatch_session_result(
+            CommandName::Flow,
+            session::execute_flow_with_target(workspace.as_deref(), cluster.as_deref(), name),
+        ),
         DeveloperCommand::Plan { workspace, cluster, flow, no_flow, confirm } => {
-            match session::execute_plan_with_target(
+            dispatch_session_result(
+                CommandName::Plan,
+                session::execute_plan_with_target(
+                    workspace.as_deref(),
+                    cluster.as_deref(),
+                    flow.as_deref(),
+                    *no_flow,
+                    *confirm,
+                ),
+            )
+        }
+        DeveloperCommand::Step { workspace, cluster } => dispatch_session_result(
+            CommandName::Step,
+            session::execute_step_with_target(workspace.as_deref(), cluster.as_deref()),
+        ),
+        DeveloperCommand::Status { workspace, cluster } => dispatch_session_result(
+            CommandName::Status,
+            session::execute_status_with_target(workspace.as_deref(), cluster.as_deref()),
+        ),
+        DeveloperCommand::Next { workspace, cluster } => dispatch_session_result(
+            CommandName::Next,
+            session::execute_next_with_target(workspace.as_deref(), cluster.as_deref()),
+        ),
+        DeveloperCommand::Continue { workspace, cluster } => dispatch_session_result(
+            CommandName::Continue,
+            session::execute_continue_with_target(workspace.as_deref(), cluster.as_deref()),
+        ),
+        _ => dispatch_internal_command_mismatch(command.name()),
+    }
+}
+
+fn dispatch_govern_command(command: &DeveloperCommand) -> DispatchOutcome {
+    let DeveloperCommand::Govern {
+        workspace,
+        mode,
+        goal,
+        brief,
+        base,
+        head,
+        risk,
+        structural_impact,
+        public_contract_change,
+        validation_exhausted,
+        pr_ready,
+        preserved_behavior_evidence,
+    } = command
+    else {
+        return dispatch_internal_command_mismatch(CommandName::Govern);
+    };
+    dispatch_prefixed_result(
+        CommandName::Govern,
+        govern::execute_govern(govern::GovernRequest {
+            workspace: workspace.as_deref(),
+            mode: *mode,
+            goal: goal.as_deref(),
+            brief,
+            base: base.as_deref(),
+            head: head.as_deref(),
+            risk: risk.as_deref(),
+            structural_impact: *structural_impact,
+            public_contract_change: *public_contract_change,
+            validation_exhausted: *validation_exhausted,
+            pr_ready: *pr_ready,
+            preserved_behavior_evidence: *preserved_behavior_evidence,
+        }),
+        |report| DispatchOutcome::text(report.exit_status, report.terminal_output, None),
+    )
+}
+
+fn dispatch_assistant_command(command: &AssistantSubcommand) -> DispatchOutcome {
+    match command {
+        AssistantSubcommand::Install { host, scope } => {
+            let report = assistant_assets::install_global_assistant_package(*host, *scope);
+            DispatchOutcome::text(
+                CommandExitStatus::Succeeded,
+                assistant_assets::render_assistant_install_report(&report),
+                None,
+            )
+        }
+    }
+}
+
+fn dispatch_init_command(command: &DeveloperCommand) -> DispatchOutcome {
+    let DeveloperCommand::Init {
+        workspace,
+        non_interactive,
+        template,
+        assistant,
+        route,
+        domain,
+        domain_standard,
+        context_binding,
+        required_context_binding,
+        canon_mode_selection,
+        risk,
+        zone,
+        owner,
+        export_docs,
+        refresh,
+        diff,
+        to,
+        force,
+    } = command
+    else {
+        return dispatch_internal_command_mismatch(CommandName::Init);
+    };
+    dispatch_prefixed_result(
+        CommandName::Init,
+        init::execute_init(init::InitRequest {
+            workspace,
+            non_interactive: *non_interactive,
+            interactive_terminal_override: None,
+            interactor: None,
+            template: *template,
+            assistants: assistant,
+            routes: route,
+            domains: domain,
+            domain_standards: domain_standard,
+            context_bindings: context_binding,
+            required_context_bindings: required_context_binding,
+            canon_mode_selection: *canon_mode_selection,
+            risk: risk.as_deref(),
+            zone: zone.as_deref(),
+            owner: owner.as_deref(),
+            export_docs: *export_docs,
+            docs_refresh: *refresh,
+            docs_diff: *diff,
+            docs_output_dir: to.as_deref(),
+            force: *force,
+        }),
+        |report| DispatchOutcome::text(report.exit_status, report.terminal_output, None),
+    )
+}
+
+fn dispatch_config_command(command: &ConfigSubcommand) -> DispatchOutcome {
+    let result = match command {
+        ConfigSubcommand::Show { workspace, cluster, scope } => {
+            config::execute_show(workspace.as_deref(), cluster.as_deref(), *scope)
+        }
+        ConfigSubcommand::Set {
+            workspace,
+            cluster,
+            scope,
+            slot,
+            reviewer,
+            adjudicator,
+            runtime,
+            model,
+        } => config::execute_set(config::SetConfigRequest {
+            workspace: workspace.as_deref(),
+            cluster: cluster.as_deref(),
+            scope: *scope,
+            slot: *slot,
+            reviewer: reviewer.as_deref(),
+            adjudicator: *adjudicator,
+            runtime: *runtime,
+            model,
+        }),
+        ConfigSubcommand::SetCapability {
+            workspace,
+            cluster,
+            scope,
+            runtime,
+            continuation,
+            resume,
+            validation,
+            handoff_target,
+            escalation_context,
+            notes,
+        } => config::execute_set_capability(config::SetCapabilityRequest {
+            workspace: workspace.as_deref(),
+            cluster: cluster.as_deref(),
+            scope: *scope,
+            runtime: *runtime,
+            continuation: *continuation,
+            resume: *resume,
+            validation: *validation,
+            handoff_target: *handoff_target,
+            escalation_context: *escalation_context,
+            notes: notes.as_deref(),
+        }),
+        ConfigSubcommand::SetCanon { workspace, mode_selection } => {
+            let resolved_workspace = cli_workspace::resolve_workspace(workspace.as_deref())
+                .map_err(|error| {
+                    config::ConfigCommandError::WorkspaceResolution(error.to_string())
+                });
+            match resolved_workspace {
+                Ok(workspace) => config::execute_set_canon(Some(&workspace), *mode_selection),
+                Err(error) => Err(error),
+            }
+        }
+        ConfigSubcommand::Unset { workspace, cluster, scope, slot, reviewer, adjudicator } => {
+            config::execute_unset(
                 workspace.as_deref(),
                 cluster.as_deref(),
-                flow.as_deref(),
-                *no_flow,
-                *confirm,
-            ) {
-                Ok(report) => DispatchOutcome::from_session_report(report),
-                Err(error) => DispatchOutcome::text(
-                    CommandExitStatus::NonSuccess,
-                    session::render_error(command.name().as_str(), &error),
-                    None,
-                ),
-            }
+                *scope,
+                *slot,
+                reviewer.as_deref(),
+                *adjudicator,
+            )
         }
-        DeveloperCommand::Step { workspace, cluster } => {
-            match session::execute_step_with_target(workspace.as_deref(), cluster.as_deref()) {
-                Ok(report) => DispatchOutcome::from_session_report(report),
-                Err(error) => DispatchOutcome::text(
-                    CommandExitStatus::NonSuccess,
-                    session::render_error(command.name().as_str(), &error),
-                    None,
-                ),
-            }
+        ConfigSubcommand::UnsetCapability { workspace, cluster, scope, runtime } => {
+            config::execute_unset_capability(
+                workspace.as_deref(),
+                cluster.as_deref(),
+                *scope,
+                *runtime,
+            )
         }
-        DeveloperCommand::Status { workspace, cluster } => {
-            match session::execute_status_with_target(workspace.as_deref(), cluster.as_deref()) {
-                Ok(report) => DispatchOutcome::from_session_report(report),
-                Err(error) => DispatchOutcome::text(
-                    CommandExitStatus::NonSuccess,
-                    session::render_error(command.name().as_str(), &error),
-                    None,
-                ),
-            }
-        }
-        DeveloperCommand::Next { workspace, cluster } => {
-            match session::execute_next_with_target(workspace.as_deref(), cluster.as_deref()) {
-                Ok(report) => DispatchOutcome::from_session_report(report),
-                Err(error) => DispatchOutcome::text(
-                    CommandExitStatus::NonSuccess,
-                    session::render_error(command.name().as_str(), &error),
-                    None,
-                ),
-            }
-        }
-        DeveloperCommand::Continue { workspace, cluster } => {
-            match session::execute_continue_with_target(workspace.as_deref(), cluster.as_deref()) {
-                Ok(report) => DispatchOutcome::from_session_report(report),
-                Err(error) => DispatchOutcome::text(
-                    CommandExitStatus::NonSuccess,
-                    session::render_error(command.name().as_str(), &error),
-                    None,
-                ),
-            }
-        }
-        DeveloperCommand::Govern {
-            workspace,
-            mode,
-            goal,
-            brief,
-            base,
-            head,
-            risk,
-            structural_impact,
-            public_contract_change,
-            validation_exhausted,
-            pr_ready,
-            preserved_behavior_evidence,
-        } => {
-            match govern::execute_govern(govern::GovernRequest {
+        ConfigSubcommand::SetSemanticAcceleration { workspace, cluster, scope, policy } => {
+            config::execute_set_semantic_acceleration(config::SetSemanticAccelerationRequest {
                 workspace: workspace.as_deref(),
-                mode: *mode,
-                goal: goal.as_deref(),
-                brief,
-                base: base.as_deref(),
-                head: head.as_deref(),
-                risk: risk.as_deref(),
-                structural_impact: *structural_impact,
-                public_contract_change: *public_contract_change,
-                validation_exhausted: *validation_exhausted,
-                pr_ready: *pr_ready,
-                preserved_behavior_evidence: *preserved_behavior_evidence,
-            }) {
-                Ok(report) => {
-                    DispatchOutcome::text(report.exit_status, report.terminal_output, None)
-                }
-                Err(error) => DispatchOutcome::text(
-                    CommandExitStatus::NonSuccess,
-                    format!("govern error: {error}"),
-                    None,
-                ),
-            }
+                cluster: cluster.as_deref(),
+                scope: *scope,
+                policy: *policy,
+            })
         }
-        DeveloperCommand::Assistant { command } => match command {
-            AssistantSubcommand::Install { host, scope } => {
-                let report = assistant_assets::install_global_assistant_package(*host, *scope);
-                DispatchOutcome::text(
-                    CommandExitStatus::Succeeded,
-                    assistant_assets::render_assistant_install_report(&report),
-                    None,
-                )
-            }
-        },
-        DeveloperCommand::Init {
+        ConfigSubcommand::SetEffort {
             workspace,
-            non_interactive,
-            template,
-            assistant,
-            route,
-            domain,
-            domain_standard,
-            context_binding,
-            required_context_binding,
-            canon_mode_selection,
-            risk,
-            zone,
-            owner,
-            export_docs,
-            refresh,
-            diff,
-            to,
-            force,
-        } => {
-            match init::execute_init(init::InitRequest {
-                workspace,
-                non_interactive: *non_interactive,
-                interactive_terminal_override: None,
-                interactor: None,
-                template: *template,
-                assistants: assistant,
-                routes: route,
-                domains: domain,
-                domain_standards: domain_standard,
-                context_bindings: context_binding,
-                required_context_bindings: required_context_binding,
-                canon_mode_selection: *canon_mode_selection,
-                risk: risk.as_deref(),
-                zone: zone.as_deref(),
-                owner: owner.as_deref(),
-                export_docs: *export_docs,
-                docs_refresh: *refresh,
-                docs_diff: *diff,
-                docs_output_dir: to.as_deref(),
-                force: *force,
-            }) {
-                Ok(report) => {
-                    DispatchOutcome::text(report.exit_status, report.terminal_output, None)
-                }
-                Err(error) => DispatchOutcome::text(
-                    CommandExitStatus::NonSuccess,
-                    format!("init error: {error}"),
-                    None,
-                ),
-            }
+            cluster,
+            scope,
+            slot,
+            level,
+            fallback,
+            rationale,
+        } => config::execute_set_effort(config::SetEffortRequest {
+            workspace: workspace.as_deref(),
+            cluster: cluster.as_deref(),
+            scope: *scope,
+            slot: *slot,
+            level: *level,
+            fallback: *fallback,
+            rationale: rationale.as_deref(),
+        }),
+        ConfigSubcommand::UnsetEffort { workspace, cluster, scope, slot } => {
+            config::execute_unset_effort(workspace.as_deref(), cluster.as_deref(), *scope, *slot)
         }
-        DeveloperCommand::Config { command } => {
-            let result = match command {
-                ConfigSubcommand::Show { workspace, cluster, scope } => {
-                    config::execute_show(workspace.as_deref(), cluster.as_deref(), *scope)
-                }
-                ConfigSubcommand::Set {
-                    workspace,
-                    cluster,
-                    scope,
-                    slot,
-                    reviewer,
-                    adjudicator,
-                    runtime,
-                    model,
-                } => config::execute_set(config::SetConfigRequest {
-                    workspace: workspace.as_deref(),
-                    cluster: cluster.as_deref(),
-                    scope: *scope,
-                    slot: *slot,
-                    reviewer: reviewer.as_deref(),
-                    adjudicator: *adjudicator,
-                    runtime: *runtime,
-                    model,
-                }),
-                ConfigSubcommand::SetCapability {
-                    workspace,
-                    cluster,
-                    scope,
-                    runtime,
-                    continuation,
-                    resume,
-                    validation,
-                    handoff_target,
-                    escalation_context,
-                    notes,
-                } => config::execute_set_capability(config::SetCapabilityRequest {
-                    workspace: workspace.as_deref(),
-                    cluster: cluster.as_deref(),
-                    scope: *scope,
-                    runtime: *runtime,
-                    continuation: *continuation,
-                    resume: *resume,
-                    validation: *validation,
-                    handoff_target: *handoff_target,
-                    escalation_context: *escalation_context,
-                    notes: notes.as_deref(),
-                }),
-                ConfigSubcommand::SetCanon { workspace, mode_selection } => {
-                    let resolved_workspace = cli_workspace::resolve_workspace(workspace.as_deref())
-                        .map_err(|error| {
-                            config::ConfigCommandError::WorkspaceResolution(error.to_string())
-                        });
-                    match resolved_workspace {
-                        Ok(workspace) => {
-                            config::execute_set_canon(Some(&workspace), *mode_selection)
-                        }
-                        Err(error) => Err(error),
-                    }
-                }
-                ConfigSubcommand::Unset {
-                    workspace,
-                    cluster,
-                    scope,
-                    slot,
-                    reviewer,
-                    adjudicator,
-                } => config::execute_unset(
-                    workspace.as_deref(),
-                    cluster.as_deref(),
-                    *scope,
-                    *slot,
-                    reviewer.as_deref(),
-                    *adjudicator,
-                ),
-                ConfigSubcommand::UnsetCapability { workspace, cluster, scope, runtime } => {
-                    config::execute_unset_capability(
-                        workspace.as_deref(),
-                        cluster.as_deref(),
-                        *scope,
-                        *runtime,
-                    )
-                }
-                ConfigSubcommand::SetEffort {
-                    workspace,
-                    cluster,
-                    scope,
-                    slot,
-                    level,
-                    fallback,
-                    rationale,
-                } => config::execute_set_effort(config::SetEffortRequest {
-                    workspace: workspace.as_deref(),
-                    cluster: cluster.as_deref(),
-                    scope: *scope,
-                    slot: *slot,
-                    level: *level,
-                    fallback: *fallback,
-                    rationale: rationale.as_deref(),
-                }),
-                ConfigSubcommand::UnsetEffort { workspace, cluster, scope, slot } => {
-                    config::execute_unset_effort(
-                        workspace.as_deref(),
-                        cluster.as_deref(),
-                        *scope,
-                        *slot,
-                    )
-                }
-                ConfigSubcommand::SetDomain {
-                    workspace,
-                    cluster,
-                    scope,
-                    family,
-                    enable,
-                    disable,
-                    standards,
-                } => config::execute_set_domain(config::SetDomainRequest {
-                    workspace: workspace.as_deref(),
-                    cluster: cluster.as_deref(),
-                    scope: *scope,
-                    family: *family,
-                    enable: *enable,
-                    disable: *disable,
-                    standards: standards.as_deref(),
-                }),
-                ConfigSubcommand::UnsetDomain { workspace, cluster, scope, family } => {
-                    config::execute_unset_domain(
-                        workspace.as_deref(),
-                        cluster.as_deref(),
-                        *scope,
-                        *family,
-                    )
-                }
-                ConfigSubcommand::BindContext {
-                    workspace,
-                    cluster,
-                    scope,
-                    family,
-                    kind,
-                    reference,
-                    required,
-                    notes,
-                } => config::execute_bind_context(config::BindContextRequest {
-                    workspace: workspace.as_deref(),
-                    cluster: cluster.as_deref(),
-                    scope: *scope,
-                    family: *family,
-                    kind: *kind,
-                    reference,
-                    required: *required,
-                    notes: notes.as_deref(),
-                }),
-                ConfigSubcommand::UnbindContext {
-                    workspace,
-                    cluster,
-                    scope,
-                    family,
-                    kind,
-                    reference,
-                } => config::execute_unbind_context(
-                    workspace.as_deref(),
-                    cluster.as_deref(),
-                    *scope,
-                    *family,
-                    *kind,
-                    reference,
-                ),
-            };
+        ConfigSubcommand::SetDomain {
+            workspace,
+            cluster,
+            scope,
+            family,
+            enable,
+            disable,
+            standards,
+        } => config::execute_set_domain(config::SetDomainRequest {
+            workspace: workspace.as_deref(),
+            cluster: cluster.as_deref(),
+            scope: *scope,
+            family: *family,
+            enable: *enable,
+            disable: *disable,
+            standards: standards.as_deref(),
+        }),
+        ConfigSubcommand::UnsetDomain { workspace, cluster, scope, family } => {
+            config::execute_unset_domain(workspace.as_deref(), cluster.as_deref(), *scope, *family)
+        }
+        ConfigSubcommand::BindContext {
+            workspace,
+            cluster,
+            scope,
+            family,
+            kind,
+            reference,
+            required,
+            notes,
+        } => config::execute_bind_context(config::BindContextRequest {
+            workspace: workspace.as_deref(),
+            cluster: cluster.as_deref(),
+            scope: *scope,
+            family: *family,
+            kind: *kind,
+            reference,
+            required: *required,
+            notes: notes.as_deref(),
+        }),
+        ConfigSubcommand::UnbindContext { workspace, cluster, scope, family, kind, reference } => {
+            config::execute_unbind_context(
+                workspace.as_deref(),
+                cluster.as_deref(),
+                *scope,
+                *family,
+                *kind,
+                reference,
+            )
+        }
+    };
+    dispatch_prefixed_result(CommandName::Config, result, |report| {
+        DispatchOutcome::text(report.exit_status, report.terminal_output, None)
+    })
+}
 
-            match result {
-                Ok(report) => {
-                    DispatchOutcome::text(report.exit_status, report.terminal_output, None)
-                }
-                Err(error) => DispatchOutcome::text(
-                    CommandExitStatus::NonSuccess,
-                    format!("config error: {error}"),
-                    None,
-                ),
-            }
+fn dispatch_cluster_command(command: &ClusterSubcommand) -> DispatchOutcome {
+    let result = match command {
+        ClusterSubcommand::Init { workspace, cluster_id, member } => {
+            cluster::execute_init(workspace, cluster_id, member)
         }
-        DeveloperCommand::Cluster { command } => match command {
-            ClusterSubcommand::Init { workspace, cluster_id, member } => {
-                match cluster::execute_init(workspace, cluster_id, member) {
-                    Ok(report) => {
-                        DispatchOutcome::text(report.exit_status, report.terminal_output, None)
-                    }
-                    Err(error) => DispatchOutcome::text(
-                        CommandExitStatus::NonSuccess,
-                        format!("cluster error: {error}"),
-                        None,
-                    ),
-                }
-            }
-            ClusterSubcommand::Status { workspace } => match cluster::execute_status(workspace) {
-                Ok(report) => {
-                    DispatchOutcome::text(report.exit_status, report.terminal_output, None)
-                }
-                Err(error) => DispatchOutcome::text(
-                    CommandExitStatus::NonSuccess,
-                    format!("cluster error: {error}"),
-                    None,
-                ),
-            },
-            ClusterSubcommand::Inspect { workspace } => match cluster::execute_inspect(workspace) {
-                Ok(report) => {
-                    DispatchOutcome::text(report.exit_status, report.terminal_output, None)
-                }
-                Err(error) => DispatchOutcome::text(
-                    CommandExitStatus::NonSuccess,
-                    format!("cluster error: {error}"),
-                    None,
-                ),
-            },
-        },
+        ClusterSubcommand::Status { workspace } => cluster::execute_status(workspace),
+        ClusterSubcommand::Inspect { workspace } => cluster::execute_inspect(workspace),
+    };
+    dispatch_prefixed_result(CommandName::Cluster, result, |report| {
+        DispatchOutcome::text(report.exit_status, report.terminal_output, None)
+    })
+}
+
+fn dispatch_prefixed_result<T, E, F>(
+    command_name: CommandName,
+    result: Result<T, E>,
+    on_success: F,
+) -> DispatchOutcome
+where
+    E: fmt::Display,
+    F: FnOnce(T) -> DispatchOutcome,
+{
+    match result {
+        Ok(report) => on_success(report),
+        Err(error) => DispatchOutcome::text(
+            CommandExitStatus::NonSuccess,
+            format!("{} error: {error}", command_name.as_str()),
+            None,
+        ),
     }
+}
+
+fn dispatch_session_result(
+    command_name: CommandName,
+    result: Result<session::SessionCommandReport, session::SessionCommandError>,
+) -> DispatchOutcome {
+    match result {
+        Ok(report) => DispatchOutcome::from_session_report(report),
+        Err(error) => DispatchOutcome::text(
+            CommandExitStatus::NonSuccess,
+            session::render_error(command_name.as_str(), &error),
+            None,
+        ),
+    }
+}
+
+fn dispatch_internal_command_mismatch(command_name: CommandName) -> DispatchOutcome {
+    DispatchOutcome::text(
+        CommandExitStatus::NonSuccess,
+        format!("internal dispatch mismatch for {}", command_name.as_str()),
+        None,
+    )
 }
 
 #[cfg(test)]
@@ -1817,7 +1758,7 @@ mod tests {
     use crate::cli::assistant_assets::{AssistantHost, AssistantInstallScope};
     use crate::domain::configuration::{
         CapabilityState, ConfigShowScope, ConfigWriteScope, EffortFallbackPolicy, EffortLevel,
-        InitTemplate, RouteSlot, RuntimeKind,
+        InitTemplate, RouteSlot, RuntimeKind, SemanticAccelerationPolicyState,
     };
     use crate::domain::domain_templates::{DomainFamily, ExternalContextKind};
     use crate::domain::governance::{CanonMode, CanonModeSelectionPreference};
@@ -2419,6 +2360,14 @@ fn red_to_green_addition() {
                     slot: Some(RouteSlot::Planning),
                     reviewer: None,
                     adjudicator: false,
+                },
+            },
+            DeveloperCommand::Config {
+                command: ConfigSubcommand::SetSemanticAcceleration {
+                    workspace: Some(config_workspace.clone()),
+                    cluster: None,
+                    scope: ConfigWriteScope::Workspace,
+                    policy: SemanticAccelerationPolicyState::Local,
                 },
             },
             DeveloperCommand::Config {

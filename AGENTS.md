@@ -1,6 +1,6 @@
 # boundline Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-05-16
+Auto-generated from all feature plans. Last updated: 2026-05-17
 
 ## Active Technologies
 - Rust 1.95.0, edition 2024 + Existing runtime dependencies (`serde`, `serde_json`, `thiserror`, `tracing`, `uuid`) plus `clap` 4.x for a stable subcommand-based CLI surface (002-developer-ux-orchestrator)
@@ -86,6 +86,9 @@ Auto-generated from all feature plans. Last updated: 2026-05-16
 - Workspace-local `.boundline/session.json`, persisted traces under `.boundline/traces/`, optional `.boundline/execution.json` and `.boundline/config.toml`, plus Canon-governed packet metadata already consumed through the governance runtime boundary (057-adaptive-governance)
 - Rust 1.95.0, edition 2024 + Existing workspace dependencies `clap`, `dialoguer`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, and Rust standard-library filesystem, path, collections, and process APIs, plus one embedded SQLite binding with FTS5 support for the workspace-local retrieval index; no external graph or vector service is required for the first slice (058-advanced-context-intelligence)
 - Existing workspace-local `.boundline/session.json`, `.boundline/traces/`, `.boundline/config.toml`, and Canon-promoted project-memory artifacts, plus a workspace-local retrieval index at `.boundline/context-intelligence/retrieval-index.sqlite3` for searchable document and evidence state (058-advanced-context-intelligence)
+- Rust 1.95.0, edition 2024 + existing workspace runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`), existing `rusqlite` bundled SQLite support, and one optional `sqlite-vec` integration path for local vector tables; no remote embedding-provider dependency in the first slice (059-semantic-acceleration)
+- existing `.boundline/session.json`, `.boundline/traces/`, `.boundline/config.toml`, and `.boundline/context-intelligence/retrieval-index.sqlite3`, extended with semantic-index metadata and vector-backed chunk tables on the same workspace-local SQLite store (059-semantic-acceleration)
+- semantic acceleration is local-only and additive: preserve `semantic_policy_state`, `semantic_capability_state`, `hybrid_outcome`, candidate `match_origin`, and any `rejected_candidate:` lines on `plan`, `status`, and `inspect`; fallback to the V1 local SQLite + FTS5 path must stay explicit when semantic capability is unavailable or degraded (059-semantic-acceleration)
 
 - Rust 1.95.0, edition 2024 + Rust standard library plus `serde`, `serde_json`, `thiserror`, `tracing`, and `uuid` for structured state, trace serialization, error handling, instrumentation, and stable identifiers (001-delivery-orchestrator-core)
 
@@ -114,9 +117,10 @@ Crate versioning follows Semantic Versioning.
 Before 1.0.0, breaking changes MAY occur in minor versions.
 
 ## Recent Changes
+- 059-semantic-acceleration: Added Rust 1.95.0, edition 2024 + existing workspace runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`), existing `rusqlite` bundled SQLite support, and one optional `sqlite-vec` integration path for local vector tables; no remote embedding-provider dependency in the first slice
+- 059-semantic-acceleration: Advanced-context retrieval can now refresh semantic chunks on the shared local index, expand or rerank the V1 candidate set when capability is ready, and surface rejected semantic candidates plus explicit fallback reasons on the normal CLI output path
 - 058-advanced-context-intelligence: Added Rust 1.95.0, edition 2024 + Existing workspace dependencies `clap`, `dialoguer`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, and Rust standard-library filesystem, path, collections, and process APIs, plus one embedded SQLite binding with FTS5 support for the workspace-local retrieval index; no external graph or vector service is required for the first slice
 - 057-adaptive-governance: Added Rust 1.95.0, edition 2024 + Existing workspace dependencies `clap`, `dialoguer`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, and Rust standard-library collections, filesystem, path, and process APIs; no new runtime dependencies planned for this slice
-- 054-guidance-guardian-capabilities: Added Rust 1.95.0, edition 2024 + Existing workspace dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `toml`, `uuid`, and Rust standard-library collections, filesystem, path, and process APIs; no new runtime dependencies planned for this slice
 
 
 <!-- MANUAL ADDITIONS START -->

@@ -809,6 +809,17 @@ pub fn compacted_canon_memory_from_response(
                 .unwrap_or_else(|| vec!["adaptive_contract_line: unavailable".to_string()])
         })
         .unwrap_or_default();
+    let semantic_provenance_lines = response
+        .packet
+        .as_ref()
+        .map(|packet| {
+            packet
+                .semantic_descriptor
+                .as_ref()
+                .map(|semantic| semantic.projection_lines())
+                .unwrap_or_else(|| vec!["semantic_contract_line: unavailable".to_string()])
+        })
+        .unwrap_or_default();
 
     Some(CompactedCanonMemory {
         headline: response
@@ -834,6 +845,7 @@ pub fn compacted_canon_memory_from_response(
         }),
         authority_provenance_lines,
         adaptive_provenance_lines,
+        semantic_provenance_lines,
     })
 }
 
@@ -864,6 +876,7 @@ pub fn compacted_canon_memory_for_block(
         evidence_summary: None,
         authority_provenance_lines: Vec::new(),
         adaptive_provenance_lines: Vec::new(),
+        semantic_provenance_lines: Vec::new(),
     })
 }
 
@@ -1168,9 +1181,11 @@ mod tests {
         CanonAdaptiveGovernanceState, CanonAdaptiveGovernanceV1Envelope,
         CanonAdaptiveRolloutProfile, CanonAuthorityGovernanceV1Envelope, CanonAuthorityZone,
         CanonChangeClass, CanonEvidenceInspectSummary, CanonIntendedPersona,
-        CanonRecommendedActionSummary, CanonRiskClass, CompactedCanonMemory,
+        CanonRecommendedActionSummary, CanonRiskClass, CanonSemanticArtifactDescriptorV1Envelope,
+        CanonSemanticEligibilityState, CanonSemanticProvenanceBoundary, CompactedCanonMemory,
         GovernanceLifecycleState, GovernanceRuntimeKind, GovernedStagePacket,
-        MemoryCredibilityState, PacketReadiness, StageGovernancePolicy,
+        MemoryCredibilityState, PacketReadiness, SEMANTIC_ARTIFACT_DESCRIPTOR_V1_CONTRACT_LINE,
+        StageGovernancePolicy,
     };
     use crate::domain::task_context::TaskContextError;
 
@@ -1202,6 +1217,7 @@ mod tests {
             reason_code: Some("packet_ready".to_string()),
             authority_governance: None,
             adaptive_governance: None,
+            semantic_descriptor: None,
         }
     }
 
@@ -1252,6 +1268,7 @@ mod tests {
             }),
             authority_provenance_lines: Vec::new(),
             adaptive_provenance_lines: Vec::new(),
+            semantic_provenance_lines: Vec::new(),
         };
 
         let documents = governance_input_documents(&json!({}), Some(&memory));
@@ -1325,6 +1342,14 @@ mod tests {
             state_rationale: Some("approval required".to_string()),
             profile_rationale: Some("yellow zone packet".to_string()),
         });
+        governed_packet.semantic_descriptor = Some(CanonSemanticArtifactDescriptorV1Envelope {
+            semantic_contract_line: SEMANTIC_ARTIFACT_DESCRIPTOR_V1_CONTRACT_LINE.to_string(),
+            semantic_eligibility: CanonSemanticEligibilityState::Eligible,
+            semantic_provenance_boundary: Some(CanonSemanticProvenanceBoundary::Surface),
+            semantic_provenance_ref: Some(".canon/runs/canon-run-1/verification.md".to_string()),
+            semantic_labels: vec!["verification".to_string()],
+            semantic_exclusion_reason: None,
+        });
         let response = response(
             GovernanceLifecycleState::GovernedReady,
             "Canon packet ready",
@@ -1352,6 +1377,12 @@ mod tests {
         );
         assert!(
             memory
+                .semantic_provenance_lines
+                .iter()
+                .any(|line| line == "semantic_contract_line: v1")
+        );
+        assert!(
+            memory
                 .provenance_lines()
                 .iter()
                 .any(|line| line == "authority_control_class: council_review")
@@ -1361,6 +1392,13 @@ mod tests {
                 .provenance_lines()
                 .iter()
                 .any(|line| line == "adaptive_rollout_profile: governed")
+        );
+        assert!(
+            memory
+                .provenance_lines()
+                .iter()
+                .any(|line| line
+                    == "semantic_provenance_ref: .canon/runs/canon-run-1/verification.md")
         );
     }
 

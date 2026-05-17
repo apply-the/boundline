@@ -2734,6 +2734,7 @@ mod tests {
                 reason_code: None,
                 authority_governance: None,
                 adaptive_governance: None,
+                semantic_descriptor: None,
             })
             .unwrap();
         task.context
@@ -2929,6 +2930,7 @@ mod tests {
                 adaptive_provenance_lines: vec![
                     "adaptive_contract_line: adaptive-governance-v1".to_string(),
                 ],
+                semantic_provenance_lines: vec!["semantic_contract_line: v1".to_string()],
             })
             .unwrap();
 
@@ -2942,6 +2944,7 @@ mod tests {
         assert!(
             provenance.iter().any(|line| line == "adaptive_contract_line: adaptive-governance-v1")
         );
+        assert!(provenance.iter().any(|line| line == "semantic_contract_line: v1"));
     }
 
     #[test]

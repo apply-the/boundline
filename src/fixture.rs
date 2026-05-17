@@ -4848,6 +4848,7 @@ mod tests {
                 reason_code: None,
                 authority_governance: None,
                 adaptive_governance: None,
+                semantic_descriptor: None,
             })
             .unwrap(),
         );

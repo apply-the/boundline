@@ -89,6 +89,7 @@ fn task_context_round_trips_governance_state_records() {
         reason_code: None,
         authority_governance: None,
         adaptive_governance: None,
+        semantic_descriptor: None,
     };
     let reuse = PacketReuseBinding {
         upstream_stage_key: "bug-fix:investigate".to_string(),
@@ -170,6 +171,7 @@ fn task_context_round_trips_canon_snapshot_and_compacted_memory() {
         evidence_summary: None,
         authority_provenance_lines: Vec::new(),
         adaptive_provenance_lines: Vec::new(),
+        semantic_provenance_lines: Vec::new(),
     };
 
     context.set_latest_canon_capability_snapshot(&snapshot).unwrap();

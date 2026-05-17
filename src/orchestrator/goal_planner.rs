@@ -13,11 +13,11 @@ use uuid::Uuid;
 use crate::adapters::cluster_store::FileClusterStore;
 use crate::adapters::config_store::FileConfigStore;
 use crate::domain::configuration::{
-    AdvancedContextConfig, RouteSlot, RoutingOverrides, SourcedRoute,
-    SourcedRuntimeCapabilityProfile, SourcedSlotEffortPolicy, ValueSource,
+    AdvancedContextConfig, RouteSlot, RoutingOverrides, SemanticAccelerationPolicyState,
+    SourcedRoute, SourcedRuntimeCapabilityProfile, SourcedSlotEffortPolicy, ValueSource,
     resolve_effective_advanced_context_config, resolve_effective_domain_templates,
     resolve_effective_routing, resolve_effective_runtime_capabilities,
-    resolve_effective_slot_effort_policies,
+    resolve_effective_semantic_acceleration_config, resolve_effective_slot_effort_policies,
 };
 use crate::domain::decision::{DecisionType, EvidenceRef};
 use crate::domain::domain_templates::{
@@ -38,7 +38,9 @@ use crate::domain::project_memory::{
     read_governed_expertise_inputs,
 };
 use crate::domain::workflow::WorkflowProgressState;
-use crate::orchestrator::context_intelligence::build_advanced_context_projection;
+use crate::orchestrator::context_intelligence::{
+    AdvancedContextBuildState, build_advanced_context_projection,
+};
 use crate::orchestrator::flow_inference::{FlowInferenceContext, infer_flow_from_context};
 use crate::orchestrator::guidance_runtime::{
     planning_runtime_evidence, resolve_capabilities_for_phase,
@@ -1477,11 +1479,13 @@ pub fn build_context_pack(
     context_sources: &PlanningContextSources,
 ) -> ContextPack {
     let advanced_context_config = resolve_advanced_context_config(workspace_ref);
+    let semantic_acceleration_policy = resolve_semantic_acceleration_policy(workspace_ref);
     build_context_pack_with_policy(
         goal_text,
         workspace_ref,
         context_sources,
         &advanced_context_config,
+        semantic_acceleration_policy,
     )
 }
 
@@ -1490,6 +1494,7 @@ fn build_context_pack_with_policy(
     workspace_ref: &Path,
     context_sources: &PlanningContextSources,
     advanced_context_config: &AdvancedContextConfig,
+    semantic_acceleration_policy: SemanticAccelerationPolicyState,
 ) -> ContextPack {
     // The workspace primary target is still available downstream as the task
     // fallback, but it does not count as bounded planning evidence on its own.
@@ -1554,8 +1559,11 @@ fn build_context_pack_with_policy(
         workspace_ref,
         &inputs,
         &selected_targets,
-        credibility.credibility,
-        staleness_reason.as_deref(),
+        AdvancedContextBuildState {
+            credibility: credibility.credibility,
+            staleness_reason: staleness_reason.as_deref(),
+            semantic_policy: semantic_acceleration_policy,
+        },
         advanced_context_config,
     ));
 
@@ -1585,6 +1593,25 @@ fn resolve_advanced_context_config(workspace_ref: &Path) -> AdvancedContextConfi
         cluster_routing.as_ref(),
         global_routing.as_ref(),
     )
+    .policy
+}
+
+fn resolve_semantic_acceleration_policy(workspace_ref: &Path) -> SemanticAccelerationPolicyState {
+    let workspace_routing =
+        FileConfigStore::for_workspace(workspace_ref).local_routing().ok().flatten();
+    let cluster_routing = FileClusterStore::for_workspace(workspace_ref)
+        .load()
+        .ok()
+        .flatten()
+        .map(|config| config.routing);
+    let global_routing = FileConfigStore::global_routing().ok().flatten();
+
+    resolve_effective_semantic_acceleration_config(
+        workspace_routing.as_ref(),
+        cluster_routing.as_ref(),
+        global_routing.as_ref(),
+    )
+    .policy
     .policy
 }
 
@@ -2117,7 +2144,10 @@ mod tests {
         build_goal_plan_with_sources, canon_input_disposition, resolve_domain_context,
     };
     use crate::adapters::config_store::FileConfigStore;
-    use crate::domain::configuration::{ConfigFile, RoutingConfig};
+    use crate::domain::configuration::{
+        ConfigFile, RoutingConfig, SemanticAccelerationPolicy, SemanticAccelerationPolicyState,
+    };
+    use crate::domain::context_intelligence::{HybridOutcome, SemanticPolicyState};
     use crate::domain::domain_templates::{
         DomainFamily, DomainTemplateSettings, ExternalContextBinding, ExternalContextKind,
     };
@@ -2145,6 +2175,35 @@ mod tests {
         FileConfigStore::for_workspace(workspace)
             .save_local(&ConfigFile { version: 1, routing, canon: None })
             .unwrap();
+    }
+
+    #[test]
+    fn build_context_pack_surfaces_local_semantic_acceleration_policy_from_workspace_config() {
+        let workspace = temp_workspace("boundline-goal-planner-semantic-local");
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::write(
+            workspace.join("src/lib.rs"),
+            "pub fn add(left: i32, right: i32) -> i32 { left + right }\n",
+        )
+        .unwrap();
+
+        let routing = RoutingConfig {
+            semantic_acceleration: Some(SemanticAccelerationPolicy {
+                policy: SemanticAccelerationPolicyState::Local,
+            }),
+            ..RoutingConfig::default()
+        };
+        save_local_routing(&workspace, routing);
+
+        let context_pack = build_context_pack(
+            "Fix the add implementation",
+            &workspace,
+            &PlanningContextSources::default(),
+        );
+        let advanced_context = context_pack.advanced_context.expect("advanced context projection");
+
+        assert_eq!(advanced_context.semantic_policy_state, SemanticPolicyState::Local);
+        assert_eq!(advanced_context.hybrid_outcome, HybridOutcome::Skipped);
     }
 
     struct CanonExpertiseFixture<'a> {
@@ -2267,6 +2326,7 @@ mod tests {
                     evidence_summary: None,
                     authority_provenance_lines: Vec::new(),
                     adaptive_provenance_lines: Vec::new(),
+                    semantic_provenance_lines: Vec::new(),
                 }),
                 ..PlanningContextSources::default()
             },
@@ -2576,6 +2636,7 @@ mod tests {
                     evidence_summary: None,
                     authority_provenance_lines: Vec::new(),
                     adaptive_provenance_lines: Vec::new(),
+                    semantic_provenance_lines: Vec::new(),
                 }),
                 ..PlanningContextSources::default()
             },
@@ -2626,6 +2687,7 @@ mod tests {
                     evidence_summary: None,
                     authority_provenance_lines: Vec::new(),
                     adaptive_provenance_lines: Vec::new(),
+                    semantic_provenance_lines: Vec::new(),
                 }),
                 ..PlanningContextSources::default()
             },
@@ -2693,6 +2755,7 @@ mod tests {
                     evidence_summary: None,
                     authority_provenance_lines: Vec::new(),
                     adaptive_provenance_lines: Vec::new(),
+                    semantic_provenance_lines: Vec::new(),
                 }),
                 ..PlanningContextSources::default()
             },

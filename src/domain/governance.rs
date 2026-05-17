@@ -711,6 +711,7 @@ pub enum PacketReadiness {
 
 pub const AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE: &str = "authority-governance-v1";
 pub const ADAPTIVE_GOVERNANCE_V1_CONTRACT_LINE: &str = "adaptive-governance-v1";
+pub const SEMANTIC_ARTIFACT_DESCRIPTOR_V1_CONTRACT_LINE: &str = "v1";
 const CANON_PROVENANCE_UNAVAILABLE: &str = "unavailable";
 
 /// Bounded council profile vocabulary defined by S3 §20.
@@ -1255,6 +1256,97 @@ impl CanonAdaptiveGovernanceV1Envelope {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CanonSemanticEligibilityState {
+    Eligible,
+    Excluded,
+}
+
+impl CanonSemanticEligibilityState {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Eligible => "eligible",
+            Self::Excluded => "excluded",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CanonSemanticProvenanceBoundary {
+    Surface,
+    ManagedBlock,
+    Section,
+}
+
+impl CanonSemanticProvenanceBoundary {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Surface => "surface",
+            Self::ManagedBlock => "managed_block",
+            Self::Section => "section",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CanonSemanticArtifactDescriptorV1Envelope {
+    pub semantic_contract_line: String,
+    pub semantic_eligibility: CanonSemanticEligibilityState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub semantic_provenance_boundary: Option<CanonSemanticProvenanceBoundary>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub semantic_provenance_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub semantic_labels: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub semantic_exclusion_reason: Option<String>,
+}
+
+impl CanonSemanticArtifactDescriptorV1Envelope {
+    /// Reports whether the packet advertises the currently supported semantic contract line.
+    pub fn is_supported_contract_line(&self) -> bool {
+        self.semantic_contract_line == SEMANTIC_ARTIFACT_DESCRIPTOR_V1_CONTRACT_LINE
+    }
+
+    /// Renders a compact projection of the semantic descriptor for session and trace views.
+    pub fn projection_lines(&self) -> Vec<String> {
+        vec![
+            format!("semantic_contract_line: {}", self.semantic_contract_line),
+            format!("semantic_eligibility: {}", self.semantic_eligibility.as_str()),
+            format!(
+                "semantic_provenance_boundary: {}",
+                self.semantic_provenance_boundary
+                    .map(CanonSemanticProvenanceBoundary::as_str)
+                    .unwrap_or(CANON_PROVENANCE_UNAVAILABLE)
+            ),
+            format!(
+                "semantic_provenance_ref: {}",
+                self.semantic_provenance_ref
+                    .as_deref()
+                    .filter(|value| !value.trim().is_empty())
+                    .unwrap_or(CANON_PROVENANCE_UNAVAILABLE)
+            ),
+            format!(
+                "semantic_labels: {}",
+                if self.semantic_labels.is_empty() {
+                    CANON_PROVENANCE_UNAVAILABLE.to_string()
+                } else {
+                    self.semantic_labels.join(", ")
+                }
+            ),
+            format!(
+                "semantic_exclusion_reason: {}",
+                self.semantic_exclusion_reason
+                    .as_deref()
+                    .filter(|value| !value.trim().is_empty())
+                    .unwrap_or(CANON_PROVENANCE_UNAVAILABLE)
+            ),
+        ]
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CanonStageRoleHint {
     pub hint_kind: CanonStageRoleHintKind,
@@ -1637,6 +1729,8 @@ pub struct CompactedCanonMemory {
     pub authority_provenance_lines: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub adaptive_provenance_lines: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub semantic_provenance_lines: Vec<String>,
 }
 
 impl CompactedCanonMemory {
@@ -1677,6 +1771,7 @@ impl CompactedCanonMemory {
         }
         lines.extend(self.authority_provenance_lines.clone());
         lines.extend(self.adaptive_provenance_lines.clone());
+        lines.extend(self.semantic_provenance_lines.clone());
         if let Some(next_action) = self.next_action_text() {
             lines.push(format!("canon_memory_next_action: {next_action}"));
         }
@@ -1825,6 +1920,8 @@ pub struct GovernedStagePacket {
     pub authority_governance: Option<CanonAuthorityGovernanceV1Envelope>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub adaptive_governance: Option<CanonAdaptiveGovernanceV1Envelope>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub semantic_descriptor: Option<CanonSemanticArtifactDescriptorV1Envelope>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

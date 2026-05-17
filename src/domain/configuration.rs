@@ -322,6 +322,58 @@ const fn default_remote_policy_state() -> RemoteTransmissionPolicyState {
     RemoteTransmissionPolicyState::LocalOnly
 }
 
+/// Semantic-acceleration policy states exposed by the dedicated config surface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "snake_case")]
+pub enum SemanticAccelerationPolicyState {
+    Disabled,
+    Local,
+}
+
+impl SemanticAccelerationPolicyState {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Disabled => "disabled",
+            Self::Local => "local",
+        }
+    }
+}
+
+impl fmt::Display for SemanticAccelerationPolicyState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Typed semantic-acceleration policy layered through configuration precedence.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SemanticAccelerationPolicy {
+    #[serde(default = "default_semantic_acceleration_policy_state")]
+    pub policy: SemanticAccelerationPolicyState,
+}
+
+impl Default for SemanticAccelerationPolicy {
+    fn default() -> Self {
+        Self { policy: default_semantic_acceleration_policy_state() }
+    }
+}
+
+impl SemanticAccelerationPolicy {
+    /// Validates the semantic-acceleration policy.
+    pub fn validate(&self) -> Result<(), ConfigurationError> {
+        Ok(())
+    }
+
+    /// Returns a compact human-readable summary of the policy.
+    pub fn summary_text(&self) -> String {
+        format!("policy={}", self.policy)
+    }
+}
+
+const fn default_semantic_acceleration_policy_state() -> SemanticAccelerationPolicyState {
+    SemanticAccelerationPolicyState::Disabled
+}
+
 /// Concrete runtime and model selected for a route slot.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ModelRoute {
@@ -362,6 +414,8 @@ pub struct RoutingConfig {
     pub slot_effort_policies: BTreeMap<RouteSlot, SlotEffortPolicy>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub advanced_context: Option<AdvancedContextConfig>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub semantic_acceleration: Option<SemanticAccelerationPolicy>,
     #[serde(default)]
     pub domain_templates: BTreeMap<DomainFamily, DomainTemplateSettings>,
 }
@@ -400,6 +454,10 @@ impl RoutingConfig {
         }
 
         if let Some(policy) = self.advanced_context.as_ref() {
+            policy.validate()?;
+        }
+
+        if let Some(policy) = self.semantic_acceleration.as_ref() {
             policy.validate()?;
         }
 
@@ -448,6 +506,14 @@ impl RoutingConfig {
 
     pub fn unset_slot_effort_policy(&mut self, slot: RouteSlot) {
         self.slot_effort_policies.remove(&slot);
+    }
+
+    pub fn set_semantic_acceleration_policy(&mut self, policy: SemanticAccelerationPolicy) {
+        self.semantic_acceleration = Some(policy);
+    }
+
+    pub fn unset_semantic_acceleration_policy(&mut self) {
+        self.semantic_acceleration = None;
     }
 
     pub fn set_domain_template_settings(
@@ -586,6 +652,13 @@ pub struct SourcedSlotEffortPolicy {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourcedAdvancedContextConfig {
     pub policy: AdvancedContextConfig,
+    pub source: ValueSource,
+}
+
+/// Semantic-acceleration policy annotated with its value source.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourcedSemanticAccelerationPolicy {
+    pub policy: SemanticAccelerationPolicy,
     pub source: ValueSource,
 }
 
@@ -777,6 +850,39 @@ pub fn resolve_effective_advanced_context_config(
 
     SourcedAdvancedContextConfig {
         policy: AdvancedContextConfig::default(),
+        source: ValueSource::BuiltIn,
+    }
+}
+
+/// Resolves the effective semantic-acceleration policy across config layers.
+pub fn resolve_effective_semantic_acceleration_config(
+    workspace: Option<&RoutingConfig>,
+    cluster: Option<&RoutingConfig>,
+    global: Option<&RoutingConfig>,
+) -> SourcedSemanticAccelerationPolicy {
+    if let Some(policy) = workspace.and_then(|cfg| cfg.semantic_acceleration.as_ref()) {
+        return SourcedSemanticAccelerationPolicy {
+            policy: policy.clone(),
+            source: ValueSource::Workspace,
+        };
+    }
+
+    if let Some(policy) = cluster.and_then(|cfg| cfg.semantic_acceleration.as_ref()) {
+        return SourcedSemanticAccelerationPolicy {
+            policy: policy.clone(),
+            source: ValueSource::Cluster,
+        };
+    }
+
+    if let Some(policy) = global.and_then(|cfg| cfg.semantic_acceleration.as_ref()) {
+        return SourcedSemanticAccelerationPolicy {
+            policy: policy.clone(),
+            source: ValueSource::Global,
+        };
+    }
+
+    SourcedSemanticAccelerationPolicy {
+        policy: SemanticAccelerationPolicy::default(),
         source: ValueSource::BuiltIn,
     }
 }
@@ -982,11 +1088,12 @@ mod tests {
     use super::{
         AdvancedContextConfig, CapabilityState, ConfigurationError, EffortFallbackPolicy,
         EffortLevel, ModelRoute, ResolvedDomainTemplate, RouteSlot, RoutingConfig,
-        RoutingOverrides, RuntimeCapabilityProfile, RuntimeKind, SlotEffortPolicy, ValueSource,
+        RoutingOverrides, RuntimeCapabilityProfile, RuntimeKind, SemanticAccelerationPolicy,
+        SemanticAccelerationPolicyState, SlotEffortPolicy, ValueSource,
         assistant_default_model_route, resolve_effective_advanced_context_config,
         resolve_effective_domain_templates, resolve_effective_routing,
-        resolve_effective_runtime_capabilities, resolve_effective_slot_effort_policies,
-        seeded_routes_for_assistants,
+        resolve_effective_runtime_capabilities, resolve_effective_semantic_acceleration_config,
+        resolve_effective_slot_effort_policies, seeded_routes_for_assistants,
     };
 
     #[test]
@@ -1079,6 +1186,31 @@ mod tests {
         assert_eq!(resolved.source, ValueSource::Workspace);
         assert_eq!(resolved.policy.retrieval_mode, RetrievalMode::Disabled);
         assert_eq!(resolved.policy.remote_policy, RemoteTransmissionPolicyState::Blocked);
+    }
+
+    #[test]
+    fn semantic_acceleration_policy_defaults_to_disabled_and_prefers_workspace() {
+        let workspace = RoutingConfig {
+            semantic_acceleration: Some(SemanticAccelerationPolicy {
+                policy: SemanticAccelerationPolicyState::Local,
+            }),
+            ..RoutingConfig::default()
+        };
+        let global = RoutingConfig {
+            semantic_acceleration: Some(SemanticAccelerationPolicy::default()),
+            ..RoutingConfig::default()
+        };
+
+        let resolved =
+            resolve_effective_semantic_acceleration_config(Some(&workspace), None, Some(&global));
+
+        assert_eq!(
+            SemanticAccelerationPolicy::default().policy,
+            SemanticAccelerationPolicyState::Disabled
+        );
+        assert_eq!(resolved.source, ValueSource::Workspace);
+        assert_eq!(resolved.policy.policy, SemanticAccelerationPolicyState::Local);
+        assert_eq!(resolved.policy.summary_text(), "policy=local");
     }
 
     #[test]

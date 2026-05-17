@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::domain::governance::CanonSemanticArtifactDescriptorV1Envelope;
 use crate::domain::project_index::{ProjectDocRoots, resolve_project_doc_roots};
 
 /// Supported contract line for this Boundline integration slice.
@@ -192,6 +193,8 @@ struct CanonSurfaceMetadata {
     #[serde(default)]
     publication_target_class: Option<String>,
     #[serde(default)]
+    semantic_descriptor: Option<CanonSemanticArtifactDescriptorV1Envelope>,
+    #[serde(default)]
     expertise_input: Option<ExpertiseInputRef>,
 }
 
@@ -210,6 +213,18 @@ pub struct GovernedExpertiseInputSurface {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub publication_target_class: Option<String>,
     pub expertise_input: ExpertiseInputRef,
+}
+
+/// Read-only consumer view of Canon semantic metadata carried beside one artifact.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CanonSemanticArtifactSurface {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lineage: Option<LineageRef>,
+    pub promotion_view: PromotionStateView,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub publication_target_class: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub semantic_descriptor: Option<CanonSemanticArtifactDescriptorV1Envelope>,
 }
 
 /// Result of checking a Canon `contract_version` against the Boundline
@@ -690,6 +705,27 @@ fn read_packet_metadata_sidecar_metadata(artifact_path: &Path) -> Option<CanonSu
     let sidecar = packet_metadata_sidecar_path(artifact_path);
     let content = std::fs::read_to_string(&sidecar).ok()?;
     serde_json::from_str(&content).ok()
+}
+
+/// Read Canon semantic sidecar metadata for one artifact when the packet metadata exists.
+pub fn read_canon_semantic_artifact_surface(
+    artifact_path: &Path,
+) -> Option<CanonSemanticArtifactSurface> {
+    let metadata = read_packet_metadata_sidecar_metadata(artifact_path)?;
+    let promotion_view = metadata
+        .lineage
+        .as_ref()
+        .map(PromotionStateView::from_lineage)
+        .unwrap_or(PromotionStateView::Unknown);
+
+    Some(CanonSemanticArtifactSurface {
+        lineage: metadata.lineage,
+        promotion_view,
+        publication_target_class: normalized_metadata_value(
+            metadata.publication_target_class.as_deref(),
+        ),
+        semantic_descriptor: metadata.semantic_descriptor,
+    })
 }
 
 fn packet_metadata_sidecar_path(artifact_path: &Path) -> PathBuf {

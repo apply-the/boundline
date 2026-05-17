@@ -86,21 +86,17 @@ pub enum ClusterStoreError {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::matches;
 
     use uuid::Uuid;
 
-    use super::FileClusterStore;
+    use super::{ClusterStoreError, FileClusterStore};
     use crate::domain::cluster::{
         ClusterConfigFile, ClusterMemberRegistration, ClusterMemberRole, WorkspaceCluster,
     };
 
-    #[test]
-    fn cluster_config_round_trip_works() {
-        let workspace = std::env::temp_dir().join(format!("boundline-cluster-{}", Uuid::new_v4()));
-        fs::create_dir_all(&workspace).unwrap();
-
-        let store = FileClusterStore::for_workspace(&workspace);
-        let config = ClusterConfigFile {
+    fn valid_config(workspace: &std::path::Path) -> ClusterConfigFile {
+        ClusterConfigFile {
             version: 1,
             cluster: WorkspaceCluster {
                 cluster_id: "delivery-a".to_string(),
@@ -121,12 +117,76 @@ mod tests {
                 updated_at: 1,
             },
             ..ClusterConfigFile::default()
-        };
+        }
+    }
+
+    #[test]
+    fn cluster_config_round_trip_works() {
+        let workspace = std::env::temp_dir().join(format!("boundline-cluster-{}", Uuid::new_v4()));
+        fs::create_dir_all(&workspace).unwrap();
+
+        let store = FileClusterStore::for_workspace(&workspace);
+        let config = valid_config(&workspace);
 
         let path = store.save(&config).unwrap();
         assert!(path.ends_with(".boundline/cluster.toml"));
 
         let loaded = store.load().unwrap().unwrap();
         assert_eq!(loaded.cluster.cluster_id, "delivery-a");
+    }
+
+    #[test]
+    fn malformed_cluster_config_reports_parse_error() {
+        let workspace =
+            std::env::temp_dir().join(format!("boundline-cluster-parse-{}", Uuid::new_v4()));
+        let store = FileClusterStore::for_workspace(&workspace);
+        let path = store.cluster_config_path();
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, "not = [valid toml").unwrap();
+
+        let error = store.load().unwrap_err();
+        assert!(matches!(error, ClusterStoreError::Parse { .. }));
+    }
+
+    #[test]
+    fn invalid_cluster_config_reports_validation_error() {
+        let workspace =
+            std::env::temp_dir().join(format!("boundline-cluster-invalid-{}", Uuid::new_v4()));
+        let store = FileClusterStore::for_workspace(&workspace);
+        let path = store.cluster_config_path();
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+
+        let mut config = valid_config(&workspace);
+        config.cluster.members.truncate(1);
+        fs::write(&path, toml::to_string_pretty(&config).unwrap()).unwrap();
+
+        let error = store.load().unwrap_err();
+        assert!(matches!(error, ClusterStoreError::InvalidConfig { .. }));
+    }
+
+    #[test]
+    fn save_invalid_cluster_config_reports_validation_error() {
+        let workspace =
+            std::env::temp_dir().join(format!("boundline-cluster-save-invalid-{}", Uuid::new_v4()));
+        fs::create_dir_all(&workspace).unwrap();
+
+        let mut config = valid_config(&workspace);
+        config.cluster.members.truncate(1);
+
+        let store = FileClusterStore::for_workspace(&workspace);
+        let error = store.save(&config).unwrap_err();
+        assert!(matches!(error, ClusterStoreError::InvalidConfig { .. }));
+    }
+
+    #[test]
+    fn save_reports_parent_write_error() {
+        let workspace =
+            std::env::temp_dir().join(format!("boundline-cluster-write-{}", Uuid::new_v4()));
+        fs::create_dir_all(&workspace).unwrap();
+        fs::write(workspace.join(".boundline"), "not a directory").unwrap();
+
+        let store = FileClusterStore::for_workspace(&workspace);
+        let error = store.save(&valid_config(&workspace)).unwrap_err();
+        assert!(matches!(error, ClusterStoreError::Write { .. }));
     }
 }

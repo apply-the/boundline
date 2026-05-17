@@ -1,0 +1,21 @@
+[
+  {
+    "name": "planner-configuration-state",
+    "goal": "planner reconcile configuration state",
+    "expected_semantic_ref": "src/semantic.rs",
+    "files": [
+      {
+        "path": "src/lib.rs",
+        "content": "pub fn planner() -> bool { true }\n",
+        "primary": true,
+        "rationale": "selected bounded implementation surface"
+      },
+      {
+        "path": "src/semantic.rs",
+        "content": "pub fn reconcileConfigState() -> bool { true }\n",
+        "primary": false,
+        "rationale": "related implementation surface"
+      }
+    ]
+  }
+]

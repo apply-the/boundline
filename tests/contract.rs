@@ -130,6 +130,15 @@ mod context_intelligence_consumer_contract;
 #[path = "contract/context_intelligence_projection_contract.rs"]
 mod context_intelligence_projection_contract;
 
+#[path = "contract/context_intelligence_semantic_inspect_contract.rs"]
+mod context_intelligence_semantic_inspect_contract;
+
+#[path = "contract/context_intelligence_semantic_projection_contract.rs"]
+mod context_intelligence_semantic_projection_contract;
+
+#[path = "contract/context_intelligence_canon_semantic_contract.rs"]
+mod context_intelligence_canon_semantic_contract;
+
 #[path = "contract/negotiated_capture_contract.rs"]
 mod negotiated_capture_contract;
 

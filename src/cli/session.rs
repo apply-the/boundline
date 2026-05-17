@@ -1594,12 +1594,12 @@ mod tests {
         RoutingConfig, RuntimeCapabilityProfile, RuntimeKind, SlotEffortPolicy,
     };
     use crate::domain::context_intelligence::{
-        AdvancedContextProjection, AuthorityRank, CandidateSelectionState, ImpactAnalysisFinding,
-        ImpactFindingKind, ImpactFindingSeverity, ImpactFindingStatus,
+        AdvancedContextProjection, AuthorityRank, CandidateSelectionState, HybridOutcome,
+        ImpactAnalysisFinding, ImpactFindingKind, ImpactFindingSeverity, ImpactFindingStatus,
         RelationshipCredibilityState, RelationshipKind, RelationshipProjection,
         RemoteTransmissionPolicyState, RetrievalCompatibilityState, RetrievalIndexState,
-        RetrievalMode, RetrievalSourceKind, RetrievalStalenessState, RetrievalState,
-        RetrievedEvidenceCandidate,
+        RetrievalMatchOrigin, RetrievalMode, RetrievalSourceKind, RetrievalStalenessState,
+        RetrievalState, RetrievedEvidenceCandidate, SemanticCapabilityState, SemanticPolicyState,
     };
     use crate::domain::decision::{Decision, DecisionType, EvidenceRef};
     use crate::domain::goal_plan::{
@@ -1689,6 +1689,9 @@ fn red_to_green_addition() {
             retrieval_mode: RetrievalMode::Local,
             retrieval_state: RetrievalState::Selected,
             retrieval_index_state: RetrievalIndexState::Ready,
+            semantic_policy_state: SemanticPolicyState::Disabled,
+            semantic_capability_state: SemanticCapabilityState::Unsupported,
+            hybrid_outcome: HybridOutcome::BaselineOnly,
             budgets: Default::default(),
             remote_policy_state: RemoteTransmissionPolicyState::LocalOnly,
             used_remote: false,
@@ -1698,13 +1701,19 @@ fn red_to_green_addition() {
                 source_kind: RetrievalSourceKind::WorkspaceFile,
                 source_ref: "src/lib.rs".to_string(),
                 authority_rank: AuthorityRank::Structured,
+                match_origin: RetrievalMatchOrigin::Fts,
                 selection_state: CandidateSelectionState::Selected,
                 selection_reason: "goal keyword matched the implementation surface".to_string(),
                 provenance_summary: "workspace file selected through local retrieval".to_string(),
                 compatibility_state: RetrievalCompatibilityState::Compatible,
                 staleness_state: RetrievalStalenessState::Fresh,
+                lexical_score: None,
+                semantic_score: None,
+                canon_semantic_contract_line: None,
+                canon_semantic_provenance_ref: None,
             }],
             rejected_candidates: Vec::new(),
+            semantic_trace_records: Vec::new(),
             relationships: vec![RelationshipProjection {
                 relationship_id: "relationship-1".to_string(),
                 subject_ref: "src/lib.rs".to_string(),
@@ -2512,6 +2521,7 @@ fn red_to_green_addition() {
                 evidence_summary: None,
                 authority_provenance_lines: Vec::new(),
                 adaptive_provenance_lines: Vec::new(),
+                semantic_provenance_lines: Vec::new(),
             })
             .unwrap();
         let record = crate::domain::session::ActiveSessionRecord {

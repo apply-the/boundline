@@ -111,12 +111,74 @@ pub enum ConfigStoreError {
 
 #[cfg(test)]
 mod tests {
+    use std::env;
+    use std::ffi::OsString;
     use std::fs;
+    use std::path::Path;
+    use std::sync::{Mutex, MutexGuard, OnceLock};
 
     use uuid::Uuid;
 
-    use super::FileConfigStore;
+    use super::{ConfigStoreError, FileConfigStore};
     use crate::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
+
+    static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    struct EnvRestore<'a> {
+        old_xdg: Option<OsString>,
+        old_home: Option<OsString>,
+        _lock: MutexGuard<'a, ()>,
+    }
+
+    impl Drop for EnvRestore<'_> {
+        fn drop(&mut self) {
+            unsafe {
+                match &self.old_xdg {
+                    Some(value) => env::set_var("XDG_CONFIG_HOME", value),
+                    None => env::remove_var("XDG_CONFIG_HOME"),
+                }
+                match &self.old_home {
+                    Some(value) => env::set_var("HOME", value),
+                    None => env::remove_var("HOME"),
+                }
+            }
+        }
+    }
+
+    fn with_config_env<T>(
+        xdg_home: Option<&Path>,
+        home: Option<&Path>,
+        action: impl FnOnce() -> T,
+    ) -> T {
+        let lock = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+        let restore = EnvRestore {
+            old_xdg: env::var_os("XDG_CONFIG_HOME"),
+            old_home: env::var_os("HOME"),
+            _lock: lock,
+        };
+
+        unsafe {
+            match xdg_home {
+                Some(path) => env::set_var("XDG_CONFIG_HOME", path),
+                None => env::remove_var("XDG_CONFIG_HOME"),
+            }
+            match home {
+                Some(path) => env::set_var("HOME", path),
+                None => env::remove_var("HOME"),
+            }
+        }
+
+        let result = action();
+        drop(restore);
+        result
+    }
+
+    fn valid_config() -> ConfigFile {
+        let mut cfg = ConfigFile::default();
+        cfg.routing.planning =
+            Some(ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-5-codex".to_string() });
+        cfg
+    }
 
     #[test]
     fn local_round_trip_works() {
@@ -124,9 +186,7 @@ mod tests {
         fs::create_dir_all(&workspace).unwrap();
 
         let store = FileConfigStore::for_workspace(&workspace);
-        let mut cfg = ConfigFile::default();
-        cfg.routing.planning =
-            Some(ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-5-codex".to_string() });
+        let cfg = valid_config();
 
         let path = store.save_local(&cfg).unwrap();
         assert!(path.ends_with(".boundline/config.toml"));
@@ -162,5 +222,79 @@ mod tests {
 
         let error = store.save_local(&cfg).unwrap_err();
         assert!(error.to_string().contains("invalid config"));
+    }
+
+    #[test]
+    fn global_config_path_prefers_xdg_config_home() {
+        let xdg_home = std::env::temp_dir().join(format!("boundline-xdg-{}", Uuid::new_v4()));
+        let home = std::env::temp_dir().join(format!("boundline-home-{}", Uuid::new_v4()));
+
+        with_config_env(Some(&xdg_home), Some(&home), || {
+            assert_eq!(
+                FileConfigStore::global_config_path(),
+                xdg_home.join("boundline/config.toml")
+            );
+        });
+    }
+
+    #[test]
+    fn malformed_global_config_reports_parse_error() {
+        let xdg_home =
+            std::env::temp_dir().join(format!("boundline-global-parse-{}", Uuid::new_v4()));
+        let path = xdg_home.join("boundline/config.toml");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, "not = [valid toml").unwrap();
+
+        with_config_env(Some(&xdg_home), None, || {
+            let error = FileConfigStore::load_global().unwrap_err();
+            assert!(matches!(error, ConfigStoreError::Parse { .. }));
+        });
+    }
+
+    #[test]
+    fn invalid_global_config_reports_validation_error() {
+        let xdg_home =
+            std::env::temp_dir().join(format!("boundline-global-invalid-{}", Uuid::new_v4()));
+        let path = xdg_home.join("boundline/config.toml");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+
+        let cfg = ConfigFile {
+            version: 1,
+            routing: RoutingConfig {
+                planning: Some(ModelRoute { runtime: RuntimeKind::Claude, model: " ".to_string() }),
+                ..RoutingConfig::default()
+            },
+            canon: None,
+        };
+        fs::write(&path, toml::to_string_pretty(&cfg).unwrap()).unwrap();
+
+        with_config_env(Some(&xdg_home), None, || {
+            let error = FileConfigStore::load_global().unwrap_err();
+            assert!(matches!(error, ConfigStoreError::InvalidConfig { .. }));
+        });
+    }
+
+    #[test]
+    fn global_routing_reads_saved_xdg_config() {
+        let xdg_home =
+            std::env::temp_dir().join(format!("boundline-global-routing-{}", Uuid::new_v4()));
+
+        with_config_env(Some(&xdg_home), None, || {
+            FileConfigStore::save_global(&valid_config()).unwrap();
+            let routing = FileConfigStore::global_routing().unwrap().unwrap();
+            assert_eq!(routing.planning.unwrap().model, "gpt-5-codex");
+        });
+    }
+
+    #[test]
+    fn save_local_reports_parent_write_error() {
+        let workspace =
+            std::env::temp_dir().join(format!("boundline-config-write-{}", Uuid::new_v4()));
+        fs::create_dir_all(&workspace).unwrap();
+        fs::write(workspace.join(".boundline"), "not a directory").unwrap();
+
+        let store = FileConfigStore::for_workspace(&workspace);
+        let error = store.save_local(&valid_config()).unwrap_err();
+        assert!(matches!(error, ConfigStoreError::Write { .. }));
     }
 }

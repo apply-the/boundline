@@ -8,10 +8,11 @@ use crate::cli::CommandExitStatus;
 use crate::domain::configuration::{
     CanonPreferences, CapabilityState, ConfigFile, ConfigShowScope, ConfigWriteScope,
     EffortFallbackPolicy, EffortLevel, ModelRoute, RouteSlot, RoutingOverrides,
-    RuntimeCapabilityProfile, RuntimeKind, SlotEffortPolicy, ValueSource,
+    RuntimeCapabilityProfile, RuntimeKind, SemanticAccelerationPolicy,
+    SemanticAccelerationPolicyState, SlotEffortPolicy, ValueSource,
     resolve_effective_advanced_context_config, resolve_effective_domain_templates,
     resolve_effective_routing, resolve_effective_runtime_capabilities,
-    resolve_effective_slot_effort_policies,
+    resolve_effective_semantic_acceleration_config, resolve_effective_slot_effort_policies,
 };
 use crate::domain::domain_templates::{DomainFamily, ExternalContextBinding, ExternalContextKind};
 use crate::domain::governance::CanonModeSelectionPreference;
@@ -58,6 +59,14 @@ pub struct SetEffortRequest<'a> {
     pub level: EffortLevel,
     pub fallback: EffortFallbackPolicy,
     pub rationale: Option<&'a str>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SetSemanticAccelerationRequest<'a> {
+    pub workspace: Option<&'a Path>,
+    pub cluster: Option<&'a Path>,
+    pub scope: ConfigWriteScope,
+    pub policy: SemanticAccelerationPolicyState,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -149,6 +158,11 @@ pub fn execute_show(
                 cluster_routing.as_ref(),
                 global.as_ref(),
             );
+            let effective_semantic_acceleration = resolve_effective_semantic_acceleration_config(
+                local.as_ref(),
+                cluster_routing.as_ref(),
+                global.as_ref(),
+            );
             let effective_domain_templates = resolve_effective_domain_templates(
                 local.as_ref(),
                 cluster_routing.as_ref(),
@@ -232,6 +246,11 @@ pub fn execute_show(
                 "advanced_context: {} [{}]",
                 advanced_context_policy_text(&effective_advanced_context.policy),
                 source_text(effective_advanced_context.source)
+            ));
+            lines.push(format!(
+                "semantic_acceleration: {} [{}]",
+                semantic_acceleration_policy_text(&effective_semantic_acceleration.policy),
+                source_text(effective_semantic_acceleration.source)
             ));
 
             push_effective_domain_template_lines(&mut lines, &effective_domain_templates);
@@ -324,6 +343,48 @@ pub fn execute_set_canon(
             path.display(),
             mode_selection
         ),
+    })
+}
+
+pub fn execute_set_semantic_acceleration(
+    request: SetSemanticAccelerationRequest<'_>,
+) -> Result<ConfigCommandReport, ConfigCommandError> {
+    let policy = SemanticAccelerationPolicy { policy: request.policy };
+    policy.validate().map_err(|source| ConfigCommandError::InvalidPolicy(source.to_string()))?;
+
+    if request.scope == ConfigWriteScope::Cluster {
+        let cluster = request.cluster.ok_or(ConfigCommandError::ClusterRequired)?;
+        let store = FileClusterStore::for_workspace(cluster);
+        let mut config = store
+            .load()?
+            .ok_or_else(|| ConfigCommandError::MissingClusterConfig(store.cluster_config_path()))?;
+        config.routing.set_semantic_acceleration_policy(policy);
+        config
+            .routing
+            .validate()
+            .map_err(|source| ConfigCommandError::InvalidPolicy(source.to_string()))?;
+        let path = store.save(&config)?;
+
+        return Ok(ConfigCommandReport {
+            exit_status: CommandExitStatus::Succeeded,
+            terminal_output: format!(
+                "config: updated semantic acceleration policy in cluster config at {}",
+                path.display()
+            ),
+        });
+    }
+
+    let (mut config, location) = load_config_for_scope(request.workspace, request.scope)?;
+    config.routing.set_semantic_acceleration_policy(policy);
+    config
+        .routing
+        .validate()
+        .map_err(|source| ConfigCommandError::InvalidPolicy(source.to_string()))?;
+    save_config_for_scope(request.workspace, request.scope, &config)?;
+
+    Ok(ConfigCommandReport {
+        exit_status: CommandExitStatus::Succeeded,
+        terminal_output: format!("config: updated semantic acceleration policy in {location}"),
     })
 }
 
@@ -851,6 +912,12 @@ fn render_scope(scope: &str, config: &ConfigFile) -> String {
         lines.push("advanced_context: none".to_string());
     }
 
+    if let Some(policy) = config.routing.semantic_acceleration.as_ref() {
+        lines.push(format!("semantic_acceleration: {}", semantic_acceleration_policy_text(policy)));
+    } else {
+        lines.push("semantic_acceleration: none".to_string());
+    }
+
     if config.routing.domain_templates.is_empty() {
         lines.push("domain_templates: none".to_string());
     } else {
@@ -911,6 +978,10 @@ fn effort_policy_text(policy: &SlotEffortPolicy) -> String {
 fn advanced_context_policy_text(
     policy: &crate::domain::configuration::AdvancedContextConfig,
 ) -> String {
+    policy.summary_text()
+}
+
+fn semantic_acceleration_policy_text(policy: &SemanticAccelerationPolicy) -> String {
     policy.summary_text()
 }
 
@@ -1161,6 +1232,7 @@ mod tests {
         assert!(empty.contains("runtime_capabilities: none"));
         assert!(empty.contains("slot_effort_policies: none"));
         assert!(empty.contains("advanced_context: none"));
+        assert!(empty.contains("semantic_acceleration: none"));
 
         assert_eq!(slot_label(RouteSlot::Planning), "planning");
         assert_eq!(slot_label(RouteSlot::Implementation), "implementation");
@@ -1207,6 +1279,10 @@ mod tests {
                     crate::domain::context_intelligence::RemoteTransmissionPolicyState::LocalOnly,
                 budgets: crate::domain::context_intelligence::RetrievalBudgets::default(),
             });
+        config.routing.semantic_acceleration =
+            Some(crate::domain::configuration::SemanticAccelerationPolicy {
+                policy: crate::domain::configuration::SemanticAccelerationPolicyState::Local,
+            });
 
         assert_eq!(route_text(config.routing.review.as_ref().unwrap()), "gemini:gemini-2.5-pro");
         assert!(
@@ -1238,6 +1314,7 @@ mod tests {
             "- verification: level=high, fallback=preserve, rationale=required for release"
         ));
         assert!(rendered.contains("advanced_context: mode=local, remote_policy=local_only"));
+        assert!(rendered.contains("semantic_acceleration: policy=local"));
     }
 
     #[test]
@@ -1390,6 +1467,11 @@ mod tests {
         );
         assert!(effective_view.terminal_output.contains("runtime_capabilities:"));
         assert!(effective_view.terminal_output.contains("slot_effort_policies:"));
+        assert!(
+            effective_view
+                .terminal_output
+                .contains("semantic_acceleration: policy=disabled [built-in]")
+        );
         assert!(effective_view
             .terminal_output
             .contains("- verification: level=high, fallback=preserve, rationale=cluster validation bar [cluster]"));
@@ -1599,6 +1681,57 @@ mod tests {
             }),
             Err(ConfigCommandError::InvalidRoute(_))
         ));
+    }
+
+    #[test]
+    fn execute_set_semantic_acceleration_updates_workspace_and_cluster_targets() {
+        let workspace = temp_workspace("boundline-cli-config-semantic-acceleration");
+
+        let workspace_report = execute_set_semantic_acceleration(SetSemanticAccelerationRequest {
+            workspace: Some(workspace.as_path()),
+            cluster: None,
+            scope: ConfigWriteScope::Workspace,
+            policy: SemanticAccelerationPolicyState::Local,
+        })
+        .unwrap();
+        assert!(
+            workspace_report
+                .terminal_output
+                .contains("semantic acceleration policy in workspace config")
+        );
+
+        let local = FileConfigStore::for_workspace(&workspace).load_local().unwrap().unwrap();
+        assert_eq!(
+            local.routing.semantic_acceleration.unwrap().policy,
+            SemanticAccelerationPolicyState::Local
+        );
+
+        let cluster_config = build_cluster_config(&workspace);
+        FileClusterStore::for_workspace(&workspace).save(&cluster_config).unwrap();
+        let cluster_report = execute_set_semantic_acceleration(SetSemanticAccelerationRequest {
+            workspace: Some(workspace.as_path()),
+            cluster: Some(workspace.as_path()),
+            scope: ConfigWriteScope::Cluster,
+            policy: SemanticAccelerationPolicyState::Disabled,
+        })
+        .unwrap();
+        assert!(
+            cluster_report
+                .terminal_output
+                .contains("semantic acceleration policy in cluster config")
+        );
+
+        let effective_view = execute_show(
+            Some(workspace.as_path()),
+            Some(workspace.as_path()),
+            Some(ConfigShowScope::Effective),
+        )
+        .unwrap();
+        assert!(
+            effective_view
+                .terminal_output
+                .contains("semantic_acceleration: policy=local [workspace]")
+        );
     }
 
     #[test]

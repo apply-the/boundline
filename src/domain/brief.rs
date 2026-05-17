@@ -630,6 +630,7 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
+    use serde_json::json;
     use uuid::Uuid;
 
     use super::*;
@@ -781,5 +782,138 @@ mod tests {
         assert!(rendered.starts_with("Goal: deliver fix"));
         assert!(rendered.contains("## plan.md"));
         assert!(rendered.contains("Step 2: fix"));
+    }
+
+    #[test]
+    fn brief_bundle_accessors_and_defaults_cover_local_helpers() {
+        let mut bundle: AuthoredBriefBundle = serde_json::from_value(json!({
+            "bundle_id": "bundle-1",
+            "primary_goal_text": "Goal",
+            "sources": [
+                {
+                    "source_id": "direct-0",
+                    "kind": "direct_text",
+                    "display_name": "developer goal",
+                    "workspace_path": null,
+                    "precedence": 0,
+                    "content": "Goal"
+                }
+            ],
+            "captured_at": 1
+        }))
+        .unwrap();
+
+        assert_eq!(bundle.resolution_state, AuthoredBriefResolutionState::Ready);
+        assert_eq!(bundle.ordered_source_labels(), vec!["direct_text: developer goal"]);
+
+        bundle.deduplicated_sources = vec!["docs/prd.md".to_string()];
+        bundle.clarification = Some(ClarificationRecord {
+            clarification_id: "clarification-1".to_string(),
+            reason_kind: ClarificationReasonKind::MissingContext,
+            prompt: "Need more business context".to_string(),
+            missing_fields: vec!["risk".to_string()],
+            blocking_sources: Vec::new(),
+            turn_index: 1,
+            status: ClarificationStatus::Open,
+        });
+        bundle.derived_task_draft = Some(DerivedTaskDraft {
+            draft_id: "draft-1".to_string(),
+            bundle_id: "bundle-1".to_string(),
+            bounded_goal: "Goal".to_string(),
+            flow_hint: None,
+            planning_ready: true,
+            validation_targets: Vec::new(),
+            blocking_clarification_ref: Some("clarification-1".to_string()),
+        });
+
+        assert_eq!(bundle.deduplicated_source_labels(), vec!["docs/prd.md".to_string()]);
+        assert!(bundle.planning_ready());
+        assert_eq!(
+            bundle.clarification_headline().as_deref(),
+            Some("clarification required: provide the missing business context")
+        );
+        assert_eq!(bundle.clarification_prompt().as_deref(), Some("Need more business context"));
+        assert_eq!(bundle.clarification_missing_fields(), Some(vec!["risk".to_string()]));
+    }
+
+    #[test]
+    fn normalize_inputs_reports_invalid_workspace_and_combined_source_overflow() {
+        let missing_workspace =
+            std::env::temp_dir().join(format!("boundline-brief-missing-ws-{}", Uuid::new_v4()));
+        let invalid_workspace_error =
+            normalize_inputs(&missing_workspace, Some("Goal"), &[]).unwrap_err();
+        assert!(matches!(invalid_workspace_error, BriefIngestionError::InvalidWorkspace { .. }));
+
+        let workspace = temp_workspace("boundline-brief-merged-overflow");
+        let docs = workspace.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+
+        let attached = (0..6)
+            .map(|index| {
+                let path = docs.join(format!("attached-{index}.md"));
+                fs::write(&path, format!("attached {index}\n")).unwrap();
+                path
+            })
+            .collect::<Vec<_>>();
+        let referenced_paths = (0..5)
+            .map(|index| {
+                let path = docs.join(format!("referenced-{index}.md"));
+                fs::write(&path, format!("referenced {index}\n")).unwrap();
+                format!("./docs/referenced-{index}.md")
+            })
+            .collect::<Vec<_>>();
+        let goal = format!("[{}]", referenced_paths.join(", "));
+
+        let error = normalize_inputs(&workspace, Some(&goal), &attached).unwrap_err();
+        assert!(matches!(error, BriefIngestionError::TooManySources(11)));
+    }
+
+    #[test]
+    fn normalize_governance_intent_validates_required_canon_fields() {
+        assert_eq!(normalize_governance_intent(None, None, None, None).unwrap(), None);
+
+        assert!(matches!(
+            normalize_governance_intent(Some(GovernanceRuntimeKind::Canon), None, None, None),
+            Err(BriefIngestionError::MissingGovernanceField {
+                field: "risk",
+                runtime: GovernanceRuntimeKind::Canon,
+            })
+        ));
+        assert!(matches!(
+            normalize_governance_intent(
+                Some(GovernanceRuntimeKind::Canon),
+                Some("high"),
+                None,
+                None,
+            ),
+            Err(BriefIngestionError::MissingGovernanceField {
+                field: "zone",
+                runtime: GovernanceRuntimeKind::Canon,
+            })
+        ));
+        assert!(matches!(
+            normalize_governance_intent(
+                Some(GovernanceRuntimeKind::Canon),
+                Some("high"),
+                Some("prod"),
+                None,
+            ),
+            Err(BriefIngestionError::MissingGovernanceField {
+                field: "owner",
+                runtime: GovernanceRuntimeKind::Canon,
+            })
+        ));
+
+        let local_intent = normalize_governance_intent(
+            Some(GovernanceRuntimeKind::Local),
+            Some(" high "),
+            Some(" yellow "),
+            Some(" team-a "),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(local_intent.risk.as_deref(), Some("high"));
+        assert_eq!(local_intent.zone.as_deref(), Some("yellow"));
+        assert_eq!(local_intent.owner.as_deref(), Some("team-a"));
     }
 }
