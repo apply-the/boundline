@@ -823,3 +823,260 @@ fn resolved_relative_path(workspace_ref: &Path, reference: &str) -> Option<Strin
     let absolute_path = workspace_ref.join(reference_path);
     absolute_path.is_file().then(|| reference_path.to_string_lossy().into_owned())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::path::PathBuf;
+
+    use crate::domain::goal_plan::{ContextInput, ContextInputKind, ContextPackCredibility};
+
+    fn temp_workspace(prefix: &str) -> PathBuf {
+        let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+        fs::create_dir_all(&workspace).unwrap();
+        workspace
+    }
+
+    fn context_input(
+        kind: ContextInputKind,
+        reference: &str,
+        source: &str,
+        rationale: &str,
+        primary: bool,
+    ) -> ContextInput {
+        ContextInput {
+            kind,
+            reference: reference.to_string(),
+            rationale: rationale.to_string(),
+            source: source.to_string(),
+            primary,
+        }
+    }
+
+    fn selected_candidate(
+        source_kind: RetrievalSourceKind,
+        source_ref: &str,
+    ) -> RetrievedEvidenceCandidate {
+        RetrievedEvidenceCandidate {
+            candidate_id: "candidate-1".to_string(),
+            source_kind,
+            source_ref: source_ref.to_string(),
+            authority_rank: AuthorityRank::Structured,
+            selection_state: CandidateSelectionState::Selected,
+            selection_reason: "selected through bounded retrieval".to_string(),
+            provenance_summary: "bounded evidence projection".to_string(),
+            compatibility_state: RetrievalCompatibilityState::Compatible,
+            staleness_state: RetrievalStalenessState::Fresh,
+        }
+    }
+
+    #[test]
+    fn build_advanced_context_projection_degrades_to_structured_fallback_when_fts_misses() {
+        let workspace = temp_workspace("boundline-advanced-context-fallback");
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::write(
+            workspace.join("src/lib.rs"),
+            "pub fn add(left: i32, right: i32) -> i32 { left + right }\n",
+        )
+        .unwrap();
+
+        let projection = build_advanced_context_projection(
+            "quartz zebra mnemonic",
+            &workspace,
+            &[context_input(
+                ContextInputKind::WorkspaceFile,
+                "src/lib.rs",
+                "workspace_scan",
+                "selected workspace target",
+                true,
+            )],
+            &[],
+            ContextPackCredibility::Credible,
+            None,
+            &AdvancedContextConfig::default(),
+        );
+
+        assert_eq!(projection.retrieval_state, RetrievalState::Degraded);
+        assert_eq!(projection.retrieval_index_state, RetrievalIndexState::Ready);
+        assert_eq!(projection.selected_evidence.len(), 1);
+        assert_eq!(projection.selected_evidence[0].source_ref, "src/lib.rs");
+        assert!(projection.terminal_reason.as_deref().is_some_and(|reason| {
+            reason.contains("SQLite retrieval returned no stronger local match")
+        }));
+    }
+
+    #[test]
+    fn collect_retrieval_documents_classifies_backing_and_staleness() {
+        let workspace = temp_workspace("boundline-advanced-context-documents");
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::write(workspace.join("src/lib.rs"), "fn demo() {}\n").unwrap();
+
+        let inputs = vec![
+            context_input(
+                ContextInputKind::WorkspaceFile,
+                "src/lib.rs",
+                "workspace_scan",
+                "selected workspace target",
+                true,
+            ),
+            context_input(
+                ContextInputKind::WorkspaceFile,
+                "src/lib.rs",
+                "workspace_scan",
+                "duplicate workspace target",
+                false,
+            ),
+            context_input(
+                ContextInputKind::RecentTrace,
+                ".boundline/traces/latest.json",
+                "latest_trace_ref",
+                "persisted trace evidence",
+                false,
+            ),
+            context_input(
+                ContextInputKind::AuthoredBrief,
+                "operator notes",
+                "authored_input_summary",
+                "captures the operator-authored task framing",
+                false,
+            ),
+        ];
+
+        let documents = collect_retrieval_documents(
+            &workspace,
+            &inputs,
+            &["src/lib.rs".to_string()],
+            ContextPackCredibility::Stale,
+            Some("trace snapshot is stale"),
+        );
+
+        assert_eq!(documents.len(), 3);
+
+        let workspace_document =
+            documents.iter().find(|document| document.source_ref == "src/lib.rs").unwrap();
+        assert_eq!(workspace_document.source_kind, RetrievalSourceKind::WorkspaceFile);
+        assert_eq!(workspace_document.authority_rank, AuthorityRank::Structured);
+        assert_eq!(workspace_document.compatibility_state, RetrievalCompatibilityState::Compatible);
+        assert_eq!(workspace_document.staleness_state, RetrievalStalenessState::Fresh);
+        assert!(workspace_document.content.contains("fn demo() {}"));
+        assert!(workspace_document.metadata_json.contains("\"selected_target\":true"));
+
+        let trace_document = documents
+            .iter()
+            .find(|document| document.source_ref == ".boundline/traces/latest.json")
+            .unwrap();
+        assert_eq!(trace_document.source_kind, RetrievalSourceKind::Trace);
+        assert_eq!(
+            trace_document.compatibility_state,
+            RetrievalCompatibilityState::MissingMetadata
+        );
+        assert_eq!(trace_document.staleness_state, RetrievalStalenessState::Stale);
+
+        let absolute_ref = workspace.join("src/lib.rs");
+        assert_eq!(
+            resolved_relative_path(&workspace, &absolute_ref.to_string_lossy()),
+            Some("src/lib.rs".to_string())
+        );
+        assert_eq!(
+            compatibility_state(ContextInputKind::DomainTemplate, false),
+            RetrievalCompatibilityState::MissingMetadata
+        );
+        assert_eq!(
+            staleness_state(
+                ContextInputKind::CanonMemory,
+                ContextPackCredibility::Stale,
+                Some("refresh evidence")
+            ),
+            RetrievalStalenessState::Stale
+        );
+    }
+
+    #[test]
+    fn structured_helpers_prioritize_selected_targets_and_deduplicate_promotions() {
+        let documents = vec![
+            RetrievalDocument {
+                source_ref: "notes/operator.md".to_string(),
+                source_kind: RetrievalSourceKind::ProjectMemory,
+                authority_rank: AuthorityRank::WorkspaceOverride,
+                provenance_summary: "notes".to_string(),
+                compatibility_state: RetrievalCompatibilityState::Compatible,
+                staleness_state: RetrievalStalenessState::Fresh,
+                metadata_json: "{}".to_string(),
+                content: "notes".to_string(),
+            },
+            RetrievalDocument {
+                source_ref: "src/lib.rs".to_string(),
+                source_kind: RetrievalSourceKind::WorkspaceFile,
+                authority_rank: AuthorityRank::Structured,
+                provenance_summary: "workspace".to_string(),
+                compatibility_state: RetrievalCompatibilityState::Compatible,
+                staleness_state: RetrievalStalenessState::Fresh,
+                metadata_json: "{}".to_string(),
+                content: "lib".to_string(),
+            },
+            RetrievalDocument {
+                source_ref: ".canon/run.md".to_string(),
+                source_kind: RetrievalSourceKind::CanonArtifact,
+                authority_rank: AuthorityRank::Canon,
+                provenance_summary: "canon".to_string(),
+                compatibility_state: RetrievalCompatibilityState::Compatible,
+                staleness_state: RetrievalStalenessState::Fresh,
+                metadata_json: "{}".to_string(),
+                content: "canon".to_string(),
+            },
+        ];
+
+        let ordered = structured_fallback_refs(&documents, &["src/lib.rs".to_string()], 3);
+        assert_eq!(ordered[0], "src/lib.rs");
+
+        let promoted = promote_selected_target_refs(
+            vec!["notes/operator.md".to_string(), "src/lib.rs".to_string()],
+            &["src/lib.rs".to_string()],
+            &documents,
+            2,
+        );
+        assert_eq!(promoted, vec!["src/lib.rs".to_string(), "notes/operator.md".to_string()]);
+    }
+
+    #[test]
+    fn derive_relationships_and_findings_cover_missing_test_and_stale_paths() {
+        let workspace = temp_workspace("boundline-advanced-context-relationships");
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::write(workspace.join("src/engine.rs"), "pub fn reconcile() {}\n").unwrap();
+
+        let (relationships, findings) = derive_relationships_and_findings(
+            &workspace,
+            &[selected_candidate(RetrievalSourceKind::WorkspaceFile, "src/engine.rs")],
+            ContextPackCredibility::Stale,
+            Some("trace snapshot is stale"),
+        );
+        assert!(relationships.iter().any(|relationship| {
+            relationship.relationship_kind == RelationshipKind::RequiresEvidence
+                && relationship.subject_ref == "src/engine.rs"
+        }));
+        assert!(findings.iter().any(|finding| {
+            finding.finding_kind == ImpactFindingKind::MissingTest
+                && finding.subject_ref == "tests/engine.rs"
+        }));
+        assert!(findings.iter().any(|finding| {
+            finding.finding_kind == ImpactFindingKind::EvidenceGap
+                && finding.supporting_relationship_ids == vec!["relationship-1".to_string()]
+        }));
+
+        let (relationships, findings) = derive_relationships_and_findings(
+            &workspace,
+            &[selected_candidate(RetrievalSourceKind::ProjectMemory, "docs/operator-notes.md")],
+            ContextPackCredibility::Stale,
+            Some("governance memory is stale"),
+        );
+        assert_eq!(relationships.len(), 1);
+        assert_eq!(relationships[0].relationship_kind, RelationshipKind::SupportsRisk);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].finding_kind, ImpactFindingKind::EvidenceGap);
+        assert_eq!(
+            findings[0].recommended_follow_up,
+            "refresh bounded evidence: governance memory is stale"
+        );
+    }
+}

@@ -1184,48 +1184,14 @@ fn domain_binding_input(
     }
 }
 
-/// Builds the bounded context pack used by goal planning.
-/// Concrete workspace evidence stays primary when available; authored or
-/// governance-derived context fills the gaps and is persisted for later status
-/// and inspect surfaces.
-pub fn build_context_pack(
-    goal_text: &str,
-    workspace_ref: &Path,
-    context_sources: &PlanningContextSources,
-) -> ContextPack {
-    let advanced_context_config = resolve_advanced_context_config(workspace_ref);
-    build_context_pack_with_policy(
-        goal_text,
-        workspace_ref,
-        context_sources,
-        &advanced_context_config,
-    )
+#[derive(Debug, Clone)]
+struct ContextCredibilityEvaluation {
+    has_credible_context: bool,
+    credibility: ContextPackCredibility,
+    memory_staleness_reason: Option<String>,
 }
 
-fn build_context_pack_with_policy(
-    goal_text: &str,
-    workspace_ref: &Path,
-    context_sources: &PlanningContextSources,
-    advanced_context_config: &AdvancedContextConfig,
-) -> ContextPack {
-    // The workspace primary target is still available downstream as the task
-    // fallback, but it does not count as bounded planning evidence on its own.
-    let workspace_inputs =
-        select_relevant_workspace_inputs(workspace_ref, goal_text, context_sources);
-    let relevant_files =
-        workspace_inputs.iter().map(|input| input.reference.clone()).collect::<Vec<_>>();
-    let symbol_hints = extract_symbol_hints(workspace_ref, &relevant_files, goal_text);
-    let canon_artifacts = selected_canon_artifacts(workspace_ref, goal_text);
-    let canon_memory_targets = context_sources
-        .compacted_canon_memory
-        .as_ref()
-        .map(|memory| memory.artifact_refs.clone())
-        .unwrap_or_default();
-
-    let mut inputs = Vec::new();
-
-    inputs.extend(workspace_inputs);
-
+fn extend_symbol_hint_inputs(inputs: &mut Vec<ContextInput>, symbol_hints: Vec<String>) {
     for symbol_hint in symbol_hints {
         inputs.push(ContextInput {
             kind: ContextInputKind::SymbolHint,
@@ -1236,6 +1202,16 @@ fn build_context_pack_with_policy(
             primary: false,
         });
     }
+}
+
+fn extend_context_source_inputs(
+    inputs: &mut Vec<ContextInput>,
+    context_sources: &PlanningContextSources,
+    relevant_files: &[String],
+    canon_artifacts: &[String],
+) {
+    let workspace_inputs_absent = relevant_files.is_empty();
+    let no_workspace_or_canon_artifacts = workspace_inputs_absent && canon_artifacts.is_empty();
 
     if let Some(summary) = context_sources.authored_input_summary.as_ref() {
         inputs.push(ContextInput {
@@ -1243,7 +1219,7 @@ fn build_context_pack_with_policy(
             reference: summary.clone(),
             rationale: "captures the operator-authored task framing".to_string(),
             source: "authored_input_summary".to_string(),
-            primary: relevant_files.is_empty() && canon_artifacts.is_empty(),
+            primary: no_workspace_or_canon_artifacts,
         });
     }
 
@@ -1297,21 +1273,28 @@ fn build_context_pack_with_policy(
             rationale: "reuses compact Canon-grounded memory from prior governed evidence"
                 .to_string(),
             source: "compacted_canon_memory".to_string(),
-            primary: relevant_files.is_empty() && canon_artifacts.is_empty(),
+            primary: no_workspace_or_canon_artifacts,
         });
     }
 
-    for artifact_ref in &canon_artifacts {
+    for artifact_ref in canon_artifacts {
         inputs.push(ContextInput {
             kind: ContextInputKind::CanonArtifact,
             reference: artifact_ref.clone(),
             rationale: "reuses a bounded governed artifact as planning input".to_string(),
             source: "canon_artifact_scan".to_string(),
-            primary: relevant_files.is_empty(),
+            primary: workspace_inputs_absent,
         });
     }
+}
 
-    let selected_target_for_domain = relevant_files
+fn selected_target_for_domain(
+    relevant_files: &[String],
+    canon_memory_targets: &[String],
+    canon_artifacts: &[String],
+    workspace_ref: &Path,
+) -> Option<String> {
+    relevant_files
         .first()
         .cloned()
         .or_else(|| canon_memory_targets.first().cloned())
@@ -1319,27 +1302,39 @@ fn build_context_pack_with_policy(
         .or_else(|| {
             let primary = select_primary_target(workspace_ref);
             (!primary.is_empty()).then_some(primary)
-        });
-    let domain_outcome =
-        resolve_domain_context(workspace_ref, selected_target_for_domain.as_deref());
-    if let Some(domain_outcome) = domain_outcome.as_ref() {
+        })
+}
+
+fn extend_domain_inputs(
+    inputs: &mut Vec<ContextInput>,
+    domain_outcome: Option<&DomainContextOutcome>,
+) {
+    if let Some(domain_outcome) = domain_outcome {
         inputs.extend(domain_outcome.inputs.iter().cloned());
     }
+}
 
-    let has_authored_context =
-        context_sources.authored_input_summary.as_ref().is_some_and(|summary| {
-            let summary = summary.trim();
-            !summary.is_empty() && summary != "direct_text only"
-        }) || context_sources.authored_input_documents.iter().any(|document| {
-            !document.content.trim().is_empty()
-                && !document.label.trim().starts_with("direct_text:")
-        }) || context_sources.authored_input_sources.iter().any(|source| {
-            let source = source.trim();
-            !source.is_empty() && !source.starts_with("direct_text:")
-        });
+fn has_authored_context(context_sources: &PlanningContextSources) -> bool {
+    context_sources.authored_input_summary.as_ref().is_some_and(|summary| {
+        let summary = summary.trim();
+        !summary.is_empty() && summary != "direct_text only"
+    }) || context_sources.authored_input_documents.iter().any(|document| {
+        !document.content.trim().is_empty() && !document.label.trim().starts_with("direct_text:")
+    }) || context_sources.authored_input_sources.iter().any(|source| {
+        let source = source.trim();
+        !source.is_empty() && !source.starts_with("direct_text:")
+    })
+}
 
+fn evaluate_context_credibility(
+    workspace_ref: &Path,
+    relevant_files: &[String],
+    canon_artifacts: &[String],
+    context_sources: &PlanningContextSources,
+    domain_outcome: Option<&DomainContextOutcome>,
+) -> ContextCredibilityEvaluation {
     let has_credible_context = !relevant_files.is_empty()
-        || has_authored_context
+        || has_authored_context(context_sources)
         || context_sources
             .compacted_canon_memory
             .as_ref()
@@ -1365,20 +1360,31 @@ fn build_context_pack_with_policy(
     let credibility = if !has_credible_context
         || memory_insufficient_reason.is_some()
         || domain_outcome
-            .as_ref()
             .is_some_and(|outcome| outcome.credibility == ContextPackCredibility::Insufficient)
     {
         ContextPackCredibility::Insufficient
     } else if memory_staleness_reason.is_some()
         || domain_outcome
-            .as_ref()
             .is_some_and(|outcome| outcome.credibility == ContextPackCredibility::Stale)
     {
         ContextPackCredibility::Stale
     } else {
         ContextPackCredibility::Credible
     };
-    let mut summary = if has_credible_context {
+
+    ContextCredibilityEvaluation { has_credible_context, credibility, memory_staleness_reason }
+}
+
+fn build_context_summary(
+    goal_text: &str,
+    relevant_files: &[String],
+    canon_artifacts: &[String],
+    canon_memory_targets: &[String],
+    context_sources: &PlanningContextSources,
+    domain_outcome: Option<&DomainContextOutcome>,
+    credibility: &ContextCredibilityEvaluation,
+) -> String {
+    let mut summary = if credibility.has_credible_context {
         format!(
             "bounded context from {} primary input(s)",
             usize::max(relevant_files.len(), canon_artifacts.len().max(canon_memory_targets.len()))
@@ -1387,7 +1393,8 @@ fn build_context_pack_with_policy(
     } else {
         format!("no credible bounded context found for planning `{}`", goal_text.trim())
     };
-    if let Some(domain_outcome) = domain_outcome.as_ref() {
+
+    if let Some(domain_outcome) = domain_outcome {
         summary.push_str("; ");
         summary.push_str(&domain_outcome.summary_clause);
         if let Some(reason) = domain_outcome.blocking_reason.as_deref()
@@ -1397,7 +1404,10 @@ fn build_context_pack_with_policy(
             summary.push_str(reason);
         }
     }
-    if has_credible_context && let Some(memory) = context_sources.compacted_canon_memory.as_ref() {
+
+    if credibility.has_credible_context
+        && let Some(memory) = context_sources.compacted_canon_memory.as_ref()
+    {
         summary.push_str("; ");
         summary.push_str(&memory.summary_text());
         if memory.credibility != MemoryCredibilityState::Credible
@@ -1409,24 +1419,40 @@ fn build_context_pack_with_policy(
             summary.push_str(&recommended_next_action.rationale);
         }
     }
-    let staleness_reason = if credibility == ContextPackCredibility::Stale {
-        let mut reasons = Vec::new();
-        if let Some(reason) = memory_staleness_reason.as_ref() {
-            reasons.push(reason.clone());
-        }
-        if let Some(reason) = domain_outcome
-            .as_ref()
-            .filter(|outcome| outcome.credibility == ContextPackCredibility::Stale)
-            .and_then(|outcome| outcome.blocking_reason.clone())
-        {
-            reasons.push(reason);
-        }
-        (!reasons.is_empty()).then(|| reasons.join("; "))
-    } else {
-        None
-    };
 
-    let selected_targets = if !canon_memory_targets.is_empty()
+    summary
+}
+
+fn build_staleness_reason(
+    credibility: ContextPackCredibility,
+    memory_staleness_reason: Option<&str>,
+    domain_outcome: Option<&DomainContextOutcome>,
+) -> Option<String> {
+    if credibility != ContextPackCredibility::Stale {
+        return None;
+    }
+
+    let mut reasons = Vec::new();
+    if let Some(reason) = memory_staleness_reason {
+        reasons.push(reason.to_string());
+    }
+    if let Some(reason) = domain_outcome
+        .filter(|outcome| outcome.credibility == ContextPackCredibility::Stale)
+        .and_then(|outcome| outcome.blocking_reason.clone())
+    {
+        reasons.push(reason);
+    }
+
+    (!reasons.is_empty()).then(|| reasons.join("; "))
+}
+
+fn select_context_targets(
+    relevant_files: Vec<String>,
+    canon_memory_targets: Vec<String>,
+    canon_artifacts: Vec<String>,
+    context_sources: &PlanningContextSources,
+) -> Vec<String> {
+    if !canon_memory_targets.is_empty()
         && (!has_specific_workspace_targets(&relevant_files)
             || context_sources
                 .compacted_canon_memory
@@ -1438,7 +1464,89 @@ fn build_context_pack_with_policy(
         relevant_files
     } else {
         canon_artifacts
-    };
+    }
+}
+
+/// Builds the bounded context pack used by goal planning.
+/// Concrete workspace evidence stays primary when available; authored or
+/// governance-derived context fills the gaps and is persisted for later status
+/// and inspect surfaces.
+pub fn build_context_pack(
+    goal_text: &str,
+    workspace_ref: &Path,
+    context_sources: &PlanningContextSources,
+) -> ContextPack {
+    let advanced_context_config = resolve_advanced_context_config(workspace_ref);
+    build_context_pack_with_policy(
+        goal_text,
+        workspace_ref,
+        context_sources,
+        &advanced_context_config,
+    )
+}
+
+fn build_context_pack_with_policy(
+    goal_text: &str,
+    workspace_ref: &Path,
+    context_sources: &PlanningContextSources,
+    advanced_context_config: &AdvancedContextConfig,
+) -> ContextPack {
+    // The workspace primary target is still available downstream as the task
+    // fallback, but it does not count as bounded planning evidence on its own.
+    let workspace_inputs =
+        select_relevant_workspace_inputs(workspace_ref, goal_text, context_sources);
+    let relevant_files =
+        workspace_inputs.iter().map(|input| input.reference.clone()).collect::<Vec<_>>();
+    let symbol_hints = extract_symbol_hints(workspace_ref, &relevant_files, goal_text);
+    let canon_artifacts = selected_canon_artifacts(workspace_ref, goal_text);
+    let canon_memory_targets = context_sources
+        .compacted_canon_memory
+        .as_ref()
+        .map(|memory| memory.artifact_refs.clone())
+        .unwrap_or_default();
+
+    let mut inputs = workspace_inputs;
+    extend_symbol_hint_inputs(&mut inputs, symbol_hints);
+    extend_context_source_inputs(&mut inputs, context_sources, &relevant_files, &canon_artifacts);
+
+    let selected_target_for_domain = selected_target_for_domain(
+        &relevant_files,
+        &canon_memory_targets,
+        &canon_artifacts,
+        workspace_ref,
+    );
+    let domain_outcome =
+        resolve_domain_context(workspace_ref, selected_target_for_domain.as_deref());
+    extend_domain_inputs(&mut inputs, domain_outcome.as_ref());
+
+    let credibility = evaluate_context_credibility(
+        workspace_ref,
+        &relevant_files,
+        &canon_artifacts,
+        context_sources,
+        domain_outcome.as_ref(),
+    );
+    let summary = build_context_summary(
+        goal_text,
+        &relevant_files,
+        &canon_artifacts,
+        &canon_memory_targets,
+        context_sources,
+        domain_outcome.as_ref(),
+        &credibility,
+    );
+    let staleness_reason = build_staleness_reason(
+        credibility.credibility,
+        credibility.memory_staleness_reason.as_deref(),
+        domain_outcome.as_ref(),
+    );
+
+    let selected_targets = select_context_targets(
+        relevant_files,
+        canon_memory_targets,
+        canon_artifacts,
+        context_sources,
+    );
     // Build the advanced-context projection while the planner still has the
     // authoritative bounded inputs and target ordering.
     let advanced_context = Some(build_advanced_context_projection(
@@ -1446,7 +1554,7 @@ fn build_context_pack_with_policy(
         workspace_ref,
         &inputs,
         &selected_targets,
-        credibility,
+        credibility.credibility,
         staleness_reason.as_deref(),
         advanced_context_config,
     ));
@@ -1454,7 +1562,7 @@ fn build_context_pack_with_policy(
     ContextPack {
         pack_id: Uuid::new_v4().to_string(),
         summary,
-        credibility,
+        credibility: credibility.credibility,
         inputs,
         selected_targets,
         advanced_context,

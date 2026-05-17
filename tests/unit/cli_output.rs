@@ -1438,6 +1438,35 @@ fn summarize_trace_uses_goal_plan_projection_and_decision_evidence_fallbacks() {
 }
 
 #[test]
+fn summarize_trace_extracts_advanced_context_from_goal_plan_payload() {
+    use boundline::domain::trace::TraceEvent;
+
+    let mut trace = ExecutionTrace::new("task-advanced-context", "session", "Inspect summary");
+    trace.terminal_status = Some(TaskStatus::Succeeded);
+    trace.terminal_reason =
+        Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "completed", None));
+    trace.events.push(TraceEvent {
+        event_id: "goal-plan".to_string(),
+        event_type: TraceEventType::GoalPlanCreated,
+        step_id: None,
+        plan_revision: 0,
+        payload: json!({
+            "task_count": 1,
+            "goal": "Inspect summary",
+            "advanced_context": sample_advanced_context()
+        }),
+        recorded_at: 0,
+    });
+
+    let summary = summarize_trace(PathBuf::from("/tmp/trace.json"), &trace).unwrap();
+
+    assert_eq!(
+        summary.advanced_context.as_ref().map(AdvancedContextProjection::selected_evidence_count),
+        Some(1)
+    );
+}
+
+#[test]
 fn compatibility_trace_without_active_session_surfaces_status_and_next_follow_up() {
     let workspace =
         std::env::temp_dir().join(format!("boundline-unit-compat-status-{}", Uuid::new_v4()));

@@ -30,6 +30,10 @@ const UNKNOWN_DECISION_ID: &str = "unknown-decision";
 const UNKNOWN_TARGET: &str = "unknown";
 const KEY_ACTION_RESULT: &str = "action_result";
 const KEY_FAILURE_REASON: &str = "failure_reason";
+
+fn advanced_context_from_payload(payload: &Value) -> Option<AdvancedContextProjection> {
+    payload.get("advanced_context").cloned().and_then(|value| serde_json::from_value(value).ok())
+}
 const KEY_FINDING: &str = "finding";
 const KEY_REVIEW_OUTCOME: &str = "review_outcome";
 const KEY_REVIEW_TRIGGER: &str = "review_trigger";
@@ -401,13 +405,8 @@ pub fn summarize_trace(
                             )
                         })
                         .unwrap_or_default();
-                    if advanced_context.is_none() {
-                        advanced_context = event
-                            .payload
-                            .get("advanced_context")
-                            .cloned()
-                            .and_then(|value| serde_json::from_value(value).ok());
-                    }
+                    advanced_context =
+                        advanced_context.or_else(|| advanced_context_from_payload(&event.payload));
                     let flow_suffix = event
                         .payload
                         .get("flow_state")

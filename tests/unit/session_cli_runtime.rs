@@ -14,6 +14,13 @@ use boundline::cli::{
     DeveloperCommandSession,
 };
 use boundline::domain::brief::normalize_inputs;
+use boundline::domain::context_intelligence::{
+    AdvancedContextProjection, AuthorityRank, CandidateSelectionState, ImpactAnalysisFinding,
+    ImpactFindingKind, ImpactFindingSeverity, ImpactFindingStatus, RelationshipCredibilityState,
+    RelationshipKind, RelationshipProjection, RemoteTransmissionPolicyState,
+    RetrievalCompatibilityState, RetrievalIndexState, RetrievalMode, RetrievalSourceKind,
+    RetrievalStalenessState, RetrievalState, RetrievedEvidenceCandidate,
+};
 use boundline::domain::execution::{
     ExecutionAttemptDefinition, ExecutionCommand, ExecutionFailureMode, ExecutionProfileError,
     WorkspaceChange, WorkspaceExecutionProfile,
@@ -189,6 +196,48 @@ fn build_status_view(record: &ActiveSessionRecord) -> SessionStatusView {
         next_command: Some("boundline step".to_string()),
         explanation: "session state is internally consistent".to_string(),
         ..Default::default()
+    }
+}
+
+fn sample_advanced_context() -> AdvancedContextProjection {
+    AdvancedContextProjection {
+        query_id: "query-session".to_string(),
+        retrieval_mode: RetrievalMode::Local,
+        retrieval_state: RetrievalState::Selected,
+        retrieval_index_state: RetrievalIndexState::Ready,
+        budgets: Default::default(),
+        remote_policy_state: RemoteTransmissionPolicyState::LocalOnly,
+        used_remote: false,
+        terminal_reason: None,
+        selected_evidence: vec![RetrievedEvidenceCandidate {
+            candidate_id: "candidate-1".to_string(),
+            source_kind: RetrievalSourceKind::WorkspaceFile,
+            source_ref: "src/lib.rs".to_string(),
+            authority_rank: AuthorityRank::Structured,
+            selection_state: CandidateSelectionState::Selected,
+            selection_reason: "goal keyword matched the implementation surface".to_string(),
+            provenance_summary: "workspace file selected through local retrieval".to_string(),
+            compatibility_state: RetrievalCompatibilityState::Compatible,
+            staleness_state: RetrievalStalenessState::Fresh,
+        }],
+        rejected_candidates: Vec::new(),
+        relationships: vec![RelationshipProjection {
+            relationship_id: "relationship-1".to_string(),
+            subject_ref: "src/lib.rs".to_string(),
+            relationship_kind: RelationshipKind::ExercisesTest,
+            credibility_state: RelationshipCredibilityState::Credible,
+            explanation: "the matching test file names the same target".to_string(),
+            supporting_candidate_ids: vec!["candidate-1".to_string()],
+        }],
+        impact_findings: vec![ImpactAnalysisFinding {
+            finding_id: "finding-1".to_string(),
+            finding_kind: ImpactFindingKind::MissingTest,
+            subject_ref: "tests/lib.rs".to_string(),
+            status: ImpactFindingStatus::Open,
+            severity: ImpactFindingSeverity::Medium,
+            recommended_follow_up: "add or refresh the focused regression test".to_string(),
+            supporting_relationship_ids: vec!["relationship-1".to_string()],
+        }],
     }
 }
 
@@ -1012,6 +1061,34 @@ fn session_validation_transition_and_status_view_cover_mismatch_paths() {
     assert!(matches!(
         wrong_plan_revision.validate(&record).unwrap_err(),
         SessionValidationError::StatusViewPlanRevisionMismatch { .. }
+    ));
+}
+
+#[test]
+fn session_status_view_tracks_latest_advanced_context_snapshot() {
+    let workspace = "/tmp/session-status-advanced-context";
+    let mut record = build_planned_record(workspace);
+    let expected_advanced_context = sample_advanced_context();
+    record
+        .active_task
+        .as_mut()
+        .unwrap()
+        .context
+        .set_latest_advanced_context(&expected_advanced_context)
+        .unwrap();
+
+    let mut matching_status = build_status_view(&record);
+    matching_status.advanced_context = Some(expected_advanced_context.clone());
+    matching_status.validate(&record).unwrap();
+
+    let mut wrong_status = build_status_view(&record);
+    wrong_status.advanced_context = Some(AdvancedContextProjection {
+        query_id: "query-session-mismatch".to_string(),
+        ..expected_advanced_context
+    });
+    assert!(matches!(
+        wrong_status.validate(&record).unwrap_err(),
+        SessionValidationError::StatusViewAdvancedContextMismatch { .. }
     ));
 }
 
