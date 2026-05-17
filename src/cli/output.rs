@@ -3046,6 +3046,71 @@ mod tests {
     }
 
     #[test]
+    fn output_covers_canon_semantic_evidence_metadata_and_empty_section_paths() {
+        use crate::domain::context_intelligence::RetrievalBudgets;
+        use crate::domain::governance::CanonSemanticProvenanceBoundary;
+
+        // Evidence candidate with both canon semantic metadata fields set covers lines 348-355.
+        let advanced_context = AdvancedContextProjection {
+            query_id: "query-output-canon-meta".to_string(),
+            retrieval_mode: RetrievalMode::Local,
+            retrieval_state: RetrievalState::Selected,
+            retrieval_index_state: RetrievalIndexState::Ready,
+            semantic_policy_state: SemanticPolicyState::Local,
+            semantic_capability_state: SemanticCapabilityState::Ready,
+            hybrid_outcome: HybridOutcome::Expanded,
+            budgets: RetrievalBudgets::default(),
+            remote_policy_state: RemoteTransmissionPolicyState::LocalOnly,
+            used_remote: false,
+            terminal_reason: Some("expanded".to_string()),
+            selected_evidence: vec![RetrievedEvidenceCandidate {
+                candidate_id: "candidate-canon-meta".to_string(),
+                source_kind: RetrievalSourceKind::WorkspaceFile,
+                source_ref: "src/lib.rs".to_string(),
+                authority_rank: AuthorityRank::Canon,
+                match_origin: RetrievalMatchOrigin::SemanticExpand,
+                selection_state: CandidateSelectionState::Selected,
+                selection_reason: "canon semantic match".to_string(),
+                provenance_summary: "canon artifact matched semantic query".to_string(),
+                compatibility_state: RetrievalCompatibilityState::Compatible,
+                staleness_state: RetrievalStalenessState::Fresh,
+                lexical_score: None,
+                semantic_score: RetrievalScore::from_raw(0.91),
+                canon_semantic_contract_line: Some("v1".to_string()),
+                canon_semantic_provenance_ref: Some(".canon/arch.md".to_string()),
+            }],
+            rejected_candidates: Vec::new(),
+            semantic_trace_records: vec![SemanticTraceRecord {
+                record_id: "trace-output-canon".to_string(),
+                event_kind: SemanticTraceEventKind::CandidateExpanded,
+                candidate_ref: Some("src/lib.rs".to_string()),
+                match_origin: Some(RetrievalMatchOrigin::SemanticExpand),
+                compatibility_state: Some(RetrievalCompatibilityState::Compatible),
+                semantic_score: RetrievalScore::from_raw(0.91),
+                canon_artifact_class: Some("stable".to_string()),
+                canon_semantic_contract_line: Some("v1".to_string()),
+                canon_semantic_provenance_boundary: Some(
+                    CanonSemanticProvenanceBoundary::ManagedBlock,
+                ),
+                canon_semantic_provenance_ref: Some(".canon/arch.md".to_string()),
+                reason: "canon evidence expanded the bounded set".to_string(),
+            }],
+            relationships: Vec::new(),
+            impact_findings: Vec::new(),
+        };
+        let mut lines = Vec::new();
+        push_advanced_context_lines(&mut lines, Some(&advanced_context));
+        assert!(
+            lines.iter().any(|line| line.contains("canon_contract=v1")),
+            "missing canon_contract in: {lines:?}"
+        );
+        assert!(
+            lines.iter().any(|line| line.contains("canon_provenance=.canon/arch.md")),
+            "missing canon_provenance in: {lines:?}"
+        );
+    }
+
+    #[test]
     fn diagnostics_render_install_follow_up_when_actions_are_missing() {
         let rendered = render_diagnostics(&DiagnosticsReport {
             subject: DiagnosticsSubject::Install,

@@ -1689,166 +1689,201 @@ fn apply_local_semantic_hybrid(
             }
         }
         SemanticAccelerationPolicyState::Local => {
-            let document_map = inputs
-                .documents
-                .iter()
-                .map(|document| (document.source_ref.clone(), document))
-                .collect::<BTreeMap<_, _>>();
-            let selected_target_refs = inputs.selected_targets.iter().collect::<BTreeSet<_>>();
-            let limited_matches =
-                semantic_matches.into_iter().take(inputs.expansion_limit).collect::<Vec<_>>();
-            if limited_matches.is_empty() {
-                return HybridSelectionResult {
-                    selected: base_selected,
-                    rejected: Vec::new(),
-                    semantic_projection: semantic_projection_for_local_hybrid_outcome(
-                        HybridOutcome::BaselineOnly,
-                        Some(SEMANTIC_BASELINE_ONLY_REASON.to_string()),
-                    ),
-                    retrieval_state: inputs.base_retrieval_state,
-                };
-            }
+            apply_semantic_hybrid_local_ready(inputs, base_selected, semantic_matches)
+        }
+    }
+}
 
-            let semantic_scores = limited_matches
-                .iter()
-                .map(|candidate| (candidate.source_ref.clone(), candidate.clone()))
-                .collect::<BTreeMap<_, _>>();
-            let locked_prefix_len = base_selected
-                .iter()
-                .take_while(|candidate| selected_target_refs.contains(&candidate.source_ref))
-                .count();
-            let mut selected = base_selected;
-            let original_order =
-                selected.iter().map(|candidate| candidate.source_ref.clone()).collect::<Vec<_>>();
+fn apply_semantic_hybrid_local_ready(
+    inputs: HybridSelectionInputs<'_>,
+    base_selected: Vec<CandidateDecision>,
+    semantic_matches: Vec<SemanticMatchResult>,
+) -> HybridSelectionResult {
+    let document_map = inputs
+        .documents
+        .iter()
+        .map(|document| (document.source_ref.clone(), document))
+        .collect::<BTreeMap<_, _>>();
+    let selected_target_refs = inputs.selected_targets.iter().collect::<BTreeSet<_>>();
+    let limited_matches =
+        semantic_matches.into_iter().take(inputs.expansion_limit).collect::<Vec<_>>();
+    if limited_matches.is_empty() {
+        return HybridSelectionResult {
+            selected: base_selected,
+            rejected: Vec::new(),
+            semantic_projection: semantic_projection_for_local_hybrid_outcome(
+                HybridOutcome::BaselineOnly,
+                Some(SEMANTIC_BASELINE_ONLY_REASON.to_string()),
+            ),
+            retrieval_state: inputs.base_retrieval_state,
+        };
+    }
 
-            let mut tail = selected.split_off(locked_prefix_len);
-            let original_tail_positions = tail
-                .iter()
-                .enumerate()
-                .map(|(index, candidate)| (candidate.source_ref.clone(), index))
-                .collect::<BTreeMap<_, _>>();
-            tail.sort_by(|left, right| {
-                let left_document = document_map.get(&left.source_ref);
-                let right_document = document_map.get(&right.source_ref);
-                let left_rank = left_document
-                    .map_or(AuthorityRank::Semantic, |document| document.authority_rank);
-                let right_rank = right_document
-                    .map_or(AuthorityRank::Semantic, |document| document.authority_rank);
-                authority_sort_index(left_rank)
-                    .cmp(&authority_sort_index(right_rank))
-                    .then_with(|| {
-                        let right_score = semantic_scores
-                            .get(&right.source_ref)
-                            .map(|candidate| candidate.semantic_score.as_raw())
-                            .unwrap_or(0.0);
-                        let left_score = semantic_scores
-                            .get(&left.source_ref)
-                            .map(|candidate| candidate.semantic_score.as_raw())
-                            .unwrap_or(0.0);
-                        right_score.partial_cmp(&left_score).unwrap_or(Ordering::Equal)
-                    })
-                    .then_with(|| {
-                        original_tail_positions
-                            .get(&left.source_ref)
-                            .cmp(&original_tail_positions.get(&right.source_ref))
-                    })
-            });
+    let semantic_scores = limited_matches
+        .iter()
+        .map(|candidate| (candidate.source_ref.clone(), candidate.clone()))
+        .collect::<BTreeMap<_, _>>();
+    let locked_prefix_len = base_selected
+        .iter()
+        .take_while(|candidate| selected_target_refs.contains(&candidate.source_ref))
+        .count();
+    let mut selected = base_selected;
+    let original_order =
+        selected.iter().map(|candidate| candidate.source_ref.clone()).collect::<Vec<_>>();
+    let mut tail = selected.split_off(locked_prefix_len);
+    let original_tail_positions = tail
+        .iter()
+        .enumerate()
+        .map(|(index, candidate)| (candidate.source_ref.clone(), index))
+        .collect::<BTreeMap<_, _>>();
+    tail.sort_by(|left, right| {
+        compare_candidate_by_authority_and_score(
+            left,
+            right,
+            &document_map,
+            &semantic_scores,
+            &original_tail_positions,
+        )
+    });
 
-            let mut reranked = false;
-            for (index, candidate) in tail.iter_mut().enumerate() {
-                if let Some(semantic_match) = semantic_scores.get(&candidate.source_ref) {
-                    let original_position = original_tail_positions
-                        .get(&candidate.source_ref)
-                        .copied()
-                        .unwrap_or(index);
-                    if original_position != index {
-                        reranked = true;
-                        candidate.match_origin = RetrievalMatchOrigin::SemanticRerank;
-                        candidate.selection_reason = SEMANTIC_RERANK_SELECTION_REASON.to_string();
-                        candidate.semantic_score = Some(semantic_match.semantic_score);
-                    }
-                }
-            }
-            selected.extend(tail);
-
-            let mut expanded_count = 0;
-            let mut rejected = Vec::new();
-            for semantic_match in semantic_scores.values() {
-                if selected
-                    .iter()
-                    .any(|candidate| candidate.source_ref == semantic_match.source_ref)
-                {
-                    continue;
-                }
-                if selected.len() < inputs.evidence_limit {
-                    expanded_count += 1;
-                    selected.push(CandidateDecision {
-                        source_ref: semantic_match.source_ref.clone(),
-                        match_origin: RetrievalMatchOrigin::SemanticExpand,
-                        selection_state: CandidateSelectionState::Selected,
-                        selection_reason: SEMANTIC_EXPAND_SELECTION_REASON.to_string(),
-                        lexical_score: None,
-                        semantic_score: Some(semantic_match.semantic_score),
-                        canon_semantic_contract_line: semantic_match
-                            .canon_semantic_contract_line
-                            .clone(),
-                        canon_semantic_provenance_ref: semantic_match
-                            .canon_semantic_provenance_ref
-                            .clone(),
-                    });
-                    continue;
-                }
-
-                rejected.push(CandidateDecision {
-                    source_ref: semantic_match.source_ref.clone(),
-                    match_origin: RetrievalMatchOrigin::SemanticExpand,
-                    selection_state: CandidateSelectionState::Rejected,
-                    selection_reason: SEMANTIC_REJECTED_LIMIT_REASON.to_string(),
-                    lexical_score: None,
-                    semantic_score: Some(semantic_match.semantic_score),
-                    canon_semantic_contract_line: semantic_match
-                        .canon_semantic_contract_line
-                        .clone(),
-                    canon_semantic_provenance_ref: semantic_match
-                        .canon_semantic_provenance_ref
-                        .clone(),
-                });
-            }
-
-            let selected_order =
-                selected.iter().map(|candidate| candidate.source_ref.clone()).collect::<Vec<_>>();
-            let (hybrid_outcome, terminal_reason, retrieval_state) = if expanded_count > 0 {
-                (
-                    HybridOutcome::Expanded,
-                    Some(format!(
-                        "{SEMANTIC_EXPANDED_REASON}: {expanded_count} additional bounded match(es)"
-                    )),
-                    RetrievalState::Selected,
-                )
-            } else if reranked && selected_order != original_order {
-                (
-                    HybridOutcome::Reranked,
-                    Some(SEMANTIC_RERANKED_REASON.to_string()),
-                    RetrievalState::Selected,
-                )
-            } else {
-                (
-                    HybridOutcome::BaselineOnly,
-                    Some(SEMANTIC_BASELINE_ONLY_REASON.to_string()),
-                    inputs.base_retrieval_state,
-                )
-            };
-
-            HybridSelectionResult {
-                selected,
-                rejected,
-                semantic_projection: semantic_projection_for_local_hybrid_outcome(
-                    hybrid_outcome,
-                    terminal_reason,
-                ),
-                retrieval_state,
+    let mut reranked = false;
+    for (index, candidate) in tail.iter_mut().enumerate() {
+        if let Some(semantic_match) = semantic_scores.get(&candidate.source_ref) {
+            let original_position =
+                original_tail_positions.get(&candidate.source_ref).copied().unwrap_or(index);
+            if original_position != index {
+                reranked = true;
+                candidate.match_origin = RetrievalMatchOrigin::SemanticRerank;
+                candidate.selection_reason = SEMANTIC_RERANK_SELECTION_REASON.to_string();
+                candidate.semantic_score = Some(semantic_match.semantic_score);
             }
         }
+    }
+    selected.extend(tail);
+
+    let (expanded_count, rejected) = expand_or_reject_semantic_candidates(
+        &mut selected,
+        &semantic_scores,
+        inputs.evidence_limit,
+    );
+    let selected_order =
+        selected.iter().map(|candidate| candidate.source_ref.clone()).collect::<Vec<_>>();
+    let (hybrid_outcome, terminal_reason, retrieval_state) = determine_hybrid_outcome(
+        expanded_count,
+        reranked,
+        &selected_order,
+        &original_order,
+        inputs.base_retrieval_state,
+    );
+
+    HybridSelectionResult {
+        selected,
+        rejected,
+        semantic_projection: semantic_projection_for_local_hybrid_outcome(
+            hybrid_outcome,
+            terminal_reason,
+        ),
+        retrieval_state,
+    }
+}
+
+fn compare_candidate_by_authority_and_score(
+    left: &CandidateDecision,
+    right: &CandidateDecision,
+    document_map: &BTreeMap<String, &RetrievalDocument>,
+    semantic_scores: &BTreeMap<String, SemanticMatchResult>,
+    original_tail_positions: &BTreeMap<String, usize>,
+) -> Ordering {
+    let left_rank = document_map
+        .get(&left.source_ref)
+        .map_or(AuthorityRank::Semantic, |document| document.authority_rank);
+    let right_rank = document_map
+        .get(&right.source_ref)
+        .map_or(AuthorityRank::Semantic, |document| document.authority_rank);
+    let right_score = semantic_scores
+        .get(&right.source_ref)
+        .map(|candidate| candidate.semantic_score.as_raw())
+        .unwrap_or(0.0);
+    let left_score = semantic_scores
+        .get(&left.source_ref)
+        .map(|candidate| candidate.semantic_score.as_raw())
+        .unwrap_or(0.0);
+    authority_sort_index(left_rank)
+        .cmp(&authority_sort_index(right_rank))
+        .then_with(|| right_score.partial_cmp(&left_score).unwrap_or(Ordering::Equal))
+        .then_with(|| {
+            original_tail_positions
+                .get(&left.source_ref)
+                .cmp(&original_tail_positions.get(&right.source_ref))
+        })
+}
+
+fn expand_or_reject_semantic_candidates(
+    selected: &mut Vec<CandidateDecision>,
+    semantic_scores: &BTreeMap<String, SemanticMatchResult>,
+    evidence_limit: usize,
+) -> (usize, Vec<CandidateDecision>) {
+    let mut expanded_count = 0;
+    let mut rejected = Vec::new();
+    for semantic_match in semantic_scores.values() {
+        if selected.iter().any(|candidate| candidate.source_ref == semantic_match.source_ref) {
+            continue;
+        }
+        if selected.len() < evidence_limit {
+            expanded_count += 1;
+            selected.push(CandidateDecision {
+                source_ref: semantic_match.source_ref.clone(),
+                match_origin: RetrievalMatchOrigin::SemanticExpand,
+                selection_state: CandidateSelectionState::Selected,
+                selection_reason: SEMANTIC_EXPAND_SELECTION_REASON.to_string(),
+                lexical_score: None,
+                semantic_score: Some(semantic_match.semantic_score),
+                canon_semantic_contract_line: semantic_match.canon_semantic_contract_line.clone(),
+                canon_semantic_provenance_ref: semantic_match.canon_semantic_provenance_ref.clone(),
+            });
+            continue;
+        }
+        rejected.push(CandidateDecision {
+            source_ref: semantic_match.source_ref.clone(),
+            match_origin: RetrievalMatchOrigin::SemanticExpand,
+            selection_state: CandidateSelectionState::Rejected,
+            selection_reason: SEMANTIC_REJECTED_LIMIT_REASON.to_string(),
+            lexical_score: None,
+            semantic_score: Some(semantic_match.semantic_score),
+            canon_semantic_contract_line: semantic_match.canon_semantic_contract_line.clone(),
+            canon_semantic_provenance_ref: semantic_match.canon_semantic_provenance_ref.clone(),
+        });
+    }
+    (expanded_count, rejected)
+}
+
+fn determine_hybrid_outcome(
+    expanded_count: usize,
+    reranked: bool,
+    selected_order: &[String],
+    original_order: &[String],
+    base_retrieval_state: RetrievalState,
+) -> (HybridOutcome, Option<String>, RetrievalState) {
+    if expanded_count > 0 {
+        (
+            HybridOutcome::Expanded,
+            Some(format!(
+                "{SEMANTIC_EXPANDED_REASON}: {expanded_count} additional bounded match(es)"
+            )),
+            RetrievalState::Selected,
+        )
+    } else if reranked && selected_order != original_order {
+        (
+            HybridOutcome::Reranked,
+            Some(SEMANTIC_RERANKED_REASON.to_string()),
+            RetrievalState::Selected,
+        )
+    } else {
+        (
+            HybridOutcome::BaselineOnly,
+            Some(SEMANTIC_BASELINE_ONLY_REASON.to_string()),
+            base_retrieval_state,
+        )
     }
 }
 

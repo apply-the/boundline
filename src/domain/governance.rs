@@ -2376,6 +2376,95 @@ mod tests {
     }
 
     #[test]
+    fn governance_covers_error_arms_duplicate_stage_and_missing_v1_matrix_paths() {
+        // CanonMode::from_str error arm — line 196.
+        let err = "unknown-mode".parse::<CanonMode>();
+        assert!(err.is_err());
+        assert!(err.unwrap_err().contains("unknown Canon mode"));
+
+        // GovernanceProfile::validate with duplicate stage key covers line 668 area.
+        let stage = StageGovernancePolicy {
+            flow_name: "bug-fix".to_string(),
+            stage_id: "implement".to_string(),
+            runtime: None,
+            enabled: true,
+            required: false,
+            autopilot: false,
+            require_adaptive_companion: false,
+            canon_mode: None,
+            system_context: None,
+            risk: None,
+            zone: None,
+            owner: None,
+        };
+        let profile = GovernanceProfile {
+            default_runtime: GovernanceRuntimeKind::Local,
+            canon: None,
+            stages: vec![stage.clone(), stage],
+        };
+        let err = profile.validate().unwrap_err();
+        assert!(matches!(err, GovernanceProfileError::DuplicateStagePolicy(_)), "{err:?}");
+
+        // v1 matrix: Green zone + BoundedImpact + no stage → YellowPair CouncilRequired.
+        let envelope = CanonAuthorityGovernanceV1Envelope {
+            contract_line: AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE.to_string(),
+            authority_zone: CanonAuthorityZone::Green,
+            change_class: CanonChangeClass::BoundedImpact,
+            intended_persona: CanonIntendedPersona::DeliveryEngineer,
+            approval_state: ApprovalState::NotNeeded,
+            packet_readiness: PacketReadiness::Reusable,
+            risk: CanonRiskClass::BoundedImpact,
+            persona_anti_behaviors: Vec::new(),
+            primary_artifact: None,
+            artifact_order: Vec::new(),
+            promotion_refs: Vec::new(),
+            stage_role_hints: Vec::new(),
+        };
+        let resolution = envelope.control_resolution();
+        assert_eq!(resolution.council_profile, CouncilProfile::YellowPair);
+        assert_eq!(resolution.stop_semantics, StopSemantics::CouncilRequired);
+        assert!(!envelope.requires_hard_stop());
+        assert!(envelope.hard_stop_reason().is_none());
+
+        // v1 matrix: Rejected packet readiness → blocked_contract + HardStop.
+        let blocked = CanonAuthorityGovernanceV1Envelope {
+            packet_readiness: PacketReadiness::Rejected,
+            approval_state: ApprovalState::NotNeeded,
+            authority_zone: CanonAuthorityZone::Green,
+            change_class: CanonChangeClass::LowImpact,
+            ..envelope.clone()
+        };
+        let blocked_resolution = blocked.control_resolution();
+        assert_eq!(blocked_resolution.effective_control_class, "blocked_contract");
+        assert!(blocked.requires_hard_stop());
+        assert!(blocked.hard_stop_reason().is_some());
+
+        // v1 matrix: Approval expired → blocked_contract.
+        let expired = CanonAuthorityGovernanceV1Envelope {
+            approval_state: ApprovalState::Expired,
+            packet_readiness: PacketReadiness::Pending,
+            ..envelope.clone()
+        };
+        assert_eq!(expired.control_resolution().effective_control_class, "blocked_contract");
+
+        // v1 matrix: Green + LowImpact + no stage → council_profile None.
+        let green_no_stage = CanonAuthorityGovernanceV1Envelope {
+            change_class: CanonChangeClass::LowImpact,
+            ..envelope.clone()
+        };
+        let green_resolution = green_no_stage.control_resolution();
+        assert_eq!(green_resolution.council_profile, CouncilProfile::None);
+        assert_eq!(green_resolution.stop_semantics, StopSemantics::Proceed);
+
+        // v1 matrix: Green + LowImpact + non-fast-path stage (Backlog has yellow floor)
+        // → stage floor escalates to yellow → YellowPair.
+        let backlog_resolution =
+            green_no_stage.control_resolution_for_stage(Some(CanonMode::Backlog));
+        assert_eq!(backlog_resolution.council_profile, CouncilProfile::YellowPair);
+        assert_eq!(backlog_resolution.stop_semantics, StopSemantics::CouncilRequired);
+    }
+
+    #[test]
     fn change_class_authority_floor_maps_to_expected_zones() {
         assert_eq!(CanonChangeClass::LowImpact.authority_floor(), CanonAuthorityZone::Green);
         assert_eq!(CanonChangeClass::BoundedImpact.authority_floor(), CanonAuthorityZone::Yellow);

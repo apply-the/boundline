@@ -287,6 +287,26 @@ mod tests {
     }
 
     #[test]
+    fn with_config_env_none_xdg_home_covers_remove_var_branch() {
+        // Passing xdg_home=None exercises the None arm inside with_config_env
+        // (line 163: None => env::remove_var("XDG_CONFIG_HOME"))
+        // and the Drop impl's None arm for old_xdg when XDG_CONFIG_HOME was
+        // not previously set.
+        let home =
+            std::env::temp_dir().join(format!("boundline-config-none-xdg-{}", Uuid::new_v4()));
+        with_config_env(None, Some(home.as_path()), || {
+            // When xdg_home is None, XDG_CONFIG_HOME is removed; the global
+            // config path falls back to HOME-based resolution.
+            assert!(
+                FileConfigStore::global_config_path()
+                    .to_string_lossy()
+                    .contains(".config/boundline"),
+                "expected home-based path"
+            );
+        });
+    }
+
+    #[test]
     fn save_local_reports_parent_write_error() {
         let workspace =
             std::env::temp_dir().join(format!("boundline-config-write-{}", Uuid::new_v4()));

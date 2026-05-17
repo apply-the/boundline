@@ -851,13 +851,7 @@ impl AdvancedContextProjection {
         self.impact_findings.len()
     }
 
-    /// Validates that the projection remains internally consistent.
-    pub fn validate(&self) -> Result<(), ContextIntelligenceError> {
-        if self.query_id.trim().is_empty() {
-            return Err(ContextIntelligenceError::MissingQueryId);
-        }
-        self.budgets.validate()?;
-
+    fn validate_semantic_consistency(&self) -> Result<(), ContextIntelligenceError> {
         if self.semantic_policy_state == SemanticPolicyState::Disabled
             && matches!(self.hybrid_outcome, HybridOutcome::Expanded | HybridOutcome::Reranked)
         {
@@ -866,7 +860,6 @@ impl AdvancedContextProjection {
                 hybrid_outcome: self.hybrid_outcome,
             });
         }
-
         if matches!(self.hybrid_outcome, HybridOutcome::Skipped | HybridOutcome::Fallback)
             && self.terminal_reason.as_deref().map(str::trim).unwrap_or_default().is_empty()
         {
@@ -874,7 +867,10 @@ impl AdvancedContextProjection {
                 hybrid_outcome: self.hybrid_outcome,
             });
         }
+        Ok(())
+    }
 
+    fn validate_retrieval_consistency(&self) -> Result<(), ContextIntelligenceError> {
         if self.retrieval_state.is_selected() && self.selected_evidence.is_empty() {
             return Err(ContextIntelligenceError::MissingSelectedEvidence);
         }
@@ -883,6 +879,10 @@ impl AdvancedContextProjection {
         {
             return Err(ContextIntelligenceError::MissingTerminalReason);
         }
+        Ok(())
+    }
+
+    fn validate_remote_consistency(&self) -> Result<(), ContextIntelligenceError> {
         if self.retrieval_mode != RetrievalMode::Remote && self.used_remote {
             return Err(ContextIntelligenceError::UnexpectedRemoteUsage);
         }
@@ -891,7 +891,18 @@ impl AdvancedContextProjection {
         {
             return Err(ContextIntelligenceError::BlockedRemoteUsage);
         }
+        Ok(())
+    }
 
+    /// Validates that the projection remains internally consistent.
+    pub fn validate(&self) -> Result<(), ContextIntelligenceError> {
+        if self.query_id.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingQueryId);
+        }
+        self.budgets.validate()?;
+        self.validate_semantic_consistency()?;
+        self.validate_retrieval_consistency()?;
+        self.validate_remote_consistency()?;
         for candidate in &self.selected_evidence {
             candidate.validate()?;
         }
@@ -907,7 +918,6 @@ impl AdvancedContextProjection {
         for finding in &self.impact_findings {
             finding.validate()?;
         }
-
         Ok(())
     }
 }
@@ -1043,6 +1053,29 @@ mod tests {
                 match_origin: RetrievalMatchOrigin::SemanticExpand,
             }
         );
+    }
+
+    #[test]
+    fn serde_defaults_cover_optional_semantic_fields_on_projection() {
+        // Deserializing a minimal JSON projection exercises the const fn default_*
+        // functions that back the #[serde(default)] attributes (lines 925-939).
+        let json = r#"{
+            "query_id": "query-defaults",
+            "retrieval_mode": "disabled",
+            "retrieval_state": "unavailable",
+            "retrieval_index_state": "insufficient",
+            "remote_policy_state": "local_only",
+            "used_remote": false
+        }"#;
+        let projection: AdvancedContextProjection = serde_json::from_str(json).unwrap();
+        assert_eq!(projection.semantic_policy_state, SemanticPolicyState::Disabled);
+        assert_eq!(projection.semantic_capability_state, SemanticCapabilityState::Unsupported);
+        assert_eq!(projection.hybrid_outcome, HybridOutcome::BaselineOnly);
+        assert!(projection.selected_evidence.is_empty());
+        assert!(projection.rejected_candidates.is_empty());
+        assert!(projection.semantic_trace_records.is_empty());
+        assert!(projection.relationships.is_empty());
+        assert!(projection.impact_findings.is_empty());
     }
 
     #[test]

@@ -1544,6 +1544,30 @@ mod tests {
     }
 
     #[test]
+    fn semantic_acceleration_policy_unset_and_global_fallback_cover_missing_paths() {
+        // unset_semantic_acceleration_policy covers lines 515-517.
+        let mut routing = RoutingConfig::default();
+        routing.set_semantic_acceleration_policy(SemanticAccelerationPolicy {
+            policy: SemanticAccelerationPolicyState::Local,
+        });
+        assert!(routing.semantic_acceleration.is_some());
+        routing.unset_semantic_acceleration_policy();
+        assert!(routing.semantic_acceleration.is_none());
+
+        // resolve_effective_semantic_acceleration_config with only global config set
+        // covers lines 878-881 (the global fallback return path).
+        let global = RoutingConfig {
+            semantic_acceleration: Some(SemanticAccelerationPolicy {
+                policy: SemanticAccelerationPolicyState::Local,
+            }),
+            ..RoutingConfig::default()
+        };
+        let resolved = resolve_effective_semantic_acceleration_config(None, None, Some(&global));
+        assert_eq!(resolved.source, ValueSource::Global);
+        assert_eq!(resolved.policy.policy, SemanticAccelerationPolicyState::Local);
+    }
+
+    #[test]
     fn seeded_routes_for_assistants_returns_empty_map_when_no_assistants_given() {
         let routes = seeded_routes_for_assistants(&[]);
         assert!(routes.is_empty());

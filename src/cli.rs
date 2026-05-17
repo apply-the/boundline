@@ -1230,74 +1230,85 @@ fn dispatch_run_command(command: &DeveloperCommand) -> DispatchOutcome {
         || mode.is_some()
         || *no_canon;
     if custom {
-        let resolved_workspace = match cli_workspace::resolve_workspace(workspace.as_deref()) {
-            Ok(workspace) => workspace,
-            Err(error) => {
-                return DispatchOutcome::text(
-                    CommandExitStatus::InvalidInvocation,
-                    format!("workspace resolution failed: {error}"),
-                    None,
-                );
-            }
-        };
-        let workspace = &resolved_workspace;
-        if !workspace.is_dir() {
-            return DispatchOutcome::text(
-                CommandExitStatus::InvalidInvocation,
-                output::validation_error_message(&CliValidationError::MissingWorkspaceRef(
-                    CommandName::Run,
-                )),
-                None,
-            );
-        }
-        let report = if *compatibility {
-            diagnostics::diagnose_workspace(workspace)
-        } else {
-            diagnostics::diagnose_native_direct_run_workspace(workspace)
-        };
-        if !report.ready {
-            return DispatchOutcome::text(
-                CommandExitStatus::InvalidInvocation,
-                output::render_diagnostics(&report),
-                None,
-            );
-        }
-
-        let result = if *compatibility {
-            run::execute_custom_run(
-                workspace,
-                goal.as_deref(),
-                brief,
-                *governance,
-                risk.as_deref(),
-                zone.as_deref(),
-                owner.as_deref(),
-            )
-        } else {
-            run::execute_native_direct_run(
-                workspace,
-                goal.as_deref(),
-                brief,
-                *governance,
-                risk.as_deref(),
-                zone.as_deref(),
-                owner.as_deref(),
-                *mode,
-                *no_canon,
-            )
-        };
-
-        match result {
-            Ok(report) => DispatchOutcome::from_run_report(report),
-            Err(error) => {
-                DispatchOutcome::text(CommandExitStatus::InvalidInvocation, error.to_string(), None)
-            }
-        }
+        dispatch_custom_run(
+            workspace.as_deref(),
+            goal.as_deref(),
+            brief,
+            *compatibility,
+            *governance,
+            risk.as_deref(),
+            zone.as_deref(),
+            owner.as_deref(),
+            *mode,
+            *no_canon,
+        )
     } else {
         dispatch_session_result(
             CommandName::Run,
             session::execute_run_with_target(workspace.as_deref(), cluster.as_deref()),
         )
+    }
+}
+
+// The parameters mirror the `DeveloperCommand::Run` fields; no further
+// grouping is warranted for a single-call CLI dispatch helper.
+#[allow(clippy::too_many_arguments)]
+fn dispatch_custom_run(
+    workspace: Option<&Path>,
+    goal: Option<&str>,
+    brief: &[PathBuf],
+    compatibility: bool,
+    governance: Option<GovernanceRuntimeKind>,
+    risk: Option<&str>,
+    zone: Option<&str>,
+    owner: Option<&str>,
+    mode: Option<CanonMode>,
+    no_canon: bool,
+) -> DispatchOutcome {
+    let resolved_workspace = match cli_workspace::resolve_workspace(workspace) {
+        Ok(workspace) => workspace,
+        Err(error) => {
+            return DispatchOutcome::text(
+                CommandExitStatus::InvalidInvocation,
+                format!("workspace resolution failed: {error}"),
+                None,
+            );
+        }
+    };
+    let workspace = &resolved_workspace;
+    if !workspace.is_dir() {
+        return DispatchOutcome::text(
+            CommandExitStatus::InvalidInvocation,
+            output::validation_error_message(&CliValidationError::MissingWorkspaceRef(
+                CommandName::Run,
+            )),
+            None,
+        );
+    }
+    let report = if compatibility {
+        diagnostics::diagnose_workspace(workspace)
+    } else {
+        diagnostics::diagnose_native_direct_run_workspace(workspace)
+    };
+    if !report.ready {
+        return DispatchOutcome::text(
+            CommandExitStatus::InvalidInvocation,
+            output::render_diagnostics(&report),
+            None,
+        );
+    }
+    let result = if compatibility {
+        run::execute_custom_run(workspace, goal, brief, governance, risk, zone, owner)
+    } else {
+        run::execute_native_direct_run(
+            workspace, goal, brief, governance, risk, zone, owner, mode, no_canon,
+        )
+    };
+    match result {
+        Ok(report) => DispatchOutcome::from_run_report(report),
+        Err(error) => {
+            DispatchOutcome::text(CommandExitStatus::InvalidInvocation, error.to_string(), None)
+        }
     }
 }
 
@@ -2567,6 +2578,85 @@ fn red_to_green_addition() {
         assert_eq!(assistant.exit_status, CommandExitStatus::Succeeded);
         assert!(assistant.output.contains("assistant_global_package:"), "{}", assistant.output);
         assert!(assistant.output.contains("host: copilot"), "{}", assistant.output);
+    }
+
+    #[test]
+    fn cli_covers_doctor_without_workspace_and_custom_run_validation_paths() {
+        // Doctor without workspace → validation error (covers lines 1185-1190).
+        let doctor = dispatch(&DeveloperCommand::Doctor { workspace: None, install: false });
+        assert_eq!(doctor.exit_status, CommandExitStatus::InvalidInvocation);
+        assert!(doctor.output.contains("workspace"), "{}", doctor.output);
+
+        // DeveloperCommandSession::from_command for Run with cluster (no custom flags)
+        // exercises the workspace_ref cluster-fallback branch (lines 764-770).
+        let cluster = temp_workspace("boundline-cli-session-run-cluster");
+        let session = DeveloperCommandSession::from_command(&DeveloperCommand::Run {
+            workspace: None,
+            cluster: Some(cluster.clone()),
+            goal: None,
+            compatibility: false,
+            brief: Vec::new(),
+            governance: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            mode: None,
+            no_canon: false,
+        });
+        assert_eq!(session.command_name, CommandName::Run);
+        assert_eq!(session.workspace_ref.as_deref(), Some(cluster.to_string_lossy().as_ref()));
+
+        // DeveloperCommandSession::from_command for Config SetCanon covers lines 907-913.
+        let config_ws = temp_workspace("boundline-cli-session-config-setcanon");
+        let canon_session = DeveloperCommandSession::from_command(&DeveloperCommand::Config {
+            command: ConfigSubcommand::SetCanon {
+                workspace: Some(config_ws.clone()),
+                mode_selection: CanonModeSelectionPreference::AutoConfirm,
+            },
+        });
+        assert_eq!(canon_session.command_name, CommandName::Config);
+        assert_eq!(
+            canon_session.workspace_ref.as_deref(),
+            Some(config_ws.to_string_lossy().as_ref())
+        );
+
+        // dispatch_custom_run with a file path (not a dir) → InvalidInvocation (lines 1294-1297).
+        let file_ws = temp_workspace("boundline-cli-custom-run-file");
+        let file_path = file_ws.join("not-a-dir");
+        std::fs::write(&file_path, "not a directory").unwrap();
+        let file_run = dispatch(&DeveloperCommand::Run {
+            workspace: Some(file_path),
+            cluster: None,
+            goal: Some("fix".to_string()),
+            compatibility: false,
+            brief: Vec::new(),
+            governance: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            mode: None,
+            no_canon: false,
+        });
+        assert_eq!(file_run.exit_status, CommandExitStatus::InvalidInvocation);
+
+        // dispatch_custom_run with workspace that fails native-direct-run diagnostics
+        // (lines 1337-1342): workspace is a valid dir but has no .boundline/execution.json.
+        let bare_ws = temp_workspace("boundline-cli-custom-run-bare");
+        let bare_run = dispatch(&DeveloperCommand::Run {
+            workspace: Some(bare_ws),
+            cluster: None,
+            goal: Some("fix".to_string()),
+            compatibility: false,
+            brief: Vec::new(),
+            governance: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            mode: None,
+            no_canon: false,
+        });
+        assert_eq!(bare_run.exit_status, CommandExitStatus::InvalidInvocation);
+        assert!(bare_run.output.contains("bounded context required"), "{}", bare_run.output);
     }
 
     #[test]
