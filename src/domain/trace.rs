@@ -7,6 +7,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::domain::cluster::ClusterDeliveryStory;
+use crate::domain::context_intelligence::AdvancedContextProjection;
 use crate::domain::guidance::GuidanceGuardianProjection;
 use crate::domain::limits::TerminalCondition;
 use crate::domain::routing_decision::RoutingDecisionProjection;
@@ -121,6 +122,9 @@ pub struct ExecutionTrace {
 pub struct TraceSummaryView {
     pub trace_ref: String,
     pub goal: String,
+    /// Optional advanced-context retrieval projection surfaced by `inspect`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub advanced_context: Option<AdvancedContextProjection>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub negotiation_goal_summary: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -208,6 +212,7 @@ impl Default for TraceSummaryView {
         Self {
             trace_ref: String::new(),
             goal: String::new(),
+            advanced_context: None,
             negotiation_goal_summary: None,
             negotiation_resolution: None,
             negotiation_acceptance_boundary: None,

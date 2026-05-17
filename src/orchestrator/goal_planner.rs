@@ -13,8 +13,9 @@ use uuid::Uuid;
 use crate::adapters::cluster_store::FileClusterStore;
 use crate::adapters::config_store::FileConfigStore;
 use crate::domain::configuration::{
-    RouteSlot, RoutingOverrides, SourcedRoute, SourcedRuntimeCapabilityProfile,
-    SourcedSlotEffortPolicy, ValueSource, resolve_effective_domain_templates,
+    AdvancedContextConfig, RouteSlot, RoutingOverrides, SourcedRoute,
+    SourcedRuntimeCapabilityProfile, SourcedSlotEffortPolicy, ValueSource,
+    resolve_effective_advanced_context_config, resolve_effective_domain_templates,
     resolve_effective_routing, resolve_effective_runtime_capabilities,
     resolve_effective_slot_effort_policies,
 };
@@ -37,6 +38,7 @@ use crate::domain::project_memory::{
     read_governed_expertise_inputs,
 };
 use crate::domain::workflow::WorkflowProgressState;
+use crate::orchestrator::context_intelligence::build_advanced_context_projection;
 use crate::orchestrator::flow_inference::{FlowInferenceContext, infer_flow_from_context};
 use crate::orchestrator::guidance_runtime::{
     planning_runtime_evidence, resolve_capabilities_for_phase,
@@ -46,6 +48,7 @@ use crate::orchestrator::guidance_runtime::{
 const MAX_SCAN_DEPTH: usize = 4;
 const MAX_CONTEXT_FILES: usize = 5;
 const MAX_SYMBOL_HINTS: usize = 3;
+const MIN_UNPAIRED_SOURCE_CUE_LENGTH: usize = 5;
 const GOAL_CUE_STOP_WORDS: &[&str] = &[
     "fix",
     "bug",
@@ -440,6 +443,25 @@ fn select_relevant_workspace_inputs(
                 true,
                 ContextEvidenceStrength::Strong,
                 80,
+            );
+        }
+
+        if cue.len() >= MIN_UNPAIRED_SOURCE_CUE_LENGTH
+            && let ([source_match], []) = (source_matches.as_slice(), test_matches.as_slice())
+        {
+            // A unique source hit can still bound investigation even when the
+            // planner has to surface missing test evidence downstream.
+            insert_context_candidate(
+                &mut candidates,
+                source_match.clone(),
+                format!(
+                    "unique source target resolved goal cue `{}` without matching test evidence",
+                    cue
+                ),
+                format!("goal_cue_source:{}", cue),
+                true,
+                ContextEvidenceStrength::Supporting,
+                70,
             );
         }
     }
@@ -1171,6 +1193,23 @@ pub fn build_context_pack(
     workspace_ref: &Path,
     context_sources: &PlanningContextSources,
 ) -> ContextPack {
+    let advanced_context_config = resolve_advanced_context_config(workspace_ref);
+    build_context_pack_with_policy(
+        goal_text,
+        workspace_ref,
+        context_sources,
+        &advanced_context_config,
+    )
+}
+
+fn build_context_pack_with_policy(
+    goal_text: &str,
+    workspace_ref: &Path,
+    context_sources: &PlanningContextSources,
+    advanced_context_config: &AdvancedContextConfig,
+) -> ContextPack {
+    // The workspace primary target is still available downstream as the task
+    // fallback, but it does not count as bounded planning evidence on its own.
     let workspace_inputs =
         select_relevant_workspace_inputs(workspace_ref, goal_text, context_sources);
     let relevant_files =
@@ -1287,7 +1326,20 @@ pub fn build_context_pack(
         inputs.extend(domain_outcome.inputs.iter().cloned());
     }
 
+    let has_authored_context =
+        context_sources.authored_input_summary.as_ref().is_some_and(|summary| {
+            let summary = summary.trim();
+            !summary.is_empty() && summary != "direct_text only"
+        }) || context_sources.authored_input_documents.iter().any(|document| {
+            !document.content.trim().is_empty()
+                && !document.label.trim().starts_with("direct_text:")
+        }) || context_sources.authored_input_sources.iter().any(|source| {
+            let source = source.trim();
+            !source.is_empty() && !source.starts_with("direct_text:")
+        });
+
     let has_credible_context = !relevant_files.is_empty()
+        || has_authored_context
         || context_sources
             .compacted_canon_memory
             .as_ref()
@@ -1374,26 +1426,58 @@ pub fn build_context_pack(
         None
     };
 
+    let selected_targets = if !canon_memory_targets.is_empty()
+        && (!has_specific_workspace_targets(&relevant_files)
+            || context_sources
+                .compacted_canon_memory
+                .as_ref()
+                .is_some_and(|memory| memory.credibility == MemoryCredibilityState::Credible))
+    {
+        canon_memory_targets
+    } else if !relevant_files.is_empty() {
+        relevant_files
+    } else {
+        canon_artifacts
+    };
+    // Build the advanced-context projection while the planner still has the
+    // authoritative bounded inputs and target ordering.
+    let advanced_context = Some(build_advanced_context_projection(
+        goal_text,
+        workspace_ref,
+        &inputs,
+        &selected_targets,
+        credibility,
+        staleness_reason.as_deref(),
+        advanced_context_config,
+    ));
+
     ContextPack {
         pack_id: Uuid::new_v4().to_string(),
         summary,
         credibility,
         inputs,
-        selected_targets: if !canon_memory_targets.is_empty()
-            && (!has_specific_workspace_targets(&relevant_files)
-                || context_sources
-                    .compacted_canon_memory
-                    .as_ref()
-                    .is_some_and(|memory| memory.credibility == MemoryCredibilityState::Credible))
-        {
-            canon_memory_targets
-        } else if !relevant_files.is_empty() {
-            relevant_files
-        } else {
-            canon_artifacts
-        },
+        selected_targets,
+        advanced_context,
         staleness_reason,
     }
+}
+
+fn resolve_advanced_context_config(workspace_ref: &Path) -> AdvancedContextConfig {
+    let workspace_routing =
+        FileConfigStore::for_workspace(workspace_ref).local_routing().ok().flatten();
+    let cluster_routing = FileClusterStore::for_workspace(workspace_ref)
+        .load()
+        .ok()
+        .flatten()
+        .map(|config| config.routing);
+    let global_routing = FileConfigStore::global_routing().ok().flatten();
+
+    resolve_effective_advanced_context_config(
+        workspace_routing.as_ref(),
+        cluster_routing.as_ref(),
+        global_routing.as_ref(),
+    )
+    .policy
 }
 
 fn select_source_target(context_pack: &ContextPack, workspace_ref: &Path) -> String {
@@ -1527,6 +1611,11 @@ fn build_routing_policy_summary(workspace_ref: &Path) -> Option<String> {
         cluster_routing.as_ref(),
         global_routing.as_ref(),
     );
+    let effective_advanced_context = resolve_effective_advanced_context_config(
+        workspace_routing.as_ref(),
+        cluster_routing.as_ref(),
+        global_routing.as_ref(),
+    );
 
     let mut clauses = Vec::new();
     for (slot, route) in [
@@ -1543,6 +1632,12 @@ fn build_routing_policy_summary(workspace_ref: &Path) -> Option<String> {
 
         clauses.push(render_routing_policy_clause(slot, route, capability, effort));
     }
+
+    clauses.push(format!(
+        "advanced_context={} [{}]",
+        effective_advanced_context.policy.summary_text(),
+        value_source_text(effective_advanced_context.source)
+    ));
 
     (!clauses.is_empty()).then(|| clauses.join("; "))
 }

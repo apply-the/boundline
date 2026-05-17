@@ -6,31 +6,50 @@ Canon is downstream from Boundline in this roadmap: Boundline thinks, decides, o
 
 Evolve Boundline into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.56.0
+## Current Status: v0.58.0
 
-Boundline now has its core session-native orchestration baseline, bounded workflow
-follow-through, deeper governed-stage plus adaptive slices, explicit
-continuity between session-native and compatibility follow-up, stronger
-route-summary plus config projection, bounded multi-workspace clustered
-delivery, negotiated delivery modeling, inspectable routing plus assistant
-decoupling, guided decision follow-through, evidence-aligned next-command
-selection, credible governed delivery completion, final product-surface
-closure, explicit bounded context assembly, decision-driven bounded action
-selection, evidence-driven dynamic planning, Canon-grounded structured
-memory, bounded delegated execution, and a release-aligned distribution
-surface in place, with Canon-default governed setup, runtime selection, and
-assistant-surface alignment now carried through the same primary workflow. The
-operator entry path is now stack-neutral for empty, non-Rust, and mixed
-repositories, with a clearer first-run CLI UX. That baseline now extends into
-Canon-promoted project-memory reuse, catalog-aware guidance packs, and the new
-authority-zoned council slice. The current `0.56.0` work makes authority
-control resolution, council assembly posture, and review stop semantics
-explicit in the same session-native and trace-native projection surfaces that
-already carry bounded planning and governance evidence. The S4 adaptive
-governance layer is now fully delivered: governance maturity stages
-(advisory, catch, rule, hook), rollout profiles, posture resolution,
-degradation modes, and the paired Boundline and Canon governance-semantics
-docs are all in place.
+Boundline now has its core session-native orchestration baseline, bounded
+workflow follow-through, deeper governed-stage plus adaptive slices, explicit
+continuity between session-native and compatibility follow-up, stronger route
+summary plus config projection, bounded multi-workspace clustered delivery,
+negotiated delivery modeling, inspectable routing plus assistant decoupling,
+guided decision follow-through, evidence-aligned next-command selection,
+credible governed delivery completion, final product-surface closure, explicit
+bounded context assembly, decision-driven bounded action selection,
+evidence-driven dynamic planning, Canon-grounded structured memory, bounded
+delegated execution, and a release-aligned distribution surface in place, with
+Canon-default governed setup, runtime selection, and assistant-surface
+alignment now carried through the same primary workflow. The operator entry
+path is now stack-neutral for empty, non-Rust, and mixed repositories, with a
+clearer first-run CLI UX. That baseline now extends into Canon-promoted
+project-memory reuse, catalog-aware guidance packs, authority-zoned review,
+adaptive governance, and the S5 V1 advanced-context slice. The current
+`0.58.0` work adds workspace-local SQLite + FTS5 retrieval, structured fallback
+ordering, explicit selected-evidence provenance, and explainable relationship
+plus impact projection so local-first context expansion remains visible,
+bounded, and non-authoritative.
+
+### Delivered in 0.58.0
+
+- Boundline now assembles one typed advanced-context projection with
+  workspace-local SQLite + FTS5 retrieval, structured fallback ordering, and
+  Canon-consumer compatibility checks.
+- Session-native `plan`, `status`, and `inspect` now surface retrieval mode,
+  selected evidence, relationships, impact findings, bounded budgets, and
+  degraded reasons instead of keeping advanced-context selection implicit.
+- Configuration now exposes a typed disabled-versus-local retrieval policy,
+  with explicit rejection of unsupported remote retrieval or transmission in
+  the S5 V1 baseline.
+
+### Delivered in 0.57.0
+
+- Boundline now resolves adaptive governance posture, rollout profile,
+  degradation mode, and startup context into one explicit runtime state.
+- Session-native `status`, `next`, and `inspect` now surface governance stage,
+  rollout posture, and degradation semantics alongside existing review and
+  planning evidence.
+- The paired adaptive-governance documentation set is now in place across the
+  roadmap and governance reference docs, so the S4 layer is fully delivered.
 
 ### Delivered in 0.56.0
 

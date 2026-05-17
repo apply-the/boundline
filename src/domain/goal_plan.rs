@@ -5,6 +5,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::domain::cluster::{ClusterDeliveryStory, ClusterSessionProjection};
+use crate::domain::context_intelligence::AdvancedContextProjection;
 use crate::domain::decision::{DecisionType, EvidenceRef};
 use crate::domain::governance::CompactedCanonMemory;
 use crate::domain::guidance::GuidanceGuardianProjection;
@@ -143,6 +144,9 @@ pub struct ContextPack {
     pub inputs: Vec<ContextInput>,
     #[serde(default)]
     pub selected_targets: Vec<String>,
+    /// Optional advanced-context retrieval projection carried with this plan.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub advanced_context: Option<AdvancedContextProjection>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub staleness_reason: Option<String>,
 }
@@ -157,6 +161,11 @@ impl ContextPack {
         }
         for input in &self.inputs {
             input.validate()?;
+        }
+        if let Some(advanced_context) = &self.advanced_context {
+            advanced_context
+                .validate()
+                .map_err(|error| GoalPlanError::InvalidAdvancedContext(error.to_string()))?;
         }
         if self.credibility == ContextPackCredibility::Credible
             && self.primary_inputs().is_empty()
@@ -981,6 +990,8 @@ pub enum GoalPlanError {
     InvalidClusterProjection(String),
     #[error("invalid cluster delivery story: {0}")]
     InvalidClusterDeliveryStory(String),
+    #[error("invalid advanced context projection: {0}")]
+    InvalidAdvancedContext(String),
     #[error("invalid goal plan status transition from {from:?} to {to:?}")]
     InvalidTransition { from: GoalPlanStatus, to: GoalPlanStatus },
 }
@@ -1177,6 +1188,7 @@ mod tests {
                 primary: true,
             }],
             selected_targets: vec!["src/lib.rs".to_string()],
+            advanced_context: None,
             staleness_reason: None,
         })
         .with_negotiation_projection(
@@ -1283,6 +1295,7 @@ mod tests {
             credibility: ContextPackCredibility::Insufficient,
             inputs: Vec::new(),
             selected_targets: Vec::new(),
+            advanced_context: None,
             staleness_reason: None,
         };
         assert_eq!(missing_id.validate().unwrap_err(), GoalPlanError::MissingContextPackId);
@@ -1293,6 +1306,7 @@ mod tests {
             credibility: ContextPackCredibility::Insufficient,
             inputs: Vec::new(),
             selected_targets: Vec::new(),
+            advanced_context: None,
             staleness_reason: None,
         };
         assert_eq!(
@@ -1312,6 +1326,7 @@ mod tests {
                 primary: false,
             }],
             selected_targets: Vec::new(),
+            advanced_context: None,
             staleness_reason: None,
         };
         assert_eq!(
@@ -1325,6 +1340,7 @@ mod tests {
             credibility: ContextPackCredibility::Stale,
             inputs: Vec::new(),
             selected_targets: vec!["src/lib.rs".to_string()],
+            advanced_context: None,
             staleness_reason: None,
         };
         assert_eq!(
@@ -1344,6 +1360,7 @@ mod tests {
                 primary: false,
             }],
             selected_targets: vec!["src/lib.rs".to_string()],
+            advanced_context: None,
             staleness_reason: None,
         };
         assert_eq!(fallback_targets.primary_references(), vec!["src/lib.rs".to_string()]);

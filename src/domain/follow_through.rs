@@ -268,7 +268,8 @@ mod tests {
     use super::FollowThroughProjection;
     use crate::domain::limits::TerminalCondition;
     use crate::domain::session::{
-        CompatibilityFollowUpMode, CompatibilityFollowUpView, ContinuityAuthority, SessionStatus,
+        CompatibilityFollowUpMode, CompatibilityFollowUpView, ContinuityAuthority,
+        DelegationContinuityMode, DelegationPacketState, DelegationStatusView, SessionStatus,
         SessionStatusView,
     };
     use crate::domain::task::{TaskStatus, TerminalReason};
@@ -280,6 +281,7 @@ mod tests {
             session_id: "session-1".to_string(),
             workspace_ref: "/tmp/workspace".to_string(),
             goal: Some("Fix the failing add test".to_string()),
+            advanced_context: None,
             negotiation_goal_summary: None,
             negotiation_resolution: None,
             negotiation_acceptance_boundary: None,
@@ -586,6 +588,57 @@ mod tests {
             Some("boundline inspect"),
         );
         assert_eq!(lifecycle_projection.evidence_source, Some("trace:lifecycle".to_string()));
+    }
+
+    #[test]
+    fn follow_through_projection_covers_delegation_branches() {
+        let session_projection = FollowThroughProjection::from_session_view(&SessionStatusView {
+            delegation: Some(DelegationStatusView {
+                mode: DelegationContinuityMode::EscalationRequired,
+                packet_id: Some("packet-123".to_string()),
+                packet_kind: None,
+                packet_state: Some(DelegationPacketState::Resolved),
+                target_owner: Some("review-council".to_string()),
+                headline: "escalation required".to_string(),
+                evidence_summary: "governance packet requires escalation".to_string(),
+            }),
+            next_command: Some("boundline inspect --delegation packet-123".to_string()),
+            ..SessionStatusView::default()
+        });
+        assert_eq!(session_projection.guidance, Some("escalation required [resolved]".to_string()));
+        assert_eq!(
+            session_projection.evidence_source,
+            Some("session:delegation_packet:packet-123".to_string())
+        );
+        assert_eq!(
+            session_projection.stop_reason,
+            Some("governance packet requires escalation; target_owner=review-council".to_string())
+        );
+
+        let trace_projection = FollowThroughProjection::from_trace_summary(
+            &TraceSummaryView {
+                delegation: Some(DelegationStatusView {
+                    mode: DelegationContinuityMode::HandoffRequired,
+                    packet_id: Some("packet-456".to_string()),
+                    packet_kind: None,
+                    packet_state: Some(DelegationPacketState::Active),
+                    target_owner: Some("delivery-owner".to_string()),
+                    headline: "handoff required".to_string(),
+                    evidence_summary: "packet is awaiting owner handoff".to_string(),
+                }),
+                ..TraceSummaryView::default()
+            },
+            Some("boundline step --resume packet-456"),
+        );
+        assert_eq!(trace_projection.guidance, Some("handoff required [active]".to_string()));
+        assert_eq!(
+            trace_projection.evidence_source,
+            Some("trace:delegation_packet:packet-456".to_string())
+        );
+        assert_eq!(
+            trace_projection.stop_reason,
+            Some("packet is awaiting owner handoff; target_owner=delivery-owner".to_string())
+        );
     }
 
     #[test]

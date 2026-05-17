@@ -1,6 +1,6 @@
-# Configuration in Boundline 0.56.0
+# Configuration in Boundline 0.58.0
 
-Boundline `0.56.0` keeps a user-friendly setup and routing configuration surface
+Boundline `0.58.0` keeps a user-friendly setup and routing configuration surface
 for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
 The `0.56.0` release keeps configuration behavior stable while preserving the
@@ -63,6 +63,7 @@ ranking, explicit adaptive exhaustion, or negotiation-state overrides.
 - default `boundline plan` now creates one evidence-driven proposal and `boundline plan --confirm` confirms it; planning lifecycle state is session-owned rather than config-owned
 - bounded `bug-fix` and `change` completion now requires both material change evidence and passed validation on the native and governed session path
 - `boundline config` manages runtime/model routing defaults, runtime capability profiles, slot effort policy, and domain-template settings for planning, implementation, verification, review, and other bounded slots
+- `boundline config show` now also surfaces the effective advanced-context retrieval policy used by the S5 V1 local SQLite + FTS5 retrieval baseline
 - `boundline cluster` registers bounded multi-workspace membership and aggregated inspection
 - negotiated delivery modeling stays session-owned and trace-projected; there is no new negotiation-specific key in `config.toml` or `.boundline/execution.json`
 - context-pack assembly and credibility projection stay session-owned and trace-projected; there is no new context-specific key in `config.toml` or `.boundline/execution.json`
@@ -114,6 +115,35 @@ target another repository or a primary cluster workspace.
 - Cluster-scoped: `<primary-workspace>/.boundline/cluster.toml`
 - User-global: `$XDG_CONFIG_HOME/boundline/config.toml`
 - User-global fallback: `$HOME/.config/boundline/config.toml`
+
+## Advanced Context Policy
+
+Advanced context remains runtime-owned, but Boundline `0.58.0` adds one typed
+policy block under routing precedence so operators can disable the feature or
+keep it explicitly local-first:
+
+```toml
+[routing.advanced_context]
+retrieval_mode = "local"
+remote_policy = "local_only"
+
+[routing.advanced_context.budgets]
+refinement_budget = 2
+refresh_budget = 1
+depth_limit = 12
+expansion_limit = 8
+traversal_limit = 8
+evidence_limit = 6
+```
+
+- `retrieval_mode = "disabled"` preserves the structured-only path and records
+	an explicit disabled terminal reason in the advanced-context projection.
+- `retrieval_mode = "local"` enables the S5 V1 workspace-local SQLite + FTS5
+	retrieval baseline.
+- Remote retrieval and remote transmission remain unsupported in S5 V1 and are
+	rejected during config validation rather than silently downgraded.
+- `boundline config show --scope effective` renders the resolved advanced-
+	context policy alongside route, capability, and effort precedence.
 
 ## Canon Workspace Preferences
 

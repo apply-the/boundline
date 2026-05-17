@@ -4,6 +4,7 @@ use serde_json::{Map, Value};
 use thiserror::Error;
 
 use crate::domain::cluster::{ClusterDeliveryStory, ClusterSessionProjection};
+use crate::domain::context_intelligence::AdvancedContextProjection;
 use crate::domain::governance::{
     AutopilotDecisionRecord, CanonCapabilitySnapshot, CompactedCanonMemory, GovernedStagePacket,
     GovernedStageRecord, PacketReuseBinding,
@@ -30,6 +31,7 @@ pub const DELEGATION_PACKET_HISTORY_KEY: &str = "delegation_packet_history";
 pub const DELEGATION_CONTINUITY_STATE_KEY: &str = "delegation_continuity_state";
 pub const CLUSTER_SESSION_PROJECTION_KEY: &str = "cluster_session_projection";
 pub const CLUSTER_DELIVERY_STORY_KEY: &str = "cluster_delivery_story";
+pub const LATEST_ADVANCED_CONTEXT_KEY: &str = "latest_advanced_context";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TaskContext {
@@ -264,6 +266,21 @@ impl TaskContext {
 
     pub fn cluster_delivery_story(&self) -> Result<Option<ClusterDeliveryStory>, TaskContextError> {
         self.load_serialized(CLUSTER_DELIVERY_STORY_KEY)
+    }
+
+    /// Stores the latest advanced-context retrieval projection in typed form.
+    pub fn set_latest_advanced_context(
+        &mut self,
+        projection: &AdvancedContextProjection,
+    ) -> Result<(), TaskContextError> {
+        self.store_serialized(LATEST_ADVANCED_CONTEXT_KEY, projection)
+    }
+
+    /// Loads the latest advanced-context retrieval projection, when present.
+    pub fn latest_advanced_context(
+        &self,
+    ) -> Result<Option<AdvancedContextProjection>, TaskContextError> {
+        self.load_serialized(LATEST_ADVANCED_CONTEXT_KEY)
     }
 
     fn merge_into_state(&mut self, patch: &Map<String, Value>) {

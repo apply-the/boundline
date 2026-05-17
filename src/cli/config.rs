@@ -9,8 +9,9 @@ use crate::domain::configuration::{
     CanonPreferences, CapabilityState, ConfigFile, ConfigShowScope, ConfigWriteScope,
     EffortFallbackPolicy, EffortLevel, ModelRoute, RouteSlot, RoutingOverrides,
     RuntimeCapabilityProfile, RuntimeKind, SlotEffortPolicy, ValueSource,
-    resolve_effective_domain_templates, resolve_effective_routing,
-    resolve_effective_runtime_capabilities, resolve_effective_slot_effort_policies,
+    resolve_effective_advanced_context_config, resolve_effective_domain_templates,
+    resolve_effective_routing, resolve_effective_runtime_capabilities,
+    resolve_effective_slot_effort_policies,
 };
 use crate::domain::domain_templates::{DomainFamily, ExternalContextBinding, ExternalContextKind};
 use crate::domain::governance::CanonModeSelectionPreference;
@@ -143,6 +144,11 @@ pub fn execute_show(
                 cluster_routing.as_ref(),
                 global.as_ref(),
             );
+            let effective_advanced_context = resolve_effective_advanced_context_config(
+                local.as_ref(),
+                cluster_routing.as_ref(),
+                global.as_ref(),
+            );
             let effective_domain_templates = resolve_effective_domain_templates(
                 local.as_ref(),
                 cluster_routing.as_ref(),
@@ -221,6 +227,12 @@ pub fn execute_show(
                     ));
                 }
             }
+
+            lines.push(format!(
+                "advanced_context: {} [{}]",
+                advanced_context_policy_text(&effective_advanced_context.policy),
+                source_text(effective_advanced_context.source)
+            ));
 
             push_effective_domain_template_lines(&mut lines, &effective_domain_templates);
 
@@ -833,6 +845,12 @@ fn render_scope(scope: &str, config: &ConfigFile) -> String {
         }
     }
 
+    if let Some(policy) = config.routing.advanced_context.as_ref() {
+        lines.push(format!("advanced_context: {}", advanced_context_policy_text(policy)));
+    } else {
+        lines.push("advanced_context: none".to_string());
+    }
+
     if config.routing.domain_templates.is_empty() {
         lines.push("domain_templates: none".to_string());
     } else {
@@ -887,6 +905,12 @@ fn profile_text(profile: &RuntimeCapabilityProfile) -> String {
 }
 
 fn effort_policy_text(policy: &SlotEffortPolicy) -> String {
+    policy.summary_text()
+}
+
+fn advanced_context_policy_text(
+    policy: &crate::domain::configuration::AdvancedContextConfig,
+) -> String {
     policy.summary_text()
 }
 
@@ -1136,6 +1160,7 @@ mod tests {
         assert!(empty.contains("assistant_runtimes: none"));
         assert!(empty.contains("runtime_capabilities: none"));
         assert!(empty.contains("slot_effort_policies: none"));
+        assert!(empty.contains("advanced_context: none"));
 
         assert_eq!(slot_label(RouteSlot::Planning), "planning");
         assert_eq!(slot_label(RouteSlot::Implementation), "implementation");
@@ -1175,6 +1200,13 @@ mod tests {
                 Some("required for release"),
             ),
         );
+        config.routing.advanced_context =
+            Some(crate::domain::configuration::AdvancedContextConfig {
+                retrieval_mode: crate::domain::context_intelligence::RetrievalMode::Local,
+                remote_policy:
+                    crate::domain::context_intelligence::RemoteTransmissionPolicyState::LocalOnly,
+                budgets: crate::domain::context_intelligence::RetrievalBudgets::default(),
+            });
 
         assert_eq!(route_text(config.routing.review.as_ref().unwrap()), "gemini:gemini-2.5-pro");
         assert!(
@@ -1205,6 +1237,7 @@ mod tests {
         assert!(rendered.contains(
             "- verification: level=high, fallback=preserve, rationale=required for release"
         ));
+        assert!(rendered.contains("advanced_context: mode=local, remote_policy=local_only"));
     }
 
     #[test]

@@ -13,6 +13,7 @@ use boundline::cli::{
     Cli, CliValidationError, CommandExitStatus, CommandName, DeveloperCommand,
     DeveloperCommandSession,
 };
+use boundline::domain::brief::normalize_inputs;
 use boundline::domain::execution::{
     ExecutionAttemptDefinition, ExecutionCommand, ExecutionFailureMode, ExecutionProfileError,
     WorkspaceChange, WorkspaceExecutionProfile,
@@ -22,6 +23,7 @@ use boundline::domain::flow::{
     supported_flow_names_csv,
 };
 use boundline::domain::limits::{RunLimits, TerminalCondition};
+use boundline::domain::negotiation::NegotiationResolutionState;
 use boundline::domain::plan::{Plan, PlanError, PlanStatus};
 use boundline::domain::session::{
     ActiveSessionRecord, SessionCommand, SessionStatus, SessionStatusView, SessionTransition,
@@ -1263,4 +1265,79 @@ fn session_runtime_public_error_paths_cover_missing_goal_task_and_terminal_short
     no_next_step.active_task = Some(no_next_step_task);
     let response = runtime.run_to_terminal(&mut no_next_step).unwrap();
     assert_eq!(response.terminal_status, TaskStatus::Failed);
+}
+
+#[test]
+fn session_runtime_capture_goal_uses_authored_brief_packet_projection() {
+    let workspace = temp_workspace("boundline-runtime-authored-brief-capture");
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let authored_brief = normalize_inputs(
+        &workspace,
+        Some("Improve the platform docs and fix whatever tests are broken"),
+        &[],
+    )
+    .unwrap();
+    let expected_summary = authored_brief.summary_text();
+    let expected_headline = authored_brief.clarification_headline();
+
+    let mut session = build_started_session(&workspace);
+    session.authored_brief = Some(authored_brief);
+
+    runtime
+        .capture_goal(&mut session, "Improve the platform docs and fix whatever tests are broken")
+        .unwrap();
+
+    let packet = session.negotiation_packet.expect("capture should persist a negotiation packet");
+    assert_eq!(packet.source_summary, expected_summary);
+    assert_eq!(packet.clarification_headline, expected_headline);
+    assert_eq!(packet.resolution_state, NegotiationResolutionState::PendingClarification);
+}
+
+#[test]
+fn session_runtime_blocks_planning_when_authored_brief_needs_clarification() {
+    let workspace = temp_workspace("boundline-runtime-authored-brief-clarification");
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let authored_brief = normalize_inputs(
+        &workspace,
+        Some("Improve the platform docs and fix whatever tests are broken"),
+        &[],
+    )
+    .unwrap();
+    let expected_headline = authored_brief
+        .clarification_headline()
+        .expect("broad authored brief should request clarification");
+    let expected_prompt = authored_brief
+        .clarification_prompt()
+        .expect("broad authored brief should carry a clarification prompt");
+
+    let mut session = build_goal_captured_session(&workspace);
+    session.goal = Some(authored_brief.render_goal_text());
+    session.authored_brief = Some(authored_brief);
+    session.negotiation_packet = None;
+
+    let error = runtime.plan_task(&mut session, None, false).unwrap_err();
+    assert!(matches!(
+        error,
+        SessionRuntimeError::ClarificationRequired { headline, prompt }
+            if headline == expected_headline && prompt == expected_prompt
+    ));
+}
+
+#[test]
+fn session_runtime_confirms_goal_plan_for_selected_flow_when_context_is_sufficient() {
+    let workspace = write_execution_workspace(
+        "boundline-runtime-flow-selected-compat",
+        vec![success_attempt()],
+    );
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut session = build_goal_captured_session(&workspace);
+    session.goal = Some("Fix the failing add test".to_string());
+
+    runtime.select_flow(&mut session, "bug-fix").unwrap();
+    runtime.plan_task(&mut session, None, false).unwrap();
+
+    assert_eq!(session.latest_status, SessionStatus::Planned);
+    assert_eq!(session.active_flow.as_ref().map(|flow| flow.flow_name.as_str()), Some("bug-fix"));
+    assert!(session.active_task.is_none());
+    assert!(session.goal_plan.is_some());
 }

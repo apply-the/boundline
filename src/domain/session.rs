@@ -10,6 +10,7 @@ use thiserror::Error;
 
 use crate::domain::brief::AuthoredBriefBundle;
 use crate::domain::cluster::ClusterDeliveryStory;
+use crate::domain::context_intelligence::AdvancedContextProjection;
 use crate::domain::decision::{Decision, DecisionStatus};
 use crate::domain::flow::SessionFlowState;
 use crate::domain::flow_policy::FlowPolicy;
@@ -772,6 +773,9 @@ pub struct SessionStatusView {
     pub session_id: String,
     pub workspace_ref: String,
     pub goal: Option<String>,
+    /// Optional advanced-context retrieval projection surfaced by `status` and `next`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub advanced_context: Option<AdvancedContextProjection>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub negotiation_goal_summary: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -965,6 +969,7 @@ impl Default for SessionStatusView {
             session_id: String::new(),
             workspace_ref: String::new(),
             goal: None,
+            advanced_context: None,
             negotiation_goal_summary: None,
             negotiation_resolution: None,
             negotiation_acceptance_boundary: None,
@@ -1110,6 +1115,25 @@ impl SessionStatusView {
             return Err(SessionValidationError::StatusViewGoalMismatch {
                 expected: record.goal.clone(),
                 actual: self.goal.clone(),
+            });
+        }
+        // Keep the advanced-context projection aligned with either the live
+        // goal plan or the task-context snapshot that execution persisted.
+        let expected_advanced_context = record
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| goal_plan.context_pack.as_ref())
+            .and_then(|context_pack| context_pack.advanced_context.clone())
+            .or_else(|| {
+                record
+                    .active_task
+                    .as_ref()
+                    .and_then(|task| task.context.latest_advanced_context().ok().flatten())
+            });
+        if self.advanced_context != expected_advanced_context {
+            return Err(SessionValidationError::StatusViewAdvancedContextMismatch {
+                expected: expected_advanced_context.map(Box::new),
+                actual: self.advanced_context.clone().map(Box::new),
             });
         }
         Ok(())
@@ -1887,6 +1911,11 @@ pub enum SessionValidationError {
     StatusViewStatusMismatch { expected: SessionStatus, actual: SessionStatus },
     #[error("status view goal mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewGoalMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view advanced context mismatch")]
+    StatusViewAdvancedContextMismatch {
+        expected: Option<Box<AdvancedContextProjection>>,
+        actual: Option<Box<AdvancedContextProjection>>,
+    },
     #[error("status view negotiation goal summary mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewNegotiationGoalSummaryMismatch { expected: Option<String>, actual: Option<String> },
     #[error("status view negotiation resolution mismatch: expected {expected:?}, got {actual:?}")]
@@ -2504,6 +2533,7 @@ mod tests {
             session_id: record.session_id.clone(),
             workspace_ref: record.workspace_ref.clone(),
             goal: record.goal.clone(),
+            advanced_context: None,
             negotiation_goal_summary: None,
             negotiation_resolution: None,
             negotiation_acceptance_boundary: None,
@@ -2812,6 +2842,7 @@ mod tests {
                 primary: true,
             }],
             selected_targets: vec!["src/lib.rs".to_string()],
+            advanced_context: None,
             staleness_reason: Some("trace snapshot is stale".to_string()),
         })
         .with_flow(InferredFlow {

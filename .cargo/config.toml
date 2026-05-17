@@ -1,0 +1,5 @@
+[env]
+# Redirect LLVM coverage profraw files into target/ to keep the repo root clean.
+# Without this, instrumented binaries write default_*.profraw into the working
+# directory when running under cargo-llvm-cov or any coverage-instrumented build.
+LLVM_PROFILE_FILE = { value = "target/coverage/profraw-%p-%m.profraw", force = false }

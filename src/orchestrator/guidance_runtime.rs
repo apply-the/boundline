@@ -1636,6 +1636,7 @@ mod tests {
                 primary: true,
             }],
             selected_targets: vec!["src/lib.rs".to_string()],
+            advanced_context: None,
             staleness_reason: None,
         };
         let signals = WorkspaceSignals {
@@ -1691,6 +1692,7 @@ mod tests {
                 primary: true,
             }],
             selected_targets: vec!["src/lib.rs".to_string()],
+            advanced_context: None,
             staleness_reason: None,
         };
         let signals = WorkspaceSignals {
@@ -1902,6 +1904,7 @@ mod tests {
                 primary: true,
             }],
             selected_targets: vec!["src/lib.rs".to_string()],
+            advanced_context: None,
             staleness_reason: None,
         };
         let signals = WorkspaceSignals {

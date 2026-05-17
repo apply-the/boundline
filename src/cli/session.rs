@@ -796,6 +796,19 @@ pub(crate) fn build_status_view_with_follow_up(
     let latest_decision = record.decisions.last();
     let latest_decision_selector = latest_decision.map(|decision| decision.selector_kind());
     let delegation = delegation_status_view(record);
+    // Prefer the goal-plan retrieval story while it remains authoritative,
+    // then fall back to the task-context snapshot after execution begins.
+    let advanced_context = record
+        .goal_plan
+        .as_ref()
+        .and_then(|goal_plan| goal_plan.context_pack.as_ref())
+        .and_then(|context_pack| context_pack.advanced_context.clone())
+        .or_else(|| {
+            record
+                .active_task
+                .as_ref()
+                .and_then(|task| task.context.latest_advanced_context().ok().flatten())
+        });
     let task_context_summary =
         record.active_task.as_ref().and_then(task_state_canon_memory_context_summary);
     let task_context_credibility =
@@ -811,6 +824,7 @@ pub(crate) fn build_status_view_with_follow_up(
         session_id: record.session_id.clone(),
         workspace_ref: record.workspace_ref.clone(),
         goal: record.goal.clone(),
+        advanced_context,
         negotiation_goal_summary: record
             .negotiation_packet
             .as_ref()
@@ -1579,6 +1593,14 @@ mod tests {
         CapabilityState, ConfigFile, EffortFallbackPolicy, EffortLevel, ModelRoute, RouteSlot,
         RoutingConfig, RuntimeCapabilityProfile, RuntimeKind, SlotEffortPolicy,
     };
+    use crate::domain::context_intelligence::{
+        AdvancedContextProjection, AuthorityRank, CandidateSelectionState, ImpactAnalysisFinding,
+        ImpactFindingKind, ImpactFindingSeverity, ImpactFindingStatus,
+        RelationshipCredibilityState, RelationshipKind, RelationshipProjection,
+        RemoteTransmissionPolicyState, RetrievalCompatibilityState, RetrievalIndexState,
+        RetrievalMode, RetrievalSourceKind, RetrievalStalenessState, RetrievalState,
+        RetrievedEvidenceCandidate,
+    };
     use crate::domain::decision::{Decision, DecisionType, EvidenceRef};
     use crate::domain::goal_plan::{
         ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan,
@@ -1658,6 +1680,49 @@ fn red_to_green_addition() {
         )
         .unwrap();
         workspace
+    }
+
+    /// Builds one stable advanced-context projection for status-view tests.
+    fn sample_advanced_context() -> AdvancedContextProjection {
+        AdvancedContextProjection {
+            query_id: "query-session".to_string(),
+            retrieval_mode: RetrievalMode::Local,
+            retrieval_state: RetrievalState::Selected,
+            retrieval_index_state: RetrievalIndexState::Ready,
+            budgets: Default::default(),
+            remote_policy_state: RemoteTransmissionPolicyState::LocalOnly,
+            used_remote: false,
+            terminal_reason: None,
+            selected_evidence: vec![RetrievedEvidenceCandidate {
+                candidate_id: "candidate-1".to_string(),
+                source_kind: RetrievalSourceKind::WorkspaceFile,
+                source_ref: "src/lib.rs".to_string(),
+                authority_rank: AuthorityRank::Structured,
+                selection_state: CandidateSelectionState::Selected,
+                selection_reason: "goal keyword matched the implementation surface".to_string(),
+                provenance_summary: "workspace file selected through local retrieval".to_string(),
+                compatibility_state: RetrievalCompatibilityState::Compatible,
+                staleness_state: RetrievalStalenessState::Fresh,
+            }],
+            rejected_candidates: Vec::new(),
+            relationships: vec![RelationshipProjection {
+                relationship_id: "relationship-1".to_string(),
+                subject_ref: "src/lib.rs".to_string(),
+                relationship_kind: RelationshipKind::ExercisesTest,
+                credibility_state: RelationshipCredibilityState::Credible,
+                explanation: "the matching test file names the same target".to_string(),
+                supporting_candidate_ids: vec!["candidate-1".to_string()],
+            }],
+            impact_findings: vec![ImpactAnalysisFinding {
+                finding_id: "finding-1".to_string(),
+                finding_kind: ImpactFindingKind::MissingTest,
+                subject_ref: "tests/red_to_green.rs".to_string(),
+                status: ImpactFindingStatus::Open,
+                severity: ImpactFindingSeverity::Medium,
+                recommended_follow_up: "add or refresh the focused regression test".to_string(),
+                supporting_relationship_ids: vec!["relationship-1".to_string()],
+            }],
+        }
     }
 
     fn write_context_brief(workspace: &Path) -> PathBuf {
@@ -2424,6 +2489,7 @@ fn red_to_green_addition() {
         let plan =
             build_fixture_plan_for_goal(&workspace, None, "Fix the failing add test").unwrap();
         let mut task = Task::new("task-canon-memory", &request, plan).unwrap();
+        task.context.set_latest_advanced_context(&sample_advanced_context()).unwrap();
         task.context
             .set_latest_compacted_canon_memory(&CompactedCanonMemory {
                 headline: "Canon verification packet".to_string(),
@@ -2496,6 +2562,10 @@ fn red_to_green_addition() {
         );
         assert_eq!(view.context_staleness_reason.as_deref(), Some("refresh_required"));
         assert_eq!(
+            view.advanced_context.as_ref().map(AdvancedContextProjection::selected_evidence_count),
+            Some(1)
+        );
+        assert_eq!(
             view.governance_next_action.as_deref(),
             Some("refresh: refresh the governed packet and reassess its credibility")
         );
@@ -2526,6 +2596,7 @@ fn red_to_green_addition() {
                 primary: true,
             }],
             selected_targets: vec!["src/lib.rs".to_string()],
+            advanced_context: None,
             staleness_reason: None,
         });
 

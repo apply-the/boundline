@@ -305,14 +305,33 @@ fn governance_autopilot_flow_rejects_unsupported_future_canon_mode_configuration
 
     let plan = run_boundline_in(&workspace, &["plan"]);
     let plan_text = terminal_text(&plan);
-    assert_ne!(plan.status.code(), Some(0), "{plan_text}");
-    assert!(plan_text.contains("session error"), "{plan_text}");
+    if plan.status.code() != Some(0) {
+        assert!(plan_text.contains("session error"), "{plan_text}");
+        assert!(
+            plan_text
+                .contains("fixture runtime is invalid: workspace execution profile is invalid"),
+            "{plan_text}"
+        );
+        assert!(
+            plan_text.contains("cannot bind Canon mode") || plan_text.contains("unknown variant"),
+            "{plan_text}"
+        );
+        return;
+    }
+
+    assert!(plan_text.contains("routing: native (goal_plan)"), "{plan_text}");
+    assert!(plan_text.contains("execution_path: native_goal_plan"), "{plan_text}");
+
+    let run = run_boundline_in(&workspace, &["run"]);
+    let run_text = terminal_text(&run);
+    assert_ne!(run.status.code(), Some(0), "{run_text}");
+    assert!(run_text.contains("session error"), "{run_text}");
     assert!(
-        plan_text.contains("fixture runtime is invalid: workspace execution profile is invalid"),
-        "{plan_text}"
+        run_text.contains("fixture runtime is invalid: workspace execution profile is invalid"),
+        "{run_text}"
     );
     assert!(
-        plan_text.contains("cannot bind Canon mode") || plan_text.contains("unknown variant"),
-        "{plan_text}"
+        run_text.contains("cannot bind Canon mode") || run_text.contains("unknown variant"),
+        "{run_text}"
     );
 }

@@ -18,6 +18,7 @@ use crate::domain::configuration::{
     ModelRoute, RoutingConfig, RoutingOverrides, resolve_effective_routing,
     resolve_effective_runtime_capabilities, resolve_effective_slot_effort_policies,
 };
+use crate::domain::context_intelligence::AdvancedContextProjection;
 use crate::domain::follow_through::FollowThroughProjection;
 use crate::domain::goal_plan::GoalPlanFlowState;
 use crate::domain::guidance::GuidanceGuardianProjection;
@@ -265,6 +266,57 @@ fn push_context_projection_lines(
 
     if let Some(context_staleness_reason) = context_staleness_reason {
         lines.push(format!("context_staleness_reason: {context_staleness_reason}"));
+    }
+}
+
+// Render the compact advanced-context projection so `status` and `inspect`
+// can explain retrieval state without hiding the runtime reasoning.
+fn push_advanced_context_lines(
+    lines: &mut Vec<String>,
+    advanced_context: Option<&AdvancedContextProjection>,
+) {
+    let Some(advanced_context) = advanced_context else {
+        return;
+    };
+
+    lines.push(format!("retrieval_mode: {}", advanced_context.retrieval_mode.as_str()));
+    lines.push(format!("retrieval_state: {}", advanced_context.retrieval_state.as_str()));
+    lines.push(format!("retrieval_authority_order: {}", advanced_context.authority_order_text()));
+    lines.push(format!(
+        "retrieval_index_state: {}",
+        advanced_context.retrieval_index_state.as_str()
+    ));
+    if let Some(terminal_reason) = advanced_context.terminal_reason.as_deref() {
+        lines.push(format!("retrieval_terminal_reason: {terminal_reason}"));
+    }
+    lines.push(format!("selected_evidence_count: {}", advanced_context.selected_evidence_count()));
+    lines.push(format!("impact_finding_count: {}", advanced_context.impact_finding_count()));
+
+    for candidate in &advanced_context.selected_evidence {
+        lines.push(format!(
+            "selected_evidence: {} [{}] {}",
+            candidate.source_ref,
+            candidate.source_kind.as_str(),
+            candidate.selection_reason
+        ));
+    }
+
+    for relationship in &advanced_context.relationships {
+        lines.push(format!(
+            "relationship: {} [{}] {}",
+            relationship.subject_ref,
+            relationship.relationship_kind.as_str(),
+            relationship.explanation
+        ));
+    }
+
+    for finding in &advanced_context.impact_findings {
+        lines.push(format!(
+            "impact_finding: {} [{}] {}",
+            finding.subject_ref,
+            finding.finding_kind.as_str(),
+            finding.recommended_follow_up
+        ));
     }
 }
 
@@ -1011,6 +1063,8 @@ pub fn render_trace_summary(
         summary.context_staleness_reason.as_deref(),
     );
 
+    push_advanced_context_lines(&mut lines, summary.advanced_context.as_ref());
+
     lines.extend(render_guidance_projection_lines(&summary.guidance_guardian));
 
     if let Some(clarification_headline) = &summary.clarification_headline {
@@ -1286,6 +1340,8 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
         view.context_provenance.as_deref().unwrap_or(&[]),
         view.context_staleness_reason.as_deref(),
     );
+
+    push_advanced_context_lines(&mut lines, view.advanced_context.as_ref());
 
     if let Some(clarification_headline) = &view.clarification_headline {
         lines.push(format!("clarification_headline: {clarification_headline}"));
@@ -3048,6 +3104,7 @@ mod tests {
         let summary = TraceSummaryView {
             trace_ref: "/tmp/workspace/.boundline/traces/task-output.json".to_string(),
             goal: "Render trace summary".to_string(),
+            advanced_context: None,
             guidance_guardian: crate::domain::guidance::GuidanceGuardianProjection::default(),
             negotiation_goal_summary: None,
             negotiation_resolution: None,
@@ -3131,6 +3188,7 @@ mod tests {
             session_id: "session-output".to_string(),
             workspace_ref: "/tmp/workspace".to_string(),
             goal: None,
+            advanced_context: None,
             negotiation_goal_summary: None,
             negotiation_resolution: None,
             negotiation_acceptance_boundary: None,
@@ -3418,6 +3476,7 @@ mod tests {
             session_id: "session-review-status".to_string(),
             workspace_ref: "/tmp/workspace".to_string(),
             goal: Some("Ship review output".to_string()),
+            advanced_context: None,
             negotiation_goal_summary: None,
             negotiation_resolution: None,
             negotiation_acceptance_boundary: None,
@@ -3626,6 +3685,7 @@ mod tests {
         let summary = TraceSummaryView {
             trace_ref: "/tmp/workspace/.boundline/traces/task-review-output.json".to_string(),
             goal: "Render trace summary".to_string(),
+            advanced_context: None,
             guidance_guardian: crate::domain::guidance::GuidanceGuardianProjection::default(),
             negotiation_goal_summary: None,
             negotiation_resolution: None,

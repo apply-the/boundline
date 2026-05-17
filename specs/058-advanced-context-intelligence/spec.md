@@ -1,124 +1,114 @@
 # Feature Specification: Advanced Context Intelligence
 
-**Feature Branch**: `058-advanced-context-intelligence`  
-**Created**: 2026-05-16  
-**Status**: Draft  
-**Input**: User description: "Create a Boundline feature spec for S5 Advanced Context Intelligence covering optional semantic retrieval, hybrid retrieval, graph projection, impact analysis, explainability, risk-aware retrieval, cost control, optional providers, and trace projection while preserving structured runtime indexes and Canon project memory as authority, plus define any needed consumer-side contract for Canon artifact indexing surfaces."
+**Feature Branch**: `058-advanced-context-intelligence`
+**Created**: 2026-05-16
+**Status**: Reviewed
+**Input**: User description: "Deliver the S5 V1 advanced-context baseline for Boundline using local SQLite + FTS5 + structured retrieval, explainable relationship and impact projection, Canon consumer compatibility, and explicit disabled or local retrieval policy without requiring semantic providers, graph infrastructure, or remote services."
 
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Expand Context Without Losing Authority (Priority: P1)
 
-As a Boundline operator using the primary session-native workflow, I want
-Boundline to retrieve semantically related repository and Canon-backed evidence
-without replacing the structured runtime context, so planning and delivery can
-use broader context without hidden guesswork.
+As a Boundline operator using the session-native workflow, I want Boundline to
+reuse bounded workspace evidence, traces, and compatible Canon artifacts through
+one local retrieval pass so planning and status surfaces gain more context
+without weakening the current authority model.
 
-**Why this priority**: S5 only has value if it strengthens real delivery
-decisions while keeping the current authority model intact.
+**Why this priority**: S5 V1 is valuable only if it improves real delivery
+choices while keeping structured runtime evidence authoritative.
 
-**Independent Test**: In a representative workspace with runtime indexes,
-review findings, traces, and compatible Canon artifacts, run `plan`, `status`,
-and `inspect` with advanced context intelligence enabled and verify that the
-returned context keeps structured inputs authoritative, adds explainable
-retrieved evidence, and preserves an explicit local-only fallback when semantic
-expansion is disabled or unavailable.
+**Independent Test**: In a representative workspace with local files, tests,
+prior traces, and compatible Canon metadata, run `plan`, `status`, and
+`inspect` and verify that Boundline keeps structured context first, selects
+local evidence through SQLite + FTS5 or explicit structured fallback, and
+records visible rationale for the chosen evidence.
 
 **Acceptance Scenarios**:
 
-1. **Given** a workspace with structured runtime context and compatible Canon
-  artifacts, **When** Boundline expands context before or during bounded
-  delivery, **Then** it orders the resulting evidence by explicit precedence:
-  structured runtime context first, Canon-governed memory second, workspace
-  overrides third, and semantic or similarity expansion after those sources.
-2. **Given** the same workspace with semantic expansion disabled,
-  **When** Boundline runs the session-native workflow, **Then** it continues
-  with structured and keyword-based context only and records that advanced
-  retrieval was intentionally inactive rather than silently failing.
-3. **Given** a semantic match that conflicts with authoritative runtime
-  context, **When** Boundline assembles the final context set, **Then** the
-  structured context remains authoritative and the conflicting match is
-  downgraded or excluded with visible rationale.
+1. **Given** a workspace with bounded source and test files, **When** Boundline
+   assembles advanced context, **Then** it preserves the authority order of
+   structured runtime context first, Canon-governed memory second, workspace
+   overrides third, and local retrieved evidence after those sources.
+2. **Given** a workspace where SQLite FTS does not return a stronger match,
+   **When** Boundline builds the advanced context projection, **Then** it falls
+   back to structured bounded ordering and records why the fallback path was
+   used.
+3. **Given** a Canon artifact with compatible indexing metadata, **When**
+   Boundline considers it for retrieval, **Then** the artifact remains semantic
+   enrichment only and does not override explicit runtime or workspace state.
 
 ---
 
 ### User Story 2 - See Impact And Review Gaps Early (Priority: P1)
 
-As a maintainer or reviewer, I want Boundline to project relationships,
-affected systems, contract exposure, missing tests, and likely reviewer needs
-from retrieved evidence, so I can understand blast radius before execution or
-review continues.
+As a maintainer or reviewer, I want Boundline to derive explainable
+relationships and impact findings from the selected evidence so I can see blast
+radius, missing tests, required evidence, and related contract exposure before
+execution or review continues.
 
-**Why this priority**: Relationship and impact reasoning are the main delivery
-benefit beyond plain retrieval; without them S5 is just a search add-on.
+**Why this priority**: Relationship and impact reasoning are the delivery value
+added by S5 V1 beyond plain search.
 
 **Independent Test**: Run a bounded change against a workspace containing
-domain invariants, tests, prior traces, and Canon artifacts, then verify that
-Boundline can explain affected systems, required evidence, missing tests, and
-reviewer or risk implications from `status`, `inspect`, and trace outputs.
+source files, tests, and Canon-backed memory, then verify that `status` and
+`inspect` surface affected systems, missing tests, and evidence gaps with
+explicit provenance.
 
 **Acceptance Scenarios**:
 
-1. **Given** retrieved evidence that references domains, invariants, tests, or
-  contracts, **When** Boundline performs impact analysis, **Then** it surfaces
-  affected systems, affected domains, contract exposure, and missing evidence
-  with explicit reasoning.
-2. **Given** higher-risk work, **When** Boundline applies retrieval policy,
-  **Then** it can deepen evidence gathering or relationship expansion within
-  configured bounds and records why additional depth was warranted.
-3. **Given** insufficient relationship evidence, **When** Boundline cannot
-  infer reviewer needs or blast radius credibly, **Then** it reports the gap
-  explicitly and avoids presenting the inference as certain.
+1. **Given** selected evidence that includes source and test surfaces, **When**
+   Boundline projects relationships, **Then** it surfaces explainable
+   `exercises_test` and `requires_evidence` relationships where the local
+   evidence supports them.
+2. **Given** a selected source target without supporting test evidence,
+   **When** Boundline performs impact analysis, **Then** it records a visible
+   `missing_test` or `evidence_gap` finding instead of inferring confidence.
+3. **Given** insufficient relationship evidence, **When** Boundline cannot make
+   a credible impact claim, **Then** it reports the gap explicitly and avoids
+   presenting tentative inference as settled fact.
 
 ---
 
 ### User Story 3 - Keep Retrieval Optional, Bounded, And Local-First (Priority: P2)
 
 As an operator working in mixed trust environments, I want advanced retrieval
-to remain optional, bounded, and local-first even when richer providers exist,
-so Boundline stays usable offline and does not send code or Canon content to
-external services by default.
+to remain optional, bounded, and local-first so Boundline stays usable offline
+and does not depend on embeddings, hosted retrieval, or remote providers for
+correctness.
 
-**Why this priority**: The retrieval layer is only acceptable if it preserves
-the product's deterministic, offline-friendly operating model.
+**Why this priority**: The retrieval layer is acceptable only if the product
+remains deterministic and local-first by default.
 
-**Independent Test**: Run the same bounded workflow in disabled, local, and
-explicit remote semantic modes and verify that Boundline remains functional in
-each mode, discloses external transmission when relevant, and stops or degrades
-explicitly when limits or policy constraints apply.
+**Independent Test**: Run the same bounded workflow with retrieval disabled and
+with local retrieval enabled, then verify that Boundline stays functional in
+both modes, records the applied policy, and rejects unsupported remote settings
+under the V1 contract.
 
 **Acceptance Scenarios**:
 
-1. **Given** a workspace without vector or graph providers, **When** Boundline
-  runs with advanced context intelligence enabled, **Then** it still completes
-  using structured and keyword retrieval paths and marks semantic or graph
-  acceleration as unavailable rather than required.
-2. **Given** a workspace policy that forbids external transmission,
-  **When** remote semantic mode is not explicitly enabled, **Then** Boundline
-  keeps all retrieval local and prevents remote provider use.
-3. **Given** a retrieval request that reaches configured depth, traversal, or
-  evidence limits, **When** Boundline expands context, **Then** it records the
-  stop reason and continues or stops according to the existing credibility
-  rules instead of hanging or exploring unboundedly.
+1. **Given** a workspace with `retrieval_mode = "disabled"`, **When**
+   Boundline builds advanced context, **Then** it records a terminal reason
+   that retrieval was intentionally disabled and does not select evidence.
+2. **Given** the default local policy, **When** Boundline builds advanced
+   context, **Then** it uses only workspace-local SQLite + FTS5 indexing and
+   marks remote transmission as blocked or local-only.
+3. **Given** a config that requests remote retrieval or remote transmission,
+   **When** Boundline validates the policy, **Then** it rejects that config as
+   unsupported in the S5 V1 baseline instead of attempting an implicit remote
+   path.
 
 ### Edge Cases
 
-- A repository produces a large number of semantically similar candidates and
-  Boundline must stop expansion before the result set becomes noisy or
-  non-credible.
-- Compatible Canon artifact metadata exists, but the artifact contract line is
-  unsupported or required attribution fields are missing.
-- A remote semantic provider is configured but unavailable, disallowed by
-  policy, or too risky for the current workspace classification.
-- Relationship expansion suggests reviewers, tests, or impacted systems that
-  conflict with authoritative runtime manifests or explicit workspace
-  configuration.
-- Retrieved evidence becomes stale after local file changes during the same
-  bounded session.
-- A similarity match or inferred relation lacks an explainable reason and must
-  be excluded rather than projected as a trustworthy result.
-- The explicit compatibility route invokes advanced retrieval and must remain
-  visibly subordinate to the primary session-native flow.
+- SQLite retrieval finds no stronger match and Boundline must preserve the
+  bounded target list through structured fallback.
+- A Canon artifact exists but exposes an unsupported contract line or missing
+  indexing metadata.
+- Retrieved evidence becomes stale relative to the bounded session and the
+  projection must degrade explicitly.
+- The evidence set reaches configured depth, traversal, or selected-evidence
+  limits and the projection must remain bounded.
+- A projected relation or impact claim lacks sufficient local evidence and must
+  remain tentative or be omitted.
 
 ## Requirements *(mandatory)*
 
@@ -126,141 +116,105 @@ explicitly when limits or policy constraints apply.
 
 - **FR-001**: Boundline MUST introduce advanced context intelligence as an
   optional augmentation layer on top of the existing structured runtime context
-  rather than as a replacement for that context.
+  rather than a replacement for that context.
 - **FR-002**: Boundline MUST preserve explicit retrieval precedence of
   structured runtime context first, Canon-governed memory second, workspace
-  overrides third, and semantic or similarity expansion only after those
-  authoritative inputs have been considered.
+  overrides third, and retrieved local evidence after those authoritative
+  inputs.
 - **FR-003**: Boundline MUST support a retrieval-disabled mode that preserves
-  the current structured-only operating path without requiring vector,
-  embedding, or graph capabilities.
-- **FR-004**: Boundline MUST support bounded advanced retrieval across local
-  repository artifacts, prior traces, review findings, verification evidence,
-  implementation precedents, and compatible Canon artifacts when those inputs
-  are available.
-- **FR-005**: Boundline MUST support similarity matching, contextual
-  expansion, review-pattern retrieval, implementation-precedent retrieval, and
-  related-context discovery as optional capabilities within the advanced
-  retrieval layer.
-- **FR-006**: Boundline MUST project explicit relationships among systems,
-  domains, invariants, tests, services, contracts, risks, reviewers, evidence,
-  and retrieved artifacts when sufficient evidence exists to support impact
-  analysis.
-- **FR-007**: Boundline MUST explain why a document, relation, reviewer
-  inference, risk escalation, or similar change match was surfaced, including
-  provenance and selection rationale.
-- **FR-008**: Boundline MUST surface retrieval reasoning and impact analysis
-  through inspectable runtime outputs, including `status`, `inspect`, trace
-  projection, and any retrieval-debug surface introduced for this feature.
-- **FR-009**: Boundline MUST keep semantic matches and graph-derived
-  relationships non-authoritative; they may enrich or reprioritize context, but
-  they MUST NOT override explicit runtime manifests, Canon contract semantics,
-  or workspace configuration.
-- **FR-010**: Boundline MUST apply explicit limits to retrieval depth,
-  similarity expansion, relationship traversal, and evidence volume, and MUST
-  record the stop reason whenever one of those limits terminates expansion.
-- **FR-011**: Boundline MUST support risk-aware retrieval policies that can
-  increase evidence depth or relationship expansion for higher-risk work
-  without silently changing authority boundaries or bypassing configured
-  limits.
-- **FR-012**: Boundline MUST consume compatible Canon artifact indexing
-  metadata only through a documented consumer contract that preserves Canon as
-  semantic owner and Boundline as retrieval orchestrator.
-- **FR-013**: Boundline MUST preserve local-first operation and MUST NOT
-  require distributed infrastructure, hosted retrieval services, or continuous
-  network access to remain usable.
-- **FR-014**: Boundline MUST support disabled, local, and explicit remote
-  semantic modes, and any remote mode MUST remain opt-in with visible
-  disclosure when source code or Canon content may leave the local machine.
-- **FR-015**: Boundline MUST record retrieval decisions, selected evidence,
-  rejected candidates, relationship traversal reasoning, reviewer inferences,
-  and impact findings in traceable runtime outputs.
-- **FR-016**: Boundline MUST degrade explicitly when a provider is
-  unavailable, a Canon artifact contract is incompatible, or evidence is
-  insufficient, by continuing in a lower-confidence mode or stopping according
-  to the existing credibility rules.
-- **FR-017**: Boundline MUST keep any compatibility-route use of advanced
-  context intelligence explicit and visibly subordinate to the primary
-  session-native workflow.
-- **FR-018**: Boundline MUST NOT introduce hosted RAG dependence,
-  autonomous memory mutation, distributed multi-tenant search, or Canon-owned
-  runtime policy as part of this slice.
+  the structured-only path without requiring SQLite retrieval to succeed.
+- **FR-004**: Boundline MUST support bounded local retrieval across workspace
+  files, tests, traces, and compatible Canon artifacts using one workspace-
+  local SQLite + FTS5 index with structured fallback ordering.
+- **FR-005**: Boundline MUST project explicit relationships and impact findings
+  from selected evidence when sufficient local evidence exists to support the
+  claim.
+- **FR-006**: Boundline MUST explain why a document, relation, or impact
+  finding was surfaced, including provenance and selection rationale.
+- **FR-007**: Boundline MUST surface retrieval mode, index state, selected
+  evidence, relationships, impact findings, and terminal or degraded reasons
+  through `status`, `inspect`, and trace projections.
+- **FR-008**: Boundline MUST keep retrieved evidence non-authoritative; it may
+  enrich context but MUST NOT override explicit runtime manifests, Canon
+  contract semantics, or workspace configuration.
+- **FR-009**: Boundline MUST apply explicit budgets to refinement, refresh,
+  traversal, expansion, depth, and selected-evidence count, and MUST record
+  the resulting bounded state in the projection.
+- **FR-010**: Boundline MUST consume Canon artifact indexing metadata only
+  through the documented Canon producer contract and the Boundline-owned
+  consumer interpretation of that contract.
+- **FR-011**: Boundline MUST preserve local-first operation and MUST NOT
+  require embeddings, vector search, graph databases, or remote services for
+  S5 V1 correctness.
+- **FR-012**: Boundline MUST reject unsupported S5.v2-or-later settings such
+  as remote retrieval or remote transmission under the S5 V1 config contract.
+- **FR-013**: Boundline MUST degrade explicitly when the local index is stale,
+  retrieval is insufficient, Canon metadata is incompatible, or evidence is too
+  weak to support a projection.
+- **FR-014**: Boundline MUST keep any future semantic acceleration,
+  sqlite-vec, or graph-projection work outside the S5 V1 baseline and document
+  those features as deferred to later slices.
+- **FR-015**: Boundline MUST NOT introduce hosted RAG, distributed search,
+  remote embeddings, autonomous memory mutation, or Canon-owned runtime policy
+  in this slice.
 
 ### Scope Boundaries *(mandatory)*
 
-- **In Scope**: optional semantic retrieval, hybrid context expansion,
-  relationship projection, impact analysis, explainable reviewer and evidence
-  inference, bounded risk-aware retrieval depth, local-first retrieval modes,
-  trace projection, and a documented Canon consumer contract for compatible
-  artifact indexing surfaces.
-- **Out of Scope**: mandatory hosted retrieval infrastructure, shared
-  enterprise indexes, autonomous memory mutation, internet-scale search,
-  council algorithm redesign, Canon producer-side feature work beyond the
-  existing artifact indexing contract, UI redesign, deployment pipelines, and
-  final provider or database selection.
+- **In Scope**: local SQLite + FTS5 retrieval, structured fallback ordering,
+  Canon consumer compatibility checks, explainable relationship projection,
+  impact findings, status and inspect visibility, trace projection, and typed
+  disabled or local retrieval policy.
+- **Out of Scope**: sqlite-vec similarity, embeddings, graph databases,
+  hosted retrieval, remote providers, remote semantic modes, distributed
+  indexes, autonomous memory mutation, Canon producer-side redesign, UI work,
+  and deployment changes.
 
 ### Key Entities *(include if feature involves data)*
 
-- **Retrieval Query**: A bounded request for additional context derived from
-  the active delivery state, current evidence gaps, and selected risk posture.
-- **Retrieved Evidence Candidate**: A repository or Canon-backed artifact that
+- **Retrieval Query**: A bounded request for additional local context derived
+  from the active delivery state and selected targets.
+- **Retrieved Evidence Candidate**: A workspace or Canon-backed artifact that
   may enrich the current context, including provenance, authority rank,
   selection rationale, and credibility status.
-- **Relationship Projection**: An explainable link between retrieved evidence
-  and delivery-relevant concepts such as systems, domains, invariants, tests,
-  contracts, reviewers, or risks.
+- **Relationship Projection**: An explainable link between selected evidence
+  and delivery-relevant concepts such as tests, systems, domains, or evidence
+  requirements.
 - **Impact Analysis Finding**: A projected delivery implication showing what is
   affected, what evidence is missing, and what follow-up is warranted.
-- **Retrieval Mode**: The active operating mode for advanced retrieval:
-  disabled, local, or explicit remote.
+- **Retrieval Policy**: The typed local config that controls disabled or local
+  retrieval mode, remote-policy disclosure, and bounded budgets.
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: In representative bounded-delivery workspaces, operators can
-  retrieve expanded context with explicit authority ordering and provenance
-  visible from `status` or `inspect` within 5 minutes.
-- **SC-002**: 100% of runs where advanced retrieval is disabled, unavailable,
-  or policy-blocked end in an explicit structured-only, degraded, or terminal
-  state rather than a hidden failure.
-- **SC-003**: For representative medium- and higher-risk changes, Boundline
-  surfaces affected systems, affected domains, contract exposure, and missing
-  evidence before execution or review continues.
-- **SC-004**: Reviewers can identify why a retrieved item or inferred
-  relationship was selected from recorded runtime outputs in under 5 minutes.
-- **SC-005**: Remote semantic retrieval never transmits local or Canon-backed
-  content unless the workspace has explicitly enabled remote mode.
+- **SC-001**: In representative bounded-delivery workspaces, operators can see
+  the selected evidence, authority order, and retrieval rationale from `status`
+  or `inspect` within 5 minutes.
+- **SC-002**: 100% of runs where retrieval is disabled, insufficient, or
+  degraded end in an explicit terminal or degraded state rather than hidden
+  failure.
+- **SC-003**: For representative bounded changes, Boundline surfaces missing
+  tests, evidence gaps, and explainable relationships before execution or
+  review continues.
+- **SC-004**: Boundline remains fully usable without semantic acceleration,
+  graph infrastructure, or remote providers.
 
 ## Catalog Research & Currency *(mandatory)*
 
-- **Public Sources Reviewed**: OpenAI Models documentation at
-  `https://developers.openai.com/api/docs/models`, Anthropic Models Overview at
-  `https://platform.claude.com/docs/en/docs/about-claude/models`, and Google
-  Gemini Models documentation at `https://ai.google.dev/gemini-api/docs/models`
-  on 2026-05-16.
-- **Catalog Delta**: No bundled catalog changes were required during spec
-  creation.
-- **No-Change Rationale**: The bundled catalog already contains the current
-  operator-facing text-and-coding families relevant to Boundline route
-  selection for this slice: OpenAI `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, and
-  `gpt-5.4-nano`; Anthropic `opus-4.7`, `sonnet-4.6`, and `haiku-4.5`; Google
-  `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`,
-  `gemini-3.1-pro-preview`, `gemini-3-flash-preview`, and
-  `gemini-3.1-flash-lite`. The public docs now also list audio, media,
-  deep-research, and embedding-specific models, but those do not change the
-  bundled assistant-routing contract for this retrieval-focused slice.
+- **Public Sources Reviewed**: OpenAI, Anthropic, and Google model catalogs on
+  2026-05-16.
+- **Catalog Delta**: No bundled catalog changes were required for S5 V1.
+- **No-Change Rationale**: S5 V1 does not depend on remote model or embedding
+  providers; the provider audit remains informative only and does not change
+  the local-first implementation contract.
 
 ## Assumptions
 
 - The primary product path remains the session-native workflow, and advanced
-  context intelligence is evaluated there before any explicit compatibility
-  route expansion.
-- Existing runtime intelligence substrate and Canon artifact-indexing contracts
-  provide enough authoritative inputs for S5 without inventing a second source
+  context intelligence is evaluated there before any compatibility path.
+- The S5 V1 baseline is the local SQLite + FTS5 retrieval layer described in
+  the S5 addendum; semantic acceleration is deferred to S5.v2.
+- Existing runtime intelligence and Canon artifact-indexing contracts provide
+  enough authoritative inputs for this slice without inventing a second source
   of truth.
-- Remote semantic providers remain optional and disabled by default in
-  workspaces that do not explicitly permit external transmission.
-- Planning may choose embedded retrieval technologies later, but any chosen
-  implementation must preserve local-first operation, bounded execution, and
-  explainability.

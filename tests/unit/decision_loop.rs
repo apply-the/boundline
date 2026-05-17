@@ -395,6 +395,7 @@ fn goal_plan_created_trace_event_includes_context_projection() {
             primary: true,
         }],
         selected_targets: vec!["src/lib.rs".to_string()],
+        advanced_context: None,
         staleness_reason: None,
     });
 
