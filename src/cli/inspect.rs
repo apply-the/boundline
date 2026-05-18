@@ -15,6 +15,7 @@ use crate::domain::context_intelligence::AdvancedContextProjection;
 use crate::domain::goal_plan::GoalPlanFlowState;
 use crate::domain::guidance::{GuardianFinding, GuidanceGuardianProjection};
 use crate::domain::limits::TerminalCondition;
+use crate::domain::reasoning::ProfileActivationRecord;
 use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::session::{RoutingMode, RoutingOutcome, RoutingSource};
 use crate::domain::session::{governance_next_action_for_state, governance_packet_provenance_text};
@@ -173,8 +174,18 @@ pub fn summarize_trace(
     let mut executed_steps: Vec<TraceStepSummary> = Vec::new();
     let mut recovery_events: Vec<TraceRecoveryEvent> = Vec::new();
     let mut review_timeline: Vec<String> = Vec::new();
+    let mut reasoning_profile: Option<ProfileActivationRecord> = None;
 
     for event in &trace.events {
+        if let Some(record) = event
+            .payload
+            .get("reasoning_profile_record")
+            .cloned()
+            .and_then(|value| serde_json::from_value(value).ok())
+        {
+            reasoning_profile = Some(record);
+        }
+
         // Guidance and guardian projection is persisted incrementally across
         // planning, execution, and verification events; inspect rebuilds the
         // latest authoritative view by folding those payload snapshots.
@@ -458,6 +469,17 @@ pub fn summarize_trace(
                     failure_evidence.push(evidence);
                 }
             }
+            TraceEventType::ReasoningProfileActivated
+            | TraceEventType::ReasoningParticipantStarted
+            | TraceEventType::ReasoningParticipantCompleted
+            | TraceEventType::ReasoningDisagreementRecorded
+            | TraceEventType::ReasoningDebateRoundCompleted
+            | TraceEventType::ReasoningReflexionRevisionCompleted
+            | TraceEventType::ReasoningAdjudicationRecorded
+            | TraceEventType::ReasoningConfidenceRecorded
+            | TraceEventType::ReasoningProfileBlocked
+            | TraceEventType::ReasoningProfileInterrupted
+            | TraceEventType::ReasoningProfileEscalated => {}
             TraceEventType::ProjectScalePathProposed
             | TraceEventType::ProjectScaleStageTransitioned
             | TraceEventType::VotingDecisionRecorded => {}
@@ -546,6 +568,7 @@ pub fn summarize_trace(
         governance_next_action: governance_projection.next_action.or_else(|| {
             governance_next_action_for_state(governance_projection.latest_state.as_deref())
         }),
+        reasoning_profile,
         delegation,
         review_timeline,
         terminal_status,
@@ -2340,6 +2363,73 @@ mod tests {
         assert_eq!(
             summary.governance_next_action.as_deref(),
             Some("refresh: refresh the governed packet and reassess its credibility")
+        );
+    }
+
+    #[test]
+    fn summarize_trace_rehydrates_reasoning_profile_from_governance_payload() {
+        let mut trace = terminal_trace();
+        trace.record_event(
+            TraceEventType::GovernanceCompleted,
+            Some("step-1".to_string()),
+            0,
+            json!({
+                "stage_key": "bug-fix:verify",
+                "runtime": "canon",
+                "headline": "reasoning profile bounded_reflexion degraded",
+                "reasoning_profile_record": {
+                    "activation_id": "reasoning-attempt-2",
+                    "stage_key": "bug-fix:verify",
+                    "profile_id": "bounded_reflexion",
+                    "trigger": "canon_required_challenge",
+                    "activation_reason": "Canon governance activated stronger challenge",
+                    "status": "degraded",
+                    "participants": [],
+                    "budget": {
+                        "max_participants": 1,
+                        "max_branches": 1,
+                        "max_debate_rounds": 0,
+                        "max_reflexion_revisions": 2,
+                        "max_calls": 2,
+                        "max_tokens": 6000,
+                        "max_adjudication_steps": 1
+                    },
+                    "independence": {
+                        "requested_floor": {
+                            "route_distinct": false,
+                            "provider_distinct": false,
+                            "context_distinct": false,
+                            "prompt_pattern_distinct": false,
+                            "minimum_participants": 1
+                        },
+                        "observed_distinctions": {
+                            "distinct_routes": 1,
+                            "distinct_providers": 1,
+                            "distinct_contexts": 1,
+                            "distinct_prompt_patterns": 1
+                        },
+                        "result": "degraded",
+                        "reason": "reflexion remained bounded but shared one runtime"
+                    },
+                    "outcome": {
+                        "outcome_kind": "degraded",
+                        "headline": "bounded reflexion degraded",
+                        "disagreement_summary": "shared runtime reduced independence",
+                        "next_action": "escalate to blind review if confidence remains low",
+                        "iterations": []
+                    }
+                }
+            }),
+        );
+
+        let summary = summarize_trace("/tmp/trace.json", &trace).unwrap();
+
+        let reasoning_profile = summary.reasoning_profile.expect("reasoning profile should exist");
+        assert_eq!(reasoning_profile.profile_id.as_str(), "bounded_reflexion");
+        assert_eq!(reasoning_profile.status.as_str(), "degraded");
+        assert_eq!(
+            reasoning_profile.outcome.as_ref().and_then(|outcome| outcome.next_action.as_deref()),
+            Some("escalate to blind review if confidence remains low")
         );
     }
 

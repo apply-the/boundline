@@ -94,6 +94,12 @@ mod session_governance_flow;
 #[path = "integration/canon_governance_flow.rs"]
 mod canon_governance_flow;
 
+#[path = "integration/reasoning_profile_activation.rs"]
+mod reasoning_profile_activation;
+
+#[path = "integration/reasoning_profile_degradation.rs"]
+mod reasoning_profile_degradation;
+
 #[path = "integration/governance_autopilot_flow.rs"]
 mod governance_autopilot_flow;
 

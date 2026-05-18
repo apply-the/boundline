@@ -133,6 +133,9 @@ mod negotiation_models;
 #[path = "unit/runtime_routing.rs"]
 mod runtime_routing;
 
+#[path = "unit/reasoning_profile_trace.rs"]
+mod reasoning_profile_trace;
+
 #[path = "unit/compatibility_continuity.rs"]
 mod compatibility_continuity;
 

@@ -7,6 +7,11 @@ use boundline::domain::governance::{
     MemoryCredibilityState, PacketReuseBindingReason,
 };
 use boundline::domain::limits::RunLimits;
+use boundline::domain::reasoning::{
+    IndependenceFloor, ParticipantRoleDefinition, ReasoningAdjudicationMode, ReasoningBudget,
+    ReasoningDegradationPolicy, ReasoningParticipantRoleKind, ReasoningProfileDefinition,
+    ReasoningProfileFamily, ReasoningProfileId, ReasoningRoutePreference,
+};
 use boundline::domain::task_context::TaskContext;
 use boundline::domain::task_context::{
     LATEST_GOVERNANCE_CONTRACT_LINES_KEY, LATEST_GOVERNANCE_DECISION_KEY,
@@ -63,6 +68,7 @@ fn sample_policy() -> StageGovernancePolicy {
         risk: None,
         zone: None,
         owner: None,
+        reasoning_profile: None,
     }
 }
 
@@ -90,6 +96,44 @@ fn sample_canon_policy(flow_name: &str, stage_id: &str, mode: CanonMode) -> Stag
         risk: Some("medium".to_string()),
         zone: Some("engineering".to_string()),
         owner: Some("platform".to_string()),
+        reasoning_profile: None,
+    }
+}
+
+fn sample_reasoning_profile() -> ReasoningProfileDefinition {
+    ReasoningProfileDefinition {
+        profile_id: ReasoningProfileId::BoundedSelfConsistency,
+        family: ReasoningProfileFamily::SelfConsistency,
+        allowed_stages: vec![CanonMode::Verification],
+        limits: ReasoningBudget {
+            max_participants: 1,
+            max_branches: 2,
+            max_debate_rounds: 0,
+            max_reflexion_revisions: 0,
+            max_calls: 2,
+            max_tokens: 2048,
+            max_adjudication_steps: 1,
+        },
+        participant_roles: vec![ParticipantRoleDefinition {
+            role_id: "self_consistency_path".to_string(),
+            role_kind: ReasoningParticipantRoleKind::IndependentPath,
+            preferred_slot: ReasoningRoutePreference::Verification,
+            independence_requirements: IndependenceFloor {
+                route_distinct: false,
+                provider_distinct: false,
+                context_distinct: false,
+                prompt_pattern_distinct: false,
+                minimum_participants: 1,
+            },
+            required: true,
+        }],
+        adjudication_mode: ReasoningAdjudicationMode::None,
+        degradation_policy: ReasoningDegradationPolicy {
+            allow_degraded_independence: false,
+            allow_reduced_participants: false,
+            interruptible: true,
+            blocked_next_action: Some("rerun bounded verification".to_string()),
+        },
     }
 }
 
@@ -157,6 +201,31 @@ fn governance_stage_helpers_select_expected_policy() {
     assert_eq!(selected_stage_policy(Some(&profile), "bug-fix", "investigate"), Some(policy));
     assert_eq!(selected_stage_policy(Some(&profile), "bug-fix", "verify"), None);
     assert_eq!(selected_stage_policy(None, "bug-fix", "investigate"), None);
+}
+
+#[test]
+fn selected_stage_policy_preserves_reasoning_profile_attachment() {
+    let mut policy = sample_canon_policy("bug-fix", "verify", CanonMode::Verification);
+    policy.reasoning_profile = Some(sample_reasoning_profile());
+    let profile = GovernanceProfile {
+        default_runtime: GovernanceRuntimeKind::Canon,
+        canon: Some(sample_canon_config()),
+        stages: vec![policy],
+    };
+
+    assert!(profile.validate().is_ok());
+
+    let selected = selected_stage_policy(Some(&profile), "bug-fix", "verify")
+        .and_then(|stage| stage.reasoning_profile);
+
+    assert_eq!(
+        selected.as_ref().map(|definition| definition.profile_id),
+        Some(ReasoningProfileId::BoundedSelfConsistency)
+    );
+    assert_eq!(
+        selected.as_ref().and_then(|definition| definition.allowed_stages.first().copied()),
+        Some(CanonMode::Verification)
+    );
 }
 
 #[test]
@@ -669,6 +738,7 @@ fn governance_profile_validation_accepts_canon_defaults_for_single_mode_stage() 
             risk: None,
             zone: None,
             owner: None,
+            reasoning_profile: None,
         }],
     };
 
@@ -769,6 +839,7 @@ fn autopilot_selects_security_assessment_first_for_verification_stage() {
         risk: Some("medium".to_string()),
         zone: Some("engineering".to_string()),
         owner: Some("platform".to_string()),
+        reasoning_profile: None,
     };
 
     let decision = build_autopilot_decision(
@@ -1103,6 +1174,7 @@ fn autopilot_escalates_pr_review_from_verification_stage() {
         risk: Some("medium".to_string()),
         zone: Some("engineering".to_string()),
         owner: Some("platform".to_string()),
+        reasoning_profile: None,
     };
 
     let decision = build_autopilot_decision(

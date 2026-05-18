@@ -23,11 +23,14 @@ through explicit sessions for planning, execution, inspection, recovery, and
 governed delivery when needed. Canon is optional: most users can ignore it
 unless they need governed stages or governed artifacts.
 
-The active `0.60.0` feature line is `060-assistant-delight-layer`, which
-implements the S7 assistant delight surfaces in Boundline while consuming Canon
-provider signals through `057-s7-delight-provider`. The feature artifacts live
-under `specs/060-assistant-delight-layer/`; start with the maintainer guide
-at `specs/060-assistant-delight-layer/quickstart.md`.
+The active `0.61.0` feature line is `061-reasoning-profile-contracts`, which
+implements the S6 reasoning-profile activation contract between Boundline and
+Canon without introducing a second orchestrator. The feature artifacts live
+under `specs/061-reasoning-profile-contracts/`; start with the maintainer guide
+at `specs/061-reasoning-profile-contracts/quickstart.md`. The shipped runtime
+also persists additive reasoning lifecycle and confidence trace events, and it
+keeps contract-drift blockers explicit on `run`, `status`, and `inspect` with
+the Canon contract line, disagreement summary, and remediation next action.
 
 In `0.58.0`, Boundline also persists advanced-context retrieval state through
 goal plans, session status, and trace summaries. The S5 V1 baseline uses one
@@ -396,7 +399,7 @@ Boundline is the local delivery orchestrator. Canon is the governed packet runti
 - Canon governs packets, approvals, and governed artifacts when a bounded delivery phase crosses a governance boundary.
 - Large work is supported by decomposition, not by unbounded autonomy.
 
-The current release documents Canon `0.53.0` support on the
+The current release documents Canon `0.57.0` support on the
 `canon governance start|refresh|capabilities --json` `v1` adapter surface.
 
 ## Community And Support

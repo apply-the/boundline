@@ -1165,28 +1165,36 @@ pub fn evaluate_mode_selection_gate(
 #[cfg(test)]
 mod tests {
     use serde::Serialize;
-    use serde_json::{Value, json};
+    use serde_json::{Map, Value, json};
 
     use super::{
         ADAPTIVE_CONTRACT_UNAVAILABLE_REASON_CODE, AUTHORITY_CONTRACT_UNAVAILABLE_REASON_CODE,
-        GovernanceStateSelectionError, canon_memory_credibility, canon_memory_possible_actions,
-        canon_memory_recommended_action, compacted_canon_memory_for_block,
-        compacted_canon_memory_from_response, fail_closed_required_authority_response,
-        governance_input_documents, optional_serialized_value, serialize_to_value,
+        GovernanceBoundedContext, GovernanceStateSelectionError, bounded_reused_packets,
+        build_autopilot_decision, canon_memory_credibility, canon_memory_possible_actions,
+        canon_memory_recommended_action, clarification_prompt_from_response,
+        compacted_canon_memory_for_block, compacted_canon_memory_from_response,
+        fail_closed_required_authority_response, governance_input_documents,
+        lifecycle_requires_refresh, optional_serialized_value, serialize_to_value,
+        set_lifecycle_awaiting_approval,
     };
     use crate::adapters::governance_runtime::GovernanceInputDocument;
     use crate::adapters::governance_runtime::GovernanceRuntimeResponse;
+    use crate::domain::flow::FlowStepMetadata;
     use crate::domain::governance::{
         ADAPTIVE_GOVERNANCE_V1_CONTRACT_LINE, AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE, ApprovalState,
-        CanonAdaptiveGovernanceState, CanonAdaptiveGovernanceV1Envelope,
+        AutopilotAction, CanonAdaptiveGovernanceState, CanonAdaptiveGovernanceV1Envelope,
         CanonAdaptiveRolloutProfile, CanonAuthorityGovernanceV1Envelope, CanonAuthorityZone,
         CanonChangeClass, CanonEvidenceInspectSummary, CanonIntendedPersona,
-        CanonRecommendedActionSummary, CanonRiskClass, CanonSemanticArtifactDescriptorV1Envelope,
-        CanonSemanticEligibilityState, CanonSemanticProvenanceBoundary, CompactedCanonMemory,
-        GovernanceLifecycleState, GovernanceRuntimeKind, GovernedStagePacket,
+        CanonModeSelectionPreference, CanonRecommendedActionSummary, CanonRiskClass,
+        CanonSemanticArtifactDescriptorV1Envelope, CanonSemanticEligibilityState,
+        CanonSemanticProvenanceBoundary, CompactedCanonMemory, GovernanceLifecycleState,
+        GovernanceRuntimeKind, GovernedSessionLifecycle, GovernedStagePacket, GovernedStageRecord,
         MemoryCredibilityState, PacketReadiness, SEMANTIC_ARTIFACT_DESCRIPTOR_V1_CONTRACT_LINE,
         StageGovernancePolicy,
     };
+    use crate::domain::limits::RunLimits;
+    use crate::domain::session::{ActiveSessionRecord, SessionStatus};
+    use crate::domain::task_context::TaskContext;
     use crate::domain::task_context::TaskContextError;
 
     fn response(
@@ -1231,6 +1239,7 @@ mod tests {
             require_adaptive_companion: false,
             runtime: Some(GovernanceRuntimeKind::Canon),
             canon_mode: None,
+            reasoning_profile: None,
             system_context: None,
             risk: Some("medium".to_string()),
             zone: Some("core".to_string()),
@@ -1651,5 +1660,301 @@ mod tests {
 
         let outcome = evaluate_mode_selection_gate(CanonModeSelectionPreference::Auto, None);
         assert!(matches!(outcome, ModeSelectionOutcome::AutoSelectedMode(_)));
+    }
+
+    #[test]
+    fn clarification_and_refresh_helpers_cover_pending_incomplete_and_blocked_paths() {
+        let pending_selection = clarification_prompt_from_response(&GovernanceRuntimeResponse {
+            status: GovernanceLifecycleState::PendingSelection,
+            approval_state: ApprovalState::NotNeeded,
+            run_ref: Some("canon-run-3".to_string()),
+            packet: None,
+            reason_code: Some("mode_selection_required".to_string()),
+            message: "select a Canon mode".to_string(),
+        });
+        assert_eq!(
+            pending_selection.as_deref(),
+            Some("Canon requires mode selection: select a Canon mode"),
+        );
+
+        let incomplete = clarification_prompt_from_response(&GovernanceRuntimeResponse {
+            status: GovernanceLifecycleState::Incomplete,
+            approval_state: ApprovalState::NotNeeded,
+            run_ref: Some("canon-run-4".to_string()),
+            packet: Some(GovernedStagePacket {
+                missing_sections: vec!["risk".to_string(), "evidence".to_string()],
+                ..packet(PacketReadiness::Incomplete)
+            }),
+            reason_code: Some("incomplete_packet".to_string()),
+            message: "complete the missing sections".to_string(),
+        });
+        assert_eq!(
+            incomplete.as_deref(),
+            Some(
+                "Canon document is incomplete. Missing sections: risk, evidence. complete the missing sections",
+            ),
+        );
+
+        let blocked = clarification_prompt_from_response(&GovernanceRuntimeResponse {
+            status: GovernanceLifecycleState::Blocked,
+            approval_state: ApprovalState::NotNeeded,
+            run_ref: Some("canon-run-5".to_string()),
+            packet: Some(GovernedStagePacket {
+                missing_sections: vec!["approval".to_string()],
+                ..packet(PacketReadiness::Incomplete)
+            }),
+            reason_code: Some("blocked_packet".to_string()),
+            message: "approval data is still missing".to_string(),
+        });
+        assert_eq!(
+            blocked.as_deref(),
+            Some(
+                "Canon document is incomplete. Missing sections: approval. approval data is still missing",
+            ),
+        );
+
+        assert!(
+            clarification_prompt_from_response(&response(
+                GovernanceLifecycleState::GovernedReady,
+                "ready",
+                Some(packet(PacketReadiness::Reusable)),
+            ))
+            .is_none()
+        );
+
+        let mut session = ActiveSessionRecord {
+            session_id: "session-governance-refresh".to_string(),
+            workspace_ref: "/tmp/governance-refresh".to_string(),
+            goal: Some("refresh governance".to_string()),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Planned,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 1,
+            updated_at: 1,
+            governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
+        };
+        set_lifecycle_awaiting_approval(
+            &mut session,
+            &response(
+                GovernanceLifecycleState::AwaitingApproval,
+                "waiting for approval",
+                Some(packet(PacketReadiness::Pending)),
+            ),
+        );
+        assert!(!lifecycle_requires_refresh(&session));
+
+        session.governance_lifecycle = Some(GovernedSessionLifecycle {
+            governance_runtime: GovernanceRuntimeKind::Canon,
+            explicit_opt_out: false,
+            mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+            selected_mode: Some(crate::domain::governance::CanonMode::Verification),
+            selected_mode_sequence: vec![crate::domain::governance::CanonMode::Verification],
+            latest_reasoning_profile: None,
+            current_stage_index: 0,
+            stage_records: Vec::new(),
+            accumulated_context: Vec::new(),
+            terminal_reason: None,
+        });
+        set_lifecycle_awaiting_approval(
+            &mut session,
+            &response(
+                GovernanceLifecycleState::AwaitingApproval,
+                "still waiting",
+                Some(packet(PacketReadiness::Pending)),
+            ),
+        );
+        assert!(lifecycle_requires_refresh(&session));
+    }
+
+    #[test]
+    fn packet_reuse_and_autopilot_helpers_cover_remaining_branches() -> Result<(), String> {
+        let mut context = TaskContext::new(
+            "session-governance",
+            "/tmp/governance",
+            RunLimits::default(),
+            Map::new(),
+        );
+        let stage_result = context.set_latest_governance_stage(&GovernedStageRecord {
+            stage_key: "bug-fix:investigate".to_string(),
+            runtime: GovernanceRuntimeKind::Canon,
+            lifecycle_state: GovernanceLifecycleState::GovernedReady,
+            required: false,
+            autopilot_enabled: true,
+            approval_state: ApprovalState::Granted,
+            canon_run_ref: Some("canon-run-6".to_string()),
+            governance_attempt_id: "attempt-1".to_string(),
+            previous_governance_attempt_id: None,
+            packet_ref: Some(".canon/runs/canon-run-6".to_string()),
+            decision_ref: None,
+            blocked_reason: None,
+        });
+        stage_result.map_err(|error| format!("unexpected stage persistence error: {error:?}"))?;
+        let packet_result =
+            context.set_latest_governance_packet(&packet(PacketReadiness::Reusable));
+        packet_result.map_err(|error| format!("unexpected packet persistence error: {error:?}"))?;
+
+        let same_stage_packets = bounded_reused_packets(
+            &context,
+            &FlowStepMetadata {
+                flow_name: "bug-fix".to_string(),
+                stage_id: "investigate".to_string(),
+                stage_index: 0,
+                total_stages: 3,
+            },
+        );
+        let same_stage_packets = same_stage_packets
+            .map_err(|error| format!("unexpected packet reuse error: {error:?}"))?;
+        assert_eq!(same_stage_packets.len(), 1);
+        assert_eq!(same_stage_packets[0].stage_key, "bug-fix:investigate");
+
+        let downstream_packets = bounded_reused_packets(
+            &context,
+            &FlowStepMetadata {
+                flow_name: "bug-fix".to_string(),
+                stage_id: "implement".to_string(),
+                stage_index: 1,
+                total_stages: 3,
+            },
+        );
+        let downstream_packets = downstream_packets
+            .map_err(|error| format!("unexpected upstream reuse error: {error:?}"))?;
+        assert_eq!(downstream_packets.len(), 1);
+        assert_eq!(downstream_packets[0].stage_key, "bug-fix:investigate");
+
+        let approval_policy = StageGovernancePolicy {
+            flow_name: "bug-fix".to_string(),
+            stage_id: "verify".to_string(),
+            enabled: true,
+            required: false,
+            autopilot: true,
+            require_adaptive_companion: false,
+            runtime: Some(GovernanceRuntimeKind::Canon),
+            canon_mode: None,
+            reasoning_profile: None,
+            system_context: None,
+            risk: None,
+            zone: None,
+            owner: None,
+        };
+        let approval_decision = build_autopilot_decision(
+            "attempt-approval",
+            &approval_policy,
+            GovernanceRuntimeKind::Canon,
+            &FlowStepMetadata {
+                flow_name: "bug-fix".to_string(),
+                stage_id: "verify".to_string(),
+                stage_index: 2,
+                total_stages: 3,
+            },
+            &GovernanceBoundedContext {
+                read_targets: vec!["src/lib.rs".to_string()],
+                stage_brief_ref: None,
+                reused_packets: Vec::new(),
+            },
+            Some(GovernanceLifecycleState::AwaitingApproval),
+            Some(ApprovalState::Requested),
+            Some(PacketReadiness::Pending),
+        );
+        let approval_decision =
+            approval_decision.ok_or_else(|| "approval decision should exist".to_string())?;
+        assert_eq!(approval_decision.selected_action, Some(AutopilotAction::AwaitApproval));
+
+        let narrowed_decision = build_autopilot_decision(
+            "attempt-narrowed",
+            &StageGovernancePolicy {
+                canon_mode: Some(crate::domain::governance::CanonMode::Verification),
+                ..approval_policy.clone()
+            },
+            GovernanceRuntimeKind::Canon,
+            &FlowStepMetadata {
+                flow_name: "bug-fix".to_string(),
+                stage_id: "verify".to_string(),
+                stage_index: 2,
+                total_stages: 3,
+            },
+            &GovernanceBoundedContext {
+                read_targets: vec!["src/lib.rs".to_string(), "tests/lib.rs".to_string()],
+                stage_brief_ref: None,
+                reused_packets: Vec::new(),
+            },
+            Some(GovernanceLifecycleState::Blocked),
+            Some(ApprovalState::Granted),
+            Some(PacketReadiness::Rejected),
+        );
+        let narrowed_decision =
+            narrowed_decision.ok_or_else(|| "narrowed decision should exist".to_string())?;
+        assert_eq!(
+            narrowed_decision.selected_action,
+            Some(AutopilotAction::RetryStageWithNarrowedContext),
+        );
+
+        let implement_decision = build_autopilot_decision(
+            "attempt-escalate-verify",
+            &StageGovernancePolicy {
+                stage_id: "implement".to_string(),
+                runtime: Some(GovernanceRuntimeKind::Local),
+                canon_mode: None,
+                ..approval_policy.clone()
+            },
+            GovernanceRuntimeKind::Local,
+            &FlowStepMetadata {
+                flow_name: "bug-fix".to_string(),
+                stage_id: "implement".to_string(),
+                stage_index: 1,
+                total_stages: 3,
+            },
+            &GovernanceBoundedContext {
+                read_targets: vec!["src/lib.rs".to_string()],
+                stage_brief_ref: None,
+                reused_packets: Vec::new(),
+            },
+            Some(GovernanceLifecycleState::GovernedReady),
+            Some(ApprovalState::Granted),
+            Some(PacketReadiness::Reusable),
+        );
+        let implement_decision =
+            implement_decision.ok_or_else(|| "implement decision should exist".to_string())?;
+        assert_eq!(implement_decision.selected_action, Some(AutopilotAction::EscalateVerification),);
+
+        let blocked_decision = build_autopilot_decision(
+            "attempt-blocked",
+            &StageGovernancePolicy {
+                required: true,
+                canon_mode: Some(crate::domain::governance::CanonMode::PrReview),
+                ..approval_policy
+            },
+            GovernanceRuntimeKind::Canon,
+            &FlowStepMetadata {
+                flow_name: "bug-fix".to_string(),
+                stage_id: "verify".to_string(),
+                stage_index: 2,
+                total_stages: 3,
+            },
+            &GovernanceBoundedContext {
+                read_targets: vec!["src/lib.rs".to_string()],
+                stage_brief_ref: None,
+                reused_packets: Vec::new(),
+            },
+            Some(GovernanceLifecycleState::GovernedReady),
+            Some(ApprovalState::Granted),
+            Some(PacketReadiness::Reusable),
+        );
+        let blocked_decision =
+            blocked_decision.ok_or_else(|| "blocked decision should exist".to_string())?;
+        assert!(blocked_decision.selected_action.is_none());
+        assert!(blocked_decision.blocked_reason.is_some());
+        assert!(blocked_decision.candidate_actions.contains(&AutopilotAction::BlockStage));
+
+        Ok(())
     }
 }

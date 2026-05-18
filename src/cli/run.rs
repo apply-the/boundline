@@ -91,6 +91,7 @@ pub fn execute_native_direct_run(
             mode_selection_preference: mode_selection,
             selected_mode: mode,
             selected_mode_sequence: mode.into_iter().collect(),
+            latest_reasoning_profile: None,
             current_stage_index: 0,
             stage_records: Vec::new(),
             accumulated_context: Vec::new(),
@@ -109,6 +110,7 @@ pub fn execute_native_direct_run(
             mode_selection_preference: CanonModeSelectionPreference::default(),
             selected_mode: None,
             selected_mode_sequence: Vec::new(),
+            latest_reasoning_profile: None,
             current_stage_index: 0,
             stage_records: Vec::new(),
             accumulated_context: Vec::new(),
@@ -471,4 +473,155 @@ fn native_direct_run_requires_clarification(record: &ActiveSessionRecord) -> boo
             packet.resolution_state
                 != crate::domain::negotiation::NegotiationResolutionState::Credible
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    use uuid::Uuid;
+
+    use super::{
+        active_session_has_meaningful_state, compatibility_terminal_output,
+        native_direct_run_flow_for_mode, native_direct_run_requires_clarification,
+        resolve_canon_default_governance,
+    };
+    use crate::domain::brief::{AuthoredBriefBundle, AuthoredBriefResolutionState};
+    use crate::domain::governance::{CanonMode, GovernanceRuntimeKind};
+    use crate::domain::negotiation::{NegotiatedDeliveryPacket, NegotiationResolutionState};
+    use crate::domain::session::{ActiveSessionRecord, SessionStatus};
+    use crate::domain::task::{ClarificationReasonKind, ClarificationRecord, ClarificationStatus};
+
+    fn temp_workspace(prefix: &str) -> Result<PathBuf, String> {
+        let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+        fs::create_dir_all(&workspace)
+            .map_err(|error| format!("failed to create temp workspace: {error}"))?;
+        Ok(workspace)
+    }
+
+    fn empty_session_record(workspace: &Path) -> ActiveSessionRecord {
+        ActiveSessionRecord {
+            session_id: "session-run-tests".to_string(),
+            workspace_ref: workspace.display().to_string(),
+            goal: None,
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Initialized,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 1,
+            updated_at: 1,
+            governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
+        }
+    }
+
+    #[test]
+    fn run_helpers_cover_flow_selection_and_session_state() {
+        for mode in [
+            CanonMode::Requirements,
+            CanonMode::Architecture,
+            CanonMode::Backlog,
+            CanonMode::SystemShaping,
+        ] {
+            assert_eq!(native_direct_run_flow_for_mode(Some(mode)), "delivery");
+        }
+        for mode in [CanonMode::Change, CanonMode::Migration, CanonMode::SupplyChainAnalysis] {
+            assert_eq!(native_direct_run_flow_for_mode(Some(mode)), "change");
+        }
+        for mode in [None, Some(CanonMode::Verification)] {
+            assert_eq!(native_direct_run_flow_for_mode(mode), "bug-fix");
+        }
+
+        let workspace = temp_workspace("boundline-run-helper").unwrap();
+        let empty_record = empty_session_record(&workspace);
+        assert!(!active_session_has_meaningful_state(&empty_record));
+
+        let mut goal_record = empty_record.clone();
+        goal_record.goal = Some("investigate regression".to_string());
+        assert!(active_session_has_meaningful_state(&goal_record));
+
+        let mut status_record = empty_record.clone();
+        status_record.latest_status = SessionStatus::Planned;
+        assert!(active_session_has_meaningful_state(&status_record));
+
+        assert!(!native_direct_run_requires_clarification(&empty_record));
+
+        let mut clarification_record = empty_record.clone();
+        clarification_record.authored_brief = Some(AuthoredBriefBundle {
+            bundle_id: "bundle-1".to_string(),
+            primary_goal_text: Some("investigate regression".to_string()),
+            sources: Vec::new(),
+            deduplicated_sources: Vec::new(),
+            governance_intent: None,
+            resolution_state: AuthoredBriefResolutionState::ClarificationRequired,
+            clarification: Some(ClarificationRecord {
+                clarification_id: "clarification-1".to_string(),
+                reason_kind: ClarificationReasonKind::MissingContext,
+                prompt: "describe the expected outcome".to_string(),
+                missing_fields: vec!["acceptance".to_string()],
+                blocking_sources: Vec::new(),
+                turn_index: 0,
+                status: ClarificationStatus::Open,
+            }),
+            derived_task_draft: None,
+            captured_at: 1,
+        });
+        assert!(native_direct_run_requires_clarification(&clarification_record));
+
+        let mut negotiation_record = empty_record.clone();
+        let mut packet = NegotiatedDeliveryPacket::from_goal(
+            &negotiation_record.session_id,
+            &negotiation_record.workspace_ref,
+            "investigate regression",
+        );
+        packet.resolution_state = NegotiationResolutionState::PendingClarification;
+        negotiation_record.negotiation_packet = Some(packet);
+        assert!(native_direct_run_requires_clarification(&negotiation_record));
+
+        let terminal_output = compatibility_terminal_output("body".to_string());
+        assert!(terminal_output.contains("execution_path: fixture_compatibility"));
+        assert!(terminal_output.ends_with("body"));
+
+        fs::remove_dir_all(&workspace).unwrap();
+    }
+
+    #[test]
+    fn resolve_canon_default_governance_prefers_local_fallbacks() {
+        let workspace = temp_workspace("boundline-run-governance").unwrap();
+
+        let no_canon_resolution =
+            resolve_canon_default_governance(&workspace, None, None, true).unwrap();
+        assert_eq!(no_canon_resolution.governance, Some(GovernanceRuntimeKind::Local));
+
+        let explicit_local = resolve_canon_default_governance(
+            &workspace,
+            Some(GovernanceRuntimeKind::Local),
+            None,
+            false,
+        )
+        .unwrap();
+        assert_eq!(explicit_local.governance, Some(GovernanceRuntimeKind::Local));
+        assert!(explicit_local.default_risk.is_none());
+        assert!(explicit_local.default_zone.is_none());
+        assert!(explicit_local.default_owner.is_none());
+
+        let implicit_local =
+            resolve_canon_default_governance(&workspace, None, None, false).unwrap();
+        assert!(implicit_local.governance.is_none());
+        assert!(implicit_local.default_risk.is_none());
+        assert!(implicit_local.default_zone.is_none());
+        assert!(implicit_local.default_owner.is_none());
+        assert!(implicit_local.mode_selection_preference.is_none());
+
+        fs::remove_dir_all(&workspace).unwrap();
+    }
 }

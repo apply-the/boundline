@@ -19,9 +19,10 @@ use crate::cli::output;
 use crate::cli::workspace as cli_workspace;
 use crate::domain::cluster::ClusterSessionProjection;
 use crate::domain::decision::ActionSelector;
-use crate::domain::governance::GovernanceRuntimeKind;
+use crate::domain::governance::{GovernanceRuntimeKind, governance_confidence_handoff};
 use crate::domain::guidance::GuidanceGuardianProjection;
 use crate::domain::negotiation::NegotiatedDeliveryPacket;
+use crate::domain::reasoning::ReasoningAdmissionEffect;
 use crate::domain::session::{
     ActiveSessionRecord, CompatibilityFollowUpMode, CompatibilityFollowUpView, ContinuityAuthority,
     SessionStatus, SessionStatusView, decision_status_text, delegation_next_command,
@@ -819,6 +820,9 @@ pub(crate) fn build_status_view_with_follow_up(
         record.active_task.as_ref().and_then(task_state_canon_memory_provenance);
     let task_context_staleness_reason =
         record.active_task.as_ref().and_then(task_state_canon_memory_staleness_reason);
+    let governance_handoff = record.governance_lifecycle.as_ref().and_then(|lifecycle| {
+        governance_confidence_handoff(lifecycle.latest_reasoning_profile.as_ref())
+    });
 
     SessionStatusView {
         session_id: record.session_id.clone(),
@@ -1134,7 +1138,16 @@ pub(crate) fn build_status_view_with_follow_up(
         latest_governance_blocked_reason: record
             .active_task
             .as_ref()
-            .and_then(task_state_governance_blocked_reason),
+            .and_then(task_state_governance_blocked_reason)
+            .or_else(|| {
+                governance_handoff.as_ref().and_then(|handoff| {
+                    matches!(
+                        handoff.admission_effect,
+                        ReasoningAdmissionEffect::Gate | ReasoningAdmissionEffect::Escalate
+                    )
+                    .then_some(handoff.summary.clone())
+                })
+            }),
         latest_governance_packet_ref: record
             .active_task
             .as_ref()
@@ -1154,15 +1167,28 @@ pub(crate) fn build_status_view_with_follow_up(
         latest_governance_decision: record
             .active_task
             .as_ref()
-            .and_then(task_state_governance_decision_headline),
+            .and_then(task_state_governance_decision_headline)
+            .or_else(|| governance_handoff.as_ref().map(|handoff| handoff.summary.clone())),
         latest_governance_candidates: record
             .active_task
             .as_ref()
             .and_then(task_state_governance_candidate_actions),
+        latest_governance_confidence_level: governance_handoff
+            .as_ref()
+            .map(|handoff| handoff.confidence_level.as_str().to_string()),
+        latest_governance_admission_effect: governance_handoff
+            .as_ref()
+            .map(|handoff| handoff.admission_effect.as_str().to_string()),
+        latest_governance_confidence_summary: governance_handoff
+            .as_ref()
+            .map(|handoff| handoff.summary.clone()),
         governance_next_action: record
             .active_task
             .as_ref()
-            .and_then(task_state_governance_next_action),
+            .and_then(task_state_governance_next_action)
+            .or_else(|| {
+                governance_handoff.as_ref().and_then(|handoff| handoff.next_action.clone())
+            }),
         governance_lifecycle_runtime: record
             .governance_lifecycle
             .as_ref()
@@ -1180,6 +1206,10 @@ pub(crate) fn build_status_view_with_follow_up(
             .governance_lifecycle
             .as_ref()
             .and_then(|lc| lc.selected_mode.map(|mode| mode.as_str().to_string())),
+        latest_reasoning_profile: record
+            .governance_lifecycle
+            .as_ref()
+            .and_then(|lc| lc.latest_reasoning_profile.clone()),
         project_scale_path: record.project_scale.as_ref().map(|state| state.path.stage_names()),
         project_scale_current_stage: record
             .project_scale
@@ -2801,6 +2831,7 @@ fn red_to_green_addition() {
                 mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
                 selected_mode: Some(CanonMode::Review),
                 selected_mode_sequence: vec![CanonMode::Review],
+                latest_reasoning_profile: None,
                 current_stage_index: 0,
                 stage_records: vec![GovernedStageRecord {
                     stage_key: "govern:review".to_string(),

@@ -23,6 +23,7 @@ fn canon_policy(
         risk: None,
         zone: None,
         owner: None,
+        reasoning_profile: None,
     }
 }
 

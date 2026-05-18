@@ -81,6 +81,7 @@ fn governed_session_lifecycle_json_roundtrip() {
             document_path: Some(".canon/runs/run-001/requirements.md".to_string()),
             readiness: PacketReadiness::Reusable,
         }],
+        latest_reasoning_profile: None,
         terminal_reason: None,
     };
 
@@ -100,6 +101,7 @@ fn governed_session_lifecycle_json_with_opt_out() {
         current_stage_index: 0,
         stage_records: Vec::new(),
         accumulated_context: Vec::new(),
+        latest_reasoning_profile: None,
         terminal_reason: None,
     };
 
@@ -602,6 +604,7 @@ fn lifecycle_requires_refresh_detects_approval_pending() {
         current_stage_index: 0,
         stage_records: Vec::new(),
         accumulated_context: Vec::new(),
+        latest_reasoning_profile: None,
         terminal_reason: None,
     });
     assert!(!lifecycle_requires_refresh(&session));

@@ -26,6 +26,7 @@ use crate::domain::context_intelligence::{
 use crate::domain::follow_through::FollowThroughProjection;
 use crate::domain::goal_plan::GoalPlanFlowState;
 use crate::domain::guidance::GuidanceGuardianProjection;
+use crate::domain::reasoning::ProfileActivationRecord;
 use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::session::RoutingOutcome;
 use crate::domain::session::{
@@ -64,6 +65,7 @@ const S7_NONE: &str = "none";
 const S7_RUNTIME_SOURCE_AUTHORED_INPUT: &str = "authored_input";
 const S7_RUNTIME_SOURCE_CONTEXT: &str = "context";
 const S7_RUNTIME_SOURCE_DECISION_TIMELINE: &str = "decision_timeline";
+const S7_RUNTIME_SOURCE_REASONING_PROFILE: &str = "reasoning_profile";
 const S7_RUNTIME_SOURCE_REVIEW_TIMELINE: &str = "review_timeline";
 const S7_RUNTIME_SOURCE_SESSION_STATE: &str = "session_state";
 const S7_RUNTIME_SOURCE_TRACE_EVIDENCE: &str = "trace_evidence";
@@ -654,6 +656,68 @@ fn s7_cognitive_projection_lines(projection: &S7CognitiveProjection) -> Vec<Stri
     lines
 }
 
+fn reasoning_projection_why_summary(
+    reasoning_profile: Option<&ProfileActivationRecord>,
+) -> Option<String> {
+    reasoning_profile.and_then(|profile| {
+        profile
+            .outcome
+            .as_ref()
+            .map(|outcome| outcome.headline.clone())
+            .or_else(|| Some(profile.activation_reason.clone()))
+    })
+}
+
+fn reasoning_projection_risk_summary(
+    reasoning_profile: Option<&ProfileActivationRecord>,
+) -> Option<String> {
+    reasoning_profile.and_then(|profile| {
+        profile
+            .confidence
+            .as_ref()
+            .map(|confidence| confidence.summary.clone())
+            .or_else(|| {
+                profile.outcome.as_ref().and_then(|outcome| outcome.disagreement_summary.clone())
+            })
+            .or_else(|| profile.outcome.as_ref().map(|outcome| outcome.headline.clone()))
+    })
+}
+
+fn reasoning_projection_confidence_level(
+    reasoning_profile: Option<&ProfileActivationRecord>,
+) -> Option<&'static str> {
+    reasoning_profile.and_then(|profile| {
+        profile.confidence.as_ref().map(|confidence| confidence.confidence_level.as_str())
+    })
+}
+
+fn reasoning_projection_next_action(
+    reasoning_profile: Option<&ProfileActivationRecord>,
+) -> Option<String> {
+    reasoning_profile.and_then(|profile| {
+        profile.outcome.as_ref().and_then(|outcome| outcome.next_action.clone())
+    })
+}
+
+fn reasoning_projection_governance_summary(
+    reasoning_profile: Option<&ProfileActivationRecord>,
+) -> Option<String> {
+    reasoning_profile.map(|profile| {
+        let mut parts = vec![
+            format!("reasoning_profile={}", profile.profile_id),
+            format!("status={}", profile.status.as_str()),
+        ];
+        if let Some(confidence) = &profile.confidence {
+            parts.push(format!("confidence={}", confidence.confidence_level.as_str()));
+            parts.push(format!("admission_effect={}", confidence.admission_effect.as_str()));
+        }
+        if let Some(posture) = &profile.posture {
+            parts.push(format!("posture_contract={}", posture.contract_line));
+        }
+        parts.join("; ")
+    })
+}
+
 fn s7_projection_for_trace_summary(summary: &TraceSummaryView, next_command: &str) -> S7Projection {
     let mut runtime_sources = Vec::new();
     if summary.authored_input_summary.is_some() {
@@ -670,6 +734,9 @@ fn s7_projection_for_trace_summary(summary: &TraceSummaryView, next_command: &st
     }
     if !summary.review_timeline.is_empty() {
         runtime_sources.push(S7_RUNTIME_SOURCE_REVIEW_TIMELINE);
+    }
+    if summary.reasoning_profile.is_some() {
+        runtime_sources.push(S7_RUNTIME_SOURCE_REASONING_PROFILE);
     }
 
     let mut canon_sources = Vec::new();
@@ -697,9 +764,8 @@ fn s7_projection_for_trace_summary(summary: &TraceSummaryView, next_command: &st
         missing_sources.push(S7_MISSING_CLARIFICATION_SOURCE);
     }
 
-    let why_summary = summary
-        .goal_plan_summary
-        .clone()
+    let why_summary = reasoning_projection_why_summary(summary.reasoning_profile.as_ref())
+        .or_else(|| summary.goal_plan_summary.clone())
         .or_else(|| summary.negotiation_goal_summary.clone())
         .or_else(|| {
             summary.executed_steps.last().map(|step| {
@@ -714,7 +780,11 @@ fn s7_projection_for_trace_summary(summary: &TraceSummaryView, next_command: &st
             }
         });
 
-    let risk_summary = if !summary.failure_evidence.is_empty() {
+    let risk_summary = if let Some(reasoning_risk) =
+        reasoning_projection_risk_summary(summary.reasoning_profile.as_ref())
+    {
+        reasoning_risk
+    } else if !summary.failure_evidence.is_empty() {
         summary.failure_evidence[0].clone()
     } else if let Some(reason) = summary.context_staleness_reason.as_ref() {
         format!("stale context reduces confidence: {reason}")
@@ -749,15 +819,21 @@ fn s7_projection_for_trace_summary(summary: &TraceSummaryView, next_command: &st
         &summary.clarification_missing_fields,
     );
 
-    let confidence_level = s7_confidence_level(
-        !summary.failure_evidence.is_empty(),
-        canon_sources.is_empty(),
-        summary.context_staleness_reason.is_some(),
-        !summary.clarification_missing_fields.is_empty(),
-    );
+    let confidence_level = reasoning_projection_confidence_level(
+        summary.reasoning_profile.as_ref(),
+    )
+    .unwrap_or_else(|| {
+        s7_confidence_level(
+            !summary.failure_evidence.is_empty(),
+            canon_sources.is_empty(),
+            summary.context_staleness_reason.is_some(),
+            !summary.clarification_missing_fields.is_empty(),
+        )
+    });
 
-    let next_best_action =
-        summary.governance_next_action.clone().unwrap_or_else(|| next_command.to_string());
+    let next_best_action = reasoning_projection_next_action(summary.reasoning_profile.as_ref())
+        .or_else(|| summary.governance_next_action.clone())
+        .unwrap_or_else(|| next_command.to_string());
 
     S7Projection {
         why_summary,
@@ -783,6 +859,9 @@ fn s7_projection_for_session_status(view: &SessionStatusView) -> S7Projection {
     }
     if view.latest_review_headline.is_some() || view.latest_review_outcome.is_some() {
         runtime_sources.push(S7_RUNTIME_SOURCE_REVIEW_TIMELINE);
+    }
+    if view.latest_reasoning_profile.is_some() {
+        runtime_sources.push(S7_RUNTIME_SOURCE_REASONING_PROFILE);
     }
 
     let mut canon_sources = Vec::new();
@@ -813,14 +892,17 @@ fn s7_projection_for_session_status(view: &SessionStatusView) -> S7Projection {
         missing_sources.push(S7_MISSING_CLARIFICATION_SOURCE);
     }
 
-    let why_summary = view
-        .planning_rationale
-        .clone()
+    let why_summary = reasoning_projection_why_summary(view.latest_reasoning_profile.as_ref())
+        .or_else(|| view.planning_rationale.clone())
         .or_else(|| view.latest_selection_reason.clone())
         .or_else(|| view.goal.clone())
         .unwrap_or_else(|| view.explanation.clone());
 
-    let risk_summary = if let Some(reason) = view.latest_exhaustion_reason.as_ref() {
+    let risk_summary = if let Some(reasoning_risk) =
+        reasoning_projection_risk_summary(view.latest_reasoning_profile.as_ref())
+    {
+        reasoning_risk
+    } else if let Some(reason) = view.latest_exhaustion_reason.as_ref() {
         reason.clone()
     } else if let Some(reason) = view.latest_governance_blocked_reason.as_ref() {
         reason.clone()
@@ -857,16 +939,20 @@ fn s7_projection_for_session_status(view: &SessionStatusView) -> S7Projection {
         &clarification_missing_fields,
     );
 
-    let confidence_level = s7_confidence_level(
-        view.latest_exhaustion_reason.is_some() || view.latest_governance_blocked_reason.is_some(),
-        canon_sources.is_empty(),
-        view.context_staleness_reason.is_some(),
-        !clarification_missing_fields.is_empty(),
-    );
+    let confidence_level =
+        reasoning_projection_confidence_level(view.latest_reasoning_profile.as_ref())
+            .unwrap_or_else(|| {
+                s7_confidence_level(
+                    view.latest_exhaustion_reason.is_some()
+                        || view.latest_governance_blocked_reason.is_some(),
+                    canon_sources.is_empty(),
+                    view.context_staleness_reason.is_some(),
+                    !clarification_missing_fields.is_empty(),
+                )
+            });
 
-    let next_best_action = view
-        .governance_next_action
-        .clone()
+    let next_best_action = reasoning_projection_next_action(view.latest_reasoning_profile.as_ref())
+        .or_else(|| view.governance_next_action.clone())
         .or_else(|| view.next_command.clone())
         .or_else(|| view.workflow_next_action.clone())
         .unwrap_or_else(|| view.explanation.clone());
@@ -1269,6 +1355,8 @@ fn s7_cognitive_projection_for_trace_summary(
     } else {
         "trace_inspect".to_string()
     };
+    let reasoning_why = reasoning_projection_why_summary(summary.reasoning_profile.as_ref())
+        .unwrap_or_else(|| "none".to_string());
 
     S7CognitiveProjection {
         assumptions_summary: s7_assumption_summary(&assumptions),
@@ -1296,17 +1384,26 @@ fn s7_cognitive_projection_for_trace_summary(
         },
         challenge_council_required: s7_council_required(governance_present),
         explain_plan_summary: format!(
-            "goal={}; stages={stage_text}; risks={}; assumptions={}",
+            "goal={}; stages={stage_text}; reasoning={reasoning_why}; risks={}; assumptions={}",
             summary.goal,
             s7_hidden_impact_summary(&impacts),
             s7_assumption_summary(&assumptions)
         ),
-        explain_plan_validation: impacts
-            .iter()
-            .find(|impact| impact.group == S7_HIDDEN_IMPACT_GROUP_MISSING_TESTS)
-            .map(|impact| impact.follow_up.clone())
-            .unwrap_or_else(|| next_command.to_string()),
-        explain_plan_governance: if governance_present {
+        explain_plan_validation: reasoning_projection_next_action(
+            summary.reasoning_profile.as_ref(),
+        )
+        .or_else(|| {
+            impacts
+                .iter()
+                .find(|impact| impact.group == S7_HIDDEN_IMPACT_GROUP_MISSING_TESTS)
+                .map(|impact| impact.follow_up.clone())
+        })
+        .unwrap_or_else(|| next_command.to_string()),
+        explain_plan_governance: if let Some(reasoning_summary) =
+            reasoning_projection_governance_summary(summary.reasoning_profile.as_ref())
+        {
+            reasoning_summary
+        } else if governance_present {
             summary
                 .governance_next_action
                 .clone()
@@ -1316,9 +1413,8 @@ fn s7_cognitive_projection_for_trace_summary(
         } else {
             fallback_disclosure.to_string()
         },
-        explain_plan_recovery: summary
-            .latest_checkpoint_restore_command
-            .clone()
+        explain_plan_recovery: reasoning_projection_next_action(summary.reasoning_profile.as_ref())
+            .or_else(|| summary.latest_checkpoint_restore_command.clone())
             .unwrap_or_else(|| next_command.to_string()),
     }
 }
@@ -1342,6 +1438,8 @@ fn s7_cognitive_projection_for_session_status(
         _ => view.current_stage_id.clone().unwrap_or_else(|| "session_state".to_string()),
     };
     let goal = view.goal.clone().unwrap_or_else(|| view.explanation.clone());
+    let reasoning_why = reasoning_projection_why_summary(view.latest_reasoning_profile.as_ref())
+        .unwrap_or_else(|| "none".to_string());
 
     S7CognitiveProjection {
         assumptions_summary: s7_assumption_summary(&assumptions),
@@ -1373,24 +1471,27 @@ fn s7_cognitive_projection_for_session_status(
         },
         challenge_council_required: s7_council_required(governance_present),
         explain_plan_summary: format!(
-            "goal={goal}; stages={stage_text}; risks={}; assumptions={}",
+            "goal={goal}; stages={stage_text}; reasoning={reasoning_why}; risks={}; assumptions={}",
             s7_hidden_impact_summary(&impacts),
             s7_assumption_summary(&assumptions)
         ),
-        explain_plan_validation: view
-            .verification_strategy
-            .clone()
-            .or_else(|| {
-                impacts
-                    .iter()
-                    .find(|impact| impact.group == S7_HIDDEN_IMPACT_GROUP_MISSING_TESTS)
-                    .map(|impact| impact.follow_up.clone())
-            })
-            .or_else(|| view.next_command.clone())
-            .unwrap_or_else(|| view.explanation.clone()),
-        explain_plan_governance: if let Some(packet_ref) =
-            view.latest_governance_packet_ref.as_deref()
+        explain_plan_validation: reasoning_projection_next_action(
+            view.latest_reasoning_profile.as_ref(),
+        )
+        .or_else(|| view.verification_strategy.clone())
+        .or_else(|| {
+            impacts
+                .iter()
+                .find(|impact| impact.group == S7_HIDDEN_IMPACT_GROUP_MISSING_TESTS)
+                .map(|impact| impact.follow_up.clone())
+        })
+        .or_else(|| view.next_command.clone())
+        .unwrap_or_else(|| view.explanation.clone()),
+        explain_plan_governance: if let Some(reasoning_summary) =
+            reasoning_projection_governance_summary(view.latest_reasoning_profile.as_ref())
         {
+            reasoning_summary
+        } else if let Some(packet_ref) = view.latest_governance_packet_ref.as_deref() {
             format!(
                 "governance_packet={packet_ref}; council_required={}",
                 s7_council_required(governance_present)
@@ -1403,11 +1504,12 @@ fn s7_cognitive_projection_for_session_status(
         } else {
             fallback_disclosure.to_string()
         },
-        explain_plan_recovery: view
-            .latest_checkpoint_restore_command
-            .clone()
-            .or_else(|| view.next_command.clone())
-            .unwrap_or_else(|| view.explanation.clone()),
+        explain_plan_recovery: reasoning_projection_next_action(
+            view.latest_reasoning_profile.as_ref(),
+        )
+        .or_else(|| view.latest_checkpoint_restore_command.clone())
+        .or_else(|| view.next_command.clone())
+        .unwrap_or_else(|| view.explanation.clone()),
     }
 }
 
@@ -1508,6 +1610,7 @@ pub fn render_run_trace(
         let mut context_provenance: Vec<String> = Vec::new();
         let mut context_staleness_reason: Option<String> = None;
         let mut governance_next_action: Option<String> = None;
+        let mut reasoning_profile: Option<ProfileActivationRecord> = None;
         lines.insert(0, format!("goal: {}", trace.goal));
         lines.insert(1, format!("route_owner: {}", run_trace_route_owner(trace)));
         if let Some(route_config_projection) = render_route_config_projection(
@@ -1813,6 +1916,14 @@ pub fn render_run_trace(
                     .and_then(Value::as_str)
                     .map(str::to_string);
             }
+            if let Some(record) = event
+                .payload
+                .get("reasoning_profile_record")
+                .cloned()
+                .and_then(|value| serde_json::from_value(value).ok())
+            {
+                reasoning_profile = Some(record);
+            }
         }
 
         push_context_projection_lines(
@@ -1823,6 +1934,10 @@ pub fn render_run_trace(
             &context_provenance,
             context_staleness_reason.as_deref(),
         );
+
+        if let Some(reasoning_profile) = &reasoning_profile {
+            append_reasoning_profile_lines(&mut lines, "", reasoning_profile);
+        }
 
         for event in &trace.events {
             if let Some(governance_next_action) = governance_next_action.as_ref() {
@@ -1928,6 +2043,17 @@ pub fn render_run_trace(
                     let decision_id = event.step_id.as_deref().unwrap_or("unknown-decision");
                     lines.push(format!("decision {decision_id} recovered"));
                 }
+                TraceEventType::ReasoningProfileActivated
+                | TraceEventType::ReasoningParticipantStarted
+                | TraceEventType::ReasoningParticipantCompleted
+                | TraceEventType::ReasoningDisagreementRecorded
+                | TraceEventType::ReasoningDebateRoundCompleted
+                | TraceEventType::ReasoningReflexionRevisionCompleted
+                | TraceEventType::ReasoningAdjudicationRecorded
+                | TraceEventType::ReasoningConfidenceRecorded
+                | TraceEventType::ReasoningProfileBlocked
+                | TraceEventType::ReasoningProfileInterrupted
+                | TraceEventType::ReasoningProfileEscalated => {}
                 TraceEventType::GovernanceSelected
                 | TraceEventType::GovernanceStarted
                 | TraceEventType::GovernanceDecisionRecorded
@@ -2256,6 +2382,10 @@ pub fn render_trace_summary(
 
     if let Some(governance_next_action) = &summary.governance_next_action {
         lines.push(format!("governance_next_action: {governance_next_action}"));
+    }
+
+    if let Some(reasoning_profile) = &summary.reasoning_profile {
+        append_reasoning_profile_lines(&mut lines, "", reasoning_profile);
     }
 
     if let Some(delegation) = &summary.delegation {
@@ -2774,6 +2904,9 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
             "governance_lifecycle_selected_mode: {governance_lifecycle_selected_mode}"
         ));
     }
+    if let Some(reasoning_profile) = &view.latest_reasoning_profile {
+        append_reasoning_profile_lines(&mut lines, "latest_", reasoning_profile);
+    }
 
     let follow_through = FollowThroughProjection::from_session_view(view);
     if !follow_through.is_empty() {
@@ -2793,6 +2926,93 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
 
     lines.push(format!("explanation: {}", view.explanation));
     lines.join("\n")
+}
+
+fn append_reasoning_profile_lines(
+    lines: &mut Vec<String>,
+    label_prefix: &str,
+    reasoning_profile: &ProfileActivationRecord,
+) {
+    lines.push(format!("{label_prefix}reasoning_profile_id: {}", reasoning_profile.profile_id));
+    lines.push(format!("{label_prefix}reasoning_profile_stage: {}", reasoning_profile.stage_key));
+    lines.push(format!(
+        "{label_prefix}reasoning_profile_status: {}",
+        reasoning_profile.status.as_str()
+    ));
+    lines.push(format!(
+        "{label_prefix}reasoning_profile_trigger: {}",
+        reasoning_profile.trigger.as_str()
+    ));
+    lines.push(format!(
+        "{label_prefix}reasoning_profile_reason: {}",
+        reasoning_profile.activation_reason
+    ));
+    lines.push(format!(
+        "{label_prefix}reasoning_budget: participants={} branches={} calls={} adjudication_steps={}",
+        reasoning_profile.budget.max_participants,
+        reasoning_profile.budget.max_branches,
+        reasoning_profile.budget.max_calls,
+        reasoning_profile.budget.max_adjudication_steps,
+    ));
+    if !reasoning_profile.participants.is_empty() {
+        lines.push(format!(
+            "{label_prefix}reasoning_participants: {}",
+            reasoning_profile
+                .participants
+                .iter()
+                .map(|participant| format!(
+                    "{}={}",
+                    participant.role_id, participant.effective_route
+                ))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    if let Some(independence) = &reasoning_profile.independence {
+        lines.push(format!(
+            "{label_prefix}reasoning_independence_result: {}",
+            independence.result.as_str()
+        ));
+        lines.push(format!("{label_prefix}reasoning_independence_reason: {}", independence.reason));
+    }
+    if let Some(posture) = &reasoning_profile.posture {
+        lines.push(format!("{label_prefix}reasoning_posture_contract: {}", posture.contract_line));
+        lines.push(format!(
+            "{label_prefix}reasoning_posture_admission_priority: {}",
+            posture.admission_priority.as_str()
+        ));
+        lines.push(format!(
+            "{label_prefix}reasoning_posture_confidence_handoff: {}",
+            posture.confidence_handoff_required
+        ));
+        lines.push(format!(
+            "{label_prefix}reasoning_posture_provenance_ref: {}",
+            posture.provenance_ref
+        ));
+    }
+    if let Some(outcome) = &reasoning_profile.outcome {
+        lines.push(format!("{label_prefix}reasoning_outcome: {}", outcome.outcome_kind.as_str()));
+        lines.push(format!("{label_prefix}reasoning_outcome_headline: {}", outcome.headline));
+        if let Some(disagreement_summary) = &outcome.disagreement_summary {
+            lines.push(format!(
+                "{label_prefix}reasoning_disagreement_summary: {disagreement_summary}"
+            ));
+        }
+        if let Some(next_action) = &outcome.next_action {
+            lines.push(format!("{label_prefix}reasoning_next_action: {next_action}"));
+        }
+    }
+    if let Some(confidence) = &reasoning_profile.confidence {
+        lines.push(format!(
+            "{label_prefix}reasoning_confidence_level: {}",
+            confidence.confidence_level.as_str()
+        ));
+        lines.push(format!(
+            "{label_prefix}reasoning_confidence_effect: {}",
+            confidence.admission_effect.as_str()
+        ));
+        lines.push(format!("{label_prefix}reasoning_confidence_summary: {}", confidence.summary));
+    }
 }
 
 /// Renders the latest compatibility follow-up when no native session state is authoritative.
@@ -3623,6 +3843,12 @@ fn session_execution_condition_parts(view: &SessionStatusView) -> (&'static str,
         }
     }
 
+    if let Some(reason) =
+        view.latest_reasoning_profile.as_ref().and_then(reasoning_execution_block_reason)
+    {
+        return ("blocked", reason);
+    }
+
     if let Some(delegation) = &view.delegation {
         return match delegation.mode {
             crate::domain::session::DelegationContinuityMode::HandoffRequired
@@ -3781,6 +4007,12 @@ fn render_trace_execution_condition(summary: &TraceSummaryView) -> String {
 }
 
 fn trace_execution_condition_parts(summary: &TraceSummaryView) -> (&'static str, String) {
+    if let Some(reason) =
+        summary.reasoning_profile.as_ref().and_then(reasoning_execution_block_reason)
+    {
+        return ("blocked", reason);
+    }
+
     if let Some(delegation) = &summary.delegation {
         return match delegation.mode {
             crate::domain::session::DelegationContinuityMode::HandoffRequired
@@ -3837,6 +4069,29 @@ fn trace_execution_condition_parts(summary: &TraceSummaryView) -> (&'static str,
             ("terminal", summary.terminal_reason.message.clone())
         }
     }
+}
+
+fn reasoning_execution_block_reason(reasoning_profile: &ProfileActivationRecord) -> Option<String> {
+    if !reasoning_profile.status.halts_outer_workflow() {
+        return None;
+    }
+
+    let detail = reasoning_profile
+        .outcome
+        .as_ref()
+        .and_then(|outcome| outcome.next_action.clone())
+        .or_else(|| {
+            reasoning_profile
+                .outcome
+                .as_ref()
+                .and_then(|outcome| outcome.disagreement_summary.clone())
+        })
+        .unwrap_or_else(|| reasoning_profile.activation_reason.clone());
+
+    Some(format!(
+        "reasoning profile {} blocked stage {}: {}",
+        reasoning_profile.profile_id, reasoning_profile.stage_key, detail
+    ))
 }
 
 fn trace_adaptive_exhaustion_reason(summary: &TraceSummaryView) -> Option<String> {
@@ -4419,6 +4674,7 @@ mod tests {
             governance_reason: None,
             governance_approval_provenance: None,
             governance_next_action: None,
+            reasoning_profile: None,
             delegation: None,
             review_timeline: Vec::new(),
             terminal_status: TaskStatus::Failed,
@@ -4523,11 +4779,15 @@ mod tests {
             latest_governance_approval: None,
             latest_governance_decision: None,
             latest_governance_candidates: None,
+            latest_governance_confidence_level: None,
+            latest_governance_admission_effect: None,
+            latest_governance_confidence_summary: None,
             governance_next_action: None,
             governance_lifecycle_runtime: None,
             governance_lifecycle_opt_out: None,
             governance_lifecycle_mode_selection: None,
             governance_lifecycle_selected_mode: None,
+            latest_reasoning_profile: None,
             project_scale_path: None,
             project_scale_current_stage: None,
             project_scale_next_action: None,
@@ -4726,6 +4986,153 @@ mod tests {
     }
 
     #[test]
+    fn render_run_trace_includes_reasoning_profile_projection() {
+        let mut trace = ExecutionTrace::new(
+            "task-reasoning-output",
+            "session-reasoning-output",
+            "Render reasoning output",
+        );
+        trace.record_event(
+            TraceEventType::GovernanceBlocked,
+            Some("governance-step".to_string()),
+            0,
+            json!({
+                "stage_key": "bug-fix:investigate",
+                "runtime": "canon",
+                "reason": "distinct_routes=1 < required=2",
+                "reasoning_profile_record": {
+                    "activation_id": "reasoning-attempt-1",
+                    "stage_key": "bug-fix:investigate",
+                    "profile_id": "independent_pair_review",
+                    "trigger": "operator_policy",
+                    "activation_reason": "stage governance activated stronger challenge",
+                    "status": "blocked",
+                    "participants": [
+                        {
+                            "role_id": "reviewer_primary",
+                            "participant_id": "independent_pair_review-reviewer_primary",
+                            "effective_route": "reviewer_roles.reviewer_primary:claude:sonnet-4.6",
+                            "provider_family": "claude",
+                            "context_basis": "governance_stage:bug-fix:investigate",
+                            "prompting_pattern": "blind_reviewer",
+                            "status": "pending",
+                            "result_summary": null
+                        },
+                        {
+                            "role_id": "reviewer_secondary",
+                            "participant_id": "independent_pair_review-reviewer_secondary",
+                            "effective_route": "review:codex:gpt-5-codex",
+                            "provider_family": "codex",
+                            "context_basis": "governance_stage:bug-fix:investigate",
+                            "prompting_pattern": "blind_reviewer",
+                            "status": "pending",
+                            "result_summary": null
+                        }
+                    ],
+                    "budget": {
+                        "max_participants": 2,
+                        "max_branches": 1,
+                        "max_debate_rounds": 0,
+                        "max_reflexion_revisions": 0,
+                        "max_calls": 2,
+                        "max_tokens": 8000,
+                        "max_adjudication_steps": 1
+                    },
+                    "posture": {
+                        "contract_line": "governed_reasoning_posture_v1",
+                        "compatibility_window": {
+                            "boundline_min": "0.61.0",
+                            "boundline_max_exclusive": "0.62.0",
+                            "canon_min": "0.57.0",
+                            "canon_max_exclusive": "0.58.0",
+                            "contract_line": "governed_reasoning_posture_v1"
+                        },
+                        "required_profile_family": "blind_review",
+                        "required_profile_id": "independent_pair_review",
+                        "minimum_independence": {
+                            "route_distinct": true,
+                            "provider_distinct": true,
+                            "context_distinct": false,
+                            "prompt_pattern_distinct": false,
+                            "minimum_participants": 2
+                        },
+                        "admission_priority": "required_before_continue",
+                        "confidence_handoff_required": true,
+                        "provenance_ref": "governance_attempt:attempt-1"
+                    },
+                    "independence": {
+                        "requested_floor": {
+                            "route_distinct": true,
+                            "provider_distinct": true,
+                            "context_distinct": false,
+                            "prompt_pattern_distinct": false,
+                            "minimum_participants": 2
+                        },
+                        "observed_distinctions": {
+                            "distinct_routes": 1,
+                            "distinct_providers": 2,
+                            "distinct_contexts": 1,
+                            "distinct_prompt_patterns": 1
+                        },
+                        "result": "failed",
+                        "reason": "distinct_routes=1 < required=2"
+                    },
+                    "outcome": {
+                        "outcome_kind": "blocked",
+                        "headline": "independent pair review blocked",
+                        "disagreement_summary": "reviewers collapsed onto one route",
+                        "next_action": "configure distinct reviewer routes",
+                        "iterations": []
+                    },
+                    "confidence": {
+                        "confidence_level": "low",
+                        "basis": [
+                            "independence=failed",
+                            "posture_contract=governed_reasoning_posture_v1"
+                        ],
+                        "admission_effect": "gate",
+                        "summary": "reasoning independence failed; block progression until challenge distinctness is restored"
+                    }
+                }
+            }),
+        );
+
+        let response = TaskRunResponse {
+            task_id: "task-reasoning-output".to_string(),
+            terminal_status: TaskStatus::Failed,
+            terminal_reason: TerminalReason::new(
+                TerminalCondition::TaskNotCredible,
+                "governed work is blocked pending intervention",
+                None,
+            ),
+            final_context: TaskContext::new(
+                "session-reasoning-output",
+                "/tmp/workspace",
+                RunLimits::default(),
+                serde_json::Map::new(),
+            ),
+            plan_revision: 0,
+            trace_location: "/tmp/workspace/.boundline/traces/task-reasoning-output.json"
+                .to_string(),
+        };
+
+        let text = render_run_trace("run", Some(&trace), &response, "/boundline-next");
+
+        assert!(text.contains("reasoning_profile_id: independent_pair_review"), "{text}");
+        assert!(text.contains("reasoning_profile_status: blocked"), "{text}");
+        assert!(text.contains("reasoning_independence_result: failed"), "{text}");
+        assert!(
+            text.contains("reasoning_posture_contract: governed_reasoning_posture_v1"),
+            "{text}"
+        );
+        assert!(text.contains("reasoning_confidence_level: low"), "{text}");
+        assert!(
+            text.contains("reasoning_next_action: configure distinct reviewer routes"),
+            "{text}"
+        );
+    }
+
+    #[test]
     fn render_session_status_surfaces_review_projection() {
         let view = SessionStatusView {
             session_id: "session-review-status".to_string(),
@@ -4821,6 +5228,9 @@ mod tests {
                 "await_approval".to_string(),
                 "block_stage".to_string(),
             ]),
+            latest_governance_confidence_level: None,
+            latest_governance_admission_effect: None,
+            latest_governance_confidence_summary: None,
             governance_next_action: Some(
                 "wait for approval and rerun boundline status".to_string(),
             ),
@@ -4828,6 +5238,7 @@ mod tests {
             governance_lifecycle_opt_out: None,
             governance_lifecycle_mode_selection: None,
             governance_lifecycle_selected_mode: None,
+            latest_reasoning_profile: None,
             project_scale_path: None,
             project_scale_current_stage: None,
             project_scale_next_action: None,
@@ -4879,6 +5290,116 @@ mod tests {
         );
         assert!(
             text.contains("governance_next_action: wait for approval and rerun boundline status"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn render_session_status_includes_reasoning_profile_projection() {
+        let view = SessionStatusView {
+            session_id: "session-reasoning".to_string(),
+            workspace_ref: "/tmp/workspace".to_string(),
+            explanation: "reasoning profile is active".to_string(),
+            latest_reasoning_profile: Some(crate::domain::reasoning::ProfileActivationRecord {
+                activation_id: "reasoning-attempt-1".to_string(),
+                stage_key: "bug-fix:investigate".to_string(),
+                profile_id: crate::domain::reasoning::ReasoningProfileId::IndependentPairReview,
+                trigger: crate::domain::reasoning::ReasoningActivationTrigger::OperatorPolicy,
+                activation_reason: "stage governance activated stronger challenge".to_string(),
+                status: crate::domain::reasoning::ReasoningActivationStatus::Blocked,
+                participants: vec![
+                    crate::domain::reasoning::ParticipantAssignment {
+                        role_id: "reviewer_primary".to_string(),
+                        participant_id: "independent_pair_review-reviewer_primary".to_string(),
+                        effective_route: "reviewer_roles.reviewer_primary:claude:sonnet-4.6"
+                            .to_string(),
+                        provider_family: Some("claude".to_string()),
+                        context_basis: "governance_stage:bug-fix:investigate".to_string(),
+                        prompting_pattern: "blind_reviewer".to_string(),
+                        status: crate::domain::reasoning::ReasoningParticipantStatus::Pending,
+                        result_summary: None,
+                    },
+                    crate::domain::reasoning::ParticipantAssignment {
+                        role_id: "reviewer_secondary".to_string(),
+                        participant_id: "independent_pair_review-reviewer_secondary".to_string(),
+                        effective_route: "review:codex:gpt-5-codex".to_string(),
+                        provider_family: Some("codex".to_string()),
+                        context_basis: "governance_stage:bug-fix:investigate".to_string(),
+                        prompting_pattern: "blind_reviewer".to_string(),
+                        status: crate::domain::reasoning::ReasoningParticipantStatus::Pending,
+                        result_summary: None,
+                    },
+                ],
+                budget: crate::domain::reasoning::ReasoningBudget {
+                    max_participants: 2,
+                    max_branches: 1,
+                    max_debate_rounds: 0,
+                    max_reflexion_revisions: 0,
+                    max_calls: 2,
+                    max_tokens: 8_000,
+                    max_adjudication_steps: 1,
+                },
+                posture: None,
+                independence: Some(crate::domain::reasoning::IndependenceAssessment {
+                    requested_floor: crate::domain::reasoning::IndependenceFloor {
+                        route_distinct: true,
+                        provider_distinct: true,
+                        context_distinct: false,
+                        prompt_pattern_distinct: false,
+                        minimum_participants: 2,
+                    },
+                    observed_distinctions:
+                        crate::domain::reasoning::ReasoningObservedDistinctness {
+                            distinct_routes: 1,
+                            distinct_providers: 2,
+                            distinct_contexts: 1,
+                            distinct_prompt_patterns: 1,
+                        },
+                    result: crate::domain::reasoning::IndependenceAssessmentResult::Failed,
+                    reason: "distinct_routes=1 < required=2".to_string(),
+                }),
+                outcome: Some(crate::domain::reasoning::ReasoningOutcome {
+                    outcome_kind: crate::domain::reasoning::ReasoningOutcomeKind::Blocked,
+                    headline: "independent pair review blocked".to_string(),
+                    disagreement_summary: Some("reviewers collapsed onto one route".to_string()),
+                    next_action: Some("configure distinct reviewer routes".to_string()),
+                    iterations: Vec::new(),
+                }),
+                confidence: Some(crate::domain::reasoning::ReasoningConfidenceContribution {
+                    confidence_level: crate::domain::reasoning::ReasoningConfidenceLevel::Low,
+                    basis: vec!["independence=failed".to_string()],
+                    admission_effect: crate::domain::reasoning::ReasoningAdmissionEffect::Gate,
+                    summary: "reasoning independence failed; block progression until challenge distinctness is restored".to_string(),
+                }),
+            }),
+            ..SessionStatusView::default()
+        };
+
+        let text = render_session_status(&view);
+
+        assert!(text.contains("latest_reasoning_profile_id: independent_pair_review"), "{text}");
+        assert!(text.contains("latest_reasoning_profile_status: blocked"), "{text}");
+        assert!(text.contains("latest_reasoning_independence_result: failed"), "{text}");
+        assert!(text.contains("latest_reasoning_confidence_level: low"), "{text}");
+        assert!(
+            text.contains("latest_reasoning_next_action: configure distinct reviewer routes"),
+            "{text}"
+        );
+        assert!(text.contains("latest_reasoning_participants: reviewer_primary=reviewer_roles.reviewer_primary:claude:sonnet-4.6"), "{text}");
+        assert!(text.contains("confidence_level: low"), "{text}");
+        assert!(text.contains("next_best_action: configure distinct reviewer routes"), "{text}");
+        assert!(
+            text.contains("explain_plan_validation: configure distinct reviewer routes"),
+            "{text}"
+        );
+        assert!(
+            text.contains("explain_plan_recovery: configure distinct reviewer routes"),
+            "{text}"
+        );
+        assert!(
+            text.contains(
+                "explain_plan_governance: reasoning_profile=independent_pair_review; status=blocked; confidence=low; admission_effect=gate"
+            ),
             "{text}"
         );
     }
@@ -4983,6 +5504,7 @@ mod tests {
             governance_next_action: Some(
                 "wait for approval and rerun boundline status".to_string(),
             ),
+            reasoning_profile: None,
             delegation: None,
             review_timeline: vec![
                 "review_trigger: pr_ready".to_string(),
@@ -5005,6 +5527,131 @@ mod tests {
         );
         assert!(text.contains("review_trigger: pr_ready"), "{text}");
         assert!(text.contains("review_outcome: accepted"), "{text}");
+    }
+
+    #[test]
+    fn render_trace_summary_includes_reasoning_profile_projection() {
+        let summary = TraceSummaryView {
+            trace_ref: "/tmp/workspace/.boundline/traces/reasoning-trace.json".to_string(),
+            goal: "Render reasoning trace summary".to_string(),
+            reasoning_profile: Some(crate::domain::reasoning::ProfileActivationRecord {
+                activation_id: "reasoning-attempt-2".to_string(),
+                stage_key: "bug-fix:verify".to_string(),
+                profile_id: crate::domain::reasoning::ReasoningProfileId::BoundedReflexion,
+                trigger:
+                    crate::domain::reasoning::ReasoningActivationTrigger::CanonRequiredChallenge,
+                activation_reason: "Canon governance activated stronger challenge".to_string(),
+                status: crate::domain::reasoning::ReasoningActivationStatus::Degraded,
+                participants: Vec::new(),
+                budget: crate::domain::reasoning::ReasoningBudget {
+                    max_participants: 1,
+                    max_branches: 1,
+                    max_debate_rounds: 0,
+                    max_reflexion_revisions: 2,
+                    max_calls: 2,
+                    max_tokens: 6_000,
+                    max_adjudication_steps: 1,
+                },
+                posture: Some(crate::domain::reasoning::CanonChallengePostureInput {
+                    contract_line: "governed_reasoning_posture_v1".to_string(),
+                    compatibility_window: crate::domain::reasoning::ReasoningCompatibilityWindow {
+                        boundline_min: "0.61.0".to_string(),
+                        boundline_max_exclusive: "0.62.0".to_string(),
+                        canon_min: "0.57.0".to_string(),
+                        canon_max_exclusive: "0.58.0".to_string(),
+                        contract_line: "governed_reasoning_posture_v1".to_string(),
+                    },
+                    required_profile_family: Some(
+                        crate::domain::reasoning::ReasoningProfileFamily::Reflexion,
+                    ),
+                    required_profile_id: Some(
+                        crate::domain::reasoning::ReasoningProfileId::BoundedReflexion,
+                    ),
+                    minimum_independence: crate::domain::reasoning::IndependenceFloor {
+                        route_distinct: false,
+                        provider_distinct: false,
+                        context_distinct: false,
+                        prompt_pattern_distinct: false,
+                        minimum_participants: 1,
+                    },
+                    admission_priority:
+                        crate::domain::reasoning::CanonAdmissionPriority::RequiredBeforeContinue,
+                    confidence_handoff_required: true,
+                    provenance_ref: "governance_attempt:attempt-2".to_string(),
+                }),
+                independence: Some(crate::domain::reasoning::IndependenceAssessment {
+                    requested_floor: crate::domain::reasoning::IndependenceFloor {
+                        route_distinct: false,
+                        provider_distinct: false,
+                        context_distinct: false,
+                        prompt_pattern_distinct: false,
+                        minimum_participants: 1,
+                    },
+                    observed_distinctions:
+                        crate::domain::reasoning::ReasoningObservedDistinctness {
+                            distinct_routes: 1,
+                            distinct_providers: 1,
+                            distinct_contexts: 1,
+                            distinct_prompt_patterns: 1,
+                        },
+                    result: crate::domain::reasoning::IndependenceAssessmentResult::Degraded,
+                    reason: "reflexion remained bounded but shared one runtime".to_string(),
+                }),
+                outcome: Some(crate::domain::reasoning::ReasoningOutcome {
+                    outcome_kind: crate::domain::reasoning::ReasoningOutcomeKind::Degraded,
+                    headline: "bounded reflexion degraded".to_string(),
+                    disagreement_summary: Some("shared runtime reduced independence".to_string()),
+                    next_action: Some(
+                        "escalate to blind review if confidence remains low".to_string(),
+                    ),
+                    iterations: Vec::new(),
+                }),
+                confidence: Some(crate::domain::reasoning::ReasoningConfidenceContribution {
+                    confidence_level: crate::domain::reasoning::ReasoningConfidenceLevel::Medium,
+                    basis: vec![
+                        "independence=degraded".to_string(),
+                        "posture_contract=governed_reasoning_posture_v1".to_string(),
+                    ],
+                    admission_effect: crate::domain::reasoning::ReasoningAdmissionEffect::Warn,
+                    summary: "reasoning independence degraded; continue only with explicit caution"
+                        .to_string(),
+                }),
+            }),
+            ..TraceSummaryView::default()
+        };
+
+        let text = render_trace_summary(&summary, "latest-workspace-trace", "/boundline-next");
+
+        assert!(text.contains("reasoning_profile_id: bounded_reflexion"), "{text}");
+        assert!(text.contains("reasoning_profile_status: degraded"), "{text}");
+        assert!(text.contains("reasoning_independence_result: degraded"), "{text}");
+        assert!(
+            text.contains("reasoning_posture_contract: governed_reasoning_posture_v1"),
+            "{text}"
+        );
+        assert!(text.contains("reasoning_confidence_level: medium"), "{text}");
+        assert!(
+            text.contains(
+                "reasoning_next_action: escalate to blind review if confidence remains low"
+            ),
+            "{text}"
+        );
+        assert!(
+            text.contains("next_best_action: escalate to blind review if confidence remains low"),
+            "{text}"
+        );
+        assert!(
+            text.contains(
+                "explain_plan_validation: escalate to blind review if confidence remains low"
+            ),
+            "{text}"
+        );
+        assert!(
+            text.contains(
+                "explain_plan_governance: reasoning_profile=bounded_reflexion; status=degraded; confidence=medium; admission_effect=warn; posture_contract=governed_reasoning_posture_v1"
+            ),
+            "{text}"
+        );
     }
 
     #[test]
@@ -5477,6 +6124,40 @@ mod tests {
         });
         assert_eq!(govern_waiting.0, "waiting");
 
+        let reasoning_blocked = session_execution_condition_parts(&SessionStatusView {
+            latest_reasoning_profile: Some(crate::domain::reasoning::ProfileActivationRecord {
+                activation_id: "reasoning-attempt-3".to_string(),
+                stage_key: "bug-fix:verify".to_string(),
+                profile_id: crate::domain::reasoning::ReasoningProfileId::IndependentPairReview,
+                trigger: crate::domain::reasoning::ReasoningActivationTrigger::OperatorPolicy,
+                activation_reason: "stronger challenge required".to_string(),
+                status: crate::domain::reasoning::ReasoningActivationStatus::Blocked,
+                participants: Vec::new(),
+                budget: crate::domain::reasoning::ReasoningBudget {
+                    max_participants: 2,
+                    max_branches: 1,
+                    max_debate_rounds: 0,
+                    max_reflexion_revisions: 0,
+                    max_calls: 2,
+                    max_tokens: 8_000,
+                    max_adjudication_steps: 1,
+                },
+                posture: None,
+                independence: None,
+                outcome: Some(crate::domain::reasoning::ReasoningOutcome {
+                    outcome_kind: crate::domain::reasoning::ReasoningOutcomeKind::Blocked,
+                    headline: "independent pair review blocked".to_string(),
+                    disagreement_summary: Some("reviewers collapsed onto one route".to_string()),
+                    next_action: Some("configure distinct reviewer routes".to_string()),
+                    iterations: Vec::new(),
+                }),
+                confidence: None,
+            }),
+            ..SessionStatusView::default()
+        });
+        assert_eq!(reasoning_blocked.0, "blocked");
+        assert!(reasoning_blocked.1.contains("configure distinct reviewer routes"));
+
         let flow_confirmation = session_execution_condition_parts(&SessionStatusView {
             execution_path: Some("native_goal_plan_pending_plan_confirmation".to_string()),
             ..SessionStatusView::default()
@@ -5545,6 +6226,47 @@ mod tests {
         });
         assert_eq!(exhausted_trace.0, "terminal");
         assert_eq!(exhausted_trace.1, "limits exhausted");
+
+        let reasoning_blocked_trace = trace_execution_condition_parts(&TraceSummaryView {
+            reasoning_profile: Some(crate::domain::reasoning::ProfileActivationRecord {
+                activation_id: "reasoning-attempt-4".to_string(),
+                stage_key: "bug-fix:verify".to_string(),
+                profile_id: crate::domain::reasoning::ReasoningProfileId::BoundedReflexion,
+                trigger:
+                    crate::domain::reasoning::ReasoningActivationTrigger::CanonRequiredChallenge,
+                activation_reason: "Canon governance activated stronger challenge".to_string(),
+                status: crate::domain::reasoning::ReasoningActivationStatus::Blocked,
+                participants: Vec::new(),
+                budget: crate::domain::reasoning::ReasoningBudget {
+                    max_participants: 1,
+                    max_branches: 1,
+                    max_debate_rounds: 0,
+                    max_reflexion_revisions: 2,
+                    max_calls: 2,
+                    max_tokens: 6_000,
+                    max_adjudication_steps: 1,
+                },
+                posture: None,
+                independence: None,
+                outcome: Some(crate::domain::reasoning::ReasoningOutcome {
+                    outcome_kind: crate::domain::reasoning::ReasoningOutcomeKind::Blocked,
+                    headline: "bounded reflexion blocked".to_string(),
+                    disagreement_summary: Some("shared runtime reduced independence".to_string()),
+                    next_action: Some("escalate to blind review".to_string()),
+                    iterations: Vec::new(),
+                }),
+                confidence: None,
+            }),
+            terminal_status: TaskStatus::Failed,
+            terminal_reason: TerminalReason::new(
+                TerminalCondition::UnrecoverableError,
+                "trace failed",
+                None,
+            ),
+            ..TraceSummaryView::default()
+        });
+        assert_eq!(reasoning_blocked_trace.0, "blocked");
+        assert!(reasoning_blocked_trace.1.contains("escalate to blind review"));
 
         let failed_trace = trace_execution_condition_parts(&TraceSummaryView {
             terminal_status: TaskStatus::Failed,

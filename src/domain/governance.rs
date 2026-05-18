@@ -7,6 +7,10 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::domain::flow::built_in_flow;
+use crate::domain::reasoning::{
+    ProfileActivationRecord, ReasoningAdmissionEffect, ReasoningConfidenceLevel,
+    ReasoningProfileDefinition, ReasoningProfileId,
+};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "snake_case")]
@@ -513,6 +517,8 @@ pub struct StageGovernancePolicy {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub canon_mode: Option<CanonMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_profile: Option<ReasoningProfileDefinition>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub system_context: Option<SystemContextBinding>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub risk: Option<String>,
@@ -556,13 +562,39 @@ impl StageGovernancePolicy {
             });
         }
 
+        let supported_modes = supported_canon_modes_for_stage(&self.flow_name, &self.stage_id);
+        if let Some(reasoning_profile) = self.reasoning_profile.as_ref() {
+            reasoning_profile.validate().map_err(|error| {
+                GovernanceProfileError::InvalidReasoningProfile {
+                    stage_key: self.stage_key(),
+                    error: error.to_string(),
+                }
+            })?;
+
+            if supported_modes.is_empty() {
+                return Err(GovernanceProfileError::UnsupportedReasoningStage(self.stage_key()));
+            }
+
+            let reasoning_stage_allowed = if let Some(mode) = self.canon_mode {
+                reasoning_profile.allowed_stages.contains(&mode)
+            } else {
+                reasoning_profile.allowed_stages.iter().any(|mode| supported_modes.contains(mode))
+            };
+
+            if !reasoning_stage_allowed {
+                return Err(GovernanceProfileError::ReasoningProfileStageNotAllowed {
+                    stage_key: self.stage_key(),
+                    profile_id: reasoning_profile.profile_id,
+                });
+            }
+        }
+
         if self.effective_runtime(default_runtime) != GovernanceRuntimeKind::Canon {
             return Ok(());
         }
 
         let canon =
             canon.ok_or_else(|| GovernanceProfileError::MissingCanonConfig(self.stage_key()))?;
-        let supported_modes = supported_canon_modes_for_stage(&self.flow_name, &self.stage_id);
         if supported_modes.is_empty() {
             return Err(GovernanceProfileError::UnsupportedCanonStage(self.stage_key()));
         }
@@ -1996,6 +2028,37 @@ pub struct AutopilotDecisionRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GovernanceConfidenceHandoff {
+    pub profile_id: ReasoningProfileId,
+    pub confidence_level: ReasoningConfidenceLevel,
+    pub admission_effect: ReasoningAdmissionEffect,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub basis: Vec<String>,
+    pub summary: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_action: Option<String>,
+}
+
+pub fn governance_confidence_handoff(
+    reasoning_profile: Option<&ProfileActivationRecord>,
+) -> Option<GovernanceConfidenceHandoff> {
+    let reasoning_profile = reasoning_profile?;
+    let confidence = reasoning_profile.confidence.as_ref()?;
+
+    Some(GovernanceConfidenceHandoff {
+        profile_id: reasoning_profile.profile_id,
+        confidence_level: confidence.confidence_level,
+        admission_effect: confidence.admission_effect,
+        basis: confidence.basis.clone(),
+        summary: confidence.summary.clone(),
+        next_action: reasoning_profile
+            .outcome
+            .as_ref()
+            .and_then(|outcome| outcome.next_action.clone()),
+    })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GovernedStageRecord {
     pub stage_key: String,
     pub runtime: GovernanceRuntimeKind,
@@ -2037,6 +2100,8 @@ pub struct GovernedSessionLifecycle {
     pub selected_mode: Option<CanonMode>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub selected_mode_sequence: Vec<CanonMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_reasoning_profile: Option<ProfileActivationRecord>,
     #[serde(default)]
     pub current_stage_index: usize,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -2059,10 +2124,16 @@ pub enum GovernanceProfileError {
     UnsupportedStage { flow_name: String, stage_id: String },
     #[error("governance stage '{0}' is not supported by the first-slice Canon mapping")]
     UnsupportedCanonStage(String),
+    #[error("governance stage '{0}' is not supported by the reasoning-profile stage mapping")]
+    UnsupportedReasoningStage(String),
     #[error("governance stage '{0}' cannot be required unless it is enabled")]
     RequiredPolicyNotEnabled(String),
     #[error("governance stage '{0}' cannot enable autopilot unless it is enabled")]
     AutopilotPolicyNotEnabled(String),
+    #[error("governance stage '{stage_key}' has invalid reasoning profile: {error}")]
+    InvalidReasoningProfile { stage_key: String, error: String },
+    #[error("governance stage '{stage_key}' cannot attach reasoning profile '{profile_id}'")]
+    ReasoningProfileStageNotAllowed { stage_key: String, profile_id: ReasoningProfileId },
     #[error("governance stage '{0}' requires Canon configuration")]
     MissingCanonConfig(String),
     #[error("governance stage '{stage_key}' is missing Canon field '{field}'")]
@@ -2392,6 +2463,7 @@ mod tests {
             autopilot: false,
             require_adaptive_companion: false,
             canon_mode: None,
+            reasoning_profile: None,
             system_context: None,
             risk: None,
             zone: None,
@@ -2470,5 +2542,340 @@ mod tests {
         assert_eq!(CanonChangeClass::BoundedImpact.authority_floor(), CanonAuthorityZone::Yellow);
         assert_eq!(CanonChangeClass::SystemicImpact.authority_floor(), CanonAuthorityZone::Yellow);
         assert_eq!(CanonChangeClass::CriticalOperations.authority_floor(), CanonAuthorityZone::Red);
+    }
+
+    #[test]
+    fn governance_confidence_handoff_derives_from_reasoning_profile() {
+        let reasoning_profile = ProfileActivationRecord {
+            activation_id: "reasoning-attempt-1".to_string(),
+            stage_key: "bug-fix:verify".to_string(),
+            profile_id: ReasoningProfileId::IndependentPairReview,
+            trigger: crate::domain::reasoning::ReasoningActivationTrigger::OperatorPolicy,
+            activation_reason: "stage governance activated stronger challenge".to_string(),
+            status: crate::domain::reasoning::ReasoningActivationStatus::Blocked,
+            participants: Vec::new(),
+            budget: crate::domain::reasoning::ReasoningBudget {
+                max_participants: 2,
+                max_branches: 1,
+                max_debate_rounds: 0,
+                max_reflexion_revisions: 0,
+                max_calls: 2,
+                max_tokens: 8_000,
+                max_adjudication_steps: 1,
+            },
+            posture: None,
+            independence: None,
+            outcome: Some(crate::domain::reasoning::ReasoningOutcome {
+                outcome_kind: crate::domain::reasoning::ReasoningOutcomeKind::Blocked,
+                headline: "independent pair review blocked".to_string(),
+                disagreement_summary: None,
+                next_action: Some("configure distinct reviewer routes".to_string()),
+                iterations: Vec::new(),
+            }),
+            confidence: Some(crate::domain::reasoning::ReasoningConfidenceContribution {
+                confidence_level: ReasoningConfidenceLevel::Low,
+                basis: vec!["independence=failed".to_string()],
+                admission_effect: ReasoningAdmissionEffect::Gate,
+                summary: "reasoning independence failed; block progression until challenge distinctness is restored"
+                    .to_string(),
+            }),
+        };
+
+        let handoff = governance_confidence_handoff(Some(&reasoning_profile)).unwrap();
+
+        assert_eq!(handoff.profile_id, ReasoningProfileId::IndependentPairReview);
+        assert_eq!(handoff.confidence_level, ReasoningConfidenceLevel::Low);
+        assert_eq!(handoff.admission_effect, ReasoningAdmissionEffect::Gate);
+        assert_eq!(handoff.next_action.as_deref(), Some("configure distinct reviewer routes"));
+    }
+
+    #[test]
+    fn governance_runtime_helpers_cover_display_conversion_and_startup_mappings() {
+        let council_profiles = [
+            (CouncilProfile::None, "none"),
+            (CouncilProfile::LightSingle, "light_single"),
+            (CouncilProfile::YellowPair, "yellow_pair"),
+            (CouncilProfile::RedFive, "red_five"),
+            (CouncilProfile::RestrictedManual, "restricted_manual"),
+        ];
+        for (profile, expected) in council_profiles {
+            assert_eq!(profile.as_str(), expected);
+            assert_eq!(profile.to_string(), expected);
+        }
+
+        let stop_semantics = [
+            (StopSemantics::Proceed, "proceed", false),
+            (StopSemantics::ProceedWithAdvisory, "proceed_with_advisory", false),
+            (StopSemantics::ProceedWithWarning, "proceed_with_warning", false),
+            (StopSemantics::DegradedProceed, "degraded_proceed", false),
+            (StopSemantics::CouncilRequired, "council_required", false),
+            (StopSemantics::AdjudicationRequired, "adjudication_required", false),
+            (StopSemantics::HumanGateRequired, "human_gate_required", false),
+            (StopSemantics::HardStop, "hard_stop", true),
+        ];
+        for (semantic, expected, hard_stop) in stop_semantics {
+            assert_eq!(semantic.as_str(), expected);
+            assert_eq!(semantic.to_string(), expected);
+            assert_eq!(semantic.is_hard_stop(), hard_stop);
+        }
+
+        let runtime_states = [
+            (GovernanceRuntimeState::Advisory, "advisory"),
+            (GovernanceRuntimeState::Catch, "catch"),
+            (GovernanceRuntimeState::Rule, "rule"),
+            (GovernanceRuntimeState::Hook, "hook"),
+        ];
+        for (runtime_state, expected) in runtime_states {
+            assert_eq!(runtime_state.as_str(), expected);
+            assert_eq!(runtime_state.to_string(), expected);
+        }
+        assert_eq!(
+            GovernanceRuntimeState::Advisory.transition_direction_to(GovernanceRuntimeState::Hook),
+            GovernanceTransitionDirection::Promote,
+        );
+        assert_eq!(
+            GovernanceRuntimeState::Hook.transition_direction_to(GovernanceRuntimeState::Advisory),
+            GovernanceTransitionDirection::Downgrade,
+        );
+        assert_eq!(
+            GovernanceRuntimeState::Rule.transition_direction_to(GovernanceRuntimeState::Rule),
+            GovernanceTransitionDirection::NoChange,
+        );
+        assert_eq!(
+            GovernanceRuntimeState::from(CanonAdaptiveGovernanceState::Advisory),
+            GovernanceRuntimeState::Advisory,
+        );
+        assert_eq!(
+            GovernanceRuntimeState::from(CanonAdaptiveGovernanceState::Catch),
+            GovernanceRuntimeState::Catch,
+        );
+        assert_eq!(
+            GovernanceRuntimeState::from(CanonAdaptiveGovernanceState::Rule),
+            GovernanceRuntimeState::Rule,
+        );
+        assert_eq!(
+            GovernanceRuntimeState::from(CanonAdaptiveGovernanceState::Hook),
+            GovernanceRuntimeState::Hook,
+        );
+
+        let directions = [
+            (GovernanceTransitionDirection::NoChange, "no_change"),
+            (GovernanceTransitionDirection::Promote, "promote"),
+            (GovernanceTransitionDirection::Downgrade, "downgrade"),
+        ];
+        for (direction, expected) in directions {
+            assert_eq!(direction.as_str(), expected);
+            assert_eq!(direction.to_string(), expected);
+        }
+
+        let rollout_profiles = [
+            (
+                GovernanceRolloutProfile::Minimal,
+                "minimal",
+                GovernanceRuntimeState::Advisory,
+                CanonAdaptiveRolloutProfile::Minimal,
+            ),
+            (
+                GovernanceRolloutProfile::Guided,
+                "guided",
+                GovernanceRuntimeState::Catch,
+                CanonAdaptiveRolloutProfile::Guided,
+            ),
+            (
+                GovernanceRolloutProfile::Governed,
+                "governed",
+                GovernanceRuntimeState::Rule,
+                CanonAdaptiveRolloutProfile::Governed,
+            ),
+            (
+                GovernanceRolloutProfile::Strict,
+                "strict",
+                GovernanceRuntimeState::Hook,
+                CanonAdaptiveRolloutProfile::Strict,
+            ),
+        ];
+        for (profile, expected, baseline, adaptive_profile) in rollout_profiles {
+            assert_eq!(profile.as_str(), expected);
+            assert_eq!(profile.to_string(), expected);
+            assert_eq!(profile.baseline_runtime_state(), baseline);
+            assert_eq!(GovernanceRolloutProfile::from(adaptive_profile), profile);
+        }
+
+        let startup = resolve_governance_startup_posture(GovernanceStartupContext {
+            current_state: GovernanceRuntimeState::Catch,
+            requested_profile: Some(GovernanceRolloutProfile::Strict),
+            operator_approved_profile: None,
+            low_trust_surface: true,
+        });
+        assert_eq!(startup.rollout_profile, GovernanceRolloutProfile::Minimal);
+        assert_eq!(startup.runtime_state, GovernanceRuntimeState::Advisory);
+        assert_eq!(startup.transition_direction, GovernanceTransitionDirection::Downgrade);
+
+        let approved_startup = resolve_governance_startup_posture(GovernanceStartupContext {
+            current_state: GovernanceRuntimeState::Advisory,
+            requested_profile: Some(GovernanceRolloutProfile::Strict),
+            operator_approved_profile: Some(GovernanceRolloutProfile::Strict),
+            low_trust_surface: false,
+        });
+        assert_eq!(approved_startup.rollout_profile, GovernanceRolloutProfile::Strict);
+        assert_eq!(approved_startup.runtime_state, GovernanceRuntimeState::Hook);
+        assert_eq!(approved_startup.transition_direction, GovernanceTransitionDirection::Promote);
+
+        let degradations = [
+            (
+                GovernanceDegradationMode::AdvisoryFallback,
+                "advisory_fallback",
+                StopSemantics::ProceedWithAdvisory,
+            ),
+            (
+                GovernanceDegradationMode::SmallerCouncil,
+                "smaller_council",
+                StopSemantics::CouncilRequired,
+            ),
+            (GovernanceDegradationMode::HumanGate, "human_gate", StopSemantics::HumanGateRequired),
+            (
+                GovernanceDegradationMode::ReducedAutonomy,
+                "reduced_autonomy",
+                StopSemantics::ProceedWithWarning,
+            ),
+            (
+                GovernanceDegradationMode::VerificationOnly,
+                "verification_only",
+                StopSemantics::DegradedProceed,
+            ),
+            (GovernanceDegradationMode::ExecutionBlock, "execution_block", StopSemantics::HardStop),
+        ];
+        for (mode, expected, mapped) in degradations {
+            assert_eq!(mode.as_str(), expected);
+            assert_eq!(mode.to_string(), expected);
+            assert_eq!(mode.mapped_stop_semantics(), mapped);
+        }
+    }
+
+    #[test]
+    fn stage_governance_policy_validation_covers_reasoning_and_canon_error_paths() {
+        let reasoning_profile = ReasoningProfileDefinition {
+            profile_id: ReasoningProfileId::IndependentPairReview,
+            family: crate::domain::reasoning::ReasoningProfileFamily::BlindReview,
+            allowed_stages: vec![CanonMode::Verification],
+            limits: crate::domain::reasoning::ReasoningBudget {
+                max_participants: 2,
+                max_branches: 1,
+                max_debate_rounds: 0,
+                max_reflexion_revisions: 0,
+                max_calls: 2,
+                max_tokens: 2048,
+                max_adjudication_steps: 1,
+            },
+            participant_roles: vec![crate::domain::reasoning::ParticipantRoleDefinition {
+                role_id: "reviewer-a".to_string(),
+                role_kind: crate::domain::reasoning::ReasoningParticipantRoleKind::BlindReviewer,
+                preferred_slot: crate::domain::reasoning::ReasoningRoutePreference::Review,
+                independence_requirements: crate::domain::reasoning::IndependenceFloor {
+                    route_distinct: true,
+                    provider_distinct: true,
+                    context_distinct: false,
+                    prompt_pattern_distinct: false,
+                    minimum_participants: 2,
+                },
+                required: true,
+            }],
+            adjudication_mode:
+                crate::domain::reasoning::ReasoningAdjudicationMode::GovernanceReview,
+            degradation_policy: crate::domain::reasoning::ReasoningDegradationPolicy {
+                allow_degraded_independence: false,
+                allow_reduced_participants: false,
+                interruptible: true,
+                blocked_next_action: Some("configure distinct reviewer routes".to_string()),
+            },
+        };
+
+        let reasoning_stage_mismatch = StageGovernancePolicy {
+            flow_name: "bug-fix".to_string(),
+            stage_id: "investigate".to_string(),
+            enabled: true,
+            required: false,
+            autopilot: false,
+            require_adaptive_companion: false,
+            runtime: Some(GovernanceRuntimeKind::Local),
+            canon_mode: None,
+            reasoning_profile: Some(reasoning_profile),
+            system_context: None,
+            risk: None,
+            zone: None,
+            owner: None,
+        };
+        assert_eq!(
+            reasoning_stage_mismatch.validate(GovernanceRuntimeKind::Local, None),
+            Err(GovernanceProfileError::ReasoningProfileStageNotAllowed {
+                stage_key: "bug-fix:investigate".to_string(),
+                profile_id: ReasoningProfileId::IndependentPairReview,
+            }),
+        );
+
+        let canon_missing_fields = StageGovernancePolicy {
+            flow_name: "bug-fix".to_string(),
+            stage_id: "verify".to_string(),
+            enabled: true,
+            required: false,
+            autopilot: false,
+            require_adaptive_companion: false,
+            runtime: Some(GovernanceRuntimeKind::Canon),
+            canon_mode: Some(CanonMode::Verification),
+            reasoning_profile: None,
+            system_context: None,
+            risk: None,
+            zone: None,
+            owner: None,
+        };
+        assert_eq!(
+            canon_missing_fields.validate(
+                GovernanceRuntimeKind::Local,
+                Some(&CanonRuntimeConfig {
+                    command: "canon".to_string(),
+                    default_owner: None,
+                    default_risk: None,
+                    default_zone: None,
+                    default_system_context: None,
+                }),
+            ),
+            Err(GovernanceProfileError::MissingCanonField {
+                stage_key: "bug-fix:verify".to_string(),
+                field: "system_context",
+            }),
+        );
+
+        let invalid_context = StageGovernancePolicy {
+            flow_name: "bug-fix".to_string(),
+            stage_id: "verify".to_string(),
+            enabled: true,
+            required: false,
+            autopilot: false,
+            require_adaptive_companion: false,
+            runtime: Some(GovernanceRuntimeKind::Canon),
+            canon_mode: Some(CanonMode::Verification),
+            reasoning_profile: None,
+            system_context: Some(SystemContextBinding::New),
+            risk: Some("medium".to_string()),
+            zone: Some("core".to_string()),
+            owner: Some("team-boundline".to_string()),
+        };
+        assert_eq!(
+            invalid_context.validate(
+                GovernanceRuntimeKind::Local,
+                Some(&CanonRuntimeConfig {
+                    command: "canon".to_string(),
+                    default_owner: Some("team-boundline".to_string()),
+                    default_risk: Some("medium".to_string()),
+                    default_zone: Some("core".to_string()),
+                    default_system_context: Some(SystemContextBinding::New),
+                }),
+            ),
+            Err(GovernanceProfileError::InvalidSystemContextForMode {
+                stage_key: "bug-fix:verify".to_string(),
+                mode: CanonMode::Verification,
+                system_context: SystemContextBinding::New,
+            }),
+        );
     }
 }
