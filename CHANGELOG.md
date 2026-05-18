@@ -21,6 +21,26 @@ Highlights:
 
 - No unreleased entries yet.
 
+## [0.61.0] - 2026-05-18
+
+Delivered specs:
+
+- `061` - Reasoning Profile Contracts
+
+Highlights:
+
+- Added the first S6 reasoning-profile runtime contract so governed stages can
+  activate bounded challenge profiles inside the existing Boundline session
+  runtime rather than spawning a second orchestrator.
+- Persisted reasoning-profile state through session status, run output, and
+  trace inspection, including blocked and degraded follow-up guidance.
+- Added additive reasoning lifecycle and confidence trace emission, and kept
+  contract-line drift blockers explicit with disagreement and remediation text
+  on the existing `status` and `inspect` surfaces.
+- Aligned the active release metadata to Boundline `0.61.0` and Canon `0.57.0`,
+  including distribution surfaces, assistant package manifests, and Canon
+  compatibility fixtures.
+
 ## [0.60.0] - 2026-05-17
 
 Delivered specs:

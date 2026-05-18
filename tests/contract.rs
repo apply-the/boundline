@@ -25,6 +25,15 @@ mod project_scale_session_contract;
 #[path = "contract/canon_capability_contract.rs"]
 mod canon_capability_contract;
 
+#[path = "contract/canon_reasoning_posture_contract.rs"]
+mod canon_reasoning_posture_contract;
+
+#[path = "contract/reasoning_profile_contract.rs"]
+mod reasoning_profile_contract;
+
+#[path = "contract/reasoning_profile_trace_contract.rs"]
+mod reasoning_profile_trace_contract;
+
 #[path = "contract/delivery_model_docs_contract.rs"]
 mod delivery_model_docs_contract;
 

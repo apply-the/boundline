@@ -1365,6 +1365,7 @@ mod tests {
                 require_adaptive_companion: false,
                 runtime: Some(GovernanceRuntimeKind::Canon),
                 canon_mode,
+                reasoning_profile: None,
                 system_context: Some(SystemContextBinding::Existing),
                 risk: Some("medium".to_string()),
                 zone: Some("core".to_string()),

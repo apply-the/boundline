@@ -1,6 +1,12 @@
 use serde::Serialize;
 use serde_json::{Map, Value};
 
+use crate::domain::reasoning::{
+    IndependenceAssessmentResult, ParticipantAssignment, ProfileActivationRecord,
+    ReasoningActivationStatus, ReasoningConfidenceContribution, ReasoningConfidenceLevel,
+    ReasoningIterationKind, ReasoningIterationRecord, ReasoningOutcome, ReasoningOutcomeKind,
+    ReasoningParticipantStatus,
+};
 use crate::domain::step::{ExecutionStatus, StepExecutionResult};
 use crate::domain::trace::{ExecutionTrace, TraceEventType};
 
@@ -113,8 +119,311 @@ struct ReviewTerminalPayload {
     failure_reason: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct ReasoningProfileEventPayload {
+    profile_id: String,
+    stage: String,
+    activation_id: String,
+    summary: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    outcome_kind: Option<ReasoningOutcomeKind>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    independence_result: Option<IndependenceAssessmentResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    next_action: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    canon_posture_ref: Option<String>,
+    reasoning_profile_record: ProfileActivationRecord,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ReasoningParticipantEventPayload {
+    profile_id: String,
+    stage: String,
+    activation_id: String,
+    participant_id: String,
+    role: String,
+    summary: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    canon_posture_ref: Option<String>,
+    reasoning_profile_record: ProfileActivationRecord,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ReasoningIterationEventPayload {
+    profile_id: String,
+    stage: String,
+    activation_id: String,
+    iteration_kind: ReasoningIterationKind,
+    iteration_index: usize,
+    summary: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    outcome_kind: Option<ReasoningOutcomeKind>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    next_action: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    canon_posture_ref: Option<String>,
+    reasoning_profile_record: ProfileActivationRecord,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ReasoningConfidenceEventPayload {
+    profile_id: String,
+    stage: String,
+    activation_id: String,
+    confidence_level: ReasoningConfidenceLevel,
+    summary: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    next_action: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    canon_posture_ref: Option<String>,
+    reasoning_profile_record: ProfileActivationRecord,
+}
+
 fn serialize_payload<T: Serialize>(payload: &T) -> Value {
     serde_json::to_value(payload).unwrap_or(Value::Null)
+}
+
+pub(crate) fn record_reasoning_profile_events(
+    trace: &mut ExecutionTrace,
+    step_id: &str,
+    plan_revision: usize,
+    activation: &ProfileActivationRecord,
+) {
+    trace.record_event(
+        TraceEventType::ReasoningProfileActivated,
+        Some(step_id.to_string()),
+        plan_revision,
+        serialize_payload(&ReasoningProfileEventPayload::from_activation(activation)),
+    );
+
+    for participant in &activation.participants {
+        let payload = ReasoningParticipantEventPayload::from_participant(activation, participant);
+        trace.record_event(
+            TraceEventType::ReasoningParticipantStarted,
+            Some(step_id.to_string()),
+            plan_revision,
+            serialize_payload(&payload),
+        );
+
+        if participant_terminal_status(participant.status) {
+            trace.record_event(
+                TraceEventType::ReasoningParticipantCompleted,
+                Some(step_id.to_string()),
+                plan_revision,
+                serialize_payload(&payload),
+            );
+        }
+    }
+
+    if let Some(outcome) = activation.outcome.as_ref() {
+        trace.record_event(
+            TraceEventType::ReasoningDisagreementRecorded,
+            Some(step_id.to_string()),
+            plan_revision,
+            serialize_payload(&ReasoningProfileEventPayload::from_outcome(activation, outcome)),
+        );
+
+        let mut adjudication_recorded = false;
+        for iteration in &outcome.iterations {
+            let Some(event_type) = reasoning_iteration_event_type(iteration.iteration_kind) else {
+                continue;
+            };
+            if event_type == TraceEventType::ReasoningAdjudicationRecorded {
+                adjudication_recorded = true;
+            }
+            trace.record_event(
+                event_type,
+                Some(step_id.to_string()),
+                plan_revision,
+                serialize_payload(&ReasoningIterationEventPayload::from_iteration(
+                    activation, outcome, iteration,
+                )),
+            );
+        }
+
+        if outcome.outcome_kind == ReasoningOutcomeKind::Adjudicated && !adjudication_recorded {
+            trace.record_event(
+                TraceEventType::ReasoningAdjudicationRecorded,
+                Some(step_id.to_string()),
+                plan_revision,
+                serialize_payload(&ReasoningProfileEventPayload::from_outcome(activation, outcome)),
+            );
+        }
+    }
+
+    if let Some(confidence) = activation.confidence.as_ref() {
+        trace.record_event(
+            TraceEventType::ReasoningConfidenceRecorded,
+            Some(step_id.to_string()),
+            plan_revision,
+            serialize_payload(&ReasoningConfidenceEventPayload::from_confidence(
+                activation, confidence,
+            )),
+        );
+    }
+
+    if let Some(event_type) = reasoning_terminal_event_type(activation.status) {
+        trace.record_event(
+            event_type,
+            Some(step_id.to_string()),
+            plan_revision,
+            serialize_payload(&ReasoningProfileEventPayload::from_activation(activation)),
+        );
+    }
+}
+
+impl ReasoningProfileEventPayload {
+    fn from_activation(activation: &ProfileActivationRecord) -> Self {
+        Self {
+            profile_id: activation.profile_id.as_str().to_string(),
+            stage: activation.stage_key.clone(),
+            activation_id: activation.activation_id.clone(),
+            summary: activation
+                .outcome
+                .as_ref()
+                .map(|outcome| outcome.headline.clone())
+                .unwrap_or_else(|| activation.activation_reason.clone()),
+            outcome_kind: activation.outcome.as_ref().map(|outcome| outcome.outcome_kind),
+            independence_result: activation.independence.as_ref().map(|value| value.result),
+            next_action: activation
+                .outcome
+                .as_ref()
+                .and_then(|outcome| outcome.next_action.clone()),
+            canon_posture_ref: reasoning_canon_posture_ref(activation),
+            reasoning_profile_record: activation.clone(),
+        }
+    }
+
+    fn from_outcome(activation: &ProfileActivationRecord, outcome: &ReasoningOutcome) -> Self {
+        Self {
+            profile_id: activation.profile_id.as_str().to_string(),
+            stage: activation.stage_key.clone(),
+            activation_id: activation.activation_id.clone(),
+            summary: outcome
+                .disagreement_summary
+                .clone()
+                .unwrap_or_else(|| outcome.headline.clone()),
+            outcome_kind: Some(outcome.outcome_kind),
+            independence_result: activation.independence.as_ref().map(|value| value.result),
+            next_action: outcome.next_action.clone(),
+            canon_posture_ref: reasoning_canon_posture_ref(activation),
+            reasoning_profile_record: activation.clone(),
+        }
+    }
+}
+
+impl ReasoningParticipantEventPayload {
+    fn from_participant(
+        activation: &ProfileActivationRecord,
+        participant: &ParticipantAssignment,
+    ) -> Self {
+        Self {
+            profile_id: activation.profile_id.as_str().to_string(),
+            stage: activation.stage_key.clone(),
+            activation_id: activation.activation_id.clone(),
+            participant_id: participant.participant_id.clone(),
+            role: participant.role_id.clone(),
+            summary: participant.result_summary.clone().unwrap_or_else(|| {
+                format!(
+                    "route={} status={}",
+                    participant.effective_route,
+                    reasoning_participant_status_text(participant.status)
+                )
+            }),
+            canon_posture_ref: reasoning_canon_posture_ref(activation),
+            reasoning_profile_record: activation.clone(),
+        }
+    }
+}
+
+impl ReasoningIterationEventPayload {
+    fn from_iteration(
+        activation: &ProfileActivationRecord,
+        outcome: &ReasoningOutcome,
+        iteration: &ReasoningIterationRecord,
+    ) -> Self {
+        Self {
+            profile_id: activation.profile_id.as_str().to_string(),
+            stage: activation.stage_key.clone(),
+            activation_id: activation.activation_id.clone(),
+            iteration_kind: iteration.iteration_kind,
+            iteration_index: iteration.iteration_index,
+            summary: iteration.summary.clone(),
+            outcome_kind: Some(outcome.outcome_kind),
+            next_action: outcome.next_action.clone(),
+            canon_posture_ref: reasoning_canon_posture_ref(activation),
+            reasoning_profile_record: activation.clone(),
+        }
+    }
+}
+
+impl ReasoningConfidenceEventPayload {
+    fn from_confidence(
+        activation: &ProfileActivationRecord,
+        confidence: &ReasoningConfidenceContribution,
+    ) -> Self {
+        Self {
+            profile_id: activation.profile_id.as_str().to_string(),
+            stage: activation.stage_key.clone(),
+            activation_id: activation.activation_id.clone(),
+            confidence_level: confidence.confidence_level,
+            summary: confidence.summary.clone(),
+            next_action: activation
+                .outcome
+                .as_ref()
+                .and_then(|outcome| outcome.next_action.clone()),
+            canon_posture_ref: reasoning_canon_posture_ref(activation),
+            reasoning_profile_record: activation.clone(),
+        }
+    }
+}
+
+fn reasoning_canon_posture_ref(activation: &ProfileActivationRecord) -> Option<String> {
+    activation.posture.as_ref().map(|posture| posture.contract_line.clone())
+}
+
+fn participant_terminal_status(status: ReasoningParticipantStatus) -> bool {
+    matches!(
+        status,
+        ReasoningParticipantStatus::Completed
+            | ReasoningParticipantStatus::Failed
+            | ReasoningParticipantStatus::Omitted
+    )
+}
+
+fn reasoning_participant_status_text(status: ReasoningParticipantStatus) -> &'static str {
+    match status {
+        ReasoningParticipantStatus::Pending => "pending",
+        ReasoningParticipantStatus::Running => "running",
+        ReasoningParticipantStatus::Completed => "completed",
+        ReasoningParticipantStatus::Failed => "failed",
+        ReasoningParticipantStatus::Omitted => "omitted",
+    }
+}
+
+fn reasoning_iteration_event_type(
+    iteration_kind: ReasoningIterationKind,
+) -> Option<TraceEventType> {
+    match iteration_kind {
+        ReasoningIterationKind::DebateRound => Some(TraceEventType::ReasoningDebateRoundCompleted),
+        ReasoningIterationKind::ReflexionRevision => {
+            Some(TraceEventType::ReasoningReflexionRevisionCompleted)
+        }
+        ReasoningIterationKind::AdjudicationStep => {
+            Some(TraceEventType::ReasoningAdjudicationRecorded)
+        }
+        ReasoningIterationKind::Branch => None,
+    }
+}
+
+fn reasoning_terminal_event_type(status: ReasoningActivationStatus) -> Option<TraceEventType> {
+    match status {
+        ReasoningActivationStatus::Blocked => Some(TraceEventType::ReasoningProfileBlocked),
+        ReasoningActivationStatus::Interrupted => Some(TraceEventType::ReasoningProfileInterrupted),
+        ReasoningActivationStatus::Escalated => Some(TraceEventType::ReasoningProfileEscalated),
+        _ => None,
+    }
 }
 
 pub(crate) fn record_review_step_started(
@@ -422,7 +731,18 @@ fn stage_id(step_input: &Value) -> Option<String> {
 mod tests {
     use serde_json::{Map, json};
 
-    use super::{record_review_step_completed, record_review_step_started};
+    use super::{
+        reasoning_iteration_event_type, reasoning_terminal_event_type,
+        record_reasoning_profile_events, record_review_step_completed, record_review_step_started,
+        review_trigger_from_output_or_state, review_trigger_from_state_or_input,
+    };
+    use crate::domain::reasoning::{
+        ParticipantAssignment, ProfileActivationRecord, ReasoningActivationStatus,
+        ReasoningActivationTrigger, ReasoningAdmissionEffect, ReasoningBudget,
+        ReasoningConfidenceContribution, ReasoningConfidenceLevel, ReasoningIterationCondition,
+        ReasoningIterationKind, ReasoningIterationRecord, ReasoningOutcome, ReasoningOutcomeKind,
+        ReasoningParticipantStatus, ReasoningProfileId,
+    };
     use crate::domain::step::{ErrorInfo, Recoverability, StepExecutionResult};
     use crate::domain::trace::{ExecutionTrace, TraceEventType};
 
@@ -652,5 +972,393 @@ mod tests {
             terminal.payload.get("independence_state").and_then(|value| value.as_str()),
             Some("failed")
         );
+    }
+
+    #[test]
+    fn reasoning_trace_records_activation_lifecycle_and_iteration_events() {
+        let mut trace =
+            ExecutionTrace::new("task-reasoning-trace", "session-reasoning-trace", "goal");
+        let activation = ProfileActivationRecord {
+            activation_id: "attempt-1-reasoning".to_string(),
+            stage_key: "bug-fix:verify".to_string(),
+            profile_id: ReasoningProfileId::IndependentPairReview,
+            trigger: ReasoningActivationTrigger::CanonRequiredChallenge,
+            activation_reason: "Canon posture required stronger challenge".to_string(),
+            status: ReasoningActivationStatus::Escalated,
+            participants: vec![ParticipantAssignment {
+                role_id: "critic".to_string(),
+                participant_id: "critic-1".to_string(),
+                effective_route: "review:copilot:gpt-5.5".to_string(),
+                provider_family: Some("copilot".to_string()),
+                context_basis: "reasoning_profile_stage:bug-fix:verify".to_string(),
+                prompting_pattern: "critic".to_string(),
+                status: ReasoningParticipantStatus::Completed,
+                result_summary: Some("critic surfaced a material disagreement".to_string()),
+            }],
+            budget: ReasoningBudget {
+                max_participants: 2,
+                max_branches: 1,
+                max_debate_rounds: 2,
+                max_reflexion_revisions: 1,
+                max_calls: 4,
+                max_tokens: 4_096,
+                max_adjudication_steps: 1,
+            },
+            posture: None,
+            independence: None,
+            outcome: Some(ReasoningOutcome {
+                outcome_kind: ReasoningOutcomeKind::Adjudicated,
+                headline: "bounded debate escalated to adjudication".to_string(),
+                disagreement_summary: Some(
+                    "bounded debate stagnated after repeated objections".to_string(),
+                ),
+                next_action: Some("continue only with explicit caution".to_string()),
+                iterations: vec![
+                    ReasoningIterationRecord {
+                        iteration_kind: ReasoningIterationKind::DebateRound,
+                        iteration_index: 0,
+                        participants: vec!["critic-1".to_string(), "reviewer-2".to_string()],
+                        summary: "the debate round repeated the same unresolved objection"
+                            .to_string(),
+                        novelty: false,
+                        condition: ReasoningIterationCondition::Stagnated,
+                    },
+                    ReasoningIterationRecord {
+                        iteration_kind: ReasoningIterationKind::ReflexionRevision,
+                        iteration_index: 1,
+                        participants: vec!["critic-1".to_string()],
+                        summary: "the reflexion revision exhausted its novelty budget".to_string(),
+                        novelty: false,
+                        condition: ReasoningIterationCondition::Exhausted,
+                    },
+                    ReasoningIterationRecord {
+                        iteration_kind: ReasoningIterationKind::AdjudicationStep,
+                        iteration_index: 2,
+                        participants: vec!["arbiter-1".to_string()],
+                        summary: "the arbiter chose the cautious route".to_string(),
+                        novelty: true,
+                        condition: ReasoningIterationCondition::Completed,
+                    },
+                ],
+            }),
+            confidence: Some(ReasoningConfidenceContribution {
+                confidence_level: ReasoningConfidenceLevel::Medium,
+                basis: vec!["debate_stagnated".to_string()],
+                admission_effect: ReasoningAdmissionEffect::Escalate,
+                summary: "confidence remained bounded after adjudication".to_string(),
+            }),
+        };
+
+        record_reasoning_profile_events(&mut trace, "verify", 0, &activation);
+
+        let event_types = trace.events.iter().map(|event| event.event_type).collect::<Vec<_>>();
+        for event_type in [
+            TraceEventType::ReasoningProfileActivated,
+            TraceEventType::ReasoningParticipantStarted,
+            TraceEventType::ReasoningParticipantCompleted,
+            TraceEventType::ReasoningDisagreementRecorded,
+            TraceEventType::ReasoningDebateRoundCompleted,
+            TraceEventType::ReasoningReflexionRevisionCompleted,
+            TraceEventType::ReasoningAdjudicationRecorded,
+            TraceEventType::ReasoningConfidenceRecorded,
+            TraceEventType::ReasoningProfileEscalated,
+        ] {
+            assert!(event_types.contains(&event_type));
+        }
+    }
+
+    #[test]
+    fn review_trace_helpers_cover_vote_fallbacks_and_terminal_dedup() -> Result<(), String> {
+        let state = Map::new();
+        let default_trigger_input = json!({
+            "phase": "review-vote",
+            "default_review_trigger": "manual_review"
+        });
+        if review_trigger_from_state_or_input(&state, &default_trigger_input).as_deref()
+            != Some("manual_review")
+        {
+            return Err("default review trigger fallback should use step input".to_string());
+        }
+
+        let output_free_result = StepExecutionResult::success(json!({"summary": "kept"}));
+        if review_trigger_from_output_or_state(&output_free_result, &state, &default_trigger_input)
+            .as_deref()
+            != Some("manual_review")
+        {
+            return Err("output/state fallback should reach default review trigger".to_string());
+        }
+
+        let mut trace =
+            ExecutionTrace::new("task-review-fallback", "session-review-fallback", "goal");
+        record_review_step_started(
+            &mut trace,
+            "implement",
+            &json!({"phase": "implement"}),
+            &state,
+            0,
+        );
+        if !trace.events.is_empty() {
+            return Err("non-review phases must not emit review events".to_string());
+        }
+
+        let mut vote_state = Map::new();
+        vote_state.insert("latest_review_trigger".to_string(), json!("manual_review"));
+        vote_state.insert(
+            "latest_review_vote".to_string(),
+            json!("strategy=unanimous decision=accepted"),
+        );
+        vote_state
+            .insert("latest_review_vote_resolution".to_string(), json!({"decision": "accepted"}));
+        let vote_result = StepExecutionResult::success(json!({
+            "vote": {"decision": "accepted"}
+        }));
+        if review_trigger_from_output_or_state(&vote_result, &vote_state, &default_trigger_input)
+            .as_deref()
+            != Some("manual_review")
+        {
+            return Err("vote trigger should fall back to latest review trigger".to_string());
+        }
+
+        record_review_step_completed(
+            &mut trace,
+            "review-vote",
+            &default_trigger_input,
+            &vote_result,
+            &vote_state,
+            0,
+        );
+        if trace.events.len() != 1 {
+            return Err(format!(
+                "expected one vote event before finalize, found {}",
+                trace.events.len()
+            ));
+        }
+        let vote_event = trace
+            .events
+            .iter()
+            .find(|event| event.event_type == TraceEventType::ReviewVoteResolved)
+            .ok_or_else(|| "missing review vote resolved event".to_string())?;
+        if vote_event.payload.get("summary").and_then(|value| value.as_str())
+            != Some("strategy=unanimous decision=accepted")
+        {
+            return Err("vote summary should fall back to latest review vote".to_string());
+        }
+        if vote_event.payload.get("review_trigger").and_then(|value| value.as_str())
+            != Some("manual_review")
+        {
+            return Err("vote event should retain the resolved review trigger".to_string());
+        }
+        if vote_event
+            .payload
+            .get("vote_resolution")
+            .and_then(|value| value.get("decision"))
+            .and_then(|value| value.as_str())
+            != Some("accepted")
+        {
+            return Err("vote resolution should fall back to output.vote".to_string());
+        }
+
+        let mut final_state = vote_state.clone();
+        final_state.insert("latest_review_outcome".to_string(), json!("accepted"));
+        final_state
+            .insert("latest_review_participants".to_string(), json!([{"reviewer_id": "safety"}]));
+        let finalize_input = json!({
+            "phase": "review-finalize",
+            "default_review_trigger": "manual_review"
+        });
+        let finalize_result = StepExecutionResult::success(json!({
+            "review_outcome": "accepted"
+        }));
+        record_review_step_completed(
+            &mut trace,
+            "review-finalize",
+            &finalize_input,
+            &finalize_result,
+            &final_state,
+            0,
+        );
+        record_review_step_completed(
+            &mut trace,
+            "review-finalize",
+            &finalize_input,
+            &finalize_result,
+            &final_state,
+            0,
+        );
+
+        let terminal_count = trace
+            .events
+            .iter()
+            .filter(|event| {
+                event.event_type == TraceEventType::ReviewTerminalRecorded
+                    && event.step_id.as_deref() == Some("review-finalize")
+                    && event.plan_revision == 0
+            })
+            .count();
+        if terminal_count != 1 {
+            return Err(format!("expected one terminal event after dedup, found {terminal_count}"));
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn reasoning_trace_helpers_cover_branch_and_interrupted_paths() -> Result<(), String> {
+        if reasoning_iteration_event_type(ReasoningIterationKind::Branch).is_some() {
+            return Err("branch iterations should not emit dedicated trace events".to_string());
+        }
+        if reasoning_terminal_event_type(ReasoningActivationStatus::Completed).is_some() {
+            return Err(
+                "completed activations should not emit terminal reasoning events".to_string()
+            );
+        }
+        if reasoning_terminal_event_type(ReasoningActivationStatus::Blocked)
+            != Some(TraceEventType::ReasoningProfileBlocked)
+        {
+            return Err("blocked activations should map to blocked terminal events".to_string());
+        }
+        if reasoning_terminal_event_type(ReasoningActivationStatus::Interrupted)
+            != Some(TraceEventType::ReasoningProfileInterrupted)
+        {
+            return Err(
+                "interrupted activations should map to interrupted terminal events".to_string()
+            );
+        }
+
+        let activation = ProfileActivationRecord {
+            activation_id: "attempt-2-reasoning".to_string(),
+            stage_key: "bug-fix:verify".to_string(),
+            profile_id: ReasoningProfileId::IndependentPairReview,
+            trigger: ReasoningActivationTrigger::GovernanceEscalation,
+            activation_reason: "confidence dropped during verification".to_string(),
+            status: ReasoningActivationStatus::Interrupted,
+            participants: vec![
+                ParticipantAssignment {
+                    role_id: "reviewer-pending".to_string(),
+                    participant_id: "pending-1".to_string(),
+                    effective_route: "review:copilot:gpt-5.5".to_string(),
+                    provider_family: Some("copilot".to_string()),
+                    context_basis: "reasoning_profile_stage:bug-fix:verify".to_string(),
+                    prompting_pattern: "parallel".to_string(),
+                    status: ReasoningParticipantStatus::Pending,
+                    result_summary: None,
+                },
+                ParticipantAssignment {
+                    role_id: "reviewer-running".to_string(),
+                    participant_id: "running-1".to_string(),
+                    effective_route: "review:copilot:gpt-5.5".to_string(),
+                    provider_family: Some("copilot".to_string()),
+                    context_basis: "reasoning_profile_stage:bug-fix:verify".to_string(),
+                    prompting_pattern: "parallel".to_string(),
+                    status: ReasoningParticipantStatus::Running,
+                    result_summary: None,
+                },
+                ParticipantAssignment {
+                    role_id: "reviewer-failed".to_string(),
+                    participant_id: "failed-1".to_string(),
+                    effective_route: "review:copilot:gpt-5.5".to_string(),
+                    provider_family: Some("copilot".to_string()),
+                    context_basis: "reasoning_profile_stage:bug-fix:verify".to_string(),
+                    prompting_pattern: "parallel".to_string(),
+                    status: ReasoningParticipantStatus::Failed,
+                    result_summary: None,
+                },
+                ParticipantAssignment {
+                    role_id: "reviewer-omitted".to_string(),
+                    participant_id: "omitted-1".to_string(),
+                    effective_route: "review:copilot:gpt-5.5".to_string(),
+                    provider_family: Some("copilot".to_string()),
+                    context_basis: "reasoning_profile_stage:bug-fix:verify".to_string(),
+                    prompting_pattern: "parallel".to_string(),
+                    status: ReasoningParticipantStatus::Omitted,
+                    result_summary: None,
+                },
+            ],
+            budget: ReasoningBudget {
+                max_participants: 4,
+                max_branches: 1,
+                max_debate_rounds: 0,
+                max_reflexion_revisions: 0,
+                max_calls: 4,
+                max_tokens: 4_096,
+                max_adjudication_steps: 0,
+            },
+            posture: None,
+            independence: None,
+            outcome: Some(ReasoningOutcome {
+                outcome_kind: ReasoningOutcomeKind::Interrupted,
+                headline: "operator paused the bounded reasoning run".to_string(),
+                disagreement_summary: None,
+                next_action: None,
+                iterations: vec![ReasoningIterationRecord {
+                    iteration_kind: ReasoningIterationKind::Branch,
+                    iteration_index: 0,
+                    participants: vec!["pending-1".to_string()],
+                    summary: "branch execution stayed local to the paused route".to_string(),
+                    novelty: false,
+                    condition: ReasoningIterationCondition::Exhausted,
+                }],
+            }),
+            confidence: None,
+        };
+
+        let mut trace = ExecutionTrace::new(
+            "task-reasoning-interrupted",
+            "session-reasoning-interrupted",
+            "goal",
+        );
+        record_reasoning_profile_events(&mut trace, "verify", 1, &activation);
+
+        let participant_started = trace
+            .events
+            .iter()
+            .filter(|event| event.event_type == TraceEventType::ReasoningParticipantStarted)
+            .count();
+        if participant_started != 4 {
+            return Err(format!(
+                "expected four participant-started events, found {participant_started}"
+            ));
+        }
+        let participant_completed = trace
+            .events
+            .iter()
+            .filter(|event| event.event_type == TraceEventType::ReasoningParticipantCompleted)
+            .count();
+        if participant_completed != 2 {
+            return Err(format!(
+                "expected terminal participant events only for failed and omitted, found {participant_completed}"
+            ));
+        }
+        if !trace.events.iter().any(|event| {
+            event.event_type == TraceEventType::ReasoningParticipantStarted
+                && event.payload.get("summary").and_then(|value| value.as_str())
+                    == Some("route=review:copilot:gpt-5.5 status=pending")
+        }) {
+            return Err("pending participant summary fallback was not recorded".to_string());
+        }
+        if !trace.events.iter().any(|event| {
+            event.event_type == TraceEventType::ReasoningParticipantCompleted
+                && event.payload.get("summary").and_then(|value| value.as_str())
+                    == Some("route=review:copilot:gpt-5.5 status=omitted")
+        }) {
+            return Err("omitted participant summary fallback was not recorded".to_string());
+        }
+        if trace.events.iter().any(|event| {
+            event.event_type == TraceEventType::ReasoningDebateRoundCompleted
+                || event.event_type == TraceEventType::ReasoningReflexionRevisionCompleted
+        }) {
+            return Err(
+                "branch iterations should not create debate or reflexion events".to_string()
+            );
+        }
+        if !trace
+            .events
+            .iter()
+            .any(|event| event.event_type == TraceEventType::ReasoningProfileInterrupted)
+        {
+            return Err("interrupted activation should emit terminal interrupted event".to_string());
+        }
+
+        Ok(())
     }
 }

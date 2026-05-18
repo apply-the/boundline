@@ -10,6 +10,7 @@ use crate::domain::cluster::ClusterDeliveryStory;
 use crate::domain::context_intelligence::AdvancedContextProjection;
 use crate::domain::guidance::GuidanceGuardianProjection;
 use crate::domain::limits::TerminalCondition;
+use crate::domain::reasoning::ProfileActivationRecord;
 use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::session::DelegationStatusView;
 use crate::domain::step::{StepKind, StepStatus};
@@ -37,6 +38,17 @@ pub enum TraceEventType {
     GovernanceCompleted,
     GovernanceBlocked,
     GovernancePacketRejected,
+    ReasoningProfileActivated,
+    ReasoningParticipantStarted,
+    ReasoningParticipantCompleted,
+    ReasoningDisagreementRecorded,
+    ReasoningDebateRoundCompleted,
+    ReasoningReflexionRevisionCompleted,
+    ReasoningAdjudicationRecorded,
+    ReasoningConfidenceRecorded,
+    ReasoningProfileBlocked,
+    ReasoningProfileInterrupted,
+    ReasoningProfileEscalated,
     ProjectScalePathProposed,
     ProjectScaleStageTransitioned,
     ReviewStarted,
@@ -63,6 +75,24 @@ pub enum TraceEventType {
 }
 
 impl TraceEventType {
+    /// Returns true when the event belongs to the additive reasoning-profile family.
+    pub const fn is_reasoning_event(self) -> bool {
+        matches!(
+            self,
+            Self::ReasoningProfileActivated
+                | Self::ReasoningParticipantStarted
+                | Self::ReasoningParticipantCompleted
+                | Self::ReasoningDisagreementRecorded
+                | Self::ReasoningDebateRoundCompleted
+                | Self::ReasoningReflexionRevisionCompleted
+                | Self::ReasoningAdjudicationRecorded
+                | Self::ReasoningConfidenceRecorded
+                | Self::ReasoningProfileBlocked
+                | Self::ReasoningProfileInterrupted
+                | Self::ReasoningProfileEscalated
+        )
+    }
+
     /// Returns true when the event belongs to the native decision-loop family.
     pub const fn is_decision_loop_event(self) -> bool {
         matches!(
@@ -198,6 +228,8 @@ pub struct TraceSummaryView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub governance_next_action: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_profile: Option<ProfileActivationRecord>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delegation: Option<DelegationStatusView>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub review_timeline: Vec<String>,
@@ -250,6 +282,7 @@ impl Default for TraceSummaryView {
             governance_reason: None,
             governance_approval_provenance: None,
             governance_next_action: None,
+            reasoning_profile: None,
             delegation: None,
             review_timeline: Vec::new(),
             terminal_status: TaskStatus::Planned,
@@ -339,6 +372,31 @@ mod tests {
     use super::{TraceEventType, TraceSummaryView};
     use crate::domain::limits::TerminalCondition;
     use crate::domain::task::TaskStatus;
+
+    #[test]
+    fn trace_event_type_helpers_cover_reasoning_family() {
+        let reasoning_events = [
+            TraceEventType::ReasoningProfileActivated,
+            TraceEventType::ReasoningParticipantStarted,
+            TraceEventType::ReasoningParticipantCompleted,
+            TraceEventType::ReasoningDisagreementRecorded,
+            TraceEventType::ReasoningDebateRoundCompleted,
+            TraceEventType::ReasoningReflexionRevisionCompleted,
+            TraceEventType::ReasoningAdjudicationRecorded,
+            TraceEventType::ReasoningConfidenceRecorded,
+            TraceEventType::ReasoningProfileBlocked,
+            TraceEventType::ReasoningProfileInterrupted,
+            TraceEventType::ReasoningProfileEscalated,
+        ];
+
+        for event_type in reasoning_events {
+            assert!(event_type.is_reasoning_event());
+            assert_eq!(event_type.routing_projection_key(), None);
+        }
+
+        assert!(!TraceEventType::TaskStarted.is_reasoning_event());
+        assert!(!TraceEventType::GovernanceCompleted.is_reasoning_event());
+    }
 
     #[test]
     fn trace_event_type_helpers_cover_decision_loop_and_routing_keys() {

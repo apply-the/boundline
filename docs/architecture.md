@@ -20,7 +20,7 @@ Canon is not the orchestrator and not the product entrypoint. A Boundline instal
 can be perfectly usable without Canon when you stay on the default local and
 session-native routes.
 
-The current Boundline adapter documents Canon `0.53.0` support for the
+The current Boundline adapter documents Canon `0.57.0` support for the
 `canon governance start|refresh|capabilities --json` `v1` surface. That is a
 bounded compatibility target, not a claim of total Canon feature parity.
 

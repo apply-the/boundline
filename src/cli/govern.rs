@@ -87,6 +87,7 @@ pub fn execute_govern(request: GovernRequest<'_>) -> Result<GovernCommandReport,
         mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
         selected_mode: Some(mode),
         selected_mode_sequence: vec![mode],
+        latest_reasoning_profile: None,
         current_stage_index: 0,
         stage_records: vec![GovernedStageRecord {
             stage_key: stage_ref.clone(),

@@ -16,10 +16,12 @@ use crate::domain::flow::SessionFlowState;
 use crate::domain::flow_policy::FlowPolicy;
 use crate::domain::goal_plan::GoalPlan;
 use crate::domain::governance::{
-    AutopilotDecisionRecord, CompactedCanonMemory, GovernedSessionLifecycle, GovernedStagePacket,
-    GovernedStageRecord, PacketReuseBinding,
+    AutopilotDecisionRecord, CompactedCanonMemory, GovernanceConfidenceHandoff,
+    GovernedSessionLifecycle, GovernedStagePacket, GovernedStageRecord, PacketReuseBinding,
+    governance_confidence_handoff,
 };
 use crate::domain::negotiation::NegotiatedDeliveryPacket;
+use crate::domain::reasoning::{ProfileActivationRecord, ReasoningAdmissionEffect};
 use crate::domain::task::{Task, TaskPersistenceError, TaskStatus, TerminalReason};
 use crate::domain::task_context::{
     LATEST_GOVERNANCE_APPROVAL_PROVENANCE_KEY, LATEST_GOVERNANCE_CONTRACT_LINES_KEY,
@@ -930,6 +932,12 @@ pub struct SessionStatusView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_governance_candidates: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_governance_confidence_level: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_governance_admission_effect: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_governance_confidence_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub governance_next_action: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub governance_lifecycle_runtime: Option<String>,
@@ -939,6 +947,8 @@ pub struct SessionStatusView {
     pub governance_lifecycle_mode_selection: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub governance_lifecycle_selected_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_reasoning_profile: Option<ProfileActivationRecord>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project_scale_path: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1049,11 +1059,15 @@ impl Default for SessionStatusView {
             latest_governance_approval: None,
             latest_governance_decision: None,
             latest_governance_candidates: None,
+            latest_governance_confidence_level: None,
+            latest_governance_admission_effect: None,
+            latest_governance_confidence_summary: None,
             governance_next_action: None,
             governance_lifecycle_runtime: None,
             governance_lifecycle_opt_out: None,
             governance_lifecycle_mode_selection: None,
             governance_lifecycle_selected_mode: None,
+            latest_reasoning_profile: None,
             project_scale_path: None,
             project_scale_current_stage: None,
             project_scale_next_action: None,
@@ -1526,8 +1540,7 @@ impl SessionStatusView {
                 actual: self.latest_governance_state.clone(),
             });
         }
-        let expected_governance_blocked_reason =
-            record.active_task.as_ref().and_then(task_state_governance_blocked_reason);
+        let expected_governance_blocked_reason = governance_blocked_reason_for_record(record);
         if self.latest_governance_blocked_reason != expected_governance_blocked_reason {
             return Err(SessionValidationError::StatusViewGovernanceBlockedReasonMismatch {
                 expected: expected_governance_blocked_reason,
@@ -1567,8 +1580,7 @@ impl SessionStatusView {
                 actual: self.latest_governance_approval.clone(),
             });
         }
-        let expected_governance_decision =
-            record.active_task.as_ref().and_then(task_state_governance_decision_headline);
+        let expected_governance_decision = governance_decision_headline_for_record(record);
         if self.latest_governance_decision != expected_governance_decision {
             return Err(SessionValidationError::StatusViewGovernanceDecisionMismatch {
                 expected: expected_governance_decision,
@@ -1583,12 +1595,48 @@ impl SessionStatusView {
                 actual: self.latest_governance_candidates.clone(),
             });
         }
-        let expected_governance_next_action =
-            record.active_task.as_ref().and_then(task_state_governance_next_action);
+        let expected_governance_confidence = governance_confidence_handoff_for_record(record);
+        let expected_governance_confidence_level = expected_governance_confidence
+            .as_ref()
+            .map(|handoff| handoff.confidence_level.as_str().to_string());
+        if self.latest_governance_confidence_level != expected_governance_confidence_level {
+            return Err(SessionValidationError::StatusViewGovernanceConfidenceLevelMismatch {
+                expected: expected_governance_confidence_level,
+                actual: self.latest_governance_confidence_level.clone(),
+            });
+        }
+        let expected_governance_admission_effect = expected_governance_confidence
+            .as_ref()
+            .map(|handoff| handoff.admission_effect.as_str().to_string());
+        if self.latest_governance_admission_effect != expected_governance_admission_effect {
+            return Err(SessionValidationError::StatusViewGovernanceAdmissionEffectMismatch {
+                expected: expected_governance_admission_effect,
+                actual: self.latest_governance_admission_effect.clone(),
+            });
+        }
+        let expected_governance_confidence_summary =
+            expected_governance_confidence.as_ref().map(|handoff| handoff.summary.clone());
+        if self.latest_governance_confidence_summary != expected_governance_confidence_summary {
+            return Err(SessionValidationError::StatusViewGovernanceConfidenceSummaryMismatch {
+                expected: expected_governance_confidence_summary,
+                actual: self.latest_governance_confidence_summary.clone(),
+            });
+        }
+        let expected_governance_next_action = governance_next_action_for_record(record);
         if self.governance_next_action != expected_governance_next_action {
             return Err(SessionValidationError::StatusViewGovernanceNextActionMismatch {
                 expected: expected_governance_next_action,
                 actual: self.governance_next_action.clone(),
+            });
+        }
+        let expected_reasoning_profile = record
+            .governance_lifecycle
+            .as_ref()
+            .and_then(|lifecycle| lifecycle.latest_reasoning_profile.clone());
+        if self.latest_reasoning_profile != expected_reasoning_profile {
+            return Err(SessionValidationError::StatusViewReasoningProfileMismatch {
+                expected: expected_reasoning_profile.map(Box::new),
+                actual: self.latest_reasoning_profile.clone().map(Box::new),
             });
         }
         Ok(())
@@ -2037,8 +2085,28 @@ pub enum SessionValidationError {
         expected: Option<Vec<String>>,
         actual: Option<Vec<String>>,
     },
+    #[error(
+        "status view governance confidence level mismatch: expected {expected:?}, got {actual:?}"
+    )]
+    StatusViewGovernanceConfidenceLevelMismatch { expected: Option<String>, actual: Option<String> },
+    #[error(
+        "status view governance admission effect mismatch: expected {expected:?}, got {actual:?}"
+    )]
+    StatusViewGovernanceAdmissionEffectMismatch { expected: Option<String>, actual: Option<String> },
+    #[error(
+        "status view governance confidence summary mismatch: expected {expected:?}, got {actual:?}"
+    )]
+    StatusViewGovernanceConfidenceSummaryMismatch {
+        expected: Option<String>,
+        actual: Option<String>,
+    },
     #[error("status view governance next action mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewGovernanceNextActionMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view reasoning profile mismatch")]
+    StatusViewReasoningProfileMismatch {
+        expected: Option<Box<ProfileActivationRecord>>,
+        actual: Option<Box<ProfileActivationRecord>>,
+    },
     #[error("status view project-scale path mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewProjectScalePathMismatch { expected: Option<String>, actual: Option<String> },
     #[error("status view project-scale stage mismatch: expected {expected:?}, got {actual:?}")]
@@ -2309,6 +2377,34 @@ pub fn task_state_governance_decision_headline(task: &Task) -> Option<String> {
     task_state_governance_decision(task).map(|decision| decision.rationale)
 }
 
+fn governance_confidence_handoff_for_record(
+    record: &ActiveSessionRecord,
+) -> Option<GovernanceConfidenceHandoff> {
+    record.governance_lifecycle.as_ref().and_then(|lifecycle| {
+        governance_confidence_handoff(lifecycle.latest_reasoning_profile.as_ref())
+    })
+}
+
+fn governance_decision_headline_for_record(record: &ActiveSessionRecord) -> Option<String> {
+    record
+        .active_task
+        .as_ref()
+        .and_then(task_state_governance_decision_headline)
+        .or_else(|| governance_confidence_handoff_for_record(record).map(|handoff| handoff.summary))
+}
+
+fn governance_blocked_reason_for_record(record: &ActiveSessionRecord) -> Option<String> {
+    record.active_task.as_ref().and_then(task_state_governance_blocked_reason).or_else(|| {
+        governance_confidence_handoff_for_record(record).and_then(|handoff| {
+            matches!(
+                handoff.admission_effect,
+                ReasoningAdmissionEffect::Gate | ReasoningAdmissionEffect::Escalate
+            )
+            .then_some(handoff.summary)
+        })
+    })
+}
+
 /// Returns the candidate governance actions recorded in task context state.
 pub fn task_state_governance_candidate_actions(task: &Task) -> Option<Vec<String>> {
     task_state_governance_decision(task)
@@ -2354,6 +2450,12 @@ pub fn task_state_governance_next_action(task: &Task) -> Option<String> {
 
     let governance_state = task_state_governance_state_text(task);
     governance_next_action_for_state(governance_state.as_deref())
+}
+
+fn governance_next_action_for_record(record: &ActiveSessionRecord) -> Option<String> {
+    record.active_task.as_ref().and_then(task_state_governance_next_action).or_else(|| {
+        governance_confidence_handoff_for_record(record).and_then(|handoff| handoff.next_action)
+    })
 }
 
 /// Returns the latest compacted Canon memory snapshot from task context state.
@@ -2651,13 +2753,32 @@ mod tests {
             latest_governance_packet_source_stage: None,
             latest_governance_packet_binding_reason: None,
             latest_governance_approval: None,
-            latest_governance_decision: None,
+            latest_governance_decision: super::governance_decision_headline_for_record(record),
             latest_governance_candidates: None,
-            governance_next_action: None,
+            latest_governance_confidence_level: super::governance_confidence_handoff_for_record(
+                record,
+            )
+            .as_ref()
+            .map(|handoff| handoff.confidence_level.as_str().to_string()),
+            latest_governance_admission_effect: super::governance_confidence_handoff_for_record(
+                record,
+            )
+            .as_ref()
+            .map(|handoff| handoff.admission_effect.as_str().to_string()),
+            latest_governance_confidence_summary: super::governance_confidence_handoff_for_record(
+                record,
+            )
+            .as_ref()
+            .map(|handoff| handoff.summary.clone()),
+            governance_next_action: super::governance_next_action_for_record(record),
             governance_lifecycle_runtime: None,
             governance_lifecycle_opt_out: None,
             governance_lifecycle_mode_selection: None,
             governance_lifecycle_selected_mode: None,
+            latest_reasoning_profile: record
+                .governance_lifecycle
+                .as_ref()
+                .and_then(|lifecycle| lifecycle.latest_reasoning_profile.clone()),
             project_scale_path: None,
             project_scale_current_stage: None,
             project_scale_next_action: None,
@@ -2806,17 +2927,113 @@ mod tests {
         view.latest_governance_contract_lines = super::task_state_governance_contract_lines(task);
         view.latest_governance_approval_provenance =
             super::task_state_governance_approval_provenance(task);
-        view.latest_governance_blocked_reason = super::task_state_governance_blocked_reason(task);
+        view.latest_governance_blocked_reason = super::governance_blocked_reason_for_record(record);
         view.latest_governance_packet_ref = super::task_state_governance_packet_ref(task);
         view.latest_governance_packet_source_stage =
             super::task_state_governance_packet_source_stage(task);
         view.latest_governance_packet_binding_reason =
             super::task_state_governance_packet_binding_reason(task);
         view.latest_governance_approval = super::task_state_governance_approval_text(task);
-        view.latest_governance_decision = super::task_state_governance_decision_headline(task);
+        view.latest_governance_decision = super::governance_decision_headline_for_record(record);
         view.latest_governance_candidates = super::task_state_governance_candidate_actions(task);
-        view.governance_next_action = super::task_state_governance_next_action(task);
+        view.latest_governance_confidence_level =
+            super::governance_confidence_handoff_for_record(record)
+                .as_ref()
+                .map(|handoff| handoff.confidence_level.as_str().to_string());
+        view.latest_governance_admission_effect =
+            super::governance_confidence_handoff_for_record(record)
+                .as_ref()
+                .map(|handoff| handoff.admission_effect.as_str().to_string());
+        view.latest_governance_confidence_summary =
+            super::governance_confidence_handoff_for_record(record)
+                .as_ref()
+                .map(|handoff| handoff.summary.clone());
+        view.governance_next_action = super::governance_next_action_for_record(record);
         view
+    }
+
+    fn blocked_reasoning_profile() -> crate::domain::reasoning::ProfileActivationRecord {
+        crate::domain::reasoning::ProfileActivationRecord {
+            activation_id: "reasoning-attempt-1".to_string(),
+            stage_key: "bug-fix:investigate".to_string(),
+            profile_id: crate::domain::reasoning::ReasoningProfileId::IndependentPairReview,
+            trigger: crate::domain::reasoning::ReasoningActivationTrigger::OperatorPolicy,
+            activation_reason: "stage governance activated stronger challenge".to_string(),
+            status: crate::domain::reasoning::ReasoningActivationStatus::Blocked,
+            participants: Vec::new(),
+            budget: crate::domain::reasoning::ReasoningBudget {
+                max_participants: 2,
+                max_branches: 1,
+                max_debate_rounds: 0,
+                max_reflexion_revisions: 0,
+                max_calls: 2,
+                max_tokens: 8_000,
+                max_adjudication_steps: 1,
+            },
+            posture: None,
+            independence: None,
+            outcome: Some(crate::domain::reasoning::ReasoningOutcome {
+                outcome_kind: crate::domain::reasoning::ReasoningOutcomeKind::Blocked,
+                headline: "independent pair review blocked".to_string(),
+                disagreement_summary: Some("reviewers collapsed onto one route".to_string()),
+                next_action: Some("configure distinct reviewer routes".to_string()),
+                iterations: Vec::new(),
+            }),
+            confidence: Some(crate::domain::reasoning::ReasoningConfidenceContribution {
+                confidence_level: crate::domain::reasoning::ReasoningConfidenceLevel::Low,
+                basis: vec!["independence=failed".to_string()],
+                admission_effect: crate::domain::reasoning::ReasoningAdmissionEffect::Gate,
+                summary: "reasoning independence failed; block progression until challenge distinctness is restored"
+                    .to_string(),
+            }),
+        }
+    }
+
+    #[test]
+    fn derived_view_projects_governance_confidence_handoff_from_reasoning_profile() {
+        let workspace = "/tmp/boundline-session-domain";
+        let mut record = build_record(workspace);
+        record.governance_lifecycle = Some(crate::domain::governance::GovernedSessionLifecycle {
+            governance_runtime: crate::domain::governance::GovernanceRuntimeKind::Canon,
+            explicit_opt_out: false,
+            mode_selection_preference:
+                crate::domain::governance::CanonModeSelectionPreference::AutoConfirm,
+            selected_mode: Some(crate::domain::governance::CanonMode::Verification),
+            selected_mode_sequence: vec![crate::domain::governance::CanonMode::Verification],
+            latest_reasoning_profile: Some(blocked_reasoning_profile()),
+            current_stage_index: 0,
+            stage_records: Vec::new(),
+            accumulated_context: Vec::new(),
+            terminal_reason: None,
+        });
+
+        let view = build_derived_view(&record);
+
+        assert_eq!(view.latest_governance_confidence_level.as_deref(), Some("low"));
+        assert_eq!(view.latest_governance_admission_effect.as_deref(), Some("gate"));
+        assert_eq!(
+            view.latest_governance_confidence_summary.as_deref(),
+            Some(
+                "reasoning independence failed; block progression until challenge distinctness is restored"
+            )
+        );
+        assert_eq!(
+            view.latest_governance_decision.as_deref(),
+            Some(
+                "reasoning independence failed; block progression until challenge distinctness is restored"
+            )
+        );
+        assert_eq!(
+            view.latest_governance_blocked_reason.as_deref(),
+            Some(
+                "reasoning independence failed; block progression until challenge distinctness is restored"
+            )
+        );
+        assert_eq!(
+            view.governance_next_action.as_deref(),
+            Some("configure distinct reviewer routes")
+        );
+        assert!(view.validate(&record).is_ok());
     }
 
     fn build_context_goal_plan() -> GoalPlan {

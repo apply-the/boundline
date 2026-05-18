@@ -17,6 +17,7 @@ use crate::domain::configuration::{
     RoutingOverrides, resolve_effective_routing, resolve_effective_runtime_capabilities,
     resolve_effective_slot_effort_policies,
 };
+use crate::domain::distribution::SUPPORTED_CANON_VERSION;
 use crate::domain::execution::{
     AdaptiveChangeKind, AttemptLineage, AttemptTransitionKind, ChangeEvidence, ChangeStatus,
     ExecutionAttemptDefinition, ExecutionCommand, ExecutionFailureMode, ExecutionProfileError,
@@ -31,6 +32,13 @@ use crate::domain::goal_plan::GoalPlan;
 use crate::domain::limits::RunLimits;
 use crate::domain::negotiation::NegotiatedDeliveryPacket;
 use crate::domain::plan::Plan;
+use crate::domain::reasoning::{
+    CanonAdmissionPriority, CanonChallengePostureInput, IndependenceFloor, ProfileActivationRecord,
+    REASONING_POSTURE_V1_CONTRACT_LINE, ReasoningActivationStatus, ReasoningActivationTrigger,
+    ReasoningAdmissionEffect, ReasoningBudget, ReasoningCompatibilityWindow,
+    ReasoningConfidenceContribution, ReasoningConfidenceLevel, ReasoningOutcome,
+    ReasoningOutcomeKind, ReasoningProfileId,
+};
 use crate::domain::review::{
     ReviewOutcome, ReviewProfile, ReviewTrigger, ReviewerDefinition, ReviewerDisposition,
     ReviewerFinding, ReviewerParticipation, ReviewerParticipationStatus, VoteDecision,
@@ -49,6 +57,24 @@ use crate::registry::tool_registry::{RegistryError as ToolRegistryError, ToolReg
 
 const EXECUTION_RELATIVE_PATH: &str = ".boundline/execution.json";
 const MIN_ADAPTIVE_REPLAN_SCORE: i64 = 60;
+const FIXTURE_REASONING_PROVENANCE_PREFIX: &str = "fixture:reasoning-posture:";
+const FIXTURE_REASONING_ACTIVATION_REASON: &str = "fixture reasoning challenge activated";
+const FIXTURE_REASONING_VERIFY_STAGE: &str = "bug-fix:verify";
+const FIXTURE_REASONING_IMPLEMENT_STAGE: &str = "bug-fix:implement";
+const FIXTURE_REASONING_MAX_BRANCHES: usize = 1;
+const FIXTURE_REASONING_MAX_CALLS: usize = 2;
+const FIXTURE_REASONING_MAX_TOKENS: usize = 8_000;
+const FIXTURE_REASONING_MAX_ADJUDICATION_STEPS: usize = 1;
+const FIXTURE_REASONING_BLOCKED_HEADLINE: &str = "independent pair review blocked";
+const FIXTURE_REASONING_BLOCKED_DISAGREEMENT: &str = "reviewers collapsed onto one route";
+const FIXTURE_REASONING_BLOCKED_NEXT_ACTION: &str = "configure distinct reviewer routes";
+const FIXTURE_REASONING_BLOCKED_SUMMARY: &str =
+    "reasoning independence failed; block progression until challenge distinctness is restored";
+const FIXTURE_REASONING_REFLEXION_HEADLINE: &str = "bounded reflexion degraded";
+const FIXTURE_REASONING_REFLEXION_NEXT_ACTION: &str =
+    "run one bounded verification pass before merge";
+const FIXTURE_REASONING_REFLEXION_SUMMARY: &str =
+    "reflexion converged partially; continue with bounded warning semantics";
 
 #[derive(Clone)]
 pub struct FixtureRuntime {
@@ -96,6 +122,114 @@ struct RankedAdaptiveCandidate {
     score: i64,
     order_index: usize,
     reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReasoningProfileFixtureScenario {
+    IndependentPairBlocked,
+    BoundedReflexionWarn,
+}
+
+impl ReasoningProfileFixtureScenario {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::IndependentPairBlocked => "independent_pair_blocked",
+            Self::BoundedReflexionWarn => "bounded_reflexion_warn",
+        }
+    }
+}
+
+pub fn local_reasoning_posture_fixture() -> Result<CanonChallengePostureInput, FixtureRuntimeError>
+{
+    local_reasoning_posture_fixture_for_profile(
+        ReasoningProfileId::IndependentPairReview,
+        CanonAdmissionPriority::RequiredBeforeAcceptance,
+    )
+}
+
+pub fn local_reasoning_posture_fixture_for_profile(
+    profile_id: ReasoningProfileId,
+    admission_priority: CanonAdmissionPriority,
+) -> Result<CanonChallengePostureInput, FixtureRuntimeError> {
+    let contract_line = REASONING_POSTURE_V1_CONTRACT_LINE.to_string();
+
+    Ok(CanonChallengePostureInput {
+        contract_line: contract_line.clone(),
+        compatibility_window: ReasoningCompatibilityWindow {
+            boundline_min: env!("CARGO_PKG_VERSION").to_string(),
+            boundline_max_exclusive: fixture_next_minor_exclusive(env!("CARGO_PKG_VERSION"))?,
+            canon_min: SUPPORTED_CANON_VERSION.to_string(),
+            canon_max_exclusive: fixture_next_minor_exclusive(SUPPORTED_CANON_VERSION)?,
+            contract_line,
+        },
+        required_profile_family: None,
+        required_profile_id: Some(profile_id),
+        minimum_independence: fixture_minimum_independence(profile_id),
+        admission_priority,
+        confidence_handoff_required: true,
+        provenance_ref: format!("{FIXTURE_REASONING_PROVENANCE_PREFIX}{}", profile_id.as_str()),
+    })
+}
+
+pub fn reasoning_profile_fixture(
+    scenario: ReasoningProfileFixtureScenario,
+) -> Result<ProfileActivationRecord, FixtureRuntimeError> {
+    match scenario {
+        ReasoningProfileFixtureScenario::IndependentPairBlocked => Ok(ProfileActivationRecord {
+            activation_id: format!("fixture-{}", scenario.as_str()),
+            stage_key: FIXTURE_REASONING_VERIFY_STAGE.to_string(),
+            profile_id: ReasoningProfileId::IndependentPairReview,
+            trigger: ReasoningActivationTrigger::OperatorPolicy,
+            activation_reason: FIXTURE_REASONING_ACTIVATION_REASON.to_string(),
+            status: ReasoningActivationStatus::Blocked,
+            participants: Vec::new(),
+            budget: fixture_reasoning_budget(ReasoningProfileId::IndependentPairReview),
+            posture: Some(local_reasoning_posture_fixture()?),
+            independence: None,
+            outcome: Some(ReasoningOutcome {
+                outcome_kind: ReasoningOutcomeKind::Blocked,
+                headline: FIXTURE_REASONING_BLOCKED_HEADLINE.to_string(),
+                disagreement_summary: Some(FIXTURE_REASONING_BLOCKED_DISAGREEMENT.to_string()),
+                next_action: Some(FIXTURE_REASONING_BLOCKED_NEXT_ACTION.to_string()),
+                iterations: Vec::new(),
+            }),
+            confidence: Some(ReasoningConfidenceContribution {
+                confidence_level: ReasoningConfidenceLevel::Low,
+                basis: vec!["independence=failed".to_string()],
+                admission_effect: ReasoningAdmissionEffect::Gate,
+                summary: FIXTURE_REASONING_BLOCKED_SUMMARY.to_string(),
+            }),
+        }),
+        ReasoningProfileFixtureScenario::BoundedReflexionWarn => Ok(ProfileActivationRecord {
+            activation_id: format!("fixture-{}", scenario.as_str()),
+            stage_key: FIXTURE_REASONING_IMPLEMENT_STAGE.to_string(),
+            profile_id: ReasoningProfileId::BoundedReflexion,
+            trigger: ReasoningActivationTrigger::OperatorPolicy,
+            activation_reason: FIXTURE_REASONING_ACTIVATION_REASON.to_string(),
+            status: ReasoningActivationStatus::Degraded,
+            participants: Vec::new(),
+            budget: fixture_reasoning_budget(ReasoningProfileId::BoundedReflexion),
+            posture: Some(local_reasoning_posture_fixture_for_profile(
+                ReasoningProfileId::BoundedReflexion,
+                CanonAdmissionPriority::Advisory,
+            )?),
+            independence: None,
+            outcome: Some(ReasoningOutcome {
+                outcome_kind: ReasoningOutcomeKind::Degraded,
+                headline: FIXTURE_REASONING_REFLEXION_HEADLINE.to_string(),
+                disagreement_summary: None,
+                next_action: Some(FIXTURE_REASONING_REFLEXION_NEXT_ACTION.to_string()),
+                iterations: Vec::new(),
+            }),
+            confidence: Some(ReasoningConfidenceContribution {
+                confidence_level: ReasoningConfidenceLevel::Medium,
+                basis: vec!["reflexion=partial_convergence".to_string()],
+                admission_effect: ReasoningAdmissionEffect::Warn,
+                summary: FIXTURE_REASONING_REFLEXION_SUMMARY.to_string(),
+            }),
+        }),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -169,6 +303,65 @@ impl FilePatch {
 
 pub fn execution_manifest_path(workspace: &Path) -> PathBuf {
     workspace.join(EXECUTION_RELATIVE_PATH)
+}
+
+fn fixture_next_minor_exclusive(version: &str) -> Result<String, FixtureRuntimeError> {
+    let mut segments = version.split('.');
+    let major =
+        segments.next().and_then(|segment| segment.parse::<u64>().ok()).ok_or_else(|| {
+            FixtureRuntimeError::InvalidReasoningFixtureVersion { version: version.to_string() }
+        })?;
+    let minor =
+        segments.next().and_then(|segment| segment.parse::<u64>().ok()).ok_or_else(|| {
+            FixtureRuntimeError::InvalidReasoningFixtureVersion { version: version.to_string() }
+        })?;
+    let patch_is_valid = segments.next().and_then(|segment| segment.parse::<u64>().ok()).is_some();
+
+    if !patch_is_valid || segments.next().is_some() {
+        return Err(FixtureRuntimeError::InvalidReasoningFixtureVersion {
+            version: version.to_string(),
+        });
+    }
+
+    Ok(format!("{major}.{}.0", minor + 1))
+}
+
+fn fixture_minimum_independence(profile_id: ReasoningProfileId) -> IndependenceFloor {
+    match profile_id {
+        ReasoningProfileId::BoundedSelfConsistency | ReasoningProfileId::BoundedReflexion => {
+            IndependenceFloor {
+                route_distinct: false,
+                provider_distinct: false,
+                context_distinct: false,
+                prompt_pattern_distinct: false,
+                minimum_participants: 1,
+            }
+        }
+        ReasoningProfileId::IndependentPairReview
+        | ReasoningProfileId::HeterogeneousSecurityReview => IndependenceFloor {
+            route_distinct: true,
+            provider_distinct: true,
+            context_distinct: false,
+            prompt_pattern_distinct: false,
+            minimum_participants: 2,
+        },
+    }
+}
+
+fn fixture_reasoning_budget(profile_id: ReasoningProfileId) -> ReasoningBudget {
+    let max_participants = profile_id.family().minimum_participants();
+    let max_reflexion_revisions =
+        if profile_id == ReasoningProfileId::BoundedReflexion { 1 } else { 0 };
+
+    ReasoningBudget {
+        max_participants,
+        max_branches: FIXTURE_REASONING_MAX_BRANCHES,
+        max_debate_rounds: 0,
+        max_reflexion_revisions,
+        max_calls: FIXTURE_REASONING_MAX_CALLS,
+        max_tokens: FIXTURE_REASONING_MAX_TOKENS,
+        max_adjudication_steps: FIXTURE_REASONING_MAX_ADJUDICATION_STEPS,
+    }
 }
 
 pub fn load_workspace_execution_profile(
@@ -3457,6 +3650,8 @@ pub enum FixtureRuntimeError {
     UnsupportedFixtureFlow { flow_name: String, context: &'static str },
     #[error("execution profile '{profile}' enables review adjudication without an adjudicator")]
     MissingReviewAdjudicator { profile: String },
+    #[error("reasoning fixture requires a semver version in major.minor.patch form: {version}")]
+    InvalidReasoningFixtureVersion { version: String },
 }
 
 #[cfg(test)]
@@ -3471,19 +3666,23 @@ mod tests {
     use super::{
         AdaptiveCandidateContext, ExecutionAttemptDefinition, ExecutionCommand,
         ExecutionFailureMode, FilePatch, FixtureRuntimeError, GeneratedAdaptiveCandidate,
-        RankedAdaptiveCandidate, WorkspaceChange, WorkspaceExecutionProfile, WorkspaceFixture,
-        adaptive_failure_evidence, adaptive_no_candidate_reason, adaptive_replan_blocker,
-        adaptive_selection_headline, adaptive_selection_reason, adaptive_transition_kind,
-        analyze_workspace_fixture, apply_fixture_patches, apply_workspace_fixture,
-        boolean_flip_candidates, build_adaptive_attempt_steps, build_adaptive_candidates,
-        build_adaptive_initial_plan, build_attempt_steps, build_fixture_plan,
-        build_fixture_plan_for_flow, build_fixture_runtime, build_fixture_runtime_for_goal_plan,
+        RankedAdaptiveCandidate, ReasoningProfileFixtureScenario, WorkspaceChange,
+        WorkspaceExecutionProfile, WorkspaceFixture, adaptive_failure_evidence,
+        adaptive_no_candidate_reason, adaptive_replan_blocker, adaptive_selection_headline,
+        adaptive_selection_reason, adaptive_transition_kind, analyze_workspace_fixture,
+        apply_fixture_patches, apply_workspace_fixture, boolean_flip_candidates,
+        build_adaptive_attempt_steps, build_adaptive_candidates, build_adaptive_initial_plan,
+        build_attempt_steps, build_fixture_plan, build_fixture_plan_for_flow,
+        build_fixture_runtime, build_fixture_runtime_for_goal_plan,
         build_rejected_candidate_summaries, build_review_steps_for_attempt, build_task_request,
         build_vertical_slice_plan, comparison_flip_candidates, execution_manifest_path,
-        guidance_paths_from_text, load_workspace_execution_profile,
-        numeric_literal_flip_candidates, ordering_boundary_flip_candidates, resolve_review_vote,
+        first_stable_line, fixture_minimum_independence, fixture_next_minor_exclusive,
+        fixture_reasoning_budget, guidance_paths_from_text, infer_goal_plan_change,
+        load_workspace_execution_profile, local_reasoning_posture_fixture,
+        numeric_literal_flip_candidates, ordering_boundary_flip_candidates,
+        reasoning_profile_fixture, resolve_review_vote, resolve_supported_fixture_flow,
         result_status_flip_candidates, review_workspace_fixture, run_fixture_command,
-        score_adaptive_candidate, verify_workspace_fixture,
+        score_adaptive_candidate, synthesize_goal_plan_execution_profile, verify_workspace_fixture,
     };
     use crate::adapters::config_store::FileConfigStore;
     use crate::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
@@ -3499,6 +3698,9 @@ mod tests {
         GovernedStagePacket, GovernedStageRecord, PacketReadiness,
     };
     use crate::domain::limits::RunLimits;
+    use crate::domain::reasoning::{
+        ReasoningAdmissionEffect, ReasoningConfidenceLevel, ReasoningProfileId,
+    };
     use crate::domain::review::{
         ReviewProfile, ReviewScenario, ReviewTrigger, ReviewerDefinition, ReviewerDisposition,
         ReviewerFinding, VoteDecision, VoteRuleDefinition,
@@ -3627,6 +3829,49 @@ mod tests {
             ],
         });
         profile
+    }
+
+    #[test]
+    fn local_reasoning_posture_fixture_tracks_supported_release_window() {
+        let posture = local_reasoning_posture_fixture();
+        assert!(posture.is_ok(), "{posture:?}");
+        let posture = posture.unwrap();
+
+        assert!(posture.validate().is_ok());
+        assert!(posture.compatibility_window.admits_versions(
+            env!("CARGO_PKG_VERSION"),
+            crate::domain::distribution::SUPPORTED_CANON_VERSION,
+        ));
+    }
+
+    #[test]
+    fn reasoning_profile_fixture_scenarios_are_deterministic() {
+        let blocked =
+            reasoning_profile_fixture(ReasoningProfileFixtureScenario::IndependentPairBlocked);
+        assert!(blocked.is_ok(), "{blocked:?}");
+        let blocked = blocked.unwrap();
+        let warn = reasoning_profile_fixture(ReasoningProfileFixtureScenario::BoundedReflexionWarn);
+        assert!(warn.is_ok(), "{warn:?}");
+        let warn = warn.unwrap();
+
+        assert_eq!(blocked.profile_id, ReasoningProfileId::IndependentPairReview);
+        assert_eq!(
+            blocked.confidence.as_ref().map(|value| value.confidence_level),
+            Some(ReasoningConfidenceLevel::Low)
+        );
+        assert_eq!(
+            blocked.confidence.as_ref().map(|value| value.admission_effect),
+            Some(ReasoningAdmissionEffect::Gate)
+        );
+        assert_eq!(warn.profile_id, ReasoningProfileId::BoundedReflexion);
+        assert_eq!(
+            warn.confidence.as_ref().map(|value| value.confidence_level),
+            Some(ReasoningConfidenceLevel::Medium)
+        );
+        assert_eq!(
+            warn.confidence.as_ref().map(|value| value.admission_effect),
+            Some(ReasoningAdmissionEffect::Warn)
+        );
     }
 
     fn unsupported_flow_state() -> SessionFlowState {
@@ -5205,5 +5450,70 @@ mod tests {
         assert!(numeric_reasons.iter().any(|reason| {
             reason.contains("strong validation guidance supported the bounded replan")
         }));
+    }
+
+    #[test]
+    fn fixture_helper_functions_cover_versions_profiles_and_goal_plan_inference() {
+        assert_eq!(fixture_next_minor_exclusive("1.2.3").unwrap(), "1.3.0");
+        assert!(matches!(
+            fixture_next_minor_exclusive("1.2"),
+            Err(FixtureRuntimeError::InvalidReasoningFixtureVersion { .. })
+        ));
+
+        let independent_floor =
+            fixture_minimum_independence(ReasoningProfileId::IndependentPairReview);
+        assert!(independent_floor.route_distinct);
+        assert!(independent_floor.provider_distinct);
+        assert_eq!(independent_floor.minimum_participants, 2);
+
+        let reflexion_floor = fixture_minimum_independence(ReasoningProfileId::BoundedReflexion);
+        assert!(!reflexion_floor.route_distinct);
+        assert!(!reflexion_floor.provider_distinct);
+        assert_eq!(reflexion_floor.minimum_participants, 1);
+
+        let reflexion_budget = fixture_reasoning_budget(ReasoningProfileId::BoundedReflexion);
+        assert_eq!(reflexion_budget.max_reflexion_revisions, 1);
+        let pair_budget = fixture_reasoning_budget(ReasoningProfileId::IndependentPairReview);
+        assert_eq!(pair_budget.max_reflexion_revisions, 0);
+        assert_eq!(pair_budget.max_participants, 2);
+
+        assert_eq!(first_stable_line("\n\n  keep me  \n").as_deref(), Some("keep me"));
+
+        let workspace = write_execution_workspace(
+            "boundline-fixture-goal-plan-inference",
+            "pub const STATUS: &str = \"todo\";\n",
+        );
+        let goal_plan = GoalPlan::new(
+            "Summarize the workspace state",
+            vec![PlannedTask {
+                task_id: "planned-task-1".to_string(),
+                description: "Update the workspace summary marker".to_string(),
+                target: "src/lib.rs".to_string(),
+                expected_outcome: Some("summary marker updated".to_string()),
+                decision_type_hint: None,
+            }],
+        )
+        .unwrap();
+
+        let (path, find, replace) = infer_goal_plan_change(&workspace, &goal_plan).unwrap();
+        assert_eq!(path, "src/lib.rs");
+        assert_eq!(find, "\"todo\"");
+        assert_eq!(replace, "\"workspace summary ready\"");
+
+        let synthesized = synthesize_goal_plan_execution_profile(&workspace, &goal_plan).unwrap();
+        assert!(synthesized.read_targets.iter().any(|target| target == "src/lib.rs"));
+        assert!(synthesized.read_targets.iter().any(|target| target == "Cargo.toml"));
+        assert_eq!(synthesized.validation_command.program, "cargo");
+        assert_eq!(
+            synthesized.validation_command.args,
+            vec!["test".to_string(), "--quiet".to_string()]
+        );
+
+        assert!(matches!(
+            resolve_supported_fixture_flow("unknown-flow", "fixture planning"),
+            Err(FixtureRuntimeError::UnsupportedFixtureFlow { .. })
+        ));
+
+        fs::remove_dir_all(&workspace).unwrap();
     }
 }

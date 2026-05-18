@@ -40,6 +40,8 @@ pub mod plan;
 pub mod project_index;
 #[path = "../../../src/domain/project_memory.rs"]
 pub mod project_memory;
+#[path = "../../../src/domain/reasoning.rs"]
+pub mod reasoning;
 #[path = "../../../src/domain/review.rs"]
 pub mod review;
 #[path = "../../../src/domain/routing_decision.rs"]

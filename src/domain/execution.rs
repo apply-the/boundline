@@ -518,6 +518,7 @@ mod tests {
                 require_adaptive_companion: false,
                 runtime: None,
                 canon_mode: None,
+                reasoning_profile: None,
                 system_context: None,
                 risk: None,
                 zone: None,

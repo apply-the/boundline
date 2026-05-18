@@ -26,20 +26,21 @@ use crate::domain::cluster::{
     ClusteredExecutionKind, WorkspaceParticipationKind, WorkspaceParticipationRecord,
 };
 use crate::domain::configuration::{
-    EffortFallbackPolicy, RouteSlot, RoutingConfig, RoutingOverrides, RuntimeKind,
-    resolve_effective_routing, resolve_effective_runtime_capabilities,
+    EffectiveRouting, EffortFallbackPolicy, RouteSlot, RoutingConfig, RoutingOverrides,
+    RuntimeKind, resolve_effective_routing, resolve_effective_runtime_capabilities,
     resolve_effective_slot_effort_policies,
 };
 use crate::domain::context_intelligence::AdvancedContextProjection;
 use crate::domain::decision::{Decision, DecisionType};
+use crate::domain::distribution::SUPPORTED_CANON_VERSION;
 use crate::domain::flow::{FlowStepMetadata, built_in_flow, supported_flow_names_csv};
 use crate::domain::flow_policy::FlowPolicy;
 use crate::domain::goal_plan::GoalPlan;
 use crate::domain::governance::{
-    ApprovalState, CanonEvidenceInspectSummary, CanonPossibleActionSummary,
-    CanonRecommendedActionSummary, CompactedCanonMemory, GovernanceLifecycleState,
-    GovernanceRuntimeKind, GovernedStageRecord, MemoryCredibilityState, PacketReadiness,
-    resolved_canon_mode,
+    ApprovalState, CanonEvidenceInspectSummary, CanonMode, CanonModeSelectionPreference,
+    CanonPossibleActionSummary, CanonRecommendedActionSummary, CompactedCanonMemory,
+    GovernanceLifecycleState, GovernanceRuntimeKind, GovernedSessionLifecycle, GovernedStageRecord,
+    MemoryCredibilityState, PacketReadiness, resolved_canon_mode,
 };
 use crate::domain::guidance::{CapabilityPhase, GuidanceGuardianProjection};
 use crate::domain::limits::{RunLimits, TerminalCondition};
@@ -48,12 +49,22 @@ use crate::domain::project_memory::{
     ProjectMemoryCondition, ProjectMemoryContext, ProjectMemoryStatus,
     evidence_contribution_summaries, evidence_root_for_lineage, read_project_memory,
 };
+use crate::domain::reasoning::{
+    CanonAdmissionPriority, CanonChallengePostureInput, IndependenceAssessment,
+    IndependenceAssessmentResult, IndependenceFloor, ParticipantAssignment,
+    ParticipantRoleDefinition, ProfileActivationRecord, REASONING_POSTURE_V1_CONTRACT_LINE,
+    ReasoningActivationStatus, ReasoningActivationTrigger, ReasoningAdmissionEffect,
+    ReasoningCompatibilityWindow, ReasoningConfidenceContribution, ReasoningConfidenceLevel,
+    ReasoningObservedDistinctness, ReasoningOutcome, ReasoningOutcomeKind,
+    ReasoningParticipantRoleKind, ReasoningParticipantStatus, ReasoningProfileDefinition,
+    ReasoningRoutePreference,
+};
 use crate::domain::review::{ReviewOutcome, ReviewTrigger};
 use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::session::{
     ActiveSessionRecord, ContinuityAuthority, DelegationContinuityMode, DelegationContinuityState,
     DelegationPacket, DelegationPacketKind, DelegationPacketState, DelegationStatusView,
-    ProjectScaleSessionState, SessionCommand, SessionStatus,
+    ProjectScaleSessionState, SessionCommand, SessionStatus, governance_next_action_for_state,
 };
 use crate::domain::step::{
     ErrorInfo, ExecutionStatus, Recoverability, Step, StepAttempt, StepExecutionRequest,
@@ -87,7 +98,9 @@ use crate::orchestrator::guidance_runtime::{
     GuardianExecutionRequest, execute_guardians_for_phase,
 };
 use crate::orchestrator::recovery::{RecoveryDecision, decide_recovery};
-use crate::orchestrator::review_trace::{record_review_step_completed, record_review_step_started};
+use crate::orchestrator::review_trace::{
+    record_reasoning_profile_events, record_review_step_completed, record_review_step_started,
+};
 use crate::orchestrator::terminal::{build_terminal_reason, task_status_for_condition};
 
 /// Workspace-scoped orchestrator that coordinates session persistence,
@@ -105,6 +118,19 @@ pub struct SessionRuntime {
 struct DelegationTraceDetails {
     delegation: Option<DelegationStatusView>,
 }
+
+struct ReasoningTraceContext<'a> {
+    step_id: &'a str,
+    plan_revision: usize,
+}
+
+struct ReasoningGateContext<'a> {
+    runtime_kind: GovernanceRuntimeKind,
+    governance_attempt_id: &'a str,
+    selected_mode: Option<CanonMode>,
+}
+
+const CURRENT_BOUNDLINE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // Persisted goal-plan projection written into trace payloads so inspect can
 // reconstruct planning context, routing, and delegation without recomputing it.
@@ -1350,6 +1376,19 @@ impl SessionRuntime {
             );
             terminal_status = TaskStatus::Failed;
         }
+        if !trace.events.iter().any(|event| event.event_type.is_reasoning_event())
+            && let Some(reasoning_profile) = session
+                .governance_lifecycle
+                .as_ref()
+                .and_then(|lifecycle| lifecycle.latest_reasoning_profile.as_ref())
+        {
+            record_reasoning_profile_events(
+                &mut trace,
+                "terminal",
+                goal_plan.proposal_revision,
+                reasoning_profile,
+            );
+        }
         if input.record_terminal_event {
             trace.record_event(
                 TraceEventType::TerminalRecorded,
@@ -1670,6 +1709,37 @@ impl SessionRuntime {
             .latest_governance_stage()
             .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?
             .ok_or(SessionRuntimeError::MissingGovernanceStage)?;
+        if let Some(reasoning_profile) = session
+            .governance_lifecycle
+            .as_ref()
+            .and_then(|lifecycle| lifecycle.latest_reasoning_profile.as_ref())
+            .filter(|record| {
+                record.stage_key == latest_governance.stage_key
+                    && record.status.halts_outer_workflow()
+            })
+        {
+            let trace_location = session
+                .latest_trace_ref
+                .clone()
+                .ok_or(SessionRuntimeError::MissingTraceReference)?;
+
+            return Ok(TaskRunResponse {
+                task_id: task.id.clone(),
+                terminal_status: TaskStatus::Running,
+                terminal_reason: build_terminal_reason(
+                    TerminalCondition::TaskNotCredible,
+                    reasoning_profile_block_message(reasoning_profile),
+                    Some(json!({
+                        "stage_key": reasoning_profile.stage_key,
+                        "profile_id": reasoning_profile.profile_id,
+                        "status": reasoning_profile.status,
+                    })),
+                ),
+                final_context: task.context.clone(),
+                plan_revision: task.plan.revision,
+                trace_location,
+            });
+        }
         let message = match latest_governance.lifecycle_state {
             GovernanceLifecycleState::AwaitingApproval => {
                 format!("governance approval is still pending for {}", latest_governance.stage_key)
@@ -2838,6 +2908,7 @@ impl SessionRuntime {
             .latest_governance_stage()
             .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?
             && existing_record.stage_key == stage_key
+            && policy.reasoning_profile.is_none()
         {
             return Ok(GovernanceStepDecision::Continue);
         }
@@ -2873,6 +2944,10 @@ impl SessionRuntime {
             .context
             .latest_governance_stage()
             .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?;
+        let existing_packet = task
+            .context
+            .latest_governance_packet()
+            .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?;
         if matches!(request_kind, GovernanceRequestKind::Refresh)
             && existing_record.as_ref().is_none_or(|record| {
                 record.stage_key != stage_key
@@ -2888,13 +2963,34 @@ impl SessionRuntime {
                     && record.lifecycle_state == GovernanceLifecycleState::GovernedReady
             })
         {
+            if let Some(existing_ready_record) = existing_record.as_ref() {
+                return self.apply_reasoning_profile_gate(
+                    session,
+                    trace,
+                    ReasoningTraceContext {
+                        step_id: step.id.as_str(),
+                        plan_revision: task.plan.revision,
+                    },
+                    policy,
+                    ReasoningGateContext {
+                        runtime_kind: existing_ready_record.runtime,
+                        governance_attempt_id: existing_ready_record.governance_attempt_id.as_str(),
+                        selected_mode: existing_packet
+                            .as_ref()
+                            .and_then(|packet| packet.canon_mode)
+                            .or_else(|| {
+                                session
+                                    .governance_lifecycle
+                                    .as_ref()
+                                    .and_then(|lifecycle| lifecycle.selected_mode)
+                            }),
+                    },
+                );
+            }
+
             return Ok(GovernanceStepDecision::Continue);
         }
 
-        let existing_packet = task
-            .context
-            .latest_governance_packet()
-            .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?;
         let governance_attempt_id = existing_record
             .as_ref()
             .filter(|_| matches!(request_kind, GovernanceRequestKind::Refresh))
@@ -3337,6 +3433,11 @@ impl SessionRuntime {
         )
         .map_err(|error| SessionRuntimeError::GovernancePatch(error.to_string()))?;
         task.context.apply_state_patch(&patch);
+        let selected_mode = response
+            .packet
+            .as_ref()
+            .and_then(|packet| packet.canon_mode)
+            .or_else(|| decision.as_ref().and_then(|decision| decision.selected_mode));
 
         if let Some(packet) = response.packet.as_ref()
             && packet_rejected
@@ -3393,23 +3494,54 @@ impl SessionRuntime {
                 session.latest_terminal_reason = None;
                 session.latest_trace_ref = Some(trace_location);
                 session.updated_at = current_timestamp_millis();
-                if let Some(canon_mode) = response
-                    .packet
-                    .as_ref()
-                    .and_then(|packet| packet.canon_mode)
-                    .or_else(|| decision.as_ref().and_then(|decision| decision.selected_mode))
-                {
+                if let Some(canon_mode) = selected_mode {
                     let doc_ref =
                         governed_document_ref_from_response(&stage_key, canon_mode, &response);
                     append_governed_document_to_lifecycle(session, doc_ref);
                 }
-                if matches!(request_kind, GovernanceRequestKind::Refresh) {
-                    Ok(GovernanceStepDecision::Halt)
-                } else {
-                    Ok(GovernanceStepDecision::Continue)
+                match self.apply_reasoning_profile_gate(
+                    session,
+                    trace,
+                    ReasoningTraceContext {
+                        step_id: step.id.as_str(),
+                        plan_revision: task.plan.revision,
+                    },
+                    policy,
+                    ReasoningGateContext {
+                        runtime_kind,
+                        governance_attempt_id: record.governance_attempt_id.as_str(),
+                        selected_mode,
+                    },
+                )? {
+                    GovernanceStepDecision::Continue => {
+                        if matches!(request_kind, GovernanceRequestKind::Refresh) {
+                            Ok(GovernanceStepDecision::Halt)
+                        } else {
+                            Ok(GovernanceStepDecision::Continue)
+                        }
+                    }
+                    GovernanceStepDecision::Halt => Ok(GovernanceStepDecision::Halt),
+                    GovernanceStepDecision::Terminal(response) => {
+                        Ok(GovernanceStepDecision::Terminal(response))
+                    }
                 }
             }
             GovernanceLifecycleState::AwaitingApproval => {
+                let interrupted_reasoning_profile = self.interrupted_reasoning_profile_for_stage(
+                    stage_key.as_str(),
+                    policy,
+                    runtime_kind,
+                    record.governance_attempt_id.as_str(),
+                    response.message.as_str(),
+                )?;
+                if let Some(reasoning_profile) = interrupted_reasoning_profile.as_ref() {
+                    store_latest_reasoning_profile(
+                        session,
+                        runtime_kind,
+                        selected_mode,
+                        reasoning_profile.clone(),
+                    );
+                }
                 trace.record_event(
                     TraceEventType::GovernanceAwaitingApproval,
                     Some(step.id.clone()),
@@ -3426,10 +3558,19 @@ impl SessionRuntime {
                         "latest_governance_reason": projection.reason.clone(),
                         "latest_governance_contract_lines": projection.contract_lines.clone(),
                         "latest_governance_approval_provenance": projection.approval_provenance.clone(),
+                        "reasoning_profile_record": interrupted_reasoning_profile,
                         "authority_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.authority_provenance_lines.clone()).unwrap_or_default(),
                         "adaptive_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.adaptive_provenance_lines.clone()).unwrap_or_default(),
                     }),
                 );
+                if let Some(reasoning_profile) = interrupted_reasoning_profile.as_ref() {
+                    record_reasoning_profile_events(
+                        trace,
+                        step.id.as_str(),
+                        task.plan.revision,
+                        reasoning_profile,
+                    );
+                }
                 let trace_location = self.persist_trace(trace)?;
                 session.latest_status = SessionStatus::Running;
                 session.latest_terminal_reason = None;
@@ -3488,6 +3629,217 @@ impl SessionRuntime {
             }
             _ => Ok(GovernanceStepDecision::Continue),
         }
+    }
+
+    fn apply_reasoning_profile_gate(
+        &self,
+        session: &mut ActiveSessionRecord,
+        trace: &mut ExecutionTrace,
+        trace_context: ReasoningTraceContext<'_>,
+        policy: &crate::domain::governance::StageGovernancePolicy,
+        gate_context: ReasoningGateContext<'_>,
+    ) -> Result<GovernanceStepDecision<TaskRunResponse>, SessionRuntimeError> {
+        let stage_key = policy.stage_key();
+        let Some(activation) = self.activate_reasoning_profile_for_stage(
+            session,
+            stage_key.as_str(),
+            policy,
+            gate_context.runtime_kind,
+            gate_context.governance_attempt_id,
+            gate_context.selected_mode,
+        )?
+        else {
+            return Ok(GovernanceStepDecision::Continue);
+        };
+
+        if activation.status != ReasoningActivationStatus::Blocked {
+            if let Some(event) = trace.events.iter_mut().rev().find(|event| {
+                event.step_id.as_deref() == Some(trace_context.step_id)
+                    && event.event_type == TraceEventType::GovernanceCompleted
+            }) {
+                if let Some(payload) = event.payload.as_object_mut() {
+                    payload
+                        .insert("reasoning_profile_record".to_string(), json!(activation.clone()));
+                }
+            } else {
+                trace.record_event(
+                    TraceEventType::GovernanceCompleted,
+                    Some(trace_context.step_id.to_string()),
+                    trace_context.plan_revision,
+                    json!({
+                        "stage_key": stage_key,
+                        "runtime": gate_context.runtime_kind,
+                        "headline": format!(
+                            "reasoning profile {} {}",
+                            activation.profile_id,
+                            activation.status.as_str()
+                        ),
+                        "reasoning_profile_record": activation.clone(),
+                    }),
+                );
+            }
+            record_reasoning_profile_events(
+                trace,
+                trace_context.step_id,
+                trace_context.plan_revision,
+                &activation,
+            );
+            let trace_location = self.persist_trace(trace)?;
+            session.latest_status = SessionStatus::Running;
+            session.latest_terminal_reason = None;
+            session.latest_trace_ref = Some(trace_location);
+            session.updated_at = current_timestamp_millis();
+            return Ok(GovernanceStepDecision::Continue);
+        }
+
+        trace.record_event(
+            TraceEventType::GovernanceBlocked,
+            Some(trace_context.step_id.to_string()),
+            trace_context.plan_revision,
+            json!({
+                "stage_key": stage_key,
+                "runtime": gate_context.runtime_kind,
+                "required": policy.required,
+                "reason": reasoning_profile_block_message(&activation),
+                "reasoning_profile": activation.profile_id,
+                "reasoning_status": activation.status,
+                "reasoning_activation_id": activation.activation_id,
+                "reasoning_profile_record": activation.clone(),
+            }),
+        );
+        record_reasoning_profile_events(
+            trace,
+            trace_context.step_id,
+            trace_context.plan_revision,
+            &activation,
+        );
+        let trace_location = self.persist_trace(trace)?;
+        session.latest_status = SessionStatus::Running;
+        session.latest_terminal_reason = None;
+        session.latest_trace_ref = Some(trace_location);
+        session.updated_at = current_timestamp_millis();
+
+        Ok(GovernanceStepDecision::Halt)
+    }
+
+    fn interrupted_reasoning_profile_for_stage(
+        &self,
+        stage_key: &str,
+        policy: &crate::domain::governance::StageGovernancePolicy,
+        runtime_kind: GovernanceRuntimeKind,
+        governance_attempt_id: &str,
+        interruption_reason: &str,
+    ) -> Result<Option<ProfileActivationRecord>, SessionRuntimeError> {
+        let Some(definition) = policy.reasoning_profile.as_ref() else {
+            return Ok(None);
+        };
+        if !definition.degradation_policy.interruptible {
+            return Ok(None);
+        }
+
+        let posture =
+            reasoning_posture_for_activation(definition, runtime_kind, governance_attempt_id)?;
+        let mut basis = vec!["interruption=awaiting_approval".to_string()];
+        if let Some(posture) = posture.as_ref() {
+            basis.push(format!("posture_contract={}", posture.contract_line));
+        }
+        let next_action = governance_next_action_for_state(Some("awaiting_approval"));
+        let activation = ProfileActivationRecord {
+            activation_id: format!("{governance_attempt_id}-reasoning"),
+            stage_key: stage_key.to_string(),
+            profile_id: definition.profile_id,
+            trigger: if runtime_kind == GovernanceRuntimeKind::Canon {
+                ReasoningActivationTrigger::CanonRequiredChallenge
+            } else {
+                ReasoningActivationTrigger::OperatorPolicy
+            },
+            activation_reason: reasoning_activation_reason(stage_key, definition, runtime_kind),
+            status: ReasoningActivationStatus::Interrupted,
+            participants: Vec::new(),
+            budget: definition.limits.clone(),
+            posture,
+            independence: None,
+            outcome: Some(ReasoningOutcome {
+                outcome_kind: ReasoningOutcomeKind::Interrupted,
+                headline: format!(
+                    "reasoning profile {} interrupted at {}",
+                    definition.profile_id, stage_key
+                ),
+                disagreement_summary: Some(interruption_reason.to_string()),
+                next_action,
+                iterations: Vec::new(),
+            }),
+            confidence: Some(ReasoningConfidenceContribution {
+                confidence_level: ReasoningConfidenceLevel::Low,
+                basis,
+                admission_effect: ReasoningAdmissionEffect::Gate,
+                summary: "reasoning profile interrupted while governance approval is pending"
+                    .to_string(),
+            }),
+        };
+        activation
+            .validate_against(definition)
+            .map_err(|error| SessionRuntimeError::ExecutionInvariant(error.to_string()))?;
+
+        Ok(Some(activation))
+    }
+
+    fn activate_reasoning_profile_for_stage(
+        &self,
+        session: &mut ActiveSessionRecord,
+        stage_key: &str,
+        policy: &crate::domain::governance::StageGovernancePolicy,
+        runtime_kind: GovernanceRuntimeKind,
+        governance_attempt_id: &str,
+        selected_mode: Option<CanonMode>,
+    ) -> Result<Option<ProfileActivationRecord>, SessionRuntimeError> {
+        let Some(definition) = policy.reasoning_profile.as_ref() else {
+            return Ok(None);
+        };
+
+        let routing = effective_routing_for_workspace(&self.workspace_ref);
+        let participants = reasoning_participants_for_profile(stage_key, definition, &routing);
+        let independence = assess_reasoning_independence(stage_key, definition, &participants);
+        let status = match independence.result {
+            IndependenceAssessmentResult::Passed => ReasoningActivationStatus::Active,
+            IndependenceAssessmentResult::Degraded => ReasoningActivationStatus::Degraded,
+            IndependenceAssessmentResult::Failed => ReasoningActivationStatus::Blocked,
+        };
+        let outcome = reasoning_outcome_for_activation(stage_key, definition, &independence);
+        let trigger = if runtime_kind == GovernanceRuntimeKind::Canon {
+            ReasoningActivationTrigger::CanonRequiredChallenge
+        } else {
+            ReasoningActivationTrigger::OperatorPolicy
+        };
+        let posture =
+            reasoning_posture_for_activation(definition, runtime_kind, governance_attempt_id)?;
+        let confidence = Some(reasoning_confidence_for_activation(
+            runtime_kind,
+            &independence,
+            posture.as_ref(),
+        ));
+        let activation = ProfileActivationRecord {
+            activation_id: format!("{governance_attempt_id}-reasoning"),
+            stage_key: stage_key.to_string(),
+            profile_id: definition.profile_id,
+            trigger,
+            activation_reason: reasoning_activation_reason(stage_key, definition, runtime_kind),
+            status,
+            participants,
+            budget: definition.limits.clone(),
+            posture,
+            independence: Some(independence),
+            outcome,
+            confidence,
+        };
+
+        activation
+            .validate_against(definition)
+            .map_err(|error| SessionRuntimeError::ExecutionInvariant(error.to_string()))?;
+
+        store_latest_reasoning_profile(session, runtime_kind, selected_mode, activation.clone());
+
+        Ok(Some(activation))
     }
 
     fn handle_governance_block(
@@ -3869,6 +4221,16 @@ impl SessionRuntime {
                 .map(|step| step.id.clone())
                 .unwrap_or_else(|| "terminal".to_string());
             self.record_stage_failure(trace, session, &step_id, task.plan.revision, &reason);
+        }
+        if !trace.events.iter().any(|event| event.event_type.is_reasoning_event())
+            && let Some(reasoning_profile) = session
+                .governance_lifecycle
+                .as_ref()
+                .and_then(|lifecycle| lifecycle.latest_reasoning_profile.as_ref())
+        {
+            let step_id =
+                task.plan.current_step().map(|step| step.id.as_str()).unwrap_or("terminal");
+            record_reasoning_profile_events(trace, step_id, task.plan.revision, reasoning_profile);
         }
         trace.record_event(
             TraceEventType::TerminalRecorded,
@@ -4252,6 +4614,465 @@ fn is_governance_trace_event(event_type: TraceEventType) -> bool {
     )
 }
 
+const REASONING_CONTEXT_BASIS_PREFIX: &str = "governance_stage";
+
+fn effective_routing_for_workspace(workspace: &Path) -> EffectiveRouting {
+    let workspace_routing =
+        FileConfigStore::for_workspace(workspace).local_routing().ok().flatten();
+    let cluster_routing = FileClusterStore::for_workspace(workspace)
+        .load()
+        .ok()
+        .flatten()
+        .map(|config| config.routing);
+    let global_routing = FileConfigStore::global_routing().ok().flatten();
+
+    resolve_effective_routing(
+        &RoutingOverrides::default(),
+        workspace_routing.as_ref(),
+        cluster_routing.as_ref(),
+        global_routing.as_ref(),
+    )
+}
+
+fn reasoning_participants_for_profile(
+    stage_key: &str,
+    definition: &ReasoningProfileDefinition,
+    routing: &EffectiveRouting,
+) -> Vec<ParticipantAssignment> {
+    let mut selected_roles = Vec::new();
+    for role in &definition.participant_roles {
+        if role.required {
+            selected_roles.push(role);
+        }
+    }
+    for role in &definition.participant_roles {
+        if !role.required && selected_roles.len() < definition.limits.max_participants {
+            selected_roles.push(role);
+        }
+    }
+
+    let mut review_role_ordinal = 0usize;
+    selected_roles
+        .into_iter()
+        .map(|role| {
+            let assignment = participant_assignment_for_role(
+                stage_key,
+                role,
+                routing,
+                definition,
+                review_role_ordinal,
+            );
+            if role_uses_configured_reviewer_routes(role) {
+                review_role_ordinal += 1;
+            }
+            assignment
+        })
+        .collect()
+}
+
+fn participant_assignment_for_role(
+    stage_key: &str,
+    role: &ParticipantRoleDefinition,
+    routing: &EffectiveRouting,
+    definition: &ReasoningProfileDefinition,
+    review_role_ordinal: usize,
+) -> ParticipantAssignment {
+    let (effective_route, provider_family) =
+        reasoning_route_for_role(role, routing, review_role_ordinal);
+    ParticipantAssignment {
+        role_id: role.role_id.clone(),
+        participant_id: format!("{}-{}", definition.profile_id.as_str(), role.role_id),
+        effective_route,
+        provider_family,
+        context_basis: format!("{REASONING_CONTEXT_BASIS_PREFIX}:{stage_key}"),
+        prompting_pattern: role.role_kind.as_str().to_string(),
+        status: ReasoningParticipantStatus::Pending,
+        result_summary: None,
+    }
+}
+
+fn role_uses_configured_reviewer_routes(role: &ParticipantRoleDefinition) -> bool {
+    role.preferred_slot == ReasoningRoutePreference::Review
+        && matches!(
+            role.role_kind,
+            ReasoningParticipantRoleKind::BlindReviewer
+                | ReasoningParticipantRoleKind::HeterogeneousReviewer
+                | ReasoningParticipantRoleKind::Critic
+                | ReasoningParticipantRoleKind::Reviser
+        )
+}
+
+fn reasoning_route_for_role(
+    role: &ParticipantRoleDefinition,
+    routing: &EffectiveRouting,
+    review_role_ordinal: usize,
+) -> (String, Option<String>) {
+    if role.role_kind == ReasoningParticipantRoleKind::Arbiter {
+        let route = &routing.adjudication.route;
+        return (
+            format!(
+                "{}:{}:{}",
+                ReasoningRoutePreference::Adjudication.as_str(),
+                route.runtime,
+                route.model
+            ),
+            Some(route.runtime.as_str().to_string()),
+        );
+    }
+
+    if role.preferred_slot == ReasoningRoutePreference::Review {
+        if let Some(route) = routing.reviewer_roles.get(&role.role_id) {
+            return (
+                format!(
+                    "reviewer_roles.{}:{}:{}",
+                    role.role_id, route.route.runtime, route.route.model
+                ),
+                Some(route.route.runtime.as_str().to_string()),
+            );
+        }
+
+        if role_uses_configured_reviewer_routes(role)
+            && let Some((reviewer_role_id, route)) =
+                routing.reviewer_roles.iter().nth(review_role_ordinal)
+        {
+            return (
+                format!(
+                    "reviewer_roles.{}:{}:{}",
+                    reviewer_role_id, route.route.runtime, route.route.model
+                ),
+                Some(route.route.runtime.as_str().to_string()),
+            );
+        }
+    }
+
+    let route = match role.preferred_slot {
+        ReasoningRoutePreference::Planning => &routing.planning.route,
+        ReasoningRoutePreference::Implementation => &routing.implementation.route,
+        ReasoningRoutePreference::Verification => &routing.verification.route,
+        ReasoningRoutePreference::Review => &routing.review.route,
+        ReasoningRoutePreference::Adjudication => &routing.adjudication.route,
+    };
+
+    (
+        format!("{}:{}:{}", role.preferred_slot.as_str(), route.runtime, route.model),
+        Some(route.runtime.as_str().to_string()),
+    )
+}
+
+fn requested_independence_floor(definition: &ReasoningProfileDefinition) -> IndependenceFloor {
+    let mut roles = definition.participant_roles.iter();
+    let Some(first_role) = roles.next() else {
+        return IndependenceFloor {
+            route_distinct: false,
+            provider_distinct: false,
+            context_distinct: false,
+            prompt_pattern_distinct: false,
+            minimum_participants: 1,
+        };
+    };
+    let mut floor = first_role.independence_requirements.clone();
+    for role in roles {
+        floor.route_distinct |= role.independence_requirements.route_distinct;
+        floor.provider_distinct |= role.independence_requirements.provider_distinct;
+        floor.context_distinct |= role.independence_requirements.context_distinct;
+        floor.prompt_pattern_distinct |= role.independence_requirements.prompt_pattern_distinct;
+        floor.minimum_participants =
+            floor.minimum_participants.max(role.independence_requirements.minimum_participants);
+    }
+
+    floor
+}
+
+fn reasoning_posture_for_activation(
+    definition: &ReasoningProfileDefinition,
+    runtime_kind: GovernanceRuntimeKind,
+    governance_attempt_id: &str,
+) -> Result<Option<CanonChallengePostureInput>, SessionRuntimeError> {
+    if runtime_kind != GovernanceRuntimeKind::Canon {
+        return Ok(None);
+    }
+
+    let posture = CanonChallengePostureInput {
+        contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
+        compatibility_window: ReasoningCompatibilityWindow {
+            boundline_min: CURRENT_BOUNDLINE_VERSION.to_string(),
+            boundline_max_exclusive: next_minor_exclusive(CURRENT_BOUNDLINE_VERSION)?,
+            canon_min: SUPPORTED_CANON_VERSION.to_string(),
+            canon_max_exclusive: next_minor_exclusive(SUPPORTED_CANON_VERSION)?,
+            contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
+        },
+        required_profile_family: Some(definition.family),
+        required_profile_id: Some(definition.profile_id),
+        minimum_independence: requested_independence_floor(definition),
+        admission_priority: CanonAdmissionPriority::RequiredBeforeContinue,
+        confidence_handoff_required: true,
+        provenance_ref: format!("governance_attempt:{governance_attempt_id}"),
+    };
+
+    posture
+        .validate()
+        .map_err(|error| SessionRuntimeError::ExecutionInvariant(error.to_string()))?;
+
+    Ok(Some(posture))
+}
+
+fn reasoning_confidence_for_activation(
+    runtime_kind: GovernanceRuntimeKind,
+    independence: &IndependenceAssessment,
+    posture: Option<&CanonChallengePostureInput>,
+) -> ReasoningConfidenceContribution {
+    let (confidence_level, admission_effect, summary) = match independence.result {
+        IndependenceAssessmentResult::Passed if runtime_kind == GovernanceRuntimeKind::Canon => (
+            ReasoningConfidenceLevel::High,
+            ReasoningAdmissionEffect::None,
+            "reasoning independence passed under the Canon-governed challenge posture"
+                .to_string(),
+        ),
+        IndependenceAssessmentResult::Passed => (
+            ReasoningConfidenceLevel::Medium,
+            ReasoningAdmissionEffect::None,
+            "reasoning independence passed under the requested participant topology"
+                .to_string(),
+        ),
+        IndependenceAssessmentResult::Degraded => (
+            ReasoningConfidenceLevel::Medium,
+            ReasoningAdmissionEffect::Warn,
+            "reasoning independence degraded; continue only with explicit caution"
+                .to_string(),
+        ),
+        IndependenceAssessmentResult::Failed => (
+            ReasoningConfidenceLevel::Low,
+            ReasoningAdmissionEffect::Gate,
+            "reasoning independence failed; block progression until challenge distinctness is restored"
+                .to_string(),
+        ),
+    };
+
+    let mut basis = vec![format!("independence={}", independence.result.as_str())];
+    if let Some(posture) = posture {
+        basis.push(format!("posture_contract={}", posture.contract_line));
+    }
+
+    ReasoningConfidenceContribution { confidence_level, basis, admission_effect, summary }
+}
+
+fn next_minor_exclusive(version: &str) -> Result<String, SessionRuntimeError> {
+    let mut parts = version.split('.');
+    let major = parts.next().and_then(|value| value.parse::<u64>().ok()).ok_or_else(|| {
+        SessionRuntimeError::ExecutionInvariant(format!(
+            "invalid semantic version '{version}' for reasoning posture window"
+        ))
+    })?;
+    let minor = parts.next().and_then(|value| value.parse::<u64>().ok()).ok_or_else(|| {
+        SessionRuntimeError::ExecutionInvariant(format!(
+            "invalid semantic version '{version}' for reasoning posture window"
+        ))
+    })?;
+    let _patch = parts.next().and_then(|value| value.parse::<u64>().ok()).ok_or_else(|| {
+        SessionRuntimeError::ExecutionInvariant(format!(
+            "invalid semantic version '{version}' for reasoning posture window"
+        ))
+    })?;
+
+    if parts.next().is_some() {
+        return Err(SessionRuntimeError::ExecutionInvariant(format!(
+            "invalid semantic version '{version}' for reasoning posture window"
+        )));
+    }
+
+    Ok(format!("{major}.{}.0", minor + 1))
+}
+
+fn assess_reasoning_independence(
+    stage_key: &str,
+    definition: &ReasoningProfileDefinition,
+    participants: &[ParticipantAssignment],
+) -> IndependenceAssessment {
+    let requested_floor = requested_independence_floor(definition);
+    let distinct_routes = participants
+        .iter()
+        .map(|participant| participant.effective_route.as_str())
+        .collect::<BTreeSet<_>>()
+        .len();
+    let distinct_providers = participants
+        .iter()
+        .filter_map(|participant| participant.provider_family.as_deref())
+        .collect::<BTreeSet<_>>()
+        .len();
+    let distinct_contexts = participants
+        .iter()
+        .map(|participant| participant.context_basis.as_str())
+        .collect::<BTreeSet<_>>()
+        .len();
+    let distinct_prompt_patterns = participants
+        .iter()
+        .map(|participant| participant.prompting_pattern.as_str())
+        .collect::<BTreeSet<_>>()
+        .len();
+    let observed_distinctions = ReasoningObservedDistinctness {
+        distinct_routes,
+        distinct_providers,
+        distinct_contexts,
+        distinct_prompt_patterns,
+    };
+    let minimum = requested_floor.minimum_participants;
+    let participant_gap = participants.len() < minimum;
+    let route_gap = requested_floor.route_distinct && distinct_routes < minimum;
+    let provider_gap = requested_floor.provider_distinct && distinct_providers < minimum;
+    let context_gap = requested_floor.context_distinct && distinct_contexts < minimum;
+    let prompt_gap = requested_floor.prompt_pattern_distinct && distinct_prompt_patterns < minimum;
+    let missing_distinctness = route_gap || provider_gap || context_gap || prompt_gap;
+
+    let result = if !participant_gap && !missing_distinctness {
+        IndependenceAssessmentResult::Passed
+    } else if (!participant_gap || definition.degradation_policy.allow_reduced_participants)
+        && (!missing_distinctness || definition.degradation_policy.allow_degraded_independence)
+    {
+        IndependenceAssessmentResult::Degraded
+    } else {
+        IndependenceAssessmentResult::Failed
+    };
+
+    let reason = if result == IndependenceAssessmentResult::Passed {
+        format!(
+            "reasoning profile {} satisfies the requested independence for {}",
+            definition.profile_id, stage_key
+        )
+    } else {
+        let mut missing = Vec::new();
+        if participant_gap {
+            missing.push(format!("participants={} < required={minimum}", participants.len()));
+        }
+        if route_gap {
+            missing.push(format!("distinct_routes={} < required={minimum}", distinct_routes));
+        }
+        if provider_gap {
+            missing.push(format!("distinct_providers={} < required={minimum}", distinct_providers));
+        }
+        if context_gap {
+            missing.push(format!("distinct_contexts={} < required={minimum}", distinct_contexts));
+        }
+        if prompt_gap {
+            missing.push(format!(
+                "distinct_prompt_patterns={} < required={minimum}",
+                distinct_prompt_patterns
+            ));
+        }
+
+        format!(
+            "reasoning profile {} cannot satisfy the requested independence for {}: {}",
+            definition.profile_id,
+            stage_key,
+            missing.join(", ")
+        )
+    };
+
+    IndependenceAssessment { requested_floor, observed_distinctions, result, reason }
+}
+
+fn reasoning_outcome_for_activation(
+    stage_key: &str,
+    definition: &ReasoningProfileDefinition,
+    independence: &IndependenceAssessment,
+) -> Option<ReasoningOutcome> {
+    match independence.result {
+        IndependenceAssessmentResult::Passed => None,
+        IndependenceAssessmentResult::Degraded => Some(ReasoningOutcome {
+            outcome_kind: ReasoningOutcomeKind::Degraded,
+            headline: format!(
+                "reasoning profile {} degraded at {}",
+                definition.profile_id, stage_key
+            ),
+            disagreement_summary: Some(independence.reason.clone()),
+            next_action: definition.degradation_policy.blocked_next_action.clone(),
+            iterations: Vec::new(),
+        }),
+        IndependenceAssessmentResult::Failed => Some(ReasoningOutcome {
+            outcome_kind: ReasoningOutcomeKind::Blocked,
+            headline: format!(
+                "reasoning profile {} blocked at {}",
+                definition.profile_id, stage_key
+            ),
+            disagreement_summary: Some(independence.reason.clone()),
+            next_action: definition.degradation_policy.blocked_next_action.clone(),
+            iterations: Vec::new(),
+        }),
+    }
+}
+
+fn reasoning_activation_reason(
+    stage_key: &str,
+    definition: &ReasoningProfileDefinition,
+    runtime_kind: GovernanceRuntimeKind,
+) -> String {
+    if runtime_kind == GovernanceRuntimeKind::Canon {
+        format!(
+            "Canon governance activated reasoning profile {} for {}",
+            definition.profile_id, stage_key
+        )
+    } else {
+        format!(
+            "stage governance activated reasoning profile {} for {}",
+            definition.profile_id, stage_key
+        )
+    }
+}
+
+fn store_latest_reasoning_profile(
+    session: &mut ActiveSessionRecord,
+    runtime_kind: GovernanceRuntimeKind,
+    selected_mode: Option<CanonMode>,
+    activation: ProfileActivationRecord,
+) {
+    if let Some(lifecycle) = session.governance_lifecycle.as_mut() {
+        lifecycle.governance_runtime = runtime_kind;
+        if lifecycle.selected_mode.is_none() {
+            lifecycle.selected_mode = selected_mode;
+        }
+        if let Some(mode) = selected_mode
+            && !lifecycle.selected_mode_sequence.contains(&mode)
+        {
+            lifecycle.selected_mode_sequence.push(mode);
+        }
+        lifecycle.latest_reasoning_profile = Some(activation);
+        return;
+    }
+
+    session.governance_lifecycle = Some(GovernedSessionLifecycle {
+        governance_runtime: runtime_kind,
+        explicit_opt_out: false,
+        mode_selection_preference: CanonModeSelectionPreference::default(),
+        selected_mode,
+        selected_mode_sequence: selected_mode.into_iter().collect(),
+        latest_reasoning_profile: Some(activation),
+        current_stage_index: 0,
+        stage_records: Vec::new(),
+        accumulated_context: Vec::new(),
+        terminal_reason: None,
+    });
+}
+
+fn reasoning_profile_block_message(record: &ProfileActivationRecord) -> String {
+    let detail = record
+        .outcome
+        .as_ref()
+        .and_then(|outcome| outcome.disagreement_summary.clone())
+        .unwrap_or_else(|| record.activation_reason.clone());
+    if let Some(next_action) =
+        record.outcome.as_ref().and_then(|outcome| outcome.next_action.as_ref())
+    {
+        format!(
+            "reasoning profile {} blocked stage {}: {}. next action: {}",
+            record.profile_id, record.stage_key, detail, next_action
+        )
+    } else {
+        format!(
+            "reasoning profile {} blocked stage {}: {}",
+            record.profile_id, record.stage_key, detail
+        )
+    }
+}
+
 struct GovernanceBlockContext {
     step_id: String,
     stage_key: String,
@@ -4370,6 +5191,13 @@ mod tests {
     use crate::domain::project_memory::{
         CompatibilityOutcome, LineageRef, ProjectMemoryContext, ProjectMemoryStatus,
         ProjectMemorySurface, PromotionStateView,
+    };
+    use crate::domain::reasoning::{
+        IndependenceAssessmentResult, IndependenceFloor, ParticipantRoleDefinition,
+        ReasoningActivationStatus, ReasoningAdjudicationMode, ReasoningBudget,
+        ReasoningConfidenceLevel, ReasoningDegradationPolicy, ReasoningParticipantRoleKind,
+        ReasoningProfileDefinition, ReasoningProfileFamily, ReasoningProfileId,
+        ReasoningRoutePreference,
     };
     use crate::domain::session::{
         ActiveSessionRecord, ContinuityAuthority, DelegationContinuityMode,
@@ -4531,6 +5359,175 @@ mod tests {
         FileConfigStore::for_workspace(workspace)
             .save_local(&ConfigFile { version: 1, routing, canon: None })
             .unwrap();
+    }
+
+    fn independent_pair_review_profile() -> ReasoningProfileDefinition {
+        ReasoningProfileDefinition {
+            profile_id: ReasoningProfileId::IndependentPairReview,
+            family: ReasoningProfileFamily::BlindReview,
+            allowed_stages: vec![CanonMode::Discovery],
+            limits: ReasoningBudget {
+                max_participants: 2,
+                max_branches: 1,
+                max_debate_rounds: 0,
+                max_reflexion_revisions: 0,
+                max_calls: 2,
+                max_tokens: 8_000,
+                max_adjudication_steps: 1,
+            },
+            participant_roles: vec![
+                ParticipantRoleDefinition {
+                    role_id: "reviewer_primary".to_string(),
+                    role_kind: ReasoningParticipantRoleKind::BlindReviewer,
+                    preferred_slot: ReasoningRoutePreference::Review,
+                    independence_requirements: IndependenceFloor {
+                        route_distinct: true,
+                        provider_distinct: true,
+                        context_distinct: false,
+                        prompt_pattern_distinct: false,
+                        minimum_participants: 2,
+                    },
+                    required: true,
+                },
+                ParticipantRoleDefinition {
+                    role_id: "reviewer_secondary".to_string(),
+                    role_kind: ReasoningParticipantRoleKind::BlindReviewer,
+                    preferred_slot: ReasoningRoutePreference::Review,
+                    independence_requirements: IndependenceFloor {
+                        route_distinct: true,
+                        provider_distinct: true,
+                        context_distinct: false,
+                        prompt_pattern_distinct: false,
+                        minimum_participants: 2,
+                    },
+                    required: true,
+                },
+            ],
+            adjudication_mode: ReasoningAdjudicationMode::GovernanceReview,
+            degradation_policy: ReasoningDegradationPolicy {
+                allow_degraded_independence: false,
+                allow_reduced_participants: false,
+                interruptible: true,
+                blocked_next_action: Some(
+                    "configure distinct reviewer routes for reviewer_primary and reviewer_secondary"
+                        .to_string(),
+                ),
+            },
+        }
+    }
+
+    fn review_kind_role(
+        role_id: &str,
+        role_kind: ReasoningParticipantRoleKind,
+        preferred_slot: ReasoningRoutePreference,
+    ) -> ParticipantRoleDefinition {
+        ParticipantRoleDefinition {
+            role_id: role_id.to_string(),
+            role_kind,
+            preferred_slot,
+            independence_requirements: IndependenceFloor {
+                route_distinct: true,
+                provider_distinct: true,
+                context_distinct: false,
+                prompt_pattern_distinct: false,
+                minimum_participants: 2,
+            },
+            required: true,
+        }
+    }
+
+    #[test]
+    fn reasoning_route_for_review_kinds_falls_back_to_configured_reviewer_roles_in_order() {
+        let workspace = temp_workspace("boundline-runtime-reasoning-reviewer-role-fallback");
+        let mut routing = RoutingConfig {
+            review: Some(ModelRoute {
+                runtime: RuntimeKind::Copilot,
+                model: "gpt-5.5".to_string(),
+            }),
+            ..RoutingConfig::default()
+        };
+        routing.reviewer_roles.insert(
+            "alpha".to_string(),
+            ModelRoute { runtime: RuntimeKind::Claude, model: "sonnet-4.6".to_string() },
+        );
+        routing.reviewer_roles.insert(
+            "beta".to_string(),
+            ModelRoute { runtime: RuntimeKind::Gemini, model: "gemini-2.5-pro".to_string() },
+        );
+        save_local_routing(&workspace, routing);
+
+        let effective_routing = super::effective_routing_for_workspace(&workspace);
+        let expected = [
+            (
+                review_kind_role(
+                    "blind",
+                    ReasoningParticipantRoleKind::BlindReviewer,
+                    ReasoningRoutePreference::Review,
+                ),
+                "reviewer_roles.alpha:claude:sonnet-4.6",
+            ),
+            (
+                review_kind_role(
+                    "heterogeneous",
+                    ReasoningParticipantRoleKind::HeterogeneousReviewer,
+                    ReasoningRoutePreference::Review,
+                ),
+                "reviewer_roles.beta:gemini:gemini-2.5-pro",
+            ),
+            (
+                review_kind_role(
+                    "critic",
+                    ReasoningParticipantRoleKind::Critic,
+                    ReasoningRoutePreference::Review,
+                ),
+                "reviewer_roles.alpha:claude:sonnet-4.6",
+            ),
+            (
+                review_kind_role(
+                    "reviser",
+                    ReasoningParticipantRoleKind::Reviser,
+                    ReasoningRoutePreference::Review,
+                ),
+                "reviewer_roles.beta:gemini:gemini-2.5-pro",
+            ),
+        ];
+
+        for (ordinal, (role, expected_route)) in expected.iter().enumerate() {
+            let (effective_route, provider_family) =
+                super::reasoning_route_for_role(role, &effective_routing, ordinal % 2);
+            assert_eq!(effective_route, *expected_route);
+            assert!(provider_family.is_some());
+        }
+    }
+
+    #[test]
+    fn reasoning_route_for_arbiter_prefers_adjudication_slot() {
+        let workspace = temp_workspace("boundline-runtime-reasoning-arbiter-route");
+        let routing = RoutingConfig {
+            review: Some(ModelRoute {
+                runtime: RuntimeKind::Claude,
+                model: "sonnet-4.6".to_string(),
+            }),
+            adjudication: Some(ModelRoute {
+                runtime: RuntimeKind::Codex,
+                model: "gpt-5-codex".to_string(),
+            }),
+            ..RoutingConfig::default()
+        };
+        save_local_routing(&workspace, routing);
+
+        let effective_routing = super::effective_routing_for_workspace(&workspace);
+        let role = review_kind_role(
+            "arbiter",
+            ReasoningParticipantRoleKind::Arbiter,
+            ReasoningRoutePreference::Review,
+        );
+
+        let (effective_route, provider_family) =
+            super::reasoning_route_for_role(&role, &effective_routing, 0);
+
+        assert_eq!(effective_route, "adjudication:codex:gpt-5-codex");
+        assert_eq!(provider_family.as_deref(), Some("codex"));
     }
 
     #[test]
@@ -6309,6 +7306,7 @@ mod tests {
                     require_adaptive_companion: false,
                     runtime: Some(GovernanceRuntimeKind::Canon),
                     canon_mode: Some(CanonMode::Discovery),
+                    reasoning_profile: None,
                     system_context: Some(SystemContextBinding::Existing),
                     risk: Some("medium".to_string()),
                     zone: Some("engineering".to_string()),
@@ -6371,6 +7369,191 @@ mod tests {
             "{:?}",
             trace.events
         );
+    }
+
+    #[test]
+    fn execute_next_step_reassesses_reasoning_profile_after_routing_changes() {
+        let workspace = write_governed_execution_profile_workspace(
+            "boundline-runtime-reasoning-profile-gate",
+            vec![ExecutionAttemptDefinition {
+                attempt_id: "fix-add".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left - right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+            vec!["README.md".to_string()],
+            Some(GovernanceProfile {
+                default_runtime: GovernanceRuntimeKind::Local,
+                canon: None,
+                stages: vec![StageGovernancePolicy {
+                    flow_name: "bug-fix".to_string(),
+                    stage_id: "investigate".to_string(),
+                    enabled: true,
+                    required: false,
+                    autopilot: false,
+                    require_adaptive_companion: false,
+                    runtime: Some(GovernanceRuntimeKind::Local),
+                    canon_mode: Some(CanonMode::Discovery),
+                    reasoning_profile: Some(independent_pair_review_profile()),
+                    system_context: None,
+                    risk: None,
+                    zone: None,
+                    owner: None,
+                }],
+            }),
+        );
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let collapsed_routing = RoutingConfig {
+            review: Some(ModelRoute {
+                runtime: RuntimeKind::Codex,
+                model: "gpt-5-codex".to_string(),
+            }),
+            ..RoutingConfig::default()
+        };
+        save_local_routing(&workspace, collapsed_routing.clone());
+
+        let mut session = ActiveSessionRecord {
+            session_id: "session-runtime".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: None,
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Initialized,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 10,
+            updated_at: 10,
+            governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
+        };
+
+        runtime.capture_goal(&mut session, "Drive governed bug fix").unwrap();
+        runtime.select_flow(&mut session, "bug-fix").unwrap();
+        runtime.plan_task(&mut session, None, false).unwrap();
+        runtime.execute_next_step(&mut session).unwrap();
+
+        let Some(blocked_profile) = session
+            .governance_lifecycle
+            .as_ref()
+            .and_then(|lifecycle| lifecycle.latest_reasoning_profile.as_ref())
+        else {
+            panic!("expected a blocked reasoning profile after the first run");
+        };
+        assert_eq!(blocked_profile.status, ReasoningActivationStatus::Blocked);
+        assert_eq!(
+            blocked_profile.independence.as_ref().map(|assessment| assessment.result),
+            Some(IndependenceAssessmentResult::Failed)
+        );
+        assert_eq!(
+            blocked_profile.confidence.as_ref().map(|confidence| confidence.confidence_level),
+            Some(ReasoningConfidenceLevel::Low)
+        );
+        assert_eq!(session.latest_status, SessionStatus::Running);
+        assert_eq!(
+            session
+                .active_task
+                .as_ref()
+                .and_then(|task| task.plan.steps.first())
+                .map(|step| step.status),
+            Some(StepStatus::Pending)
+        );
+
+        let mut recovered_routing = collapsed_routing;
+        recovered_routing.reviewer_roles.insert(
+            "reviewer_primary".to_string(),
+            ModelRoute { runtime: RuntimeKind::Claude, model: "sonnet-4.6".to_string() },
+        );
+        recovered_routing.reviewer_roles.insert(
+            "reviewer_secondary".to_string(),
+            ModelRoute { runtime: RuntimeKind::Gemini, model: "gemini-2.5-pro".to_string() },
+        );
+        save_local_routing(&workspace, recovered_routing);
+
+        let profile = independent_pair_review_profile();
+        let effective_routing = super::effective_routing_for_workspace(&workspace);
+        let participants = super::reasoning_participants_for_profile(
+            "bug-fix:investigate",
+            &profile,
+            &effective_routing,
+        );
+        let assessment =
+            super::assess_reasoning_independence("bug-fix:investigate", &profile, &participants);
+        assert_eq!(assessment.result, IndependenceAssessmentResult::Passed);
+
+        runtime.execute_next_step(&mut session).unwrap();
+
+        let Some(active_profile) = session
+            .governance_lifecycle
+            .as_ref()
+            .and_then(|lifecycle| lifecycle.latest_reasoning_profile.as_ref())
+        else {
+            panic!("expected an active reasoning profile after reviewer routes diverged");
+        };
+        let step_status = session
+            .active_task
+            .as_ref()
+            .and_then(|task| task.plan.steps.first())
+            .map(|step| step.status);
+        assert!(
+            step_status.is_some_and(|status| status != StepStatus::Pending),
+            "{active_profile:?}"
+        );
+        assert_eq!(
+            active_profile.status,
+            ReasoningActivationStatus::Active,
+            "{step_status:?} {active_profile:?}"
+        );
+        assert_eq!(
+            active_profile.independence.as_ref().map(|assessment| assessment.result),
+            Some(IndependenceAssessmentResult::Passed)
+        );
+        assert_eq!(
+            active_profile.confidence.as_ref().map(|confidence| confidence.confidence_level),
+            Some(ReasoningConfidenceLevel::Medium)
+        );
+        assert_eq!(active_profile.participants.len(), 2);
+        assert!(
+            active_profile
+                .participants
+                .iter()
+                .any(|participant| participant.provider_family.as_deref() == Some("claude"))
+        );
+    }
+
+    #[test]
+    fn canon_reasoning_posture_uses_current_release_window() {
+        let posture = super::reasoning_posture_for_activation(
+            &independent_pair_review_profile(),
+            GovernanceRuntimeKind::Canon,
+            "attempt-7",
+        )
+        .unwrap()
+        .expect("canon runtime should project a reasoning posture");
+
+        assert_eq!(
+            posture.contract_line,
+            crate::domain::reasoning::REASONING_POSTURE_V1_CONTRACT_LINE.to_string()
+        );
+        assert_eq!(
+            posture.required_profile_id,
+            Some(crate::domain::reasoning::ReasoningProfileId::IndependentPairReview)
+        );
+        assert!(posture.compatibility_window.admits_versions(
+            super::CURRENT_BOUNDLINE_VERSION,
+            crate::domain::distribution::SUPPORTED_CANON_VERSION,
+        ));
+        assert_eq!(posture.provenance_ref, "governance_attempt:attempt-7");
     }
 
     #[test]
@@ -6602,6 +7785,7 @@ mod tests {
                     require_adaptive_companion: false,
                     runtime: Some(GovernanceRuntimeKind::Local),
                     canon_mode: None,
+                    reasoning_profile: None,
                     system_context: Some(SystemContextBinding::Existing),
                     risk: None,
                     zone: None,
@@ -6739,6 +7923,7 @@ mod tests {
                     require_adaptive_companion: false,
                     runtime: Some(GovernanceRuntimeKind::Canon),
                     canon_mode: Some(CanonMode::Discovery),
+                    reasoning_profile: None,
                     system_context: Some(SystemContextBinding::Existing),
                     risk: Some("medium".to_string()),
                     zone: Some("engineering".to_string()),
@@ -6839,6 +8024,7 @@ mod tests {
             require_adaptive_companion: false,
             runtime: Some(GovernanceRuntimeKind::Canon),
             canon_mode: Some(CanonMode::Discovery),
+            reasoning_profile: None,
             system_context: Some(SystemContextBinding::Existing),
             risk: None,
             zone: None,
@@ -6922,6 +8108,7 @@ mod tests {
                     require_adaptive_companion: false,
                     runtime: Some(GovernanceRuntimeKind::Canon),
                     canon_mode: None,
+                    reasoning_profile: None,
                     system_context: Some(SystemContextBinding::Existing),
                     risk: None,
                     zone: None,

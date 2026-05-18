@@ -1,6 +1,6 @@
 # boundline Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-05-17
+Auto-generated from all feature plans. Last updated: 2026-05-18
 
 ## Active Technologies
 - Rust 1.95.0, edition 2024 + Existing runtime dependencies (`serde`, `serde_json`, `thiserror`, `tracing`, `uuid`) plus `clap` 4.x for a stable subcommand-based CLI surface (002-developer-ux-orchestrator)
@@ -91,6 +91,8 @@ Auto-generated from all feature plans. Last updated: 2026-05-17
 - semantic acceleration is local-only and additive: preserve `semantic_policy_state`, `semantic_capability_state`, `hybrid_outcome`, candidate `match_origin`, and any `rejected_candidate:` lines on `plan`, `status`, and `inspect`; fallback to the V1 local SQLite + FTS5 path must stay explicit when semantic capability is unavailable or degraded (059-semantic-acceleration)
 - Rust 1.95.0, edition 2024 (for Boundline runtime that will consume this contract); contract itself is Markdown + JSON schema for tooling + Existing Boundline stack (clap, serde, serde_json, thiserror, tracing, uuid, toml); no new runtime dependencies required for contract definition slice (060-s7-canon-contracts)
 - Repository-managed Markdown documentation under `specs/060-s7-canon-contracts/contracts/` plus cross-repo reference to Canon `specs/057-s7-delight-provider/contracts/` (060-s7-canon-contracts)
+- Rust 1.95.0, edition 2024 for Boundline and Canon runtime changes; Markdown and TOML or JSON contract artifacts for cross-repo contract surfaces + Existing Boundline workspace dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`) and Canon workspace dependencies of the same family; no new runtime crates planned for the first implementation line (061-reasoning-profile-contracts)
+- Existing Boundline `.boundline/session.json`, `.boundline/traces/`, optional config and execution-profile surfaces, feature-local spec artifacts under `specs/061-reasoning-profile-contracts/`, sibling Canon docs under `docs/integration/`, and normal repository documentation surfaces (061-reasoning-profile-contracts)
 
 - Rust 1.95.0, edition 2024 + Rust standard library plus `serde`, `serde_json`, `thiserror`, `tracing`, and `uuid` for structured state, trace serialization, error handling, instrumentation, and stable identifiers (001-delivery-orchestrator-core)
 
@@ -119,9 +121,9 @@ Crate versioning follows Semantic Versioning.
 Before 1.0.0, breaking changes MAY occur in minor versions.
 
 ## Recent Changes
+- 061-reasoning-profile-contracts: Added Rust 1.95.0, edition 2024 for Boundline and Canon runtime changes; Markdown and TOML or JSON contract artifacts for cross-repo contract surfaces + Existing Boundline workspace dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`) and Canon workspace dependencies of the same family; no new runtime crates planned for the first implementation line
 - 060-s7-canon-contracts: Added Rust 1.95.0, edition 2024 (for Boundline runtime that will consume this contract); contract itself is Markdown + JSON schema for tooling + Existing Boundline stack (clap, serde, serde_json, thiserror, tracing, uuid, toml); no new runtime dependencies required for contract definition slice
 - 059-semantic-acceleration: Added Rust 1.95.0, edition 2024 + existing workspace runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`), existing `rusqlite` bundled SQLite support, and one optional `sqlite-vec` integration path for local vector tables; no remote embedding-provider dependency in the first slice
-- 059-semantic-acceleration: Advanced-context retrieval can now refresh semantic chunks on the shared local index, expand or rerank the V1 candidate set when capability is ready, and surface rejected semantic candidates plus explicit fallback reasons on the normal CLI output path
 
 
 <!-- MANUAL ADDITIONS START -->

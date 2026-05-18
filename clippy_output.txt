@@ -1,0 +1,138 @@
+    Checking boundline-cli v0.61.0 (/Users/rt/workspace/apply-the/boundline/crates/boundline-cli)
+error: field assignment outside of initializer for an instance created with Default::default()
+    --> crates/boundline-cli/src/../../../src/cli/output.rs:5139:9
+     |
+5139 |         view.session_id = "session-reasoning".to_string();
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+note: consider initializing the variable with `boundline_adapters::domain::session::SessionStatusView { session_id: "session-reasoning".to_string(), workspace_ref: "/tmp/workspace".to_string(), explanation: "reasoning profile is active".to_string(), latest_reasoning_profile: Some(crate::domain::reasoning::ProfileActivationRecord {
+                  activation_id: "reasoning-attempt-1".to_string(),
+                  stage_key: "bug-fix:investigate".to_string(),
+                  profile_id: crate::domain::reasoning::ReasoningProfileId::IndependentPairReview,
+                  trigger: crate::domain::reasoning::ReasoningActivationTrigger::OperatorPolicy,
+                  activation_reason: "stage governance activated stronger challenge".to_string(),
+                  status: crate::domain::reasoning::ReasoningActivationStatus::Blocked,
+                  participants: vec![
+                      crate::domain::reasoning::ParticipantAssignment {
+                          role_id: "reviewer_primary".to_string(),
+                          participant_id: "independent_pair_review-reviewer_primary".to_string(),
+                          effective_route: "reviewer_roles.reviewer_primary:claude:sonnet-4.6"
+                              .to_string(),
+                          provider_family: Some("claude".to_string()),
+                          context_basis: "governance_stage:bug-fix:investigate".to_string(),
+                          prompting_pattern: "blind_reviewer".to_string(),
+                          status: crate::domain::reasoning::ReasoningParticipantStatus::Pending,
+                          result_summary: None,
+                      },
+                      crate::domain::reasoning::ParticipantAssignment {
+                          role_id: "reviewer_secondary".to_string(),
+                          participant_id: "independent_pair_review-reviewer_secondary".to_string(),
+                          effective_route: "review:codex:gpt-5-codex".to_string(),
+                          provider_family: Some("codex".to_string()),
+                          context_basis: "governance_stage:bug-fix:investigate".to_string(),
+                          prompting_pattern: "blind_reviewer".to_string(),
+                          status: crate::domain::reasoning::ReasoningParticipantStatus::Pending,
+                          result_summary: None,
+                      },
+                  ],
+                  budget: crate::domain::reasoning::ReasoningBudget {
+                      max_participants: 2,
+                      max_branches: 1,
+                      max_debate_rounds: 0,
+                      max_reflexion_revisions: 0,
+                      max_calls: 2,
+                      max_tokens: 8_000,
+                      max_adjudication_steps: 1,
+                  },
+                  posture: None,
+                  independence: Some(crate::domain::reasoning::IndependenceAssessment {
+                      requested_floor: crate::domain::reasoning::IndependenceFloor {
+                          route_distinct: true,
+                          provider_distinct: true,
+                          context_distinct: false,
+                          prompt_pattern_distinct: false,
+                          minimum_participants: 2,
+                      },
+                      observed_distinctions: crate::domain::reasoning::ReasoningObservedDistinctness {
+                          distinct_routes: 1,
+                          distinct_providers: 2,
+                          distinct_contexts: 1,
+                          distinct_prompt_patterns: 1,
+                      },
+                      result: crate::domain::reasoning::IndependenceAssessmentResult::Failed,
+                      reason: "distinct_routes=1 < required=2".to_string(),
+                  }),
+                  outcome: Some(crate::domain::reasoning::ReasoningOutcome {
+                      outcome_kind: crate::domain::reasoning::ReasoningOutcomeKind::Blocked,
+                      headline: "independent pair review blocked".to_string(),
+                      disagreement_summary: Some("reviewers collapsed onto one route".to_string()),
+                      next_action: Some("configure distinct reviewer routes".to_string()),
+                      iterations: Vec::new(),
+                  }),
+                  confidence: None,
+              }), ..Default::default() }` and removing relevant reassignments
+    --> crates/boundline-cli/src/../../../src/cli/output.rs:5138:9
+     |
+5138 |         let mut view = SessionStatusView::default();
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#field_reassign_with_default
+     = note: `-D clippy::field-reassign-with-default` implied by `-D warnings`
+     = help: to override `-D warnings` add `#[allow(clippy::field_reassign_with_default)]`
+
+error: field assignment outside of initializer for an instance created with Default::default()
+    --> crates/boundline-cli/src/../../../src/cli/output.rs:5346:9
+     |
+5346 | ...   summary.trace_ref = "/tmp/workspace/.boundline/traces/reasoning-trace.json".to_string();
+     |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+note: consider initializing the variable with `boundline_adapters::domain::trace::TraceSummaryView { trace_ref: "/tmp/workspace/.boundline/traces/reasoning-trace.json".to_string(), goal: "Render reasoning trace summary".to_string(), reasoning_profile: Some(crate::domain::reasoning::ProfileActivationRecord {
+                  activation_id: "reasoning-attempt-2".to_string(),
+                  stage_key: "bug-fix:verify".to_string(),
+                  profile_id: crate::domain::reasoning::ReasoningProfileId::BoundedReflexion,
+                  trigger: crate::domain::reasoning::ReasoningActivationTrigger::CanonRequiredChallenge,
+                  activation_reason: "Canon governance activated stronger challenge".to_string(),
+                  status: crate::domain::reasoning::ReasoningActivationStatus::Degraded,
+                  participants: Vec::new(),
+                  budget: crate::domain::reasoning::ReasoningBudget {
+                      max_participants: 1,
+                      max_branches: 1,
+                      max_debate_rounds: 0,
+                      max_reflexion_revisions: 2,
+                      max_calls: 2,
+                      max_tokens: 6_000,
+                      max_adjudication_steps: 1,
+                  },
+                  posture: None,
+                  independence: Some(crate::domain::reasoning::IndependenceAssessment {
+                      requested_floor: crate::domain::reasoning::IndependenceFloor {
+                          route_distinct: false,
+                          provider_distinct: false,
+                          context_distinct: false,
+                          prompt_pattern_distinct: false,
+                          minimum_participants: 1,
+                      },
+                      observed_distinctions: crate::domain::reasoning::ReasoningObservedDistinctness {
+                          distinct_routes: 1,
+                          distinct_providers: 1,
+                          distinct_contexts: 1,
+                          distinct_prompt_patterns: 1,
+                      },
+                      result: crate::domain::reasoning::IndependenceAssessmentResult::Degraded,
+                      reason: "reflexion remained bounded but shared one runtime".to_string(),
+                  }),
+                  outcome: Some(crate::domain::reasoning::ReasoningOutcome {
+                      outcome_kind: crate::domain::reasoning::ReasoningOutcomeKind::Degraded,
+                      headline: "bounded reflexion degraded".to_string(),
+                      disagreement_summary: Some("shared runtime reduced independence".to_string()),
+                      next_action: Some("escalate to blind review if confidence remains low".to_string()),
+                      iterations: Vec::new(),
+                  }),
+                  confidence: None,
+              }), ..Default::default() }` and removing relevant reassignments
+    --> crates/boundline-cli/src/../../../src/cli/output.rs:5345:9
+     |
+5345 |         let mut summary = TraceSummaryView::default();
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#field_reassign_with_default
+
+error: could not compile `boundline-cli` (lib test) due to 2 previous errors

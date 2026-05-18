@@ -6,7 +6,7 @@ Canon is downstream from Boundline in this roadmap: Boundline thinks, decides, o
 
 Evolve Boundline into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.60.0
+## Current Status: v0.61.0
 
 Boundline now has its core session-native orchestration baseline, bounded
 workflow follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -23,13 +23,27 @@ alignment now carried through the same primary workflow. The operator entry
 path is now stack-neutral for empty, non-Rust, and mixed repositories, with a
 clearer first-run CLI UX. That baseline now extends into Canon-promoted
 project-memory reuse, catalog-aware guidance packs, authority-zoned review,
-adaptive governance, and the S5 advanced-context stack with local semantic
-acceleration. The current `0.60.0` work delivers the assistant delight
-layer: runtime-backed cognitive affordance commands (`why`, `risk`, `evidence`,
-`next-best`, `assumptions`, `hidden-impact`, `challenge`, `explain-plan`, and
-`doctor-context`), contextual workspace diagnostics, compact host-package
-alignment across Claude, Codex, Copilot, Cursor, and Gemini, and the
-bilateral Canon 057 delight-provider contract review.
+adaptive governance, the S5 advanced-context stack with local semantic
+acceleration, and the S6 reasoning-profile contract layer. The current
+`0.61.0` work activates bounded reasoning profiles inside the existing
+session-native and governed runtime, keeps blocked or degraded challenge state
+explicit on `run`, `status`, and `inspect`, and aligns the active release
+metadata to the paired Boundline `0.61.0` and Canon `0.57.0` delivery.
+
+### Delivered in 0.61.0
+
+- Boundline now activates governed reasoning profiles through the existing
+  session runtime, with persisted profile records for active, degraded, and
+  blocked challenge states instead of a parallel orchestration path.
+- Session-native `run`, `status`, and `inspect` now surface reasoning-profile
+  identity, trigger, independence result, and explicit next-action guidance
+  from persisted trace and session state.
+- The same projection now carries additive reasoning lifecycle and confidence
+  trace events, plus explicit contract-drift blocker remediation when Canon
+  posture metadata falls outside the supported release pair.
+- The active release metadata, distribution surfaces, assistant package
+  manifests, and Canon compatibility fixtures are now aligned to Boundline
+  `0.61.0` and Canon `0.57.0`.
 
 ### Delivered in 0.60.0
 
@@ -711,6 +725,12 @@ feature lines instead of separate forward-looking roadmap files.
   delivered `0.56.0` authority-zoned council baseline, the delivered S4
   adaptive governance layer, and the active S5 advanced-context plus semantic-
   acceleration lines make councils operationally and contextually credible.
+- [S6.1: Reasoning Profile Closure](roadmap/S6.1%20-%20reasoning-profile-closure.md)
+  narrows the remaining closure work after the delivered
+  [`061-reasoning-profile-contracts`](specs/061-reasoning-profile-contracts/spec.md)
+  slice so concrete shipped profiles, family-level substrate, and still-open
+  debate or adjudication work remain explicit instead of being inferred from
+  partial runtime vocabulary alone.
 - [S7.1: Post-S6 Assistant Delight Follow-Through](roadmap/S7.1%20-%20post-s6-assistant-delight-follow-through.md)
   is the future-facing follow-through for the already delivered assistant
   delight layer in
