@@ -10,6 +10,10 @@ Prompts:
 - `/boundline:status`
 - `/boundline:continue`
 
+Contextual follow-ups after bootstrap:
+- `/boundline:explain-plan`
+- `/boundline:doctor-context`
+
 These prompts must read Boundline state through the CLI when shell execution is
 available, or provide exact fallback commands when it is not. Chat history is
 not authoritative; `.boundline/session.json` is the active session source of
@@ -18,5 +22,6 @@ truth after initialization.
 Fallback CLI:
 - `boundline init --assistant copilot`
 - `boundline doctor`
+- `boundline doctor --workspace <workspace>`
 - `boundline status`
 - `boundline continue`

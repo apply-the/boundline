@@ -19,7 +19,9 @@ use crate::domain::configuration::{
     resolve_effective_runtime_capabilities, resolve_effective_slot_effort_policies,
 };
 use crate::domain::context_intelligence::{
-    AdvancedContextProjection, RetrievedEvidenceCandidate, SemanticTraceRecord,
+    AdvancedContextProjection, ImpactFindingKind, ImpactFindingSeverity, ImpactFindingStatus,
+    RelationshipCredibilityState, RelationshipKind, RetrievalSourceKind,
+    RetrievedEvidenceCandidate, SemanticCapabilityState, SemanticPolicyState, SemanticTraceRecord,
 };
 use crate::domain::follow_through::FollowThroughProjection;
 use crate::domain::goal_plan::GoalPlanFlowState;
@@ -45,6 +47,139 @@ const KEY_STAGE_ID: &str = "stage_id";
 const KEY_SUMMARY: &str = "summary";
 const KEY_VOTE_RESOLUTION: &str = "vote_resolution";
 const UNKNOWN_STAGE_ID: &str = "unknown-stage";
+const S7_CONFIDENCE_HIGH: &str = "high";
+const S7_CONFIDENCE_LOW: &str = "low";
+const S7_CONFIDENCE_MEDIUM: &str = "medium";
+const S7_FALLBACK_READY: &str =
+    "Using authoritative Boundline runtime and available Canon signals.";
+const S7_FALLBACK_CANON_MISSING: &str =
+    "Canon input not yet available; using Boundline runtime evidence only";
+const S7_FALLBACK_CLARIFICATION_PREFIX: &str = "Clarification is still required for: ";
+const S7_FALLBACK_CONTEXT_STALE_PREFIX: &str =
+    "Context is stale; refresh before treating this answer as fully current: ";
+const S7_MISSING_CANON_SOURCE: &str = "canon_input";
+const S7_MISSING_CLARIFICATION_SOURCE: &str = "clarification_fields";
+const S7_MISSING_CONTEXT_SOURCE: &str = "fresh_context";
+const S7_NONE: &str = "none";
+const S7_RUNTIME_SOURCE_AUTHORED_INPUT: &str = "authored_input";
+const S7_RUNTIME_SOURCE_CONTEXT: &str = "context";
+const S7_RUNTIME_SOURCE_DECISION_TIMELINE: &str = "decision_timeline";
+const S7_RUNTIME_SOURCE_REVIEW_TIMELINE: &str = "review_timeline";
+const S7_RUNTIME_SOURCE_SESSION_STATE: &str = "session_state";
+const S7_RUNTIME_SOURCE_TRACE_EVIDENCE: &str = "trace_evidence";
+const S7_RUNTIME_SOURCE_TRACE_STEPS: &str = "trace_steps";
+const S7_CANON_SOURCE_APPROVAL_PROVENANCE: &str = "approval_provenance";
+const S7_CANON_SOURCE_GOVERNANCE_ACTION: &str = "governance_next_action";
+const S7_CANON_SOURCE_GOVERNANCE_DECISION: &str = "governance_decision";
+const S7_CANON_SOURCE_GOVERNANCE_PACKET: &str = "governance_packet";
+const S7_CANON_SOURCE_GOVERNANCE_TIMELINE: &str = "governance_timeline";
+const S7_LABEL_CONFIDENCE_LEVEL: &str = "confidence_level";
+const S7_LABEL_EVIDENCE_SUMMARY: &str = "evidence_summary";
+const S7_LABEL_FALLBACK_DISCLOSURE: &str = "fallback_disclosure";
+const S7_LABEL_NEXT_BEST_ACTION: &str = "next_best_action";
+const S7_LABEL_RISK_SUMMARY: &str = "risk_summary";
+const S7_LABEL_SOURCE_ATTRIBUTION: &str = "source_attribution";
+const S7_LABEL_WHY_SUMMARY: &str = "why_summary";
+const S7_LABEL_ASSUMPTIONS_SUMMARY: &str = "assumptions_summary";
+const S7_LABEL_ASSUMPTION_GROUP: &str = "assumption_group";
+const S7_LABEL_HIDDEN_IMPACT_SUMMARY: &str = "hidden_impact_summary";
+const S7_LABEL_HIDDEN_IMPACT_FALLBACK_DISCLOSURE: &str = "hidden_impact_fallback_disclosure";
+const S7_LABEL_CHALLENGE_COUNCIL_REQUIRED: &str = "challenge_council_required";
+const S7_LABEL_CHALLENGE_FAILURE_MODE: &str = "challenge_failure_mode";
+const S7_LABEL_CHALLENGE_MISSING_EVIDENCE: &str = "challenge_missing_evidence";
+const S7_LABEL_CHALLENGE_REQUIRED_REVIEW: &str = "challenge_required_review";
+const S7_LABEL_CHALLENGE_STRONGEST_OBJECTION: &str = "challenge_strongest_objection";
+const S7_LABEL_CHALLENGE_WEAKEST_ASSUMPTION: &str = "challenge_weakest_assumption";
+const S7_LABEL_EXPLAIN_PLAN_GOVERNANCE: &str = "explain_plan_governance";
+const S7_LABEL_EXPLAIN_PLAN_RECOVERY: &str = "explain_plan_recovery";
+const S7_LABEL_EXPLAIN_PLAN_SUMMARY: &str = "explain_plan_summary";
+const S7_LABEL_EXPLAIN_PLAN_VALIDATION: &str = "explain_plan_validation";
+const S7_ASSUMPTION_CATEGORY_ARCHITECTURE: &str = "architecture";
+const S7_ASSUMPTION_CATEGORY_DOMAIN: &str = "domain";
+const S7_ASSUMPTION_CATEGORY_GOVERNANCE: &str = "governance";
+const S7_ASSUMPTION_CATEGORY_IMPLEMENTATION: &str = "implementation";
+const S7_ASSUMPTION_CATEGORY_VALIDATION: &str = "validation";
+const S7_ASSUMPTION_RISK_HIGH: &str = "high";
+const S7_ASSUMPTION_RISK_LOW: &str = "low";
+const S7_ASSUMPTION_RISK_MEDIUM: &str = "medium";
+const S7_ASSUMPTION_SOURCE_CANON: &str = "Canon";
+const S7_ASSUMPTION_SOURCE_TRACE: &str = "trace";
+const S7_ASSUMPTION_SOURCE_WORKSPACE: &str = "workspace";
+const S7_ASSUMPTION_STATUS_EXPLICIT: &str = "explicit";
+const S7_ASSUMPTION_STATUS_INFERRED: &str = "inferred";
+const S7_ASSUMPTION_STATUS_MISSING: &str = "missing";
+const S7_COUNCIL_REQUIRED_NO: &str = "no";
+const S7_COUNCIL_REQUIRED_YES: &str = "yes";
+const S7_HIDDEN_IMPACT_GROUP_AFFECTED_DOMAINS: &str = "affected_domains";
+const S7_HIDDEN_IMPACT_GROUP_AFFECTED_SYSTEMS: &str = "affected_systems";
+const S7_HIDDEN_IMPACT_GROUP_CONTRACT_EXPOSURES: &str = "contract_exposures";
+const S7_HIDDEN_IMPACT_GROUP_MISSING_EVIDENCE: &str = "missing_evidence";
+const S7_HIDDEN_IMPACT_GROUP_MISSING_TESTS: &str = "missing_tests";
+const S7_HIDDEN_IMPACT_GROUP_REQUIRED_REVIEWERS: &str = "required_reviewers";
+const S7_HIDDEN_IMPACT_LABEL_AFFECTED_DOMAINS: &str = "hidden_impact_affected_domains";
+const S7_HIDDEN_IMPACT_LABEL_AFFECTED_SYSTEMS: &str = "hidden_impact_affected_systems";
+const S7_HIDDEN_IMPACT_LABEL_CONTRACT_EXPOSURES: &str = "hidden_impact_contract_exposures";
+const S7_HIDDEN_IMPACT_LABEL_MISSING_EVIDENCE: &str = "hidden_impact_missing_evidence";
+const S7_HIDDEN_IMPACT_LABEL_MISSING_TESTS: &str = "hidden_impact_missing_tests";
+const S7_HIDDEN_IMPACT_LABEL_REQUIRED_REVIEWERS: &str = "hidden_impact_required_reviewers";
+const S7_REVIEW_RUNTIME_ONLY: &str = "bounded runtime review only";
+const S7_WEAK_ASSUMPTION_NONE: &str = "none";
+const S7_RISK_CANON_GAP: &str =
+    "Canon confirmation is missing, so risk remains bounded by runtime-only evidence.";
+const S7_RISK_NO_EXPLICIT_FAILURE: &str =
+    "No explicit runtime failure evidence is currently reported.";
+const S7_WHY_FALLBACK: &str =
+    "Boundline has current runtime state but no richer explanation summary yet.";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct S7Projection {
+    why_summary: String,
+    risk_summary: String,
+    evidence_summary: String,
+    source_attribution: String,
+    fallback_disclosure: String,
+    confidence_level: &'static str,
+    next_best_action: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct S7AssumptionEntry {
+    category: &'static str,
+    subject_ref: String,
+    status: &'static str,
+    source: &'static str,
+    risk: &'static str,
+    explanation: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct S7HiddenImpactEntry {
+    group: &'static str,
+    label: &'static str,
+    subject_ref: String,
+    status: &'static str,
+    severity: &'static str,
+    follow_up: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct S7CognitiveProjection {
+    assumptions_summary: String,
+    assumption_groups: Vec<String>,
+    hidden_impact_summary: String,
+    hidden_impact_lines: Vec<String>,
+    hidden_impact_fallback_disclosure: Option<String>,
+    challenge_strongest_objection: String,
+    challenge_weakest_assumption: String,
+    challenge_missing_evidence: String,
+    challenge_failure_mode: String,
+    challenge_required_review: String,
+    challenge_council_required: &'static str,
+    explain_plan_summary: String,
+    explain_plan_validation: String,
+    explain_plan_governance: String,
+    explain_plan_recovery: String,
+}
 
 fn checkpoint_projection_from_state(
     state: &serde_json::Map<String, Value>,
@@ -429,6 +564,853 @@ fn push_output_section(
     lines.extend(section_lines);
 }
 
+fn s7_source_bucket_text(labels: &[&str]) -> String {
+    if labels.is_empty() { S7_NONE.to_string() } else { labels.join(", ") }
+}
+
+fn s7_confidence_level(
+    has_failure_signal: bool,
+    canon_missing: bool,
+    context_stale: bool,
+    clarification_required: bool,
+) -> &'static str {
+    if has_failure_signal || clarification_required {
+        S7_CONFIDENCE_LOW
+    } else if canon_missing || context_stale {
+        S7_CONFIDENCE_MEDIUM
+    } else {
+        S7_CONFIDENCE_HIGH
+    }
+}
+
+fn s7_fallback_disclosure(
+    canon_missing: bool,
+    context_staleness_reason: Option<&str>,
+    clarification_missing_fields: &[String],
+) -> String {
+    if canon_missing {
+        S7_FALLBACK_CANON_MISSING.to_string()
+    } else if let Some(reason) = context_staleness_reason {
+        format!("{S7_FALLBACK_CONTEXT_STALE_PREFIX}{reason}")
+    } else if !clarification_missing_fields.is_empty() {
+        format!("{S7_FALLBACK_CLARIFICATION_PREFIX}{}", clarification_missing_fields.join(", "))
+    } else {
+        S7_FALLBACK_READY.to_string()
+    }
+}
+
+fn s7_projection_lines(projection: &S7Projection) -> Vec<String> {
+    vec![
+        format!("{S7_LABEL_WHY_SUMMARY}: {}", projection.why_summary),
+        format!("{S7_LABEL_RISK_SUMMARY}: {}", projection.risk_summary),
+        format!("{S7_LABEL_EVIDENCE_SUMMARY}: {}", projection.evidence_summary),
+        format!("{S7_LABEL_SOURCE_ATTRIBUTION}: {}", projection.source_attribution),
+        format!("{S7_LABEL_FALLBACK_DISCLOSURE}: {}", projection.fallback_disclosure),
+        format!("{S7_LABEL_CONFIDENCE_LEVEL}: {}", projection.confidence_level),
+        format!("{S7_LABEL_NEXT_BEST_ACTION}: {}", projection.next_best_action),
+    ]
+}
+
+fn s7_cognitive_projection_lines(projection: &S7CognitiveProjection) -> Vec<String> {
+    let mut lines =
+        vec![format!("{S7_LABEL_ASSUMPTIONS_SUMMARY}: {}", projection.assumptions_summary)];
+    lines.extend(projection.assumption_groups.iter().cloned());
+    lines.push(format!("{S7_LABEL_HIDDEN_IMPACT_SUMMARY}: {}", projection.hidden_impact_summary));
+    lines.extend(projection.hidden_impact_lines.iter().cloned());
+    if let Some(fallback_disclosure) = projection.hidden_impact_fallback_disclosure.as_deref() {
+        lines.push(format!("{S7_LABEL_HIDDEN_IMPACT_FALLBACK_DISCLOSURE}: {fallback_disclosure}"));
+    }
+    lines.push(format!(
+        "{S7_LABEL_CHALLENGE_STRONGEST_OBJECTION}: {}",
+        projection.challenge_strongest_objection
+    ));
+    lines.push(format!(
+        "{S7_LABEL_CHALLENGE_WEAKEST_ASSUMPTION}: {}",
+        projection.challenge_weakest_assumption
+    ));
+    lines.push(format!(
+        "{S7_LABEL_CHALLENGE_MISSING_EVIDENCE}: {}",
+        projection.challenge_missing_evidence
+    ));
+    lines.push(format!("{S7_LABEL_CHALLENGE_FAILURE_MODE}: {}", projection.challenge_failure_mode));
+    lines.push(format!(
+        "{S7_LABEL_CHALLENGE_REQUIRED_REVIEW}: {}",
+        projection.challenge_required_review
+    ));
+    lines.push(format!(
+        "{S7_LABEL_CHALLENGE_COUNCIL_REQUIRED}: {}",
+        projection.challenge_council_required
+    ));
+    lines.push(format!("{S7_LABEL_EXPLAIN_PLAN_SUMMARY}: {}", projection.explain_plan_summary));
+    lines.push(format!(
+        "{S7_LABEL_EXPLAIN_PLAN_VALIDATION}: {}",
+        projection.explain_plan_validation
+    ));
+    lines.push(format!(
+        "{S7_LABEL_EXPLAIN_PLAN_GOVERNANCE}: {}",
+        projection.explain_plan_governance
+    ));
+    lines.push(format!("{S7_LABEL_EXPLAIN_PLAN_RECOVERY}: {}", projection.explain_plan_recovery));
+    lines
+}
+
+fn s7_projection_for_trace_summary(summary: &TraceSummaryView, next_command: &str) -> S7Projection {
+    let mut runtime_sources = Vec::new();
+    if summary.authored_input_summary.is_some() {
+        runtime_sources.push(S7_RUNTIME_SOURCE_AUTHORED_INPUT);
+    }
+    if summary.context_summary.is_some() {
+        runtime_sources.push(S7_RUNTIME_SOURCE_CONTEXT);
+    }
+    if !summary.executed_steps.is_empty() {
+        runtime_sources.push(S7_RUNTIME_SOURCE_TRACE_STEPS);
+    }
+    if !summary.decision_timeline.is_empty() || !summary.failure_evidence.is_empty() {
+        runtime_sources.push(S7_RUNTIME_SOURCE_TRACE_EVIDENCE);
+    }
+    if !summary.review_timeline.is_empty() {
+        runtime_sources.push(S7_RUNTIME_SOURCE_REVIEW_TIMELINE);
+    }
+
+    let mut canon_sources = Vec::new();
+    if !summary.governance_timeline.is_empty() {
+        canon_sources.push(S7_CANON_SOURCE_GOVERNANCE_TIMELINE);
+    }
+    if summary.governance_approval_provenance.is_some() {
+        canon_sources.push(S7_CANON_SOURCE_APPROVAL_PROVENANCE);
+    }
+    if summary.governance_reason.is_some() {
+        canon_sources.push(S7_CANON_SOURCE_GOVERNANCE_DECISION);
+    }
+    if summary.governance_next_action.is_some() {
+        canon_sources.push(S7_CANON_SOURCE_GOVERNANCE_ACTION);
+    }
+
+    let mut missing_sources = Vec::new();
+    if canon_sources.is_empty() {
+        missing_sources.push(S7_MISSING_CANON_SOURCE);
+    }
+    if summary.context_staleness_reason.is_some() {
+        missing_sources.push(S7_MISSING_CONTEXT_SOURCE);
+    }
+    if !summary.clarification_missing_fields.is_empty() {
+        missing_sources.push(S7_MISSING_CLARIFICATION_SOURCE);
+    }
+
+    let why_summary = summary
+        .goal_plan_summary
+        .clone()
+        .or_else(|| summary.negotiation_goal_summary.clone())
+        .or_else(|| {
+            summary.executed_steps.last().map(|step| {
+                format!("latest bounded step {} reports {}", step.step_id, step.headline)
+            })
+        })
+        .unwrap_or_else(|| {
+            if summary.terminal_reason.message.trim().is_empty() {
+                S7_WHY_FALLBACK.to_string()
+            } else {
+                summary.terminal_reason.message.clone()
+            }
+        });
+
+    let risk_summary = if !summary.failure_evidence.is_empty() {
+        summary.failure_evidence[0].clone()
+    } else if let Some(reason) = summary.context_staleness_reason.as_ref() {
+        format!("stale context reduces confidence: {reason}")
+    } else if canon_sources.is_empty() {
+        S7_RISK_CANON_GAP.to_string()
+    } else if summary.terminal_reason.message.trim().is_empty() {
+        S7_RISK_NO_EXPLICIT_FAILURE.to_string()
+    } else {
+        summary.terminal_reason.message.clone()
+    };
+
+    let evidence_summary = format!(
+        "runtime({}): {}; canon({}): {}; missing({}): {}",
+        runtime_sources.len(),
+        s7_source_bucket_text(&runtime_sources),
+        canon_sources.len(),
+        s7_source_bucket_text(&canon_sources),
+        missing_sources.len(),
+        s7_source_bucket_text(&missing_sources)
+    );
+
+    let source_attribution = format!(
+        "runtime={}; canon={}; missing={}",
+        s7_source_bucket_text(&runtime_sources),
+        s7_source_bucket_text(&canon_sources),
+        s7_source_bucket_text(&missing_sources)
+    );
+
+    let fallback_disclosure = s7_fallback_disclosure(
+        canon_sources.is_empty(),
+        summary.context_staleness_reason.as_deref(),
+        &summary.clarification_missing_fields,
+    );
+
+    let confidence_level = s7_confidence_level(
+        !summary.failure_evidence.is_empty(),
+        canon_sources.is_empty(),
+        summary.context_staleness_reason.is_some(),
+        !summary.clarification_missing_fields.is_empty(),
+    );
+
+    let next_best_action =
+        summary.governance_next_action.clone().unwrap_or_else(|| next_command.to_string());
+
+    S7Projection {
+        why_summary,
+        risk_summary,
+        evidence_summary,
+        source_attribution,
+        fallback_disclosure,
+        confidence_level,
+        next_best_action,
+    }
+}
+
+fn s7_projection_for_session_status(view: &SessionStatusView) -> S7Projection {
+    let mut runtime_sources = vec![S7_RUNTIME_SOURCE_SESSION_STATE];
+    if view.authored_input_summary.is_some() {
+        runtime_sources.push(S7_RUNTIME_SOURCE_AUTHORED_INPUT);
+    }
+    if view.context_summary.is_some() {
+        runtime_sources.push(S7_RUNTIME_SOURCE_CONTEXT);
+    }
+    if view.latest_selection_reason.is_some() || view.latest_validation_status.is_some() {
+        runtime_sources.push(S7_RUNTIME_SOURCE_DECISION_TIMELINE);
+    }
+    if view.latest_review_headline.is_some() || view.latest_review_outcome.is_some() {
+        runtime_sources.push(S7_RUNTIME_SOURCE_REVIEW_TIMELINE);
+    }
+
+    let mut canon_sources = Vec::new();
+    if view.latest_governance_packet_ref.is_some() {
+        canon_sources.push(S7_CANON_SOURCE_GOVERNANCE_PACKET);
+    }
+    if view.latest_governance_approval_provenance.is_some() {
+        canon_sources.push(S7_CANON_SOURCE_APPROVAL_PROVENANCE);
+    }
+    if view.latest_governance_decision.is_some() || view.latest_governance_reason.is_some() {
+        canon_sources.push(S7_CANON_SOURCE_GOVERNANCE_DECISION);
+    }
+    if view.governance_next_action.is_some() {
+        canon_sources.push(S7_CANON_SOURCE_GOVERNANCE_ACTION);
+    }
+
+    let clarification_missing_fields =
+        view.clarification_missing_fields.clone().unwrap_or_default();
+
+    let mut missing_sources = Vec::new();
+    if canon_sources.is_empty() {
+        missing_sources.push(S7_MISSING_CANON_SOURCE);
+    }
+    if view.context_staleness_reason.is_some() {
+        missing_sources.push(S7_MISSING_CONTEXT_SOURCE);
+    }
+    if !clarification_missing_fields.is_empty() {
+        missing_sources.push(S7_MISSING_CLARIFICATION_SOURCE);
+    }
+
+    let why_summary = view
+        .planning_rationale
+        .clone()
+        .or_else(|| view.latest_selection_reason.clone())
+        .or_else(|| view.goal.clone())
+        .unwrap_or_else(|| view.explanation.clone());
+
+    let risk_summary = if let Some(reason) = view.latest_exhaustion_reason.as_ref() {
+        reason.clone()
+    } else if let Some(reason) = view.latest_governance_blocked_reason.as_ref() {
+        reason.clone()
+    } else if let Some(reason) = view.context_staleness_reason.as_ref() {
+        format!("stale context reduces confidence: {reason}")
+    } else if canon_sources.is_empty() {
+        S7_RISK_CANON_GAP.to_string()
+    } else if let Some(status) = view.latest_validation_status.as_ref() {
+        status.clone()
+    } else {
+        S7_RISK_NO_EXPLICIT_FAILURE.to_string()
+    };
+
+    let evidence_summary = format!(
+        "runtime({}): {}; canon({}): {}; missing({}): {}",
+        runtime_sources.len(),
+        s7_source_bucket_text(&runtime_sources),
+        canon_sources.len(),
+        s7_source_bucket_text(&canon_sources),
+        missing_sources.len(),
+        s7_source_bucket_text(&missing_sources)
+    );
+
+    let source_attribution = format!(
+        "runtime={}; canon={}; missing={}",
+        s7_source_bucket_text(&runtime_sources),
+        s7_source_bucket_text(&canon_sources),
+        s7_source_bucket_text(&missing_sources)
+    );
+
+    let fallback_disclosure = s7_fallback_disclosure(
+        canon_sources.is_empty(),
+        view.context_staleness_reason.as_deref(),
+        &clarification_missing_fields,
+    );
+
+    let confidence_level = s7_confidence_level(
+        view.latest_exhaustion_reason.is_some() || view.latest_governance_blocked_reason.is_some(),
+        canon_sources.is_empty(),
+        view.context_staleness_reason.is_some(),
+        !clarification_missing_fields.is_empty(),
+    );
+
+    let next_best_action = view
+        .governance_next_action
+        .clone()
+        .or_else(|| view.next_command.clone())
+        .or_else(|| view.workflow_next_action.clone())
+        .unwrap_or_else(|| view.explanation.clone());
+
+    S7Projection {
+        why_summary,
+        risk_summary,
+        evidence_summary,
+        source_attribution,
+        fallback_disclosure,
+        confidence_level,
+        next_best_action,
+    }
+}
+
+fn s7_assumption_entries(
+    advanced_context: Option<&AdvancedContextProjection>,
+) -> Vec<S7AssumptionEntry> {
+    let Some(advanced_context) = advanced_context else {
+        return Vec::new();
+    };
+
+    advanced_context
+        .relationships
+        .iter()
+        .map(|relationship| S7AssumptionEntry {
+            category: s7_assumption_category(relationship.relationship_kind),
+            subject_ref: relationship.subject_ref.clone(),
+            status: s7_assumption_status(relationship.relationship_kind),
+            source: s7_assumption_source(
+                advanced_context,
+                relationship.supporting_candidate_ids.as_slice(),
+            ),
+            risk: s7_assumption_risk(
+                relationship.relationship_kind,
+                relationship.credibility_state,
+            ),
+            explanation: relationship.explanation.clone(),
+        })
+        .collect()
+}
+
+fn s7_hidden_impact_entries(
+    advanced_context: Option<&AdvancedContextProjection>,
+) -> Vec<S7HiddenImpactEntry> {
+    let Some(advanced_context) = advanced_context else {
+        return Vec::new();
+    };
+
+    advanced_context
+        .impact_findings
+        .iter()
+        .map(|finding| S7HiddenImpactEntry {
+            group: s7_hidden_impact_group(finding.finding_kind),
+            label: s7_hidden_impact_label(finding.finding_kind),
+            subject_ref: finding.subject_ref.clone(),
+            status: s7_hidden_impact_status(finding.status),
+            severity: s7_hidden_impact_severity(finding.severity),
+            follow_up: finding.recommended_follow_up.clone(),
+        })
+        .collect()
+}
+
+fn s7_assumption_category(kind: RelationshipKind) -> &'static str {
+    match kind {
+        RelationshipKind::AffectsSystem | RelationshipKind::ExposesContract => {
+            S7_ASSUMPTION_CATEGORY_ARCHITECTURE
+        }
+        RelationshipKind::AffectsDomain => S7_ASSUMPTION_CATEGORY_DOMAIN,
+        RelationshipKind::SuggestsReviewer => S7_ASSUMPTION_CATEGORY_GOVERNANCE,
+        RelationshipKind::SupportsRisk => S7_ASSUMPTION_CATEGORY_IMPLEMENTATION,
+        RelationshipKind::ExercisesTest | RelationshipKind::RequiresEvidence => {
+            S7_ASSUMPTION_CATEGORY_VALIDATION
+        }
+    }
+}
+
+fn s7_assumption_status(kind: RelationshipKind) -> &'static str {
+    match kind {
+        RelationshipKind::ExercisesTest | RelationshipKind::ExposesContract => {
+            S7_ASSUMPTION_STATUS_EXPLICIT
+        }
+        RelationshipKind::RequiresEvidence => S7_ASSUMPTION_STATUS_MISSING,
+        RelationshipKind::AffectsSystem
+        | RelationshipKind::AffectsDomain
+        | RelationshipKind::SuggestsReviewer
+        | RelationshipKind::SupportsRisk => S7_ASSUMPTION_STATUS_INFERRED,
+    }
+}
+
+fn s7_assumption_source(
+    advanced_context: &AdvancedContextProjection,
+    supporting_candidate_ids: &[String],
+) -> &'static str {
+    for candidate_id in supporting_candidate_ids {
+        if let Some(source_kind) = advanced_context
+            .selected_evidence
+            .iter()
+            .chain(advanced_context.rejected_candidates.iter())
+            .find(|candidate| candidate.candidate_id == *candidate_id)
+            .map(|candidate| candidate.source_kind)
+        {
+            return match source_kind {
+                RetrievalSourceKind::CanonArtifact => S7_ASSUMPTION_SOURCE_CANON,
+                RetrievalSourceKind::Trace
+                | RetrievalSourceKind::ReviewFinding
+                | RetrievalSourceKind::VerificationEvidence => S7_ASSUMPTION_SOURCE_TRACE,
+                RetrievalSourceKind::WorkspaceFile | RetrievalSourceKind::ProjectMemory => {
+                    S7_ASSUMPTION_SOURCE_WORKSPACE
+                }
+            };
+        }
+    }
+
+    S7_ASSUMPTION_SOURCE_TRACE
+}
+
+fn s7_assumption_risk(
+    kind: RelationshipKind,
+    credibility_state: RelationshipCredibilityState,
+) -> &'static str {
+    if matches!(kind, RelationshipKind::RequiresEvidence) {
+        return S7_ASSUMPTION_RISK_HIGH;
+    }
+
+    match credibility_state {
+        RelationshipCredibilityState::Credible => S7_ASSUMPTION_RISK_LOW,
+        RelationshipCredibilityState::Tentative => S7_ASSUMPTION_RISK_MEDIUM,
+        RelationshipCredibilityState::Insufficient => S7_ASSUMPTION_RISK_HIGH,
+    }
+}
+
+fn s7_assumption_summary(entries: &[S7AssumptionEntry]) -> String {
+    s7_group_summary(
+        entries.iter().map(|entry| entry.category),
+        &[
+            S7_ASSUMPTION_CATEGORY_DOMAIN,
+            S7_ASSUMPTION_CATEGORY_ARCHITECTURE,
+            S7_ASSUMPTION_CATEGORY_IMPLEMENTATION,
+            S7_ASSUMPTION_CATEGORY_VALIDATION,
+            S7_ASSUMPTION_CATEGORY_GOVERNANCE,
+        ],
+    )
+}
+
+fn s7_assumption_group_lines(entries: &[S7AssumptionEntry]) -> Vec<String> {
+    entries
+        .iter()
+        .map(|entry| {
+            format!(
+                "{S7_LABEL_ASSUMPTION_GROUP}: {} -> {} [{}] source={} risk={} {}",
+                entry.category,
+                entry.subject_ref,
+                entry.status,
+                entry.source,
+                entry.risk,
+                entry.explanation
+            )
+        })
+        .collect()
+}
+
+fn s7_hidden_impact_group(kind: ImpactFindingKind) -> &'static str {
+    match kind {
+        ImpactFindingKind::AffectedSystem => S7_HIDDEN_IMPACT_GROUP_AFFECTED_SYSTEMS,
+        ImpactFindingKind::AffectedDomain => S7_HIDDEN_IMPACT_GROUP_AFFECTED_DOMAINS,
+        ImpactFindingKind::MissingTest => S7_HIDDEN_IMPACT_GROUP_MISSING_TESTS,
+        ImpactFindingKind::ContractExposure => S7_HIDDEN_IMPACT_GROUP_CONTRACT_EXPOSURES,
+        ImpactFindingKind::ReviewerGap => S7_HIDDEN_IMPACT_GROUP_REQUIRED_REVIEWERS,
+        ImpactFindingKind::EvidenceGap => S7_HIDDEN_IMPACT_GROUP_MISSING_EVIDENCE,
+    }
+}
+
+fn s7_hidden_impact_label(kind: ImpactFindingKind) -> &'static str {
+    match kind {
+        ImpactFindingKind::AffectedSystem => S7_HIDDEN_IMPACT_LABEL_AFFECTED_SYSTEMS,
+        ImpactFindingKind::AffectedDomain => S7_HIDDEN_IMPACT_LABEL_AFFECTED_DOMAINS,
+        ImpactFindingKind::MissingTest => S7_HIDDEN_IMPACT_LABEL_MISSING_TESTS,
+        ImpactFindingKind::ContractExposure => S7_HIDDEN_IMPACT_LABEL_CONTRACT_EXPOSURES,
+        ImpactFindingKind::ReviewerGap => S7_HIDDEN_IMPACT_LABEL_REQUIRED_REVIEWERS,
+        ImpactFindingKind::EvidenceGap => S7_HIDDEN_IMPACT_LABEL_MISSING_EVIDENCE,
+    }
+}
+
+fn s7_hidden_impact_status(status: ImpactFindingStatus) -> &'static str {
+    match status {
+        ImpactFindingStatus::Open => "open",
+        ImpactFindingStatus::Acknowledged => "acknowledged",
+        ImpactFindingStatus::Resolved => "resolved",
+        ImpactFindingStatus::Invalidated => "invalidated",
+    }
+}
+
+fn s7_hidden_impact_severity(severity: ImpactFindingSeverity) -> &'static str {
+    match severity {
+        ImpactFindingSeverity::Low => S7_ASSUMPTION_RISK_LOW,
+        ImpactFindingSeverity::Medium => S7_ASSUMPTION_RISK_MEDIUM,
+        ImpactFindingSeverity::High => S7_ASSUMPTION_RISK_HIGH,
+    }
+}
+
+fn s7_hidden_impact_summary(entries: &[S7HiddenImpactEntry]) -> String {
+    s7_group_summary(
+        entries.iter().map(|entry| entry.group),
+        &[
+            S7_HIDDEN_IMPACT_GROUP_AFFECTED_DOMAINS,
+            S7_HIDDEN_IMPACT_GROUP_AFFECTED_SYSTEMS,
+            S7_HIDDEN_IMPACT_GROUP_MISSING_TESTS,
+            S7_HIDDEN_IMPACT_GROUP_CONTRACT_EXPOSURES,
+            S7_HIDDEN_IMPACT_GROUP_REQUIRED_REVIEWERS,
+            S7_HIDDEN_IMPACT_GROUP_MISSING_EVIDENCE,
+        ],
+    )
+}
+
+fn s7_hidden_impact_lines(entries: &[S7HiddenImpactEntry]) -> Vec<String> {
+    entries
+        .iter()
+        .map(|entry| {
+            format!(
+                "{}: {} [{}/{}] {}",
+                entry.label, entry.subject_ref, entry.status, entry.severity, entry.follow_up
+            )
+        })
+        .collect()
+}
+
+fn s7_group_summary<'a>(entries: impl Iterator<Item = &'a str>, ordered_groups: &[&str]) -> String {
+    let collected = entries.collect::<Vec<_>>();
+    let mut parts = Vec::new();
+    for group in ordered_groups {
+        let count = collected.iter().filter(|entry| **entry == *group).count();
+        if count > 0 {
+            parts.push(format!("{group}({count})"));
+        }
+    }
+
+    if parts.is_empty() { format!("{S7_NONE}(0)") } else { parts.join(", ") }
+}
+
+fn s7_hidden_impact_fallback_disclosure(
+    advanced_context: Option<&AdvancedContextProjection>,
+) -> Option<String> {
+    let advanced_context = advanced_context?;
+    if advanced_context.semantic_policy_state == SemanticPolicyState::Local
+        && advanced_context.semantic_capability_state != SemanticCapabilityState::Ready
+    {
+        let reason = advanced_context
+            .terminal_reason
+            .as_deref()
+            .unwrap_or("semantic acceleration is unavailable; using baseline structured retrieval");
+        return Some(format!("higher-order impact inference is unavailable because {reason}"));
+    }
+
+    None
+}
+
+fn s7_highest_priority_impact(entries: &[S7HiddenImpactEntry]) -> Option<&S7HiddenImpactEntry> {
+    entries.iter().max_by_key(|entry| {
+        (
+            usize::from(entry.status == "open"),
+            match entry.severity {
+                S7_ASSUMPTION_RISK_HIGH => 3,
+                S7_ASSUMPTION_RISK_MEDIUM => 2,
+                _ => 1,
+            },
+        )
+    })
+}
+
+fn s7_weakest_assumption(entries: &[S7AssumptionEntry]) -> String {
+    entries
+        .iter()
+        .max_by_key(|entry| {
+            (
+                usize::from(entry.status == S7_ASSUMPTION_STATUS_MISSING),
+                match entry.risk {
+                    S7_ASSUMPTION_RISK_HIGH => 3,
+                    S7_ASSUMPTION_RISK_MEDIUM => 2,
+                    _ => 1,
+                },
+            )
+        })
+        .map(|entry| {
+            format!("{} -> {} [{}/{}]", entry.category, entry.subject_ref, entry.status, entry.risk)
+        })
+        .unwrap_or_else(|| S7_WEAK_ASSUMPTION_NONE.to_string())
+}
+
+fn s7_challenge_strongest_objection(
+    impacts: &[S7HiddenImpactEntry],
+    hidden_impact_fallback_disclosure: Option<&str>,
+) -> String {
+    if let Some(impact) = s7_highest_priority_impact(impacts) {
+        return match impact.group {
+            S7_HIDDEN_IMPACT_GROUP_MISSING_TESTS => {
+                format!("missing test coverage is still open for {}", impact.subject_ref)
+            }
+            S7_HIDDEN_IMPACT_GROUP_MISSING_EVIDENCE => {
+                format!("required evidence is still missing for {}", impact.subject_ref)
+            }
+            S7_HIDDEN_IMPACT_GROUP_REQUIRED_REVIEWERS => {
+                format!("required reviewer coverage is still missing for {}", impact.subject_ref)
+            }
+            S7_HIDDEN_IMPACT_GROUP_CONTRACT_EXPOSURES => {
+                format!("contract exposure still needs review for {}", impact.subject_ref)
+            }
+            S7_HIDDEN_IMPACT_GROUP_AFFECTED_SYSTEMS => {
+                format!("system impact extends beyond the current slice for {}", impact.subject_ref)
+            }
+            S7_HIDDEN_IMPACT_GROUP_AFFECTED_DOMAINS => {
+                format!("domain impact extends beyond the current slice for {}", impact.subject_ref)
+            }
+            _ => impact.follow_up.clone(),
+        };
+    }
+
+    hidden_impact_fallback_disclosure.unwrap_or(S7_RISK_NO_EXPLICIT_FAILURE).to_string()
+}
+
+fn s7_challenge_missing_evidence(
+    impacts: &[S7HiddenImpactEntry],
+    hidden_impact_fallback_disclosure: Option<&str>,
+) -> String {
+    let evidence_refs = impacts
+        .iter()
+        .filter(|impact| {
+            impact.group == S7_HIDDEN_IMPACT_GROUP_MISSING_TESTS
+                || impact.group == S7_HIDDEN_IMPACT_GROUP_MISSING_EVIDENCE
+        })
+        .map(|impact| impact.subject_ref.clone())
+        .collect::<Vec<_>>();
+    if !evidence_refs.is_empty() {
+        return evidence_refs.join(", ");
+    }
+    hidden_impact_fallback_disclosure.map(str::to_string).unwrap_or_else(|| S7_NONE.to_string())
+}
+
+fn s7_challenge_failure_mode(
+    impacts: &[S7HiddenImpactEntry],
+    hidden_impact_fallback_disclosure: Option<&str>,
+) -> String {
+    if let Some(impact) = s7_highest_priority_impact(impacts) {
+        return match impact.group {
+            S7_HIDDEN_IMPACT_GROUP_MISSING_TESTS => {
+                format!(
+                    "bounded validation can regress without a focused test for {}",
+                    impact.subject_ref
+                )
+            }
+            S7_HIDDEN_IMPACT_GROUP_MISSING_EVIDENCE => {
+                format!("the plan can proceed without required evidence for {}", impact.subject_ref)
+            }
+            S7_HIDDEN_IMPACT_GROUP_REQUIRED_REVIEWERS => {
+                format!("review can miss critical dissent for {}", impact.subject_ref)
+            }
+            S7_HIDDEN_IMPACT_GROUP_CONTRACT_EXPOSURES => {
+                format!(
+                    "downstream consumers can break if {} changes without review",
+                    impact.subject_ref
+                )
+            }
+            S7_HIDDEN_IMPACT_GROUP_AFFECTED_SYSTEMS => {
+                format!(
+                    "cross-system impact can escape the bounded slice for {}",
+                    impact.subject_ref
+                )
+            }
+            S7_HIDDEN_IMPACT_GROUP_AFFECTED_DOMAINS => {
+                format!("domain invariants can drift for {}", impact.subject_ref)
+            }
+            _ => impact.follow_up.clone(),
+        };
+    }
+
+    hidden_impact_fallback_disclosure
+        .map(str::to_string)
+        .unwrap_or_else(|| S7_RISK_NO_EXPLICIT_FAILURE.to_string())
+}
+
+fn s7_council_required(governance_present: bool) -> &'static str {
+    if governance_present { S7_COUNCIL_REQUIRED_YES } else { S7_COUNCIL_REQUIRED_NO }
+}
+
+fn s7_cognitive_projection_for_trace_summary(
+    summary: &TraceSummaryView,
+    next_command: &str,
+    fallback_disclosure: &str,
+) -> S7CognitiveProjection {
+    let assumptions = s7_assumption_entries(summary.advanced_context.as_ref());
+    let impacts = s7_hidden_impact_entries(summary.advanced_context.as_ref());
+    let hidden_impact_fallback_disclosure =
+        s7_hidden_impact_fallback_disclosure(summary.advanced_context.as_ref());
+    let governance_present = !summary.governance_timeline.is_empty()
+        || summary.governance_reason.is_some()
+        || summary.governance_approval_provenance.is_some()
+        || summary.governance_next_action.is_some();
+    let stage_text = if !summary.executed_steps.is_empty() {
+        format!("{} step(s)", summary.executed_steps.len())
+    } else {
+        "trace_inspect".to_string()
+    };
+
+    S7CognitiveProjection {
+        assumptions_summary: s7_assumption_summary(&assumptions),
+        assumption_groups: s7_assumption_group_lines(&assumptions),
+        hidden_impact_summary: s7_hidden_impact_summary(&impacts),
+        hidden_impact_lines: s7_hidden_impact_lines(&impacts),
+        hidden_impact_fallback_disclosure: hidden_impact_fallback_disclosure.clone(),
+        challenge_strongest_objection: s7_challenge_strongest_objection(
+            &impacts,
+            hidden_impact_fallback_disclosure.as_deref(),
+        ),
+        challenge_weakest_assumption: s7_weakest_assumption(&assumptions),
+        challenge_missing_evidence: s7_challenge_missing_evidence(
+            &impacts,
+            hidden_impact_fallback_disclosure.as_deref(),
+        ),
+        challenge_failure_mode: s7_challenge_failure_mode(
+            &impacts,
+            hidden_impact_fallback_disclosure.as_deref(),
+        ),
+        challenge_required_review: if governance_present {
+            "governance timeline remains authoritative".to_string()
+        } else {
+            S7_REVIEW_RUNTIME_ONLY.to_string()
+        },
+        challenge_council_required: s7_council_required(governance_present),
+        explain_plan_summary: format!(
+            "goal={}; stages={stage_text}; risks={}; assumptions={}",
+            summary.goal,
+            s7_hidden_impact_summary(&impacts),
+            s7_assumption_summary(&assumptions)
+        ),
+        explain_plan_validation: impacts
+            .iter()
+            .find(|impact| impact.group == S7_HIDDEN_IMPACT_GROUP_MISSING_TESTS)
+            .map(|impact| impact.follow_up.clone())
+            .unwrap_or_else(|| next_command.to_string()),
+        explain_plan_governance: if governance_present {
+            summary
+                .governance_next_action
+                .clone()
+                .or_else(|| summary.governance_approval_provenance.clone())
+                .or_else(|| summary.governance_reason.clone())
+                .unwrap_or_else(|| fallback_disclosure.to_string())
+        } else {
+            fallback_disclosure.to_string()
+        },
+        explain_plan_recovery: summary
+            .latest_checkpoint_restore_command
+            .clone()
+            .unwrap_or_else(|| next_command.to_string()),
+    }
+}
+
+fn s7_cognitive_projection_for_session_status(
+    view: &SessionStatusView,
+    fallback_disclosure: &str,
+) -> S7CognitiveProjection {
+    let assumptions = s7_assumption_entries(view.advanced_context.as_ref());
+    let impacts = s7_hidden_impact_entries(view.advanced_context.as_ref());
+    let hidden_impact_fallback_disclosure =
+        s7_hidden_impact_fallback_disclosure(view.advanced_context.as_ref());
+    let governance_present = view.latest_governance_packet_ref.is_some()
+        || view.latest_governance_runtime.is_some()
+        || view.latest_governance_decision.is_some()
+        || view.latest_governance_reason.is_some()
+        || view.governance_next_action.is_some();
+    let stage_text = match (view.active_flow.as_deref(), view.flow_state.as_deref()) {
+        (Some(flow), Some(state)) => format!("{flow}/{state}"),
+        (Some(flow), None) => flow.to_string(),
+        _ => view.current_stage_id.clone().unwrap_or_else(|| "session_state".to_string()),
+    };
+    let goal = view.goal.clone().unwrap_or_else(|| view.explanation.clone());
+
+    S7CognitiveProjection {
+        assumptions_summary: s7_assumption_summary(&assumptions),
+        assumption_groups: s7_assumption_group_lines(&assumptions),
+        hidden_impact_summary: s7_hidden_impact_summary(&impacts),
+        hidden_impact_lines: s7_hidden_impact_lines(&impacts),
+        hidden_impact_fallback_disclosure: hidden_impact_fallback_disclosure.clone(),
+        challenge_strongest_objection: s7_challenge_strongest_objection(
+            &impacts,
+            hidden_impact_fallback_disclosure.as_deref(),
+        ),
+        challenge_weakest_assumption: s7_weakest_assumption(&assumptions),
+        challenge_missing_evidence: s7_challenge_missing_evidence(
+            &impacts,
+            hidden_impact_fallback_disclosure.as_deref(),
+        ),
+        challenge_failure_mode: s7_challenge_failure_mode(
+            &impacts,
+            hidden_impact_fallback_disclosure.as_deref(),
+        ),
+        challenge_required_review: if let Some(packet_ref) =
+            view.latest_governance_packet_ref.as_deref()
+        {
+            format!("governance packet {packet_ref} remains authoritative")
+        } else if governance_present {
+            "governance runtime remains authoritative".to_string()
+        } else {
+            S7_REVIEW_RUNTIME_ONLY.to_string()
+        },
+        challenge_council_required: s7_council_required(governance_present),
+        explain_plan_summary: format!(
+            "goal={goal}; stages={stage_text}; risks={}; assumptions={}",
+            s7_hidden_impact_summary(&impacts),
+            s7_assumption_summary(&assumptions)
+        ),
+        explain_plan_validation: view
+            .verification_strategy
+            .clone()
+            .or_else(|| {
+                impacts
+                    .iter()
+                    .find(|impact| impact.group == S7_HIDDEN_IMPACT_GROUP_MISSING_TESTS)
+                    .map(|impact| impact.follow_up.clone())
+            })
+            .or_else(|| view.next_command.clone())
+            .unwrap_or_else(|| view.explanation.clone()),
+        explain_plan_governance: if let Some(packet_ref) =
+            view.latest_governance_packet_ref.as_deref()
+        {
+            format!(
+                "governance_packet={packet_ref}; council_required={}",
+                s7_council_required(governance_present)
+            )
+        } else if governance_present {
+            view.latest_governance_decision
+                .clone()
+                .or_else(|| view.governance_next_action.clone())
+                .unwrap_or_else(|| fallback_disclosure.to_string())
+        } else {
+            fallback_disclosure.to_string()
+        },
+        explain_plan_recovery: view
+            .latest_checkpoint_restore_command
+            .clone()
+            .or_else(|| view.next_command.clone())
+            .unwrap_or_else(|| view.explanation.clone()),
+    }
+}
+
 fn diagnostic_follow_up_actions(report: &DiagnosticsReport) -> Vec<String> {
     if !report.ready {
         return Vec::new();
@@ -485,6 +1467,7 @@ pub fn render_diagnostics(report: &DiagnosticsReport) -> String {
         .map(|check| {
             let status = match check.status {
                 DiagnosticsStatus::Passed => "passed",
+                DiagnosticsStatus::Advisory => "advisory",
                 DiagnosticsStatus::Failed => "failed",
             };
             format!("- {}: {} - {}", check.name, status, check.message)
@@ -492,10 +1475,17 @@ pub fn render_diagnostics(report: &DiagnosticsReport) -> String {
         .collect::<Vec<_>>();
     push_output_section(&mut lines, presentation, "checks", check_lines);
 
-    let mut action_lines =
-        report.suggested_actions.iter().map(|action| format!("- {action}")).collect::<Vec<_>>();
-    if action_lines.is_empty() {
-        action_lines = diagnostic_follow_up_actions(report);
+    let mut action_lines = Vec::new();
+    for action in &report.suggested_actions {
+        let rendered = format!("- {action}");
+        if !action_lines.iter().any(|existing| existing == &rendered) {
+            action_lines.push(rendered);
+        }
+    }
+    for action in diagnostic_follow_up_actions(report) {
+        if !action_lines.iter().any(|existing| existing == &action) {
+            action_lines.push(action);
+        }
     }
     push_output_section(&mut lines, presentation, "actions", action_lines);
 
@@ -1286,6 +2276,14 @@ pub fn render_trace_summary(
         lines.push(format!("delegation_evidence_summary: {}", delegation.evidence_summary));
     }
 
+    let s7_projection = s7_projection_for_trace_summary(summary, next_command);
+    lines.extend(s7_projection_lines(&s7_projection));
+    lines.extend(s7_cognitive_projection_lines(&s7_cognitive_projection_for_trace_summary(
+        summary,
+        next_command,
+        &s7_projection.fallback_disclosure,
+    )));
+
     let follow_through = FollowThroughProjection::from_trace_summary(summary, Some(next_command));
     if !follow_through.is_empty() {
         lines.extend(follow_through.projection_lines());
@@ -1781,6 +2779,13 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
     if !follow_through.is_empty() {
         lines.extend(follow_through.projection_lines());
     }
+
+    let s7_projection = s7_projection_for_session_status(view);
+    lines.extend(s7_projection_lines(&s7_projection));
+    lines.extend(s7_cognitive_projection_lines(&s7_cognitive_projection_for_session_status(
+        view,
+        &s7_projection.fallback_disclosure,
+    )));
 
     if let Some(next_command) = view.next_command.as_ref().or(view.workflow_next_action.as_ref()) {
         lines.push(format!("next_command: {next_command}"));

@@ -4,6 +4,14 @@ const US1_COMMANDS: &[&str] = &["boundline-start", "boundline-plan"];
 const US2_COMMANDS: &[&str] =
     &["boundline-step", "boundline-run", "boundline-status", "boundline-next"];
 const US3_COMMANDS: &[&str] = &["boundline-inspect"];
+const S7_MVP_COMMANDS: &[&str] =
+    &["boundline-why", "boundline-risk", "boundline-evidence", "boundline-next-best"];
+const S7_DEEP_COMMANDS: &[&str] = &[
+    "boundline-assumptions",
+    "boundline-hidden-impact",
+    "boundline-challenge",
+    "boundline-explain-plan",
+];
 
 #[test]
 fn test_command_pack_covers_start_and_plan_commands() {
@@ -18,6 +26,16 @@ fn test_command_pack_covers_step_run_status_and_next_commands() {
 #[test]
 fn test_command_pack_covers_inspect_commands() {
     assert_pack_commands_exist(US3_COMMANDS);
+}
+
+#[test]
+fn test_command_pack_covers_s7_mvp_commands() {
+    assert_pack_commands_exist(S7_MVP_COMMANDS);
+}
+
+#[test]
+fn s7_deep_command_pack_covers_us2_commands() {
+    assert_pack_commands_exist(S7_DEEP_COMMANDS);
 }
 
 #[test]

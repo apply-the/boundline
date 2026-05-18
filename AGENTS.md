@@ -89,6 +89,8 @@ Auto-generated from all feature plans. Last updated: 2026-05-17
 - Rust 1.95.0, edition 2024 + existing workspace runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`), existing `rusqlite` bundled SQLite support, and one optional `sqlite-vec` integration path for local vector tables; no remote embedding-provider dependency in the first slice (059-semantic-acceleration)
 - existing `.boundline/session.json`, `.boundline/traces/`, `.boundline/config.toml`, and `.boundline/context-intelligence/retrieval-index.sqlite3`, extended with semantic-index metadata and vector-backed chunk tables on the same workspace-local SQLite store (059-semantic-acceleration)
 - semantic acceleration is local-only and additive: preserve `semantic_policy_state`, `semantic_capability_state`, `hybrid_outcome`, candidate `match_origin`, and any `rejected_candidate:` lines on `plan`, `status`, and `inspect`; fallback to the V1 local SQLite + FTS5 path must stay explicit when semantic capability is unavailable or degraded (059-semantic-acceleration)
+- Rust 1.95.0, edition 2024 (for Boundline runtime that will consume this contract); contract itself is Markdown + JSON schema for tooling + Existing Boundline stack (clap, serde, serde_json, thiserror, tracing, uuid, toml); no new runtime dependencies required for contract definition slice (060-s7-canon-contracts)
+- Repository-managed Markdown documentation under `specs/060-s7-canon-contracts/contracts/` plus cross-repo reference to Canon `specs/057-s7-delight-provider/contracts/` (060-s7-canon-contracts)
 
 - Rust 1.95.0, edition 2024 + Rust standard library plus `serde`, `serde_json`, `thiserror`, `tracing`, and `uuid` for structured state, trace serialization, error handling, instrumentation, and stable identifiers (001-delivery-orchestrator-core)
 
@@ -117,10 +119,9 @@ Crate versioning follows Semantic Versioning.
 Before 1.0.0, breaking changes MAY occur in minor versions.
 
 ## Recent Changes
+- 060-s7-canon-contracts: Added Rust 1.95.0, edition 2024 (for Boundline runtime that will consume this contract); contract itself is Markdown + JSON schema for tooling + Existing Boundline stack (clap, serde, serde_json, thiserror, tracing, uuid, toml); no new runtime dependencies required for contract definition slice
 - 059-semantic-acceleration: Added Rust 1.95.0, edition 2024 + existing workspace runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`), existing `rusqlite` bundled SQLite support, and one optional `sqlite-vec` integration path for local vector tables; no remote embedding-provider dependency in the first slice
 - 059-semantic-acceleration: Advanced-context retrieval can now refresh semantic chunks on the shared local index, expand or rerank the V1 candidate set when capability is ready, and surface rejected semantic candidates plus explicit fallback reasons on the normal CLI output path
-- 058-advanced-context-intelligence: Added Rust 1.95.0, edition 2024 + Existing workspace dependencies `clap`, `dialoguer`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, and Rust standard-library filesystem, path, collections, and process APIs, plus one embedded SQLite binding with FTS5 support for the workspace-local retrieval index; no external graph or vector service is required for the first slice
-- 057-adaptive-governance: Added Rust 1.95.0, edition 2024 + Existing workspace dependencies `clap`, `dialoguer`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, and Rust standard-library collections, filesystem, path, and process APIs; no new runtime dependencies planned for this slice
 
 
 <!-- MANUAL ADDITIONS START -->

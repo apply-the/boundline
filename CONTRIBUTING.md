@@ -195,3 +195,7 @@ Participation in Boundline project spaces is governed by
 Boundline follows Semantic Versioning.
 
 Before `1.0.0`, breaking changes may still land in minor releases, but version bumps should remain intentional and consistent with the user-visible scope of the change.
+
+When advancing the version, follow the checklist in
+[docs/release-checklist.md](docs/release-checklist.md), which lists every file
+that must change and the two contract tests that enforce alignment.

@@ -72,6 +72,25 @@ fn doctor_install_reports_missing_canon_mode() {
     assert!(text.contains("actions:"), "{text}");
 }
 
+#[test]
+fn doctor_install_keeps_workspace_doctor_follow_up_visible() {
+    let canon_dir = fake_canon_directory(SUPPORTED_CANON_VERSION);
+    let output = Command::new(env!("CARGO_BIN_EXE_boundline"))
+        .args(["doctor", "--install"])
+        .env("PATH", &canon_dir)
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .unwrap();
+    let text = terminal_text(&output);
+
+    assert_eq!(output.status.code(), Some(0), "{text}");
+    assert!(text.contains("actions:"), "{text}");
+    assert!(
+        text.contains("verify a workspace next: boundline doctor --workspace <workspace>"),
+        "{text}"
+    );
+}
+
 fn fake_canon_directory(version: &str) -> PathBuf {
     fake_canon_directory_with_capabilities(version, FULL_CAPABILITIES)
 }

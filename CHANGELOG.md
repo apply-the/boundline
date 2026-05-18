@@ -21,6 +21,23 @@ Highlights:
 
 - No unreleased entries yet.
 
+## [0.60.0] - 2026-05-17
+
+Delivered specs:
+
+- `060` - S7 Assistant Delight Layer
+
+Highlights:
+
+- Re-scoped the 060 feature line around the Boundline-side runtime and
+  assistant-surface implementation for S7.
+- Aligned the Boundline S7 feature to consume Canon provider signals through
+  `057-s7-delight-provider` instead of treating 060 as a contract-only slice.
+- Kept the S7 support artifacts under
+  `specs/060-assistant-delight-layer/` as inputs to the runtime
+  implementation and validation work.
+- Bumped workspace version to `0.60.0`.
+
 ## [0.59.0] - 2026-05-17
 
 Delivered specs:

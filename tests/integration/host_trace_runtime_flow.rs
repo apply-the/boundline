@@ -65,3 +65,25 @@ fn structured_inspect_failure_keeps_non_success_exit_and_text_fallback() {
         "{inspect_text}"
     );
 }
+
+#[test]
+fn s7_host_status_advises_partial_setup_with_explicit_fallback() {
+    let workspace = temp_fixture_workspace("boundline-host-trace-runtime-s7-partial");
+
+    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
+
+    let status = run_boundline_in(&workspace, &["status", "--json"]);
+    let status_text = terminal_text(&status);
+    assert_eq!(status.status.code(), Some(0), "{status_text}");
+
+    let status_json: Value = stdout_json(&status);
+    let rendered = status_json["rendered_output"].as_str().unwrap_or_default();
+    assert!(rendered.contains("source_attribution: runtime="), "{status_text}");
+    assert!(
+        rendered.contains(
+            "fallback_disclosure: Canon input not yet available; using Boundline runtime evidence only"
+        ),
+        "{status_text}"
+    );
+    assert!(rendered.contains("next_best_action:"), "{status_text}");
+}

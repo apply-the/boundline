@@ -1190,7 +1190,7 @@ fn dispatch_doctor_command(workspace: Option<&Path>, install: bool) -> DispatchO
                 None,
             );
         };
-        diagnostics::diagnose_workspace(workspace)
+        diagnostics::diagnose_workspace_context(workspace)
     };
     DispatchOutcome::text(
         if report.ready {

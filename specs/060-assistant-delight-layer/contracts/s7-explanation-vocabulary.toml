@@ -1,0 +1,255 @@
+# S7 Explanation Vocabulary - Structured Schema
+# Version: 0.5.0
+# Effective Date: 2026-05-17
+# Purpose: Machine-readable vocabulary definitions for S7 cognitive affordances
+
+[vocabulary]
+version = "0.5.0"
+contract_version = "0.5.0"
+description = "Canonical S7 vocabulary terms for cross-surface cognitive affordances"
+
+## RISK TERM
+
+[vocabulary.risk]
+term_id = "risk"
+display_name = "Risk"
+definition = "What could go wrong with this plan or decision, according to all available evidence sources."
+use_cases = [
+  "what are the risks?",
+  "what could break?",
+  "what should I worry about?"
+]
+sources = ["boundline_runtime", "canon_security", "canon_audit"]
+confidence_levels = ["low", "medium", "high"]
+
+[vocabulary.risk.confidence_mapping]
+low = "Few or uncertain blockers identified"
+medium = "Identified blockers are manageable or have mitigations"
+high = "Critical blockers without clear mitigation"
+
+[vocabulary.risk.conflict_handling]
+description = "If Boundline and Canon disagree on risk level, cite both and surface conflict explicitly"
+action = "surface_both_with_sources"
+
+[[vocabulary.risk.example_fields]]
+name = "factors"
+type = "array"
+items = "{ source: string, assessment: string, confidence: enum }"
+
+[[vocabulary.risk.example_fields]]
+name = "conflicts"
+type = "array"
+items = "{ source1: string, assessment1: string, source2: string, assessment2: string, resolution: string }"
+
+[[vocabulary.risk.example_fields]]
+name = "missing_evidence"
+type = "array"
+items = "{ evidence_type: string, why_needed: string, time_to_availability: string }"
+
+## ASSUMPTION TERM
+
+[vocabulary.assumption]
+term_id = "assumption"
+display_name = "Assumption"
+definition = "What must remain true for this plan to succeed, identified from evidence."
+use_cases = [
+  "what must be true for this to work?",
+  "what are we assuming?",
+  "what could make this fail?"
+]
+sources = ["boundline_runtime", "canon_packets", "canon_audit"]
+confidence_levels = ["low", "medium", "high"]
+
+[vocabulary.assumption.conflict_handling]
+description = "If Boundline and Canon assumptions differ, surface disagreement as potential blocker"
+action = "surface_disagreement_as_blocker"
+
+[[vocabulary.assumption.example_fields]]
+name = "assumptions"
+type = "array"
+items = "{ statement: string, source: string, confidence: enum, freshness: enum, staleness_warning: bool }"
+
+## BLOCKER TERM
+
+[vocabulary.blocker]
+term_id = "blocker"
+display_name = "Blocker"
+definition = "Something that prevents forward progress in the current decision or plan, with identified source authority."
+use_cases = [
+  "what's stopping us?",
+  "why can't we proceed?",
+  "what needs to happen first?"
+]
+sources = ["canon_readiness", "canon_approvals", "boundline_safety"]
+confidence_levels = ["present", "absent"]
+
+[vocabulary.blocker.conflict_handling]
+description = "If Boundline says proceed but Canon readiness says blocked, surface as governance override"
+action = "surface_governance_override"
+
+[[vocabulary.blocker.example_fields]]
+name = "blockers"
+type = "array"
+items = "{ description: string, authority: string, severity: enum, recommended_action: string, alternative_path: string }"
+
+## CONFIDENCE TERM
+
+[vocabulary.confidence]
+term_id = "confidence"
+display_name = "Confidence"
+definition = "How certain this assessment is, based on completeness and freshness of available evidence."
+use_cases = [
+  "how sure are we about this?",
+  "can we trust this assessment?",
+  "what would make us more confident?"
+]
+sources = ["all_sources_weighted"]
+levels = ["low", "medium", "high"]
+
+[vocabulary.confidence.conflict_handling]
+description = "If evidence sources conflict, reduce confidence and itemize conflicts"
+action = "reduce_confidence_and_itemize"
+
+[[vocabulary.confidence.example_fields]]
+name = "evidence_quality"
+type = "enum"
+values = ["complete", "partial", "minimal"]
+
+[[vocabulary.confidence.example_fields]]
+name = "evidence_recency"
+type = "enum"
+values = ["current", "recent", "stale"]
+
+[[vocabulary.confidence.example_fields]]
+name = "caveats"
+type = "array"
+items = "{ caveat: string, impact_on_confidence: string }"
+
+## NEXT_ACTION TERM
+
+[vocabulary.next_action]
+term_id = "next_action"
+display_name = "Next Action"
+definition = "What step the operator should take next, with identified source authority and rationale."
+use_cases = [
+  "what should I do?",
+  "what's the next step?",
+  "what happens now?"
+]
+sources = ["canon_packets", "boundline_runtime", "canon_approvals"]
+categories = [
+  "proceed",
+  "wait",
+  "investigate",
+  "refresh_assessment",
+  "escalate",
+  "acknowledge_risk"
+]
+
+[vocabulary.next_action.conflict_handling]
+description = "If governance and runtime recommend different actions, surface both with authority labels"
+action = "surface_both_with_authority"
+
+[[vocabulary.next_action.example_fields]]
+name = "actions"
+type = "array"
+items = "{ action: string, source: string, rationale: string, estimated_time: string }"
+
+[[vocabulary.next_action.example_fields]]
+name = "alternatives"
+type = "array"
+items = "{ alternative_action: string, source: string, why_less_preferred: string }"
+
+## MISSING_EVIDENCE TERM
+
+[vocabulary.missing_evidence]
+term_id = "missing_evidence"
+display_name = "Missing Evidence"
+definition = "Information not currently available but would improve confidence or completeness of assessment."
+use_cases = [
+  "what would make this better?",
+  "what's missing?",
+  "where can I get more information?"
+]
+derived_from = ["absence_of_contracted_inputs", "gaps_in_boundline_visibility"]
+severity_levels = ["clarifying", "important", "critical"]
+
+[[vocabulary.missing_evidence.example_fields]]
+name = "evidence_gaps"
+type = "array"
+items = "{ gap_type: string, why_needed: string, time_to_availability: string, recommended_action: string }"
+
+## TERM COMBINATIONS & CONFLICT SCENARIOS
+
+[combinations]
+valid_combinations = [
+  { terms = ["risk", "confidence"], reason = "risk level + certainty" },
+  { terms = ["risk", "missing_evidence"], reason = "risk + what would clarify it" },
+  { terms = ["assumption", "blocker"], reason = "what's needed + what's stopping it" },
+  { terms = ["blocker", "next_action"], reason = "what's stopping it + how to proceed" },
+  { terms = ["confidence", "caveats"], reason = "certainty + conditions affecting it" },
+  { terms = ["next_action", "missing_evidence"], reason = "what to do + what info would help" },
+  { terms = ["risk", "assumption", "blocker", "confidence", "next_action", "missing_evidence"], reason = "comprehensive assessment" }
+]
+
+[conflict_scenarios]
+risk_divergence = { description = "Boundline vs Canon risk assessment mismatch", handling = "surface_both_with_sources_and_note_conflict" }
+action_divergence = { description = "Boundline vs Canon next-action mismatch", handling = "cite_canonical_authority_note_alternative" }
+assumption_conflict = { description = "Boundline vs Canon assumption mismatch", handling = "surface_as_blocker_and_caveat" }
+blocker_resolution = { description = "Blocker status changes from NOT_READY to READY", handling = "surface_state_change_confidence_improves" }
+evidence_staleness = { description = "Evidence exceeds max_age_days threshold", handling = "surface_staleness_in_confidence_caveat" }
+
+## RENDERING GUIDELINES
+
+[rendering]
+supports_surfaces = ["cli", "chat", "ide"]
+term_order = ["risk", "assumption", "blocker", "confidence", "next_action", "missing_evidence"]
+
+[rendering.cli]
+style = "compact_with_details"
+shows_sources = true
+shows_conflicts = true
+shows_caveats = true
+collapse_threshold_terms = 4
+
+[rendering.chat]
+style = "natural_language"
+shows_sources = true
+shows_conflicts = true
+shows_caveats = true
+inline_explanations = true
+
+[rendering.ide]
+style = "inline_gutter"
+shows_sources = true
+shows_conflicts = false
+shows_caveats = false
+collapse_threshold_terms = 2
+
+## VALIDATION RULES
+
+[validation]
+required_fields_for_answer = ["term_id", "assessment", "source", "confidence"]
+never_allowed = ["silent_merging_of_conflicts", "invented_certainty", "hidden_degradation"]
+always_required = ["source_attribution", "degradation_signals_when_applicable", "explicit_missing_evidence"]
+
+[validation.source_attribution]
+must_identify = ["boundline_judgment", "canon_evidence", "missing_evidence"]
+never_conflate = ["product_ux_with_governed_authority"]
+must_preserve = ["operator_understanding_of_what_contributed"]
+
+## VOCABULARY EVOLUTION & AMENDMENTS
+
+[evolution]
+amendment_process = "bilateral"
+requires_approval = ["boundline", "canon"]
+deprecation_window_releases = 2
+versions_supported = ["0.5.0"]
+next_major_planned = "1.0.0"
+
+[evolution.amendment_types]
+add_term = { requires_bilateral_review = true, example = "Add LongTermRisk term for multi-phase assessments" }
+modify_term = { requires_bilateral_review = true, example = "Expand Confidence levels to include ExtraHigh" }
+deprecate_term = { requires_bilateral_review = true, window_releases = 2, example = "Retire legacy Certainty term" }
+add_combination = { requires_bilateral_review = false, example = "Document new valid term combinations" }
+modify_rendering = { requires_bilateral_review = false, example = "Update CLI compact format" }

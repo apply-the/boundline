@@ -76,3 +76,30 @@ fn inspect_command_surfaces_authored_input_summary_and_sources() {
     assert!(text.contains("authored_input_summary: direct_text + 2 markdown source(s)"), "{text}");
     assert!(text.contains("authored_input_sources: direct_text: developer goal, attached_markdown: docs/explicit.md, referenced_markdown: docs/referenced.md"), "{text}");
 }
+
+#[test]
+fn s7_inspect_output_surfaces_canon_aware_explanation_lines() {
+    let workspace = temp_fixture_workspace("boundline-cli-inspect-s7");
+    let run_output = run_boundline(&[
+        "run",
+        "--goal",
+        "Explain the active delivery state",
+        "--compatibility",
+        "--workspace",
+        workspace.to_string_lossy().as_ref(),
+    ]);
+    let trace_path = extract_trace_path(&terminal_text(&run_output)).expect("trace path");
+    let inspect_output =
+        run_boundline(&["inspect", "--trace", trace_path.to_string_lossy().as_ref()]);
+    let text = terminal_text(&inspect_output);
+
+    assert_eq!(inspect_output.status.code(), Some(0), "{text}");
+    assert!(text.contains("source_attribution: runtime="), "{text}");
+    assert!(
+        text.contains(
+            "fallback_disclosure: Canon input not yet available; using Boundline runtime evidence only"
+        ),
+        "{text}"
+    );
+    assert!(text.contains("next_best_action:"), "{text}");
+}

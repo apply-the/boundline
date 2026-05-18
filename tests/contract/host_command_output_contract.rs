@@ -107,3 +107,58 @@ fn invalid_invocations_can_emit_structured_host_output() {
     assert!(capture_json["session_status"].is_null(), "{capture_text}");
     assert!(capture_json["trace_summary"].is_null(), "{capture_text}");
 }
+
+#[test]
+fn s7_partial_setup_status_output_surfaces_fallback_disclosure_and_next_best_action() {
+    let workspace = temp_fixture_workspace("boundline-host-command-contract-s7-partial");
+
+    let start = run_boundline_in(&workspace, &["start", "--json"]);
+    let start_text = terminal_text(&start);
+    assert_eq!(start.status.code(), Some(0), "{start_text}");
+
+    let status = run_boundline_in(&workspace, &["status", "--json"]);
+    let status_text = terminal_text(&status);
+    assert_eq!(status.status.code(), Some(0), "{status_text}");
+
+    let status_json: Value = stdout_json(&status);
+    let rendered = status_json["rendered_output"].as_str().unwrap_or_default();
+    assert!(rendered.contains("source_attribution: runtime="), "{status_text}");
+    assert!(
+        rendered.contains(
+            "fallback_disclosure: Canon input not yet available; using Boundline runtime evidence only"
+        ),
+        "{status_text}"
+    );
+    assert!(rendered.contains("next_best_action:"), "{status_text}");
+}
+
+#[test]
+fn s7_inspect_output_surfaces_runtime_source_attribution() {
+    let workspace = temp_fixture_workspace("boundline-host-command-contract-s7-inspect");
+
+    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
+    assert_eq!(
+        run_boundline_in(&workspace, &["capture", "--goal", "Explain why this delivery is safe"])
+            .status
+            .code(),
+        Some(0)
+    );
+    assert_eq!(run_boundline_in(&workspace, &["plan"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(&workspace, &["plan", "--confirm"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(&workspace, &["run"]).status.code(), Some(0));
+
+    let inspect = run_boundline_in(&workspace, &["inspect", "--json"]);
+    let inspect_text = terminal_text(&inspect);
+    assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
+
+    let inspect_json: Value = stdout_json(&inspect);
+    let rendered = inspect_json["rendered_output"].as_str().unwrap_or_default();
+    assert!(rendered.contains("source_attribution: runtime="), "{inspect_text}");
+    assert!(
+        rendered.contains(
+            "fallback_disclosure: Canon input not yet available; using Boundline runtime evidence only"
+        ),
+        "{inspect_text}"
+    );
+    assert!(rendered.contains("next_best_action:"), "{inspect_text}");
+}

@@ -214,6 +214,34 @@ fn trace_summary_projects_route_owner_and_effective_routing_snapshot() {
 }
 
 #[test]
+fn s7_trace_summary_surfaces_source_attribution_fallback_and_next_best_action() {
+    let workspace = temp_fixture_workspace("boundline-trace-summary-s7");
+    let output = run_boundline(&[
+        "run",
+        "--goal",
+        "Explain the current risk and next safe action",
+        "--compatibility",
+        "--workspace",
+        workspace.to_string_lossy().as_ref(),
+    ]);
+    let text = terminal_text(&output);
+    let trace_path = extract_trace_path(&text).expect(&text);
+    let store = FileTraceStore::for_workspace(&workspace);
+    let trace = store.load(&trace_path).unwrap();
+    let summary = summarize_trace(&trace_path, &trace).unwrap();
+    let rendered = render_trace_summary(&summary, "explicit-trace", "/boundline-next");
+
+    assert!(rendered.contains("source_attribution: runtime="), "{rendered}");
+    assert!(
+        rendered.contains(
+            "fallback_disclosure: Canon input not yet available; using Boundline runtime evidence only"
+        ),
+        "{rendered}"
+    );
+    assert!(rendered.contains("next_best_action:"), "{rendered}");
+}
+
+#[test]
 fn trace_summary_surfaces_context_pack_for_native_runs() {
     let workspace = temp_fixture_workspace("boundline-trace-summary-context-pack");
     std::fs::write(

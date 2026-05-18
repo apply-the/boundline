@@ -116,6 +116,30 @@ fn build_context_pack_records_missing_test_findings_for_uncovered_targets() {
 }
 
 #[test]
+fn s7_build_context_pack_emits_validation_group_inputs_for_assumptions_and_hidden_impact() {
+    let workspace = temp_workspace("boundline-context-intelligence-s7-groups");
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::write(workspace.join("src/engine.rs"), "pub fn reconcile_plan() -> bool { true }\n")
+        .unwrap();
+
+    let context_pack = build_context_pack(
+        "Reconcile the planner engine",
+        &workspace,
+        &PlanningContextSources::default(),
+    );
+    let advanced_context = context_pack.advanced_context.expect("advanced context projection");
+
+    assert!(advanced_context.relationships.iter().any(|relationship| {
+        relationship.relationship_kind == RelationshipKind::RequiresEvidence
+            && relationship.subject_ref == "src/engine.rs"
+    }));
+    assert!(advanced_context.impact_findings.iter().any(|finding| {
+        finding.finding_kind == ImpactFindingKind::MissingTest
+            && finding.subject_ref == "tests/engine.rs"
+    }));
+}
+
+#[test]
 fn build_context_pack_projects_advanced_context_from_authored_input_without_files() {
     let workspace = temp_workspace("boundline-context-intelligence-insufficient");
     let context_pack = build_context_pack(

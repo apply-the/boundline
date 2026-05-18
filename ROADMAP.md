@@ -6,7 +6,7 @@ Canon is downstream from Boundline in this roadmap: Boundline thinks, decides, o
 
 Evolve Boundline into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.59.0
+## Current Status: v0.60.0
 
 Boundline now has its core session-native orchestration baseline, bounded
 workflow follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -23,11 +23,31 @@ alignment now carried through the same primary workflow. The operator entry
 path is now stack-neutral for empty, non-Rust, and mixed repositories, with a
 clearer first-run CLI UX. That baseline now extends into Canon-promoted
 project-memory reuse, catalog-aware guidance packs, authority-zoned review,
-adaptive governance, and the S5 advanced-context stack. The current `0.59.0`
-work adds the first local semantic acceleration slice on top of the shipped V1
-SQLite + FTS5 baseline, preserving semantic policy and capability state,
-hybrid outcome selection, Canon compatibility reasoning, and typed semantic
-trace records on the normal `plan`, `status`, and `inspect` surfaces.
+adaptive governance, and the S5 advanced-context stack with local semantic
+acceleration. The current `0.60.0` work delivers the assistant delight
+layer: runtime-backed cognitive affordance commands (`why`, `risk`, `evidence`,
+`next-best`, `assumptions`, `hidden-impact`, `challenge`, `explain-plan`, and
+`doctor-context`), contextual workspace diagnostics, compact host-package
+alignment across Claude, Codex, Copilot, Cursor, and Gemini, and the
+bilateral Canon 057 delight-provider contract review.
+
+### Delivered in 0.60.0
+
+- Boundline now ships runtime-backed assistant delight commands (`why`,
+  `risk`, `evidence`, `next-best`, `assumptions`, `hidden-impact`, `challenge`,
+  `explain-plan`, and `doctor-context`) backed by active session and trace
+  authority, with explicit Canon-gap and fallback disclosure.
+- The `doctor --workspace` path now surfaces contextual advisory checks for
+  Boundline config, Canon project memory, expert-pack inputs, provider
+  readiness, advanced-context index, and session evidence with actionable fix
+  commands.
+- Host prompt assets for all nine assistant delight commands are now in place for Claude,
+  Codex, and Copilot; global bootstrap docs for Claude, Codex, Copilot,
+  Cursor, and Gemini now point operators at the compact default palette and
+  `doctor-context` as the setup-repair follow-up.
+- The bilateral Canon 057 delight-provider contract review is now closed, with
+  consumer-side alignment assertions locking the six authorized artifact
+  classes and five-state compatibility signaling.
 
 ### Delivered in 0.59.0
 
@@ -691,14 +711,14 @@ feature lines instead of separate forward-looking roadmap files.
   delivered `0.56.0` authority-zoned council baseline, the delivered S4
   adaptive governance layer, and the active S5 advanced-context plus semantic-
   acceleration lines make councils operationally and contextually credible.
-- [S7: Assistant Delight And Cognitive Affordance Layer](roadmap/S7%20-%20assistant-delight-and-cognitive-affordance-layer.md)
-  complements assistant/package and operator-surface work in
-  [`048-assistant-plugin-packages`](specs/048-assistant-plugin-packages/spec.md),
-  [`049-project-scale-delivery-ux`](specs/049-project-scale-delivery-ux/spec.md),
-  and [`051-delivery-control-consumer`](specs/051-delivery-control-consumer/spec.md),
-  but it is not duplicate scope. It should follow the active S5 semantic-
-  retrieval line and S6 on the roadmap so the delight layer can surface both
-  semantic-retrieval and reasoning-profile outputs on stable runtime surfaces.
+- [S7.1: Post-S6 Assistant Delight Follow-Through](roadmap/S7.1%20-%20post-s6-assistant-delight-follow-through.md)
+  is the future-facing follow-through for the already delivered assistant
+  delight layer in
+  [`060-assistant-delight-layer`](specs/060-assistant-delight-layer/spec.md).
+  It is intentionally deferred until S6 reasoning profiles become active,
+  then narrows the remaining follow-through around richer inspect surfaces,
+  reasoning-profile-aware explanations, and deeper host parity where runtime
+  support is credible.
 - [S8: Interactive Delivery Dashboard (iocraft)](roadmap/S8%20-%20interactive-delivery-dashboard-iocraft.md)
   introduces a dedicated `boundline-dashboard` crate using the `iocraft`
   framework to provide a real-time, high-density visualization of the Pilot Loop,
@@ -708,14 +728,15 @@ feature lines instead of separate forward-looking roadmap files.
 
 Coverage check: the delivered content already recorded in this roadmap is
 covered by the active spec set, not by these future drafts. The copied S2.1,
-S6, and S7 documents mostly extend the current line; the S5 base and S5.v2
-semantic-acceleration work now live in the active `058-advanced-context-intelligence`
-and `059-semantic-acceleration` slices rather than duplicate roadmap files.
+S6, S7.1, and S8 documents mostly extend the current line; the S5 base and
+S5.v2 semantic-acceleration work now live in the active
+`058-advanced-context-intelligence` and `059-semantic-acceleration` slices
+rather than duplicate roadmap files.
 
 ### Sequencing rule
 
-These three features are ordered and intentionally absorb all remaining major
-scope:
+These forward-looking features are ordered and intentionally absorb the
+remaining major scope:
 
 1. Boundline must deliver real code changes before more platform abstraction work.
 2. Canon must prove value inside that real delivery loop, not beside it.

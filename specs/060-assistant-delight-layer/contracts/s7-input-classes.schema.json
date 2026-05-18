@@ -1,0 +1,107 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "S7 Contracted Canon Input Classes",
+  "description": "Formal schema defining which Canon artifact classes S7 may consume for delight explanations",
+  "version": "0.5.0",
+  "effective_date": "2026-05-17",
+  
+  "definitions": {
+    "InputClass": {
+      "type": "object",
+      "properties": {
+        "class_id": {
+          "type": "string",
+          "enum": ["packets", "approval_states", "readiness_signals", "security_findings", "audit_findings", "promotion_references"],
+          "description": "Unique identifier for this input class"
+        },
+        "display_name": {
+          "type": "string",
+          "description": "Human-readable name for maintainer documentation"
+        },
+        "description": {
+          "type": "string",
+          "description": "What this input class represents and when it is available"
+        },
+        "when_available": {
+          "type": "string",
+          "description": "Conditions under which this input is present (e.g., 'after Canon promotion', 'if security enabled')"
+        },
+        "max_age_days": {
+          "type": ["integer", "null"],
+          "description": "Maximum age in days; null means no expiration",
+          "minimum": 1
+        },
+        "required_metadata": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "field": { "type": "string" },
+              "description": { "type": "string" },
+              "type": { "type": "string", "enum": ["string", "datetime", "uuid", "enum", "integer"] }
+            },
+            "required": ["field", "description", "type"]
+          },
+          "description": "Mandatory metadata fields that must accompany every artifact of this class"
+        },
+        "s7_vocabulary_use": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["Risk", "Assumption", "Blocker", "Confidence", "NextAction", "MissingEvidence"] },
+          "description": "Which S7 explanation vocabulary terms this input can contribute to"
+        },
+        "example": {
+          "type": "object",
+          "description": "Example S7 input artifact of this class"
+        },
+        "validation_rules": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Rules for validating whether this artifact is usable by S7"
+        }
+      },
+      "required": ["class_id", "display_name", "description", "when_available", "required_metadata", "s7_vocabulary_use", "validation_rules"]
+    }
+  },
+
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0.5.0",
+      "description": "Must match S7 contract version"
+    },
+    "effective_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this schema became effective"
+    },
+    "input_classes": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/InputClass" },
+      "minItems": 1,
+      "description": "All contracted Canon input classes"
+    },
+    "validation_strategy": {
+      "type": "object",
+      "properties": {
+        "schema_validation": {
+          "type": "string",
+          "description": "Check that artifacts match their class schema"
+        },
+        "metadata_completeness": {
+          "type": "string",
+          "description": "Verify required_metadata fields are present"
+        },
+        "age_validation": {
+          "type": "string",
+          "description": "Check timestamps against max_age_days"
+        },
+        "source_attribution": {
+          "type": "string",
+          "description": "Verify every claim cites the input class it came from"
+        }
+      }
+    }
+  },
+  "required": ["contract_version", "effective_date", "input_classes"]
+}

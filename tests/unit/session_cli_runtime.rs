@@ -765,6 +765,31 @@ fn native_direct_run_reuses_existing_initialized_session() {
 }
 
 #[test]
+fn s7_execute_status_surfaces_why_and_risk_for_goal_captured_session() {
+    let workspace = temp_workspace("boundline-status-s7-goal-captured");
+    let canonical_workspace = workspace.canonicalize().unwrap();
+    FileSessionStore::for_workspace(&canonical_workspace)
+        .persist(&build_goal_captured_session(&canonical_workspace))
+        .unwrap();
+
+    let report = execute_status(Some(&canonical_workspace)).unwrap();
+
+    assert_eq!(report.exit_status, CommandExitStatus::Succeeded);
+    assert!(
+        report.terminal_output.contains("why_summary: Fix the failing add test"),
+        "{}",
+        report.terminal_output
+    );
+    assert!(
+        report.terminal_output.contains(
+            "risk_summary: Canon confirmation is missing, so risk remains bounded by runtime-only evidence."
+        ),
+        "{}",
+        report.terminal_output
+    );
+}
+
+#[test]
 fn native_direct_run_surfaces_clarification_without_planning() {
     let workspace = temp_workspace("boundline-native-direct-run-clarification");
 

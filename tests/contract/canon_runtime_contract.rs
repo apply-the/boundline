@@ -270,3 +270,69 @@ fn canon_runtime_contract_preserves_security_assessment_refresh_lineage() {
     assert_eq!(response.approval_state, boundline::ApprovalState::Granted);
     assert_eq!(response.run_ref.as_deref(), Some("canon-run-security-refresh"));
 }
+
+#[test]
+fn s7_delight_contract_alignment_matches_canon_provider_contract_when_available() {
+    let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let canon_contract_path = repo_root
+        .parent()
+        .map(|path| {
+            path.join("canon/specs/057-s7-delight-provider/contracts/delight-provider-contract.md")
+        })
+        .unwrap_or_default();
+    if !canon_contract_path.is_file() {
+        return;
+    }
+
+    let canon_contract = fs::read_to_string(&canon_contract_path).unwrap_or_else(|error| {
+        panic!("failed to read {}: {error}", canon_contract_path.display())
+    });
+    let boundline_contract_path =
+        repo_root.join("specs/060-assistant-delight-layer/contracts/s7-delight-contract.md");
+    let boundline_contract = fs::read_to_string(&boundline_contract_path).unwrap_or_else(|error| {
+        panic!("failed to read {}: {error}", boundline_contract_path.display())
+    });
+
+    let artifact_class_pairs = [
+        ("### `packets`", "Packets"),
+        ("### `approval-states`", "Approval States"),
+        ("### `readiness-signals`", "Readiness Signals"),
+        ("### `security-findings`", "Security Findings"),
+        ("### `audit-findings`", "Audit/Review Findings"),
+        ("### `promotion-references`", "Promotion References"),
+    ];
+    for (canon_anchor, boundline_anchor) in artifact_class_pairs {
+        assert!(
+            canon_contract.contains(canon_anchor),
+            "{canon_anchor} missing from Canon contract"
+        );
+        assert!(
+            boundline_contract.contains(boundline_anchor),
+            "{boundline_anchor} missing from Boundline delight contract"
+        );
+    }
+
+    let degradation_pairs = [
+        ("`stale`", "Stale Inputs"),
+        ("`incompatible`", "Incompatible Inputs"),
+        ("`absent`", "Missing Inputs"),
+        ("`contradicted`", "Contradictory Inputs"),
+    ];
+    for (canon_signal, boundline_signal) in degradation_pairs {
+        assert!(
+            canon_contract.contains(canon_signal),
+            "{canon_signal} missing from Canon contract"
+        );
+        assert!(
+            boundline_contract.contains(boundline_signal),
+            "{boundline_signal} missing from Boundline delight contract"
+        );
+    }
+
+    assert!(canon_contract.contains("delight-provider-v1"), "Canon contract line missing");
+    assert!(
+        boundline_contract.contains("057-s7-delight-provider")
+            || boundline_contract.contains("Canon 057"),
+        "Boundline contract must reference Canon 057"
+    );
+}

@@ -1,7 +1,7 @@
 {
   "name": "boundline",
   "displayName": "Boundline Assistant Support",
-  "version": "0.59.0",
+  "version": "0.60.0",
   "description": "Local delivery orchestrator for bounded engineering work",
   "author": {
     "name": "Apply The",
@@ -23,6 +23,26 @@
     "Plan, act, verify, trace",
     "Turns bounded engineering goals into verified workspace changes",
     "Session-native runtime for AI-assisted software delivery"
+  ],
+  "defaultPalette": [
+    "/boundline:start",
+    "/boundline:capture",
+    "/boundline:plan",
+    "/boundline:run",
+    "/boundline:status",
+    "/boundline:continue",
+    "/boundline:inspect",
+    "/boundline:why",
+    "/boundline:risk",
+    "/boundline:evidence",
+    "/boundline:next-best",
+    "/boundline:assumptions",
+    "/boundline:hidden-impact",
+    "/boundline:challenge"
+  ],
+  "contextualCommands": [
+    "/boundline:explain-plan",
+    "/boundline:doctor-context"
   ],
   "capabilities": [
     {
@@ -52,6 +72,44 @@
     {
       "id": "/boundline:inspect",
       "label": "inspect"
+    },
+    {
+      "id": "/boundline:why",
+      "label": "why"
+    },
+    {
+      "id": "/boundline:risk",
+      "label": "risk"
+    },
+    {
+      "id": "/boundline:evidence",
+      "label": "evidence"
+    },
+    {
+      "id": "/boundline:next-best",
+      "label": "next-best"
+    },
+    {
+      "id": "/boundline:assumptions",
+      "label": "assumptions"
+    },
+    {
+      "id": "/boundline:hidden-impact",
+      "label": "hidden-impact"
+    },
+    {
+      "id": "/boundline:challenge",
+      "label": "challenge"
+    },
+    {
+      "id": "/boundline:explain-plan",
+      "label": "explain-plan",
+      "visibility": "contextual"
+    },
+    {
+      "id": "/boundline:doctor-context",
+      "label": "doctor-context",
+      "visibility": "contextual"
     },
     {
       "id": "/boundline:recover",

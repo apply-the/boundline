@@ -1,7 +1,8 @@
 # Boundline
 
 ![Boundline banner](docs/images/boundline-banner.jpg)
-
+[![Version](https://img.shields.io/github/v/release/apply-the/boundline?color=blue&label=version)](https://github.com/apply-the/boundline/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![CI](https://github.com/apply-the/boundline/actions/workflows/ci.yml/badge.svg)](https://github.com/apply-the/boundline/actions/workflows/ci.yml)
 [![Lint](https://github.com/apply-the/boundline/actions/workflows/lint.yml/badge.svg)](https://github.com/apply-the/boundline/actions/workflows/lint.yml)
 [![Vulnerabilities](https://github.com/apply-the/boundline/actions/workflows/vulnerabilities.yml/badge.svg)](https://github.com/apply-the/boundline/actions/workflows/vulnerabilities.yml)
@@ -21,6 +22,12 @@ Point it at a workspace, give it an idea, brief, or bounded goal, then move
 through explicit sessions for planning, execution, inspection, recovery, and
 governed delivery when needed. Canon is optional: most users can ignore it
 unless they need governed stages or governed artifacts.
+
+The active `0.60.0` feature line is `060-assistant-delight-layer`, which
+implements the S7 assistant delight surfaces in Boundline while consuming Canon
+provider signals through `057-s7-delight-provider`. The feature artifacts live
+under `specs/060-assistant-delight-layer/`; start with the maintainer guide
+at `specs/060-assistant-delight-layer/quickstart.md`.
 
 In `0.58.0`, Boundline also persists advanced-context retrieval state through
 goal plans, session status, and trace summaries. The S5 V1 baseline uses one
