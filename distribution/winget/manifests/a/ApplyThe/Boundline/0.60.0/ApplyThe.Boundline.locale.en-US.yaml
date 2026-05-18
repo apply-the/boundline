@@ -1,0 +1,22 @@
+PackageIdentifier: ApplyThe.Boundline
+PackageVersion: 0.60.0
+PackageLocale: en-US
+Publisher: Apply The
+PublisherUrl: https://github.com/apply-the/boundline
+PublisherSupportUrl: https://github.com/apply-the/boundline/issues
+Author: Apply The
+PackageName: Boundline
+PackageUrl: https://github.com/apply-the/boundline
+ShortDescription: Boundline is a local delivery orchestrator for bounded engineering work.
+Description: |
+  Boundline is a local delivery orchestrator for bounded engineering work.
+  It owns orchestration, bounded planning, execution,
+  validation, and session continuity. The Windows release bundle installs both
+  boundline and a compatible Canon companion so boundline doctor --install can verify
+  the supported pairing after install or upgrade.
+Moniker: boundline
+License: MIT
+LicenseUrl: https://github.com/apply-the/boundline/blob/main/LICENSE
+ReleaseNotesUrl: https://github.com/apply-the/boundline/blob/main/CHANGELOG.md
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

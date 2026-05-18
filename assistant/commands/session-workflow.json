@@ -2,6 +2,26 @@
   "stateAuthority": ".boundline/session.json",
   "nextActionAuthority": "CLI-reported next_command",
   "projectScaleAuthority": "CLI-reported project_scale_path, project_scale_current_stage, project_scale_next_action, checkpoint refs, trace refs",
+  "defaultPalette": [
+    "/boundline:start",
+    "/boundline:capture",
+    "/boundline:plan",
+    "/boundline:run",
+    "/boundline:status",
+    "/boundline:continue",
+    "/boundline:inspect",
+    "/boundline:why",
+    "/boundline:risk",
+    "/boundline:evidence",
+    "/boundline:next-best",
+    "/boundline:assumptions",
+    "/boundline:hidden-impact",
+    "/boundline:challenge"
+  ],
+  "contextualCommands": [
+    "/boundline:explain-plan",
+    "/boundline:doctor-context"
+  ],
   "nonSuccessStates": [
     "blocked",
     "clarification-required",
@@ -93,6 +113,116 @@
         "copilot": "assistant/copilot/prompts/boundline-inspect.prompt.md"
       },
       "stateHandling": "Use trace output and .boundline/session.json to explain next_command, blocked, clarification-required, failed, exhausted, and terminal states."
+    },
+    {
+      "id": "/boundline:why",
+      "label": "why",
+      "purpose": "Explain why the current bounded delivery state looks the way it does.",
+      "boundlineCommand": "cargo run --bin boundline -- inspect --workspace <workspace> --json",
+      "skillRefs": {
+        "claude": "assistant/claude/commands/boundline-why.md",
+        "codex": "assistant/codex/commands/boundline-why.md",
+        "copilot": "assistant/copilot/prompts/boundline-why.prompt.md"
+      },
+      "stateHandling": "Prefer inspect-backed why_summary, source_attribution, fallback_disclosure, confidence_level, next_best_action, and next_command lines; keep missing Canon input explicit rather than inferred."
+    },
+    {
+      "id": "/boundline:risk",
+      "label": "risk",
+      "purpose": "Summarize the current bounded-delivery risks from authoritative runtime evidence.",
+      "boundlineCommand": "cargo run --bin boundline -- inspect --workspace <workspace> --json",
+      "skillRefs": {
+        "claude": "assistant/claude/commands/boundline-risk.md",
+        "codex": "assistant/codex/commands/boundline-risk.md",
+        "copilot": "assistant/copilot/prompts/boundline-risk.prompt.md"
+      },
+      "stateHandling": "Prefer inspect-backed risk_summary, source_attribution, fallback_disclosure, confidence_level, next_best_action, and next_command lines; preserve blocked, stale, or missing Canon signals exactly."
+    },
+    {
+      "id": "/boundline:evidence",
+      "label": "evidence",
+      "purpose": "Show the runtime and governed evidence currently supporting the active answer.",
+      "boundlineCommand": "cargo run --bin boundline -- inspect --workspace <workspace> --json",
+      "skillRefs": {
+        "claude": "assistant/claude/commands/boundline-evidence.md",
+        "codex": "assistant/codex/commands/boundline-evidence.md",
+        "copilot": "assistant/copilot/prompts/boundline-evidence.prompt.md"
+      },
+      "stateHandling": "Prefer inspect-backed evidence_summary, source_attribution, fallback_disclosure, next_best_action, and next_command lines; separate Boundline runtime evidence from Canon-governed evidence and missing evidence."
+    },
+    {
+      "id": "/boundline:next-best",
+      "label": "next-best",
+      "purpose": "Recommend the next best bounded action from the active session state.",
+      "boundlineCommand": "cargo run --bin boundline -- status --workspace <workspace> --json",
+      "skillRefs": {
+        "claude": "assistant/claude/commands/boundline-next-best.md",
+        "codex": "assistant/codex/commands/boundline-next-best.md",
+        "copilot": "assistant/copilot/prompts/boundline-next-best.prompt.md"
+      },
+      "stateHandling": "Prefer status-backed next_best_action, source_attribution, fallback_disclosure, confidence_level, and next_command lines; do not invent a next step when the runtime reports a blocked or inspect-only boundary."
+    },
+    {
+      "id": "/boundline:assumptions",
+      "label": "assumptions",
+      "purpose": "Inspect grouped assumptions influencing the active bounded plan or execution.",
+      "boundlineCommand": "cargo run --bin boundline -- inspect --workspace <workspace> --json",
+      "skillRefs": {
+        "claude": "assistant/claude/commands/boundline-assumptions.md",
+        "codex": "assistant/codex/commands/boundline-assumptions.md",
+        "copilot": "assistant/copilot/prompts/boundline-assumptions.prompt.md"
+      },
+      "stateHandling": "Prefer inspect-backed assumptions_summary, assumption_group, source_attribution, fallback_disclosure, challenge_weakest_assumption, and next_command lines; keep category, source, status, and risk visible instead of flattening them."
+    },
+    {
+      "id": "/boundline:hidden-impact",
+      "label": "hidden-impact",
+      "purpose": "Inspect likely indirect impact using structured runtime evidence and visible fallback disclosure.",
+      "boundlineCommand": "cargo run --bin boundline -- inspect --workspace <workspace> --json",
+      "skillRefs": {
+        "claude": "assistant/claude/commands/boundline-hidden-impact.md",
+        "codex": "assistant/codex/commands/boundline-hidden-impact.md",
+        "copilot": "assistant/copilot/prompts/boundline-hidden-impact.prompt.md"
+      },
+      "stateHandling": "Prefer inspect-backed hidden_impact_summary, hidden_impact_* detail lines, hidden_impact_fallback_disclosure, challenge_required_review, and next_command lines; disclose higher-order fallback when semantic capability is unavailable."
+    },
+    {
+      "id": "/boundline:challenge",
+      "label": "challenge",
+      "purpose": "Challenge the active bounded plan without obscuring governance boundaries.",
+      "boundlineCommand": "cargo run --bin boundline -- inspect --workspace <workspace> --json",
+      "skillRefs": {
+        "claude": "assistant/claude/commands/boundline-challenge.md",
+        "codex": "assistant/codex/commands/boundline-challenge.md",
+        "copilot": "assistant/copilot/prompts/boundline-challenge.prompt.md"
+      },
+      "stateHandling": "Prefer inspect-backed challenge_strongest_objection, challenge_weakest_assumption, challenge_missing_evidence, challenge_failure_mode, challenge_required_review, challenge_council_required, fallback_disclosure, and next_command lines; never imply that challenge output replaces Canon review."
+    },
+    {
+      "id": "/boundline:explain-plan",
+      "label": "explain-plan",
+      "purpose": "Explain the active bounded plan in human terms from session-native runtime state.",
+      "boundlineCommand": "cargo run --bin boundline -- status --workspace <workspace> --json",
+      "visibility": "contextual",
+      "skillRefs": {
+        "claude": "assistant/claude/commands/boundline-explain-plan.md",
+        "codex": "assistant/codex/commands/boundline-explain-plan.md",
+        "copilot": "assistant/copilot/prompts/boundline-explain-plan.prompt.md"
+      },
+      "stateHandling": "Prefer status-backed explain_plan_summary, explain_plan_validation, explain_plan_governance, explain_plan_recovery, why_summary, risk_summary, and next_command lines; keep recovery and governance posture explicit."
+    },
+    {
+      "id": "/boundline:doctor-context",
+      "label": "doctor-context",
+      "purpose": "Diagnose missing workspace context, readiness signals, and evidence prerequisites for the active bounded task.",
+      "boundlineCommand": "cargo run --bin boundline -- doctor --workspace <workspace>",
+      "visibility": "contextual",
+      "skillRefs": {
+        "claude": "assistant/claude/commands/boundline-doctor-context.md",
+        "codex": "assistant/codex/commands/boundline-doctor-context.md",
+        "copilot": "assistant/copilot/prompts/boundline-doctor-context.prompt.md"
+      },
+      "stateHandling": "Prefer doctor-backed missing_prerequisites and actionable fix commands for config, Canon readiness, indexes, and evidence gaps; keep blocked setup explicit rather than inferred from chat history."
     },
     {
       "id": "/boundline:recover",

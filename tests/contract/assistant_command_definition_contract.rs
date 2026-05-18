@@ -423,6 +423,161 @@ fn test_workflow_definition_sections_and_backend_mappings() {
     }
 }
 
+#[test]
+fn test_s7_mvp_definition_sections_exist() {
+    let assets = [
+        asset_path("assistant/claude/commands/boundline-why.md"),
+        asset_path("assistant/codex/commands/boundline-why.md"),
+        asset_path("assistant/copilot/prompts/boundline-why.prompt.md"),
+        asset_path("assistant/claude/commands/boundline-risk.md"),
+        asset_path("assistant/codex/commands/boundline-risk.md"),
+        asset_path("assistant/copilot/prompts/boundline-risk.prompt.md"),
+        asset_path("assistant/claude/commands/boundline-evidence.md"),
+        asset_path("assistant/codex/commands/boundline-evidence.md"),
+        asset_path("assistant/copilot/prompts/boundline-evidence.prompt.md"),
+        asset_path("assistant/claude/commands/boundline-next-best.md"),
+        asset_path("assistant/codex/commands/boundline-next-best.md"),
+        asset_path("assistant/copilot/prompts/boundline-next-best.prompt.md"),
+    ];
+
+    for path in assets {
+        let content = read_asset(&path);
+        assert_required_sections(&path, &content);
+    }
+}
+
+#[test]
+fn s7_us2_definition_sections_and_backend_mappings_exist() {
+    let assets = [
+        (
+            asset_path("assistant/claude/commands/boundline-assumptions.md"),
+            &[
+                "cargo run --bin boundline -- inspect --workspace <workspace>",
+                "assumptions_summary",
+                "assumption_group",
+                "fallback_disclosure",
+                "next_command",
+            ][..],
+        ),
+        (
+            asset_path("assistant/codex/commands/boundline-assumptions.md"),
+            &[
+                "cargo run --bin boundline -- inspect --workspace <workspace>",
+                "assumptions_summary",
+                "assumption_group",
+                "fallback_disclosure",
+                "next_command",
+            ][..],
+        ),
+        (
+            asset_path("assistant/copilot/prompts/boundline-assumptions.prompt.md"),
+            &[
+                "cargo run --bin boundline -- inspect --workspace <workspace>",
+                "assumptions_summary",
+                "assumption_group",
+                "fallback_disclosure",
+                "next_command",
+            ][..],
+        ),
+        (
+            asset_path("assistant/claude/commands/boundline-hidden-impact.md"),
+            &[
+                "cargo run --bin boundline -- inspect --workspace <workspace>",
+                "hidden_impact_summary",
+                "hidden_impact_fallback_disclosure",
+                "challenge_required_review",
+                "next_command",
+            ][..],
+        ),
+        (
+            asset_path("assistant/codex/commands/boundline-hidden-impact.md"),
+            &[
+                "cargo run --bin boundline -- inspect --workspace <workspace>",
+                "hidden_impact_summary",
+                "hidden_impact_fallback_disclosure",
+                "challenge_required_review",
+                "next_command",
+            ][..],
+        ),
+        (
+            asset_path("assistant/copilot/prompts/boundline-hidden-impact.prompt.md"),
+            &[
+                "cargo run --bin boundline -- inspect --workspace <workspace>",
+                "hidden_impact_summary",
+                "hidden_impact_fallback_disclosure",
+                "challenge_required_review",
+                "next_command",
+            ][..],
+        ),
+        (
+            asset_path("assistant/claude/commands/boundline-challenge.md"),
+            &[
+                "cargo run --bin boundline -- inspect --workspace <workspace>",
+                "challenge_strongest_objection",
+                "challenge_required_review",
+                "challenge_council_required",
+                "next_command",
+            ][..],
+        ),
+        (
+            asset_path("assistant/codex/commands/boundline-challenge.md"),
+            &[
+                "cargo run --bin boundline -- inspect --workspace <workspace>",
+                "challenge_strongest_objection",
+                "challenge_required_review",
+                "challenge_council_required",
+                "next_command",
+            ][..],
+        ),
+        (
+            asset_path("assistant/copilot/prompts/boundline-challenge.prompt.md"),
+            &[
+                "cargo run --bin boundline -- inspect --workspace <workspace>",
+                "challenge_strongest_objection",
+                "challenge_required_review",
+                "challenge_council_required",
+                "next_command",
+            ][..],
+        ),
+        (
+            asset_path("assistant/claude/commands/boundline-explain-plan.md"),
+            &[
+                "cargo run --bin boundline -- status --workspace <workspace>",
+                "explain_plan_summary",
+                "explain_plan_validation",
+                "explain_plan_governance",
+                "explain_plan_recovery",
+            ][..],
+        ),
+        (
+            asset_path("assistant/codex/commands/boundline-explain-plan.md"),
+            &[
+                "cargo run --bin boundline -- status --workspace <workspace>",
+                "explain_plan_summary",
+                "explain_plan_validation",
+                "explain_plan_governance",
+                "explain_plan_recovery",
+            ][..],
+        ),
+        (
+            asset_path("assistant/copilot/prompts/boundline-explain-plan.prompt.md"),
+            &[
+                "cargo run --bin boundline -- status --workspace <workspace>",
+                "explain_plan_summary",
+                "explain_plan_validation",
+                "explain_plan_governance",
+                "explain_plan_recovery",
+            ][..],
+        ),
+    ];
+
+    for (path, snippets) in assets {
+        let content = read_asset(&path);
+        assert_required_sections(&path, &content);
+        assert_required_snippets(&path, &content, snippets);
+    }
+}
+
 fn assert_forbidden_snippets(path: &Path, content: &str, snippets: &[&str]) {
     for snippet in snippets {
         assert!(

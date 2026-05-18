@@ -1,9 +1,11 @@
 #![allow(dead_code)]
 
+use std::ffi::OsString;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+use std::sync::{Mutex, MutexGuard};
 
 use serde::de::DeserializeOwned;
 use uuid::Uuid;
@@ -76,6 +78,13 @@ const GUIDED_ADAPTIVE_VALIDATE_SH: &str = concat!(
 
 const MISSING_CANON_COMMAND: &str = "/definitely/missing/canon";
 
+const SEMANTIC_VECTOR_STATE_OVERRIDE_ENV: &str = "BOUNDLINE_SEMANTIC_VECTOR_STATE_OVERRIDE";
+
+pub const SEMANTIC_VECTOR_STATE_MISSING_VALUE: &str = "missing";
+pub const SEMANTIC_VECTOR_STATE_READY_VALUE: &str = "ready";
+
+static SEMANTIC_VECTOR_STATE_OVERRIDE_LOCK: Mutex<()> = Mutex::new(());
+
 const FIXTURE_TEST_RS: &str = concat!(
     "use boundline_fixture::add;\n\n",
     "#[test]\n",
@@ -83,6 +92,37 @@ const FIXTURE_TEST_RS: &str = concat!(
     "    assert_eq!(add(2, 2), 4);\n",
     "}\n",
 );
+
+pub struct SemanticVectorStateOverrideGuard {
+    _lock: MutexGuard<'static, ()>,
+    previous: Option<OsString>,
+}
+
+impl Drop for SemanticVectorStateOverrideGuard {
+    fn drop(&mut self) {
+        if let Some(previous) = &self.previous {
+            unsafe {
+                std::env::set_var(SEMANTIC_VECTOR_STATE_OVERRIDE_ENV, previous);
+            }
+        } else {
+            unsafe {
+                std::env::remove_var(SEMANTIC_VECTOR_STATE_OVERRIDE_ENV);
+            }
+        }
+    }
+}
+
+pub fn force_semantic_vector_state_override(
+    value: &'static str,
+) -> SemanticVectorStateOverrideGuard {
+    let lock =
+        SEMANTIC_VECTOR_STATE_OVERRIDE_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let previous = std::env::var_os(SEMANTIC_VECTOR_STATE_OVERRIDE_ENV);
+    unsafe {
+        std::env::set_var(SEMANTIC_VECTOR_STATE_OVERRIDE_ENV, value);
+    }
+    SemanticVectorStateOverrideGuard { _lock: lock, previous }
+}
 
 const VALID_WORKFLOWS_TOML: &str = concat!(
     "[workflow.default]\n",

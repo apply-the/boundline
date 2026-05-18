@@ -390,6 +390,102 @@ fn trace_summary_renderer_mentions_steps_recovery_and_terminal_reason() {
 }
 
 #[test]
+fn s7_trace_summary_renderer_surfaces_why_and_risk_summaries() {
+    let summary = TraceSummaryView {
+        trace_ref: "/tmp/workspace/.boundline/traces/s7.json".to_string(),
+        goal: "Explain the active delivery state".to_string(),
+        goal_plan_summary: Some(
+            "explain the bounded plan from authoritative runtime state".to_string(),
+        ),
+        failure_evidence: vec!["validation still has not run for the current attempt".to_string()],
+        terminal_status: TaskStatus::Succeeded,
+        terminal_reason: TerminalReason::new(
+            TerminalCondition::GoalSatisfied,
+            "goal satisfied after trace inspection",
+            None,
+        ),
+        ..Default::default()
+    };
+
+    let rendered = render_trace_summary(&summary, "explicit-trace", "/boundline-next");
+
+    assert!(
+        rendered.contains("why_summary: explain the bounded plan from authoritative runtime state"),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains("risk_summary: validation still has not run for the current attempt"),
+        "{rendered}"
+    );
+}
+
+#[test]
+fn s7_session_status_renderer_surfaces_us2_cognitive_lenses() {
+    let view = SessionStatusView {
+        session_id: "session-s7-us2".to_string(),
+        workspace_ref: "/tmp/session-s7-us2".to_string(),
+        goal: Some("Plan with bounded context".to_string()),
+        advanced_context: Some(sample_advanced_context()),
+        active_flow: Some("bug-fix".to_string()),
+        flow_state: Some("implement".to_string()),
+        planning_rationale: Some(
+            "bounded runtime evidence points to the context router".to_string(),
+        ),
+        verification_strategy: Some(
+            "run focused regression checks before applying the route".to_string(),
+        ),
+        latest_status: SessionStatus::Planned,
+        latest_governance_runtime: Some("canon".to_string()),
+        latest_governance_packet_ref: Some(".canon/runs/canon-run-security".to_string()),
+        next_command: Some("boundline inspect".to_string()),
+        explanation: "session is ready to execute the bounded plan".to_string(),
+        ..Default::default()
+    };
+
+    let rendered = render_session_status(&view);
+
+    assert!(rendered.contains("assumptions_summary: validation(1)"), "{rendered}");
+    assert!(
+        rendered.contains(
+            "assumption_group: validation -> src/context_router.rs [explicit] source=workspace risk=low the matching test file names the same target"
+        ),
+        "{rendered}"
+    );
+    assert!(rendered.contains("hidden_impact_summary: missing_tests(1)"), "{rendered}");
+    assert!(
+        rendered.contains(
+            "hidden_impact_missing_tests: tests/context_router.rs [open/medium] add or refresh the focused regression test"
+        ),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains(
+            "challenge_strongest_objection: missing test coverage is still open for tests/context_router.rs"
+        ),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains(
+            "challenge_required_review: governance packet .canon/runs/canon-run-security remains authoritative"
+        ),
+        "{rendered}"
+    );
+    assert!(rendered.contains("challenge_council_required: yes"), "{rendered}");
+    assert!(
+        rendered.contains(
+            "explain_plan_summary: goal=Plan with bounded context; stages=bug-fix/implement"
+        ),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains(
+            "explain_plan_validation: run focused regression checks before applying the route"
+        ),
+        "{rendered}"
+    );
+}
+
+#[test]
 fn inspect_failure_renderer_includes_workspace_ref_when_provided() {
     let rendered = render_inspect_failure(
         "latest-workspace-trace",

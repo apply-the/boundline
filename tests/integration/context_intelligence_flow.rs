@@ -45,3 +45,35 @@ fn plan_status_and_inspect_surface_selected_local_evidence() {
         inspect.terminal_output
     );
 }
+
+#[test]
+fn s7_plan_status_and_inspect_surface_us2_cognitive_lenses_when_advanced_context_is_available() {
+    let workspace = write_flow_workspace("boundline-context-intelligence-s7-us2");
+
+    execute_start(Some(&workspace)).unwrap();
+    execute_capture(
+        Some(&workspace),
+        Some("fix the failing add path"),
+        &[],
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let plan = execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+    let status = execute_status(Some(&workspace)).unwrap();
+    execute_run(Some(&workspace)).unwrap();
+    let inspect = execute_inspect(None, Some(&workspace)).unwrap();
+
+    for output in [
+        plan.terminal_output.as_str(),
+        status.terminal_output.as_str(),
+        inspect.terminal_output.as_str(),
+    ] {
+        assert!(output.contains("assumptions_summary:"), "{output}");
+        assert!(output.contains("hidden_impact_summary:"), "{output}");
+        assert!(output.contains("challenge_strongest_objection:"), "{output}");
+        assert!(output.contains("explain_plan_summary:"), "{output}");
+    }
+}

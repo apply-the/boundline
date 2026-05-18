@@ -1,46 +1,14 @@
-use std::ffi::OsString;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Mutex;
 
 use boundline::cli::inspect::execute_inspect;
 use boundline::cli::session::{
     execute_capture, execute_plan, execute_run, execute_start, execute_status,
 };
 
-use crate::workspace_fixture::temp_empty_workspace;
-
-const SEMANTIC_VECTOR_STATE_OVERRIDE_ENV: &str = "BOUNDLINE_SEMANTIC_VECTOR_STATE_OVERRIDE";
-const SEMANTIC_VECTOR_STATE_READY_VALUE: &str = "ready";
-
-static SEMANTIC_VECTOR_STATE_OVERRIDE_LOCK: Mutex<()> = Mutex::new(());
-
-struct EnvVarGuard {
-    name: &'static str,
-    previous: Option<OsString>,
-}
-
-impl Drop for EnvVarGuard {
-    fn drop(&mut self) {
-        if let Some(previous) = &self.previous {
-            unsafe {
-                std::env::set_var(self.name, previous);
-            }
-        } else {
-            unsafe {
-                std::env::remove_var(self.name);
-            }
-        }
-    }
-}
-
-fn set_env_var(name: &'static str, value: &str) -> EnvVarGuard {
-    let previous = std::env::var_os(name);
-    unsafe {
-        std::env::set_var(name, value);
-    }
-    EnvVarGuard { name, previous }
-}
+use crate::workspace_fixture::{
+    SEMANTIC_VECTOR_STATE_READY_VALUE, force_semantic_vector_state_override, temp_empty_workspace,
+};
 
 fn write_semantic_inspect_workspace(prefix: &str) -> PathBuf {
     let workspace = temp_empty_workspace(prefix);
@@ -107,10 +75,7 @@ fn write_semantic_inspect_workspace(prefix: &str) -> PathBuf {
 
 #[test]
 fn status_and_inspect_surface_semantic_explanation_lines() {
-    let _guard =
-        SEMANTIC_VECTOR_STATE_OVERRIDE_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    let _env_guard =
-        set_env_var(SEMANTIC_VECTOR_STATE_OVERRIDE_ENV, SEMANTIC_VECTOR_STATE_READY_VALUE);
+    let _env_guard = force_semantic_vector_state_override(SEMANTIC_VECTOR_STATE_READY_VALUE);
     let workspace =
         write_semantic_inspect_workspace("boundline-context-intelligence-semantic-inspect");
 

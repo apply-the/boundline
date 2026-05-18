@@ -285,3 +285,48 @@ fn command_reference_paths_exist() {
         }
     }
 }
+
+#[test]
+fn s7_mvp_commands_are_registered_in_shared_metadata() {
+    let metadata = read_json("assistant/plugin-metadata.json");
+    let commands = read_json("assistant/commands/session-workflow.json");
+    let capability_ids = capability_ids(&metadata).expect("metadata capabilities parse");
+    let command_ids = command_ids(&commands).expect("command ids parse");
+
+    for expected in
+        ["/boundline:why", "/boundline:risk", "/boundline:evidence", "/boundline:next-best"]
+    {
+        assert!(
+            capability_ids.iter().any(|capability| capability == expected),
+            "shared metadata must include {expected}"
+        );
+        assert!(
+            command_ids.iter().any(|command| command == expected),
+            "shared commands must include {expected}"
+        );
+    }
+}
+
+#[test]
+fn s7_us2_commands_are_registered_in_shared_metadata() {
+    let metadata = read_json("assistant/plugin-metadata.json");
+    let commands = read_json("assistant/commands/session-workflow.json");
+    let capability_ids = capability_ids(&metadata).expect("metadata capabilities parse");
+    let command_ids = command_ids(&commands).expect("command ids parse");
+
+    for expected in [
+        "/boundline:assumptions",
+        "/boundline:hidden-impact",
+        "/boundline:challenge",
+        "/boundline:explain-plan",
+    ] {
+        assert!(
+            capability_ids.iter().any(|capability| capability == expected),
+            "shared metadata must include {expected}"
+        );
+        assert!(
+            command_ids.iter().any(|command| command == expected),
+            "shared commands must include {expected}"
+        );
+    }
+}

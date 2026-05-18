@@ -86,6 +86,7 @@ pub struct AssistantInstallReport {
     pub install_mode: &'static str,
     pub package_path: &'static str,
     pub bootstrap_commands: &'static [&'static str],
+    pub contextual_commands: &'static [&'static str],
     pub cli_fallback_commands: Vec<String>,
     pub note: &'static str,
 }
@@ -106,6 +107,7 @@ pub fn install_global_assistant_package(
             "/boundline:status",
             "/boundline:continue",
         ],
+        contextual_commands: &["/boundline:explain-plan", "/boundline:doctor-context"],
         cli_fallback_commands: vec![
             "boundline init --workspace <workspace> --assistant <host>".to_string(),
             "boundline doctor --workspace <workspace>".to_string(),
@@ -126,6 +128,8 @@ pub fn render_assistant_install_report(report: &AssistantInstallReport) -> Strin
             "package_path: {}\n",
             "commands:\n",
             "{}\n",
+            "contextual_commands:\n",
+            "{}\n",
             "fallback_cli:\n",
             "{}\n",
             "note: {}\n"
@@ -136,6 +140,12 @@ pub fn render_assistant_install_report(report: &AssistantInstallReport) -> Strin
         report.package_path,
         report
             .bootstrap_commands
+            .iter()
+            .map(|command| format!("- {command}"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        report
+            .contextual_commands
             .iter()
             .map(|command| format!("- {command}"))
             .collect::<Vec<_>>()

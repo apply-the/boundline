@@ -12,6 +12,7 @@ Use these prompts with the Boundline CLI installed in the target repository. `.b
 | Run work | Run the next bounded Boundline action. | `boundline run --json` |
 | Inspect status | Continue the active Boundline session. | `boundline status --json` |
 | Inspect trace | Inspect the latest Boundline trace and tell me the next safe action. | `boundline inspect --json` |
+| Diagnose context | Diagnose missing workspace context, provider readiness, indexes, and evidence gaps for this workspace. | `boundline doctor --workspace <workspace>` |
 | Recover | Recover this Boundline session using the CLI-reported next_command or checkpoint restore command. | `boundline status --json` |
 | Govern | Use Canon governance only if this Boundline workspace is configured for it. | `boundline config show --scope workspace --json` |
 

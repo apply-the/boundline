@@ -2,6 +2,8 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
+use serde_json::Value;
+
 const CORE_COMMANDS: &[&str] = &[
     "boundline-start",
     "boundline-plan",
@@ -47,6 +49,15 @@ const REQUIRED_COMMANDS: &[&str] = &[
     "boundline-system-assessment",
     "boundline-migration",
     "boundline-supply-chain-analysis",
+    "boundline-why",
+    "boundline-risk",
+    "boundline-evidence",
+    "boundline-next-best",
+    "boundline-assumptions",
+    "boundline-hidden-impact",
+    "boundline-challenge",
+    "boundline-explain-plan",
+    "boundline-doctor-context",
 ];
 
 #[test]
@@ -160,6 +171,48 @@ fn test_documented_flows_match_the_assistant_asset_surface() {
     assert!(
         quickstart.contains("cargo run --bin boundline -- inspect --workspace \"$PWD\""),
         "{quickstart}"
+    );
+}
+
+#[test]
+fn s7_global_bootstrap_manifest_keeps_doctor_context_contextual() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let manifest_path = manifest_dir.join("assistant/global/manifest.json");
+    let manifest: Value = serde_json::from_str(&read_text(&manifest_path))
+        .unwrap_or_else(|error| panic!("failed to parse {}: {error}", manifest_path.display()));
+
+    let commands = manifest["commands"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{} missing commands array", manifest_path.display()))
+        .iter()
+        .map(|value| {
+            value.as_str().unwrap_or_else(|| {
+                panic!("{} command entries must be strings", manifest_path.display())
+            })
+        })
+        .collect::<Vec<_>>();
+    let contextual_commands = manifest["contextualCommands"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{} missing contextualCommands array", manifest_path.display()))
+        .iter()
+        .map(|value| {
+            value.as_str().unwrap_or_else(|| {
+                panic!("{} contextual command entries must be strings", manifest_path.display())
+            })
+        })
+        .collect::<Vec<_>>();
+
+    assert!(
+        !commands.contains(&"/boundline:doctor-context"),
+        "global bootstrap palette should stay compact"
+    );
+    assert!(
+        contextual_commands.contains(&"/boundline:doctor-context"),
+        "doctor-context should stay available as a contextual global follow-up"
+    );
+    assert!(
+        contextual_commands.contains(&"/boundline:explain-plan"),
+        "explain-plan should also remain contextual rather than always visible"
     );
 }
 

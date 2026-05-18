@@ -28,3 +28,15 @@ fn assistant_install_user_scope_is_explicit_when_host_needs_manual_fallback() {
     assert!(text.contains("global command installation is not claimed for this host"), "{text}");
     assert!(text.contains("boundline doctor --workspace"), "{text}");
 }
+
+#[test]
+fn assistant_install_user_scope_reports_contextual_doctor_context_follow_up() {
+    let output = run_boundline(&["assistant", "install", "--host", "claude", "--scope", "user"]);
+    let text = terminal_text(&output);
+
+    assert_eq!(output.status.code(), Some(0), "{text}");
+    assert!(text.contains("contextual_commands:"), "{text}");
+    assert!(text.contains("/boundline:doctor-context"), "{text}");
+    assert!(text.contains("/boundline:explain-plan"), "{text}");
+    assert!(text.contains("boundline doctor --workspace"), "{text}");
+}

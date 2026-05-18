@@ -1,8 +1,9 @@
 <!--
 Sync Impact Report
-Version change: 1.2.0 -> 1.3.0
+Version change: 1.3.0 -> 1.4.0
 Modified principles:
-- None
+- Language Rules: expanded the Rust no-panic rule so it applies to all code
+	outside `main.rs`, including `#[cfg(test)]` modules and files under `tests/`
 Added sections:
 - Language Rules: added Rust-level rules for banning magic literals in owned
 	logic and requiring typed serde models for stable serialization shapes
@@ -12,8 +13,11 @@ Templates requiring updates:
 - None
 Related docs updated:
 - updated: .agents/skills/boundline-shared/references/rust-language-rules.md
+- updated: AGENTS.md
+- updated: assistant/packs/guidance-catalog/guardians/rust-zero-panic.md
 Follow-up TODOs:
-- None
+- audit legacy test code that still uses `unwrap`, `expect`, or `panic!`
+	outside `main.rs`
 -->
 
 # Boundline Spec Kit Constitution
@@ -247,10 +251,11 @@ For Rust code in this repository, the normative language rules live in
 
 Compliance expectations are mandatory:
 
-- Rust code outside `main.rs`, `#[cfg(test)]` modules, and files under
-	`tests/` MUST NOT introduce panic-prone control flow; failures and
-	invariant breaks MUST surface as explicit error values or equivalent
-	blocked, stale, unsupported, or invalid states.
+- Rust code outside `main.rs` MUST NOT introduce panic-prone control flow;
+	this prohibition applies to production code, `#[cfg(test)]` modules, and
+	files under `tests/`. Failures and invariant breaks MUST surface as
+	explicit error values or equivalent blocked, stale, unsupported, or invalid
+	states.
 - Rust code outside `main.rs`, `#[cfg(test)]` modules, and files under
 	`tests/` MUST NOT introduce magic strings or magic numbers in domain logic,
 	protocol handling, persistence, configuration, CLI contracts, or
@@ -280,4 +285,4 @@ Compliance expectations are mandatory:
 - Ratification and amendment dates MUST use ISO format. An amendment is incomplete until
 	this file, the Sync Impact Report, and dependent artifacts are in sync.
 
-**Version**: 1.3.0 | **Ratified**: 2026-04-23 | **Last Amended**: 2026-05-14
+**Version**: 1.4.0 | **Ratified**: 2026-04-23 | **Last Amended**: 2026-05-18

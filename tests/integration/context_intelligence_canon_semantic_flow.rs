@@ -1,7 +1,5 @@
-use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 
 use boundline::domain::configuration::{AdvancedContextConfig, SemanticAccelerationPolicyState};
 use boundline::domain::context_intelligence::{
@@ -19,38 +17,11 @@ use boundline::orchestrator::context_intelligence::{
 use serde_json::json;
 use uuid::Uuid;
 
-const SEMANTIC_VECTOR_STATE_OVERRIDE_ENV: &str = "BOUNDLINE_SEMANTIC_VECTOR_STATE_OVERRIDE";
-const SEMANTIC_VECTOR_STATE_READY_VALUE: &str = "ready";
 const CANON_INDEX_CONTRACT_LINE_V1: &str = "v1";
 
-static SEMANTIC_VECTOR_STATE_OVERRIDE_LOCK: Mutex<()> = Mutex::new(());
-
-struct EnvVarGuard {
-    name: &'static str,
-    previous: Option<OsString>,
-}
-
-impl Drop for EnvVarGuard {
-    fn drop(&mut self) {
-        if let Some(previous) = &self.previous {
-            unsafe {
-                std::env::set_var(self.name, previous);
-            }
-        } else {
-            unsafe {
-                std::env::remove_var(self.name);
-            }
-        }
-    }
-}
-
-fn set_env_var(name: &'static str, value: &str) -> EnvVarGuard {
-    let previous = std::env::var_os(name);
-    unsafe {
-        std::env::set_var(name, value);
-    }
-    EnvVarGuard { name, previous }
-}
+use crate::workspace_fixture::{
+    SEMANTIC_VECTOR_STATE_READY_VALUE, force_semantic_vector_state_override,
+};
 
 fn temp_workspace(prefix: &str) -> PathBuf {
     let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
@@ -103,10 +74,7 @@ fn write_canon_semantic_artifact(
 
 #[test]
 fn build_projection_accepts_compatible_canon_artifacts_and_surfaces_explicit_skip_reasons() {
-    let _guard =
-        SEMANTIC_VECTOR_STATE_OVERRIDE_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    let _env_guard =
-        set_env_var(SEMANTIC_VECTOR_STATE_OVERRIDE_ENV, SEMANTIC_VECTOR_STATE_READY_VALUE);
+    let _env_guard = force_semantic_vector_state_override(SEMANTIC_VECTOR_STATE_READY_VALUE);
     let workspace = temp_workspace("boundline-context-intelligence-canon-semantic-flow");
 
     write_workspace_file(

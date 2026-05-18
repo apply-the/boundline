@@ -57,3 +57,30 @@ fn global_continue_does_not_invent_a_session_before_init_or_start() {
     assert!(text.contains("next_command: boundline init --workspace"), "{text}");
     assert!(!text.contains("latest_status:"), "{text}");
 }
+
+#[test]
+fn doctor_workspace_output_surfaces_contextual_s7_gaps_before_init() {
+    let workspace = temp_empty_workspace("boundline-global-doctor-context");
+    let output = run_boundline(&["doctor", "--workspace", workspace.to_string_lossy().as_ref()]);
+    let text = terminal_text(&output);
+
+    assert_eq!(output.status.code(), Some(2), "{text}");
+    assert!(text.contains("boundline_config"), "{text}");
+    assert!(text.contains("provider_readiness"), "{text}");
+    assert!(text.contains("advanced_context_index"), "{text}");
+    assert!(text.contains("session_evidence"), "{text}");
+    assert!(text.contains("Canon project memory"), "{text}");
+    assert!(
+        text.contains("boundline config show --workspace")
+            || text.contains("boundline init --workspace"),
+        "{text}"
+    );
+    assert!(text.contains("boundline doctor --install"), "{text}");
+    assert!(
+        text.contains(
+            "boundline config set-semantic-acceleration --scope workspace --policy local"
+        ),
+        "{text}"
+    );
+    assert!(text.contains("boundline start --workspace"), "{text}");
+}

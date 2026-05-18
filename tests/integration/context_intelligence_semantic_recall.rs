@@ -1,7 +1,5 @@
-use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 
 use boundline::domain::configuration::{AdvancedContextConfig, SemanticAccelerationPolicyState};
 use boundline::domain::context_intelligence::{
@@ -13,40 +11,10 @@ use boundline::orchestrator::context_intelligence::{
 };
 use serde::Deserialize;
 
-use crate::workspace_fixture::temp_empty_workspace;
-
-const SEMANTIC_VECTOR_STATE_OVERRIDE_ENV: &str = "BOUNDLINE_SEMANTIC_VECTOR_STATE_OVERRIDE";
-const SEMANTIC_VECTOR_STATE_READY_VALUE: &str = "ready";
+use crate::workspace_fixture::{
+    SEMANTIC_VECTOR_STATE_READY_VALUE, force_semantic_vector_state_override, temp_empty_workspace,
+};
 const MIN_SEMANTIC_RECALL_THRESHOLD: f64 = 1.0;
-
-static SEMANTIC_VECTOR_STATE_OVERRIDE_LOCK: Mutex<()> = Mutex::new(());
-
-struct EnvVarGuard {
-    name: &'static str,
-    previous: Option<OsString>,
-}
-
-impl Drop for EnvVarGuard {
-    fn drop(&mut self) {
-        if let Some(previous) = &self.previous {
-            unsafe {
-                std::env::set_var(self.name, previous);
-            }
-        } else {
-            unsafe {
-                std::env::remove_var(self.name);
-            }
-        }
-    }
-}
-
-fn set_env_var(name: &'static str, value: &str) -> EnvVarGuard {
-    let previous = std::env::var_os(name);
-    unsafe {
-        std::env::set_var(name, value);
-    }
-    EnvVarGuard { name, previous }
-}
 
 #[derive(Debug, Deserialize)]
 struct SemanticRecallCase {
@@ -117,10 +85,7 @@ fn build_case_projection(
 
 #[test]
 fn semantic_recall_corpus_meets_curated_threshold() {
-    let _guard =
-        SEMANTIC_VECTOR_STATE_OVERRIDE_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    let _env_guard =
-        set_env_var(SEMANTIC_VECTOR_STATE_OVERRIDE_ENV, SEMANTIC_VECTOR_STATE_READY_VALUE);
+    let _env_guard = force_semantic_vector_state_override(SEMANTIC_VECTOR_STATE_READY_VALUE);
     let cases = load_semantic_recall_cases();
     let mut matched_cases = 0usize;
 

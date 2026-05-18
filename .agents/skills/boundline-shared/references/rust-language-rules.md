@@ -4,22 +4,24 @@ These rules are normative for Rust code changes in this repository. They are
 part of the repository's AI-visible engineering surface and apply to both human
 and AI-authored changes.
 
-## No Panic Outside Entrypoints And Tests
+## No Panic Outside Main
 
-- In Rust code outside `main.rs`, `#[cfg(test)]` modules, and files under
-  `tests/`, do not introduce panic-prone control flow.
+- In Rust code outside `main.rs`, do not introduce panic-prone control flow.
 - Treat `unwrap()`, `expect()`, `panic!()`, `todo!()`, `unimplemented!()`,
   `unreachable!()`, and assert-family macros used as runtime guards as banned
-  outside `main.rs` and test code.
+  everywhere outside `main.rs`, including `#[cfg(test)]` modules and files
+  under `tests/`.
 - When a failure can arise from workspace state, user input, IO, parsing,
   serialization, validation, configuration, session projection, governance
-  integration, or delivery-path selection, surface it with explicit error
-  propagation or a typed blocked, stale, unsupported, or invalid state.
+  integration, delivery-path selection, or test setup and fixture execution,
+  surface it with explicit error propagation or a typed blocked, stale,
+  unsupported, or invalid state.
 - `main.rs` may still panic when immediate process termination is the intended
   behavior of the executable entrypoint, but explicit exit handling remains
   preferred when practical.
-- `#[cfg(test)]` code and files under `tests/` may use panicking helpers
-  freely.
+- Test code outside `main.rs` must use returned `Result` values or equivalent
+  explicit handling for fallible setup, IO, parsing, and runtime invocation
+  instead of panicking helpers.
 
 ## No Magic Literals In Owned Logic
 
@@ -52,7 +54,7 @@ and AI-authored changes.
 ## Review Expectation
 
 - Reviewers and implementers should treat newly introduced panic-prone calls
-  outside `main.rs` and test code as policy violations.
+  outside `main.rs` as policy violations.
 - Reviewers and implementers should treat newly introduced magic literals or
   stable-shape ad hoc map/json serialization outside `main.rs` and test code
   as policy violations.

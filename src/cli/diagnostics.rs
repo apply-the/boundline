@@ -5,16 +5,26 @@ use serde::{Deserialize, Serialize};
 
 use crate::adapters::trace_store::FileTraceStore;
 use crate::domain::distribution::{
-    CompanionState, SUPPORTED_CANON_VERSION, evaluate_canon_install,
+    CanonInstallStatus, CompanionState, SUPPORTED_CANON_VERSION, evaluate_canon_install,
     supported_distribution_channels,
 };
+use crate::domain::project_memory::read_project_memory;
 use crate::fixture::FixtureRuntimeError;
 use crate::fixture::load_workspace_execution_profile;
+
+const ADVANCED_CONTEXT_INDEX_RELATIVE: &str =
+    ".boundline/context-intelligence/retrieval-index.sqlite3";
+const CANON_GUIDANCE_DIR_RELATIVE: &str = ".canon/boundline/guidance";
+const SESSION_RECORD_RELATIVE: &str = ".boundline/session.json";
+const WORKSPACE_CONFIG_RELATIVE: &str = ".boundline/config.toml";
+const WORKSPACE_GUIDANCE_DIR_RELATIVE: &str = ".boundline/guidance";
+const WORKSPACE_GUARDIAN_DIR_RELATIVE: &str = ".boundline/guardians";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DiagnosticsStatus {
     Passed,
+    Advisory,
     Failed,
 }
 
@@ -59,6 +69,13 @@ struct DiagnosticsReportContext {
 
 pub fn diagnose_workspace(workspace_ref: impl AsRef<Path>) -> DiagnosticsReport {
     diagnose_workspace_with_profile_requirement(workspace_ref, true)
+}
+
+pub fn diagnose_workspace_context(workspace_ref: impl AsRef<Path>) -> DiagnosticsReport {
+    let workspace = workspace_ref.as_ref();
+    let mut report = diagnose_workspace_with_profile_requirement(workspace, true);
+    extend_workspace_context_diagnostics(&mut report, workspace);
+    report
 }
 
 pub fn diagnose_installation() -> DiagnosticsReport {
@@ -347,6 +364,216 @@ fn diagnose_workspace_with_profile_requirement(
     )
 }
 
+fn extend_workspace_context_diagnostics(report: &mut DiagnosticsReport, workspace: &Path) {
+    if !(workspace.exists() && workspace.is_dir()) {
+        return;
+    }
+
+    let workspace_ref = workspace.to_string_lossy().into_owned();
+    let config_path = workspace.join(WORKSPACE_CONFIG_RELATIVE);
+    push_context_check(
+        report,
+        DiagnosticsCheck {
+            name: "boundline_config".to_string(),
+            status: if config_path.is_file() {
+                DiagnosticsStatus::Passed
+            } else {
+                DiagnosticsStatus::Advisory
+            },
+            message: if config_path.is_file() {
+                format!("workspace config is available at {}", config_path.display())
+            } else {
+                format!(
+                    "workspace config is missing; inspect or create it with `boundline config show --workspace {} --scope effective`",
+                    workspace.display()
+                )
+            },
+        },
+        (!config_path.is_file()).then(|| {
+            format!("boundline config show --workspace {workspace_ref} --scope effective")
+        }),
+    );
+
+    let project_memory = read_project_memory(workspace);
+    let project_memory_available = project_memory.has_credible_memory();
+    let project_memory_message = project_memory
+        .condition()
+        .map(|condition| condition.headline().to_string())
+        .unwrap_or_else(|| {
+            "Canon project memory is missing; govern a stage or refresh project memory after Canon promotes a stable docs/project surface"
+                .to_string()
+        });
+    push_context_check(
+        report,
+        DiagnosticsCheck {
+            name: "canon_project_memory".to_string(),
+            status: if project_memory_available {
+                DiagnosticsStatus::Passed
+            } else {
+                DiagnosticsStatus::Advisory
+            },
+            message: project_memory_message,
+        },
+        (!project_memory_available)
+            .then(|| format!("boundline govern --workspace {workspace_ref}")),
+    );
+
+    let expert_pack_ready = [
+        workspace.join(WORKSPACE_GUIDANCE_DIR_RELATIVE),
+        workspace.join(WORKSPACE_GUARDIAN_DIR_RELATIVE),
+        workspace.join(CANON_GUIDANCE_DIR_RELATIVE),
+    ]
+    .iter()
+    .any(|path| path_has_entries(path));
+    push_context_check(
+        report,
+        DiagnosticsCheck {
+            name: "expert_pack_inputs".to_string(),
+            status: if expert_pack_ready {
+                DiagnosticsStatus::Passed
+            } else {
+                DiagnosticsStatus::Advisory
+            },
+            message: if expert_pack_ready {
+                "workspace or Canon guidance inputs are available for expert-pack calibration"
+                    .to_string()
+            } else {
+                "expert-pack inputs are missing; add workspace domain guidance or bind a required context before relying on deeper S7 routing".to_string()
+            },
+        },
+        (!expert_pack_ready).then(|| {
+            "boundline config set-domain --scope workspace --family <family> --enable --standards \"<standards>\""
+                .to_string()
+        }),
+    );
+
+    let (provider_status, provider_message, provider_actions) =
+        provider_readiness_context(workspace);
+    push_context_check(
+        report,
+        DiagnosticsCheck {
+            name: "provider_readiness".to_string(),
+            status: provider_status,
+            message: provider_message,
+        },
+        None,
+    );
+    for action in provider_actions {
+        push_suggested_action(report, action);
+    }
+
+    let advanced_context_index = workspace.join(ADVANCED_CONTEXT_INDEX_RELATIVE);
+    let advanced_context_ready = advanced_context_index.is_file();
+    push_context_check(
+        report,
+        DiagnosticsCheck {
+            name: "advanced_context_index".to_string(),
+            status: if advanced_context_ready {
+                DiagnosticsStatus::Passed
+            } else {
+                DiagnosticsStatus::Advisory
+            },
+            message: if advanced_context_ready {
+                format!(
+                    "advanced-context index is available at {}",
+                    advanced_context_index.display()
+                )
+            } else {
+                "advanced-context index is missing; enable local semantic acceleration before expecting higher-order impact inference"
+                    .to_string()
+            },
+        },
+        (!advanced_context_ready).then(|| {
+            "boundline config set-semantic-acceleration --scope workspace --policy local"
+                .to_string()
+        }),
+    );
+
+    let trace_root = FileTraceStore::for_workspace(workspace).root().to_path_buf();
+    let has_session_evidence =
+        workspace.join(SESSION_RECORD_RELATIVE).is_file() || path_has_entries(&trace_root);
+    push_context_check(
+        report,
+        DiagnosticsCheck {
+            name: "session_evidence".to_string(),
+            status: if has_session_evidence {
+                DiagnosticsStatus::Passed
+            } else {
+                DiagnosticsStatus::Advisory
+            },
+            message: if has_session_evidence {
+                "session or trace evidence is available for S7 explanations".to_string()
+            } else {
+                "session evidence is missing; start a session before expecting `why`, `risk`, or `next-best` to cite live runtime context".to_string()
+            },
+        },
+        (!has_session_evidence).then(|| format!("boundline start --workspace {workspace_ref}")),
+    );
+}
+
+fn path_has_entries(path: &Path) -> bool {
+    path.read_dir().ok().and_then(|mut entries| entries.next()).is_some()
+}
+
+fn provider_readiness_context(workspace: &Path) -> (DiagnosticsStatus, String, Vec<String>) {
+    let canon_status =
+        std::env::current_exe().ok().map(|current_exe| evaluate_canon_install(&current_exe));
+    provider_readiness_context_from_status(workspace, canon_status)
+}
+
+fn provider_readiness_context_from_status(
+    workspace: &Path,
+    canon_status: Option<CanonInstallStatus>,
+) -> (DiagnosticsStatus, String, Vec<String>) {
+    let fallback_action = "boundline doctor --install".to_string();
+    let Some(canon_status) = canon_status else {
+        return (
+            DiagnosticsStatus::Advisory,
+            "provider readiness is unknown because the current Boundline executable could not be resolved"
+                .to_string(),
+            vec![fallback_action],
+        );
+    };
+
+    if matches!(canon_status.state, CompanionState::Ready | CompanionState::AlreadySatisfied) {
+        return (
+            DiagnosticsStatus::Passed,
+            format!(
+                "provider readiness is confirmed for workspace diagnostics from {}",
+                workspace.display()
+            ),
+            Vec::new(),
+        );
+    }
+
+    let mut actions = canon_status.suggested_actions;
+    if !actions.iter().any(|action| action == &fallback_action) {
+        actions.push(fallback_action);
+    }
+    (
+        DiagnosticsStatus::Advisory,
+        format!("provider readiness is not confirmed for this machine: {}", canon_status.message),
+        actions,
+    )
+}
+
+fn push_context_check(
+    report: &mut DiagnosticsReport,
+    check: DiagnosticsCheck,
+    suggested_action: Option<String>,
+) {
+    report.checks.push(check);
+    if let Some(action) = suggested_action {
+        push_suggested_action(report, action);
+    }
+}
+
+fn push_suggested_action(report: &mut DiagnosticsReport, action: String) {
+    if !report.suggested_actions.iter().any(|existing| existing == &action) {
+        report.suggested_actions.push(action);
+    }
+}
+
 fn distribution_channel_message(channel_candidates: &[String]) -> String {
     match channel_candidates {
         [] => "no supported install channels are available on this machine".to_string(),
@@ -400,16 +627,19 @@ fn finalize_report(
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     use uuid::Uuid;
 
     use super::{
-        DiagnosticsCheck, DiagnosticsReportContext, DiagnosticsStatus, DiagnosticsSubject,
-        diagnose_installation, diagnose_installation_from_current_exe,
-        diagnose_native_direct_run_workspace, diagnose_workspace, distribution_channel_message,
-        finalize_report,
+        ADVANCED_CONTEXT_INDEX_RELATIVE, CANON_GUIDANCE_DIR_RELATIVE, DiagnosticsCheck,
+        DiagnosticsReportContext, DiagnosticsStatus, DiagnosticsSubject, SESSION_RECORD_RELATIVE,
+        WORKSPACE_CONFIG_RELATIVE, WORKSPACE_GUIDANCE_DIR_RELATIVE, diagnose_installation,
+        diagnose_installation_from_current_exe, diagnose_native_direct_run_workspace,
+        diagnose_workspace, diagnose_workspace_context, distribution_channel_message,
+        finalize_report, provider_readiness_context_from_status,
     };
+    use crate::domain::distribution::{CanonInstallStatus, CompanionState};
 
     fn temp_workspace() -> PathBuf {
         let workspace =
@@ -470,6 +700,52 @@ mod tests {
         )
         .unwrap();
         workspace
+    }
+
+    fn write_project_memory_surface(workspace: &Path) {
+        let project_dir = workspace.join("docs/project");
+        fs::create_dir_all(&project_dir).unwrap();
+        fs::write(project_dir.join("architecture-map.md"), "# Architecture Map\n\nContent here.")
+            .unwrap();
+        fs::write(
+            project_dir.join("architecture-map.packet-metadata.json"),
+            serde_json::to_string_pretty(&serde_json::json!({
+                "run_id": "run-123",
+                "mode": "architecture",
+                "risk": "bounded-impact",
+                "zone": "yellow",
+                "publish_timestamp": "2026-05-13T14:30:00Z",
+                "descriptor": "architecture-map",
+                "destination": "docs/project/architecture-map.md",
+                "source_artifacts": ["architecture-overview.md"],
+                "profile": "project-memory",
+                "promotion_state": "auto",
+                "update_strategy": "managed-blocks",
+                "lineage": {
+                    "contract_version": "v1",
+                    "producer": "canon",
+                    "source_ref": "canon-run:run-123",
+                    "source_artifacts": ["architecture-overview.md"],
+                    "mode": "architecture",
+                    "promotion_state": "auto-if-approved",
+                    "approval_state": "Completed",
+                    "stage": "architecture",
+                    "owner": "Owner <owner@example.com>",
+                    "risk": "bounded-impact",
+                    "zone": "yellow",
+                    "promoted_at": "2026-05-13T14:30:00Z",
+                    "content_digest": "sha256:abc123",
+                    "packet_readiness": "complete",
+                    "promotion_profile": "project-memory"
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+    }
+
+    fn context_check<'a>(report: &'a super::DiagnosticsReport, name: &str) -> &'a DiagnosticsCheck {
+        report.checks.iter().find(|check| check.name == name).unwrap()
     }
 
     #[test]
@@ -571,6 +847,103 @@ mod tests {
     }
 
     #[test]
+    fn diagnostics_report_flags_invalid_profile_when_required() {
+        let workspace = temp_workspace();
+        fs::write(workspace.join(".boundline").join("execution.json"), "{not-json").unwrap();
+
+        let report = diagnose_workspace(&workspace);
+        let profile_check =
+            report.checks.iter().find(|check| check.name == "workspace_execution_profile").unwrap();
+
+        assert_eq!(profile_check.status, DiagnosticsStatus::Failed);
+        assert!(profile_check.message.contains("workspace execution profile is unavailable"));
+        assert!(report.missing_prerequisites.contains(&"workspace_execution_profile".to_string()));
+    }
+
+    #[test]
+    fn workspace_context_diagnostics_surface_advisory_follow_ups_for_missing_context_inputs() {
+        let workspace = temp_workspace();
+
+        let report = diagnose_workspace_context(&workspace);
+
+        assert!(report.ready, "context advisories should not fail workspace doctor: {report:#?}");
+        assert_eq!(context_check(&report, "boundline_config").status, DiagnosticsStatus::Advisory);
+        assert_eq!(
+            context_check(&report, "canon_project_memory").status,
+            DiagnosticsStatus::Advisory
+        );
+        assert_eq!(
+            context_check(&report, "expert_pack_inputs").status,
+            DiagnosticsStatus::Advisory
+        );
+        assert_eq!(
+            context_check(&report, "advanced_context_index").status,
+            DiagnosticsStatus::Advisory
+        );
+        assert_eq!(context_check(&report, "session_evidence").status, DiagnosticsStatus::Advisory);
+        assert!(report.suggested_actions.iter().any(|action| {
+            action.contains("boundline config show --workspace")
+                && action.contains(workspace.to_string_lossy().as_ref())
+        }));
+        assert!(
+            report
+                .suggested_actions
+                .iter()
+                .any(|action| action.contains("boundline govern --workspace"))
+        );
+        assert!(
+            report
+                .suggested_actions
+                .iter()
+                .any(|action| action.contains("boundline start --workspace"))
+        );
+    }
+
+    #[test]
+    fn workspace_context_diagnostics_skip_context_checks_for_missing_workspace() {
+        let workspace =
+            std::env::temp_dir().join(format!("boundline-missing-context-{}", Uuid::new_v4()));
+
+        let report = diagnose_workspace_context(&workspace);
+
+        assert!(!report.ready);
+        assert!(report.missing_prerequisites.contains(&"workspace_exists".to_string()));
+        assert!(report.checks.iter().all(|check| check.name != "boundline_config"));
+    }
+
+    #[test]
+    fn workspace_context_diagnostics_mark_local_context_inputs_as_ready_when_present() {
+        let workspace = temp_workspace();
+        fs::write(workspace.join(WORKSPACE_CONFIG_RELATIVE), "[routing]\nmode = \"balanced\"\n")
+            .unwrap();
+        write_project_memory_surface(&workspace);
+        let guidance_dir = workspace.join(WORKSPACE_GUIDANCE_DIR_RELATIVE);
+        fs::create_dir_all(&guidance_dir).unwrap();
+        fs::write(guidance_dir.join("domain.md"), "# Domain guidance\n").unwrap();
+        let canon_guidance_dir = workspace.join(CANON_GUIDANCE_DIR_RELATIVE);
+        fs::create_dir_all(&canon_guidance_dir).unwrap();
+        fs::write(canon_guidance_dir.join("governance.md"), "# Canon guidance\n").unwrap();
+        let advanced_context_index = workspace.join(ADVANCED_CONTEXT_INDEX_RELATIVE);
+        fs::create_dir_all(advanced_context_index.parent().unwrap()).unwrap();
+        fs::write(&advanced_context_index, b"sqlite-index").unwrap();
+        fs::write(workspace.join(SESSION_RECORD_RELATIVE), "{}\n").unwrap();
+
+        let report = diagnose_workspace_context(&workspace);
+
+        assert_eq!(context_check(&report, "boundline_config").status, DiagnosticsStatus::Passed);
+        assert_eq!(
+            context_check(&report, "canon_project_memory").status,
+            DiagnosticsStatus::Passed
+        );
+        assert_eq!(context_check(&report, "expert_pack_inputs").status, DiagnosticsStatus::Passed);
+        assert_eq!(
+            context_check(&report, "advanced_context_index").status,
+            DiagnosticsStatus::Passed
+        );
+        assert_eq!(context_check(&report, "session_evidence").status, DiagnosticsStatus::Passed);
+    }
+
+    #[test]
     fn installation_diagnostics_handle_missing_current_executable() {
         let report = diagnose_installation_from_current_exe(Err(std::io::Error::other(
             "no executable available",
@@ -623,5 +996,56 @@ mod tests {
             report.suggested_actions,
             vec!["create the workspace".to_string(), "rerun doctor".to_string()]
         );
+    }
+
+    #[test]
+    fn provider_readiness_context_reports_ready_status_without_actions() {
+        let (status, message, actions) = provider_readiness_context_from_status(
+            Path::new("/tmp/workspace"),
+            Some(CanonInstallStatus {
+                state: CompanionState::Ready,
+                version: Some("0.53.0".to_string()),
+                location: None,
+                bundled_with_boundline: true,
+                message: "Canon is ready".to_string(),
+                suggested_actions: Vec::new(),
+                surface_verification: None,
+            }),
+        );
+
+        assert_eq!(status, DiagnosticsStatus::Passed);
+        assert!(message.contains("provider readiness is confirmed"));
+        assert!(actions.is_empty());
+    }
+
+    #[test]
+    fn provider_readiness_context_reports_advisory_with_fallback_actions() {
+        let (status, message, actions) = provider_readiness_context_from_status(
+            Path::new("/tmp/workspace"),
+            Some(CanonInstallStatus {
+                state: CompanionState::RepairNeeded,
+                version: Some("0.52.0".to_string()),
+                location: None,
+                bundled_with_boundline: false,
+                message: "Canon needs repair".to_string(),
+                suggested_actions: vec!["brew upgrade canon".to_string()],
+                surface_verification: None,
+            }),
+        );
+
+        assert_eq!(status, DiagnosticsStatus::Advisory);
+        assert!(message.contains("Canon needs repair"));
+        assert!(actions.iter().any(|action| action == "brew upgrade canon"));
+        assert!(actions.iter().any(|action| action == "boundline doctor --install"));
+    }
+
+    #[test]
+    fn provider_readiness_context_reports_unknown_when_install_state_is_unavailable() {
+        let (status, message, actions) =
+            provider_readiness_context_from_status(Path::new("/tmp/workspace"), None);
+
+        assert_eq!(status, DiagnosticsStatus::Advisory);
+        assert!(message.contains("could not be resolved"));
+        assert_eq!(actions, vec!["boundline doctor --install".to_string()]);
     }
 }

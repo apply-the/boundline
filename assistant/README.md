@@ -4,7 +4,25 @@ This directory contains Markdown-based commands to run `boundline` from various 
 
 The primary delivery surface is session-native: `start -> capture -> plan -> run -> status -> next -> inspect` against `<workspace>/.boundline/session.json` and `<workspace>/.boundline/traces/`.
 
-In `0.59.0`, shell-enabled assistant flows should preserve advanced-context
+In `0.60.0`, the S7 first-response assistant surfaces are part of that same
+session-native runtime rather than a parallel report. Preserve
+`why_summary`, `risk_summary`, `evidence_summary`, `source_attribution`,
+`fallback_disclosure`, `confidence_level`, and `next_best_action` exactly when
+they appear on `status` or `inspect`. These lines are the authoritative backing
+for `/boundline:why`, `/boundline:risk`, `/boundline:evidence`, and
+`/boundline:next-best`, including partial-setup answers where Canon is not yet
+available.
+
+The same release adds deeper cognitive lens lines for `/boundline:assumptions`,
+`/boundline:hidden-impact`, `/boundline:challenge`, and
+`/boundline:explain-plan`. Preserve `assumptions_summary`, every
+`assumption_group`, `hidden_impact_summary`, all surfaced `hidden_impact_*`
+detail lines, `hidden_impact_fallback_disclosure`, every `challenge_*` line,
+and every `explain_plan_*` line exactly. When `challenge_required_review` or
+`challenge_council_required` appears, do not paraphrase that governance
+boundary away or imply the assistant can bypass it.
+
+In `0.60.0`, shell-enabled assistant flows should preserve advanced-context
 projection fields exactly when they appear on `plan`, `status`, and `inspect`:
 `retrieval_mode`, `retrieval_state`, `retrieval_index_state`, selected
 evidence, relationship lines, impact findings, and any explicit disabled or
@@ -220,6 +238,16 @@ CLI-reported recovery command, and `/boundline-govern` maps to governed
 `boundline run --mode ...` only when Canon governance is configured.
 Assistants should collect missing chat answers first, then run or provide the
 same CLI commands without asking operators to edit manifests manually.
+
+The S7 cognitive follow-up commands are also first-class assistant surfaces:
+`/boundline-why`, `/boundline-risk`, `/boundline-evidence`, `/boundline-next-best`,
+`/boundline-assumptions`, `/boundline-hidden-impact`, `/boundline-challenge`, and
+`/boundline-explain-plan` each run the matching `boundline` subcommand against the
+active session and surface the result without inferring missing context from chat
+history. `/boundline-doctor-context` maps to `boundline doctor --workspace <workspace>`
+and must summarize `boundline_config`, `canon_project_memory`, `expert_pack_inputs`,
+`provider_readiness`, `advanced_context_index`, and `session_evidence`, plus the
+CLI-reported fix commands. Keep advisory gaps explicit.
 
 ## Directory Structure
 - **Claude**: `claude/commands/`
