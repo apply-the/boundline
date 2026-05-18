@@ -129,10 +129,11 @@ Before 1.0.0, breaking changes MAY occur in minor versions.
 
 - AI-visible Rust language rules live in
 	`.agents/skills/boundline-shared/references/rust-language-rules.md`.
-- Rust code outside `main.rs`, `#[cfg(test)]`, and files under `tests/` MUST
-	NOT introduce panic-prone control flow such as `unwrap`, `expect`,
-	`panic!`, `todo!`, `unimplemented!`, `unreachable!`, or assert-family
-	runtime guards; use explicit error propagation instead.
+- Rust code outside `main.rs` MUST NOT introduce panic-prone control flow
+	such as `unwrap`, `expect`, `panic!`, `todo!`, `unimplemented!`,
+	`unreachable!`, or assert-family runtime guards; this applies to
+	`#[cfg(test)]` modules and files under `tests/` too, and failures must use
+	explicit error propagation instead.
 - Rust code outside `main.rs`, `#[cfg(test)]`, and files under `tests/` MUST
 	NOT introduce magic strings or magic numbers in domain logic, protocol
 	handling, persistence, configuration, CLI contracts, or serialization
