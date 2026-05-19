@@ -5,7 +5,7 @@
 **Status**: Implemented  
 **Input**: User description: "Implement S6 advanced reasoning profiles by defining a Boundline runtime contract and Canon posture contract for governed challenge activation, profile execution, confidence handoff, traceability, version alignment, and bilateral compatibility updates."
 
-**Implementation Closeout Note**: `061-reasoning-profile-contracts` closes the first release reasoning-profile contract slice: runtime activation inside the existing session flow, fail-closed Canon posture compatibility, operator-visible reasoning projections, and additive reasoning trace vocabulary. Roadmap-level follow-through needed to close every conceptual S6 profile uniformly is intentionally tracked in [`roadmap/S6.1 - reasoning-profile-closure.md`](../../roadmap/S6.1%20-%20reasoning-profile-closure.md) and is intended to seed the next implementation spec (`062-*`) rather than reopen `061`.
+**Implementation Closeout Note**: `061-reasoning-profile-contracts` closes the first release reasoning-profile contract slice: runtime activation inside the existing session flow, fail-closed Canon posture compatibility, operator-visible reasoning projections, and additive reasoning trace vocabulary. The follow-through that closed every conceptual first-wave reasoning profile uniformly now lives in [`062-reasoning-profile-closure`](../062-reasoning-profile-closure/spec.md) rather than reopening `061`.
 
 ## User Scenarios & Testing *(mandatory)*
 

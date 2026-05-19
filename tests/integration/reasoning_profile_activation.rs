@@ -11,6 +11,7 @@ use boundline::domain::reasoning::{
 };
 use boundline::domain::session::ActiveSessionRecord;
 use boundline::domain::trace::TraceEventType;
+use boundline::{ConfigFile, FileConfigStore, ModelRoute, RoutingConfig, RuntimeKind};
 use serde_json::Value;
 
 use crate::workspace_fixture::{
@@ -18,6 +19,10 @@ use crate::workspace_fixture::{
 };
 
 const SELF_CONSISTENCY_PATH_ROLE_ID: &str = "self_consistency_path";
+const REVIEWER_PRIMARY_ROLE_ID: &str = "reviewer_primary";
+const REVIEWER_SECONDARY_ROLE_ID: &str = "reviewer_secondary";
+const CRITIC_ROLE_ID: &str = "critic";
+const REVISER_ROLE_ID: &str = "reviser";
 const LATEST_SELF_CONSISTENCY_PARTICIPANT_LINE: &str =
     "latest_reasoning_participants: self_consistency_path=verification:";
 const SELF_CONSISTENCY_PARTICIPANT_LINE: &str =
@@ -74,12 +79,211 @@ fn verification_reasoning_profile() -> ReasoningProfileDefinition {
     }
 }
 
-fn write_reasoning_profile_into_execution_profile(workspace: &Path) {
+fn independent_pair_review_profile() -> ReasoningProfileDefinition {
+    ReasoningProfileDefinition {
+        profile_id: ReasoningProfileId::IndependentPairReview,
+        family: ReasoningProfileFamily::BlindReview,
+        allowed_stages: vec![CanonMode::Verification, CanonMode::SecurityAssessment],
+        limits: ReasoningBudget {
+            max_participants: 2,
+            max_branches: 1,
+            max_debate_rounds: 0,
+            max_reflexion_revisions: 0,
+            max_calls: 2,
+            max_tokens: 8_000,
+            max_adjudication_steps: 1,
+        },
+        participant_roles: vec![
+            ParticipantRoleDefinition {
+                role_id: REVIEWER_PRIMARY_ROLE_ID.to_string(),
+                role_kind: ReasoningParticipantRoleKind::BlindReviewer,
+                preferred_slot: ReasoningRoutePreference::Review,
+                independence_requirements: IndependenceFloor {
+                    route_distinct: true,
+                    provider_distinct: true,
+                    context_distinct: false,
+                    prompt_pattern_distinct: false,
+                    minimum_participants: 2,
+                },
+                required: true,
+            },
+            ParticipantRoleDefinition {
+                role_id: REVIEWER_SECONDARY_ROLE_ID.to_string(),
+                role_kind: ReasoningParticipantRoleKind::BlindReviewer,
+                preferred_slot: ReasoningRoutePreference::Review,
+                independence_requirements: IndependenceFloor {
+                    route_distinct: true,
+                    provider_distinct: true,
+                    context_distinct: false,
+                    prompt_pattern_distinct: false,
+                    minimum_participants: 2,
+                },
+                required: true,
+            },
+        ],
+        adjudication_mode: ReasoningAdjudicationMode::GovernanceReview,
+        degradation_policy: ReasoningDegradationPolicy {
+            allow_degraded_independence: false,
+            allow_reduced_participants: false,
+            interruptible: true,
+            blocked_next_action: Some(
+                "configure distinct reviewer routes for reviewer_primary and reviewer_secondary"
+                    .to_string(),
+            ),
+        },
+    }
+}
+
+fn heterogeneous_security_review_profile() -> ReasoningProfileDefinition {
+    ReasoningProfileDefinition {
+        profile_id: ReasoningProfileId::HeterogeneousSecurityReview,
+        family: ReasoningProfileFamily::HeterogeneousReview,
+        allowed_stages: vec![CanonMode::Verification, CanonMode::SecurityAssessment],
+        limits: ReasoningBudget {
+            max_participants: 2,
+            max_branches: 1,
+            max_debate_rounds: 0,
+            max_reflexion_revisions: 0,
+            max_calls: 2,
+            max_tokens: 8_000,
+            max_adjudication_steps: 1,
+        },
+        participant_roles: vec![
+            ParticipantRoleDefinition {
+                role_id: REVIEWER_PRIMARY_ROLE_ID.to_string(),
+                role_kind: ReasoningParticipantRoleKind::HeterogeneousReviewer,
+                preferred_slot: ReasoningRoutePreference::Review,
+                independence_requirements: IndependenceFloor {
+                    route_distinct: false,
+                    provider_distinct: true,
+                    context_distinct: false,
+                    prompt_pattern_distinct: false,
+                    minimum_participants: 2,
+                },
+                required: true,
+            },
+            ParticipantRoleDefinition {
+                role_id: REVIEWER_SECONDARY_ROLE_ID.to_string(),
+                role_kind: ReasoningParticipantRoleKind::HeterogeneousReviewer,
+                preferred_slot: ReasoningRoutePreference::Review,
+                independence_requirements: IndependenceFloor {
+                    route_distinct: false,
+                    provider_distinct: true,
+                    context_distinct: false,
+                    prompt_pattern_distinct: false,
+                    minimum_participants: 2,
+                },
+                required: true,
+            },
+        ],
+        adjudication_mode: ReasoningAdjudicationMode::None,
+        degradation_policy: ReasoningDegradationPolicy {
+            allow_degraded_independence: false,
+            allow_reduced_participants: false,
+            interruptible: true,
+            blocked_next_action: Some(
+                "configure heterogeneous reviewer routes with distinct provider families"
+                    .to_string(),
+            ),
+        },
+    }
+}
+
+fn bounded_reflexion_profile() -> ReasoningProfileDefinition {
+    ReasoningProfileDefinition {
+        profile_id: ReasoningProfileId::BoundedReflexion,
+        family: ReasoningProfileFamily::Reflexion,
+        allowed_stages: vec![CanonMode::Verification, CanonMode::SecurityAssessment],
+        limits: ReasoningBudget {
+            max_participants: 2,
+            max_branches: 1,
+            max_debate_rounds: 0,
+            max_reflexion_revisions: 1,
+            max_calls: 2,
+            max_tokens: 4_096,
+            max_adjudication_steps: 1,
+        },
+        participant_roles: vec![
+            ParticipantRoleDefinition {
+                role_id: CRITIC_ROLE_ID.to_string(),
+                role_kind: ReasoningParticipantRoleKind::Critic,
+                preferred_slot: ReasoningRoutePreference::Review,
+                independence_requirements: IndependenceFloor {
+                    route_distinct: false,
+                    provider_distinct: false,
+                    context_distinct: false,
+                    prompt_pattern_distinct: false,
+                    minimum_participants: 1,
+                },
+                required: true,
+            },
+            ParticipantRoleDefinition {
+                role_id: REVISER_ROLE_ID.to_string(),
+                role_kind: ReasoningParticipantRoleKind::Reviser,
+                preferred_slot: ReasoningRoutePreference::Verification,
+                independence_requirements: IndependenceFloor {
+                    route_distinct: false,
+                    provider_distinct: false,
+                    context_distinct: false,
+                    prompt_pattern_distinct: false,
+                    minimum_participants: 1,
+                },
+                required: true,
+            },
+        ],
+        adjudication_mode: ReasoningAdjudicationMode::None,
+        degradation_policy: ReasoningDegradationPolicy {
+            allow_degraded_independence: false,
+            allow_reduced_participants: false,
+            interruptible: true,
+            blocked_next_action: Some(
+                "rerun bounded reflexion after restoring critique or revise capacity".to_string(),
+            ),
+        },
+    }
+}
+
+fn write_selected_reasoning_profile_into_execution_profile(
+    workspace: &Path,
+    reasoning_profile: &ReasoningProfileDefinition,
+) {
     let path = workspace.join(".boundline/execution.json");
     let mut profile: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
     profile["governance"]["stages"][0]["reasoning_profile"] =
-        serde_json::to_value(verification_reasoning_profile()).unwrap();
+        serde_json::to_value(reasoning_profile).unwrap();
     fs::write(path, serde_json::to_string_pretty(&profile).unwrap()).unwrap();
+}
+
+fn write_reasoning_profile_into_execution_profile(workspace: &Path) {
+    write_selected_reasoning_profile_into_execution_profile(
+        workspace,
+        &verification_reasoning_profile(),
+    );
+}
+
+fn save_distinct_review_routing(workspace: &Path) {
+    FileConfigStore::for_workspace(workspace)
+        .save_local(&ConfigFile {
+            version: 1,
+            routing: RoutingConfig {
+                reviewer_roles: std::collections::BTreeMap::from([
+                    (
+                        REVIEWER_PRIMARY_ROLE_ID.to_string(),
+                        ModelRoute {
+                            runtime: RuntimeKind::Claude,
+                            model: "sonnet-4.6".to_string(),
+                        },
+                    ),
+                    (
+                        REVIEWER_SECONDARY_ROLE_ID.to_string(),
+                        ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-5.5".to_string() },
+                    ),
+                ]),
+                ..RoutingConfig::default()
+            },
+            canon: None,
+        })
+        .unwrap();
 }
 
 fn load_session_record(workspace: &Path) -> Result<ActiveSessionRecord, Box<dyn Error>> {
@@ -222,4 +426,153 @@ fn verification_stage_without_reasoning_profile_preserves_unchanged_projection_p
     let inspect_text = terminal_text(&inspect);
     assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
     assert!(!inspect_text.contains("reasoning_profile_id:"), "{inspect_text}");
+}
+
+#[test]
+fn independent_pair_review_positive_path_surfaces_terminal_reasoning_outcome()
+-> Result<(), Box<dyn Error>> {
+    let workspace =
+        temp_canon_security_assessment_workspace("boundline-reasoning-profile-independent-pair");
+    save_distinct_review_routing(&workspace);
+    write_selected_reasoning_profile_into_execution_profile(
+        &workspace,
+        &independent_pair_review_profile(),
+    );
+    bootstrap_bug_fix(&workspace);
+
+    let run = run_boundline_in(&workspace, &["run"]);
+    let run_text = terminal_text(&run);
+    assert_eq!(run.status.code(), Some(0), "{run_text}");
+
+    let status = run_boundline_in(&workspace, &["status"]);
+    let status_text = terminal_text(&status);
+    assert_eq!(status.status.code(), Some(0), "{status_text}");
+    for needle in [
+        "latest_reasoning_profile_id: independent_pair_review",
+        "latest_reasoning_profile_status: completed",
+        "latest_reasoning_independence_result: passed",
+        "latest_reasoning_outcome: adjudicated",
+        "latest_reasoning_confidence_level: high",
+    ] {
+        assert!(status_text.contains(needle), "{status_text}");
+    }
+
+    let inspect = run_boundline_in(&workspace, &["inspect", "--workspace", "."]);
+    let inspect_text = terminal_text(&inspect);
+    assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
+    for needle in [
+        "reasoning_profile_id: independent_pair_review",
+        "reasoning_profile_status: completed",
+        "reasoning_independence_result: passed",
+        "reasoning_outcome: adjudicated",
+    ] {
+        assert!(inspect_text.contains(needle), "{inspect_text}");
+    }
+
+    let trace = load_latest_trace(&workspace)?;
+    assert!(
+        trace
+            .events
+            .iter()
+            .any(|event| event.event_type == TraceEventType::ReasoningAdjudicationRecorded),
+        "expected reasoning adjudication event in persisted trace"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn heterogeneous_security_review_positive_path_surfaces_terminal_reasoning_outcome()
+-> Result<(), Box<dyn Error>> {
+    let workspace = temp_canon_security_assessment_workspace(
+        "boundline-reasoning-profile-heterogeneous-security-review",
+    );
+    save_distinct_review_routing(&workspace);
+    write_selected_reasoning_profile_into_execution_profile(
+        &workspace,
+        &heterogeneous_security_review_profile(),
+    );
+    bootstrap_bug_fix(&workspace);
+
+    let run = run_boundline_in(&workspace, &["run"]);
+    let run_text = terminal_text(&run);
+    assert_eq!(run.status.code(), Some(0), "{run_text}");
+
+    let status = run_boundline_in(&workspace, &["status"]);
+    let status_text = terminal_text(&status);
+    assert_eq!(status.status.code(), Some(0), "{status_text}");
+    for needle in [
+        "latest_reasoning_profile_id: heterogeneous_security_review",
+        "latest_reasoning_profile_status: completed",
+        "latest_reasoning_independence_result: passed",
+        "latest_reasoning_outcome: converged",
+        "latest_reasoning_confidence_level: high",
+    ] {
+        assert!(status_text.contains(needle), "{status_text}");
+    }
+
+    let inspect = run_boundline_in(&workspace, &["inspect", "--workspace", "."]);
+    let inspect_text = terminal_text(&inspect);
+    assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
+    for needle in [
+        "reasoning_profile_id: heterogeneous_security_review",
+        "reasoning_profile_status: completed",
+        "reasoning_independence_result: passed",
+        "reasoning_outcome: converged",
+    ] {
+        assert!(inspect_text.contains(needle), "{inspect_text}");
+    }
+
+    Ok(())
+}
+
+#[test]
+fn bounded_reflexion_positive_path_surfaces_terminal_reasoning_outcome()
+-> Result<(), Box<dyn Error>> {
+    let workspace =
+        temp_canon_security_assessment_workspace("boundline-reasoning-profile-bounded-reflexion");
+    write_selected_reasoning_profile_into_execution_profile(
+        &workspace,
+        &bounded_reflexion_profile(),
+    );
+    bootstrap_bug_fix(&workspace);
+
+    let run = run_boundline_in(&workspace, &["run"]);
+    let run_text = terminal_text(&run);
+    assert_eq!(run.status.code(), Some(0), "{run_text}");
+
+    let status = run_boundline_in(&workspace, &["status"]);
+    let status_text = terminal_text(&status);
+    assert_eq!(status.status.code(), Some(0), "{status_text}");
+    for needle in [
+        "latest_reasoning_profile_id: bounded_reflexion",
+        "latest_reasoning_profile_status: completed",
+        "latest_reasoning_independence_result: passed",
+        "latest_reasoning_outcome: converged",
+        "latest_reasoning_confidence_level: high",
+    ] {
+        assert!(status_text.contains(needle), "{status_text}");
+    }
+
+    let inspect = run_boundline_in(&workspace, &["inspect", "--workspace", "."]);
+    let inspect_text = terminal_text(&inspect);
+    assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
+    for needle in [
+        "reasoning_profile_id: bounded_reflexion",
+        "reasoning_profile_status: completed",
+        "reasoning_independence_result: passed",
+        "reasoning_outcome: converged",
+    ] {
+        assert!(inspect_text.contains(needle), "{inspect_text}");
+    }
+
+    let trace = load_latest_trace(&workspace)?;
+    assert!(
+        trace.events.iter().any(|event| {
+            event.event_type == TraceEventType::ReasoningReflexionRevisionCompleted
+        }),
+        "expected reasoning reflexion revision event in persisted trace"
+    );
+
+    Ok(())
 }

@@ -49,6 +49,71 @@ impl std::fmt::Display for ReasoningProfileId {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum ReasoningCapabilityKey {
+    BoundedSelfConsistency,
+    IndependentPairReview,
+    HeterogeneousSecurityReview,
+    BoundedReflexion,
+    Debate,
+    Adjudication,
+}
+
+impl ReasoningCapabilityKey {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::BoundedSelfConsistency => "bounded_self_consistency",
+            Self::IndependentPairReview => "independent_pair_review",
+            Self::HeterogeneousSecurityReview => "heterogeneous_security_review",
+            Self::BoundedReflexion => "bounded_reflexion",
+            Self::Debate => "debate",
+            Self::Adjudication => "adjudication",
+        }
+    }
+
+    pub const fn classification(self) -> ReasoningCapabilityClassification {
+        match self {
+            Self::BoundedSelfConsistency
+            | Self::IndependentPairReview
+            | Self::HeterogeneousSecurityReview
+            | Self::BoundedReflexion => ReasoningCapabilityClassification::ShippedProfile,
+            Self::Debate => ReasoningCapabilityClassification::BoundedSubstrate,
+            Self::Adjudication => ReasoningCapabilityClassification::SharedPrimitive,
+        }
+    }
+}
+
+impl std::fmt::Display for ReasoningCapabilityKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReasoningCapabilityClassification {
+    ShippedProfile,
+    BoundedSubstrate,
+    SharedPrimitive,
+}
+
+impl ReasoningCapabilityClassification {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ShippedProfile => "shipped_profile",
+            Self::BoundedSubstrate => "bounded_substrate",
+            Self::SharedPrimitive => "shared_primitive",
+        }
+    }
+}
+
+impl std::fmt::Display for ReasoningCapabilityClassification {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ReasoningProfileFamily {
     SelfConsistency,
     BlindReview,
@@ -994,9 +1059,10 @@ mod tests {
         IndependenceAssessmentResult, IndependenceFloor, ParticipantAssignment,
         ProfileActivationRecord, REASONING_POSTURE_V1_CONTRACT_LINE, ReasoningActivationStatus,
         ReasoningActivationTrigger, ReasoningAdjudicationMode, ReasoningAdmissionEffect,
-        ReasoningBudget, ReasoningCompatibilityWindow, ReasoningConfidenceContribution,
-        ReasoningConfidenceLevel, ReasoningDegradationPolicy, ReasoningIterationCondition,
-        ReasoningIterationKind, ReasoningIterationRecord, ReasoningOutcome, ReasoningOutcomeKind,
+        ReasoningBudget, ReasoningCapabilityClassification, ReasoningCapabilityKey,
+        ReasoningCompatibilityWindow, ReasoningConfidenceContribution, ReasoningConfidenceLevel,
+        ReasoningDegradationPolicy, ReasoningIterationCondition, ReasoningIterationKind,
+        ReasoningIterationRecord, ReasoningOutcome, ReasoningOutcomeKind,
         ReasoningParticipantRoleKind, ReasoningParticipantStatus, ReasoningProfileDefinition,
         ReasoningProfileError, ReasoningProfileFamily, ReasoningProfileId,
         ReasoningRoutePreference,
@@ -1126,25 +1192,25 @@ mod tests {
     #[test]
     fn compatibility_window_admits_supported_pair() {
         let window = ReasoningCompatibilityWindow {
-            boundline_min: "0.61.0".to_string(),
-            boundline_max_exclusive: "0.62.0".to_string(),
-            canon_min: "0.57.0".to_string(),
-            canon_max_exclusive: "0.58.0".to_string(),
+            boundline_min: "0.62.0".to_string(),
+            boundline_max_exclusive: "0.63.0".to_string(),
+            canon_min: "0.58.0".to_string(),
+            canon_max_exclusive: "0.59.0".to_string(),
             contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
         };
 
         assert!(window.validate().is_ok());
-        assert!(window.admits_versions("0.61.0", "0.57.0"));
-        assert!(!window.admits_versions("0.62.0", "0.57.0"));
+        assert!(window.admits_versions("0.62.0", "0.58.0"));
+        assert!(!window.admits_versions("0.63.0", "0.58.0"));
     }
 
     #[test]
     fn compatibility_window_rejects_unsupported_contract_line() {
         let window = ReasoningCompatibilityWindow {
-            boundline_min: "0.61.0".to_string(),
-            boundline_max_exclusive: "0.62.0".to_string(),
-            canon_min: "0.57.0".to_string(),
-            canon_max_exclusive: "0.58.0".to_string(),
+            boundline_min: "0.62.0".to_string(),
+            boundline_max_exclusive: "0.63.0".to_string(),
+            canon_min: "0.58.0".to_string(),
+            canon_max_exclusive: "0.59.0".to_string(),
             contract_line: "governed_reasoning_posture_v2".to_string(),
         };
 
@@ -1161,10 +1227,10 @@ mod tests {
         let posture = CanonChallengePostureInput {
             contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
             compatibility_window: ReasoningCompatibilityWindow {
-                boundline_min: "0.61.0".to_string(),
-                boundline_max_exclusive: "0.62.0".to_string(),
-                canon_min: "0.57.0".to_string(),
-                canon_max_exclusive: "0.58.0".to_string(),
+                boundline_min: "0.62.0".to_string(),
+                boundline_max_exclusive: "0.63.0".to_string(),
+                canon_min: "0.58.0".to_string(),
+                canon_max_exclusive: "0.59.0".to_string(),
                 contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
             },
             required_profile_family: None,
@@ -1192,10 +1258,10 @@ mod tests {
         let posture = CanonChallengePostureInput {
             contract_line: "governed_reasoning_posture_v2".to_string(),
             compatibility_window: ReasoningCompatibilityWindow {
-                boundline_min: "0.61.0".to_string(),
-                boundline_max_exclusive: "0.62.0".to_string(),
-                canon_min: "0.57.0".to_string(),
-                canon_max_exclusive: "0.58.0".to_string(),
+                boundline_min: "0.62.0".to_string(),
+                boundline_max_exclusive: "0.63.0".to_string(),
+                canon_min: "0.58.0".to_string(),
+                canon_max_exclusive: "0.59.0".to_string(),
                 contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
             },
             required_profile_family: Some(ReasoningProfileFamily::BlindReview),
@@ -1225,10 +1291,10 @@ mod tests {
         let posture = CanonChallengePostureInput {
             contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
             compatibility_window: ReasoningCompatibilityWindow {
-                boundline_min: "0.61.0".to_string(),
-                boundline_max_exclusive: "0.62.0".to_string(),
-                canon_min: "0.57.0".to_string(),
-                canon_max_exclusive: "0.58.0".to_string(),
+                boundline_min: "0.62.0".to_string(),
+                boundline_max_exclusive: "0.63.0".to_string(),
+                canon_min: "0.58.0".to_string(),
+                canon_max_exclusive: "0.59.0".to_string(),
                 contract_line: "governed_reasoning_posture_v2".to_string(),
             },
             required_profile_family: Some(ReasoningProfileFamily::BlindReview),
@@ -1408,6 +1474,45 @@ mod tests {
             }
         }
 
+        let capabilities = [
+            (
+                ReasoningCapabilityKey::BoundedSelfConsistency,
+                "bounded_self_consistency",
+                ReasoningCapabilityClassification::ShippedProfile,
+            ),
+            (
+                ReasoningCapabilityKey::IndependentPairReview,
+                "independent_pair_review",
+                ReasoningCapabilityClassification::ShippedProfile,
+            ),
+            (
+                ReasoningCapabilityKey::HeterogeneousSecurityReview,
+                "heterogeneous_security_review",
+                ReasoningCapabilityClassification::ShippedProfile,
+            ),
+            (
+                ReasoningCapabilityKey::BoundedReflexion,
+                "bounded_reflexion",
+                ReasoningCapabilityClassification::ShippedProfile,
+            ),
+            (
+                ReasoningCapabilityKey::Debate,
+                "debate",
+                ReasoningCapabilityClassification::BoundedSubstrate,
+            ),
+            (
+                ReasoningCapabilityKey::Adjudication,
+                "adjudication",
+                ReasoningCapabilityClassification::SharedPrimitive,
+            ),
+        ];
+        for (capability, expected_text, classification) in capabilities {
+            assert_eq!(capability.as_str(), expected_text);
+            assert_eq!(capability.to_string(), expected_text);
+            assert_eq!(capability.classification(), classification);
+            assert_eq!(classification.to_string(), classification.as_str());
+        }
+
         let independence_results = [
             (IndependenceAssessmentResult::Passed, "passed"),
             (IndependenceAssessmentResult::Degraded, "degraded"),
@@ -1567,9 +1672,9 @@ mod tests {
 
         let invalid_window = ReasoningCompatibilityWindow {
             boundline_min: "not-a-version".to_string(),
-            boundline_max_exclusive: "0.62.0".to_string(),
-            canon_min: "0.57.0".to_string(),
-            canon_max_exclusive: "0.58.0".to_string(),
+            boundline_max_exclusive: "0.63.0".to_string(),
+            canon_min: "0.58.0".to_string(),
+            canon_max_exclusive: "0.59.0".to_string(),
             contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
         };
         assert_eq!(

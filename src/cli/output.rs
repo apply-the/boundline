@@ -5041,10 +5041,10 @@ mod tests {
                     "posture": {
                         "contract_line": "governed_reasoning_posture_v1",
                         "compatibility_window": {
-                            "boundline_min": "0.61.0",
-                            "boundline_max_exclusive": "0.62.0",
-                            "canon_min": "0.57.0",
-                            "canon_max_exclusive": "0.58.0",
+                            "boundline_min": "0.62.0",
+                            "boundline_max_exclusive": "0.63.0",
+                            "canon_min": "0.58.0",
+                            "canon_max_exclusive": "0.59.0",
                             "contract_line": "governed_reasoning_posture_v1"
                         },
                         "required_profile_family": "blind_review",
@@ -5555,10 +5555,10 @@ mod tests {
                 posture: Some(crate::domain::reasoning::CanonChallengePostureInput {
                     contract_line: "governed_reasoning_posture_v1".to_string(),
                     compatibility_window: crate::domain::reasoning::ReasoningCompatibilityWindow {
-                        boundline_min: "0.61.0".to_string(),
-                        boundline_max_exclusive: "0.62.0".to_string(),
-                        canon_min: "0.57.0".to_string(),
-                        canon_max_exclusive: "0.58.0".to_string(),
+                        boundline_min: "0.62.0".to_string(),
+                        boundline_max_exclusive: "0.63.0".to_string(),
+                        canon_min: "0.58.0".to_string(),
+                        canon_max_exclusive: "0.59.0".to_string(),
                         contract_line: "governed_reasoning_posture_v1".to_string(),
                     },
                     required_profile_family: Some(

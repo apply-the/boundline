@@ -23,14 +23,15 @@ through explicit sessions for planning, execution, inspection, recovery, and
 governed delivery when needed. Canon is optional: most users can ignore it
 unless they need governed stages or governed artifacts.
 
-The active `0.61.0` feature line is `061-reasoning-profile-contracts`, which
-implements the S6 reasoning-profile activation contract between Boundline and
-Canon without introducing a second orchestrator. The feature artifacts live
-under `specs/061-reasoning-profile-contracts/`; start with the maintainer guide
-at `specs/061-reasoning-profile-contracts/quickstart.md`. The shipped runtime
-also persists additive reasoning lifecycle and confidence trace events, and it
-keeps contract-drift blockers explicit on `run`, `status`, and `inspect` with
-the Canon contract line, disagreement summary, and remediation next action.
+The active `0.62.0` feature line is `062-reasoning-profile-closure`, which
+closes the first-wave S6 reasoning-profile set without introducing a second
+orchestrator. The feature artifacts live under
+`specs/062-reasoning-profile-closure/`; start with the maintainer guide at
+`specs/062-reasoning-profile-closure/quickstart.md`. The shipped runtime now
+keeps positive-path and blocked-path reasoning outcomes explicit on `run`,
+`status`, and `inspect`, preserves additive lifecycle and confidence trace
+events, and freezes debate as bounded substrate plus adjudication as a shared
+primitive instead of over-claiming them as standalone shipped profiles.
 
 In `0.58.0`, Boundline also persists advanced-context retrieval state through
 goal plans, session status, and trace summaries. The S5 V1 baseline uses one
@@ -399,7 +400,7 @@ Boundline is the local delivery orchestrator. Canon is the governed packet runti
 - Canon governs packets, approvals, and governed artifacts when a bounded delivery phase crosses a governance boundary.
 - Large work is supported by decomposition, not by unbounded autonomy.
 
-The current release documents Canon `0.57.0` support on the
+The current release documents Canon `0.58.0` support on the
 `canon governance start|refresh|capabilities --json` `v1` adapter surface.
 
 ## Community And Support

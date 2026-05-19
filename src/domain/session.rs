@@ -1084,6 +1084,18 @@ impl Default for SessionStatusView {
     }
 }
 
+fn validate_status_view_field<T, F>(
+    expected: T,
+    actual: T,
+    mismatch: F,
+) -> Result<(), SessionValidationError>
+where
+    T: PartialEq,
+    F: FnOnce(T, T) -> SessionValidationError,
+{
+    if expected == actual { Ok(()) } else { Err(mismatch(expected, actual)) }
+}
+
 impl SessionStatusView {
     /// Validates that the flattened status view matches the authoritative
     /// session record it was projected from.
@@ -1502,143 +1514,182 @@ impl SessionStatusView {
     ) -> Result<(), SessionValidationError> {
         let expected_governance_stage =
             record.active_task.as_ref().and_then(task_state_governance_stage_key);
-        if self.latest_governance_stage != expected_governance_stage {
-            return Err(SessionValidationError::StatusViewGovernanceStageMismatch {
-                expected: expected_governance_stage,
-                actual: self.latest_governance_stage.clone(),
-            });
-        }
+        validate_status_view_field(
+            expected_governance_stage,
+            self.latest_governance_stage.clone(),
+            |expected, actual| SessionValidationError::StatusViewGovernanceStageMismatch {
+                expected,
+                actual,
+            },
+        )?;
         let expected_governance_runtime =
             record.active_task.as_ref().and_then(task_state_governance_runtime_text);
-        if self.latest_governance_runtime != expected_governance_runtime {
-            return Err(SessionValidationError::StatusViewGovernanceRuntimeMismatch {
-                expected: expected_governance_runtime,
-                actual: self.latest_governance_runtime.clone(),
-            });
-        }
+        validate_status_view_field(
+            expected_governance_runtime,
+            self.latest_governance_runtime.clone(),
+            |expected, actual| SessionValidationError::StatusViewGovernanceRuntimeMismatch {
+                expected,
+                actual,
+            },
+        )?;
         let expected_governance_mode =
             record.active_task.as_ref().and_then(task_state_governance_mode_text);
-        if self.latest_governance_mode != expected_governance_mode {
-            return Err(SessionValidationError::StatusViewGovernanceModeMismatch {
-                expected: expected_governance_mode,
-                actual: self.latest_governance_mode.clone(),
-            });
-        }
+        validate_status_view_field(
+            expected_governance_mode,
+            self.latest_governance_mode.clone(),
+            |expected, actual| SessionValidationError::StatusViewGovernanceModeMismatch {
+                expected,
+                actual,
+            },
+        )?;
         let expected_governance_run_ref =
             record.active_task.as_ref().and_then(task_state_governance_canon_run_ref);
-        if self.latest_governance_run_ref != expected_governance_run_ref {
-            return Err(SessionValidationError::StatusViewGovernanceRunRefMismatch {
-                expected: expected_governance_run_ref,
-                actual: self.latest_governance_run_ref.clone(),
-            });
-        }
+        validate_status_view_field(
+            expected_governance_run_ref,
+            self.latest_governance_run_ref.clone(),
+            |expected, actual| SessionValidationError::StatusViewGovernanceRunRefMismatch {
+                expected,
+                actual,
+            },
+        )?;
         let expected_governance_state =
             record.active_task.as_ref().and_then(task_state_governance_state_text);
-        if self.latest_governance_state != expected_governance_state {
-            return Err(SessionValidationError::StatusViewGovernanceStateMismatch {
-                expected: expected_governance_state,
-                actual: self.latest_governance_state.clone(),
-            });
-        }
+        validate_status_view_field(
+            expected_governance_state,
+            self.latest_governance_state.clone(),
+            |expected, actual| SessionValidationError::StatusViewGovernanceStateMismatch {
+                expected,
+                actual,
+            },
+        )?;
         let expected_governance_blocked_reason = governance_blocked_reason_for_record(record);
-        if self.latest_governance_blocked_reason != expected_governance_blocked_reason {
-            return Err(SessionValidationError::StatusViewGovernanceBlockedReasonMismatch {
-                expected: expected_governance_blocked_reason,
-                actual: self.latest_governance_blocked_reason.clone(),
-            });
-        }
+        validate_status_view_field(
+            expected_governance_blocked_reason,
+            self.latest_governance_blocked_reason.clone(),
+            |expected, actual| SessionValidationError::StatusViewGovernanceBlockedReasonMismatch {
+                expected,
+                actual,
+            },
+        )?;
         let expected_governance_packet_ref =
             record.active_task.as_ref().and_then(task_state_governance_packet_ref);
-        if self.latest_governance_packet_ref != expected_governance_packet_ref {
-            return Err(SessionValidationError::StatusViewGovernancePacketRefMismatch {
-                expected: expected_governance_packet_ref,
-                actual: self.latest_governance_packet_ref.clone(),
-            });
-        }
+        validate_status_view_field(
+            expected_governance_packet_ref,
+            self.latest_governance_packet_ref.clone(),
+            |expected, actual| SessionValidationError::StatusViewGovernancePacketRefMismatch {
+                expected,
+                actual,
+            },
+        )?;
         let expected_governance_packet_source_stage =
             record.active_task.as_ref().and_then(task_state_governance_packet_source_stage);
-        if self.latest_governance_packet_source_stage != expected_governance_packet_source_stage {
-            return Err(SessionValidationError::StatusViewGovernancePacketSourceMismatch {
-                expected: expected_governance_packet_source_stage,
-                actual: self.latest_governance_packet_source_stage.clone(),
-            });
-        }
+        validate_status_view_field(
+            expected_governance_packet_source_stage,
+            self.latest_governance_packet_source_stage.clone(),
+            |expected, actual| SessionValidationError::StatusViewGovernancePacketSourceMismatch {
+                expected,
+                actual,
+            },
+        )?;
         let expected_governance_packet_binding_reason =
             record.active_task.as_ref().and_then(task_state_governance_packet_binding_reason);
-        if self.latest_governance_packet_binding_reason != expected_governance_packet_binding_reason
-        {
-            return Err(SessionValidationError::StatusViewGovernancePacketBindingMismatch {
-                expected: expected_governance_packet_binding_reason,
-                actual: self.latest_governance_packet_binding_reason.clone(),
-            });
-        }
+        validate_status_view_field(
+            expected_governance_packet_binding_reason,
+            self.latest_governance_packet_binding_reason.clone(),
+            |expected, actual| SessionValidationError::StatusViewGovernancePacketBindingMismatch {
+                expected,
+                actual,
+            },
+        )?;
         let expected_governance_approval =
             record.active_task.as_ref().and_then(task_state_governance_approval_text);
-        if self.latest_governance_approval != expected_governance_approval {
-            return Err(SessionValidationError::StatusViewGovernanceApprovalMismatch {
-                expected: expected_governance_approval,
-                actual: self.latest_governance_approval.clone(),
-            });
-        }
+        validate_status_view_field(
+            expected_governance_approval,
+            self.latest_governance_approval.clone(),
+            |expected, actual| SessionValidationError::StatusViewGovernanceApprovalMismatch {
+                expected,
+                actual,
+            },
+        )?;
         let expected_governance_decision = governance_decision_headline_for_record(record);
-        if self.latest_governance_decision != expected_governance_decision {
-            return Err(SessionValidationError::StatusViewGovernanceDecisionMismatch {
-                expected: expected_governance_decision,
-                actual: self.latest_governance_decision.clone(),
-            });
-        }
+        validate_status_view_field(
+            expected_governance_decision,
+            self.latest_governance_decision.clone(),
+            |expected, actual| SessionValidationError::StatusViewGovernanceDecisionMismatch {
+                expected,
+                actual,
+            },
+        )?;
         let expected_governance_candidates =
             record.active_task.as_ref().and_then(task_state_governance_candidate_actions);
-        if self.latest_governance_candidates != expected_governance_candidates {
-            return Err(SessionValidationError::StatusViewGovernanceCandidatesMismatch {
-                expected: expected_governance_candidates,
-                actual: self.latest_governance_candidates.clone(),
-            });
-        }
+        validate_status_view_field(
+            expected_governance_candidates,
+            self.latest_governance_candidates.clone(),
+            |expected, actual| SessionValidationError::StatusViewGovernanceCandidatesMismatch {
+                expected,
+                actual,
+            },
+        )?;
         let expected_governance_confidence = governance_confidence_handoff_for_record(record);
         let expected_governance_confidence_level = expected_governance_confidence
             .as_ref()
             .map(|handoff| handoff.confidence_level.as_str().to_string());
-        if self.latest_governance_confidence_level != expected_governance_confidence_level {
-            return Err(SessionValidationError::StatusViewGovernanceConfidenceLevelMismatch {
-                expected: expected_governance_confidence_level,
-                actual: self.latest_governance_confidence_level.clone(),
-            });
-        }
+        validate_status_view_field(
+            expected_governance_confidence_level,
+            self.latest_governance_confidence_level.clone(),
+            |expected, actual| {
+                SessionValidationError::StatusViewGovernanceConfidenceLevelMismatch {
+                    expected,
+                    actual,
+                }
+            },
+        )?;
         let expected_governance_admission_effect = expected_governance_confidence
             .as_ref()
             .map(|handoff| handoff.admission_effect.as_str().to_string());
-        if self.latest_governance_admission_effect != expected_governance_admission_effect {
-            return Err(SessionValidationError::StatusViewGovernanceAdmissionEffectMismatch {
-                expected: expected_governance_admission_effect,
-                actual: self.latest_governance_admission_effect.clone(),
-            });
-        }
+        validate_status_view_field(
+            expected_governance_admission_effect,
+            self.latest_governance_admission_effect.clone(),
+            |expected, actual| {
+                SessionValidationError::StatusViewGovernanceAdmissionEffectMismatch {
+                    expected,
+                    actual,
+                }
+            },
+        )?;
         let expected_governance_confidence_summary =
             expected_governance_confidence.as_ref().map(|handoff| handoff.summary.clone());
-        if self.latest_governance_confidence_summary != expected_governance_confidence_summary {
-            return Err(SessionValidationError::StatusViewGovernanceConfidenceSummaryMismatch {
-                expected: expected_governance_confidence_summary,
-                actual: self.latest_governance_confidence_summary.clone(),
-            });
-        }
+        validate_status_view_field(
+            expected_governance_confidence_summary,
+            self.latest_governance_confidence_summary.clone(),
+            |expected, actual| {
+                SessionValidationError::StatusViewGovernanceConfidenceSummaryMismatch {
+                    expected,
+                    actual,
+                }
+            },
+        )?;
         let expected_governance_next_action = governance_next_action_for_record(record);
-        if self.governance_next_action != expected_governance_next_action {
-            return Err(SessionValidationError::StatusViewGovernanceNextActionMismatch {
-                expected: expected_governance_next_action,
-                actual: self.governance_next_action.clone(),
-            });
-        }
+        validate_status_view_field(
+            expected_governance_next_action,
+            self.governance_next_action.clone(),
+            |expected, actual| SessionValidationError::StatusViewGovernanceNextActionMismatch {
+                expected,
+                actual,
+            },
+        )?;
         let expected_reasoning_profile = record
             .governance_lifecycle
             .as_ref()
             .and_then(|lifecycle| lifecycle.latest_reasoning_profile.clone());
-        if self.latest_reasoning_profile != expected_reasoning_profile {
-            return Err(SessionValidationError::StatusViewReasoningProfileMismatch {
-                expected: expected_reasoning_profile.map(Box::new),
-                actual: self.latest_reasoning_profile.clone().map(Box::new),
-            });
-        }
+        validate_status_view_field(
+            expected_reasoning_profile.map(Box::new),
+            self.latest_reasoning_profile.clone().map(Box::new),
+            |expected, actual| SessionValidationError::StatusViewReasoningProfileMismatch {
+                expected,
+                actual,
+            },
+        )?;
         Ok(())
     }
 
@@ -3420,6 +3471,45 @@ mod tests {
         assert_view_error!(
             wrong_governance_candidates,
             SessionValidationError::StatusViewGovernanceCandidatesMismatch { .. }
+        );
+
+        let mut wrong_governance_confidence_level = view.clone();
+        wrong_governance_confidence_level.latest_governance_confidence_level =
+            Some("medium".to_string());
+        assert_view_error!(
+            wrong_governance_confidence_level,
+            SessionValidationError::StatusViewGovernanceConfidenceLevelMismatch { .. }
+        );
+
+        let mut wrong_governance_admission_effect = view.clone();
+        wrong_governance_admission_effect.latest_governance_admission_effect =
+            Some("warn".to_string());
+        assert_view_error!(
+            wrong_governance_admission_effect,
+            SessionValidationError::StatusViewGovernanceAdmissionEffectMismatch { .. }
+        );
+
+        let mut wrong_governance_confidence_summary = view.clone();
+        wrong_governance_confidence_summary.latest_governance_confidence_summary =
+            Some("unexpected confidence summary".to_string());
+        assert_view_error!(
+            wrong_governance_confidence_summary,
+            SessionValidationError::StatusViewGovernanceConfidenceSummaryMismatch { .. }
+        );
+
+        let mut wrong_governance_next_action = view.clone();
+        wrong_governance_next_action.governance_next_action =
+            Some("continue_without_governance_follow_up".to_string());
+        assert_view_error!(
+            wrong_governance_next_action,
+            SessionValidationError::StatusViewGovernanceNextActionMismatch { .. }
+        );
+
+        let mut wrong_reasoning_profile = view.clone();
+        wrong_reasoning_profile.latest_reasoning_profile = Some(blocked_reasoning_profile());
+        assert_view_error!(
+            wrong_reasoning_profile,
+            SessionValidationError::StatusViewReasoningProfileMismatch { .. }
         );
 
         let mut missing_explanation = view.clone();

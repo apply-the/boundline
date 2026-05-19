@@ -2,13 +2,17 @@ use std::error::Error;
 use std::fs;
 
 use boundline::domain::reasoning::{
-    ReasoningActivationStatus, ReasoningOutcomeKind, ReasoningParticipantRoleKind,
-    ReasoningProfileId,
+    ReasoningActivationStatus, ReasoningCapabilityClassification, ReasoningCapabilityKey,
+    ReasoningOutcomeKind, ReasoningParticipantRoleKind, ReasoningProfileId,
 };
 
 const RUNTIME_CONTRACT_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/specs/061-reasoning-profile-contracts/contracts/reasoning-profile-runtime-contract.md"
+);
+const PROFILE_CLOSURE_CLASSIFICATION_CONTRACT_PATH: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/specs/062-reasoning-profile-closure/contracts/profile-closure-classification-contract.md"
 );
 const EXPECTED_PROFILE_IDS: [&str; 4] = [
     "bounded_self_consistency",
@@ -148,6 +152,36 @@ fn reasoning_profile_runtime_contract_lists_supported_participant_roles()
         serde_json::from_str::<ReasoningParticipantRoleKind>("\"observer\"").is_err(),
         "runtime vocabulary should reject unpublished participant roles"
     );
+
+    Ok(())
+}
+
+#[test]
+fn profile_closure_contract_distinguishes_debate_and_adjudication_claims()
+-> Result<(), Box<dyn Error>> {
+    let contract = read_text(PROFILE_CLOSURE_CLASSIFICATION_CONTRACT_PATH)?;
+    let expected_pairs = [
+        (ReasoningCapabilityKey::Debate, ReasoningCapabilityClassification::BoundedSubstrate),
+        (ReasoningCapabilityKey::Adjudication, ReasoningCapabilityClassification::SharedPrimitive),
+    ];
+
+    for (capability, classification) in expected_pairs {
+        assert_contains(
+            &contract,
+            capability.as_str(),
+            "profile closure contract should list the non-profile capability key",
+        );
+        assert_contains(
+            &contract,
+            classification.as_str(),
+            "profile closure contract should publish the final capability classification",
+        );
+        assert_eq!(serde_json::to_string(&capability)?, format!("\"{}\"", capability.as_str()));
+        assert_eq!(
+            serde_json::to_string(&classification)?,
+            format!("\"{}\"", classification.as_str())
+        );
+    }
 
     Ok(())
 }

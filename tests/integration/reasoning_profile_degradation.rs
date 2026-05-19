@@ -241,10 +241,10 @@ fn contract_drift_reasoning_profile() -> ProfileActivationRecord {
         posture: Some(CanonChallengePostureInput {
             contract_line: DRIFTED_REASONING_POSTURE_CONTRACT_LINE.to_string(),
             compatibility_window: ReasoningCompatibilityWindow {
-                boundline_min: "0.61.0".to_string(),
-                boundline_max_exclusive: "0.62.0".to_string(),
-                canon_min: "0.57.0".to_string(),
-                canon_max_exclusive: "0.58.0".to_string(),
+                boundline_min: "0.62.0".to_string(),
+                boundline_max_exclusive: "0.63.0".to_string(),
+                canon_min: "0.58.0".to_string(),
+                canon_max_exclusive: "0.59.0".to_string(),
                 contract_line: DRIFTED_REASONING_POSTURE_CONTRACT_LINE.to_string(),
             },
             required_profile_family: Some(ReasoningProfileFamily::SelfConsistency),

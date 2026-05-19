@@ -164,6 +164,59 @@ fn session_record_round_trips_and_status_values_serialize() {
 }
 
 #[test]
+fn session_status_view_rejects_governance_stage_mismatch() {
+    let task = build_task("/tmp/boundline-session-record");
+    let record = ActiveSessionRecord {
+        session_id: "session-governance-mismatch".to_string(),
+        workspace_ref: "/tmp/boundline-session-record".to_string(),
+        goal: Some("Deliver a session-backed CLI".to_string()),
+        authored_brief: None,
+        negotiation_packet: None,
+        active_flow: Some(built_in_flow("bug-fix").unwrap().initial_state()),
+        active_task: Some(task),
+        goal_plan: None,
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Planned,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 20,
+        governance_lifecycle: None,
+        project_scale: None,
+        latest_voting: None,
+    };
+    let view = SessionStatusView {
+        session_id: record.session_id.clone(),
+        workspace_ref: record.workspace_ref.clone(),
+        goal: record.goal.clone(),
+        active_flow: Some("bug-fix".to_string()),
+        current_stage_id: Some("investigate".to_string()),
+        current_stage_index: Some(0),
+        total_stages: Some(3),
+        plan_revision: Some(0),
+        current_step_id: Some("analyze".to_string()),
+        current_step_index: Some(0),
+        latest_status: SessionStatus::Planned,
+        execution_path: boundline::domain::session::execution_path_text(&record),
+        latest_trace_ref: record.latest_trace_ref.clone(),
+        latest_governance_stage: Some("bug-fix:verify".to_string()),
+        next_command: Some("boundline step".to_string()),
+        explanation: "the active plan is ready for explicit execution".to_string(),
+        ..Default::default()
+    };
+
+    assert_eq!(
+        view.validate(&record).unwrap_err(),
+        SessionValidationError::StatusViewGovernanceStageMismatch {
+            expected: None,
+            actual: Some("bug-fix:verify".to_string()),
+        }
+    );
+}
+
+#[test]
 fn session_record_validation_rejects_workspace_mismatches_and_external_traces() {
     let task = build_task("/tmp/other-workspace");
     let record = ActiveSessionRecord {
