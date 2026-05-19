@@ -123,15 +123,15 @@ the release bar now treats them as blocking for this feature.
 - Leave the issues to later cleanup: Rejected because the user requested a full
   residual closure, not another carry-forward slice.
 
-### R-006: Boundline Ships As 0.62.0 And Canon Companion Publishes 0.58.0
+### R-006: Boundline Ships As 0.62.0 And Canon Companion Publishes 0.59.0
 
 **Unknown**: What release version strategy keeps the closure work honest and
 compatible?
 
 **Decision**:
 - Boundline targets `0.62.0` for this closure slice.
-- Canon targets `0.58.0` for the required companion publication update.
-- Boundline-local fallback artifacts must validate the same `0.62.x`/`0.58.x`
+- Canon targets `0.59.0` for the required companion publication update.
+- Boundline-local fallback artifacts must validate the same `0.62.x`/`0.59.x`
   published pair when the sibling Canon repository is unavailable.
 
 **Rationale**: The user requested version bumps in the closure cycle. Boundline
@@ -177,7 +177,7 @@ release artifacts all agree.
 - Canon companion publication and version alignment are required for the new
   release pair
 - Maintainability findings are fixed by helper extraction, not suppressions
-- Version strategy is Boundline `0.62.0`, Canon `0.58.0`
+- Version strategy is Boundline `0.62.0`, Canon `0.59.0`
 - Validation must finish with repository-level checks and refreshed `lcov.info`
 
 ## Design Readiness

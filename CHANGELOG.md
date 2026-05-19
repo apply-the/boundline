@@ -41,7 +41,7 @@ Highlights:
   runtime-facing tests to match the shipped completed-state behavior.
 - Aligned the active release metadata, distribution surfaces, assistant package
   manifests, and Canon compatibility fixtures to Boundline `0.62.0` and Canon
-  `0.58.0`.
+  `0.59.0`.
 
 ## [0.61.0] - 2026-05-18
 

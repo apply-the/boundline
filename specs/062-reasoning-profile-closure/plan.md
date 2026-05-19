@@ -25,7 +25,7 @@ are no longer implied as more shipped than the runtime actually supports.
 2. Keep debate as bounded substrate and adjudication as a shared primitive
   rather than standalone shipped profiles.
 3. Because `0.62.0` changes the published supported pair, ship one Canon
-  companion publication update to `0.58.0` that realigns version windows,
+  companion publication update to `0.59.0` that realigns version windows,
   changelog notes, and contract tests without adding Canon runtime behavior.
 4. Refactor the flagged session-validation and reasoning-independence helpers so
   the closure slice passes the repository maintainability gate without

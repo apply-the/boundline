@@ -29,7 +29,7 @@ acceleration, and the completed reasoning-profile closure. The current
 positive-path runtime evidence for `independent_pair_review`,
 `heterogeneous_security_review`, and `bounded_reflexion`, keeps debate as
 bounded substrate and adjudication as a shared primitive, and aligns the
-active release metadata to the paired Boundline `0.62.0` and Canon `0.58.0`
+active release metadata to the paired Boundline `0.62.0` and Canon `0.59.0`
 delivery.
 
 ### Delivered in 0.62.0
@@ -44,7 +44,7 @@ delivery.
   standalone shipped profile.
 - The active release metadata, distribution surfaces, assistant package
   manifests, and Canon compatibility fixtures are now aligned to Boundline
-  `0.62.0` and Canon `0.58.0`.
+  `0.62.0` and Canon `0.59.0`.
 
 ### Delivered in 0.61.0
 

@@ -1194,14 +1194,14 @@ mod tests {
         let window = ReasoningCompatibilityWindow {
             boundline_min: "0.62.0".to_string(),
             boundline_max_exclusive: "0.63.0".to_string(),
-            canon_min: "0.58.0".to_string(),
-            canon_max_exclusive: "0.59.0".to_string(),
+            canon_min: "0.59.0".to_string(),
+            canon_max_exclusive: "0.60.0".to_string(),
             contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
         };
 
         assert!(window.validate().is_ok());
-        assert!(window.admits_versions("0.62.0", "0.58.0"));
-        assert!(!window.admits_versions("0.63.0", "0.58.0"));
+        assert!(window.admits_versions("0.62.0", "0.59.0"));
+        assert!(!window.admits_versions("0.63.0", "0.59.0"));
     }
 
     #[test]
@@ -1209,8 +1209,8 @@ mod tests {
         let window = ReasoningCompatibilityWindow {
             boundline_min: "0.62.0".to_string(),
             boundline_max_exclusive: "0.63.0".to_string(),
-            canon_min: "0.58.0".to_string(),
-            canon_max_exclusive: "0.59.0".to_string(),
+            canon_min: "0.59.0".to_string(),
+            canon_max_exclusive: "0.60.0".to_string(),
             contract_line: "governed_reasoning_posture_v2".to_string(),
         };
 
@@ -1229,8 +1229,8 @@ mod tests {
             compatibility_window: ReasoningCompatibilityWindow {
                 boundline_min: "0.62.0".to_string(),
                 boundline_max_exclusive: "0.63.0".to_string(),
-                canon_min: "0.58.0".to_string(),
-                canon_max_exclusive: "0.59.0".to_string(),
+                canon_min: "0.59.0".to_string(),
+                canon_max_exclusive: "0.60.0".to_string(),
                 contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
             },
             required_profile_family: None,
@@ -1260,8 +1260,8 @@ mod tests {
             compatibility_window: ReasoningCompatibilityWindow {
                 boundline_min: "0.62.0".to_string(),
                 boundline_max_exclusive: "0.63.0".to_string(),
-                canon_min: "0.58.0".to_string(),
-                canon_max_exclusive: "0.59.0".to_string(),
+                canon_min: "0.59.0".to_string(),
+                canon_max_exclusive: "0.60.0".to_string(),
                 contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
             },
             required_profile_family: Some(ReasoningProfileFamily::BlindReview),
@@ -1293,8 +1293,8 @@ mod tests {
             compatibility_window: ReasoningCompatibilityWindow {
                 boundline_min: "0.62.0".to_string(),
                 boundline_max_exclusive: "0.63.0".to_string(),
-                canon_min: "0.58.0".to_string(),
-                canon_max_exclusive: "0.59.0".to_string(),
+                canon_min: "0.59.0".to_string(),
+                canon_max_exclusive: "0.60.0".to_string(),
                 contract_line: "governed_reasoning_posture_v2".to_string(),
             },
             required_profile_family: Some(ReasoningProfileFamily::BlindReview),
@@ -1326,8 +1326,8 @@ mod tests {
             compatibility_window: ReasoningCompatibilityWindow {
                 boundline_min: "0.62.0".to_string(),
                 boundline_max_exclusive: "0.63.0".to_string(),
-                canon_min: "0.57.0".to_string(),
-                canon_max_exclusive: "0.58.0".to_string(),
+                canon_min: "0.60.0".to_string(),
+                canon_max_exclusive: "0.61.0".to_string(),
                 contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
             },
             required_profile_family: Some(ReasoningProfileFamily::BlindReview),
@@ -1673,8 +1673,8 @@ mod tests {
         let invalid_window = ReasoningCompatibilityWindow {
             boundline_min: "not-a-version".to_string(),
             boundline_max_exclusive: "0.63.0".to_string(),
-            canon_min: "0.58.0".to_string(),
-            canon_max_exclusive: "0.59.0".to_string(),
+            canon_min: "0.59.0".to_string(),
+            canon_max_exclusive: "0.60.0".to_string(),
             contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
         };
         assert_eq!(

@@ -10,8 +10,8 @@ profile closure slice.
 ```toml
 boundline_target = "0.62.0"
 boundline_supported_window = "0.62.x"
-canon_target = "0.58.0"
-canon_supported_window = "0.58.x"
+canon_target = "0.59.0"
+canon_supported_window = "0.59.x"
 contract_line = "governed_reasoning_posture_v1"
 ```
 
@@ -20,7 +20,7 @@ contract_line = "governed_reasoning_posture_v1"
 - Boundline MUST update its release-facing docs, changelog, roadmap, validation
   report, and compatibility tests to match the final shipped profile
   classification.
-- Canon MUST publish the matching `0.58.x` companion compatibility docs, version
+- Canon MUST publish the matching `0.59.x` companion compatibility docs, version
   windows, changelog notes, and contract-test expectations for the released
   `0.62.x` Boundline pair.
 - When the sibling Canon repository is unavailable, Boundline MUST still be able

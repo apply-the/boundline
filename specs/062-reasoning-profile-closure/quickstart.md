@@ -1,7 +1,7 @@
 # Reasoning Profile Closure Quickstart
 
 **Target Boundline Release**: 0.62.0  
-**Companion Canon Release**: 0.58.0  
+**Companion Canon Release**: 0.59.0  
 **Audience**: Boundline maintainers, Canon maintainers, release reviewers  
 **Purpose**: Exercise the full S6.1 closure slice in under 20 minutes
 
@@ -77,7 +77,7 @@ Focused validation targets:
 
 ## Scenario 4: Validate Release Alignment And Companion Compatibility
 
-Goal: confirm that the published Boundline `0.62.x` and Canon `0.58.x`
+Goal: confirm that the published Boundline `0.62.x` and Canon `0.59.x`
 compatibility artifacts stay aligned even when the sibling Canon repo is
 absent.
 

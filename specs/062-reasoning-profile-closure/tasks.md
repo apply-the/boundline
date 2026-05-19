@@ -28,7 +28,7 @@ place.
 **Purpose**: Lock the release pair, seed validation artifacts, and capture the
 required catalog audit before runtime work expands.
 
-- [ ] T001 Bump Boundline to `0.62.0` and seed the release-alignment expectations in `Cargo.toml`, `CHANGELOG.md`, `tests/contract/canon_reasoning_posture_contract.rs`, and `specs/062-reasoning-profile-closure/contracts/release-alignment-contract.md`; bump `/Users/rt/workspace/apply-the/canon/Cargo.toml` to `0.58.0` and align its version assertions in `/Users/rt/workspace/apply-the/canon/tests/contract/governed_reasoning_posture_contract.rs`
+- [ ] T001 Bump Boundline to `0.62.0` and seed the release-alignment expectations in `Cargo.toml`, `CHANGELOG.md`, `tests/contract/canon_reasoning_posture_contract.rs`, and `specs/062-reasoning-profile-closure/contracts/release-alignment-contract.md`; bump `/Users/rt/workspace/apply-the/canon/Cargo.toml` to `0.59.0` and align its version assertions in `/Users/rt/workspace/apply-the/canon/tests/contract/governed_reasoning_posture_contract.rs`
 - [ ] T002 [P] Create `specs/062-reasoning-profile-closure/validation-report.md` and record the provider-doc catalog audit result referencing `assistant/catalog/model-catalog.toml` plus the public OpenAI, Anthropic, and Google model docs
 
 ---
