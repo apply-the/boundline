@@ -113,6 +113,7 @@ tests/
 - `cargo nextest run`
 - `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`
 - `cargo deny check licenses advisories bans sources`
+- Patch-coverage helpers live under `scripts/common/coverage/`; prefer `intersect_patch_coverage.py` when the question is about uncovered diff lines rather than full-file coverage.
 
 ## Code Style
 

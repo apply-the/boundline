@@ -422,6 +422,7 @@ Keep this README short. Use the other docs only when you need more detail.
 - [docs/configuration.md](docs/configuration.md) for `init`, config precedence, and advanced execution-profile setup
 - [docs/adaptive-execution.md](docs/adaptive-execution.md) for advanced adaptive manifest-backed execution
 - [docs/review-voting.md](docs/review-voting.md) for review councils on the advanced manifest-backed path
+- [docs/guides/patch-coverage.md](docs/guides/patch-coverage.md) for patch-coverage triage helpers and workflow
 - [assistant/README.md](assistant/README.md) for assistant command packs
 - [CONTRIBUTING.md](CONTRIBUTING.md) for contributor workflow
 - [SECURITY.md](SECURITY.md) for vulnerability reporting
@@ -442,3 +443,7 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo nextest run --workspace --all-features
 cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
 ```
+
+For patch-coverage triage and LCOV inspection helpers, use
+`scripts/common/coverage/` and
+[docs/guides/patch-coverage.md](docs/guides/patch-coverage.md).

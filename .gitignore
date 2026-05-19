@@ -38,3 +38,6 @@ StartupProfileData-NonInteractive
 Thumbs.db
 *.tmp
 *.swp
+**/__pycache__/
+*.pyc
+*.pyo
