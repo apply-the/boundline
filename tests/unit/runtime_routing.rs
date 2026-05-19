@@ -117,6 +117,7 @@ fn session_runtime_resolve_routing_outcome_blocks_pending_plan_confirmation() {
         governance_lifecycle: None,
         project_scale: None,
         latest_voting: None,
+        delight_feedback: None,
     };
 
     let outcome = runtime.resolve_routing_outcome(&record).unwrap();
@@ -151,6 +152,7 @@ fn session_runtime_resolve_routing_outcome_uses_compatibility_when_only_task_exi
         governance_lifecycle: None,
         project_scale: None,
         latest_voting: None,
+        delight_feedback: None,
     };
 
     let outcome = runtime.resolve_routing_outcome(&record).unwrap();
@@ -184,6 +186,7 @@ fn plan_task_blocks_when_context_pack_is_not_credible() {
         governance_lifecycle: None,
         project_scale: None,
         latest_voting: None,
+        delight_feedback: None,
     };
 
     let err = runtime.plan_task(&mut record, None, false).unwrap_err();
@@ -227,6 +230,7 @@ fn plan_task_uses_authored_brief_as_credible_context_on_empty_workspace() {
         governance_lifecycle: None,
         project_scale: None,
         latest_voting: None,
+        delight_feedback: None,
     };
 
     let err = runtime.plan_task(&mut record, None, false).unwrap_err();
@@ -289,6 +293,7 @@ fn repeated_plan_task_revises_goal_plan_when_workspace_evidence_changes() {
         governance_lifecycle: None,
         project_scale: None,
         latest_voting: None,
+        delight_feedback: None,
     };
 
     runtime.plan_task(&mut record, None, false).unwrap();
@@ -359,6 +364,7 @@ fn plan_task_blocks_on_negotiation_and_authored_brief_clarifications() {
         governance_lifecycle: None,
         project_scale: None,
         latest_voting: None,
+        delight_feedback: None,
     };
 
     let negotiation_error = runtime.plan_task(&mut negotiation_record, None, false).unwrap_err();
@@ -416,6 +422,7 @@ fn plan_task_blocks_on_negotiation_and_authored_brief_clarifications() {
         governance_lifecycle: None,
         project_scale: None,
         latest_voting: None,
+        delight_feedback: None,
     };
 
     let authored_brief_error =

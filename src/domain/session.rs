@@ -71,6 +71,165 @@ pub struct VotingSessionState {
     pub next_action: String,
 }
 
+/// Delight surfaces that can produce inspectable usefulness signals.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DelightSurface {
+    Why,
+    Risk,
+    Evidence,
+    NextBest,
+    Assumptions,
+    HiddenImpact,
+    Challenge,
+    ExplainPlan,
+    InspectContext,
+    InspectCouncil,
+    InspectTimeline,
+}
+
+impl DelightSurface {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Why => "why",
+            Self::Risk => "risk",
+            Self::Evidence => "evidence",
+            Self::NextBest => "next_best",
+            Self::Assumptions => "assumptions",
+            Self::HiddenImpact => "hidden_impact",
+            Self::Challenge => "challenge",
+            Self::ExplainPlan => "explain_plan",
+            Self::InspectContext => "inspect_context",
+            Self::InspectCouncil => "inspect_council",
+            Self::InspectTimeline => "inspect_timeline",
+        }
+    }
+}
+
+/// Operator outcome recorded for the latest delight next action.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DelightNextActionOutcome {
+    Accepted,
+    Overridden,
+    NotApplicable,
+    #[default]
+    Unknown,
+}
+
+impl DelightNextActionOutcome {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Accepted => "accepted",
+            Self::Overridden => "overridden",
+            Self::NotApplicable => "not_applicable",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+/// Lightweight, session-scoped delight usefulness signals.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct DelightFeedbackSignal {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_useful_answer_at: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_useful_answer_command: Option<DelightSurface>,
+    #[serde(default)]
+    pub total_explanations: u64,
+    #[serde(default)]
+    pub attributed_explanations: u64,
+    #[serde(default)]
+    pub accepted_next_actions: u64,
+    #[serde(default)]
+    pub overridden_next_actions: u64,
+    #[serde(default, skip_serializing_if = "delight_next_action_outcome_is_unknown")]
+    pub next_action_outcome: DelightNextActionOutcome,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub override_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub captured_at: Option<u64>,
+}
+
+impl DelightFeedbackSignal {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.has_captured_signal_data() && self.captured_at.is_none() {
+            return Err("delight feedback signal requires captured_at when populated".to_string());
+        }
+
+        match (self.first_useful_answer_at, self.first_useful_answer_command) {
+            (Some(_), Some(_)) | (None, None) => {}
+            (Some(_), None) => {
+                return Err("first useful answer timestamp requires first_useful_answer_command"
+                    .to_string());
+            }
+            (None, Some(_)) => {
+                return Err(
+                    "first useful answer command requires first_useful_answer_at".to_string()
+                );
+            }
+        }
+
+        if self.override_reason.is_some()
+            && self.next_action_outcome != DelightNextActionOutcome::Overridden
+        {
+            return Err(
+                "override_reason is only valid when next_action_outcome is overridden".to_string()
+            );
+        }
+
+        if self.override_reason.as_deref().is_some_and(|reason| reason.trim().is_empty()) {
+            return Err("override_reason must not be empty when present".to_string());
+        }
+
+        if self.attributed_explanations > self.total_explanations {
+            return Err("attributed_explanations must not exceed total_explanations".to_string());
+        }
+
+        let next_action_events =
+            self.accepted_next_actions.saturating_add(self.overridden_next_actions);
+        if next_action_events > self.total_explanations {
+            return Err("accepted and overridden next actions must not exceed total explanations"
+                .to_string());
+        }
+
+        Ok(())
+    }
+
+    pub fn explanation_attribution_rate(&self) -> Option<f64> {
+        if self.total_explanations == 0 {
+            None
+        } else {
+            Some(self.attributed_explanations as f64 / self.total_explanations as f64)
+        }
+    }
+
+    pub fn next_action_acceptance_rate(&self) -> Option<f64> {
+        let total_outcomes =
+            self.accepted_next_actions.saturating_add(self.overridden_next_actions);
+        if total_outcomes == 0 {
+            None
+        } else {
+            Some(self.accepted_next_actions as f64 / total_outcomes as f64)
+        }
+    }
+
+    fn has_captured_signal_data(&self) -> bool {
+        self.first_useful_answer_at.is_some()
+            || self.first_useful_answer_command.is_some()
+            || self.total_explanations > 0
+            || self.attributed_explanations > 0
+            || self.accepted_next_actions > 0
+            || self.overridden_next_actions > 0
+            || self.next_action_outcome != DelightNextActionOutcome::Unknown
+            || self.override_reason.is_some()
+    }
+}
+
+fn delight_next_action_outcome_is_unknown(outcome: &DelightNextActionOutcome) -> bool {
+    *outcome == DelightNextActionOutcome::Unknown
+}
+
 /// Lifecycle status of the active workspace session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -140,6 +299,8 @@ pub struct ActiveSessionRecord {
     pub project_scale: Option<ProjectScaleSessionState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_voting: Option<VotingSessionState>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delight_feedback: Option<DelightFeedbackSignal>,
 }
 
 impl ActiveSessionRecord {
@@ -159,6 +320,10 @@ impl ActiveSessionRecord {
                 created_at: self.created_at,
                 updated_at: self.updated_at,
             });
+        }
+
+        if let Some(delight_feedback) = &self.delight_feedback {
+            delight_feedback.validate().map_err(SessionValidationError::InvalidDelightFeedback)?;
         }
 
         if status_requires_goal(self.latest_status)
@@ -774,6 +939,8 @@ pub fn delegation_next_command(record: &ActiveSessionRecord) -> Option<String> {
 pub struct SessionStatusView {
     pub session_id: String,
     pub workspace_ref: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_started_at: Option<u64>,
     pub goal: Option<String>,
     /// Optional advanced-context retrieval projection surfaced by `status` and `next`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -969,6 +1136,8 @@ pub struct SessionStatusView {
     pub latest_voting_blocking: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_voting_next_action: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delight_feedback: Option<DelightFeedbackSignal>,
     pub next_command: Option<String>,
     pub explanation: String,
 }
@@ -978,6 +1147,7 @@ impl Default for SessionStatusView {
         Self {
             session_id: String::new(),
             workspace_ref: String::new(),
+            session_started_at: None,
             goal: None,
             advanced_context: None,
             negotiation_goal_summary: None,
@@ -1078,6 +1248,7 @@ impl Default for SessionStatusView {
             latest_voting_reviewed_evidence: None,
             latest_voting_blocking: None,
             latest_voting_next_action: None,
+            delight_feedback: None,
             next_command: None,
             explanation: String::new(),
         }
@@ -1110,6 +1281,7 @@ impl SessionStatusView {
         self.validate_governance(record)?;
         self.validate_project_scale(record)?;
         self.validate_voting(record)?;
+        self.validate_delight_feedback(record)?;
         self.validate_invariants()?;
         self.validate_active_task_plan(record)?;
         Ok(())
@@ -1141,6 +1313,12 @@ impl SessionStatusView {
             return Err(SessionValidationError::StatusViewGoalMismatch {
                 expected: record.goal.clone(),
                 actual: self.goal.clone(),
+            });
+        }
+        if self.session_started_at != Some(record.created_at) {
+            return Err(SessionValidationError::StatusViewSessionStartedAtMismatch {
+                expected: record.created_at,
+                actual: self.session_started_at,
             });
         }
         // Keep the advanced-context projection aligned with either the live
@@ -1778,6 +1956,26 @@ impl SessionStatusView {
         Ok(())
     }
 
+    fn validate_delight_feedback(
+        &self,
+        record: &ActiveSessionRecord,
+    ) -> Result<(), SessionValidationError> {
+        if let Some(delight_feedback) = &self.delight_feedback {
+            delight_feedback.validate().map_err(SessionValidationError::InvalidDelightFeedback)?;
+        }
+
+        validate_status_view_field(
+            record.delight_feedback.clone().map(Box::new),
+            self.delight_feedback.clone().map(Box::new),
+            |expected, actual| SessionValidationError::StatusViewDelightFeedbackMismatch {
+                expected,
+                actual,
+            },
+        )?;
+
+        Ok(())
+    }
+
     fn validate_invariants(&self) -> Result<(), SessionValidationError> {
         if self.explanation.trim().is_empty() {
             return Err(SessionValidationError::MissingStatusExplanation);
@@ -1976,6 +2174,8 @@ pub enum SessionValidationError {
     MissingWorkspaceRef,
     #[error("updated_at {updated_at} must be greater than or equal to created_at {created_at}")]
     UpdatedBeforeCreated { created_at: u64, updated_at: u64 },
+    #[error("delight feedback signal is invalid: {0}")]
+    InvalidDelightFeedback(String),
     #[error("status {0:?} requires a goal")]
     MissingGoal(SessionStatus),
     #[error("status {0:?} requires an active task")]
@@ -2010,6 +2210,8 @@ pub enum SessionValidationError {
     StatusViewStatusMismatch { expected: SessionStatus, actual: SessionStatus },
     #[error("status view goal mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewGoalMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view session_started_at mismatch: expected {expected}, got {actual:?}")]
+    StatusViewSessionStartedAtMismatch { expected: u64, actual: Option<u64> },
     #[error("status view advanced context mismatch")]
     StatusViewAdvancedContextMismatch {
         expected: Option<Box<AdvancedContextProjection>>,
@@ -2185,6 +2387,11 @@ pub enum SessionValidationError {
     StatusViewVotingBlockingMismatch { expected: Option<bool>, actual: Option<bool> },
     #[error("status view voting next action mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewVotingNextActionMismatch { expected: Option<String>, actual: Option<String> },
+    #[error("status view delight feedback mismatch")]
+    StatusViewDelightFeedbackMismatch {
+        expected: Option<Box<DelightFeedbackSignal>>,
+        actual: Option<Box<DelightFeedbackSignal>>,
+    },
     #[error("status view explanation must not be empty")]
     MissingStatusExplanation,
     #[error("status view governance_next_action must not be empty when present")]
@@ -2677,6 +2884,7 @@ mod tests {
             updated_at: 20,
             governance_lifecycle: None,
             project_scale: None,
+            delight_feedback: None,
             latest_voting: None,
         }
     }
@@ -2685,6 +2893,7 @@ mod tests {
         SessionStatusView {
             session_id: record.session_id.clone(),
             workspace_ref: record.workspace_ref.clone(),
+            session_started_at: Some(record.created_at),
             goal: record.goal.clone(),
             advanced_context: None,
             negotiation_goal_summary: None,
@@ -2840,6 +3049,7 @@ mod tests {
             latest_voting_reviewed_evidence: None,
             latest_voting_blocking: None,
             latest_voting_next_action: None,
+            delight_feedback: record.delight_feedback.clone(),
             next_command: Some("boundline step".to_string()),
             explanation: "view is consistent".to_string(),
         }

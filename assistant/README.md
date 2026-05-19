@@ -4,7 +4,7 @@ This directory contains Markdown-based commands to run `boundline` from various 
 
 The primary delivery surface is session-native: `start -> capture -> plan -> run -> status -> next -> inspect` against `<workspace>/.boundline/session.json` and `<workspace>/.boundline/traces/`.
 
-The S7 first-response assistant surfaces are part of that same session-native
+The first-response assistant surfaces are part of that same session-native
 runtime rather than a parallel report. Preserve
 `why_summary`, `risk_summary`, `evidence_summary`, `source_attribution`,
 `fallback_disclosure`, `confidence_level`, and `next_best_action` exactly when
@@ -26,11 +26,11 @@ Shell-enabled assistant flows should preserve advanced-context projection
 fields exactly when they appear on `plan`, `status`, and `inspect`:
 `retrieval_mode`, `retrieval_state`, `retrieval_index_state`, selected
 evidence, relationship lines, impact findings, and any explicit disabled or
-degraded reason. These fields explain the S5 V1 local SQLite + FTS5 retrieval
-baseline and must not be paraphrased away.
+degraded reason. These fields explain the baseline local SQLite + FTS5
+retrieval path and must not be paraphrased away.
 
-The active S5.v2 semantic slice extends those same fields rather than creating
-another report. Preserve `semantic_policy_state`,
+The active semantic-acceleration path extends those same fields rather than
+creating another report. Preserve `semantic_policy_state`,
 `semantic_capability_state`, `hybrid_outcome`, `semantic_selected_count`,
 `semantic_rejected_count`, candidate `match_origin`, and any surfaced
 `rejected_candidate:` lines exactly when they appear. They explain whether the
@@ -239,7 +239,7 @@ CLI-reported recovery command, and `/boundline-govern` maps to governed
 Assistants should collect missing chat answers first, then run or provide the
 same CLI commands without asking operators to edit manifests manually.
 
-The S7 cognitive follow-up commands are also first-class assistant surfaces:
+The cognitive follow-up commands are also first-class assistant surfaces:
 `/boundline-why`, `/boundline-risk`, `/boundline-evidence`, `/boundline-next-best`,
 `/boundline-assumptions`, `/boundline-hidden-impact`, `/boundline-challenge`, and
 `/boundline-explain-plan` each run the matching `boundline` subcommand against the
@@ -260,15 +260,18 @@ Each AI assistant has its own local or remote configuration. Currently, all comm
 - **Copilot**: `boundline init --assistant copilot` scaffolds `./assistant/copilot/prompts/`, `.copilot-prompts/`, and mirrors the generated prompts into `.github/prompts/` for VS Code discovery. Use `#file` when you want ad hoc prompt references instead of repo-local discovery.
 - **Claude**: `boundline init --assistant claude` scaffolds `.claude-plugin/` plus `./assistant/claude/commands/`; complete any host-specific registration from that repo-local package root.
 - **Codex**: `boundline init --assistant codex` scaffolds `.codex-plugin/` plus `./assistant/codex/commands/`; import or register that repo-local package in the host.
+- **Cursor**: `boundline assistant install --host cursor --scope user` emits copy-ready bootstrap assets and guidance. Treat Cursor as `copy-ready-assets`: installation details remain host-specific and the CLI stays authoritative.
 - **Gemini CLI**: Reference the command docs from this directory and run the mapped Boundline CLI commands locally.
 
 For pre-init host chat bootstrap, use `boundline assistant install --host
 <claude|codex|cursor|copilot|gemini> --scope user`. Copilot and Gemini output
 manual fallback guidance instead of claiming a universal global plugin install.
 
-Gemini remains an explicit CLI fallback in this release. Claude, Codex, and
-Copilot command packs should follow the active route slot binding instead of
-assuming one hard-wired backend.
+Repo-local support modes in this release are explicit: Claude, Codex, and
+Copilot are `repo-local-full`; Cursor is `copy-ready-assets`; Gemini is
+`manual-fallback`. Assistants should not claim stronger parity than those
+declared support modes, and all hosts must treat CLI output plus
+`.boundline/session.json` as authoritative.
 
 ## Fallback Conventions
 Since an assistant may be executed in a context *without* shell access (e.g., standard chat window), each command must gracefully degrade.

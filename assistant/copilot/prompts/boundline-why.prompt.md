@@ -35,7 +35,7 @@ or
 Wait for pasted output before continuing.
 
 ## Output Interpretation
-Summarize the current `goal`, `routing_summary`, `goal_plan_summary`, `negotiation_goal_summary`, `decision_timeline`, `failure_evidence`, `terminal_reason`, `governance_next_action`, `follow_through_guidance`, `follow_through_evidence_source`, and `next_command` when present. Preserve `authored_input_summary`, `context_summary`, `context_credibility`, `context_provenance`, and any Canon-grounded governance or stale-context wording exactly. When Canon-governed input is absent, stale, incompatible, or blocked, say that plainly instead of implying agreement.
+Summarize the current `goal`, `routing_summary`, `goal_plan_summary`, `negotiation_goal_summary`, `decision_timeline`, `failure_evidence`, `terminal_reason`, `governance_next_action`, `reasoning_profile_id`, `reasoning_selection_reason`, `reasoning_contribution`, `reasoning_fallback_disclosure`, `follow_through_guidance`, `follow_through_evidence_source`, and `next_command` when present. Preserve `authored_input_summary`, `context_summary`, `context_credibility`, `context_provenance`, and any Canon-grounded governance or stale-context wording exactly. When Canon-governed input is absent, stale, incompatible, blocked, or downgraded to a reasoning fallback, say that plainly instead of implying agreement.
 
 ## Next-Step Routing
 Prefer the CLI-reported `next_command`. If inspect reports a session error, route to `/boundline-start`.

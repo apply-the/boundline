@@ -1,71 +1,138 @@
-# S8 - Interactive Delivery Dashboard (iocraft)
+# S8 - Interactive Delivery Dashboard
 
-This specification outlines the creation of a dedicated interactive dashboard for Boundline, built using the `iocraft` framework. This dashboard provides a real-time, high-density visualization of the Boundline Pilot Loop, session state, and governance posture.
+## Owner
 
-## Motivation
+Boundline
 
-As Boundline evolves into a project-scale delivery orchestrator, the current linear terminal output (via `println!` and `dialoguer`) becomes insufficient for monitoring complex, multi-step agent workflows.
+## Status
 
-An interactive dashboard (TUI) allows the operator to:
-1. **Monitor the Pilot Loop** (`observe -> decide -> act -> verify`) in real-time without scrolling through log history.
-2. **Visualize "Stop Rules"** and blocking conditions (e.g., "Insufficient Context", "Approval Required") in a persistent status area.
-3. **Inspect the "Context Pack"** and "Negotiated Delivery" artifacts during the planning phase.
-4. **Perform Side-by-Side Reviews** of proposed code mutations before confirmation.
-5. **Navigate Canon Artifacts** and governance packets through a structured, interactive explorer.
+Next feature, re-scoped from standalone product to operator shell
 
-## Architectural Decision: Standalone Product (Separate Crate)
+## Strategic Role
 
-The dashboard will be implemented as a separate crate: `boundline-dashboard`, producing a dedicated binary.
+S8 is the operator surface for governed delivery. It should make Boundline's
+runtime legible during complex, multi-step work without creating a second
+implementation of Boundline.
 
-- **Standalone Completeness:** The dashboard is not just a viewer; it is a complete product. It will embed all core functionalities, including `init`, `doctor`, `config`, and the full delivery workflow.
-- **Dual-Binary Strategy:**
-    - `boundline` (or `boundline-cli`): The slim, high-performance CLI optimized for CI/CD, scripting, and quick terminal interactions.
-    - `boundline-dashboard`: The immersive, interactive environment for heavy engineering sessions.
-- **Decoupling:** Isolates TUI-specific dependencies (like `iocraft`, `taffy`, and terminal backends) from the automation-focused CLI.
+The dashboard is an operator shell over existing Boundline commands, session
+state, trace events, checkpoints, plans, findings, and Canon references.
 
-## Key Features (Full Lifecycle)
+## Problem
 
-- **Interactive Init Wizard:** A rich, component-based `init` experience that replaces the current linear prompts with a structured, visual configuration dashboard.
-- **Pilot Monitor:** Displays the active step, agent role, and real-time execution logs.
-- **State Sidebar:** Shows the current `session.json` state, active `Checkpoint`, and `Authority Zone`.
-- **Decision Panel:** Visualizes the `GoalPlan` rationale and the next recommended action.
-- **Review Canvas:** A rich interface for diff review and plan confirmation.
-- **Notification Toast/Alerts:** For critical "Stop Rule" triggers or required human intervention.
+Linear terminal output is no longer enough for:
 
-### Example Component Structure (Conceptual)
+- project-scale delivery
+- stop semantics
+- review councils
+- guidance and guardian findings
+- Context Pack inspection
+- Canon artifact inspection
+- confirmation, rejection, replanning, recovery, and evidence review
 
-```rust
-element! {
-    Box(flex_direction: FlexDirection::Column, width: Percent(100), height: Percent(100)) [
-        Header(title: "BOUNDLINE DASHBOARD", version: "0.60.0"),
-        Box(flex_direction: FlexDirection::Row, flex_grow: 1.0) [
-            MainView(active_workflow: session.workflow),
-            Sidebar(
-                context_credibility: session.context_credibility,
-                stop_rules: session.active_stop_rules,
-            )
-        ],
-        Footer(shortcuts: ["(c) confirm", "(r) replan", "(q) quit"])
-    ]
-}
+Without a dashboard, Boundline can be architecturally strong but operationally
+hard to trust.
+
+## Core Scope
+
+### Must Cover
+
+- session selector
+- live Pilot Loop monitor
+- current phase and active step
+- stop rules panel
+- Context Pack explorer
+- guidance, guardian, and finding panel
+- current GoalPlan panel
+- trace timeline
+- checkpoint view
+- confirm, reject, replan, and recover actions
+- read-only Canon project memory explorer
+- read-only packet and evidence viewer
+- dashboard-oriented doctor view
+- keyboard-first navigation
+- clear degraded mode when terminal capabilities are limited
+
+### Must Not Cover In V1
+
+- duplicated workflow engine
+- independent config implementation
+- independent init implementation
+- independent governance logic
+- independent provider orchestration
+- new state store
+- different behavior from the CLI
+
+## Architectural Model
+
+```text
+boundline CLI/runtime remains authoritative
+dashboard reads state and event streams
+dashboard invokes existing commands
+dashboard never forks runtime semantics
 ```
 
-## Integration with boundline-cli
+The standard `boundline` automation surface remains the source of truth for
+CI, scripting, assistant command packs, and normal terminal use. A separate
+dashboard crate or feature-gated binary is acceptable only if it consumes the
+same state and command contracts as the CLI.
 
-The main `boundline` executable will provide a new command:
+## Suggested Technology
 
-```bash
-boundline dashboard
+Primary candidate:
+
+- `iocraft` for interactive terminal UI, if it fits current Rust ergonomics and
+  rendering needs
+
+Fallback:
+
+- `ratatui` if iocraft proves too immature or too restrictive
+
+Supporting pieces:
+
+- stable JSON event model from Boundline runtime
+- file watcher for `.boundline/session.json`, trace files, and findings
+- snapshot rendering for terminal compatibility
+- no TUI dependency in the slim CLI binary unless feature-gated or separated
+
+## Required Runtime Prerequisite
+
+S8 should push Boundline to formalize structured runtime events:
+
+```text
+session_started
+context_pack_built
+plan_ready
+stop_rule_triggered
+guardian_started
+guardian_finished
+finding_emitted
+checkpoint_created
+confirmation_required
+run_started
+run_finished
+recovery_available
 ```
 
-This command will:
-1. Verify terminal capabilities.
-2. Launch the `boundline-dashboard` runtime.
-3. Connect to the local `.boundline/session.json` and watch for filesystem changes to update the UI reactively.
+## Acceptance Criteria
 
-## Success Criteria
+- Dashboard can attach to an existing Boundline session.
+- Dashboard can launch a new session by invoking existing commands.
+- Stop rules are visible without scrolling.
+- Context Pack items show reason, source, budget cost, and authority.
+- Guardian findings show severity, evidence refs, and resolution status.
+- Canon artifacts are browsable read-only.
+- Confirm, reject, replan, and recover actions produce the same runtime behavior
+  as CLI.
+- CLI works unchanged without dashboard dependencies.
+- Dashboard has tests for rendering critical states.
 
-- The dashboard provides a real-time view of the Pilot Loop without screen flickering.
-- "Stop Rules" are visually prominent and explain the blocking reason clearly.
-- Plan confirmation through the dashboard is more intuitive than the current text-based prompts.
-- The `boundline-dashboard` crate adds zero overhead to the standard `boundline` binary size when not in use (via feature flags or separate binary).
+## Risks
+
+- Dashboard becomes a parallel product.
+- UI code leaks into core runtime.
+- Runtime state is not structured enough.
+- Pretty UI hides weak trace semantics.
+
+## Hard Rule
+
+The dashboard must reveal Boundline's truth. It must not create a new truth.

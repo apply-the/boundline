@@ -47,8 +47,8 @@ fn plan_status_and_inspect_surface_selected_local_evidence() {
 }
 
 #[test]
-fn s7_plan_status_and_inspect_surface_us2_cognitive_lenses_when_advanced_context_is_available() {
-    let workspace = write_flow_workspace("boundline-context-intelligence-s7-us2");
+fn plan_status_and_inspect_surface_cognitive_lenses_when_advanced_context_is_available() {
+    let workspace = write_flow_workspace("boundline-context-intelligence-cognitive-lenses");
 
     execute_start(Some(&workspace)).unwrap();
     execute_capture(

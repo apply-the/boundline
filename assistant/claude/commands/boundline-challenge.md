@@ -31,7 +31,7 @@ or
 Wait for pasted output before continuing.
 
 ## Output Interpretation
-Summarize `challenge_strongest_objection`, `challenge_weakest_assumption`, `challenge_missing_evidence`, `challenge_failure_mode`, `challenge_required_review`, `challenge_council_required`, `fallback_disclosure`, and `next_command`. Do not soften governance wording or imply that this command can replace required Canon review or council decisions.
+Summarize `challenge_strongest_objection`, `challenge_weakest_assumption`, `challenge_missing_evidence`, `challenge_failure_mode`, `challenge_required_review`, `challenge_council_required`, `reasoning_profile_id`, `reasoning_selection_reason`, `reasoning_contribution`, `reasoning_fallback_disclosure`, `fallback_disclosure`, and `next_command`. Do not soften governance wording or imply that this command can replace required Canon review or council decisions.
 
 ## Next-Step Routing
 Prefer the CLI-reported `next_command`. If `challenge_required_review` or `challenge_council_required` escalates governance, route to `/boundline-govern` or `/boundline-status` instead of inventing a bypass.

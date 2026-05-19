@@ -521,6 +521,7 @@ mod tests {
             governance_lifecycle: None,
             project_scale: None,
             latest_voting: None,
+            delight_feedback: None,
         }
     }
 

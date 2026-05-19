@@ -116,8 +116,8 @@ fn build_context_pack_records_missing_test_findings_for_uncovered_targets() {
 }
 
 #[test]
-fn s7_build_context_pack_emits_validation_group_inputs_for_assumptions_and_hidden_impact() {
-    let workspace = temp_workspace("boundline-context-intelligence-s7-groups");
+fn build_context_pack_emits_validation_group_inputs_for_assumptions_and_hidden_impact() {
+    let workspace = temp_workspace("boundline-context-intelligence-groups");
     fs::create_dir_all(workspace.join("src")).unwrap();
     fs::write(workspace.join("src/engine.rs"), "pub fn reconcile_plan() -> bool { true }\n")
         .unwrap();

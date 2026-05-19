@@ -1,9 +1,9 @@
-# Configuration in Boundline 0.58.0
+# Configuration in Boundline 0.63.0
 
-Boundline `0.58.0` keeps a user-friendly setup and routing configuration surface
+Boundline `0.63.0` keeps a user-friendly setup and routing configuration surface
 for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
-The `0.56.0` release keeps configuration behavior stable while preserving the
+The `0.63.0` release keeps configuration behavior stable while preserving the
 same governed routing defaults across earlier `bug-fix:investigate` work,
 later verify-stage `security-assessment`, workflow-aware projection of the
 same bounded governance state, continuity-aware read-side follow-up, the
@@ -36,6 +36,10 @@ Runtime capability profiles and slot effort policies are the new explicit
 exception: operators can now declare what each assistant family credibly
 supports and how much effort each routed slot should prefer, while the runtime
 continues to own the resulting delegation or stop semantics.
+The same remains true for support modes and delight follow-through: Cursor or
+Gemini parity expectations, reasoning-profile disclosure, inspect closures, and
+delight usefulness signals are runtime-owned projections or metadata surfaces,
+not new operator-authored config keys.
 Domain templates extend that same explicit config surface: operators can now
 declare active domain families, layered standards, and optional or required
 external context bindings per scope, while the runtime still owns target
@@ -63,7 +67,7 @@ ranking, explicit adaptive exhaustion, or negotiation-state overrides.
 - default `boundline plan` now creates one evidence-driven proposal and `boundline plan --confirm` confirms it; planning lifecycle state is session-owned rather than config-owned
 - bounded `bug-fix` and `change` completion now requires both material change evidence and passed validation on the native and governed session path
 - `boundline config` manages runtime/model routing defaults, runtime capability profiles, slot effort policy, and domain-template settings for planning, implementation, verification, review, and other bounded slots
-- `boundline config show` now also surfaces the effective advanced-context retrieval policy used by the S5 V1 local SQLite + FTS5 retrieval baseline plus the dedicated `semantic_acceleration` opt-in for S5.v2 local semantic expansion
+- `boundline config show` now also surfaces the effective advanced-context retrieval policy used by the baseline local SQLite + FTS5 retrieval path plus the dedicated `semantic_acceleration` opt-in for local semantic expansion
 - `boundline cluster` registers bounded multi-workspace membership and aggregated inspection
 - negotiated delivery modeling stays session-owned and trace-projected; there is no new negotiation-specific key in `config.toml` or `.boundline/execution.json`
 - context-pack assembly and credibility projection stay session-owned and trace-projected; there is no new context-specific key in `config.toml` or `.boundline/execution.json`
@@ -138,9 +142,9 @@ evidence_limit = 6
 
 - `retrieval_mode = "disabled"` preserves the structured-only path and records
 	an explicit disabled terminal reason in the advanced-context projection.
-- `retrieval_mode = "local"` enables the S5 V1 workspace-local SQLite + FTS5
+- `retrieval_mode = "local"` enables the baseline workspace-local SQLite + FTS5
 	retrieval baseline.
-- Remote retrieval and remote transmission remain unsupported in S5 V1 and are
+- Remote retrieval and remote transmission remain unsupported in the baseline local mode and are
 	rejected during config validation rather than silently downgraded.
 - `boundline config show --scope effective` renders the resolved advanced-
 	context policy alongside route, capability, and effort precedence.

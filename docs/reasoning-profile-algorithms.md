@@ -1,6 +1,6 @@
 # Reasoning Profile Algorithms
 
-Boundline `0.62.0` ships reasoning profiles inside the existing session-native
+Boundline `0.63.0` ships reasoning profiles inside the existing session-native
 runtime. Canon can require a challenge posture, but Boundline still owns
 profile selection, participant assignment, independence checking, bounded
 outcomes, trace emission, and operator-facing projection.
@@ -80,7 +80,7 @@ Current runtime shape:
 - minimum participants: `1`
 - independence posture: no multi-party distinctness requirement
 - bounded behavior: branch exploration stays limited by the declared reasoning budget
-- shipped-status note: `0.62.0` keeps the concrete shipped claim inherited from the earlier contract slice; this release does not promote it into a separate orchestration path
+- shipped-status note: `0.63.0` keeps the concrete shipped claim inherited from the earlier contract slice; the follow-through release extends the same reasoning story into explanation and inspect surfaces rather than promoting a second orchestration path
 
 ### 4.2 `independent_pair_review`
 
@@ -129,7 +129,7 @@ That means:
 
 - the domain and trace model can represent debate-oriented rounds
 - bounded debate vocabulary can support other reasoning or review flows
-- Boundline `0.62.0` does not claim a standalone shipped V1 debate profile id
+- Boundline `0.63.0` does not claim a standalone shipped V1 debate profile id
 
 ### 5.2 Adjudication
 
@@ -139,7 +139,7 @@ That means:
 
 - it can appear as an arbiter role, an adjudication step, or a terminal disagreement-resolution outcome
 - it remains reusable across reasoning and review flows
-- Boundline `0.62.0` does not claim adjudication as a standalone shipped reasoning profile
+- Boundline `0.63.0` does not claim adjudication as a standalone shipped reasoning profile
 
 ## 6. Operator Reading Guide
 
@@ -149,7 +149,7 @@ When a reasoning profile is active, read the operator surfaces in this order:
 2. independence result: whether the participant topology is actually credible
 3. outcome kind: whether the profile converged, adjudicated, degraded, blocked, or was interrupted
 4. confidence contribution: how much the stage should trust the challenge result
-5. next action: what the operator must fix when the profile could not complete credibly
+5. next action and fallback disclosure: what the operator must fix when the profile could not complete credibly and what the runtime disclosed on `status`, `inspect`, `why`, `risk`, `evidence`, `next-best`, `challenge`, or `explain-plan`
 
 That ordering keeps the runtime honest. A profile is not trustworthy just
 because it ran; it is trustworthy when the bounded topology, outcome, and

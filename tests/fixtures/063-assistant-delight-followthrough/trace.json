@@ -1,0 +1,174 @@
+{
+  "task_id": "task-assistant-delight-fixture",
+  "session_id": "session-assistant-delight-fixture",
+  "goal": "Explain the bounded runtime change with inspectable authority",
+  "started_at": 1716115200000,
+  "ended_at": 1716115600000,
+  "terminal_status": "succeeded",
+  "terminal_reason": {
+    "condition": "goal_satisfied",
+    "message": "bounded explanation closed with an accepted next step",
+    "details": null
+  },
+  "events": [
+    {
+      "event_id": "event-task-started",
+      "event_type": "task_started",
+      "step_id": null,
+      "plan_revision": 0,
+      "payload": {
+        "input": {
+          "context_summary": "Active session state and trace evidence are available for bounded explanation work",
+          "context_credibility": "credible",
+          "context_primary_inputs": [
+            ".boundline/session.json",
+            "src/cli/output.rs"
+          ],
+          "context_provenance": [
+            "session_state: .boundline/session.json",
+            "workspace_file: src/cli/output.rs"
+          ]
+        }
+      },
+      "recorded_at": 1716115200000
+    },
+    {
+      "event_id": "event-goal-plan-created",
+      "event_type": "goal_plan_created",
+      "step_id": null,
+      "plan_revision": 1,
+      "payload": {
+        "task_count": 1,
+        "goal": "Explain the bounded runtime change with inspectable authority",
+        "goal_plan_state": "confirmed",
+        "goal_plan_revision": 1,
+        "planning_rationale": "runtime evidence already narrows the explanation slice",
+        "verification_strategy": "cargo test --no-run --all-targets"
+      },
+      "recorded_at": 1716115210000
+    },
+    {
+      "event_id": "event-decision-created",
+      "event_type": "decision_created",
+      "step_id": "decide-explain",
+      "plan_revision": 1,
+      "payload": {
+        "status": "pending",
+        "decision_type": "code",
+        "target": "src/cli/output.rs",
+        "rationale": "the explanation surface must disclose authority and fallback state",
+        "expected_outcome": "status and inspect can explain the current bounded answer",
+        "evidence_inputs": [
+          {
+            "kind": "file",
+            "reference": "src/cli/output.rs"
+          },
+          {
+            "kind": "trace",
+            "reference": "event-task-started"
+          }
+        ]
+      },
+      "recorded_at": 1716115220000
+    },
+    {
+      "event_id": "event-step-started",
+      "event_type": "step_started",
+      "step_id": "explain",
+      "plan_revision": 1,
+      "payload": {
+        "step_kind": "decision"
+      },
+      "recorded_at": 1716115230000
+    },
+    {
+      "event_id": "event-step-completed",
+      "event_type": "step_completed",
+      "step_id": "explain",
+      "plan_revision": 1,
+      "payload": {
+        "status": "succeeded",
+        "output": {
+          "changed_files": [
+            "src/cli/output.rs"
+          ],
+          "validation": {
+            "command": "cargo test --no-run --all-targets",
+            "succeeded": true
+          }
+        }
+      },
+      "recorded_at": 1716115300000
+    },
+    {
+      "event_id": "event-review-started",
+      "event_type": "review_started",
+      "step_id": null,
+      "plan_revision": 1,
+      "payload": {
+        "review_trigger": "reasoning_profile"
+      },
+      "recorded_at": 1716115320000
+    },
+    {
+      "event_id": "event-reviewer-completed",
+      "event_type": "reviewer_completed",
+      "step_id": null,
+      "plan_revision": 1,
+      "payload": {
+        "reviewer_id": "reviewer-primary",
+        "reviewer_role": "challenger",
+        "finding": {
+          "disposition": "accepted",
+          "summary": "bounded review confirmed the explanation stays within the runtime evidence"
+        }
+      },
+      "recorded_at": 1716115340000
+    },
+    {
+      "event_id": "event-review-vote-resolved",
+      "event_type": "review_vote_resolved",
+      "step_id": null,
+      "plan_revision": 1,
+      "payload": {
+        "summary": "bounded review accepted the projection"
+      },
+      "recorded_at": 1716115360000
+    },
+    {
+      "event_id": "event-governance-completed",
+      "event_type": "governance_completed",
+      "step_id": null,
+      "plan_revision": 1,
+      "payload": {
+        "headline": "governed packet ready",
+        "packet_ref": "packet-assistant-delight-001",
+        "latest_governance_runtime_state": "governed_ready",
+        "latest_governance_reason": "runtime evidence was sufficient without additional Canon escalation",
+        "latest_governance_approval_provenance": "session trace authority",
+        "canon_next_action": "boundline inspect --workspace <workspace>"
+      },
+      "recorded_at": 1716115400000
+    },
+    {
+      "event_id": "event-terminal-recorded",
+      "event_type": "terminal_recorded",
+      "step_id": null,
+      "plan_revision": 1,
+      "payload": {
+        "delight_feedback": {
+          "first_useful_answer_at": 1716115515000,
+          "first_useful_answer_command": "explain_plan",
+          "total_explanations": 1,
+          "attributed_explanations": 1,
+          "accepted_next_actions": 1,
+          "overridden_next_actions": 0,
+          "next_action_outcome": "accepted",
+          "captured_at": 1716115515000
+        }
+      },
+      "recorded_at": 1716115515000
+    }
+  ],
+  "trace_location": ".boundline/traces/trace.json"
+}

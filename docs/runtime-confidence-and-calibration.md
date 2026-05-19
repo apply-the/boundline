@@ -1,4 +1,4 @@
-# Runtime Confidence And Calibration In Boundline 0.56.0
+# Runtime Confidence And Calibration In Boundline 0.63.0
 
 Boundline computes governance confidence locally from runtime evidence.
 
@@ -10,8 +10,8 @@ confidence, trust, or calibration. Those remain Boundline runtime concerns.
 Confidence is the runtime estimate of whether the currently available evidence
 justifies stronger or weaker governance behavior for a governed boundary.
 
-For this S4 slice, Boundline treats confidence as evidence-derived, not as a
-static configuration flag.
+For the active `0.63.0` line, Boundline still treats confidence as
+evidence-derived, not as a static configuration flag.
 
 ## Calibration Inputs
 
@@ -36,6 +36,10 @@ Calibration must remain inspectable across the normal session-native flow.
 Boundline therefore persists the evidence needed to explain confidence and
 trust evolution through its existing state and trace surfaces rather than a new
 governance subsystem.
+
+The same local confidence story now feeds reasoning-profile disclosure,
+inspect-closure follow-through, and delight usefulness signals rather than a
+second reporting pipeline.
 
 Operators should be able to inspect:
 
@@ -85,7 +89,7 @@ Those surfaces should explain:
 
 ## Current Slice Boundary
 
-This first S4 slice does not introduce a second trust model, a separate
+This product line does not introduce a second trust model, a separate
 calibration service, or Canon-owned runtime confidence.
 
 Boundline remains the runtime owner of:

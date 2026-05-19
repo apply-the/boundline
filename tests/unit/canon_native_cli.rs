@@ -588,6 +588,7 @@ fn lifecycle_requires_refresh_detects_approval_pending() {
         governance_lifecycle: None,
         project_scale: None,
         latest_voting: None,
+        delight_feedback: None,
     };
 
     // No lifecycle — no refresh needed

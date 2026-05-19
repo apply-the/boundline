@@ -23,15 +23,17 @@ through explicit sessions for planning, execution, inspection, recovery, and
 governed delivery when needed. Canon is optional: most users can ignore it
 unless they need governed stages or governed artifacts.
 
-The active `0.62.0` feature line is `062-reasoning-profile-closure`, which
-closes the first-wave S6 reasoning-profile set without introducing a second
-orchestrator. The feature artifacts live under
-`specs/062-reasoning-profile-closure/`; start with the maintainer guide at
-`specs/062-reasoning-profile-closure/quickstart.md`. The shipped runtime now
-keeps positive-path and blocked-path reasoning outcomes explicit on `run`,
-`status`, and `inspect`, preserves additive lifecycle and confidence trace
-events, and freezes debate as bounded substrate plus adjudication as a shared
-primitive instead of over-claiming them as standalone shipped profiles.
+The active `0.63.0` feature line is `063-assistant-delight-followthrough`,
+which closes the first S7.1 follow-through gaps without introducing a second
+runtime. The feature artifacts live under
+`specs/063-assistant-delight-followthrough/`; start with the maintainer guide
+at `specs/063-assistant-delight-followthrough/quickstart.md`. The shipped
+runtime now keeps reasoning-profile-aware explanation disclosure explicit,
+surfaces human-facing `inspect_context`, `inspect_council`, and
+`inspect_timeline` closures, reports session-scoped delight usefulness signals
+through `status` and `inspect`, and makes Cursor and Gemini support modes
+explicit without claiming a richer host parity than the release actually
+ships.
 
 In `0.58.0`, Boundline also persists advanced-context retrieval state through
 goal plans, session status, and trace summaries. The S5 V1 baseline uses one

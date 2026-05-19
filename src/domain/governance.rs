@@ -148,7 +148,7 @@ impl CanonMode {
         vec![format!("{}/{}", packet_ref.trim_end_matches('/'), self.primary_document_name())]
     }
 
-    /// Map a Canon mode to its minimum authority-zone floor per S3 §8.1.
+    /// Map a Canon mode to its minimum authority-zone floor.
     pub const fn stage_authority_floor(self) -> CanonAuthorityZone {
         match self {
             Self::Discovery | Self::Requirements => CanonAuthorityZone::Green,
@@ -746,7 +746,7 @@ pub const ADAPTIVE_GOVERNANCE_V1_CONTRACT_LINE: &str = "adaptive-governance-v1";
 pub const SEMANTIC_ARTIFACT_DESCRIPTOR_V1_CONTRACT_LINE: &str = "v1";
 const CANON_PROVENANCE_UNAVAILABLE: &str = "unavailable";
 
-/// Bounded council profile vocabulary defined by S3 §20.
+/// Bounded council profile vocabulary used by authority governance.
 ///
 /// The variants describe the minimum review-council shape required before a
 /// governed stage may advance.
@@ -784,7 +784,7 @@ impl std::fmt::Display for CouncilProfile {
     }
 }
 
-/// Stop-semantics vocabulary defined by S3 §15.
+/// Stop-semantics vocabulary used by authority governance.
 ///
 /// These values describe what the operator is allowed to do next after the
 /// authority matrix and any structural gates are applied.
@@ -1018,7 +1018,7 @@ pub fn resolve_governance_startup_posture(
     }
 }
 
-/// Explicit degraded runtime outcomes used by S4 before escalation or stop.
+/// Explicit degraded runtime outcomes used before escalation or stop.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GovernanceDegradationMode {
@@ -1042,7 +1042,7 @@ impl GovernanceDegradationMode {
         }
     }
 
-    /// Maps S4 degradation outcomes onto the existing S3 stop-semantics vocabulary.
+    /// Maps degradation outcomes onto the existing stop-semantics vocabulary.
     pub const fn mapped_stop_semantics(self) -> StopSemantics {
         match self {
             Self::AdvisoryFallback => StopSemantics::ProceedWithAdvisory,
@@ -1125,7 +1125,7 @@ impl CanonChangeClass {
         }
     }
 
-    /// Map change class to its minimum authority-zone floor per S3 §8.
+    /// Map change class to its minimum authority-zone floor.
     pub const fn authority_floor(self) -> CanonAuthorityZone {
         match self {
             Self::LowImpact => CanonAuthorityZone::Green,
@@ -1427,7 +1427,7 @@ impl CanonAuthorityGovernanceV1Envelope {
     /// Resolves the effective control class, council profile, and stop semantics.
     ///
     /// When `stage` is available the resolution incorporates the stage
-    /// authority floor per S3 §8.1 and maps to the S3 §21 V1 matrix.
+    /// authority floor and maps to the authority-governance control matrix.
     /// When `stage` is `None` the resolution uses only the Canon authority
     /// zone and change class.
     pub fn control_resolution_for_stage(

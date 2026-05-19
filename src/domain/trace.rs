@@ -12,7 +12,7 @@ use crate::domain::guidance::GuidanceGuardianProjection;
 use crate::domain::limits::TerminalCondition;
 use crate::domain::reasoning::ProfileActivationRecord;
 use crate::domain::routing_decision::RoutingDecisionProjection;
-use crate::domain::session::DelegationStatusView;
+use crate::domain::session::{DelegationStatusView, DelightFeedbackSignal};
 use crate::domain::step::{StepKind, StepStatus};
 use crate::domain::task::{TaskStatus, TerminalReason};
 
@@ -147,11 +147,87 @@ pub struct ExecutionTrace {
     pub trace_location: Option<String>,
 }
 
+/// Inspect closure kinds synthesized from the flattened trace summary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InspectClosureKind {
+    Context,
+    Council,
+    Timeline,
+}
+
+impl InspectClosureKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Context => "context",
+            Self::Council => "council",
+            Self::Timeline => "timeline",
+        }
+    }
+}
+
+/// Human-facing inspect closure synthesized from the flattened trace summary.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InspectClosureView {
+    pub view_kind: InspectClosureKind,
+    pub headline: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub narrative_lines: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_attribution: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub missing_inputs: Vec<String>,
+    pub terminal_status: TaskStatus,
+    pub terminal_reason: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_action: Option<String>,
+}
+
+impl InspectClosureView {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.headline.trim().is_empty() {
+            return Err(format!("inspect {} headline must not be empty", self.view_kind.as_str()));
+        }
+
+        if self.narrative_lines.is_empty() && self.missing_inputs.is_empty() {
+            return Err(format!(
+                "inspect {} view requires narrative_lines or missing_inputs",
+                self.view_kind.as_str()
+            ));
+        }
+
+        if self.terminal_reason.trim().is_empty() {
+            return Err(format!(
+                "inspect {} terminal_reason must not be empty",
+                self.view_kind.as_str()
+            ));
+        }
+
+        if self.source_attribution.iter().any(|line| line.trim().is_empty()) {
+            return Err(format!(
+                "inspect {} source_attribution entries must not be empty",
+                self.view_kind.as_str()
+            ));
+        }
+
+        if self.missing_inputs.iter().any(|line| line.trim().is_empty()) {
+            return Err(format!(
+                "inspect {} missing_inputs entries must not be empty",
+                self.view_kind.as_str()
+            ));
+        }
+
+        Ok(())
+    }
+}
+
 /// Flattened read-side trace summary reused by inspect and other CLI surfaces.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TraceSummaryView {
     pub trace_ref: String,
     pub goal: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trace_started_at: Option<u64>,
     /// Optional advanced-context retrieval projection surfaced by `inspect`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub advanced_context: Option<AdvancedContextProjection>,
@@ -231,8 +307,16 @@ pub struct TraceSummaryView {
     pub reasoning_profile: Option<ProfileActivationRecord>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delegation: Option<DelegationStatusView>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inspect_context: Option<InspectClosureView>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inspect_council: Option<InspectClosureView>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inspect_timeline: Option<InspectClosureView>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub review_timeline: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delight_feedback: Option<DelightFeedbackSignal>,
     pub terminal_status: TaskStatus,
     pub terminal_reason: TerminalReason,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -244,6 +328,7 @@ impl Default for TraceSummaryView {
         Self {
             trace_ref: String::new(),
             goal: String::new(),
+            trace_started_at: None,
             advanced_context: None,
             negotiation_goal_summary: None,
             negotiation_resolution: None,
@@ -284,7 +369,11 @@ impl Default for TraceSummaryView {
             governance_next_action: None,
             reasoning_profile: None,
             delegation: None,
+            inspect_context: None,
+            inspect_council: None,
+            inspect_timeline: None,
             review_timeline: Vec::new(),
+            delight_feedback: None,
             terminal_status: TaskStatus::Planned,
             terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "", None),
             duration: None,

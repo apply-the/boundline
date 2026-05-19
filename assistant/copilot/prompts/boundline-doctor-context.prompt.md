@@ -1,5 +1,5 @@
 ---
-description: "Diagnose missing workspace context for S7 assistant follow-through"
+description: "Diagnose missing workspace context for assistant follow-through"
 ---
 
 # Command: /boundline-doctor-context

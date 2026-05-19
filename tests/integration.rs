@@ -4,6 +4,9 @@ mod workspace_fixture;
 #[path = "support/runtime_refoundation.rs"]
 mod runtime_refoundation;
 
+#[path = "support/assistant_delight_support.rs"]
+mod assistant_delight_support;
+
 #[path = "integration/sequential_task_run.rs"]
 mod sequential_task_run;
 
@@ -219,3 +222,21 @@ mod cli_guidance_guardian_projection;
 
 #[path = "integration/cli_guidance_catalog.rs"]
 mod cli_guidance_catalog;
+
+#[path = "integration/reasoning_profile_explanations.rs"]
+mod reasoning_profile_explanations;
+
+#[path = "integration/reasoning_profile_explanations_degraded.rs"]
+mod reasoning_profile_explanations_degraded;
+
+#[path = "integration/inspect_closure_views.rs"]
+mod inspect_closure_views;
+
+#[path = "integration/inspect_closure_timeline.rs"]
+mod inspect_closure_timeline;
+
+#[path = "integration/delight_feedback_signals.rs"]
+mod delight_feedback_signals;
+
+#[path = "integration/assistant_host_parity_paths.rs"]
+mod assistant_host_parity_paths;

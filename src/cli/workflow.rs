@@ -755,6 +755,7 @@ fn initialize_session(workspace: &Path) -> ActiveSessionRecord {
         governance_lifecycle: None,
         project_scale: None,
         latest_voting: None,
+        delight_feedback: None,
     }
 }
 

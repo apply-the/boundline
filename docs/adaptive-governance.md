@@ -1,6 +1,6 @@
-# Adaptive Governance In Boundline 0.56.0
+# Adaptive Governance In Boundline 0.63.0
 
-Boundline `0.56.0` can consume Canon `adaptive-governance-v1` as an additive
+Boundline `0.63.0` can consume Canon `adaptive-governance-v1` as an additive
 companion to the required `authority-governance-v1` baseline.
 
 The companion is semantic input, not runtime control.
@@ -97,5 +97,5 @@ Boundline owns:
 - degradation and escalation outcomes
 - council and stop behavior
 
-This split is the core S4 contract boundary: Canon describes the governed
+This split is the core adaptive-governance contract boundary: Canon describes the governed
 packet; Boundline decides what the runtime does next.

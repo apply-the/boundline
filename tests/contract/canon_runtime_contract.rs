@@ -277,7 +277,7 @@ fn canon_runtime_contract_preserves_security_assessment_refresh_lineage()
 }
 
 #[test]
-fn s7_delight_contract_alignment_matches_canon_provider_contract_when_available()
+fn assistant_delight_contract_alignment_matches_canon_provider_contract_when_available()
 -> Result<(), Box<dyn Error>> {
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let canon_contract_path = repo_root
@@ -292,7 +292,7 @@ fn s7_delight_contract_alignment_matches_canon_provider_contract_when_available(
 
     let canon_contract = fs::read_to_string(&canon_contract_path)?;
     let boundline_contract_path =
-        repo_root.join("specs/060-assistant-delight-layer/contracts/s7-delight-contract.md");
+        repo_root.join("specs/060-assistant-delight-layer/contracts/assistant-delight-contract.md");
     let boundline_contract = fs::read_to_string(&boundline_contract_path)?;
 
     let artifact_class_pairs = [

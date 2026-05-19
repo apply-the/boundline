@@ -390,9 +390,9 @@ fn trace_summary_renderer_mentions_steps_recovery_and_terminal_reason() {
 }
 
 #[test]
-fn s7_trace_summary_renderer_surfaces_why_and_risk_summaries() {
+fn trace_summary_renderer_surfaces_why_and_risk_summaries() {
     let summary = TraceSummaryView {
-        trace_ref: "/tmp/workspace/.boundline/traces/s7.json".to_string(),
+        trace_ref: "/tmp/workspace/.boundline/traces/assistant-delight.json".to_string(),
         goal: "Explain the active delivery state".to_string(),
         goal_plan_summary: Some(
             "explain the bounded plan from authoritative runtime state".to_string(),
@@ -420,10 +420,10 @@ fn s7_trace_summary_renderer_surfaces_why_and_risk_summaries() {
 }
 
 #[test]
-fn s7_session_status_renderer_surfaces_us2_cognitive_lenses() {
+fn session_status_renderer_surfaces_cognitive_lenses() {
     let view = SessionStatusView {
-        session_id: "session-s7-us2".to_string(),
-        workspace_ref: "/tmp/session-s7-us2".to_string(),
+        session_id: "session-cognitive-lenses".to_string(),
+        workspace_ref: "/tmp/session-cognitive-lenses".to_string(),
         goal: Some("Plan with bounded context".to_string()),
         advanced_context: Some(sample_advanced_context()),
         active_flow: Some("bug-fix".to_string()),

@@ -2,10 +2,17 @@
 
 This folder documents Boundline usage from Gemini CLI surfaces.
 
-Gemini remains CLI-first in `0.43.0`, but it follows the same primary Boundline
+Support mode: `manual-fallback`.
+
+Gemini remains CLI-first in `0.63.0`, but it follows the same primary Boundline
 workflow surface used by the other assistants.
 
 compatibility remains an explicit subordinate route.
+
+Do not describe Gemini as a repo-local full package surface in this release.
+The CLI output remains authoritative for explain-plan, status, inspect, and the
+delight follow-through lines that Boundline surfaces from session or trace
+state.
 
 For now, Gemini support is CLI-only. Use the same Boundline command workflow as
 other assistants and treat Gemini as the explicit `gemini-cli` assistant

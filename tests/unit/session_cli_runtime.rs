@@ -109,6 +109,7 @@ fn build_planned_record(workspace_ref: &str) -> ActiveSessionRecord {
         governance_lifecycle: None,
         project_scale: None,
         latest_voting: None,
+        delight_feedback: None,
     }
 }
 
@@ -147,6 +148,7 @@ fn build_status_view(record: &ActiveSessionRecord) -> SessionStatusView {
             .and_then(|task| task.plan.current_step().map(|step| step.id.clone())),
         current_step_index: active_task.map(|task| task.plan.current_step_index),
         latest_status: record.latest_status,
+        session_started_at: Some(record.created_at),
         execution_path: boundline::domain::session::execution_path_text(record),
         latest_trace_ref: record.latest_trace_ref.clone(),
         latest_decision_status: None,
@@ -275,6 +277,7 @@ fn build_started_session(workspace: &Path) -> ActiveSessionRecord {
         governance_lifecycle: None,
         project_scale: None,
         latest_voting: None,
+        delight_feedback: None,
     }
 }
 
@@ -765,8 +768,8 @@ fn native_direct_run_reuses_existing_initialized_session() {
 }
 
 #[test]
-fn s7_execute_status_surfaces_why_and_risk_for_goal_captured_session() {
-    let workspace = temp_workspace("boundline-status-s7-goal-captured");
+fn execute_status_surfaces_why_and_risk_for_goal_captured_session() {
+    let workspace = temp_workspace("boundline-status-goal-captured");
     let canonical_workspace = workspace.canonicalize().unwrap();
     FileSessionStore::for_workspace(&canonical_workspace)
         .persist(&build_goal_captured_session(&canonical_workspace))

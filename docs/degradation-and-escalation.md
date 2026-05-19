@@ -1,4 +1,4 @@
-# Degradation And Escalation In Boundline 0.56.0
+# Degradation And Escalation In Boundline 0.63.0
 
 Boundline must not silently weaken governance when runtime conditions are no
 longer sufficient.
@@ -24,7 +24,7 @@ These are runtime mechanisms. They are not a second stop-semantics vocabulary.
 
 ## Mapping To Existing Stop Semantics
 
-Boundline continues to map degradation outcomes onto the existing S3 stop
+Boundline continues to map degradation outcomes onto the existing stop
 posture vocabulary instead of inventing a competing control language.
 
 Representative mappings include:
@@ -48,7 +48,8 @@ Boundline may degrade when it encounters conditions such as:
 - optional companion semantics that are unavailable but not required
 
 The key rule is visibility: degradation must remain inspectable and
-explainable.
+explainable through the same `status`, `next`, `inspect`, and explanation
+surfaces that operators already use.
 
 ## Escalation Means Authority Transfer
 
@@ -95,7 +96,8 @@ plan -> run -> status -> next -> inspect
 
 ## Current Slice Boundary
 
-This S4 slice keeps degradation and escalation runtime-owned inside Boundline.
+This release line keeps degradation and escalation runtime-owned inside
+Boundline.
 
 Canon may explain posture and compatibility inputs, but it does not choose the
 degradation mode, escalation target, or final stop behavior.

@@ -205,11 +205,11 @@ When Boundline and Canon assess the same dimension differently:
 
 | Document | Purpose | Audience |
 |----------|---------|----------|
-| `s7-delight-contract.md` | Contract boundaries | Maintainers, architects |
-| `s7-explanation-vocabulary.md` | Standardized terms | Operators, implementers |
-| `s7-input-classes.schema.json` | Input class schema | Validation tooling, canonical reference |
-| `s7-degradation-modes.md` | Failure handling | Implementers |
-| `s7-extension-procedures.md` | Amendment process | Maintainers proposing changes |
+| `assistant-delight-contract.md` | Contract boundaries | Maintainers, architects |
+| `assistant-delight-explanation-vocabulary.md` | Standardized terms | Operators, implementers |
+| `assistant-delight-input-classes.schema.json` | Input class schema | Validation tooling, canonical reference |
+| `assistant-delight-degradation-modes.md` | Failure handling | Implementers |
+| `assistant-delight-extension-procedures.md` | Amendment process | Maintainers proposing changes |
 | `data-model.md` | Data structures | Implementers, system designers |
 
 ---
@@ -227,6 +227,6 @@ When Boundline and Canon assess the same dimension differently:
 ## Getting Help
 
 - **Questions about the contract**: See the full contract documents in `contracts/` directory
-- **Adding new S7 capabilities**: Follow `s7-extension-procedures.md`
+- **Adding new S7 capabilities**: Follow `assistant-delight-extension-procedures.md`
 - **Troubleshooting S7 answers**: Check degradation signals and recency of sources
 - **Reaching maintainers**: Boundline team (@boundline-team) and Canon team (@canon-team)

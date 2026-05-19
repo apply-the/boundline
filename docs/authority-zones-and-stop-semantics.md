@@ -1,6 +1,6 @@
-# Authority Zones And Stop Semantics In Boundline 0.56.0
+# Authority Zones And Stop Semantics In Boundline 0.63.0
 
-Boundline `0.56.0` consumes Canon `authority-governance-v1` envelopes when a
+Boundline `0.63.0` consumes Canon `authority-governance-v1` envelopes when a
 governed Canon stage returns a reusable packet. Canon remains the semantic
 authority for the boundary classification. Boundline remains the runtime owner
 for the resulting council profile, stop posture, session projection, and trace

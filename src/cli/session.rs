@@ -153,6 +153,7 @@ pub fn execute_start_with_target(
         governance_lifecycle: None,
         project_scale: None,
         latest_voting: None,
+        delight_feedback: None,
     };
 
     FileSessionStore::for_workspace(&workspace).persist(&record)?;
@@ -827,6 +828,7 @@ pub(crate) fn build_status_view_with_follow_up(
     SessionStatusView {
         session_id: record.session_id.clone(),
         workspace_ref: record.workspace_ref.clone(),
+        session_started_at: Some(record.created_at),
         goal: record.goal.clone(),
         advanced_context,
         negotiation_goal_summary: record
@@ -1237,6 +1239,7 @@ pub(crate) fn build_status_view_with_follow_up(
             .latest_voting
             .as_ref()
             .map(|vote| vote.next_action.clone()),
+        delight_feedback: record.delight_feedback.clone(),
         next_command,
         explanation: explanation.into(),
     }
@@ -1931,6 +1934,7 @@ fn red_to_green_addition() {
                 governance_lifecycle: None,
                 project_scale: None,
                 latest_voting: None,
+                delight_feedback: None,
             }),
             Some("boundline start".to_string())
         );
@@ -2496,6 +2500,7 @@ fn red_to_green_addition() {
             governance_lifecycle: None,
             project_scale: None,
             latest_voting: None,
+            delight_feedback: None,
         };
 
         let view = build_status_view_with_follow_up(
@@ -2574,6 +2579,7 @@ fn red_to_green_addition() {
             governance_lifecycle: None,
             project_scale: None,
             latest_voting: None,
+            delight_feedback: None,
         };
 
         let view = build_status_view_with_follow_up(
@@ -2660,6 +2666,7 @@ fn red_to_green_addition() {
             governance_lifecycle: None,
             project_scale: None,
             latest_voting: None,
+            delight_feedback: None,
         };
         assert_eq!(
             suggested_next_command(&base_record),
@@ -2887,6 +2894,7 @@ fn red_to_green_addition() {
                 blocking: true,
                 next_action: "collect approval".to_string(),
             }),
+            delight_feedback: None,
         };
 
         FileSessionStore::for_workspace(&workspace).persist(&record).unwrap();

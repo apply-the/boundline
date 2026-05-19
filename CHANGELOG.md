@@ -21,6 +21,27 @@ Highlights:
 
 - No unreleased entries yet.
 
+## [0.63.0] - 2026-05-19
+
+Delivered specs:
+
+- `063` - Assistant Delight Follow-Through
+
+Highlights:
+
+- Extended the S7 delight surfaces so `status` and `inspect` now disclose the
+  active reasoning profile, the selection reason, the contribution summary,
+  and the fallback disclosure from authoritative session and trace state.
+- Closed the remaining inspect follow-through gaps with human-facing
+  `inspect_context`, `inspect_council`, and `inspect_timeline` views backed by
+  the flattened trace model.
+- Added session-scoped delight usefulness signals, including
+  `time_to_first_useful_answer_ms`, explanation attribution rate, and next
+  action acceptance rate, without introducing a second telemetry runtime.
+- Made Cursor and Gemini support modes explicit across assistant metadata,
+  package docs, and global bootstrap guidance while keeping the CLI
+  authoritative.
+
 ## [0.62.0] - 2026-05-18
 
 Delivered specs:

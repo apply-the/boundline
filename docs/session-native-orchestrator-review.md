@@ -30,6 +30,11 @@ Current behavior is now:
 - decision execution is adapter-backed and persisted into both session state and traces
 - `fixture.rs` remains an explicit compatibility layer for declarative execution profiles rather than the default session path
 
+Feature `063-assistant-delight-followthrough` extends that same runtime story
+through the assistant-facing follow-through surfaces: reasoning-profile
+disclosure, inspect closures, and delight usefulness signals are projected from
+the existing session and trace authority rather than a second reporting path.
+
 The rest of this document remains useful as the architectural review that drove
 those changes. Sections that describe fixture-first planning or implicit fixture
 defaults should be read as historical rationale unless they are still explicitly

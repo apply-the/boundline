@@ -1741,6 +1741,7 @@ mod tests {
             updated_at: 1,
             governance_lifecycle: None,
             project_scale: None,
+            delight_feedback: None,
             latest_voting: None,
         };
         set_lifecycle_awaiting_approval(

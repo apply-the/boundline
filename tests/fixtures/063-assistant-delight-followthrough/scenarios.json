@@ -1,0 +1,44 @@
+{
+  "feature_id": "063-assistant-delight-followthrough",
+  "scenario_notes": [
+    {
+      "scenario_id": "reasoning-profile-active",
+      "goal": "Explain a bounded change with profile-aware challenge output",
+      "expected_views": [
+        "why",
+        "challenge",
+        "explain-plan"
+      ],
+      "reasoning_profile_expected": true,
+      "council_state": "used",
+      "timeline_state": "normal-progress",
+      "feedback_trigger": "accept next best action without override"
+    },
+    {
+      "scenario_id": "reasoning-profile-degraded",
+      "goal": "Explain a bounded change when advanced reasoning degrades",
+      "expected_views": [
+        "why",
+        "risk",
+        "hidden-impact"
+      ],
+      "reasoning_profile_expected": false,
+      "council_state": "not-required",
+      "timeline_state": "degraded-or-fallback",
+      "feedback_trigger": "no first useful answer recorded until a bounded next action is accepted"
+    },
+    {
+      "scenario_id": "inspect-closure-review",
+      "goal": "Inspect context, council, and timeline after review activity",
+      "expected_views": [
+        "inspect context",
+        "inspect council",
+        "inspect timeline"
+      ],
+      "reasoning_profile_expected": true,
+      "council_state": "used",
+      "timeline_state": "review-and-recovery",
+      "feedback_trigger": "accept next best action without override"
+    }
+  ]
+}
