@@ -4,7 +4,7 @@
 
 This feature is complete. This report records the implemented and validated `061-reasoning-profile-contracts` surface so spec, code, release metadata, and the paired Canon companion remain aligned.
 
-`061` is closed as the first release reasoning-profile contract slice, not as the final closure of every conceptual S6 roadmap profile. Remaining roadmap-level profile-closure follow-through is intentionally tracked in [`roadmap/S6.1 - reasoning-profile-closure.md`](../../roadmap/S6.1%20-%20reasoning-profile-closure.md) so the next implementation spec (`062-*`) can pick it up explicitly without reopening this completed feature.
+`061` is closed as the first release reasoning-profile contract slice, not as the final closure of every conceptual first-wave reasoning profile. The follow-through that completed that closure now lives in [`062-reasoning-profile-closure`](../062-reasoning-profile-closure/spec.md) so the completed implementation can stay explicit without reopening this feature.
 
 ## Implemented And Validated
 
@@ -113,4 +113,4 @@ To capture the member crates touched by this feature, targeted crate summaries w
 
 All tasks in `tasks.md` are now complete.
 
-Roadmap-level follow-through for uniform per-profile closure is intentionally deferred out of `061` and tracked in [`roadmap/S6.1 - reasoning-profile-closure.md`](../../roadmap/S6.1%20-%20reasoning-profile-closure.md) for the next implementation spec (`062-*`).
+Uniform per-profile closure was completed in [`062-reasoning-profile-closure`](../062-reasoning-profile-closure/spec.md).

@@ -7,8 +7,8 @@ feature and the checks that must fail closed on drift.
 
 ## Supported Release Pair
 
-- **Boundline**: `0.61.x`
-- **Canon**: `0.57.x`
+- **Boundline**: `0.62.x`
+- **Canon**: `0.58.x`
 - **Shared Contract Line**: `governed_reasoning_posture_v1`
 
 ## Required Validation
@@ -18,7 +18,7 @@ feature and the checks that must fail closed on drift.
 - Boundline contract tests MUST assert that the provider's compatibility window
   admits the active Boundline version.
 - Canon contract tests or docs checks MUST assert that the published posture
-  contract names Boundline `0.61.x` as a supported consumer window.
+  contract names Boundline `0.62.x` as a supported consumer window.
 - Release-facing docs, changelogs, and compatibility guidance in both repos
   MUST agree on the supported pair.
 

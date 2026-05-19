@@ -6,7 +6,7 @@ Canon is downstream from Boundline in this roadmap: Boundline thinks, decides, o
 
 Evolve Boundline into a system capable of taking a problem and transforming it into working code, with multi-agent quality control.
 
-## Current Status: v0.61.0
+## Current Status: v0.62.0
 
 Boundline now has its core session-native orchestration baseline, bounded
 workflow follow-through, deeper governed-stage plus adaptive slices, explicit
@@ -24,11 +24,27 @@ path is now stack-neutral for empty, non-Rust, and mixed repositories, with a
 clearer first-run CLI UX. That baseline now extends into Canon-promoted
 project-memory reuse, catalog-aware guidance packs, authority-zoned review,
 adaptive governance, the S5 advanced-context stack with local semantic
-acceleration, and the S6 reasoning-profile contract layer. The current
-`0.61.0` work activates bounded reasoning profiles inside the existing
-session-native and governed runtime, keeps blocked or degraded challenge state
-explicit on `run`, `status`, and `inspect`, and aligns the active release
-metadata to the paired Boundline `0.61.0` and Canon `0.57.0` delivery.
+acceleration, and the completed reasoning-profile closure. The current
+`0.62.0` work closes the shipped first-wave reasoning profile set with
+positive-path runtime evidence for `independent_pair_review`,
+`heterogeneous_security_review`, and `bounded_reflexion`, keeps debate as
+bounded substrate and adjudication as a shared primitive, and aligns the
+active release metadata to the paired Boundline `0.62.0` and Canon `0.58.0`
+delivery.
+
+### Delivered in 0.62.0
+
+- Boundline now closes the shipped first-wave reasoning profile set:
+  `bounded_self_consistency`, `independent_pair_review`,
+  `heterogeneous_security_review`, and `bounded_reflexion` all have explicit
+  bounded runtime activation with operator-visible completed outcomes.
+- Session-native `run`, `status`, and `inspect` now carry the aligned closure
+  story for shipped profiles while keeping debate documented as bounded
+  substrate and adjudication documented as a shared primitive rather than a
+  standalone shipped profile.
+- The active release metadata, distribution surfaces, assistant package
+  manifests, and Canon compatibility fixtures are now aligned to Boundline
+  `0.62.0` and Canon `0.58.0`.
 
 ### Delivered in 0.61.0
 
@@ -718,27 +734,14 @@ feature lines instead of separate forward-looking roadmap files.
   extends the Expert Pack baseline from S2 into executable engineering
   principles (Guidance) and automated verification rules (Guardians) across
   architecture, design, and testing pillars.
-- [S6: Advanced Multi-Agent Reasoning Profiles](roadmap/S6%20-%20advanced-multi-agent-reasoning-profiles-spec.md)
-  is intentionally future-facing rather than already covered by the active
-  roadmap; it builds on the review-council baseline in
-  [`007-multi-agent-review`](specs/007-multi-agent-review/spec.md) after the
-  delivered `0.56.0` authority-zoned council baseline, the delivered S4
-  adaptive governance layer, and the active S5 advanced-context plus semantic-
-  acceleration lines make councils operationally and contextually credible.
-- [S6.1: Reasoning Profile Closure](roadmap/S6.1%20-%20reasoning-profile-closure.md)
-  narrows the remaining closure work after the delivered
-  [`061-reasoning-profile-contracts`](specs/061-reasoning-profile-contracts/spec.md)
-  slice so concrete shipped profiles, family-level substrate, and still-open
-  debate or adjudication work remain explicit instead of being inferred from
-  partial runtime vocabulary alone.
 - [S7.1: Post-S6 Assistant Delight Follow-Through](roadmap/S7.1%20-%20post-s6-assistant-delight-follow-through.md)
   is the future-facing follow-through for the already delivered assistant
   delight layer in
   [`060-assistant-delight-layer`](specs/060-assistant-delight-layer/spec.md).
-  It is intentionally deferred until S6 reasoning profiles become active,
-  then narrows the remaining follow-through around richer inspect surfaces,
+  It now builds on the delivered reasoning-profile runtime and narrows the
+  remaining follow-through around richer inspect surfaces,
   reasoning-profile-aware explanations, and deeper host parity where runtime
-  support is credible.
+  support is already credible.
 - [S8: Interactive Delivery Dashboard (iocraft)](roadmap/S8%20-%20interactive-delivery-dashboard-iocraft.md)
   introduces a dedicated `boundline-dashboard` crate using the `iocraft`
   framework to provide a real-time, high-density visualization of the Pilot Loop,
@@ -748,10 +751,14 @@ feature lines instead of separate forward-looking roadmap files.
 
 Coverage check: the delivered content already recorded in this roadmap is
 covered by the active spec set, not by these future drafts. The copied S2.1,
-S6, S7.1, and S8 documents mostly extend the current line; the S5 base and
-S5.v2 semantic-acceleration work now live in the active
-`058-advanced-context-intelligence` and `059-semantic-acceleration` slices
-rather than duplicate roadmap files.
+S7.1, and S8 documents mostly extend the current line; the completed
+reasoning-profile closure now lives in the active
+[`061-reasoning-profile-contracts`](specs/061-reasoning-profile-contracts/spec.md)
+and
+[`062-reasoning-profile-closure`](specs/062-reasoning-profile-closure/spec.md)
+feature lines, while the S5 base and S5.v2 semantic-acceleration work live in
+the active `058-advanced-context-intelligence` and
+`059-semantic-acceleration` slices rather than duplicate roadmap files.
 
 ### Sequencing rule
 

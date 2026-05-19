@@ -20,7 +20,7 @@ Canon is not the orchestrator and not the product entrypoint. A Boundline instal
 can be perfectly usable without Canon when you stay on the default local and
 session-native routes.
 
-The current Boundline adapter documents Canon `0.57.0` support for the
+The current Boundline adapter documents Canon `0.58.0` support for the
 `canon governance start|refresh|capabilities --json` `v1` surface. That is a
 bounded compatibility target, not a claim of total Canon feature parity.
 
@@ -51,6 +51,52 @@ Boundline persists that story in workspace-local state under `.boundline/` and k
 traces alongside the same session model. `run`, `status`, `next`, and
 `inspect` project the same route, follow-through, and evidence story instead of
 making the operator infer state from logs.
+
+## Implemented Algorithms
+
+Boundline currently ships two runtime-owned algorithm families:
+
+- review-council assembly, independence guarding, vote resolution, and bounded adjudication projection. See [review-council-algorithms.md](review-council-algorithms.md).
+- reasoning-profile activation, independence assessment, bounded profile outcomes, and confidence handoff. See [reasoning-profile-algorithms.md](reasoning-profile-algorithms.md).
+
+The concrete reasoning algorithms implemented in the current product line are:
+
+- `bounded_self_consistency`
+- `independent_pair_review`
+- `heterogeneous_security_review`
+- `bounded_reflexion`
+- debate as bounded substrate rather than a standalone shipped profile
+- adjudication as a shared primitive rather than a standalone shipped profile
+
+```mermaid
+flowchart LR
+  Capture[capture and plan] --> Run[run]
+  Run --> Stage{governance stage}
+  Stage -->|no extra challenge| Execute[bounded stage execution]
+  Stage -->|review vote required| Council[review-council algorithms]
+  Stage -->|reasoning challenge required| Reasoning[reasoning-profile algorithms]
+  Execute --> Session[(.boundline/session.json)]
+  Council --> Session
+  Reasoning --> Session
+  Council --> Trace[(.boundline/traces/)]
+  Reasoning --> Trace
+  Session --> Surfaces[status, next, inspect]
+  Trace --> Surfaces
+```
+
+```mermaid
+flowchart TD
+  Trigger[Canon posture, governance escalation, or operator policy] --> Select[resolve typed profile definition]
+  Select --> Participants[assign participant roles to effective routes]
+  Participants --> Independence[assess requested independence floor]
+  Independence -->|passed| Success[attach profile-specific bounded outcome]
+  Independence -->|degraded| Warn[degraded outcome plus explicit caution]
+  Independence -->|failed| Block[blocked outcome plus remediation]
+  Success --> Persist[persist session state, confidence, and trace events]
+  Warn --> Persist
+  Block --> Persist
+  Persist --> Project[run, status, and inspect projection]
+```
 
 ## Compatibility Path
 

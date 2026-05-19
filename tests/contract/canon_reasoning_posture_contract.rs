@@ -17,10 +17,10 @@ const VERSION_ALIGNMENT_BRIEF_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/specs/061-reasoning-profile-contracts/contracts/reasoning-version-alignment-contract.md"
 );
-const SUPPORTED_BOUNDLINE_VERSION: &str = "0.61.0";
-const SUPPORTED_BOUNDLINE_WINDOW: &str = "0.61.x";
-const SUPPORTED_CANON_VERSION: &str = "0.57.0";
-const SUPPORTED_CANON_WINDOW: &str = "0.57.x";
+const SUPPORTED_BOUNDLINE_VERSION: &str = "0.62.0";
+const SUPPORTED_BOUNDLINE_WINDOW: &str = "0.62.x";
+const SUPPORTED_CANON_VERSION: &str = "0.58.0";
+const SUPPORTED_CANON_WINDOW: &str = "0.58.x";
 const SUPPORTED_CONTRACT_LINE: &str = "governed_reasoning_posture_v1";
 
 fn read_text(path: &str) -> Result<String, Box<dyn Error>> {

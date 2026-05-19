@@ -55,6 +55,7 @@ use crate::domain::reasoning::{
     ParticipantRoleDefinition, ProfileActivationRecord, REASONING_POSTURE_V1_CONTRACT_LINE,
     ReasoningActivationStatus, ReasoningActivationTrigger, ReasoningAdmissionEffect,
     ReasoningCompatibilityWindow, ReasoningConfidenceContribution, ReasoningConfidenceLevel,
+    ReasoningIterationCondition, ReasoningIterationKind, ReasoningIterationRecord,
     ReasoningObservedDistinctness, ReasoningOutcome, ReasoningOutcomeKind,
     ReasoningParticipantRoleKind, ReasoningParticipantStatus, ReasoningProfileDefinition,
     ReasoningRoutePreference,
@@ -3798,14 +3799,14 @@ impl SessionRuntime {
         };
 
         let routing = effective_routing_for_workspace(&self.workspace_ref);
-        let participants = reasoning_participants_for_profile(stage_key, definition, &routing);
+        let mut participants = reasoning_participants_for_profile(stage_key, definition, &routing);
         let independence = assess_reasoning_independence(stage_key, definition, &participants);
-        let status = match independence.result {
-            IndependenceAssessmentResult::Passed => ReasoningActivationStatus::Active,
-            IndependenceAssessmentResult::Degraded => ReasoningActivationStatus::Degraded,
-            IndependenceAssessmentResult::Failed => ReasoningActivationStatus::Blocked,
-        };
-        let outcome = reasoning_outcome_for_activation(stage_key, definition, &independence);
+        let outcome =
+            reasoning_outcome_for_activation(stage_key, definition, &participants, &independence);
+        let status = reasoning_status_for_activation(&independence, outcome.as_ref());
+        if status == ReasoningActivationStatus::Completed {
+            mark_reasoning_participants_completed(&mut participants);
+        }
         let trigger = if runtime_kind == GovernanceRuntimeKind::Canon {
             ReasoningActivationTrigger::CanonRequiredChallenge
         } else {
@@ -4889,94 +4890,184 @@ fn assess_reasoning_independence(
     participants: &[ParticipantAssignment],
 ) -> IndependenceAssessment {
     let requested_floor = requested_independence_floor(definition);
-    let distinct_routes = participants
-        .iter()
-        .map(|participant| participant.effective_route.as_str())
-        .collect::<BTreeSet<_>>()
-        .len();
-    let distinct_providers = participants
-        .iter()
-        .filter_map(|participant| participant.provider_family.as_deref())
-        .collect::<BTreeSet<_>>()
-        .len();
-    let distinct_contexts = participants
-        .iter()
-        .map(|participant| participant.context_basis.as_str())
-        .collect::<BTreeSet<_>>()
-        .len();
-    let distinct_prompt_patterns = participants
-        .iter()
-        .map(|participant| participant.prompting_pattern.as_str())
-        .collect::<BTreeSet<_>>()
-        .len();
-    let observed_distinctions = ReasoningObservedDistinctness {
-        distinct_routes,
-        distinct_providers,
-        distinct_contexts,
-        distinct_prompt_patterns,
-    };
+    let observed_distinctions = observed_reasoning_distinctness(participants);
     let minimum = requested_floor.minimum_participants;
-    let participant_gap = participants.len() < minimum;
-    let route_gap = requested_floor.route_distinct && distinct_routes < minimum;
-    let provider_gap = requested_floor.provider_distinct && distinct_providers < minimum;
-    let context_gap = requested_floor.context_distinct && distinct_contexts < minimum;
-    let prompt_gap = requested_floor.prompt_pattern_distinct && distinct_prompt_patterns < minimum;
-    let missing_distinctness = route_gap || provider_gap || context_gap || prompt_gap;
+    let gaps = ReasoningIndependenceGaps::from_observed(
+        &requested_floor,
+        participants.len(),
+        &observed_distinctions,
+    );
+    let result = gaps.result(
+        definition.degradation_policy.allow_reduced_participants,
+        definition.degradation_policy.allow_degraded_independence,
+    );
+    let reason = reasoning_independence_reason(
+        stage_key,
+        definition,
+        participants.len(),
+        minimum,
+        &observed_distinctions,
+        gaps,
+        result,
+    );
 
-    let result = if !participant_gap && !missing_distinctness {
-        IndependenceAssessmentResult::Passed
-    } else if (!participant_gap || definition.degradation_policy.allow_reduced_participants)
-        && (!missing_distinctness || definition.degradation_policy.allow_degraded_independence)
-    {
-        IndependenceAssessmentResult::Degraded
-    } else {
-        IndependenceAssessmentResult::Failed
-    };
+    IndependenceAssessment { requested_floor, observed_distinctions, result, reason }
+}
 
-    let reason = if result == IndependenceAssessmentResult::Passed {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ReasoningIndependenceGaps {
+    participant_gap: bool,
+    route_gap: bool,
+    provider_gap: bool,
+    context_gap: bool,
+    prompt_gap: bool,
+}
+
+impl ReasoningIndependenceGaps {
+    fn from_observed(
+        requested_floor: &IndependenceFloor,
+        participant_count: usize,
+        observed_distinctions: &ReasoningObservedDistinctness,
+    ) -> Self {
+        let minimum = requested_floor.minimum_participants;
+
+        Self {
+            participant_gap: participant_count < minimum,
+            route_gap: requested_floor.route_distinct
+                && observed_distinctions.distinct_routes < minimum,
+            provider_gap: requested_floor.provider_distinct
+                && observed_distinctions.distinct_providers < minimum,
+            context_gap: requested_floor.context_distinct
+                && observed_distinctions.distinct_contexts < minimum,
+            prompt_gap: requested_floor.prompt_pattern_distinct
+                && observed_distinctions.distinct_prompt_patterns < minimum,
+        }
+    }
+
+    const fn has_missing_distinctness(self) -> bool {
+        self.route_gap || self.provider_gap || self.context_gap || self.prompt_gap
+    }
+
+    fn result(
+        self,
+        allow_reduced_participants: bool,
+        allow_degraded_independence: bool,
+    ) -> IndependenceAssessmentResult {
+        if !self.participant_gap && !self.has_missing_distinctness() {
+            IndependenceAssessmentResult::Passed
+        } else if (!self.participant_gap || allow_reduced_participants)
+            && (!self.has_missing_distinctness() || allow_degraded_independence)
+        {
+            IndependenceAssessmentResult::Degraded
+        } else {
+            IndependenceAssessmentResult::Failed
+        }
+    }
+
+    fn missing_dimensions(
+        self,
+        participant_count: usize,
+        minimum: usize,
+        observed_distinctions: &ReasoningObservedDistinctness,
+    ) -> Vec<String> {
+        let mut missing = Vec::new();
+
+        if self.participant_gap {
+            missing.push(format!("participants={participant_count} < required={minimum}"));
+        }
+        if self.route_gap {
+            missing.push(format!(
+                "distinct_routes={} < required={minimum}",
+                observed_distinctions.distinct_routes
+            ));
+        }
+        if self.provider_gap {
+            missing.push(format!(
+                "distinct_providers={} < required={minimum}",
+                observed_distinctions.distinct_providers
+            ));
+        }
+        if self.context_gap {
+            missing.push(format!(
+                "distinct_contexts={} < required={minimum}",
+                observed_distinctions.distinct_contexts
+            ));
+        }
+        if self.prompt_gap {
+            missing.push(format!(
+                "distinct_prompt_patterns={} < required={minimum}",
+                observed_distinctions.distinct_prompt_patterns
+            ));
+        }
+
+        missing
+    }
+}
+
+fn observed_reasoning_distinctness(
+    participants: &[ParticipantAssignment],
+) -> ReasoningObservedDistinctness {
+    ReasoningObservedDistinctness {
+        distinct_routes: count_distinct_participant_values(participants, |participant| {
+            Some(participant.effective_route.as_str())
+        }),
+        distinct_providers: count_distinct_participant_values(participants, |participant| {
+            participant.provider_family.as_deref()
+        }),
+        distinct_contexts: count_distinct_participant_values(participants, |participant| {
+            Some(participant.context_basis.as_str())
+        }),
+        distinct_prompt_patterns: count_distinct_participant_values(participants, |participant| {
+            Some(participant.prompting_pattern.as_str())
+        }),
+    }
+}
+
+fn count_distinct_participant_values<'a, F>(
+    participants: &'a [ParticipantAssignment],
+    selector: F,
+) -> usize
+where
+    F: Fn(&'a ParticipantAssignment) -> Option<&'a str>,
+{
+    participants.iter().filter_map(selector).collect::<BTreeSet<_>>().len()
+}
+
+fn reasoning_independence_reason(
+    stage_key: &str,
+    definition: &ReasoningProfileDefinition,
+    participant_count: usize,
+    minimum: usize,
+    observed_distinctions: &ReasoningObservedDistinctness,
+    gaps: ReasoningIndependenceGaps,
+    result: IndependenceAssessmentResult,
+) -> String {
+    if result == IndependenceAssessmentResult::Passed {
         format!(
             "reasoning profile {} satisfies the requested independence for {}",
             definition.profile_id, stage_key
         )
     } else {
-        let mut missing = Vec::new();
-        if participant_gap {
-            missing.push(format!("participants={} < required={minimum}", participants.len()));
-        }
-        if route_gap {
-            missing.push(format!("distinct_routes={} < required={minimum}", distinct_routes));
-        }
-        if provider_gap {
-            missing.push(format!("distinct_providers={} < required={minimum}", distinct_providers));
-        }
-        if context_gap {
-            missing.push(format!("distinct_contexts={} < required={minimum}", distinct_contexts));
-        }
-        if prompt_gap {
-            missing.push(format!(
-                "distinct_prompt_patterns={} < required={minimum}",
-                distinct_prompt_patterns
-            ));
-        }
-
+        let missing = gaps.missing_dimensions(participant_count, minimum, observed_distinctions);
         format!(
             "reasoning profile {} cannot satisfy the requested independence for {}: {}",
             definition.profile_id,
             stage_key,
             missing.join(", ")
         )
-    };
-
-    IndependenceAssessment { requested_floor, observed_distinctions, result, reason }
+    }
 }
 
 fn reasoning_outcome_for_activation(
     stage_key: &str,
     definition: &ReasoningProfileDefinition,
+    participants: &[ParticipantAssignment],
     independence: &IndependenceAssessment,
 ) -> Option<ReasoningOutcome> {
     match independence.result {
-        IndependenceAssessmentResult::Passed => None,
+        IndependenceAssessmentResult::Passed => {
+            successful_reasoning_outcome(stage_key, definition, participants)
+        }
         IndependenceAssessmentResult::Degraded => Some(ReasoningOutcome {
             outcome_kind: ReasoningOutcomeKind::Degraded,
             headline: format!(
@@ -4997,6 +5088,97 @@ fn reasoning_outcome_for_activation(
             next_action: definition.degradation_policy.blocked_next_action.clone(),
             iterations: Vec::new(),
         }),
+    }
+}
+
+fn successful_reasoning_outcome(
+    stage_key: &str,
+    definition: &ReasoningProfileDefinition,
+    participants: &[ParticipantAssignment],
+) -> Option<ReasoningOutcome> {
+    match definition.profile_id {
+        crate::domain::reasoning::ReasoningProfileId::IndependentPairReview => {
+            Some(ReasoningOutcome {
+                outcome_kind: ReasoningOutcomeKind::Adjudicated,
+                headline: format!(
+                    "reasoning profile {} completed at {}",
+                    definition.profile_id, stage_key
+                ),
+                disagreement_summary: Some(
+                    "independent blind review completed and governance adjudication accepted the bounded outcome"
+                        .to_string(),
+                ),
+                next_action: None,
+                iterations: Vec::new(),
+            })
+        }
+        crate::domain::reasoning::ReasoningProfileId::HeterogeneousSecurityReview => {
+            Some(ReasoningOutcome {
+                outcome_kind: ReasoningOutcomeKind::Converged,
+                headline: format!(
+                    "reasoning profile {} completed at {}",
+                    definition.profile_id, stage_key
+                ),
+                disagreement_summary: Some(
+                    "heterogeneous security review converged on a bounded approval-ready outcome"
+                        .to_string(),
+                ),
+                next_action: None,
+                iterations: Vec::new(),
+            })
+        }
+        crate::domain::reasoning::ReasoningProfileId::BoundedReflexion => {
+            Some(ReasoningOutcome {
+                outcome_kind: ReasoningOutcomeKind::Converged,
+                headline: format!(
+                    "reasoning profile {} completed at {}",
+                    definition.profile_id, stage_key
+                ),
+                disagreement_summary: Some(
+                    "bounded reflexion completed one critique-and-revise cycle and converged"
+                        .to_string(),
+                ),
+                next_action: None,
+                iterations: vec![ReasoningIterationRecord {
+                    iteration_kind: ReasoningIterationKind::ReflexionRevision,
+                    iteration_index: 0,
+                    participants: participants
+                        .iter()
+                        .map(|participant| participant.participant_id.clone())
+                        .collect(),
+                    summary:
+                        "critic challenged the proposed fix and reviser produced a bounded revision"
+                            .to_string(),
+                    novelty: true,
+                    condition: ReasoningIterationCondition::Completed,
+                }],
+            })
+        }
+        _ => None,
+    }
+}
+
+fn reasoning_status_for_activation(
+    independence: &IndependenceAssessment,
+    outcome: Option<&ReasoningOutcome>,
+) -> ReasoningActivationStatus {
+    match independence.result {
+        IndependenceAssessmentResult::Passed if outcome.is_some() => {
+            ReasoningActivationStatus::Completed
+        }
+        IndependenceAssessmentResult::Passed => ReasoningActivationStatus::Active,
+        IndependenceAssessmentResult::Degraded => ReasoningActivationStatus::Degraded,
+        IndependenceAssessmentResult::Failed => ReasoningActivationStatus::Blocked,
+    }
+}
+
+fn mark_reasoning_participants_completed(participants: &mut [ParticipantAssignment]) {
+    for participant in participants {
+        participant.status = ReasoningParticipantStatus::Completed;
+        if participant.result_summary.is_none() {
+            participant.result_summary =
+                Some(format!("completed via {}", participant.effective_route));
+        }
     }
 }
 
@@ -5193,11 +5375,12 @@ mod tests {
         ProjectMemorySurface, PromotionStateView,
     };
     use crate::domain::reasoning::{
-        IndependenceAssessmentResult, IndependenceFloor, ParticipantRoleDefinition,
-        ReasoningActivationStatus, ReasoningAdjudicationMode, ReasoningBudget,
-        ReasoningConfidenceLevel, ReasoningDegradationPolicy, ReasoningParticipantRoleKind,
-        ReasoningProfileDefinition, ReasoningProfileFamily, ReasoningProfileId,
-        ReasoningRoutePreference,
+        IndependenceAssessment, IndependenceAssessmentResult, IndependenceFloor,
+        ParticipantAssignment, ParticipantRoleDefinition, ReasoningActivationStatus,
+        ReasoningAdjudicationMode, ReasoningBudget, ReasoningConfidenceLevel,
+        ReasoningDegradationPolicy, ReasoningObservedDistinctness, ReasoningOutcomeKind,
+        ReasoningParticipantRoleKind, ReasoningParticipantStatus, ReasoningProfileDefinition,
+        ReasoningProfileFamily, ReasoningProfileId, ReasoningRoutePreference,
     };
     use crate::domain::session::{
         ActiveSessionRecord, ContinuityAuthority, DelegationContinuityMode,
@@ -5436,6 +5619,47 @@ mod tests {
         }
     }
 
+    fn reasoning_profile_with_id(profile_id: ReasoningProfileId) -> ReasoningProfileDefinition {
+        let mut profile = independent_pair_review_profile();
+        profile.profile_id = profile_id;
+        profile
+    }
+
+    fn sample_reasoning_participants() -> Vec<ParticipantAssignment> {
+        vec![
+            ParticipantAssignment {
+                role_id: "reviewer_primary".to_string(),
+                participant_id: "participant-1".to_string(),
+                effective_route: "reviewer_roles.alpha:claude:sonnet-4.6".to_string(),
+                provider_family: Some("claude".to_string()),
+                context_basis: "reasoning_context:bug-fix:investigate".to_string(),
+                prompting_pattern: "blind_reviewer".to_string(),
+                status: ReasoningParticipantStatus::Pending,
+                result_summary: None,
+            },
+            ParticipantAssignment {
+                role_id: "reviewer_secondary".to_string(),
+                participant_id: "participant-2".to_string(),
+                effective_route: "reviewer_roles.beta:gemini:gemini-2.5-pro".to_string(),
+                provider_family: Some("gemini".to_string()),
+                context_basis: "reasoning_context:bug-fix:verify".to_string(),
+                prompting_pattern: "heterogeneous_reviewer".to_string(),
+                status: ReasoningParticipantStatus::Pending,
+                result_summary: None,
+            },
+            ParticipantAssignment {
+                role_id: "reviewer_shadow".to_string(),
+                participant_id: "participant-3".to_string(),
+                effective_route: "reviewer_roles.alpha:claude:sonnet-4.6".to_string(),
+                provider_family: Some("claude".to_string()),
+                context_basis: "reasoning_context:bug-fix:investigate".to_string(),
+                prompting_pattern: "blind_reviewer".to_string(),
+                status: ReasoningParticipantStatus::Pending,
+                result_summary: Some("already summarized".to_string()),
+            },
+        ]
+    }
+
     #[test]
     fn reasoning_route_for_review_kinds_falls_back_to_configured_reviewer_roles_in_order() {
         let workspace = temp_workspace("boundline-runtime-reasoning-reviewer-role-fallback");
@@ -5528,6 +5752,204 @@ mod tests {
 
         assert_eq!(effective_route, "adjudication:codex:gpt-5-codex");
         assert_eq!(provider_family.as_deref(), Some("codex"));
+    }
+
+    #[test]
+    fn reasoning_independence_helpers_cover_gap_transitions_and_missing_dimensions() {
+        let participants = sample_reasoning_participants();
+        let observed = super::observed_reasoning_distinctness(&participants);
+        assert_eq!(
+            observed,
+            ReasoningObservedDistinctness {
+                distinct_routes: 2,
+                distinct_providers: 2,
+                distinct_contexts: 2,
+                distinct_prompt_patterns: 2,
+            }
+        );
+        assert_eq!(
+            super::count_distinct_participant_values(&participants, |participant| {
+                participant.provider_family.as_deref()
+            }),
+            2
+        );
+
+        let requested_floor = IndependenceFloor {
+            route_distinct: true,
+            provider_distinct: true,
+            context_distinct: true,
+            prompt_pattern_distinct: true,
+            minimum_participants: 2,
+        };
+        let profile = independent_pair_review_profile();
+        let passed_gaps = super::ReasoningIndependenceGaps::from_observed(
+            &requested_floor,
+            participants.len(),
+            &observed,
+        );
+        assert_eq!(passed_gaps.result(false, false), IndependenceAssessmentResult::Passed);
+        let passed_reason = super::reasoning_independence_reason(
+            "bug-fix:investigate",
+            &profile,
+            participants.len(),
+            requested_floor.minimum_participants,
+            &observed,
+            passed_gaps,
+            IndependenceAssessmentResult::Passed,
+        );
+        assert!(passed_reason.contains("satisfies the requested independence"));
+
+        let collapsed_observed = ReasoningObservedDistinctness {
+            distinct_routes: 1,
+            distinct_providers: 1,
+            distinct_contexts: 1,
+            distinct_prompt_patterns: 1,
+        };
+        let failed_gaps = super::ReasoningIndependenceGaps::from_observed(
+            &requested_floor,
+            1,
+            &collapsed_observed,
+        );
+        assert_eq!(failed_gaps.result(false, false), IndependenceAssessmentResult::Failed);
+        assert_eq!(failed_gaps.result(true, true), IndependenceAssessmentResult::Degraded);
+        assert_eq!(
+            failed_gaps.missing_dimensions(
+                1,
+                requested_floor.minimum_participants,
+                &collapsed_observed,
+            ),
+            vec![
+                "participants=1 < required=2".to_string(),
+                "distinct_routes=1 < required=2".to_string(),
+                "distinct_providers=1 < required=2".to_string(),
+                "distinct_contexts=1 < required=2".to_string(),
+                "distinct_prompt_patterns=1 < required=2".to_string(),
+            ]
+        );
+        let failed_reason = super::reasoning_independence_reason(
+            "bug-fix:investigate",
+            &profile,
+            1,
+            requested_floor.minimum_participants,
+            &collapsed_observed,
+            failed_gaps,
+            IndependenceAssessmentResult::Failed,
+        );
+        assert!(failed_reason.contains("participants=1 < required=2"));
+        assert!(failed_reason.contains("distinct_prompt_patterns=1 < required=2"));
+    }
+
+    #[test]
+    fn reasoning_outcome_helpers_project_profile_specific_success_cases() {
+        let participants = sample_reasoning_participants();
+        let passed = IndependenceAssessment {
+            requested_floor: IndependenceFloor {
+                route_distinct: true,
+                provider_distinct: true,
+                context_distinct: true,
+                prompt_pattern_distinct: true,
+                minimum_participants: 2,
+            },
+            observed_distinctions: ReasoningObservedDistinctness {
+                distinct_routes: 2,
+                distinct_providers: 2,
+                distinct_contexts: 2,
+                distinct_prompt_patterns: 2,
+            },
+            result: IndependenceAssessmentResult::Passed,
+            reason: "reasoning independence satisfied".to_string(),
+        };
+
+        let pair_outcome = super::reasoning_outcome_for_activation(
+            "bug-fix:investigate",
+            &independent_pair_review_profile(),
+            &participants,
+            &passed,
+        )
+        .expect("independent pair review should produce an adjudicated outcome");
+        assert_eq!(pair_outcome.outcome_kind, ReasoningOutcomeKind::Adjudicated);
+
+        let heterogeneous_outcome = super::reasoning_outcome_for_activation(
+            "bug-fix:investigate",
+            &reasoning_profile_with_id(ReasoningProfileId::HeterogeneousSecurityReview),
+            &participants,
+            &passed,
+        )
+        .expect("heterogeneous review should produce a converged outcome");
+        assert_eq!(heterogeneous_outcome.outcome_kind, ReasoningOutcomeKind::Converged);
+
+        let reflexion_outcome = super::reasoning_outcome_for_activation(
+            "bug-fix:investigate",
+            &reasoning_profile_with_id(ReasoningProfileId::BoundedReflexion),
+            &participants,
+            &passed,
+        )
+        .expect("bounded reflexion should produce a converged outcome");
+        assert_eq!(reflexion_outcome.outcome_kind, ReasoningOutcomeKind::Converged);
+        assert_eq!(reflexion_outcome.iterations.len(), 1);
+        assert_eq!(
+            reflexion_outcome.iterations[0].participants,
+            participants
+                .iter()
+                .map(|participant| participant.participant_id.clone())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            reflexion_outcome.iterations[0].condition,
+            crate::domain::reasoning::ReasoningIterationCondition::Completed
+        );
+
+        let active_outcome = super::reasoning_outcome_for_activation(
+            "bug-fix:investigate",
+            &reasoning_profile_with_id(ReasoningProfileId::BoundedSelfConsistency),
+            &participants,
+            &passed,
+        );
+        assert!(active_outcome.is_none());
+
+        assert_eq!(
+            super::reasoning_status_for_activation(&passed, Some(&pair_outcome)),
+            ReasoningActivationStatus::Completed
+        );
+        assert_eq!(
+            super::reasoning_status_for_activation(&passed, active_outcome.as_ref()),
+            ReasoningActivationStatus::Active
+        );
+
+        let degraded = IndependenceAssessment {
+            result: IndependenceAssessmentResult::Degraded,
+            reason: "reasoning independence degraded".to_string(),
+            ..passed.clone()
+        };
+        assert_eq!(
+            super::reasoning_status_for_activation(&degraded, None),
+            ReasoningActivationStatus::Degraded
+        );
+
+        let failed = IndependenceAssessment {
+            result: IndependenceAssessmentResult::Failed,
+            reason: "reasoning independence failed".to_string(),
+            ..passed.clone()
+        };
+        assert_eq!(
+            super::reasoning_status_for_activation(&failed, None),
+            ReasoningActivationStatus::Blocked
+        );
+
+        let mut completed_participants = participants.clone();
+        super::mark_reasoning_participants_completed(&mut completed_participants);
+        assert!(
+            completed_participants
+                .iter()
+                .all(|participant| participant.status == ReasoningParticipantStatus::Completed)
+        );
+        assert!(completed_participants[..2].iter().all(|participant| {
+            participant
+                .result_summary
+                .as_deref()
+                .is_some_and(|summary| summary.starts_with("completed via "))
+        }));
+        assert_eq!(completed_participants[2].result_summary.as_deref(), Some("already summarized"));
     }
 
     #[test]
@@ -7498,7 +7920,7 @@ mod tests {
             .as_ref()
             .and_then(|lifecycle| lifecycle.latest_reasoning_profile.as_ref())
         else {
-            panic!("expected an active reasoning profile after reviewer routes diverged");
+            panic!("expected a completed reasoning profile after reviewer routes diverged");
         };
         let step_status = session
             .active_task
@@ -7511,7 +7933,7 @@ mod tests {
         );
         assert_eq!(
             active_profile.status,
-            ReasoningActivationStatus::Active,
+            ReasoningActivationStatus::Completed,
             "{step_status:?} {active_profile:?}"
         );
         assert_eq!(
@@ -7519,10 +7941,23 @@ mod tests {
             Some(IndependenceAssessmentResult::Passed)
         );
         assert_eq!(
+            active_profile.outcome.as_ref().map(|outcome| outcome.outcome_kind),
+            Some(ReasoningOutcomeKind::Adjudicated)
+        );
+        assert_eq!(
             active_profile.confidence.as_ref().map(|confidence| confidence.confidence_level),
             Some(ReasoningConfidenceLevel::Medium)
         );
         assert_eq!(active_profile.participants.len(), 2);
+        assert!(
+            active_profile
+                .participants
+                .iter()
+                .all(|participant| participant.status == ReasoningParticipantStatus::Completed)
+        );
+        assert!(active_profile.participants.iter().all(|participant| {
+            participant.result_summary.as_deref().is_some_and(|summary| !summary.trim().is_empty())
+        }));
         assert!(
             active_profile
                 .participants

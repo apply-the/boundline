@@ -93,6 +93,8 @@ Auto-generated from all feature plans. Last updated: 2026-05-18
 - Repository-managed Markdown documentation under `specs/060-s7-canon-contracts/contracts/` plus cross-repo reference to Canon `specs/057-s7-delight-provider/contracts/` (060-s7-canon-contracts)
 - Rust 1.95.0, edition 2024 for Boundline and Canon runtime changes; Markdown and TOML or JSON contract artifacts for cross-repo contract surfaces + Existing Boundline workspace dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`) and Canon workspace dependencies of the same family; no new runtime crates planned for the first implementation line (061-reasoning-profile-contracts)
 - Existing Boundline `.boundline/session.json`, `.boundline/traces/`, optional config and execution-profile surfaces, feature-local spec artifacts under `specs/061-reasoning-profile-contracts/`, sibling Canon docs under `docs/integration/`, and normal repository documentation surfaces (061-reasoning-profile-contracts)
+- Rust 1.95.0, edition 2024 in Boundline; Markdown, TOML, and JSON repository artifacts; companion Canon updates only if the supported release pair changes + Existing workspace dependencies only (`serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `clap`, `dialoguer`, `rusqlite` already present in workspace); no new runtime crates planned (062-reasoning-profile-closure)
+- Existing `.boundline/session.json`, trace files, configuration state, spec artifacts under `specs/062-reasoning-profile-closure/`, and release-facing docs or changelog files in Boundline and optional Canon companion artifacts (062-reasoning-profile-closure)
 
 - Rust 1.95.0, edition 2024 + Rust standard library plus `serde`, `serde_json`, `thiserror`, `tracing`, and `uuid` for structured state, trace serialization, error handling, instrumentation, and stable identifiers (001-delivery-orchestrator-core)
 
@@ -111,6 +113,7 @@ tests/
 - `cargo nextest run`
 - `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`
 - `cargo deny check licenses advisories bans sources`
+- Patch-coverage helpers live under `scripts/common/coverage/`; prefer `intersect_patch_coverage.py` when the question is about uncovered diff lines rather than full-file coverage.
 
 ## Code Style
 
@@ -121,9 +124,9 @@ Crate versioning follows Semantic Versioning.
 Before 1.0.0, breaking changes MAY occur in minor versions.
 
 ## Recent Changes
+- 062-reasoning-profile-closure: Added Rust 1.95.0, edition 2024 in Boundline; Markdown, TOML, and JSON repository artifacts; companion Canon updates only if the supported release pair changes + Existing workspace dependencies only (`serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `clap`, `dialoguer`, `rusqlite` already present in workspace); no new runtime crates planned
 - 061-reasoning-profile-contracts: Added Rust 1.95.0, edition 2024 for Boundline and Canon runtime changes; Markdown and TOML or JSON contract artifacts for cross-repo contract surfaces + Existing Boundline workspace dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`) and Canon workspace dependencies of the same family; no new runtime crates planned for the first implementation line
 - 060-s7-canon-contracts: Added Rust 1.95.0, edition 2024 (for Boundline runtime that will consume this contract); contract itself is Markdown + JSON schema for tooling + Existing Boundline stack (clap, serde, serde_json, thiserror, tracing, uuid, toml); no new runtime dependencies required for contract definition slice
-- 059-semantic-acceleration: Added Rust 1.95.0, edition 2024 + existing workspace runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`), existing `rusqlite` bundled SQLite support, and one optional `sqlite-vec` integration path for local vector tables; no remote embedding-provider dependency in the first slice
 
 
 <!-- MANUAL ADDITIONS START -->

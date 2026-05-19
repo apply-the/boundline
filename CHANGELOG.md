@@ -21,6 +21,28 @@ Highlights:
 
 - No unreleased entries yet.
 
+## [0.62.0] - 2026-05-18
+
+Delivered specs:
+
+- `062` - Reasoning Profile Closure
+
+Highlights:
+
+- Closed the residual S6.1 reasoning-profile claims with terminal positive-path
+  runtime evidence for `independent_pair_review`,
+  `heterogeneous_security_review`, and `bounded_reflexion` inside the existing
+  session-native governance loop.
+- Froze debate as bounded substrate and adjudication as a shared reasoning
+  primitive, and added typed capability classification checks so those claims
+  stay aligned across runtime vocabulary and the 062 contract surface.
+- Refactored the remaining governance-view and reasoning-independence
+  maintainability hotspots without changing runtime semantics, and updated the
+  runtime-facing tests to match the shipped completed-state behavior.
+- Aligned the active release metadata, distribution surfaces, assistant package
+  manifests, and Canon compatibility fixtures to Boundline `0.62.0` and Canon
+  `0.58.0`.
+
 ## [0.61.0] - 2026-05-18
 
 Delivered specs:
