@@ -67,8 +67,8 @@ fn structured_inspect_failure_keeps_non_success_exit_and_text_fallback() {
 }
 
 #[test]
-fn s7_host_status_advises_partial_setup_with_explicit_fallback() {
-    let workspace = temp_fixture_workspace("boundline-host-trace-runtime-s7-partial");
+fn host_status_advises_partial_setup_with_explicit_fallback() {
+    let workspace = temp_fixture_workspace("boundline-host-trace-runtime-partial");
 
     assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
 

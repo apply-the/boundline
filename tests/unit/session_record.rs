@@ -70,6 +70,7 @@ fn session_record_round_trips_and_status_values_serialize() {
         governance_lifecycle: None,
         project_scale: None,
         latest_voting: None,
+        delight_feedback: None,
     };
 
     record.validate().unwrap();
@@ -121,6 +122,7 @@ fn session_record_round_trips_and_status_values_serialize() {
         current_step_id: Some("analyze".to_string()),
         current_step_index: Some(0),
         latest_status: SessionStatus::Planned,
+        session_started_at: Some(record.created_at),
         execution_path: boundline::domain::session::execution_path_text(&record),
         latest_trace_ref: record.latest_trace_ref.clone(),
         latest_decision_status: None,
@@ -186,6 +188,7 @@ fn session_status_view_rejects_governance_stage_mismatch() {
         governance_lifecycle: None,
         project_scale: None,
         latest_voting: None,
+        delight_feedback: None,
     };
     let view = SessionStatusView {
         session_id: record.session_id.clone(),
@@ -199,6 +202,7 @@ fn session_status_view_rejects_governance_stage_mismatch() {
         current_step_id: Some("analyze".to_string()),
         current_step_index: Some(0),
         latest_status: SessionStatus::Planned,
+        session_started_at: Some(record.created_at),
         execution_path: boundline::domain::session::execution_path_text(&record),
         latest_trace_ref: record.latest_trace_ref.clone(),
         latest_governance_stage: Some("bug-fix:verify".to_string()),
@@ -241,6 +245,7 @@ fn session_record_validation_rejects_workspace_mismatches_and_external_traces() 
         governance_lifecycle: None,
         project_scale: None,
         latest_voting: None,
+        delight_feedback: None,
     };
 
     assert_eq!(
@@ -289,6 +294,7 @@ fn session_record_validation_allows_cluster_member_tasks_when_projection_is_pres
         governance_lifecycle: None,
         project_scale: None,
         latest_voting: None,
+        delight_feedback: None,
     };
 
     record.validate().unwrap();
@@ -328,6 +334,7 @@ fn terminal_session_requires_terminal_reason_and_consistent_view() {
         governance_lifecycle: None,
         project_scale: None,
         latest_voting: None,
+        delight_feedback: None,
     };
 
     assert_eq!(
@@ -358,6 +365,7 @@ fn goal_captured_sessions_require_a_goal_but_invalid_sessions_can_clear_context(
         governance_lifecycle: None,
         project_scale: None,
         latest_voting: None,
+        delight_feedback: None,
     };
 
     assert_eq!(
@@ -397,6 +405,7 @@ fn invalid_flow_state_is_rejected_by_session_validation() {
         governance_lifecycle: None,
         project_scale: None,
         latest_voting: None,
+        delight_feedback: None,
     };
 
     assert!(matches!(record.validate().unwrap_err(), SessionValidationError::InvalidFlowState(_)));
@@ -434,6 +443,7 @@ fn goal_captured_status_view_can_project_clarification_fields_from_authored_brie
         governance_lifecycle: None,
         project_scale: None,
         latest_voting: None,
+        delight_feedback: None,
     };
 
     let view = SessionStatusView {
@@ -468,6 +478,7 @@ fn goal_captured_status_view_can_project_clarification_fields_from_authored_brie
         current_step_id: None,
         current_step_index: None,
         latest_status: SessionStatus::GoalCaptured,
+        session_started_at: Some(record.created_at),
         execution_path: boundline::domain::session::execution_path_text(&record),
         latest_trace_ref: None,
         latest_decision_status: None,
@@ -535,6 +546,7 @@ fn planned_session_with_goal_plan_and_no_active_task_is_valid() {
         governance_lifecycle: None,
         project_scale: None,
         latest_voting: None,
+        delight_feedback: None,
     };
 
     record.validate().unwrap();

@@ -109,8 +109,8 @@ fn invalid_invocations_can_emit_structured_host_output() {
 }
 
 #[test]
-fn s7_partial_setup_status_output_surfaces_fallback_disclosure_and_next_best_action() {
-    let workspace = temp_fixture_workspace("boundline-host-command-contract-s7-partial");
+fn partial_setup_status_output_surfaces_fallback_disclosure_and_next_best_action() {
+    let workspace = temp_fixture_workspace("boundline-host-command-contract-partial");
 
     let start = run_boundline_in(&workspace, &["start", "--json"]);
     let start_text = terminal_text(&start);
@@ -133,8 +133,8 @@ fn s7_partial_setup_status_output_surfaces_fallback_disclosure_and_next_best_act
 }
 
 #[test]
-fn s7_inspect_output_surfaces_runtime_source_attribution() {
-    let workspace = temp_fixture_workspace("boundline-host-command-contract-s7-inspect");
+fn inspect_output_surfaces_runtime_source_attribution() {
+    let workspace = temp_fixture_workspace("boundline-host-command-contract-inspect");
 
     assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(

@@ -264,7 +264,7 @@ Every S7 explanation MUST:
 
 ## Metadata
 
-**File Location**: `specs/060-assistant-delight-layer/contracts/s7-explanation-vocabulary.toml`  
+**File Location**: `specs/060-assistant-delight-layer/contracts/assistant-delight-explanation-vocabulary.toml`  
 **Maintenance**: Updated per S7 contract amendment procedures  
 **Tooling**: Referenced by S7 runtime for validation and rendering  
 **Distribution**: Bundled with Boundline release; available for external tool integration

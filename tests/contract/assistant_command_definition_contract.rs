@@ -447,7 +447,35 @@ fn test_s7_mvp_definition_sections_exist() {
 }
 
 #[test]
-fn s7_us2_definition_sections_and_backend_mappings_exist() {
+fn reasoning_profile_fields_are_documented_in_delight_command_packs() {
+    let assets = [
+        asset_path("assistant/claude/commands/boundline-why.md"),
+        asset_path("assistant/codex/commands/boundline-why.md"),
+        asset_path("assistant/copilot/prompts/boundline-why.prompt.md"),
+        asset_path("assistant/claude/commands/boundline-challenge.md"),
+        asset_path("assistant/codex/commands/boundline-challenge.md"),
+        asset_path("assistant/copilot/prompts/boundline-challenge.prompt.md"),
+        asset_path("assistant/claude/commands/boundline-explain-plan.md"),
+        asset_path("assistant/codex/commands/boundline-explain-plan.md"),
+        asset_path("assistant/copilot/prompts/boundline-explain-plan.prompt.md"),
+    ];
+
+    for path in assets {
+        let content = read_asset(&path);
+        assert_required_snippets(
+            &path,
+            &content,
+            &[
+                "reasoning_selection_reason",
+                "reasoning_contribution",
+                "reasoning_fallback_disclosure",
+            ],
+        );
+    }
+}
+
+#[test]
+fn cognitive_follow_up_definition_sections_and_backend_mappings_exist() {
     let assets = [
         (
             asset_path("assistant/claude/commands/boundline-assumptions.md"),

@@ -1,7 +1,19 @@
 {
   "stateAuthority": ".boundline/session.json",
   "nextActionAuthority": "CLI-reported next_command",
+  "reasoningDisclosureAuthority": "CLI-reported reasoning_profile_id, reasoning_selection_reason, reasoning_contribution, and reasoning_fallback_disclosure lines",
+  "inspectClosureAuthority": "CLI-reported inspect_context, inspect_council, and inspect_timeline lines",
+  "delightSignalAuthority": "CLI-reported time_to_first_useful_answer_ms, time_to_first_useful_answer_command, explanation_attribution_rate, next_action_acceptance_rate, and latest_next_action_outcome lines",
+  "hostSupportModeAuthority": "assistant/global/manifest.json and assistant/plugin-metadata.json declare whether each host is repo-local-full, copy-ready-assets, or manual-fallback; the CLI remains authoritative for output and state",
   "projectScaleAuthority": "CLI-reported project_scale_path, project_scale_current_stage, project_scale_next_action, checkpoint refs, trace refs",
+  "palettePolicy": "Keep the default palette compact; explain-plan and doctor-context remain contextual follow-ups",
+  "hostSupportModes": {
+    "claude": "repo-local-full",
+    "codex": "repo-local-full",
+    "cursor": "copy-ready-assets",
+    "copilot": "repo-local-full",
+    "gemini": "manual-fallback"
+  },
   "defaultPalette": [
     "/boundline:start",
     "/boundline:capture",
@@ -112,7 +124,7 @@
         "codex": "assistant/codex/commands/boundline-inspect.md",
         "copilot": "assistant/copilot/prompts/boundline-inspect.prompt.md"
       },
-      "stateHandling": "Use trace output and .boundline/session.json to explain next_command, blocked, clarification-required, failed, exhausted, and terminal states."
+      "stateHandling": "Use trace output and .boundline/session.json to explain inspect_context, inspect_council, inspect_timeline, next_command, blocked, clarification-required, failed, exhausted, and terminal states."
     },
     {
       "id": "/boundline:why",
@@ -124,7 +136,7 @@
         "codex": "assistant/codex/commands/boundline-why.md",
         "copilot": "assistant/copilot/prompts/boundline-why.prompt.md"
       },
-      "stateHandling": "Prefer inspect-backed why_summary, source_attribution, fallback_disclosure, confidence_level, next_best_action, and next_command lines; keep missing Canon input explicit rather than inferred."
+      "stateHandling": "Prefer inspect-backed why_summary, source_attribution, reasoning_profile_id, reasoning_selection_reason, reasoning_contribution, fallback_disclosure, confidence_level, next_best_action, and next_command lines; keep missing Canon input explicit rather than inferred."
     },
     {
       "id": "/boundline:risk",
@@ -136,7 +148,7 @@
         "codex": "assistant/codex/commands/boundline-risk.md",
         "copilot": "assistant/copilot/prompts/boundline-risk.prompt.md"
       },
-      "stateHandling": "Prefer inspect-backed risk_summary, source_attribution, fallback_disclosure, confidence_level, next_best_action, and next_command lines; preserve blocked, stale, or missing Canon signals exactly."
+      "stateHandling": "Prefer inspect-backed risk_summary, source_attribution, reasoning_profile_id, reasoning_selection_reason, reasoning_contribution, fallback_disclosure, confidence_level, next_best_action, and next_command lines; preserve blocked, stale, or missing Canon signals exactly."
     },
     {
       "id": "/boundline:evidence",
@@ -148,7 +160,7 @@
         "codex": "assistant/codex/commands/boundline-evidence.md",
         "copilot": "assistant/copilot/prompts/boundline-evidence.prompt.md"
       },
-      "stateHandling": "Prefer inspect-backed evidence_summary, source_attribution, fallback_disclosure, next_best_action, and next_command lines; separate Boundline runtime evidence from Canon-governed evidence and missing evidence."
+      "stateHandling": "Prefer inspect-backed evidence_summary, source_attribution, reasoning_profile_id, reasoning_selection_reason, reasoning_contribution, fallback_disclosure, next_best_action, and next_command lines; separate Boundline runtime evidence from Canon-governed evidence and missing evidence."
     },
     {
       "id": "/boundline:next-best",
@@ -160,7 +172,7 @@
         "codex": "assistant/codex/commands/boundline-next-best.md",
         "copilot": "assistant/copilot/prompts/boundline-next-best.prompt.md"
       },
-      "stateHandling": "Prefer status-backed next_best_action, source_attribution, fallback_disclosure, confidence_level, and next_command lines; do not invent a next step when the runtime reports a blocked or inspect-only boundary."
+      "stateHandling": "Prefer status-backed next_best_action, source_attribution, reasoning_profile_id, reasoning_selection_reason, reasoning_contribution, fallback_disclosure, confidence_level, and next_command lines; do not invent a next step when the runtime reports a blocked or inspect-only boundary."
     },
     {
       "id": "/boundline:assumptions",
@@ -184,7 +196,7 @@
         "codex": "assistant/codex/commands/boundline-hidden-impact.md",
         "copilot": "assistant/copilot/prompts/boundline-hidden-impact.prompt.md"
       },
-      "stateHandling": "Prefer inspect-backed hidden_impact_summary, hidden_impact_* detail lines, hidden_impact_fallback_disclosure, challenge_required_review, and next_command lines; disclose higher-order fallback when semantic capability is unavailable."
+      "stateHandling": "Prefer inspect-backed hidden_impact_summary, hidden_impact_* detail lines, reasoning_profile_id, reasoning_selection_reason, reasoning_contribution, hidden_impact_fallback_disclosure, challenge_required_review, and next_command lines; disclose higher-order fallback when semantic capability is unavailable."
     },
     {
       "id": "/boundline:challenge",
@@ -196,7 +208,7 @@
         "codex": "assistant/codex/commands/boundline-challenge.md",
         "copilot": "assistant/copilot/prompts/boundline-challenge.prompt.md"
       },
-      "stateHandling": "Prefer inspect-backed challenge_strongest_objection, challenge_weakest_assumption, challenge_missing_evidence, challenge_failure_mode, challenge_required_review, challenge_council_required, fallback_disclosure, and next_command lines; never imply that challenge output replaces Canon review."
+      "stateHandling": "Prefer inspect-backed challenge_strongest_objection, challenge_weakest_assumption, challenge_missing_evidence, challenge_failure_mode, reasoning_profile_id, reasoning_selection_reason, reasoning_contribution, challenge_required_review, challenge_council_required, fallback_disclosure, and next_command lines; never imply that challenge output replaces Canon review."
     },
     {
       "id": "/boundline:explain-plan",
@@ -209,7 +221,7 @@
         "codex": "assistant/codex/commands/boundline-explain-plan.md",
         "copilot": "assistant/copilot/prompts/boundline-explain-plan.prompt.md"
       },
-      "stateHandling": "Prefer status-backed explain_plan_summary, explain_plan_validation, explain_plan_governance, explain_plan_recovery, why_summary, risk_summary, and next_command lines; keep recovery and governance posture explicit."
+      "stateHandling": "Prefer status-backed explain_plan_summary, explain_plan_validation, explain_plan_governance, explain_plan_recovery, why_summary, risk_summary, reasoning_profile_id, reasoning_selection_reason, reasoning_contribution, reasoning_fallback_disclosure, time_to_first_useful_answer_ms, time_to_first_useful_answer_command, explanation_attribution_rate, next_action_acceptance_rate, latest_next_action_outcome, and next_command lines; keep recovery and governance posture explicit."
     },
     {
       "id": "/boundline:doctor-context",

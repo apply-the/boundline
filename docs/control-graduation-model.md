@@ -1,10 +1,10 @@
-# Control Graduation Model In Boundline 0.56.0
+# Control Graduation Model In Boundline 0.63.0
 
-Boundline `0.56.0` resolves one explicit runtime governance posture for each
+Boundline `0.63.0` resolves one explicit runtime governance posture for each
 governed boundary. Canon supplies semantic inputs. Boundline decides what the
 runtime does with them.
 
-This S4 slice keeps the primary operator path unchanged:
+This adaptive-governance slice keeps the primary operator path unchanged:
 
 ```text
 start -> capture -> plan -> run -> status -> next -> inspect
@@ -30,7 +30,7 @@ may consume while still keeping local runtime authority.
 
 ## Canon Inputs At The Boundary
 
-Current S4 consumption uses two Canon envelopes:
+Current adaptive-governance consumption uses two Canon envelopes:
 
 - required baseline: `authority-governance-v1`
 - optional additive companion: `adaptive-governance-v1`
@@ -99,12 +99,12 @@ This matters because operators can distinguish three cases clearly:
 - a compatible companion was supplied
 - a required companion was unavailable and blocked execution
 
-## Relationship To S3
+## Relationship To Existing Authority Semantics
 
-S3 still owns the authority-zone, council, and stop-semantics vocabulary that
-Boundline maps onto runtime outcomes. S4 adds adaptive governance maturity and
-runtime follow-through without moving the source of runtime authority out of
-Boundline.
+The existing authority-zone, council, and stop-semantics vocabulary still owns
+the governance posture that Boundline maps onto runtime outcomes. Adaptive
+governance adds maturity and runtime follow-through without moving the source
+of runtime authority out of Boundline.
 
 For the current authority-zone matrix and stop posture details, see
 `docs/authority-zones-and-stop-semantics.md`.

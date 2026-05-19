@@ -280,6 +280,7 @@ mod tests {
         let projection = FollowThroughProjection::from_session_view(&SessionStatusView {
             session_id: "session-1".to_string(),
             workspace_ref: "/tmp/workspace".to_string(),
+            session_started_at: None,
             goal: Some("Fix the failing add test".to_string()),
             advanced_context: None,
             negotiation_goal_summary: None,
@@ -382,6 +383,7 @@ mod tests {
             latest_voting_reviewed_evidence: None,
             latest_voting_blocking: None,
             latest_voting_next_action: None,
+            delight_feedback: None,
             next_command: Some("boundline step".to_string()),
             explanation: "current active session state for the workspace".to_string(),
         });

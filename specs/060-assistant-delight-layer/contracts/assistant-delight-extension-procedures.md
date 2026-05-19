@@ -57,9 +57,9 @@ The S7 contract is a living document that evolves as new delight capabilities ar
      - No approval: amendment is blocked; proposer notified with rationale
 
 4. **Specification Update** (Simultaneous in both repos)
-   - Update Boundline `specs/060-assistant-delight-layer/contracts/s7-delight-contract.md` Section III
+   - Update Boundline `specs/060-assistant-delight-layer/contracts/assistant-delight-contract.md` Section III
    - Update Canon `specs/057-s7-delight-provider/contracts/...` (provider side)
-   - Both update: `s7-input-classes.schema.json`
+   - Both update: `assistant-delight-input-classes.schema.json`
    - Both update: Data model documentation
    - Both bump contract version: 0.5.0 → 0.6.0 (or appropriate semver)
    - Update CHANGELOG.md in both repos with amendment details
@@ -104,7 +104,7 @@ The S7 contract is a living document that evolves as new delight capabilities ar
    - What are the implications for both teams?
 
 3. **Specification Update**
-   - Modify the relevant entry in `s7-input-classes.schema.json`
+   - Modify the relevant entry in `assistant-delight-input-classes.schema.json`
    - Update contract narrative explaining the change
    - Bump contract version (minor version if compatible, major if breaking)
    - Document in CHANGELOG.md with date and rationale
@@ -146,7 +146,7 @@ The S7 contract is a living document that evolves as new delight capabilities ar
      - Will it require schema changes to data model?
 
 3. **Specification Update**
-   - Update `s7-explanation-vocabulary.md` with new term definition
+   - Update `assistant-delight-explanation-vocabulary.md` with new term definition
    - Update data model to include new vocabulary choice
    - Update example answers to show new term in context
    - Document how new term interacts with existing terms
@@ -273,7 +273,7 @@ Before merging any amendment:
 - [ ] **Canon approver has signed off: "We can reliably provide this"**
 - [ ] **Both specs are updated with identical contract versions**
 - [ ] **Data model and schemas updated consistently**
-- [ ] **s7-explanation-vocabulary.md and s7-input-classes.schema.json updated**
+- [ ] **assistant-delight-explanation-vocabulary.md and assistant-delight-input-classes.schema.json updated**
 - [ ] **CHANGELOG.md entries in both repos with amendment date and summary**
 - [ ] **Degradation handling rules updated if new input classes added**
 - [ ] **Examples and documentation updated to reflect change**
@@ -374,7 +374,7 @@ Every approved amendment is recorded in a `amendment-history.md` file:
 
 ## Related Documents
 
-- `/specs/060-assistant-delight-layer/contracts/s7-delight-contract.md` — Main contract
-- `/specs/060-assistant-delight-layer/contracts/s7-explanation-vocabulary.md` — Vocabulary
-- `/specs/060-assistant-delight-layer/contracts/s7-input-classes.schema.json` — Input schema
+- `/specs/060-assistant-delight-layer/contracts/assistant-delight-contract.md` — Main contract
+- `/specs/060-assistant-delight-layer/contracts/assistant-delight-explanation-vocabulary.md` — Vocabulary
+- `/specs/060-assistant-delight-layer/contracts/assistant-delight-input-classes.schema.json` — Input schema
 - `amendment-history.md` — Record of all amendments

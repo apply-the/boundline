@@ -115,12 +115,12 @@ specs/060-assistant-delight-layer/
 ├── data-model.md
 ├── quickstart.md
 ├── contracts/
-│   ├── s7-delight-contract.md
-│   ├── s7-explanation-vocabulary.md
-│   ├── s7-explanation-vocabulary.toml
-│   ├── s7-degradation-modes.md
-│   ├── s7-extension-procedures.md
-│   └── s7-input-classes.schema.json
+│   ├── assistant-delight-contract.md
+│   ├── assistant-delight-explanation-vocabulary.md
+│   ├── assistant-delight-explanation-vocabulary.toml
+│   ├── assistant-delight-degradation-modes.md
+│   ├── assistant-delight-extension-procedures.md
+│   └── assistant-delight-input-classes.schema.json
 └── tasks.md
 ```
 

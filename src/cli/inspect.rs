@@ -17,13 +17,14 @@ use crate::domain::guidance::{GuardianFinding, GuidanceGuardianProjection};
 use crate::domain::limits::TerminalCondition;
 use crate::domain::reasoning::ProfileActivationRecord;
 use crate::domain::routing_decision::RoutingDecisionProjection;
-use crate::domain::session::{RoutingMode, RoutingOutcome, RoutingSource};
+use crate::domain::session::{DelightFeedbackSignal, RoutingMode, RoutingOutcome, RoutingSource};
 use crate::domain::session::{governance_next_action_for_state, governance_packet_provenance_text};
 use crate::domain::step::{StepKind, StepStatus};
 use crate::domain::task::{TaskStatus, TerminalReason};
 use crate::domain::tool_result::ToolResult;
 use crate::domain::trace::{
-    ExecutionTrace, TraceEventType, TraceRecoveryEvent, TraceStepSummary, TraceSummaryView,
+    ExecutionTrace, InspectClosureKind, InspectClosureView, TraceEventType, TraceRecoveryEvent,
+    TraceStepSummary, TraceSummaryView,
 };
 
 const UNKNOWN_VALIDATION_EXIT_CODE: i64 = -1;
@@ -36,6 +37,7 @@ fn advanced_context_from_payload(payload: &Value) -> Option<AdvancedContextProje
     payload.get("advanced_context").cloned().and_then(|value| serde_json::from_value(value).ok())
 }
 const KEY_FINDING: &str = "finding";
+const KEY_DELIGHT_FEEDBACK: &str = "delight_feedback";
 const KEY_REVIEW_OUTCOME: &str = "review_outcome";
 const KEY_REVIEW_TRIGGER: &str = "review_trigger";
 const KEY_REVIEWER_ID: &str = "reviewer_id";
@@ -175,8 +177,19 @@ pub fn summarize_trace(
     let mut recovery_events: Vec<TraceRecoveryEvent> = Vec::new();
     let mut review_timeline: Vec<String> = Vec::new();
     let mut reasoning_profile: Option<ProfileActivationRecord> = None;
+    let mut delight_feedback: Option<DelightFeedbackSignal> = None;
 
     for event in &trace.events {
+        if let Some(signal) = event
+            .payload
+            .get(KEY_DELIGHT_FEEDBACK)
+            .cloned()
+            .and_then(|value| serde_json::from_value::<DelightFeedbackSignal>(value).ok())
+            .filter(|signal| signal.validate().is_ok())
+        {
+            delight_feedback = Some(signal);
+        }
+
         if let Some(record) = event
             .payload
             .get("reasoning_profile_record")
@@ -525,9 +538,46 @@ pub fn summarize_trace(
             (Some(_), None) => return Err(TraceSummaryError::MissingTerminalReason),
         };
 
+    let governance_timeline = governance_projection.timeline;
+    let governance_runtime_state = governance_projection.runtime_state;
+    let governance_rollout_profile = governance_projection.rollout_profile;
+    let governance_reason = governance_projection.reason;
+    let governance_approval_provenance = governance_projection.approval_provenance;
+    let governance_next_action = governance_projection.next_action.or_else(|| {
+        governance_next_action_for_state(governance_projection.latest_state.as_deref())
+    });
+    let terminal_projection = InspectTerminalProjection {
+        terminal_status,
+        terminal_reason: &terminal_reason,
+        next_action: governance_next_action.as_deref(),
+    };
+    let inspect_context = Some(build_inspect_context_view(
+        context_projection.summary.as_deref(),
+        context_projection.credibility.as_deref(),
+        &context_projection.primary_inputs,
+        &context_projection.provenance,
+        context_projection.staleness_reason.as_deref(),
+        terminal_projection,
+    ));
+    let inspect_council = Some(build_inspect_council_view(
+        &review_timeline,
+        &governance_timeline,
+        reasoning_profile.as_ref(),
+        terminal_projection,
+    ));
+    let inspect_timeline = Some(build_inspect_timeline_view(
+        &decision_timeline,
+        &review_timeline,
+        &governance_timeline,
+        &executed_steps,
+        &recovery_events,
+        terminal_projection,
+    ));
+
     Ok(TraceSummaryView {
         trace_ref: trace_ref.as_ref().to_string_lossy().into_owned(),
         goal: trace.goal.clone(),
+        trace_started_at: Some(trace.started_at),
         advanced_context,
         negotiation_goal_summary: input_projection.negotiation_goal_summary,
         negotiation_resolution: input_projection.negotiation_resolution,
@@ -560,21 +610,236 @@ pub fn summarize_trace(
         latest_checkpoint_restore_command,
         executed_steps,
         recovery_events,
-        governance_timeline: governance_projection.timeline,
-        governance_runtime_state: governance_projection.runtime_state,
-        governance_rollout_profile: governance_projection.rollout_profile,
-        governance_reason: governance_projection.reason,
-        governance_approval_provenance: governance_projection.approval_provenance,
-        governance_next_action: governance_projection.next_action.or_else(|| {
-            governance_next_action_for_state(governance_projection.latest_state.as_deref())
-        }),
+        governance_timeline,
+        governance_runtime_state,
+        governance_rollout_profile,
+        governance_reason,
+        governance_approval_provenance,
+        governance_next_action,
         reasoning_profile,
         delegation,
+        inspect_context,
+        inspect_council,
+        inspect_timeline,
         review_timeline,
+        delight_feedback,
         terminal_status,
         terminal_reason,
         duration: trace.duration_millis(),
     })
+}
+
+#[derive(Clone, Copy)]
+struct InspectTerminalProjection<'a> {
+    terminal_status: TaskStatus,
+    terminal_reason: &'a TerminalReason,
+    next_action: Option<&'a str>,
+}
+
+fn build_inspect_context_view(
+    context_summary: Option<&str>,
+    context_credibility: Option<&str>,
+    context_primary_inputs: &[String],
+    context_provenance: &[String],
+    context_staleness_reason: Option<&str>,
+    terminal: InspectTerminalProjection<'_>,
+) -> InspectClosureView {
+    let mut narrative_lines = Vec::new();
+    if let Some(context_summary) = context_summary {
+        narrative_lines.push(format!("context_summary: {context_summary}"));
+    }
+    if let Some(context_credibility) = context_credibility {
+        narrative_lines.push(format!("context_credibility: {context_credibility}"));
+    }
+    if !context_primary_inputs.is_empty() {
+        narrative_lines
+            .push(format!("context_primary_inputs: {}", context_primary_inputs.join(", ")));
+    }
+    narrative_lines.extend(context_provenance.iter().cloned());
+    if let Some(context_staleness_reason) = context_staleness_reason {
+        narrative_lines.push(format!("context_staleness_reason: {context_staleness_reason}"));
+    }
+
+    let mut missing_inputs = Vec::new();
+    if context_summary.is_none() {
+        missing_inputs.push("context_summary".to_string());
+    }
+    if context_primary_inputs.is_empty() {
+        missing_inputs.push("context_primary_inputs".to_string());
+    }
+    if context_provenance.is_empty() {
+        missing_inputs.push("context_provenance".to_string());
+    }
+
+    let headline = if let Some(context_summary) = context_summary {
+        context_summary.to_string()
+    } else if let Some(context_staleness_reason) = context_staleness_reason {
+        format!("context needs refresh: {context_staleness_reason}")
+    } else {
+        "context evidence is not yet available from the authoritative trace".to_string()
+    };
+
+    InspectClosureView {
+        view_kind: InspectClosureKind::Context,
+        headline,
+        narrative_lines,
+        source_attribution: context_provenance.to_vec(),
+        missing_inputs,
+        terminal_status: terminal.terminal_status,
+        terminal_reason: terminal.terminal_reason.message.clone(),
+        next_action: terminal.next_action.map(str::to_string),
+    }
+}
+
+fn build_inspect_council_view(
+    review_timeline: &[String],
+    governance_timeline: &[String],
+    reasoning_profile: Option<&ProfileActivationRecord>,
+    terminal: InspectTerminalProjection<'_>,
+) -> InspectClosureView {
+    let mut narrative_lines = review_timeline.to_vec();
+    if narrative_lines.is_empty() {
+        narrative_lines.extend(governance_timeline.iter().cloned());
+    }
+    if let Some(reasoning_profile) = reasoning_profile {
+        narrative_lines.push(format!(
+            "reasoning_profile: {} ({})",
+            reasoning_profile.profile_id,
+            reasoning_profile.status.as_str()
+        ));
+    }
+
+    let mut source_attribution = Vec::new();
+    if !review_timeline.is_empty() {
+        source_attribution.push("review_timeline".to_string());
+    }
+    if !governance_timeline.is_empty() {
+        source_attribution.push("governance_timeline".to_string());
+    }
+    if reasoning_profile.is_some() {
+        source_attribution.push("reasoning_profile".to_string());
+    }
+
+    let mut missing_inputs = Vec::new();
+    if review_timeline.is_empty() {
+        missing_inputs.push("review_timeline".to_string());
+    }
+
+    let headline = if !review_timeline.is_empty() {
+        "council activity was recorded for this trace".to_string()
+    } else if !governance_timeline.is_empty() {
+        "governance state is available, but no council review lines were recorded".to_string()
+    } else {
+        "council activity was not recorded for this trace".to_string()
+    };
+
+    InspectClosureView {
+        view_kind: InspectClosureKind::Council,
+        headline,
+        narrative_lines,
+        source_attribution,
+        missing_inputs,
+        terminal_status: terminal.terminal_status,
+        terminal_reason: terminal.terminal_reason.message.clone(),
+        next_action: terminal.next_action.map(str::to_string),
+    }
+}
+
+fn build_inspect_timeline_view(
+    decision_timeline: &[String],
+    review_timeline: &[String],
+    governance_timeline: &[String],
+    executed_steps: &[TraceStepSummary],
+    recovery_events: &[TraceRecoveryEvent],
+    terminal: InspectTerminalProjection<'_>,
+) -> InspectClosureView {
+    let mut narrative_lines = Vec::new();
+    narrative_lines.extend(decision_timeline.iter().cloned());
+    narrative_lines.extend(review_timeline.iter().cloned());
+    narrative_lines.extend(governance_timeline.iter().cloned());
+    narrative_lines.extend(executed_steps.iter().map(step_timeline_line));
+    narrative_lines.extend(recovery_events.iter().map(recovery_timeline_line));
+
+    let mut missing_inputs = Vec::new();
+    if decision_timeline.is_empty()
+        && review_timeline.is_empty()
+        && governance_timeline.is_empty()
+        && executed_steps.is_empty()
+        && recovery_events.is_empty()
+    {
+        missing_inputs.push("decision_review_governance_step_recovery_timeline".to_string());
+    }
+
+    let headline = if narrative_lines.is_empty() {
+        "timeline details are not yet available for this trace".to_string()
+    } else {
+        format!("timeline preserves {} recorded transition(s)", narrative_lines.len())
+    };
+
+    let source_attribution = vec![
+        "decision_timeline".to_string(),
+        "review_timeline".to_string(),
+        "governance_timeline".to_string(),
+        "executed_steps".to_string(),
+        "recovery_events".to_string(),
+    ];
+
+    InspectClosureView {
+        view_kind: InspectClosureKind::Timeline,
+        headline,
+        narrative_lines,
+        source_attribution,
+        missing_inputs,
+        terminal_status: terminal.terminal_status,
+        terminal_reason: terminal.terminal_reason.message.clone(),
+        next_action: terminal.next_action.map(str::to_string),
+    }
+}
+
+fn step_timeline_line(step: &TraceStepSummary) -> String {
+    format!(
+        "step: {} ({}) {} [{} attempt(s)] - {}",
+        step.step_id,
+        step_kind_label(step.step_kind),
+        step_status_label(step.final_status),
+        step.attempts,
+        step.headline,
+    )
+}
+
+fn recovery_timeline_line(event: &TraceRecoveryEvent) -> String {
+    let label = match event.event_type {
+        TraceEventType::RetryScheduled => "retry",
+        TraceEventType::StageRetryScheduled => "stage_retry",
+        TraceEventType::Replanned => "replan",
+        TraceEventType::StageReplanned => "stage_replan",
+        TraceEventType::FlowSelected => "flow",
+        TraceEventType::StageTransitioned => "stage",
+        TraceEventType::StageFailed => "stage_failure",
+        _ => "recovery",
+    };
+    match event.related_step_id.as_deref() {
+        Some(step_id) => format!("{label}: {} [{step_id}]", event.trigger),
+        None => format!("{label}: {}", event.trigger),
+    }
+}
+
+fn step_kind_label(step_kind: StepKind) -> &'static str {
+    match step_kind {
+        StepKind::Agent => "agent",
+        StepKind::Tool => "tool",
+        StepKind::Decision => "decision",
+    }
+}
+
+fn step_status_label(step_status: StepStatus) -> &'static str {
+    match step_status {
+        StepStatus::Pending => "pending",
+        StepStatus::Running => "running",
+        StepStatus::Succeeded => "succeeded",
+        StepStatus::Failed => "failed",
+        StepStatus::Skipped => "skipped",
+    }
 }
 
 // Fold one event payload into the flattened guidance/guardian projection.
@@ -2012,6 +2277,7 @@ mod tests {
             governance_lifecycle: None,
             project_scale: None,
             latest_voting: None,
+            delight_feedback: None,
         };
         fs::write(
             workspace.join(".boundline/session.json"),

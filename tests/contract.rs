@@ -4,6 +4,9 @@ mod workspace_fixture;
 #[path = "support/runtime_refoundation.rs"]
 mod runtime_refoundation;
 
+#[path = "support/assistant_delight_support.rs"]
+mod assistant_delight_support;
+
 #[path = "contract/orchestrator_run.rs"]
 mod orchestrator_run;
 
@@ -117,6 +120,15 @@ mod stack_neutral_init_contract;
 
 #[path = "contract/config_cli_contract.rs"]
 mod config_cli_contract;
+
+#[path = "contract/delight_projection_contract.rs"]
+mod delight_projection_contract;
+
+#[path = "contract/assistant_host_parity_contract.rs"]
+mod assistant_host_parity_contract;
+
+#[path = "contract/inspect_closure_contract.rs"]
+mod inspect_closure_contract;
 
 #[path = "contract/cluster_cli_contract.rs"]
 mod cluster_cli_contract;

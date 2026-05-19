@@ -163,10 +163,10 @@ These are product layers over one runtime, not separate products.
 
 ## Distribution And Update Model
 
-The `0.43.0` release keeps the repo-managed distribution surface introduced in
-`0.39.0`, carries the same Boundline-plus-Canon pairing metadata, and now makes
-Canon-ready setup, verification, and governed runs part of the same primary
-operator surface:
+The `0.63.0` release keeps the repo-managed distribution surface introduced in
+`0.39.0`, carries the same Boundline-plus-Canon pairing metadata, and keeps
+Canon-ready setup, verification, governed runs, and the assistant-delight
+follow-through surfaces on the same primary operator path:
 
 - `distribution/channel-metadata.toml` pins the release-aligned Boundline plus Canon pairing and the tap-facing Homebrew channel metadata.
 - `scripts/sync-distribution-metadata.sh` regenerates the tap-ready Homebrew formula and the winget manifests.

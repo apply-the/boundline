@@ -100,7 +100,7 @@ S7 NEVER:
 - Failed amendments are visible in task logs (not silently rejected)
 - Deprecated contract lines receive a 2-release deprecation window with fallback guidance
 
-Amendment procedure document (s7-extension-procedures.md) will specify:
+Amendment procedure document (assistant-delight-extension-procedures.md) will specify:
 - Who can propose amendments (any maintainer)
 - Review criteria (contract boundary preserved, degradation handling defined)
 - Approval gate (must pass in both repos)
@@ -120,7 +120,7 @@ Amendment procedure document (s7-extension-procedures.md) will specify:
 
 **Finding**: Yes, standardized vocabulary prevents operator confusion and enables consistent source attribution.
 
-**Decision**: Canonical explanation vocabulary defined in `s7-explanation-vocabulary.toml` with these key terms:
+**Decision**: Canonical explanation vocabulary defined in `assistant-delight-explanation-vocabulary.toml` with these key terms:
 - **Risk**: What could go wrong with this plan, according to all evidence sources
 - **Assumption**: What must remain true for this plan to succeed, from Boundline or Canon
 - **Blocker**: What prevents forward progress, with explicit source (Boundline runtime check or Canon authority zone)
@@ -201,7 +201,7 @@ Test data lives in `specs/060-assistant-delight-layer/test-fixtures/canon-input-
 
 Phase 0 research complete. All technical unknowns are resolved and documented. Phase 1 design can now proceed to:
 1. Generate `data-model.md` with formal entity definitions
-2. Create `contracts/s7-delight-contract.md` with complete contract specification
-3. Define `s7-explanation-vocabulary.toml` and `s7-input-classes.json` schemas
+2. Create `contracts/assistant-delight-contract.md` with complete contract specification
+3. Define `assistant-delight-explanation-vocabulary.toml` and `assistant-delight-input-classes.schema.json` schemas
 4. Document extension procedures and validation rules
 5. Update agent context to reflect new S7 contract terminology

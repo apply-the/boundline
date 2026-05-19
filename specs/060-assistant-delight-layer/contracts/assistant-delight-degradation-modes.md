@@ -243,7 +243,7 @@ Reason: Boundline delight layer cannot consume uncontracted Canon concepts to pr
 
 Options:
   1. Propose contract amendment to add this input class
-    → See: specs/060-assistant-delight-layer/contracts/s7-extension-procedures.md
+    → See: specs/060-assistant-delight-layer/contracts/assistant-delight-extension-procedures.md
   2. Use a contracted input class instead (e.g., stage from packet)
   3. Use Boundline runtime evidence only
 

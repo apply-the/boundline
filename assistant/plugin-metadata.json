@@ -1,7 +1,7 @@
 {
   "name": "boundline",
   "displayName": "Boundline Assistant Support",
-  "version": "0.62.0",
+  "version": "0.63.0",
   "description": "Local delivery orchestrator for bounded engineering work",
   "author": {
     "name": "Apply The",
@@ -161,6 +161,21 @@
       "manifestPath": ".copilot-prompts/pack.json"
     }
   ],
+  "hostSupportScope": "supportedHosts lists packaged repo-local assets; supportModes declares whether each host is repo-local-full, copy-ready-assets, or manual-fallback",
+  "supportModes": {
+    "claude": "repo-local-full",
+    "codex": "repo-local-full",
+    "cursor": "copy-ready-assets",
+    "copilot": "repo-local-full",
+    "gemini": "manual-fallback"
+  },
+  "supportModeNotes": {
+    "claude": "Repository-managed command assets expose the shared Boundline session workflow and delight follow-through surfaces directly.",
+    "codex": "Repository-managed command assets expose the shared Boundline session workflow and delight follow-through surfaces directly.",
+    "cursor": "Cursor remains in copy-ready-assets support mode: assets are copy-ready rather than self-registering, installation details remain environment-specific, and the CLI stays authoritative.",
+    "copilot": "Repository-managed prompt assets expose the Boundline delight surface directly even though global bootstrap installation remains a manual fallback.",
+    "gemini": "Gemini remains an explicit CLI-first manual fallback until a richer parity path is intentionally promoted."
+  },
   "copilot": {
     "manifestSupported": false,
     "commandPromptPack": "assistant/prompts/copilot-command-pack.md"

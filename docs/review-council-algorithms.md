@@ -1,11 +1,11 @@
 # Review Council Algorithms
 
-Boundline `0.62.0` keeps review councils bounded and runtime-owned. Canon can
+Boundline `0.63.0` keeps review councils bounded and runtime-owned. Canon can
 describe the authority posture of the stage, but Boundline decides how to
 assemble reviewers, enforce independence, persist the council outcome, and
 project the result through the session-native CLI surfaces.
 
-This document describes the current runtime algorithm as of `0.62.0`, not an
+This document describes the current runtime algorithm as of `0.63.0`, not an
 aspirational future council system.
 
 ## 1. Intake: Structured Findings

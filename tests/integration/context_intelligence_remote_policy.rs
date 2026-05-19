@@ -8,8 +8,9 @@ use boundline::cli::session::{
 
 use crate::workspace_fixture::temp_fixture_workspace;
 
-// Seed a workspace with the S5 V1 policy explicitly disabled so the integration
-// flow can prove no remote or degraded fallback retrieval occurs silently.
+// Seed a workspace with the baseline local retrieval policy explicitly disabled
+// so the integration flow can prove no remote or degraded fallback retrieval
+// occurs silently.
 fn write_disabled_policy_workspace(prefix: &str) -> PathBuf {
     let workspace = temp_fixture_workspace(prefix);
     fs::create_dir_all(workspace.join(".boundline")).unwrap();

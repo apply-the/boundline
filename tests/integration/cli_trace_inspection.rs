@@ -78,8 +78,8 @@ fn inspect_command_surfaces_authored_input_summary_and_sources() {
 }
 
 #[test]
-fn s7_inspect_output_surfaces_canon_aware_explanation_lines() {
-    let workspace = temp_fixture_workspace("boundline-cli-inspect-s7");
+fn inspect_output_surfaces_canon_aware_explanation_lines() {
+    let workspace = temp_fixture_workspace("boundline-cli-inspect-explanation");
     let run_output = run_boundline(&[
         "run",
         "--goal",

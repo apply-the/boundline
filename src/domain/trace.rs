@@ -12,7 +12,7 @@ use crate::domain::guidance::GuidanceGuardianProjection;
 use crate::domain::limits::TerminalCondition;
 use crate::domain::reasoning::ProfileActivationRecord;
 use crate::domain::routing_decision::RoutingDecisionProjection;
-use crate::domain::session::DelegationStatusView;
+use crate::domain::session::{DelegationStatusView, DelightFeedbackSignal};
 use crate::domain::step::{StepKind, StepStatus};
 use crate::domain::task::{TaskStatus, TerminalReason};
 
@@ -147,11 +147,87 @@ pub struct ExecutionTrace {
     pub trace_location: Option<String>,
 }
 
+/// Inspect closure kinds synthesized from the flattened trace summary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InspectClosureKind {
+    Context,
+    Council,
+    Timeline,
+}
+
+impl InspectClosureKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Context => "context",
+            Self::Council => "council",
+            Self::Timeline => "timeline",
+        }
+    }
+}
+
+/// Human-facing inspect closure synthesized from the flattened trace summary.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InspectClosureView {
+    pub view_kind: InspectClosureKind,
+    pub headline: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub narrative_lines: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_attribution: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub missing_inputs: Vec<String>,
+    pub terminal_status: TaskStatus,
+    pub terminal_reason: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_action: Option<String>,
+}
+
+impl InspectClosureView {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.headline.trim().is_empty() {
+            return Err(format!("inspect {} headline must not be empty", self.view_kind.as_str()));
+        }
+
+        if self.narrative_lines.is_empty() && self.missing_inputs.is_empty() {
+            return Err(format!(
+                "inspect {} view requires narrative_lines or missing_inputs",
+                self.view_kind.as_str()
+            ));
+        }
+
+        if self.terminal_reason.trim().is_empty() {
+            return Err(format!(
+                "inspect {} terminal_reason must not be empty",
+                self.view_kind.as_str()
+            ));
+        }
+
+        if self.source_attribution.iter().any(|line| line.trim().is_empty()) {
+            return Err(format!(
+                "inspect {} source_attribution entries must not be empty",
+                self.view_kind.as_str()
+            ));
+        }
+
+        if self.missing_inputs.iter().any(|line| line.trim().is_empty()) {
+            return Err(format!(
+                "inspect {} missing_inputs entries must not be empty",
+                self.view_kind.as_str()
+            ));
+        }
+
+        Ok(())
+    }
+}
+
 /// Flattened read-side trace summary reused by inspect and other CLI surfaces.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TraceSummaryView {
     pub trace_ref: String,
     pub goal: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trace_started_at: Option<u64>,
     /// Optional advanced-context retrieval projection surfaced by `inspect`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub advanced_context: Option<AdvancedContextProjection>,
@@ -231,8 +307,16 @@ pub struct TraceSummaryView {
     pub reasoning_profile: Option<ProfileActivationRecord>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delegation: Option<DelegationStatusView>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inspect_context: Option<InspectClosureView>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inspect_council: Option<InspectClosureView>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inspect_timeline: Option<InspectClosureView>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub review_timeline: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delight_feedback: Option<DelightFeedbackSignal>,
     pub terminal_status: TaskStatus,
     pub terminal_reason: TerminalReason,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -244,6 +328,7 @@ impl Default for TraceSummaryView {
         Self {
             trace_ref: String::new(),
             goal: String::new(),
+            trace_started_at: None,
             advanced_context: None,
             negotiation_goal_summary: None,
             negotiation_resolution: None,
@@ -284,7 +369,11 @@ impl Default for TraceSummaryView {
             governance_next_action: None,
             reasoning_profile: None,
             delegation: None,
+            inspect_context: None,
+            inspect_council: None,
+            inspect_timeline: None,
             review_timeline: Vec::new(),
+            delight_feedback: None,
             terminal_status: TaskStatus::Planned,
             terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "", None),
             duration: None,
@@ -369,9 +458,11 @@ impl ExecutionTrace {
 
 #[cfg(test)]
 mod tests {
-    use super::{TraceEventType, TraceSummaryView};
+    use super::{
+        ExecutionTrace, InspectClosureKind, InspectClosureView, TraceEventType, TraceSummaryView,
+    };
     use crate::domain::limits::TerminalCondition;
-    use crate::domain::task::TaskStatus;
+    use crate::domain::task::{TaskStatus, TerminalReason};
 
     #[test]
     fn trace_event_type_helpers_cover_reasoning_family() {
@@ -430,5 +521,97 @@ mod tests {
         assert!(summary.terminal_reason.message.is_empty());
         assert!(summary.context_primary_inputs.is_empty());
         assert!(summary.context_provenance.is_empty());
+    }
+
+    #[test]
+    fn inspect_closure_kind_as_str_covers_all_variants() {
+        assert_eq!(InspectClosureKind::Context.as_str(), "context");
+        assert_eq!(InspectClosureKind::Council.as_str(), "council");
+        assert_eq!(InspectClosureKind::Timeline.as_str(), "timeline");
+    }
+
+    #[test]
+    fn inspect_closure_view_validate_covers_all_error_branches() {
+        let valid = InspectClosureView {
+            view_kind: InspectClosureKind::Context,
+            headline: "context looks good".to_string(),
+            narrative_lines: vec!["workspace is consistent".to_string()],
+            source_attribution: vec!["src/lib.rs".to_string()],
+            missing_inputs: Vec::new(),
+            terminal_status: TaskStatus::Succeeded,
+            terminal_reason: "goal satisfied".to_string(),
+            next_action: None,
+        };
+        assert!(valid.validate().is_ok());
+
+        // empty headline
+        let mut bad = valid.clone();
+        bad.headline = "  ".to_string();
+        assert!(bad.validate().unwrap_err().contains("headline must not be empty"));
+
+        // both narrative_lines and missing_inputs empty
+        let mut bad = valid.clone();
+        bad.narrative_lines = Vec::new();
+        assert!(bad.validate().unwrap_err().contains("requires narrative_lines or missing_inputs"));
+
+        // missing_inputs alone satisfies the check
+        let mut ok = valid.clone();
+        ok.narrative_lines = Vec::new();
+        ok.missing_inputs = vec!["src/missing.rs".to_string()];
+        assert!(ok.validate().is_ok());
+
+        // empty terminal_reason
+        let mut bad = valid.clone();
+        bad.terminal_reason = String::new();
+        assert!(bad.validate().unwrap_err().contains("terminal_reason must not be empty"));
+
+        // blank source_attribution entry
+        let mut bad = valid.clone();
+        bad.source_attribution = vec!["  ".to_string()];
+        assert!(
+            bad.validate().unwrap_err().contains("source_attribution entries must not be empty")
+        );
+
+        // blank missing_inputs entry
+        let mut bad = valid.clone();
+        bad.missing_inputs = vec!["".to_string()];
+        assert!(bad.validate().unwrap_err().contains("missing_inputs entries must not be empty"));
+    }
+
+    #[test]
+    fn execution_trace_methods_cover_record_finalize_location_and_duration() {
+        use serde_json::json;
+
+        let mut trace = ExecutionTrace::new("task-1", "session-1", "Build the CLI");
+        assert!(trace.events.is_empty());
+        assert!(trace.terminal_status.is_none());
+        assert!(trace.ended_at.is_none());
+        assert!(trace.trace_location.is_none());
+        assert_eq!(trace.duration_millis(), None);
+
+        trace.record_event(TraceEventType::TaskStarted, None, 0, json!({"goal": "Build the CLI"}));
+        assert_eq!(trace.events.len(), 1);
+        assert_eq!(trace.events[0].event_type, TraceEventType::TaskStarted);
+        assert!(!trace.events[0].event_id.is_empty());
+
+        trace.record_event(
+            TraceEventType::StepCompleted,
+            Some("step-1".to_string()),
+            1,
+            json!({"outcome": "success"}),
+        );
+        assert_eq!(trace.events.len(), 2);
+        assert_eq!(trace.events[1].step_id.as_deref(), Some("step-1"));
+        assert_eq!(trace.events[1].plan_revision, 1);
+
+        trace.set_trace_location("/tmp/traces/task-1.json");
+        assert_eq!(trace.trace_location.as_deref(), Some("/tmp/traces/task-1.json"));
+
+        let reason = TerminalReason::new(TerminalCondition::GoalSatisfied, "all done", None);
+        trace.finalize(TaskStatus::Succeeded, reason);
+        assert_eq!(trace.terminal_status, Some(TaskStatus::Succeeded));
+        assert!(trace.terminal_reason.is_some());
+        assert!(trace.ended_at.is_some());
+        assert!(trace.duration_millis().is_some());
     }
 }

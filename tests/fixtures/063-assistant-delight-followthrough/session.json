@@ -1,0 +1,31 @@
+{
+  "session_id": "session-assistant-delight-fixture",
+  "workspace_ref": "/tmp/boundline-assistant-delight-fixture",
+  "goal": "Explain the bounded runtime change with inspectable authority",
+  "authored_brief": null,
+  "negotiation_packet": null,
+  "active_flow": null,
+  "active_task": null,
+  "goal_plan": null,
+  "workflow_progress": null,
+  "decisions": [],
+  "active_flow_policy": null,
+  "latest_status": "goal_captured",
+  "latest_terminal_reason": null,
+  "latest_trace_ref": ".boundline/traces/trace.json",
+  "created_at": 1716115200000,
+  "updated_at": 1716115515000,
+  "governance_lifecycle": null,
+  "project_scale": null,
+  "latest_voting": null,
+  "delight_feedback": {
+    "first_useful_answer_at": 1716115515000,
+    "first_useful_answer_command": "explain_plan",
+    "total_explanations": 1,
+    "attributed_explanations": 1,
+    "accepted_next_actions": 1,
+    "overridden_next_actions": 0,
+    "next_action_outcome": "accepted",
+    "captured_at": 1716115515000
+  }
+}

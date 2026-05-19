@@ -438,7 +438,7 @@ fn extend_workspace_context_diagnostics(report: &mut DiagnosticsReport, workspac
                 "workspace or Canon guidance inputs are available for expert-pack calibration"
                     .to_string()
             } else {
-                "expert-pack inputs are missing; add workspace domain guidance or bind a required context before relying on deeper S7 routing".to_string()
+                "expert-pack inputs are missing; add workspace domain guidance or bind a required context before relying on deeper explanation routing".to_string()
             },
         },
         (!expert_pack_ready).then(|| {
@@ -502,7 +502,8 @@ fn extend_workspace_context_diagnostics(report: &mut DiagnosticsReport, workspac
                 DiagnosticsStatus::Advisory
             },
             message: if has_session_evidence {
-                "session or trace evidence is available for S7 explanations".to_string()
+                "session or trace evidence is available for source-attributed explanations"
+                    .to_string()
             } else {
                 "session evidence is missing; start a session before expecting `why`, `risk`, or `next-best` to cite live runtime context".to_string()
             },

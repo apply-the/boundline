@@ -8,6 +8,12 @@ use crate::domain::governance::CanonMode;
 
 pub const REASONING_POSTURE_V1_CONTRACT_LINE: &str = "governed_reasoning_posture_v1";
 const CURRENT_BOUNDLINE_VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const REASONING_FALLBACK_BLOCKED_PREFIX: &str = "reasoning profile is blocked: ";
+pub const REASONING_FALLBACK_DEGRADED_PREFIX: &str = "reasoning profile is degraded: ";
+pub const REASONING_FALLBACK_ESCALATED_PREFIX: &str = "reasoning profile escalated: ";
+pub const REASONING_FALLBACK_FAILED_PREFIX: &str = "reasoning profile failed: ";
+pub const REASONING_FALLBACK_INTERRUPTED_PREFIX: &str = "reasoning profile was interrupted: ";
+pub const REASONING_FALLBACK_PENDING_PREFIX: &str = "reasoning profile is pending: ";
 
 const MINIMUM_SINGLE_PARTICIPANT: usize = 1;
 const MINIMUM_PAIR_PARTICIPANTS: usize = 2;
@@ -892,6 +898,34 @@ pub struct ProfileActivationRecord {
 }
 
 impl ProfileActivationRecord {
+    pub fn disclosure_selection_reason(&self) -> &str {
+        &self.activation_reason
+    }
+
+    pub fn disclosure_contribution_summary(&self) -> Option<String> {
+        self.outcome
+            .as_ref()
+            .map(|outcome| outcome.headline.clone())
+            .or_else(|| self.confidence.as_ref().map(|confidence| confidence.summary.clone()))
+            .or_else(|| self.independence.as_ref().map(|independence| independence.reason.clone()))
+    }
+
+    pub fn disclosure_fallback_disclosure(&self) -> Option<String> {
+        let prefix = match self.status {
+            ReasoningActivationStatus::Pending => REASONING_FALLBACK_PENDING_PREFIX,
+            ReasoningActivationStatus::Degraded => REASONING_FALLBACK_DEGRADED_PREFIX,
+            ReasoningActivationStatus::Blocked => REASONING_FALLBACK_BLOCKED_PREFIX,
+            ReasoningActivationStatus::Interrupted => REASONING_FALLBACK_INTERRUPTED_PREFIX,
+            ReasoningActivationStatus::Escalated => REASONING_FALLBACK_ESCALATED_PREFIX,
+            ReasoningActivationStatus::Failed => REASONING_FALLBACK_FAILED_PREFIX,
+            ReasoningActivationStatus::Active | ReasoningActivationStatus::Completed => {
+                return None;
+            }
+        };
+
+        Some(format!("{prefix}{}", self.activation_reason))
+    }
+
     pub fn validate_against(
         &self,
         definition: &ReasoningProfileDefinition,
@@ -1192,23 +1226,23 @@ mod tests {
     #[test]
     fn compatibility_window_admits_supported_pair() {
         let window = ReasoningCompatibilityWindow {
-            boundline_min: "0.62.0".to_string(),
-            boundline_max_exclusive: "0.63.0".to_string(),
+            boundline_min: "0.63.0".to_string(),
+            boundline_max_exclusive: "0.64.0".to_string(),
             canon_min: "0.59.0".to_string(),
             canon_max_exclusive: "0.60.0".to_string(),
             contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
         };
 
         assert!(window.validate().is_ok());
-        assert!(window.admits_versions("0.62.0", "0.59.0"));
-        assert!(!window.admits_versions("0.63.0", "0.59.0"));
+        assert!(window.admits_versions("0.63.0", "0.59.0"));
+        assert!(!window.admits_versions("0.64.0", "0.59.0"));
     }
 
     #[test]
     fn compatibility_window_rejects_unsupported_contract_line() {
         let window = ReasoningCompatibilityWindow {
-            boundline_min: "0.62.0".to_string(),
-            boundline_max_exclusive: "0.63.0".to_string(),
+            boundline_min: "0.63.0".to_string(),
+            boundline_max_exclusive: "0.64.0".to_string(),
             canon_min: "0.59.0".to_string(),
             canon_max_exclusive: "0.60.0".to_string(),
             contract_line: "governed_reasoning_posture_v2".to_string(),
@@ -1227,8 +1261,8 @@ mod tests {
         let posture = CanonChallengePostureInput {
             contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
             compatibility_window: ReasoningCompatibilityWindow {
-                boundline_min: "0.62.0".to_string(),
-                boundline_max_exclusive: "0.63.0".to_string(),
+                boundline_min: "0.63.0".to_string(),
+                boundline_max_exclusive: "0.64.0".to_string(),
                 canon_min: "0.59.0".to_string(),
                 canon_max_exclusive: "0.60.0".to_string(),
                 contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
@@ -1258,8 +1292,8 @@ mod tests {
         let posture = CanonChallengePostureInput {
             contract_line: "governed_reasoning_posture_v2".to_string(),
             compatibility_window: ReasoningCompatibilityWindow {
-                boundline_min: "0.62.0".to_string(),
-                boundline_max_exclusive: "0.63.0".to_string(),
+                boundline_min: "0.63.0".to_string(),
+                boundline_max_exclusive: "0.64.0".to_string(),
                 canon_min: "0.59.0".to_string(),
                 canon_max_exclusive: "0.60.0".to_string(),
                 contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
@@ -1291,8 +1325,8 @@ mod tests {
         let posture = CanonChallengePostureInput {
             contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
             compatibility_window: ReasoningCompatibilityWindow {
-                boundline_min: "0.62.0".to_string(),
-                boundline_max_exclusive: "0.63.0".to_string(),
+                boundline_min: "0.63.0".to_string(),
+                boundline_max_exclusive: "0.64.0".to_string(),
                 canon_min: "0.59.0".to_string(),
                 canon_max_exclusive: "0.60.0".to_string(),
                 contract_line: "governed_reasoning_posture_v2".to_string(),
@@ -1324,8 +1358,8 @@ mod tests {
         let posture = CanonChallengePostureInput {
             contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
             compatibility_window: ReasoningCompatibilityWindow {
-                boundline_min: "0.62.0".to_string(),
-                boundline_max_exclusive: "0.63.0".to_string(),
+                boundline_min: "0.63.0".to_string(),
+                boundline_max_exclusive: "0.64.0".to_string(),
                 canon_min: "0.60.0".to_string(),
                 canon_max_exclusive: "0.61.0".to_string(),
                 contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
@@ -1672,7 +1706,7 @@ mod tests {
 
         let invalid_window = ReasoningCompatibilityWindow {
             boundline_min: "not-a-version".to_string(),
-            boundline_max_exclusive: "0.63.0".to_string(),
+            boundline_max_exclusive: "0.64.0".to_string(),
             canon_min: "0.59.0".to_string(),
             canon_max_exclusive: "0.60.0".to_string(),
             contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),

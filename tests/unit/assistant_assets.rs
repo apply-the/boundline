@@ -175,7 +175,7 @@ fn test_documented_flows_match_the_assistant_asset_surface() {
 }
 
 #[test]
-fn s7_global_bootstrap_manifest_keeps_doctor_context_contextual() {
+fn global_bootstrap_manifest_keeps_doctor_context_contextual() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let manifest_path = manifest_dir.join("assistant/global/manifest.json");
     let manifest: Value = serde_json::from_str(&read_text(&manifest_path))

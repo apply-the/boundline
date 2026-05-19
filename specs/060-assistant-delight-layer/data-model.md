@@ -329,7 +329,7 @@ S7Explanation
 
 ### TOML Config (contract parameters)
 
-Stored in `s7-explanation-vocabulary.toml`:
+Stored in `assistant-delight-explanation-vocabulary.toml`:
 ```toml
 [vocabulary.Risk]
 definition = "What could go wrong with this plan according to all evidence sources"
@@ -356,7 +356,7 @@ The data model supports contract amendment without redesign:
 3. **New degradation modes**: Add to DegradationType enum and rendering logic
 4. **New evidence gaps**: No schema change; evidence_type is free-form text matching actual evidence sources
 
-All extensions MUST go through the amendment procedures documented in `s7-extension-procedures.md` to maintain bilateral agreement.
+All extensions MUST go through the amendment procedures documented in `assistant-delight-extension-procedures.md` to maintain bilateral agreement.
 
 ---
 
@@ -370,9 +370,9 @@ All extensions MUST go through the amendment procedures documented in `s7-extens
 ✅ Ready for quickstart documentation (entity reference complete)
 
 **Next Phase 1 steps**:
-1. Generate `contracts/s7-delight-contract.md` with full contract definition
-2. Create `s7-explanation-vocabulary.toml` with standardized terms
-3. Generate `s7-input-classes.json` with artifact class schema
+1. Generate `contracts/assistant-delight-contract.md` with full contract definition
+2. Create `assistant-delight-explanation-vocabulary.toml` with standardized terms
+3. Generate `assistant-delight-input-classes.schema.json` with artifact class schema
 4. Document degradation modes and handling rules
 5. Document extension procedures
 6. Update agent context with S7 terminology

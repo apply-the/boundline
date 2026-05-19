@@ -53,7 +53,16 @@ version tag. Two contract tests enforce alignment automatically:
 
 ### Assistant plugin surface
 
-- **`assistant/plugin-metadata.json`** — `"version": "X.Y.Z"`.
+- **`assistant/plugin-metadata.json`** — `"version": "X.Y.Z"` plus any
+  active `supportModes` or `supportModeNotes` declarations.
+
+- **`.claude-plugin/manifest.json`**, **`.codex-plugin/plugin.json`**,
+  **`.cursor-plugin/manifest.json`**, and **`.copilot-prompts/pack.json`** —
+  update the packaged host manifest version to `X.Y.Z`.
+
+- **`assistant/global/manifest.json`** — update `"version": "X.Y.Z"` and any
+  active host-support declarations when the release changes bootstrap or host
+  parity wording.
 
 - **`assistant/README.md`** — update or remove any release-specific wording if
   it is describing active assistant surfaces rather than historical release

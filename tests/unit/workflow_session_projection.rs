@@ -52,6 +52,7 @@ fn build_record() -> ActiveSessionRecord {
         governance_lifecycle: None,
         project_scale: None,
         latest_voting: None,
+        delight_feedback: None,
     }
 }
 
@@ -91,6 +92,7 @@ fn build_view(record: &ActiveSessionRecord) -> SessionStatusView {
         current_step_id: None,
         current_step_index: None,
         latest_status: record.latest_status,
+        session_started_at: Some(record.created_at),
         execution_path: execution_path_text(record),
         latest_trace_ref: record.latest_trace_ref.clone(),
         latest_decision_status: None,
@@ -200,6 +202,7 @@ fn session_status_view_accepts_session_owned_workflow_progress_without_goal_plan
         governance_lifecycle: None,
         project_scale: None,
         latest_voting: None,
+        delight_feedback: None,
     };
 
     let view = build_view(&record);

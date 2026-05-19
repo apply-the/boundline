@@ -287,7 +287,7 @@ fn command_reference_paths_exist() {
 }
 
 #[test]
-fn s7_mvp_commands_are_registered_in_shared_metadata() {
+fn delight_mvp_commands_are_registered_in_shared_metadata() {
     let metadata = read_json("assistant/plugin-metadata.json");
     let commands = read_json("assistant/commands/session-workflow.json");
     let capability_ids = capability_ids(&metadata).expect("metadata capabilities parse");
@@ -308,7 +308,7 @@ fn s7_mvp_commands_are_registered_in_shared_metadata() {
 }
 
 #[test]
-fn s7_us2_commands_are_registered_in_shared_metadata() {
+fn delight_follow_up_commands_are_registered_in_shared_metadata() {
     let metadata = read_json("assistant/plugin-metadata.json");
     let commands = read_json("assistant/commands/session-workflow.json");
     let capability_ids = capability_ids(&metadata).expect("metadata capabilities parse");

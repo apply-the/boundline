@@ -61,10 +61,10 @@ fn plan_status_and_inspect_surface_explicit_semantic_fallback_when_local_capabil
 }
 
 #[test]
-fn s7_plan_and_status_surface_hidden_impact_fallback_when_semantic_capability_is_unavailable() {
+fn plan_and_status_surface_hidden_impact_fallback_when_semantic_capability_is_unavailable() {
     let _env_guard = force_semantic_vector_state_override(SEMANTIC_VECTOR_STATE_MISSING_VALUE);
     let workspace =
-        write_semantic_fallback_workspace("boundline-context-intelligence-s7-semantic-fallback");
+        write_semantic_fallback_workspace("boundline-context-intelligence-semantic-fallback");
 
     execute_start(Some(&workspace)).unwrap();
     execute_capture(

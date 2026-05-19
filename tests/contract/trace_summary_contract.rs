@@ -214,8 +214,8 @@ fn trace_summary_projects_route_owner_and_effective_routing_snapshot() {
 }
 
 #[test]
-fn s7_trace_summary_surfaces_source_attribution_fallback_and_next_best_action() {
-    let workspace = temp_fixture_workspace("boundline-trace-summary-s7");
+fn trace_summary_surfaces_source_attribution_fallback_and_next_best_action() {
+    let workspace = temp_fixture_workspace("boundline-trace-summary-attribution");
     let output = run_boundline(&[
         "run",
         "--goal",

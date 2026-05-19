@@ -174,7 +174,7 @@ pub enum ReviewerDisposition {
     Block,
 }
 
-/// Finding severity per S3 §13 structured findings.
+/// Finding severity for structured reviewer findings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FindingSeverity {
@@ -214,7 +214,7 @@ impl FindingConfidence {
     }
 }
 
-/// Producer response disposition per S3 §14 producer response protocol.
+/// Producer response disposition for the reviewer response protocol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProducerResponseDisposition {
@@ -233,7 +233,7 @@ impl ProducerResponseDisposition {
     }
 }
 
-/// Adjudication decision outcome per S3 §15 stop semantics.
+/// Adjudication decision outcome for review stop semantics.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AdjudicationDecision {
@@ -373,19 +373,19 @@ pub struct ReviewerFinding {
     pub summary: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub details: Option<String>,
-    /// Runtime role of the reviewer (S3 §13).
+    /// Runtime role of the reviewer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_role: Option<String>,
-    /// Severity classification (S3 §13).
+    /// Severity classification.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub severity: Option<FindingSeverity>,
-    /// Required action for concern or block findings (S3 §13).
+    /// Required action for concern or block findings.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub required_action: Option<String>,
-    /// Confidence of the finding (S3 §13).
+    /// Confidence of the finding.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub confidence: Option<FindingConfidence>,
-    /// Evidence references (S3 §13).
+    /// Evidence references.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub evidence_refs: Vec<String>,
 }
@@ -856,7 +856,7 @@ impl AdjudicationDefinition {
     }
 }
 
-/// Producer-side response to a concern or blocking finding (S3 §14).
+/// Producer-side response to a concern or blocking finding.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProducerResponse {
     pub finding_id: String,
