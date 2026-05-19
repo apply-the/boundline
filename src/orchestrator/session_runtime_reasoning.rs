@@ -66,17 +66,13 @@ impl SessionRuntime {
                     }),
                 );
             }
-            record_reasoning_profile_events(
+            self.persist_reasoning_gate_state(
+                session,
                 trace,
                 trace_context.step_id,
                 trace_context.plan_revision,
                 &activation,
-            );
-            let trace_location = self.persist_trace(trace)?;
-            session.latest_status = SessionStatus::Running;
-            session.latest_terminal_reason = None;
-            session.latest_trace_ref = Some(trace_location);
-            session.updated_at = current_timestamp_millis();
+            )?;
             return Ok(GovernanceStepDecision::Continue);
         }
 
@@ -95,17 +91,13 @@ impl SessionRuntime {
                 "reasoning_profile_record": activation.clone(),
             }),
         );
-        record_reasoning_profile_events(
+        self.persist_reasoning_gate_state(
+            session,
             trace,
             trace_context.step_id,
             trace_context.plan_revision,
             &activation,
-        );
-        let trace_location = self.persist_trace(trace)?;
-        session.latest_status = SessionStatus::Running;
-        session.latest_terminal_reason = None;
-        session.latest_trace_ref = Some(trace_location);
-        session.updated_at = current_timestamp_millis();
+        )?;
 
         Ok(GovernanceStepDecision::Halt)
     }
@@ -312,6 +304,23 @@ impl SessionRuntime {
             session.latest_terminal_reason = None;
             Ok(GovernanceStepDecision::Halt)
         }
+    }
+
+    fn persist_reasoning_gate_state(
+        &self,
+        session: &mut ActiveSessionRecord,
+        trace: &mut ExecutionTrace,
+        step_id: &str,
+        plan_revision: usize,
+        activation: &ProfileActivationRecord,
+    ) -> Result<(), SessionRuntimeError> {
+        record_reasoning_profile_events(trace, step_id, plan_revision, activation);
+        let trace_location = self.persist_trace(trace)?;
+        session.latest_status = SessionStatus::Running;
+        session.latest_terminal_reason = None;
+        session.latest_trace_ref = Some(trace_location);
+        session.updated_at = current_timestamp_millis();
+        Ok(())
     }
 }
 

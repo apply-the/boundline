@@ -11,6 +11,7 @@ use super::routing::{
     route_config_projection_for_status_view, session_route_owner,
 };
 use super::runtime::append_reasoning_profile_lines;
+use super::support::push_governance_display_lines;
 use super::*;
 use crate::domain::follow_through::FollowThroughProjection;
 
@@ -128,21 +129,13 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
         ));
     }
 
-    if let Some(requested_governance_runtime) = &view.requested_governance_runtime {
-        lines.push(format!("requested_governance_runtime: {requested_governance_runtime}"));
-    }
-
-    if let Some(requested_governance_risk) = &view.requested_governance_risk {
-        lines.push(format!("requested_governance_risk: {requested_governance_risk}"));
-    }
-
-    if let Some(requested_governance_zone) = &view.requested_governance_zone {
-        lines.push(format!("requested_governance_zone: {requested_governance_zone}"));
-    }
-
-    if let Some(requested_governance_owner) = &view.requested_governance_owner {
-        lines.push(format!("requested_governance_owner: {requested_governance_owner}"));
-    }
+    push_governance_display_lines(
+        &mut lines,
+        view.requested_governance_runtime.as_deref(),
+        view.requested_governance_risk.as_deref(),
+        view.requested_governance_zone.as_deref(),
+        view.requested_governance_owner.as_deref(),
+    );
 
     if let Some(active_flow) = &view.active_flow {
         lines.push(format!("active_flow: {active_flow}"));

@@ -151,3 +151,25 @@ pub const fn next_command_after_run(status: TaskStatus) -> &'static str {
 pub const fn next_command_after_inspect(_: TaskStatus) -> &'static str {
     "/boundline-next"
 }
+
+/// Appends the four governance display lines using `: ` separator format.
+pub(crate) fn push_governance_display_lines(
+    lines: &mut Vec<String>,
+    runtime: Option<&str>,
+    risk: Option<&str>,
+    zone: Option<&str>,
+    owner: Option<&str>,
+) {
+    if let Some(runtime) = runtime {
+        lines.push(format!("requested_governance_runtime: {runtime}"));
+    }
+    if let Some(risk) = risk {
+        lines.push(format!("requested_governance_risk: {risk}"));
+    }
+    if let Some(zone) = zone {
+        lines.push(format!("requested_governance_zone: {zone}"));
+    }
+    if let Some(owner) = owner {
+        lines.push(format!("requested_governance_owner: {owner}"));
+    }
+}

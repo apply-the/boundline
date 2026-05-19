@@ -10,7 +10,7 @@ use super::routing::{
     route_config_projection_for_trace_summary, trace_route_owner,
 };
 use super::runtime::append_reasoning_profile_lines;
-use super::support::render_guidance_projection_lines;
+use super::support::{push_governance_display_lines, render_guidance_projection_lines};
 use super::*;
 use crate::domain::follow_through::FollowThroughProjection;
 
@@ -104,21 +104,13 @@ pub fn render_trace_summary(
         ));
     }
 
-    if let Some(requested_governance_runtime) = &summary.requested_governance_runtime {
-        lines.push(format!("requested_governance_runtime: {requested_governance_runtime}"));
-    }
-
-    if let Some(requested_governance_risk) = &summary.requested_governance_risk {
-        lines.push(format!("requested_governance_risk: {requested_governance_risk}"));
-    }
-
-    if let Some(requested_governance_zone) = &summary.requested_governance_zone {
-        lines.push(format!("requested_governance_zone: {requested_governance_zone}"));
-    }
-
-    if let Some(requested_governance_owner) = &summary.requested_governance_owner {
-        lines.push(format!("requested_governance_owner: {requested_governance_owner}"));
-    }
+    push_governance_display_lines(
+        &mut lines,
+        summary.requested_governance_runtime.as_deref(),
+        summary.requested_governance_risk.as_deref(),
+        summary.requested_governance_zone.as_deref(),
+        summary.requested_governance_owner.as_deref(),
+    );
 
     if !summary.decision_timeline.is_empty() {
         lines.push("decision_timeline:".to_string());

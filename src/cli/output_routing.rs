@@ -138,21 +138,13 @@ pub(crate) fn route_config_projection_for_status_view(view: &SessionStatusView) 
         projection.push(format!("flow_state={flow_state}"));
     }
 
-    if let Some(requested_governance_runtime) = &view.requested_governance_runtime {
-        projection.push(format!("requested_governance_runtime={requested_governance_runtime}"));
-    }
-
-    if let Some(requested_governance_risk) = &view.requested_governance_risk {
-        projection.push(format!("requested_governance_risk={requested_governance_risk}"));
-    }
-
-    if let Some(requested_governance_zone) = &view.requested_governance_zone {
-        projection.push(format!("requested_governance_zone={requested_governance_zone}"));
-    }
-
-    if let Some(requested_governance_owner) = &view.requested_governance_owner {
-        projection.push(format!("requested_governance_owner={requested_governance_owner}"));
-    }
+    push_governance_projection_fields(
+        &mut projection,
+        view.requested_governance_runtime.as_deref(),
+        view.requested_governance_risk.as_deref(),
+        view.requested_governance_zone.as_deref(),
+        view.requested_governance_owner.as_deref(),
+    );
 
     projection
 }
@@ -166,21 +158,13 @@ pub(crate) fn route_config_projection_for_trace_summary(summary: &TraceSummaryVi
         projection.extend(current_routing_projection(&workspace));
     }
 
-    if let Some(requested_governance_runtime) = &summary.requested_governance_runtime {
-        projection.push(format!("requested_governance_runtime={requested_governance_runtime}"));
-    }
-
-    if let Some(requested_governance_risk) = &summary.requested_governance_risk {
-        projection.push(format!("requested_governance_risk={requested_governance_risk}"));
-    }
-
-    if let Some(requested_governance_zone) = &summary.requested_governance_zone {
-        projection.push(format!("requested_governance_zone={requested_governance_zone}"));
-    }
-
-    if let Some(requested_governance_owner) = &summary.requested_governance_owner {
-        projection.push(format!("requested_governance_owner={requested_governance_owner}"));
-    }
+    push_governance_projection_fields(
+        &mut projection,
+        summary.requested_governance_runtime.as_deref(),
+        summary.requested_governance_risk.as_deref(),
+        summary.requested_governance_zone.as_deref(),
+        summary.requested_governance_owner.as_deref(),
+    );
 
     projection
 }
@@ -202,26 +186,13 @@ pub(crate) fn route_config_projection_for_run_trace(
             .then(|| event.payload.get("input"))
             .flatten()
     }) {
-        if let Some(requested_governance_runtime) =
-            input.get("requested_governance_runtime").and_then(Value::as_str)
-        {
-            projection.push(format!("requested_governance_runtime={requested_governance_runtime}"));
-        }
-        if let Some(requested_governance_risk) =
-            input.get("requested_governance_risk").and_then(Value::as_str)
-        {
-            projection.push(format!("requested_governance_risk={requested_governance_risk}"));
-        }
-        if let Some(requested_governance_zone) =
-            input.get("requested_governance_zone").and_then(Value::as_str)
-        {
-            projection.push(format!("requested_governance_zone={requested_governance_zone}"));
-        }
-        if let Some(requested_governance_owner) =
-            input.get("requested_governance_owner").and_then(Value::as_str)
-        {
-            projection.push(format!("requested_governance_owner={requested_governance_owner}"));
-        }
+        push_governance_projection_fields(
+            &mut projection,
+            input.get("requested_governance_runtime").and_then(Value::as_str),
+            input.get("requested_governance_risk").and_then(Value::as_str),
+            input.get("requested_governance_zone").and_then(Value::as_str),
+            input.get("requested_governance_owner").and_then(Value::as_str),
+        );
     }
 
     projection
@@ -671,4 +642,25 @@ pub(crate) fn render_run_execution_condition(response: &TaskRunResponse) -> Stri
     };
 
     format!("execution_condition: {kind} - {}", response.terminal_reason.message)
+}
+
+fn push_governance_projection_fields(
+    projection: &mut Vec<String>,
+    runtime: Option<&str>,
+    risk: Option<&str>,
+    zone: Option<&str>,
+    owner: Option<&str>,
+) {
+    if let Some(runtime) = runtime {
+        projection.push(format!("requested_governance_runtime={runtime}"));
+    }
+    if let Some(risk) = risk {
+        projection.push(format!("requested_governance_risk={risk}"));
+    }
+    if let Some(zone) = zone {
+        projection.push(format!("requested_governance_zone={zone}"));
+    }
+    if let Some(owner) = owner {
+        projection.push(format!("requested_governance_owner={owner}"));
+    }
 }

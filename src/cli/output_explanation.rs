@@ -1,5 +1,46 @@
 use super::*;
 
+fn build_missing_sources(
+    canon_empty: bool,
+    context_stale: bool,
+    clarification_missing: bool,
+) -> Vec<&'static str> {
+    let mut sources = Vec::new();
+    if canon_empty {
+        sources.push(EXPLANATION_MISSING_CANON_SOURCE);
+    }
+    if context_stale {
+        sources.push(EXPLANATION_MISSING_CONTEXT_SOURCE);
+    }
+    if clarification_missing {
+        sources.push(EXPLANATION_MISSING_CLARIFICATION_SOURCE);
+    }
+    sources
+}
+
+fn build_evidence_and_attribution(
+    runtime_sources: &[&str],
+    canon_sources: &[&str],
+    missing_sources: &[&str],
+) -> (String, String) {
+    let evidence_summary = format!(
+        "runtime({}): {}; canon({}): {}; missing({}): {}",
+        runtime_sources.len(),
+        explanation_source_bucket_text(runtime_sources),
+        canon_sources.len(),
+        explanation_source_bucket_text(canon_sources),
+        missing_sources.len(),
+        explanation_source_bucket_text(missing_sources)
+    );
+    let source_attribution = format!(
+        "runtime={}; canon={}; missing={}",
+        explanation_source_bucket_text(runtime_sources),
+        explanation_source_bucket_text(canon_sources),
+        explanation_source_bucket_text(missing_sources)
+    );
+    (evidence_summary, source_attribution)
+}
+
 fn explanation_source_bucket_text(labels: &[&str]) -> String {
     if labels.is_empty() { EXPLANATION_NONE.to_string() } else { labels.join(", ") }
 }
@@ -211,16 +252,11 @@ pub(crate) fn explanation_projection_for_trace_summary(
         canon_sources.push(EXPLANATION_CANON_SOURCE_GOVERNANCE_ACTION);
     }
 
-    let mut missing_sources = Vec::new();
-    if canon_sources.is_empty() {
-        missing_sources.push(EXPLANATION_MISSING_CANON_SOURCE);
-    }
-    if summary.context_staleness_reason.is_some() {
-        missing_sources.push(EXPLANATION_MISSING_CONTEXT_SOURCE);
-    }
-    if !summary.clarification_missing_fields.is_empty() {
-        missing_sources.push(EXPLANATION_MISSING_CLARIFICATION_SOURCE);
-    }
+    let missing_sources = build_missing_sources(
+        canon_sources.is_empty(),
+        summary.context_staleness_reason.is_some(),
+        !summary.clarification_missing_fields.is_empty(),
+    );
 
     let why_summary = reasoning_projection_why_summary(summary.reasoning_profile.as_ref())
         .or_else(|| summary.goal_plan_summary.clone())
@@ -254,22 +290,8 @@ pub(crate) fn explanation_projection_for_trace_summary(
         summary.terminal_reason.message.clone()
     };
 
-    let evidence_summary = format!(
-        "runtime({}): {}; canon({}): {}; missing({}): {}",
-        runtime_sources.len(),
-        explanation_source_bucket_text(&runtime_sources),
-        canon_sources.len(),
-        explanation_source_bucket_text(&canon_sources),
-        missing_sources.len(),
-        explanation_source_bucket_text(&missing_sources)
-    );
-
-    let source_attribution = format!(
-        "runtime={}; canon={}; missing={}",
-        explanation_source_bucket_text(&runtime_sources),
-        explanation_source_bucket_text(&canon_sources),
-        explanation_source_bucket_text(&missing_sources)
-    );
+    let (evidence_summary, source_attribution) =
+        build_evidence_and_attribution(&runtime_sources, &canon_sources, &missing_sources);
 
     let fallback_disclosure = explanation_fallback_disclosure(
         canon_sources.is_empty(),
@@ -341,16 +363,11 @@ pub(crate) fn explanation_projection_for_session_status(
     let clarification_missing_fields =
         view.clarification_missing_fields.clone().unwrap_or_default();
 
-    let mut missing_sources = Vec::new();
-    if canon_sources.is_empty() {
-        missing_sources.push(EXPLANATION_MISSING_CANON_SOURCE);
-    }
-    if view.context_staleness_reason.is_some() {
-        missing_sources.push(EXPLANATION_MISSING_CONTEXT_SOURCE);
-    }
-    if !clarification_missing_fields.is_empty() {
-        missing_sources.push(EXPLANATION_MISSING_CLARIFICATION_SOURCE);
-    }
+    let missing_sources = build_missing_sources(
+        canon_sources.is_empty(),
+        view.context_staleness_reason.is_some(),
+        !clarification_missing_fields.is_empty(),
+    );
 
     let why_summary = reasoning_projection_why_summary(view.latest_reasoning_profile.as_ref())
         .or_else(|| view.planning_rationale.clone())
@@ -376,22 +393,8 @@ pub(crate) fn explanation_projection_for_session_status(
         EXPLANATION_RISK_NO_EXPLICIT_FAILURE.to_string()
     };
 
-    let evidence_summary = format!(
-        "runtime({}): {}; canon({}): {}; missing({}): {}",
-        runtime_sources.len(),
-        explanation_source_bucket_text(&runtime_sources),
-        canon_sources.len(),
-        explanation_source_bucket_text(&canon_sources),
-        missing_sources.len(),
-        explanation_source_bucket_text(&missing_sources)
-    );
-
-    let source_attribution = format!(
-        "runtime={}; canon={}; missing={}",
-        explanation_source_bucket_text(&runtime_sources),
-        explanation_source_bucket_text(&canon_sources),
-        explanation_source_bucket_text(&missing_sources)
-    );
+    let (evidence_summary, source_attribution) =
+        build_evidence_and_attribution(&runtime_sources, &canon_sources, &missing_sources);
 
     let fallback_disclosure = explanation_fallback_disclosure(
         canon_sources.is_empty(),

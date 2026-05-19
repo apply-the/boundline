@@ -4,6 +4,7 @@ use boundline::FileConfigStore;
 use boundline::FileTraceStore;
 use boundline::adapters::session_store::SessionStoreError;
 use boundline::adapters::trace_store::TraceStore;
+use boundline::cli::assistant_assets::{AssistantHost, AssistantInstallScope};
 use boundline::cli::diagnostics::{
     DiagnosticsCheck, DiagnosticsReport, DiagnosticsStatus, DiagnosticsSubject,
 };
@@ -13,17 +14,23 @@ use boundline::cli::inspect::{
 };
 use boundline::cli::output::{
     CommandExitCode, command_name, next_command_after_inspect, next_command_after_run,
-    render_diagnostics, render_goal_plan_flow_state, render_inspect_failure, render_route_outcome,
-    render_run_trace, render_session_status, render_trace_summary, validation_error_message,
+    render_cluster_init, render_cluster_inspect, render_cluster_status, render_diagnostics,
+    render_goal_plan_flow_state, render_inspect_failure, render_route_outcome, render_run_trace,
+    render_session_status, render_trace_summary, validation_error_message,
 };
 use boundline::cli::session::{
     SessionCommandError, execute_next, execute_status, render_error as render_session_error,
 };
 use boundline::cli::{
+    AssistantSubcommand, CheckpointSubcommand, ClusterSubcommand, ConfigSubcommand,
+    WorkflowSubcommand,
+};
+use boundline::cli::{
     CliValidationError, CommandExitStatus, CommandName, DeveloperCommand, DeveloperCommandSession,
 };
 use boundline::domain::cluster::{
-    ClusterDeliveryStory, ClusterRouteOwner, ClusteredExecutionCondition, ClusteredExecutionKind,
+    ClusterDeliveryStory, ClusterInspectReport, ClusterMemberState, ClusterMemberStatusView,
+    ClusterRouteOwner, ClusteredExecutionCondition, ClusteredExecutionKind,
     WorkspaceParticipationKind, WorkspaceParticipationRecord,
 };
 use boundline::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
@@ -2526,6 +2533,331 @@ fn render_trace_summary_surfaces_cluster_delivery_story() {
     assert!(rendered.contains("cluster_route_owner: native"), "{rendered}");
     assert!(rendered.contains("cluster_authoritative_workspace: /tmp/primary"), "{rendered}");
     assert!(rendered.contains("cluster_blocking_workspace: /tmp/secondary"), "{rendered}");
+}
+
+#[test]
+fn cluster_rendering_covers_init_status_and_inspect_functions() {
+    let rendered = render_cluster_init(
+        "cluster-alpha",
+        "/tmp/cluster.toml",
+        &["/tmp/ws1".to_string(), "/tmp/ws2".to_string()],
+    );
+    assert!(rendered.contains("cluster: initialized"), "{rendered}");
+    assert!(rendered.contains("cluster_id: cluster-alpha"), "{rendered}");
+    assert!(rendered.contains("- /tmp/ws1"), "{rendered}");
+
+    let report = ClusterInspectReport {
+        cluster_id: "cluster-beta".to_string(),
+        primary_workspace_ref: "/tmp/primary".to_string(),
+        members: vec![
+            ClusterMemberStatusView {
+                workspace_ref: "/tmp/ws1".to_string(),
+                state: ClusterMemberState::Healthy,
+                latest_status: Some(SessionStatus::Succeeded),
+                latest_trace_ref: Some("/tmp/ws1/.boundline/traces/t.json".to_string()),
+                headline: "all steps completed".to_string(),
+            },
+            ClusterMemberStatusView {
+                workspace_ref: "/tmp/ws2".to_string(),
+                state: ClusterMemberState::MissingSession,
+                latest_status: None,
+                latest_trace_ref: None,
+                headline: "no session found".to_string(),
+            },
+            ClusterMemberStatusView {
+                workspace_ref: "/tmp/ws3".to_string(),
+                state: ClusterMemberState::MissingTrace,
+                latest_status: None,
+                latest_trace_ref: None,
+                headline: "trace missing".to_string(),
+            },
+            ClusterMemberStatusView {
+                workspace_ref: "/tmp/ws4".to_string(),
+                state: ClusterMemberState::Blocked,
+                latest_status: None,
+                latest_trace_ref: None,
+                headline: "blocked by dependency".to_string(),
+            },
+            ClusterMemberStatusView {
+                workspace_ref: "/tmp/ws5".to_string(),
+                state: ClusterMemberState::Invalid,
+                latest_status: None,
+                latest_trace_ref: None,
+                headline: "invalid config".to_string(),
+            },
+        ],
+    };
+
+    let status_rendered = render_cluster_status(&report);
+    assert!(status_rendered.contains("cluster: status"), "{status_rendered}");
+    assert!(status_rendered.contains("[healthy]"), "{status_rendered}");
+    assert!(status_rendered.contains("status=succeeded"), "{status_rendered}");
+    assert!(status_rendered.contains("[missing-session]"), "{status_rendered}");
+    assert!(status_rendered.contains("[missing-trace]"), "{status_rendered}");
+    assert!(status_rendered.contains("[blocked]"), "{status_rendered}");
+    assert!(status_rendered.contains("[invalid]"), "{status_rendered}");
+
+    let inspect_rendered = render_cluster_inspect(&report);
+    assert!(inspect_rendered.contains("cluster: inspect"), "{inspect_rendered}");
+    assert!(inspect_rendered.contains("trace=<missing>"), "{inspect_rendered}");
+    assert!(
+        inspect_rendered.contains("trace=/tmp/ws1/.boundline/traces/t.json"),
+        "{inspect_rendered}"
+    );
+}
+
+#[test]
+fn cluster_story_lines_cover_all_route_owner_and_execution_kind_variants() {
+    let base_story = |route_owner, kind| ClusterDeliveryStory {
+        cluster_id: "c1".to_string(),
+        primary_workspace_ref: "/tmp/p".to_string(),
+        authoritative_workspace_ref: "/tmp/p".to_string(),
+        route_owner,
+        member_workspace_refs: Vec::new(),
+        participating_workspaces: Vec::new(),
+        started_from_command: "run".to_string(),
+        execution_condition: ClusteredExecutionCondition {
+            kind,
+            active_workspace_ref: None,
+            blocking_workspace_ref: None,
+            summary: "ok".to_string(),
+            recovery_allowed: false,
+        },
+        updated_at: 0,
+    };
+
+    for (owner, label) in [
+        (ClusterRouteOwner::Workflow, "workflow"),
+        (ClusterRouteOwner::Review, "review"),
+        (ClusterRouteOwner::Governance, "governance"),
+        (ClusterRouteOwner::Compatibility, "compatibility"),
+    ] {
+        let story = base_story(owner, ClusteredExecutionKind::Success);
+        let lines = render_session_status(&SessionStatusView {
+            cluster_delivery_story: Some(story),
+            session_id: "s".to_string(),
+            workspace_ref: "/tmp/p".to_string(),
+            explanation: "ok".to_string(),
+            ..Default::default()
+        });
+        assert!(lines.contains(&format!("cluster_route_owner: {label}")), "{lines}");
+    }
+
+    for (kind, label) in [
+        (ClusteredExecutionKind::Success, "success"),
+        (ClusteredExecutionKind::Paused, "paused"),
+        (ClusteredExecutionKind::Blocked, "blocked"),
+        (ClusteredExecutionKind::Exhausted, "exhausted"),
+        (ClusteredExecutionKind::InspectOnly, "inspect_only"),
+    ] {
+        let story = base_story(ClusterRouteOwner::Native, kind);
+        let lines = render_session_status(&SessionStatusView {
+            cluster_delivery_story: Some(story),
+            session_id: "s".to_string(),
+            workspace_ref: "/tmp/p".to_string(),
+            explanation: "ok".to_string(),
+            ..Default::default()
+        });
+        assert!(lines.contains(&format!("cluster_execution_condition: {label} - ok")), "{lines}");
+    }
+
+    let story_with_participants = ClusterDeliveryStory {
+        cluster_id: "c2".to_string(),
+        primary_workspace_ref: "/tmp/p".to_string(),
+        authoritative_workspace_ref: "/tmp/p".to_string(),
+        route_owner: ClusterRouteOwner::Native,
+        member_workspace_refs: Vec::new(),
+        participating_workspaces: vec![
+            WorkspaceParticipationRecord {
+                workspace_ref: "/tmp/a".to_string(),
+                participation_kind: WorkspaceParticipationKind::ReadOnly,
+                order: 0,
+                latest_trace_ref: None,
+                latest_status: None,
+                headline: "read only".to_string(),
+                terminal_reason: None,
+            },
+            WorkspaceParticipationRecord {
+                workspace_ref: "/tmp/b".to_string(),
+                participation_kind: WorkspaceParticipationKind::Mutated,
+                order: 1,
+                latest_trace_ref: None,
+                latest_status: None,
+                headline: "mutated".to_string(),
+                terminal_reason: None,
+            },
+            WorkspaceParticipationRecord {
+                workspace_ref: "/tmp/c".to_string(),
+                participation_kind: WorkspaceParticipationKind::Skipped,
+                order: 2,
+                latest_trace_ref: None,
+                latest_status: None,
+                headline: "skipped".to_string(),
+                terminal_reason: None,
+            },
+        ],
+        started_from_command: "run".to_string(),
+        execution_condition: ClusteredExecutionCondition {
+            kind: ClusteredExecutionKind::Success,
+            active_workspace_ref: None,
+            blocking_workspace_ref: None,
+            summary: "all done".to_string(),
+            recovery_allowed: false,
+        },
+        updated_at: 0,
+    };
+    let lines = render_session_status(&SessionStatusView {
+        cluster_delivery_story: Some(story_with_participants),
+        session_id: "s2".to_string(),
+        workspace_ref: "/tmp/p".to_string(),
+        explanation: "ok".to_string(),
+        ..Default::default()
+    });
+    assert!(lines.contains("[read_only]"), "{lines}");
+    assert!(lines.contains("[mutated]"), "{lines}");
+    assert!(lines.contains("[skipped]"), "{lines}");
+}
+
+#[test]
+fn command_names_render_for_all_remaining_subcommands() {
+    let cases: &[(&DeveloperCommand, &str)] = &[
+        (
+            &DeveloperCommand::Checkpoint {
+                command: CheckpointSubcommand::List { workspace: None, cluster: None },
+            },
+            "checkpoint",
+        ),
+        (&DeveloperCommand::Start { workspace: None, cluster: None }, "start"),
+        (
+            &DeveloperCommand::Capture {
+                workspace: None,
+                cluster: None,
+                goal: None,
+                brief: Vec::new(),
+                governance: None,
+                risk: None,
+                zone: None,
+                owner: None,
+            },
+            "capture",
+        ),
+        (
+            &DeveloperCommand::Plan {
+                workspace: None,
+                cluster: None,
+                flow: None,
+                no_flow: false,
+                confirm: false,
+            },
+            "plan",
+        ),
+        (&DeveloperCommand::Step { workspace: None, cluster: None }, "step"),
+        (
+            &DeveloperCommand::Workflow { command: WorkflowSubcommand::List { workspace: None } },
+            "workflow",
+        ),
+        (&DeveloperCommand::Status { workspace: None, cluster: None }, "status"),
+        (&DeveloperCommand::Next { workspace: None, cluster: None }, "next"),
+        (&DeveloperCommand::Continue { workspace: None, cluster: None }, "continue"),
+        (
+            &DeveloperCommand::Govern {
+                workspace: None,
+                mode: None,
+                goal: None,
+                brief: Vec::new(),
+                base: None,
+                head: None,
+                risk: None,
+                structural_impact: false,
+                public_contract_change: false,
+                validation_exhausted: false,
+                pr_ready: false,
+                preserved_behavior_evidence: false,
+            },
+            "govern",
+        ),
+        (
+            &DeveloperCommand::Assistant {
+                command: AssistantSubcommand::Install {
+                    host: AssistantHost::Copilot,
+                    scope: AssistantInstallScope::User,
+                },
+            },
+            "assistant",
+        ),
+        (
+            &DeveloperCommand::Init {
+                workspace: std::path::PathBuf::from("."),
+                non_interactive: false,
+                template: None,
+                assistant: Vec::new(),
+                route: Vec::new(),
+                domain: Vec::new(),
+                domain_standard: Vec::new(),
+                context_binding: Vec::new(),
+                required_context_binding: Vec::new(),
+                canon_mode_selection: None,
+                risk: None,
+                zone: None,
+                owner: None,
+                export_docs: false,
+                refresh: false,
+                diff: false,
+                to: None,
+                force: false,
+            },
+            "init",
+        ),
+        (
+            &DeveloperCommand::Config {
+                command: ConfigSubcommand::Show { workspace: None, cluster: None, scope: None },
+            },
+            "config",
+        ),
+        (
+            &DeveloperCommand::Cluster {
+                command: ClusterSubcommand::Status { workspace: std::path::PathBuf::from("/tmp") },
+            },
+            "cluster",
+        ),
+    ];
+    for (command, expected) in cases {
+        assert_eq!(command_name(command), *expected, "command_name mismatch for {expected}");
+    }
+}
+
+#[test]
+fn summarize_trace_extracts_delight_feedback_signal_from_events() {
+    let mut trace = ExecutionTrace::new("task-delight", "session-delight", "Delight test goal");
+    trace.terminal_status = Some(TaskStatus::Succeeded);
+    trace.terminal_reason =
+        Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None));
+    trace.events.push(TraceEvent {
+        event_id: "e1".to_string(),
+        event_type: TraceEventType::TerminalRecorded,
+        step_id: None,
+        plan_revision: 0,
+        payload: json!({
+            "delight_feedback": {
+                "total_explanations": 5,
+                "attributed_explanations": 3,
+                "accepted_next_actions": 2,
+                "overridden_next_actions": 0,
+                "captured_at": 99999
+            }
+        }),
+        recorded_at: 0,
+    });
+
+    let summary = summarize_trace(std::path::PathBuf::from("/tmp/task.json"), &trace)
+        .expect("summarize_trace failed");
+    assert!(
+        summary.delight_feedback.is_some(),
+        "expected delight_feedback to be populated from trace event payload"
+    );
+    let signal = summary.delight_feedback.as_ref().unwrap();
+    assert_eq!(signal.total_explanations, 5);
+    assert_eq!(signal.attributed_explanations, 3);
 }
 
 fn sample_cluster_delivery_story() -> ClusterDeliveryStory {

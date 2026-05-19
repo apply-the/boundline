@@ -1,11 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 120" role="img" aria-labelledby="title">
-  <title>Boundline plugin logo</title>
-  <rect width="420" height="120" rx="16" fill="#0f172a"/>
-  <g transform="translate(28 28)">
-    <rect width="64" height="64" rx="12" fill="#38bdf8"/>
-    <path d="M16 17h22c8 0 14 6 14 15s-6 15-14 15H16V17Z" fill="#0f172a"/>
-    <path d="M25 26h13c3 0 5 2 5 6s-2 6-5 6H25V26Z" fill="#38bdf8"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" width="100%" height="100%">
+  <defs>
+    <linearGradient id="blueGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#14b5ff"/>
+      <stop offset="50%" stop-color="#006aff"/>
+      <stop offset="100%" stop-color="#003cc2"/>
+    </linearGradient>
+  </defs>
+  <rect width="100%" height="100%" fill="#050d21"/>
+  <g transform="translate(110, 100)">
+    <path d="M 0 -68 L 58.9 -34 L 58.9 34 L 0 68 L -58.9 34 L -58.9 -34 Z M 0 -46 L -39.8 -23 L -39.8 23 L 0 46 L 39.8 23 L 39.8 -23 Z" fill="url(#blueGradient)" fill-rule="evenodd"/>
+    <path d="M -26 -30 L -12 -22 L -12 -12 L 0 -19 L 26 -4 L 26 21 L 0 36 L -26 21 Z M 0 -3 L -11 3.5 L -11 16.5 L 0 23 L 11 16.5 L 11 3.5 Z" fill="url(#blueGradient)" fill-rule="evenodd"/>
   </g>
-  <text x="112" y="58" fill="#f8fafc" font-family="Arial, sans-serif" font-size="34" font-weight="700">Boundline</text>
-  <text x="114" y="84" fill="#bae6fd" font-family="Arial, sans-serif" font-size="16">Plan, act, verify, trace</text>
+  <text x="220" y="128" font-family="'Montserrat', 'Century Gothic', 'Poppins', 'Segoe UI', sans-serif" font-weight="700" font-size="88" fill="#ffffff" letter-spacing="-2.5">boundline</text>
 </svg>
