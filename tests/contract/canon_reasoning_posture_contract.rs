@@ -5,22 +5,19 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const BOUNDLINE_MANIFEST_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml");
 const CANON_MANIFEST_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../canon/Cargo.toml");
-const CANON_PROVIDER_CONTRACT_PATH: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../canon/docs/integration/governed-reasoning-posture-contract.md"
-);
 const CANON_PROVIDER_CONTRACT_SNAPSHOT_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/specs/061-reasoning-profile-contracts/contracts/canon-governed-reasoning-posture-contract.snapshot.md"
 );
+const EXTERNAL_CANON_CONTRACT_ENV: &str = "BOUNDLINE_CANON_PROVIDER_CONTRACT";
 const VERSION_ALIGNMENT_BRIEF_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/specs/061-reasoning-profile-contracts/contracts/reasoning-version-alignment-contract.md"
 );
-const SUPPORTED_BOUNDLINE_VERSION: &str = "0.63.0";
-const SUPPORTED_BOUNDLINE_WINDOW: &str = "0.63.x";
-const SUPPORTED_CANON_VERSION: &str = "0.59.0";
-const SUPPORTED_CANON_WINDOW: &str = "0.59.x";
+const SUPPORTED_BOUNDLINE_VERSION: &str = "0.64.0";
+const SUPPORTED_BOUNDLINE_WINDOW: &str = "0.64.x";
+const SUPPORTED_CANON_VERSION: &str = "0.60.0";
+const SUPPORTED_CANON_WINDOW: &str = "0.60.x";
 const SUPPORTED_CONTRACT_LINE: &str = "governed_reasoning_posture_v1";
 
 fn read_text(path: &str) -> Result<String, Box<dyn Error>> {
@@ -40,6 +37,13 @@ fn read_text_with_fallback(
 
 fn assert_contains(document: &str, expected: &str, context: &str) {
     assert!(document.contains(expected), "{context}: expected to find `{expected}`");
+}
+
+fn read_canon_provider_contract() -> Result<String, Box<dyn Error>> {
+    match std::env::var(EXTERNAL_CANON_CONTRACT_ENV) {
+        Ok(path) => read_text(path.as_str()),
+        Err(_) => read_text(CANON_PROVIDER_CONTRACT_SNAPSHOT_PATH),
+    }
 }
 
 #[test]
@@ -102,10 +106,7 @@ fn reasoning_version_alignment_brief_matches_workspace_versions() -> Result<(), 
 #[test]
 fn canon_reasoning_posture_contract_publishes_supported_line_and_window()
 -> Result<(), Box<dyn Error>> {
-    let contract = read_text_with_fallback(
-        CANON_PROVIDER_CONTRACT_PATH,
-        CANON_PROVIDER_CONTRACT_SNAPSHOT_PATH,
-    )?;
+    let contract = read_canon_provider_contract()?;
 
     assert_contains(
         &contract,

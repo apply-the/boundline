@@ -1,6 +1,6 @@
-# Control Graduation Model In Boundline 0.63.0
+# Control Graduation Model In Boundline 0.64.0
 
-Boundline `0.63.0` resolves one explicit runtime governance posture for each
+Boundline `0.64.0` resolves one explicit runtime governance posture for each
 governed boundary. Canon supplies semantic inputs. Boundline decides what the
 runtime does with them.
 

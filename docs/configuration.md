@@ -1,9 +1,9 @@
-# Configuration in Boundline 0.63.0
+# Configuration in Boundline 0.64.0
 
-Boundline `0.63.0` keeps a user-friendly setup and routing configuration surface
+Boundline `0.64.0` keeps a user-friendly setup and routing configuration surface
 for the session-native runtime plus explicit compatibility/bootstrap workflows.
 
-The `0.63.0` release keeps configuration behavior stable while preserving the
+The `0.64.0` release keeps configuration behavior stable while preserving the
 same governed routing defaults across earlier `bug-fix:investigate` work,
 later verify-stage `security-assessment`, workflow-aware projection of the
 same bounded governance state, continuity-aware read-side follow-up, the
@@ -40,6 +40,11 @@ The same remains true for support modes and delight follow-through: Cursor or
 Gemini parity expectations, reasoning-profile disclosure, inspect closures, and
 delight usefulness signals are runtime-owned projections or metadata surfaces,
 not new operator-authored config keys.
+The dashboard follows the same rule: `boundline-dashboard` and
+`boundline dashboard` can select a workspace and color mode, but dashboard
+state, diagnostics, panels, actions, and degraded fallbacks are projections over
+existing session, trace, and runtime surfaces rather than new configuration
+keys.
 Domain templates extend that same explicit config surface: operators can now
 declare active domain families, layered standards, and optional or required
 external context bindings per scope, while the runtime still owns target
@@ -403,8 +408,8 @@ boundline config show --scope global
 ### Set delivery-stage routes
 
 ```bash
-boundline config set --scope global --slot planning --runtime codex --model gpt-5-codex
-boundline config set --cluster <primary-workspace> --scope cluster --slot planning --runtime codex --model gpt-5-codex
+boundline config set --scope global --slot planning --runtime codex --model gpt-5.3-codex
+boundline config set --cluster <primary-workspace> --scope cluster --slot planning --runtime codex --model gpt-5.3-codex
 boundline config set --scope workspace --slot verification --runtime copilot --model gpt-5.4
 ```
 
@@ -412,7 +417,7 @@ boundline config set --scope workspace --slot verification --runtime copilot --m
 
 ```bash
 boundline config set --scope workspace --reviewer safety --runtime claude --model sonnet-4
-boundline config set --scope workspace --adjudicator --runtime codex --model gpt-5-codex
+boundline config set --scope workspace --adjudicator --runtime codex --model gpt-5.3-codex
 ```
 
 ### Set runtime capability profiles

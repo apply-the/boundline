@@ -417,8 +417,14 @@ pub enum ExecutionProfileError {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::domain::governance::{GovernanceRuntimeKind, StageGovernancePolicy};
+    use super::{
+        AdaptiveChangeKind, AdaptiveExecutionProfile, ExecutionAttemptDefinition, ExecutionCommand,
+        ExecutionFailureMode, ExecutionProfileError, WorkspaceChange, WorkspaceExecutionProfile,
+    };
+    use crate::domain::governance::{
+        GovernanceProfile, GovernanceRuntimeKind, StageGovernancePolicy,
+    };
+    use crate::domain::limits::RunLimits;
     use crate::domain::review::{AdjudicationDefinition, ReviewProfile, VoteRuleDefinition};
 
     fn valid_profile() -> WorkspaceExecutionProfile {

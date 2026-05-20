@@ -3249,11 +3249,11 @@ mod tests {
 
         assert_eq!(planning.source, super::GuidedRouteSource::Bundled);
         assert_eq!(planning.route.as_ref().unwrap().runtime, RuntimeKind::Codex);
-        assert_eq!(planning.route.as_ref().unwrap().model, "gpt-5-codex");
+        assert_eq!(planning.route.as_ref().unwrap().model, "gpt-5.3-codex");
 
         assert_eq!(implementation.source, super::GuidedRouteSource::Bundled);
         assert_eq!(implementation.route.as_ref().unwrap().runtime, RuntimeKind::Codex);
-        assert_eq!(implementation.route.as_ref().unwrap().model, "gpt-5-codex");
+        assert_eq!(implementation.route.as_ref().unwrap().model, "gpt-5.3-codex");
 
         assert_eq!(verification.source, super::GuidedRouteSource::Bundled);
         assert_eq!(verification.route.as_ref().unwrap().runtime, RuntimeKind::Copilot);
@@ -3306,9 +3306,9 @@ mod tests {
         let local = FileConfigStore::for_workspace(&workspace).load_local().unwrap().unwrap();
         assert_eq!(local.routing.assistant_runtimes, Vec::<RuntimeKind>::new());
         assert_eq!(local.routing.planning.as_ref().unwrap().runtime, RuntimeKind::Codex);
-        assert_eq!(local.routing.planning.as_ref().unwrap().model, "gpt-5-codex");
+        assert_eq!(local.routing.planning.as_ref().unwrap().model, "gpt-5.3-codex");
         assert_eq!(local.routing.implementation.as_ref().unwrap().runtime, RuntimeKind::Codex);
-        assert_eq!(local.routing.implementation.as_ref().unwrap().model, "gpt-5-codex");
+        assert_eq!(local.routing.implementation.as_ref().unwrap().model, "gpt-5.3-codex");
         assert_eq!(local.routing.verification.as_ref().unwrap().runtime, RuntimeKind::Copilot);
         assert_eq!(local.routing.verification.as_ref().unwrap().model, "gpt-5.5");
         assert_eq!(local.routing.review.as_ref().unwrap().runtime, RuntimeKind::Claude);

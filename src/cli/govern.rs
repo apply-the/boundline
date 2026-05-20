@@ -275,10 +275,15 @@ pub enum GovernError {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use std::fs;
+    use std::path::{Path, PathBuf};
 
+    use uuid::Uuid;
+
+    use super::{
+        CanonMode, CommandExitStatus, FileSessionStore, GovernError, GovernRequest, SessionStore,
+        VotingBoundaryTrigger, execute_govern, voting_stage_for_mode, voting_state_for_request,
+    };
     use crate::cli::session;
     use crate::domain::session::SessionStatus;
 

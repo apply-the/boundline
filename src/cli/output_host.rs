@@ -111,6 +111,7 @@ pub fn command_name(command: &DeveloperCommand) -> &'static str {
         DeveloperCommand::Status { .. } => "status",
         DeveloperCommand::Next { .. } => "next",
         DeveloperCommand::Continue { .. } => "continue",
+        DeveloperCommand::Dashboard { .. } => "dashboard",
         DeveloperCommand::Govern { .. } => "govern",
         DeveloperCommand::Assistant { .. } => "assistant",
         DeveloperCommand::Init { .. } => "init",

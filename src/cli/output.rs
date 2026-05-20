@@ -638,6 +638,7 @@ mod tests {
             (DeveloperCommand::Status { workspace: None, cluster: None }, "status"),
             (DeveloperCommand::Next { workspace: None, cluster: None }, "next"),
             (DeveloperCommand::Continue { workspace: None, cluster: None }, "continue"),
+            (DeveloperCommand::Dashboard { workspace: None, no_color: false }, "dashboard"),
             (
                 DeveloperCommand::Govern {
                     workspace: None,

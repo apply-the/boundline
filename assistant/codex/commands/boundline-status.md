@@ -16,6 +16,7 @@ Compatibility follow-up means the user previously chose `boundline run --compati
 
 ## Shell-Enabled Path
 Run `cargo run --bin boundline -- status --workspace <workspace> --json` exactly once.
+If the user asks for the dashboard instead of a status summary, run `cargo run --bin boundline-dashboard -- --workspace <workspace> --snapshot-json` in non-interactive contexts or `cargo run --bin boundline-dashboard -- --workspace <workspace>` in an interactive terminal.
 
 ## Chat-Only Path
 If shell execution is unavailable, provide this exact copyable command:

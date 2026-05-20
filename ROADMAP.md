@@ -7,18 +7,21 @@ persists structured artifacts that Boundline can reuse for reasoning.
 Delivered release history belongs in [CHANGELOG.md](CHANGELOG.md). This file is
 for current direction, future feature sequencing, and product boundaries.
 
-## Current Status: v0.63.0
+## Current Status: v0.64.0
 
-Boundline is currently shipping the `0.63.0` assistant-delight follow-through
+Boundline is currently shipping the `0.64.0` interactive delivery dashboard
 line while keeping the CLI and session-native runtime authoritative.
 
-### Delivered in 0.63.0
+### Delivered in 0.64.0
 
-- reasoning-profile-aware explanation disclosure across `status` and `inspect`
-- human-facing `inspect_context`, `inspect_council`, and `inspect_timeline`
-  closures backed by session and trace state
-- session-scoped delight usefulness signals without a second telemetry runtime
-- explicit Cursor and Gemini support modes across shipped assistant surfaces
+- a separate `boundline-dashboard` workspace component with local terminal UI
+  dependencies isolated from the normal CLI path
+- typed dashboard snapshots over existing session, trace, checkpoint, finding,
+  and governed-reference projections
+- first-screen state, timeline, actions, panels, diagnostics, and degraded
+  fallbacks that point back to normal Boundline commands
+- terminal-safe `boundline` wordmark branding without SVG, raster, or wide ANSI
+  banner dependencies
 
 ## Objective
 
@@ -47,18 +50,9 @@ capabilities as new features.
 
 The repo-local `roadmap/` folder carries the active forward-looking drafts:
 
-- [S7.1: Post-S6 Assistant Delight Follow-Through](roadmap/S7.1%20-%20post-s6-assistant-delight-follow-through.md)
-  narrows the remaining assistant-delight follow-through around richer inspect
-  surfaces, reasoning-profile-aware explanations, and deeper host parity where
-  runtime support is already credible.
-- [S8: Interactive Delivery Dashboard](roadmap/S8%20-%20interactive-delivery-dashboard-iocraft.md)
-  is scoped as an operator shell over existing Boundline state, events, and
-  commands. It must reveal the authoritative CLI/runtime truth and must not
-  embed a second workflow engine, config implementation, init implementation, or
-  governance runtime.
-- [Next Visible Trust Roadmap](roadmap/Next%20-%20visible-trust-roadmap.md)
-  absorbs the post-S8 analysis into Boundline. It prioritizes large codebase
-  context hardening, external capability providers including open-model
+- [Next Boundline Roadmap](roadmap/Next%20-%20forward-roadmap.md)
+  absorbs the next forward-looking work into Boundline. It prioritizes large
+  codebase context hardening, external capability providers including open-model
   adapters, evals and runtime observability, Boundline help-next, guidance
   activation hardening, council and adaptive-governance hardening, sandboxed
   execution, MCP adapters, AI gateway economics, browser validation providers,
@@ -71,8 +65,8 @@ The repo-local `roadmap/` folder carries the active forward-looking drafts:
 
 1. Boundline must deliver visible runtime trust before more platform abstraction
    work.
-2. S8 must be an operator shell over the existing CLI/runtime, not a second
-   product.
+2. The dashboard remains an operator shell over the existing CLI/runtime, not a
+   second product.
 3. Large-codebase handling, provider permissions, and evals must precede
    stronger autonomy.
 4. Canon must prove value inside the real delivery loop, not beside it.

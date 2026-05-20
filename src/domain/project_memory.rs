@@ -872,7 +872,15 @@ fn collect_governed_expertise_input(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::path::{Path, PathBuf};
+
+    use super::{
+        CompatibilityOutcome, LineageRef, ProjectMemoryCondition, ProjectMemoryContext,
+        ProjectMemoryDecision, ProjectMemoryStatus, ProjectMemorySurface, PromotionStateView,
+        evidence_contribution_summaries, evidence_root_for_lineage, legacy_lineage_sidecar_path,
+        managed_block_attribute, merge_compatibility, packet_metadata_sidecar_path,
+        parse_contract_version, read_lineage_sidecar, read_project_memory, surface_category,
+    };
 
     fn sample_lineage_ref(
         source_ref: &str,

@@ -20,7 +20,7 @@ Canon is not the orchestrator and not the product entrypoint. A Boundline instal
 can be perfectly usable without Canon when you stay on the default local and
 session-native routes.
 
-The current Boundline adapter documents Canon `0.59.0` support for the
+The current Boundline adapter documents Canon `0.60.0` support for the
 `canon governance start|refresh|capabilities --json` `v1` surface. That is a
 bounded compatibility target, not a claim of total Canon feature parity.
 
@@ -51,6 +51,22 @@ Boundline persists that story in workspace-local state under `.boundline/` and k
 traces alongside the same session model. `run`, `status`, `next`, and
 `inspect` project the same route, follow-through, and evidence story instead of
 making the operator infer state from logs.
+
+## Dashboard Boundary
+
+The interactive delivery dashboard is an operator shell over that same primary
+runtime. Shared snapshot and action contracts live in the core domain, state
+assembly lives in adapters, the normal `boundline dashboard` command remains a
+thin launcher and fallback surface, and terminal rendering plus input handling
+live in the separate `boundline-dashboard` workspace component.
+
+The dashboard may show session summaries, timelines, plan and evidence panels,
+findings, checkpoints, diagnostics, and read-only governed references, but it
+does not own delivery state. It reads `.boundline/session.json`, existing
+traces, and already exposed projections, and it points degraded or unavailable
+paths back to normal commands. It must not introduce independent init,
+configuration, governance, hidden background progression, or a separate
+workflow engine.
 
 ## Implemented Algorithms
 
@@ -163,7 +179,7 @@ These are product layers over one runtime, not separate products.
 
 ## Distribution And Update Model
 
-The `0.63.0` release keeps the repo-managed distribution surface introduced in
+The `0.64.0` release keeps the repo-managed distribution surface introduced in
 `0.39.0`, carries the same Boundline-plus-Canon pairing metadata, and keeps
 Canon-ready setup, verification, governed runs, and the assistant-delight
 follow-through surfaces on the same primary operator path:

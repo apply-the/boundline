@@ -2152,7 +2152,22 @@ pub enum GovernanceProfileError {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        AUTHORITY_GOVERNANCE_V1_CONTRACT_LINE, ApprovalState, CANONICAL_MODES,
+        CanonAdaptiveGovernanceState, CanonAdaptiveRolloutProfile,
+        CanonAuthorityGovernanceV1Envelope, CanonAuthorityZone, CanonCapabilitySnapshot,
+        CanonChangeClass, CanonIntendedPersona, CanonMode, CanonRiskClass, CanonRuntimeConfig,
+        CouncilProfile, GovernanceDegradationMode, GovernanceProfile, GovernanceProfileError,
+        GovernanceRolloutProfile, GovernanceRuntimeKind, GovernanceRuntimeState,
+        GovernanceStartupContext, GovernanceTransitionDirection, GovernedStageCategory,
+        PacketReadiness, PacketReuseBindingReason, StageGovernancePolicy, StopSemantics,
+        SystemContextBinding, governance_confidence_handoff, governed_stage_catalog,
+        resolve_governance_startup_posture, validate_canon_capabilities_for_mode,
+    };
+    use crate::domain::reasoning::{
+        ProfileActivationRecord, ReasoningAdmissionEffect, ReasoningConfidenceLevel,
+        ReasoningProfileDefinition, ReasoningProfileId,
+    };
 
     #[test]
     fn canonical_modes_and_catalog_cover_project_scale_stage_set() {

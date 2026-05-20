@@ -1,6 +1,6 @@
-# Council Adoption Guide For Boundline 0.63.0
+# Council Adoption Guide For Boundline 0.64.0
 
-Boundline `0.63.0` is designed so teams can adopt authority-zoned councils
+Boundline `0.64.0` is designed so teams can adopt authority-zoned councils
 incrementally. You do not need to turn every stage into a permanently governed
 debate. The intended pattern is bounded escalation: use stronger council and
 stop semantics only where the boundary actually justifies them.

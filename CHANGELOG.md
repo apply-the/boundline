@@ -21,6 +21,38 @@ Highlights:
 
 - No unreleased entries yet.
 
+## [0.64.0] - 2026-05-20
+
+Delivered specs:
+
+- `064` - Interactive Delivery Dashboard
+
+Highlights:
+
+- Added a separate `boundline-dashboard` workspace component for the terminal
+  operator surface while keeping normal CLI commands and session-native state
+  authoritative.
+- Introduced typed dashboard snapshots, action contracts, diagnostics, and
+  degraded fallbacks over existing session, trace, checkpoint, finding, and
+  governed-reference projections.
+- Added release documentation for dashboard launch, snapshot JSON validation,
+  panel inspection, action boundaries, degraded mode, and terminal-safe
+  `boundline` wordmark branding.
+- Bumped release metadata to Boundline `0.64.0`, Canon `0.60.0`, and refreshed
+  the bundled assistant model catalog from current provider documentation.
+
+Validation notes:
+
+- Dashboard-targeted contract, integration, unit, and crate-local UI suites all
+  passed; `cargo nextest run` also exited `0` for the full workspace.
+- `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`
+  produced file-level LCOV evidence above the repository target for the new
+  dashboard files, including `36/37` lines in `crates/boundline-dashboard/src/app.rs`
+  and `382/385` lines in `src/adapters/dashboard_state.rs`.
+- In this environment the bare `cargo test` harness still stalls after
+  compilation, so release evidence relies on `cargo test --no-run --all-targets`
+  plus the targeted dashboard suites for deterministic validation.
+
 ## [0.63.0] - 2026-05-19
 
 Delivered specs:
@@ -62,7 +94,7 @@ Highlights:
   runtime-facing tests to match the shipped completed-state behavior.
 - Aligned the active release metadata, distribution surfaces, assistant package
   manifests, and Canon compatibility fixtures to Boundline `0.62.0` and Canon
-  `0.59.0`.
+  `0.60.0`.
 
 ## [0.61.0] - 2026-05-18
 
@@ -101,7 +133,7 @@ Highlights:
   implementation and validation work.
 - Bumped workspace version to `0.60.0`.
 
-## [0.59.0] - 2026-05-17
+## [0.60.0] - 2026-05-17
 
 Delivered specs:
 
@@ -122,7 +154,7 @@ Highlights:
 - Refreshed focused coverage and validation evidence for the semantic runtime,
   including owner-local LCOV attribution for the retrieval, domain, and CLI
   output files.
-- Bumped workspace version to `0.59.0`.
+- Bumped workspace version to `0.60.0`.
 
 ## [0.58.0] - 2026-05-16
 

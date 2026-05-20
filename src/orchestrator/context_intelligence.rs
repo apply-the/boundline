@@ -2561,10 +2561,27 @@ fn resolved_relative_path(workspace_ref: &Path, reference: &str) -> Option<Strin
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
+    use std::fs;
     use std::path::PathBuf;
 
+    use uuid::Uuid;
+
+    use super::{
+        AdvancedContextBuildState, AdvancedContextConfig, RelationshipKind, RetrievalDocument,
+        SEMANTIC_INDEX_MANIFEST_ID, build_advanced_context_projection,
+        build_advanced_context_projection_with_vector_state, collect_retrieval_documents,
+        default_compatibility_state, derive_relationships_and_findings,
+        detect_vector_extension_state, initialize_schema, open_connection,
+        promote_selected_target_refs, resolved_relative_path, staleness_state,
+        structured_fallback_refs, vector_extension_state_from_modules,
+    };
+    use crate::domain::configuration::SemanticAccelerationPolicyState;
+    use crate::domain::context_intelligence::{
+        AuthorityRank, CandidateSelectionState, HybridOutcome, ImpactFindingKind,
+        RetrievalCompatibilityState, RetrievalIndexState, RetrievalMatchOrigin,
+        RetrievalSourceKind, RetrievalStalenessState, RetrievalState, RetrievedEvidenceCandidate,
+        SemanticCapabilityState, SemanticPolicyState, VectorExtensionState,
+    };
     use crate::domain::goal_plan::{ContextInput, ContextInputKind, ContextPackCredibility};
 
     fn temp_workspace(prefix: &str) -> PathBuf {

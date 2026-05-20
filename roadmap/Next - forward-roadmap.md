@@ -1,9 +1,9 @@
-# Next Visible Trust Roadmap
+# Next Boundline Roadmap
 
 ## Purpose
 
-This document absorbs the post-S8 roadmap analysis into the Boundline repository
-and normalizes it around Boundline ownership.
+This document captures the next Boundline roadmap after the delivered
+interactive dashboard release and normalizes it around Boundline ownership.
 
 Canon remains a governed knowledge and packet authority. Boundline owns runtime
 movement, inspection, admission control, execution boundaries, guidance,
@@ -21,12 +21,11 @@ a companion dependency that Boundline consumes through stable contracts.
 
 | Priority | Feature | Boundline Position | Notes |
 |---|---|---|---|
-| A1 | S8 Interactive Delivery Dashboard | Next feature | Operator shell over existing state and commands, not a standalone product. |
-| A2 | Large Codebase Context Hardening | Extend delivered S5/S5.v2 work | Add hard read limits, paged reads, patch-safe editing, omitted-context inspection, and huge artifact hash refs. |
-| A3 | External Capability Provider Protocol | New architecture feature | Boundline-owned permissioned provider contract before one-off adapters, including open-model adapters. |
-| A4 | Evals And Runtime Observability | New quality layer | Local eval corpus, JSONL trace export, and regression checks for runtime behavior. |
-| A5 | Boundline Help-Next And Documentation Architecture | Operator UX feature | `boundline help-next`, state-aware docs links, and Diataxis-style Boundline docs. |
-| A6 | Guidance Catalog Operational Hardening | Extend delivered S2.1/S055 work | Stronger selective activation, skipped-guidance explanations, and budget admission. |
+| A1 | Large Codebase Context Hardening | Extend delivered S5/S5.v2 work | Add hard read limits, paged reads, patch-safe editing, omitted-context inspection, and huge artifact hash refs. |
+| A2 | External Capability Provider Protocol | New architecture feature | Boundline-owned permissioned provider contract before one-off adapters, including open-model adapters. |
+| A3 | Evals And Runtime Observability | New quality layer | Local eval corpus, JSONL trace export, and regression checks for runtime behavior. |
+| A4 | Boundline Help-Next And Documentation Architecture | Operator UX feature | `boundline help-next`, state-aware docs links, and Diataxis-style Boundline docs. |
+| A5 | Guidance Catalog Operational Hardening | Extend delivered S2.1/S055 work | Stronger selective activation, skipped-guidance explanations, and budget admission. |
 | B1 | Review Council Hardening | Extend delivered S3/S056 work | Make councils more measurable, cost-bounded, and tied to findings and zones. |
 | B2 | Adaptive Governance Calibration Hardening | Extend delivered S4/S057 work | Promote controls from advisory to catch, rule, or hook based on evidence. |
 | B3 | Sandboxed Execution And Secret Inheritance | New safety feature | Local sandbox modes, write scopes, secret handles, artifact capture, commit/rollback. |

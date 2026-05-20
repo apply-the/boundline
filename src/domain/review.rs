@@ -1013,11 +1013,20 @@ pub enum ReviewProfileError {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
-
     use serde_json::json;
+    use std::collections::{BTreeMap, BTreeSet};
 
-    use super::*;
+    use super::{
+        AdjudicationDecision, AdjudicationDefinition, CouncilAssemblyDecision, CouncilQuorumState,
+        FindingConfidence, FindingSeverity, ProducerResponseDisposition, ReviewProfileError,
+        ReviewScenario, ReviewTrigger, ReviewerDefinition, ReviewerDisposition, ReviewerFinding,
+        ReviewerIndependenceState, ReviewerParticipation, ReviewerParticipationStatus,
+        VoteDecision, VoteRuleDefinition, VoteStrategy, VotingBoundaryInput, VotingBoundaryTrigger,
+        VotingStageRisk, council_profile_id, first_blocking_duplicate_route, independence_guard,
+        join_roles, required_reviewers_for_profile, resolve_council_assembly,
+        voting_boundary_decision,
+    };
+    use crate::domain::governance::CouncilProfile;
 
     fn sample_reviewers() -> Vec<ReviewerDefinition> {
         vec![

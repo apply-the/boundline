@@ -4,6 +4,8 @@ This directory contains Markdown-based commands to run `boundline` from various 
 
 The primary delivery surface is session-native: `start -> capture -> plan -> run -> status -> next -> inspect` against `<workspace>/.boundline/session.json` and `<workspace>/.boundline/traces/`.
 
+The dashboard is an optional terminal operator surface over the same runtime truth. When a user asks for a visual or consolidated state view, prefer `boundline-dashboard --workspace <workspace>` or `boundline-dashboard --workspace <workspace> --snapshot-json` for non-interactive validation. Preserve dashboard degraded reasons and fallback commands exactly; do not infer state from chat history or treat the dashboard as a second workflow engine.
+
 The first-response assistant surfaces are part of that same session-native
 runtime rather than a parallel report. Preserve
 `why_summary`, `risk_summary`, `evidence_summary`, `source_attribution`,

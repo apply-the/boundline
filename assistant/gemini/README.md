@@ -4,7 +4,7 @@ This folder documents Boundline usage from Gemini CLI surfaces.
 
 Support mode: `manual-fallback`.
 
-Gemini remains CLI-first in `0.63.0`, but it follows the same primary Boundline
+Gemini remains CLI-first in `0.64.0`, but it follows the same primary Boundline
 workflow surface used by the other assistants.
 
 compatibility remains an explicit subordinate route.

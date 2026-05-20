@@ -97,6 +97,8 @@ Auto-generated from all feature plans. Last updated: 2026-05-19
 - Existing `.boundline/session.json`, trace files, configuration state, spec artifacts under `specs/062-reasoning-profile-closure/`, and release-facing docs or changelog files in Boundline and optional Canon companion artifacts (062-reasoning-profile-closure)
 - Rust 1.95.0, edition 2024, plus repository-managed Markdown and JSON assistant assets + existing workspace crates and runtime dependencies (`clap`, `dialoguer`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `rusqlite`); no new runtime dependencies planned for the first slice (063-assistant-delight-followthrough)
 - workspace-local `.boundline/session.json`, persisted traces under `.boundline/traces/`, and repository-managed assistant asset manifests and host docs under `assistant/` (063-assistant-delight-followthrough)
+- Rust 1.95.0, edition 2024 + Existing workspace dependencies (`clap`, `dialoguer`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `rusqlite`) plus a dashboard-local terminal UI stack (`ratatui` with a terminal backend such as `crossterm`) scoped to the dashboard component (064-interactive-delivery-dashboard)
+- Existing workspace-local `.boundline/session.json`, `.boundline/traces/`, optional `.boundline/checkpoints/`, optional `.boundline/config.toml`, optional `.boundline/workflows.toml`, optional `.boundline/execution.json`, and optional `.canon/` references; no new authoritative dashboard state store (064-interactive-delivery-dashboard)
 
 - Rust 1.95.0, edition 2024 + Rust standard library plus `serde`, `serde_json`, `thiserror`, `tracing`, and `uuid` for structured state, trace serialization, error handling, instrumentation, and stable identifiers (001-delivery-orchestrator-core)
 
@@ -126,9 +128,9 @@ Crate versioning follows Semantic Versioning.
 Before 1.0.0, breaking changes MAY occur in minor versions.
 
 ## Recent Changes
+- 064-interactive-delivery-dashboard: Added Rust 1.95.0, edition 2024 + Existing workspace dependencies (`clap`, `dialoguer`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `rusqlite`) plus a dashboard-local terminal UI stack (`ratatui` with a terminal backend such as `crossterm`) scoped to the dashboard component
 - 063-assistant-delight-followthrough: Added Rust 1.95.0, edition 2024, plus repository-managed Markdown and JSON assistant assets + existing workspace crates and runtime dependencies (`clap`, `dialoguer`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `rusqlite`); no new runtime dependencies planned for the first slice
 - 062-reasoning-profile-closure: Added Rust 1.95.0, edition 2024 in Boundline; Markdown, TOML, and JSON repository artifacts; companion Canon updates only if the supported release pair changes + Existing workspace dependencies only (`serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `clap`, `dialoguer`, `rusqlite` already present in workspace); no new runtime crates planned
-- 061-reasoning-profile-contracts: Added Rust 1.95.0, edition 2024 for Boundline and Canon runtime changes; Markdown and TOML or JSON contract artifacts for cross-repo contract surfaces + Existing Boundline workspace dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`) and Canon workspace dependencies of the same family; no new runtime crates planned for the first implementation line
 
 
 <!-- MANUAL ADDITIONS START -->

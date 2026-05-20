@@ -41,7 +41,7 @@ fn host_support_paths_are_explicit_across_repo_guidance() {
             "assistant/gemini/README.md",
             [
                 "Support mode: `manual-fallback`.",
-                "Gemini remains CLI-first in `0.63.0`",
+                "Gemini remains CLI-first in `0.64.0`",
                 "The CLI output remains authoritative for explain-plan, status, inspect",
             ],
         ),

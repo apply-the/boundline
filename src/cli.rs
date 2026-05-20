@@ -16,8 +16,8 @@ use crate::domain::governance::{CanonMode, CanonModeSelectionPreference, Governa
 use crate::domain::trace::current_timestamp_millis;
 
 use super::{
-    assistant_assets, checkpoint, cluster, config, diagnostics, govern, init, inspect, output, run,
-    session, workflow, workspace as cli_workspace,
+    assistant_assets, checkpoint, cluster, config, dashboard, diagnostics, govern, init, inspect,
+    output, run, session, workflow, workspace as cli_workspace,
 };
 
 /// Top-level CLI parser for the Boundline executable.
@@ -55,6 +55,7 @@ pub enum CommandName {
     Status,
     Next,
     Continue,
+    Dashboard,
     Govern,
     Init,
     Assistant,
@@ -78,6 +79,7 @@ impl CommandName {
             Self::Status => "status",
             Self::Next => "next",
             Self::Continue => "continue",
+            Self::Dashboard => "dashboard",
             Self::Govern => "govern",
             Self::Init => "init",
             Self::Assistant => "assistant",
@@ -222,6 +224,12 @@ pub enum DeveloperCommand {
         workspace: Option<PathBuf>,
         #[arg(long)]
         cluster: Option<PathBuf>,
+    },
+    Dashboard {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long = "no-color")]
+        no_color: bool,
     },
     Govern {
         #[arg(long)]
@@ -597,6 +605,7 @@ impl DeveloperCommand {
             Self::Status { .. } => CommandName::Status,
             Self::Next { .. } => CommandName::Next,
             Self::Continue { .. } => CommandName::Continue,
+            Self::Dashboard { .. } => CommandName::Dashboard,
             Self::Govern { .. } => CommandName::Govern,
             Self::Assistant { .. } => CommandName::Assistant,
             Self::Init { .. } => CommandName::Init,
@@ -862,6 +871,18 @@ impl DeveloperCommandSession {
                 exit_status: None,
                 trace_location: None,
             },
+            DeveloperCommand::Dashboard { workspace, .. } => Self {
+                command_name: CommandName::Dashboard,
+                workspace_ref: workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
+                requires_workspace_ref: false,
+                install_check: false,
+                goal: None,
+                trace_ref: None,
+                started_at: current_timestamp_millis(),
+                completed_at: None,
+                exit_status: None,
+                trace_location: None,
+            },
             DeveloperCommand::Govern { workspace, goal, .. } => Self {
                 command_name: CommandName::Govern,
                 workspace_ref: workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
@@ -985,6 +1006,7 @@ impl DeveloperCommandSession {
             | CommandName::Status
             | CommandName::Next
             | CommandName::Continue
+            | CommandName::Dashboard
             | CommandName::Govern
             | CommandName::Init
             | CommandName::Assistant
@@ -1169,6 +1191,9 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
         | DeveloperCommand::Status { .. }
         | DeveloperCommand::Next { .. }
         | DeveloperCommand::Continue { .. } => dispatch_session_command(command),
+        DeveloperCommand::Dashboard { workspace, no_color } => {
+            dispatch_dashboard_command(workspace.as_deref(), *no_color)
+        }
         DeveloperCommand::Govern { .. } => dispatch_govern_command(command),
         DeveloperCommand::Assistant { command } => dispatch_assistant_command(command),
         DeveloperCommand::Init { .. } => dispatch_init_command(command),
@@ -1199,6 +1224,14 @@ fn dispatch_doctor_command(workspace: Option<&Path>, install: bool) -> DispatchO
             CommandExitStatus::InvalidInvocation
         },
         output::render_diagnostics(&report),
+        None,
+    )
+}
+
+fn dispatch_dashboard_command(workspace: Option<&Path>, no_color: bool) -> DispatchOutcome {
+    DispatchOutcome::text(
+        CommandExitStatus::Succeeded,
+        dashboard::execute_dashboard_launcher(workspace, no_color),
         None,
     )
 }
@@ -2120,6 +2153,7 @@ fn red_to_green_addition() {
             (CommandName::Workflow, "workflow"),
             (CommandName::Inspect, "inspect"),
             (CommandName::Continue, "continue"),
+            (CommandName::Dashboard, "dashboard"),
             (CommandName::Govern, "govern"),
             (CommandName::Init, "init"),
             (CommandName::Assistant, "assistant"),
@@ -2158,6 +2192,10 @@ fn red_to_green_addition() {
             (
                 DeveloperCommand::Status { workspace: Some(workspace.clone()), cluster: None },
                 CommandName::Status,
+            ),
+            (
+                DeveloperCommand::Dashboard { workspace: Some(workspace.clone()), no_color: true },
+                CommandName::Dashboard,
             ),
             (
                 DeveloperCommand::Next { workspace: Some(workspace.clone()), cluster: None },
@@ -2221,6 +2259,15 @@ fn red_to_green_addition() {
             });
         assert!(checkpoint_session.validate().is_ok());
 
+        let dashboard_session =
+            DeveloperCommandSession::from_command(&DeveloperCommand::Dashboard {
+                workspace: Some(workspace.clone()),
+                no_color: true,
+            });
+        assert!(dashboard_session.validate().is_ok());
+        assert_eq!(dashboard_session.command_name, CommandName::Dashboard);
+        assert_eq!(dashboard_session.workspace_ref, Some(workspace.to_string_lossy().into_owned()));
+
         let checkpoint = dispatch(&DeveloperCommand::Checkpoint {
             command: CheckpointSubcommand::List {
                 workspace: Some(workspace.clone()),
@@ -2229,6 +2276,18 @@ fn red_to_green_addition() {
         });
         assert_eq!(checkpoint.exit_status, CommandExitStatus::Succeeded);
         assert!(checkpoint.output.contains("checkpoint_scope: workspace"), "{}", checkpoint.output);
+
+        let dashboard = dispatch(&DeveloperCommand::Dashboard {
+            workspace: Some(workspace.clone()),
+            no_color: true,
+        });
+        assert_eq!(dashboard.exit_status, CommandExitStatus::Succeeded);
+        assert!(
+            dashboard.output.contains("outcome: dashboard_unavailable"),
+            "{}",
+            dashboard.output
+        );
+        assert!(dashboard.output.contains("color_mode: monochrome"), "{}", dashboard.output);
 
         assert_eq!(
             dispatch(&DeveloperCommand::Doctor {

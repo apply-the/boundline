@@ -4,11 +4,12 @@ members = [
 	"crates/boundline-core",
 	"crates/boundline-adapters",
 	"crates/boundline-cli",
+	"crates/boundline-dashboard",
 ]
 resolver = "3"
 
 [workspace.package]
-version = "0.63.0"
+version = "0.64.0"
 edition = "2024"
 license = "MIT"
 
@@ -22,9 +23,12 @@ thiserror = "2"
 tracing = "0.1"
 uuid = { version = "1", features = ["serde", "v4"] }
 toml = "0.8"
+ratatui = "0.29"
+crossterm = "0.28"
 boundline-core = { path = "crates/boundline-core" }
 boundline-adapters = { path = "crates/boundline-adapters" }
 boundline-cli = { path = "crates/boundline-cli" }
+boundline-dashboard = { path = "crates/boundline-dashboard" }
 
 [package]
 name = "boundline"
@@ -48,3 +52,6 @@ thiserror.workspace = true
 tracing.workspace = true
 uuid.workspace = true
 toml.workspace = true
+
+[dev-dependencies]
+boundline-dashboard.workspace = true

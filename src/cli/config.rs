@@ -1162,9 +1162,22 @@ mod tests {
 
     use uuid::Uuid;
 
-    use super::*;
+    use super::{
+        BindContextRequest, CapabilityState, ConfigCommandError, ConfigFile, ConfigShowScope,
+        ConfigWriteScope, EffortFallbackPolicy, EffortLevel, ExternalContextBinding, ModelRoute,
+        MutationTarget, RouteSlot, RuntimeCapabilityProfile, RuntimeKind,
+        SemanticAccelerationPolicyState, SetCapabilityRequest, SetConfigRequest, SetDomainRequest,
+        SetEffortRequest, SetSemanticAccelerationRequest, SlotEffortPolicy, ValueSource,
+        binding_text, domain_enabled_text, effort_policy_text, execute_bind_context, execute_set,
+        execute_set_capability, execute_set_domain, execute_set_effort,
+        execute_set_semantic_acceleration, execute_show, execute_unbind_context, execute_unset,
+        execute_unset_capability, execute_unset_domain, execute_unset_effort,
+        load_config_for_scope, mutation_target, profile_text, push_effective_domain_template_lines,
+        render_scope, route_text, save_config_for_scope, slot_label, source_text,
+    };
     use crate::adapters::cluster_store::FileClusterStore;
     use crate::adapters::config_store::FileConfigStore;
+    use crate::cli::CommandExitStatus;
     use crate::domain::cluster::{
         ClusterConfigFile, ClusterMemberRegistration, ClusterMemberRole, WorkspaceCluster,
     };

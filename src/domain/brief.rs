@@ -633,7 +633,12 @@ mod tests {
     use serde_json::json;
     use uuid::Uuid;
 
-    use super::*;
+    use super::{
+        AuthoredBriefBundle, AuthoredBriefResolutionState, BriefIngestionError,
+        ClarificationReasonKind, ClarificationRecord, ClarificationStatus, DerivedTaskDraft,
+        InputSourceKind, MAX_BRIEF_SOURCES, normalize_governance_intent, normalize_inputs,
+    };
+    use crate::domain::governance::GovernanceRuntimeKind;
 
     fn temp_workspace(prefix: &str) -> PathBuf {
         let path = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));

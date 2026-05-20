@@ -3,6 +3,7 @@ pub mod checkpoint;
 pub mod cluster;
 pub mod context_intelligence;
 pub mod configuration;
+pub mod dashboard;
 pub mod decision;
 pub mod distribution;
 pub mod domain_templates;
