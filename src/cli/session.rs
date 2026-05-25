@@ -1,48 +1,58 @@
 //! Session-native CLI command handlers and status/report projection helpers.
 
+use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::thread;
+use std::time::Duration;
 
 use crate::adapters::cluster_store::{ClusterStoreError, FileClusterStore};
 use crate::adapters::trace_store::{FileTraceStore, TraceStore};
 use crate::domain::brief::{
-    AuthoredBriefBundle, BriefIngestionError, normalize_governance_intent,
+    AuthoredBriefBundle, BriefIngestionError, GovernanceIntent, normalize_governance_intent,
     normalize_inputs_with_governance,
 };
 use serde_json::Value;
 use thiserror::Error;
-use uuid::Uuid;
 
 use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
 use crate::cli::CommandExitStatus;
 use crate::cli::inspect::summarize_trace;
 use crate::cli::output;
 use crate::cli::workspace as cli_workspace;
-use crate::domain::cluster::ClusterSessionProjection;
+use crate::domain::cluster::{ClusterDeliveryStory, ClusterSessionProjection};
 use crate::domain::decision::ActionSelector;
-use crate::domain::governance::{GovernanceRuntimeKind, governance_confidence_handoff};
+use crate::domain::governance::{
+    CanonModeSelectionPreference, GovernanceLifecycleState, GovernanceRuntimeKind,
+    GovernedSessionLifecycle, governance_confidence_handoff, is_planning_stage_key,
+    planning_canon_mode_for_stage_key,
+};
 use crate::domain::guidance::GuidanceGuardianProjection;
 use crate::domain::negotiation::NegotiatedDeliveryPacket;
 use crate::domain::reasoning::ReasoningAdmissionEffect;
 use crate::domain::session::{
     ActiveSessionRecord, CompatibilityFollowUpMode, CompatibilityFollowUpView, ContinuityAuthority,
-    SessionStatus, SessionStatusView, decision_status_text, delegation_next_command,
-    delegation_status_view, execution_path_text, routing_outcome,
-    task_state_attempt_lineage_summary, task_state_canon_memory_context_credibility,
-    task_state_canon_memory_context_summary, task_state_canon_memory_primary_inputs,
-    task_state_canon_memory_provenance, task_state_canon_memory_staleness_reason,
-    task_state_governance_approval_provenance, task_state_governance_approval_text,
-    task_state_governance_blocked_reason, task_state_governance_candidate_actions,
-    task_state_governance_canon_run_ref, task_state_governance_contract_lines,
-    task_state_governance_decision_headline, task_state_governance_mode_text,
-    task_state_governance_next_action, task_state_governance_packet_binding_reason,
-    task_state_governance_packet_ref, task_state_governance_packet_source_stage,
-    task_state_governance_reason, task_state_governance_rollout_profile_text,
-    task_state_governance_runtime_state_text, task_state_governance_runtime_text,
-    task_state_governance_stage_key, task_state_governance_state_text, task_state_string,
-    task_state_strings, task_state_workspace_slice_summary,
+    SessionStatus, SessionStatusView, date_prefix_from_millis, decision_status_text,
+    delegation_next_command, delegation_status_view, execution_path_text, generate_session_ref,
+    routing_outcome, session_branch_ref, session_goal_brief_ref, session_plan_brief_ref,
+    session_run_brief_ref, session_storage_root_ref, task_state_attempt_lineage_summary,
+    task_state_canon_memory_context_credibility, task_state_canon_memory_context_summary,
+    task_state_canon_memory_primary_inputs, task_state_canon_memory_provenance,
+    task_state_canon_memory_staleness_reason, task_state_governance_approval_provenance,
+    task_state_governance_approval_text, task_state_governance_blocked_reason,
+    task_state_governance_candidate_actions, task_state_governance_canon_run_ref,
+    task_state_governance_contract_lines, task_state_governance_decision_headline,
+    task_state_governance_mode_text, task_state_governance_next_action,
+    task_state_governance_packet_binding_reason, task_state_governance_packet_ref,
+    task_state_governance_packet_source_stage, task_state_governance_reason,
+    task_state_governance_rollout_profile_text, task_state_governance_runtime_state_text,
+    task_state_governance_runtime_text, task_state_governance_stage_key,
+    task_state_governance_state_text, task_state_string, task_state_strings,
+    task_state_workspace_slice_summary,
 };
-use crate::domain::task::TaskStatus;
+use crate::domain::task::{ClarificationReasonKind, TaskStatus};
 use crate::domain::trace::{TraceSummaryView, current_timestamp_millis};
+use crate::fixture::FixtureRuntimeError;
 use crate::orchestrator::session_runtime::{SessionRuntime, SessionRuntimeError};
 
 /// Result returned by session-native CLI commands.
@@ -52,7 +62,55 @@ pub struct SessionCommandReport {
     pub terminal_output: String,
     pub trace_location: Option<String>,
     pub session_status: Option<SessionStatusView>,
+    pub guidance_guardian: Option<GuidanceGuardianProjection>,
     pub trace_summary: Option<TraceSummaryView>,
+}
+
+const SESSION_BRIEF_ARTIFACT_NOTE: &str =
+    "This runtime-owned artifact preserves Boundline's compact operator brief fields.";
+const SESSION_SOURCE_OF_TRUTH: &str =
+    ".boundline/active-session -> .boundline/sessions/<session_ref>/session.json";
+const SESSION_HISTORY_RESUME_HINT: &str = "boundline session resume <session_id>";
+const SESSION_HISTORY_CREATE_HINT: &str = "boundline goal --goal <goal>";
+const GIT_DIRECTORY_ENTRY_NAME: &str = ".git";
+const GIT_PROGRAM: &str = "git";
+const GIT_SHOW_REF_SUBCOMMAND: &str = "show-ref";
+const GIT_SWITCH_SUBCOMMAND: &str = "switch";
+const GIT_CREATE_BRANCH_FLAG: &str = "-c";
+const GIT_VERIFY_FLAG: &str = "--verify";
+const GIT_QUIET_FLAG: &str = "--quiet";
+const GIT_LOCAL_BRANCH_REF_PREFIX: &str = "refs/heads";
+const GIT_INDEX_LOCK_MARKER: &str = ".git/index.lock";
+const GIT_FILE_EXISTS_MARKER: &str = "File exists";
+const GIT_BRANCH_ACTIVATION_RETRY_ATTEMPTS: u8 = 40;
+const GIT_BRANCH_ACTIVATION_RETRY_DELAY_MILLIS: u64 = 50;
+const DIRECT_RUN_BOUNDED_CONTEXT_HEADLINE: &str = "bounded context required before planning";
+const DIRECT_RUN_BOUNDED_CONTEXT_REPAIR: &str =
+    "provide a credible brief or concrete workspace target before retrying direct run";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SessionBriefArtifactKind {
+    Goal,
+    Plan,
+    Run,
+}
+
+impl SessionBriefArtifactKind {
+    const fn title(self) -> &'static str {
+        match self {
+            Self::Goal => "Goal Brief",
+            Self::Plan => "Plan Brief",
+            Self::Run => "Run Brief",
+        }
+    }
+
+    fn brief_ref(self, session_id: &str) -> String {
+        match self {
+            Self::Goal => session_goal_brief_ref(session_id),
+            Self::Plan => session_plan_brief_ref(session_id),
+            Self::Run => session_run_brief_ref(session_id),
+        }
+    }
 }
 
 fn report_with_session_status(
@@ -80,6 +138,7 @@ fn report_with_session_guidance(
         terminal_output,
         trace_location,
         session_status: Some(view),
+        guidance_guardian: guidance_guardian.cloned(),
         trace_summary: None,
     }
 }
@@ -95,6 +154,7 @@ fn report_with_trace_summary(
         terminal_output,
         trace_location,
         session_status: None,
+        guidance_guardian: None,
         trace_summary,
     }
 }
@@ -108,8 +168,294 @@ fn report_with_text(
         terminal_output,
         trace_location: None,
         session_status: None,
+        guidance_guardian: None,
         trace_summary: None,
     }
+}
+
+fn cluster_delivery_story_for_record(record: &ActiveSessionRecord) -> Option<ClusterDeliveryStory> {
+    record
+        .goal_plan
+        .as_ref()
+        .and_then(|goal_plan| goal_plan.cluster_delivery_story.clone())
+        .or_else(|| {
+            record
+                .active_task
+                .as_ref()
+                .and_then(|task| task.context.cluster_delivery_story().ok().flatten())
+        })
+}
+
+fn summarize_session_goal(goal: Option<&str>) -> String {
+    let Some(line) = goal.unwrap_or_default().lines().map(str::trim).find(|line| !line.is_empty())
+    else {
+        return "none".to_string();
+    };
+
+    const MAX_GOAL_SUMMARY_CHARS: usize = 96;
+    let mut summary: String = line.chars().take(MAX_GOAL_SUMMARY_CHARS).collect();
+    if line.chars().nth(MAX_GOAL_SUMMARY_CHARS).is_some() {
+        summary.push_str("...");
+    }
+
+    summary
+}
+
+fn session_goal_hint<'a>(
+    goal: Option<&'a str>,
+    bundle: &'a AuthoredBriefBundle,
+) -> Option<&'a str> {
+    goal.map(str::trim).filter(|goal| !goal.is_empty()).or_else(|| {
+        bundle
+            .derived_task_draft
+            .as_ref()
+            .map(|draft| draft.bounded_goal.trim())
+            .filter(|goal| !goal.is_empty())
+    })
+}
+
+fn session_history_status_label(status: SessionStatus) -> &'static str {
+    match status {
+        SessionStatus::Initialized => "initialized",
+        SessionStatus::GoalCaptured => "goal_captured",
+        SessionStatus::Planned => "planned",
+        SessionStatus::Running => "running",
+        SessionStatus::Succeeded => "succeeded",
+        SessionStatus::Blocked => "blocked",
+        SessionStatus::Failed => "failed",
+        SessionStatus::Exhausted => "exhausted",
+        SessionStatus::Aborted => "aborted",
+        SessionStatus::Invalid => "invalid",
+    }
+}
+
+fn render_session_history(
+    workspace: &Path,
+    active_session_id: Option<&str>,
+    sessions: &[ActiveSessionRecord],
+) -> String {
+    let mut lines = vec![
+        "session_history:".to_string(),
+        format!("workspace: {}", workspace.display()),
+        format!("source_of_truth: {SESSION_SOURCE_OF_TRUTH}"),
+        format!("session_count: {}", sessions.len()),
+        format!("active_session: {}", active_session_id.unwrap_or("none")),
+    ];
+
+    if sessions.is_empty() {
+        lines.push("summary: no persisted sessions found for the workspace history".to_string());
+        lines.push(format!("next_command: {SESSION_HISTORY_CREATE_HINT}"));
+        return lines.join("\n");
+    }
+
+    for (index, record) in sessions.iter().enumerate() {
+        lines.push(String::new());
+        lines.push(format!("session_{}:", index + 1));
+        lines.push(format!("session_id: {}", record.session_id));
+        lines.push(format!("active: {}", active_session_id == Some(record.session_id.as_str())));
+        lines.push(format!("branch: {}", session_branch_ref(&record.session_id)));
+        lines
+            .push(format!("latest_status: {}", session_history_status_label(record.latest_status)));
+        lines.push(format!("goal_summary: {}", summarize_session_goal(record.goal.as_deref())));
+        lines.push(format!("updated_at: {}", record.updated_at));
+        lines.push(format!(
+            "latest_trace_ref: {}",
+            record.latest_trace_ref.as_deref().unwrap_or("none")
+        ));
+    }
+
+    lines.push(String::new());
+    lines.push(format!("next_command: {SESSION_HISTORY_RESUME_HINT}"));
+    lines.join("\n")
+}
+
+fn persist_session_status_brief_artifact(
+    workspace: &Path,
+    kind: SessionBriefArtifactKind,
+    view: &SessionStatusView,
+) -> Result<String, SessionCommandError> {
+    persist_session_brief_artifact(
+        workspace,
+        &view.session_id,
+        kind,
+        &output::render_session_status_brief(view),
+    )
+}
+
+fn persist_trace_summary_brief_artifact(
+    workspace: &Path,
+    session_id: &str,
+    summary: &TraceSummaryView,
+    next_command: &str,
+) -> Result<String, SessionCommandError> {
+    persist_session_brief_artifact(
+        workspace,
+        session_id,
+        SessionBriefArtifactKind::Run,
+        &output::render_trace_summary_brief(summary, None, next_command),
+    )
+}
+
+fn persist_session_brief_artifact(
+    workspace: &Path,
+    session_id: &str,
+    kind: SessionBriefArtifactKind,
+    rendered_brief: &str,
+) -> Result<String, SessionCommandError> {
+    let artifact_ref = kind.brief_ref(session_id);
+    let artifact_path = workspace.join(&artifact_ref);
+    let Some(parent) = artifact_path.parent() else {
+        return Err(SessionCommandError::InvalidRequest(format!(
+            "session brief artifact path has no parent: {}",
+            artifact_path.display()
+        )));
+    };
+
+    fs::create_dir_all(parent).map_err(|source| SessionCommandError::BriefWrite {
+        artifact_ref: artifact_ref.clone(),
+        source,
+    })?;
+    fs::write(&artifact_path, render_session_brief_markdown(kind, rendered_brief)).map_err(
+        |source| SessionCommandError::BriefWrite { artifact_ref: artifact_ref.clone(), source },
+    )?;
+
+    Ok(artifact_ref)
+}
+
+fn render_session_brief_markdown(kind: SessionBriefArtifactKind, rendered_brief: &str) -> String {
+    let mut lines = vec![
+        format!("# {}", kind.title()),
+        String::new(),
+        SESSION_BRIEF_ARTIFACT_NOTE.to_string(),
+        String::new(),
+    ];
+
+    for line in rendered_brief.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        lines.push(format!("- {line}"));
+    }
+
+    lines.push(String::new());
+    lines.join("\n")
+}
+
+fn persisted_session_brief_ref(workspace: &Path, brief_ref: &str) -> Option<String> {
+    workspace.join(brief_ref).is_file().then(|| brief_ref.to_string())
+}
+
+fn nearest_git_root(start: &Path) -> Option<PathBuf> {
+    let mut current = start.canonicalize().unwrap_or_else(|_| start.to_path_buf());
+    loop {
+        if current.join(GIT_DIRECTORY_ENTRY_NAME).exists() {
+            return Some(current);
+        }
+        if !current.pop() {
+            return None;
+        }
+    }
+}
+
+fn git_command_failure_detail(output: &std::process::Output) -> String {
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    if !stderr.is_empty() {
+        return stderr;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if !stdout.is_empty() {
+        return stdout;
+    }
+
+    "git command exited without output".to_string()
+}
+
+fn activate_session_branch(workspace: &Path, session_ref: &str) -> Result<(), SessionCommandError> {
+    let Some(repo_root) = nearest_git_root(workspace) else {
+        return Ok(());
+    };
+    let branch_ref = session_branch_ref(session_ref);
+    let mut last_detail = String::new();
+    for attempt_index in 0..GIT_BRANCH_ACTIVATION_RETRY_ATTEMPTS {
+        let mut command = Command::new(GIT_PROGRAM);
+        command.current_dir(&repo_root).arg(GIT_SWITCH_SUBCOMMAND);
+        if !session_branch_exists(&repo_root, &branch_ref)? {
+            command.arg(GIT_CREATE_BRANCH_FLAG);
+        }
+        let output = command.arg(&branch_ref).output().map_err(|source| {
+            SessionCommandError::GitBranchCreate {
+                branch_ref: branch_ref.clone(),
+                repo_root: repo_root.clone(),
+                source,
+            }
+        })?;
+
+        if output.status.success() {
+            return Ok(());
+        }
+
+        let detail = git_command_failure_detail(&output);
+        last_detail = detail.clone();
+        let has_retries_remaining = attempt_index + 1 < GIT_BRANCH_ACTIVATION_RETRY_ATTEMPTS;
+        if has_retries_remaining && is_git_index_lock_contention(&detail) {
+            thread::sleep(Duration::from_millis(GIT_BRANCH_ACTIVATION_RETRY_DELAY_MILLIS));
+            continue;
+        }
+
+        return Err(SessionCommandError::GitBranchCreateFailed { branch_ref, repo_root, detail });
+    }
+
+    Err(SessionCommandError::GitBranchCreateFailed { branch_ref, repo_root, detail: last_detail })
+}
+
+fn is_git_index_lock_contention(detail: &str) -> bool {
+    detail.contains(GIT_INDEX_LOCK_MARKER) && detail.contains(GIT_FILE_EXISTS_MARKER)
+}
+
+fn session_branch_exists(repo_root: &Path, branch_ref: &str) -> Result<bool, SessionCommandError> {
+    let branch_head_ref = format!("{GIT_LOCAL_BRANCH_REF_PREFIX}/{branch_ref}");
+    let output = Command::new(GIT_PROGRAM)
+        .current_dir(repo_root)
+        .arg(GIT_SHOW_REF_SUBCOMMAND)
+        .arg(GIT_VERIFY_FLAG)
+        .arg(GIT_QUIET_FLAG)
+        .arg(&branch_head_ref)
+        .output()
+        .map_err(|source| SessionCommandError::GitBranchCreate {
+            branch_ref: branch_ref.to_string(),
+            repo_root: repo_root.to_path_buf(),
+            source,
+        })?;
+
+    Ok(output.status.success())
+}
+
+fn apply_capture_governance_selection(
+    record: &mut ActiveSessionRecord,
+    governance: GovernanceRuntimeKind,
+) {
+    let mut lifecycle = record.governance_lifecycle.clone().unwrap_or(GovernedSessionLifecycle {
+        governance_runtime: governance,
+        explicit_opt_out: governance == GovernanceRuntimeKind::Local,
+        mode_selection_preference: CanonModeSelectionPreference::default(),
+        selected_mode: None,
+        selected_mode_sequence: Vec::new(),
+        latest_reasoning_profile: None,
+        current_stage_index: 0,
+        stage_records: Vec::new(),
+        accumulated_context: Vec::new(),
+        terminal_reason: None,
+        planning_input_fingerprint: None,
+    });
+
+    lifecycle.governance_runtime = governance;
+    lifecycle.explicit_opt_out = governance == GovernanceRuntimeKind::Local;
+    lifecycle.selected_mode = None;
+    lifecycle.selected_mode_sequence.clear();
+    lifecycle.latest_reasoning_profile = None;
+    lifecycle.current_stage_index = 0;
+    lifecycle.stage_records.clear();
+    lifecycle.accumulated_context.clear();
+    lifecycle.terminal_reason = None;
+    record.governance_lifecycle = Some(lifecycle);
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -118,23 +464,102 @@ struct ResolvedSessionTarget {
     cluster_projection: Option<ClusterSessionProjection>,
 }
 
-/// Starts a new active session for the current or requested workspace.
-pub fn execute_start(
+/// Lists persisted sessions for the current or requested workspace.
+pub fn execute_session_list(
     workspace: Option<&Path>,
 ) -> Result<SessionCommandReport, SessionCommandError> {
-    execute_start_with_target(workspace, None)
+    execute_session_list_with_target(workspace, None)
 }
 
-/// Starts a new active session for an explicit workspace or cluster target.
-pub fn execute_start_with_target(
+/// Lists persisted sessions for an explicit workspace or cluster target.
+pub fn execute_session_list_with_target(
     workspace: Option<&Path>,
     cluster: Option<&Path>,
 ) -> Result<SessionCommandReport, SessionCommandError> {
-    let target = resolve_session_target(workspace, cluster, "start")?;
+    let workspace = resolve_session_target(workspace, cluster, "session list")?.owner_workspace;
+    let store = FileSessionStore::for_workspace(&workspace);
+    let active_session_id = store.load().map_err(map_store_error)?.map(|record| record.session_id);
+    let sessions = store.list_sessions().map_err(map_store_error)?;
+
+    Ok(report_with_text(
+        CommandExitStatus::Succeeded,
+        render_session_history(&workspace, active_session_id.as_deref(), &sessions),
+    ))
+}
+
+/// Reactivates one persisted session for the current or requested workspace.
+pub fn execute_session_resume(
+    workspace: Option<&Path>,
+    session_id: &str,
+) -> Result<SessionCommandReport, SessionCommandError> {
+    execute_session_resume_with_target(workspace, None, session_id)
+}
+
+/// Reactivates one persisted session for an explicit workspace or cluster target.
+pub fn execute_session_resume_with_target(
+    workspace: Option<&Path>,
+    cluster: Option<&Path>,
+    session_id: &str,
+) -> Result<SessionCommandReport, SessionCommandError> {
+    let target = resolve_session_target(workspace, cluster, "session resume")?;
     let workspace = target.owner_workspace;
+    let store = FileSessionStore::for_workspace(&workspace);
+    let Some(record) = store.select_active_session(session_id).map_err(map_store_error)? else {
+        return Err(SessionCommandError::UnknownSession {
+            session_id: session_id.to_string(),
+            workspace,
+        });
+    };
+
+    let branch_ref = session_branch_ref(&record.session_id);
+    let switched_branch = nearest_git_root(Path::new(&record.workspace_ref)).is_some();
+    activate_session_branch(Path::new(&record.workspace_ref), &record.session_id)?;
+
+    let explanation = if target.cluster_projection.is_some() {
+        if switched_branch {
+            format!(
+                "reactivated the persisted clustered session and switched the repository to `{branch_ref}`"
+            )
+        } else {
+            "reactivated the persisted clustered session for the primary workspace".to_string()
+        }
+    } else if switched_branch {
+        format!(
+            "reactivated the persisted workspace session and switched the repository to `{branch_ref}`"
+        )
+    } else {
+        "reactivated the persisted workspace session".to_string()
+    };
+    let view = build_status_view(&record, suggested_next_command(&record), explanation);
+
+    Ok(report_with_session_status(CommandExitStatus::Succeeded, view))
+}
+
+/// Returns the number of session directories in `workspace/.boundline/sessions/`
+/// whose names start with `date_prefix` (e.g. `"20260525"`).  Used to derive
+/// the 1-based daily sequence number for new session references.
+pub(crate) fn count_sessions_for_date(workspace: &Path, date_prefix: &str) -> u16 {
+    let sessions_dir = workspace.join(session_storage_root_ref());
+    let Ok(entries) = fs::read_dir(&sessions_dir) else {
+        return 0;
+    };
+    entries
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_name().to_string_lossy().starts_with(date_prefix))
+        .count()
+        .min(u16::MAX as usize) as u16
+}
+
+fn persist_initialized_session_with_goal_hint(
+    workspace: &Path,
+    goal_hint: Option<&str>,
+    slug_override: Option<&str>,
+) -> Result<ActiveSessionRecord, SessionCommandError> {
     let now = current_timestamp_millis();
+    let date_prefix = date_prefix_from_millis(now);
+    let daily_seq = count_sessions_for_date(workspace, &date_prefix) + 1;
     let record = ActiveSessionRecord {
-        session_id: Uuid::new_v4().to_string(),
+        session_id: generate_session_ref(goal_hint, &date_prefix, daily_seq, slug_override),
         workspace_ref: workspace.to_string_lossy().into_owned(),
         goal: None,
         authored_brief: None,
@@ -156,23 +581,14 @@ pub fn execute_start_with_target(
         delight_feedback: None,
     };
 
-    FileSessionStore::for_workspace(&workspace).persist(&record)?;
+    activate_session_branch(workspace, &record.session_id)?;
+    FileSessionStore::for_workspace(workspace).persist(&record)?;
 
-    let view = build_status_view(
-        &record,
-        Some("boundline capture --goal <goal>".to_string()),
-        if target.cluster_projection.is_some() {
-            "active clustered session initialized for the current primary workspace"
-        } else {
-            "active session initialized for the current workspace"
-        },
-    );
-
-    Ok(report_with_session_status(CommandExitStatus::Succeeded, view))
+    Ok(record)
 }
 
-/// Captures a goal and optional authored briefs into the active session.
-pub fn execute_capture(
+/// Records a goal and optional authored briefs into the active session.
+pub fn execute_goal(
     workspace: Option<&Path>,
     goal: Option<&str>,
     briefs: &[PathBuf],
@@ -181,12 +597,64 @@ pub fn execute_capture(
     zone: Option<&str>,
     owner: Option<&str>,
 ) -> Result<SessionCommandReport, SessionCommandError> {
-    execute_capture_with_target(workspace, None, goal, briefs, governance, risk, zone, owner)
+    execute_goal_with_target(workspace, None, goal, briefs, governance, risk, zone, owner, None)
 }
 
-/// Captures a goal and optional authored briefs into an explicit workspace or cluster target.
+/// Updates the active session goal and optional authored briefs in place.
 #[allow(clippy::too_many_arguments)]
-pub fn execute_capture_with_target(
+pub fn execute_goal_update(
+    workspace: Option<&Path>,
+    goal: Option<&str>,
+    briefs: &[PathBuf],
+    governance: Option<GovernanceRuntimeKind>,
+    risk: Option<&str>,
+    zone: Option<&str>,
+    owner: Option<&str>,
+) -> Result<SessionCommandReport, SessionCommandError> {
+    execute_goal_update_with_target(workspace, None, goal, briefs, governance, risk, zone, owner)
+}
+
+fn can_update_goal_in_place(status: SessionStatus) -> bool {
+    matches!(
+        status,
+        SessionStatus::Initialized
+            | SessionStatus::GoalCaptured
+            | SessionStatus::Planned
+            | SessionStatus::Blocked
+            | SessionStatus::Running
+    )
+}
+
+fn load_goal_update_session(workspace: &Path) -> Result<ActiveSessionRecord, SessionCommandError> {
+    let record = load_active_session(workspace)?;
+    if can_update_goal_in_place(record.latest_status) {
+        Ok(record)
+    } else {
+        Err(SessionCommandError::GoalUpdateRequiresNewSession { status: record.latest_status })
+    }
+}
+
+/// Records a goal and optional authored briefs into an explicit workspace or cluster target.
+#[allow(clippy::too_many_arguments)]
+pub fn execute_goal_with_target(
+    workspace: Option<&Path>,
+    cluster: Option<&Path>,
+    goal: Option<&str>,
+    briefs: &[PathBuf],
+    governance: Option<GovernanceRuntimeKind>,
+    risk: Option<&str>,
+    zone: Option<&str>,
+    owner: Option<&str>,
+    slug: Option<&str>,
+) -> Result<SessionCommandReport, SessionCommandError> {
+    execute_goal_with_target_mode(
+        workspace, cluster, goal, briefs, governance, risk, zone, owner, false, slug,
+    )
+}
+
+/// Updates the active goal and authored briefs for an explicit workspace or cluster target.
+#[allow(clippy::too_many_arguments)]
+pub fn execute_goal_update_with_target(
     workspace: Option<&Path>,
     cluster: Option<&Path>,
     goal: Option<&str>,
@@ -196,15 +664,60 @@ pub fn execute_capture_with_target(
     zone: Option<&str>,
     owner: Option<&str>,
 ) -> Result<SessionCommandReport, SessionCommandError> {
-    let target = resolve_session_target(workspace, cluster, "capture")?;
+    execute_goal_with_target_mode(
+        workspace, cluster, goal, briefs, governance, risk, zone, owner, true, None,
+    )
+}
+
+/// Sets or updates the bounded goal using upsert semantics: updates the active
+/// non-terminal session when one exists, creates a new session otherwise.
+///
+/// This mirrors the behavior that `orchestrate --goal` uses internally (try
+/// update first, fall back to create on missing or terminal session).
+#[allow(clippy::too_many_arguments)]
+pub fn execute_goal_upsert_with_target(
+    workspace: Option<&Path>,
+    cluster: Option<&Path>,
+    goal: Option<&str>,
+    briefs: &[PathBuf],
+    governance: Option<GovernanceRuntimeKind>,
+    risk: Option<&str>,
+    zone: Option<&str>,
+    owner: Option<&str>,
+    slug: Option<&str>,
+) -> Result<SessionCommandReport, SessionCommandError> {
+    match execute_goal_with_target_mode(
+        workspace, cluster, goal, briefs, governance, risk, zone, owner, true, None,
+    ) {
+        Ok(report) => Ok(report),
+        Err(
+            SessionCommandError::MissingActiveSession
+            | SessionCommandError::GoalUpdateRequiresNewSession { .. },
+        ) => execute_goal_with_target_mode(
+            workspace, cluster, goal, briefs, governance, risk, zone, owner, false, slug,
+        ),
+        Err(error) => Err(error),
+    }
+}
+
+pub fn execute_goal_clarification_answer_with_target(
+    workspace: Option<&Path>,
+    cluster: Option<&Path>,
+    answer: &str,
+) -> Result<SessionCommandReport, SessionCommandError> {
+    let target = resolve_session_target(workspace, cluster, "goal clarification")?;
     let workspace = target.owner_workspace;
     let runtime = SessionRuntime::for_workspace(&workspace);
     let mut record = load_active_session(&workspace)?;
-
-    let governance_intent = normalize_governance_intent(governance, risk, zone, owner)
-        .map_err(SessionCommandError::BriefIngestion)?;
-    let bundle = normalize_inputs_with_governance(&workspace, goal, briefs, governance_intent)
-        .map_err(SessionCommandError::BriefIngestion)?;
+    let bundle = record
+        .authored_brief
+        .as_ref()
+        .ok_or_else(|| {
+            SessionCommandError::InvalidRequest(
+                "goal clarification answer requires authored brief input".to_string(),
+            )
+        })?
+        .with_clarification_answer(answer);
     let effective_goal = bundle.render_goal_text();
 
     runtime.capture_goal(&mut record, &effective_goal).map_err(map_runtime_error)?;
@@ -218,26 +731,110 @@ pub fn execute_capture_with_target(
     runtime.persist_session(&record).map_err(map_runtime_error)?;
 
     let summary = if bundle.clarification.is_some() {
-        "captured the active goal, but clarification is required before planning can continue"
+        "updated the active goal with the clarification answer, but clarification is still required before planning can continue"
             .to_string()
+    } else {
+        "applied the clarification answer to the active goal".to_string()
+    };
+    let explanation = if target.cluster_projection.is_some() {
+        format!("{summary} for the current clustered delivery session")
+    } else {
+        summary
+    };
+    let preview_view =
+        build_status_view(&record, suggested_next_command(&record), explanation.clone());
+    persist_session_status_brief_artifact(
+        &workspace,
+        SessionBriefArtifactKind::Goal,
+        &preview_view,
+    )?;
+    let view = build_status_view(&record, suggested_next_command(&record), explanation);
+
+    Ok(report_with_session_status(CommandExitStatus::Succeeded, view))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn execute_goal_with_target_mode(
+    workspace: Option<&Path>,
+    cluster: Option<&Path>,
+    goal: Option<&str>,
+    briefs: &[PathBuf],
+    governance: Option<GovernanceRuntimeKind>,
+    risk: Option<&str>,
+    zone: Option<&str>,
+    owner: Option<&str>,
+    update_existing: bool,
+    slug: Option<&str>,
+) -> Result<SessionCommandReport, SessionCommandError> {
+    let target = resolve_session_target(
+        workspace,
+        cluster,
+        if update_existing { "goal update" } else { "goal" },
+    )?;
+    let workspace = target.owner_workspace;
+    let runtime = SessionRuntime::for_workspace(&workspace);
+
+    let governance_intent = normalize_governance_intent(governance, risk, zone, owner)
+        .map_err(SessionCommandError::BriefIngestion)?;
+    let bundle = normalize_inputs_with_governance(&workspace, goal, briefs, governance_intent)
+        .map_err(SessionCommandError::BriefIngestion)?;
+    let effective_goal = bundle.render_goal_text();
+
+    let goal_hint = session_goal_hint(goal, &bundle);
+    let mut record = if update_existing {
+        load_goal_update_session(&workspace)?
+    } else {
+        persist_initialized_session_with_goal_hint(&workspace, goal_hint, slug)?
+    };
+
+    runtime.capture_goal(&mut record, &effective_goal).map_err(map_runtime_error)?;
+    record.authored_brief = Some(bundle.clone());
+    record.negotiation_packet = Some(NegotiatedDeliveryPacket::from_authored_brief(
+        &record.session_id,
+        &record.workspace_ref,
+        &effective_goal,
+        &bundle,
+    ));
+    if let Some(governance) = governance {
+        apply_capture_governance_selection(&mut record, governance);
+    }
+    runtime.persist_session(&record).map_err(map_runtime_error)?;
+
+    let summary = if bundle.clarification.is_some() {
+        if update_existing {
+            "updated the active goal, but clarification is required before planning can continue"
+                .to_string()
+        } else {
+            "recorded the active goal, but clarification is required before planning can continue"
+                .to_string()
+        }
     } else if bundle.markdown_source_count() == 0 {
-        "captured the active goal for the current workspace session".to_string()
+        if update_existing {
+            "updated the active goal for the current workspace session".to_string()
+        } else {
+            "recorded the active goal for the current workspace session".to_string()
+        }
     } else {
         format!(
-            "captured the active goal with {} Markdown brief source(s) for the current workspace session",
+            "{} the active goal with {} Markdown brief source(s) for the current workspace session",
+            if update_existing { "updated" } else { "recorded" },
             bundle.markdown_source_count()
         )
     };
 
-    let view = build_status_view(
-        &record,
-        Some("boundline plan".to_string()),
-        if target.cluster_projection.is_some() {
-            format!("{summary} for the current clustered delivery session")
-        } else {
-            summary
-        },
-    );
+    let explanation = if target.cluster_projection.is_some() {
+        format!("{summary} for the current clustered delivery session")
+    } else {
+        summary
+    };
+    let preview_view =
+        build_status_view(&record, suggested_next_command(&record), explanation.clone());
+    persist_session_status_brief_artifact(
+        &workspace,
+        SessionBriefArtifactKind::Goal,
+        &preview_view,
+    )?;
+    let view = build_status_view(&record, suggested_next_command(&record), explanation);
 
     Ok(report_with_session_status(CommandExitStatus::Succeeded, view))
 }
@@ -277,38 +874,93 @@ pub fn execute_flow_with_target(
     Ok(report_with_session_status(CommandExitStatus::Succeeded, view))
 }
 
-/// Builds or confirms a plan for the active session.
+/// Builds a plan for the active session.
 pub fn execute_plan(
     workspace: Option<&Path>,
     requested_flow: Option<&str>,
     no_flow: bool,
-    confirm: bool,
 ) -> Result<SessionCommandReport, SessionCommandError> {
-    execute_plan_with_target(workspace, None, requested_flow, no_flow, confirm)
+    execute_plan_with_target_input(workspace, None, requested_flow, no_flow, false, None)
 }
 
-/// Builds or confirms a plan for an explicit workspace or cluster target.
+/// Builds a plan for an explicit workspace or cluster target.
 pub fn execute_plan_with_target(
     workspace: Option<&Path>,
     cluster: Option<&Path>,
     requested_flow: Option<&str>,
     no_flow: bool,
-    confirm: bool,
+) -> Result<SessionCommandReport, SessionCommandError> {
+    execute_plan_with_target_input(workspace, cluster, requested_flow, no_flow, false, None)
+}
+
+/// Builds a plan for an explicit workspace or cluster target,
+/// optionally refreshing the authored planning input from a Markdown file.
+pub fn execute_plan_with_target_input(
+    workspace: Option<&Path>,
+    cluster: Option<&Path>,
+    requested_flow: Option<&str>,
+    no_flow: bool,
+    no_canon: bool,
+    input: Option<&Path>,
 ) -> Result<SessionCommandReport, SessionCommandError> {
     let target = resolve_session_target(workspace, cluster, "plan")?;
     let workspace = target.owner_workspace;
     let runtime = SessionRuntime::for_workspace(&workspace);
     let mut record = load_active_session(&workspace)?;
 
+    if let Some(input) = input {
+        let governance_intent =
+            record.authored_brief.as_ref().and_then(|bundle| bundle.governance_intent.clone());
+        let direct_goal = record
+            .authored_brief
+            .as_ref()
+            .and_then(|bundle| bundle.primary_goal_text.as_deref())
+            .or_else(|| {
+                record.authored_brief.is_none().then_some(record.goal.as_deref()).flatten()
+            });
+        let bundle = normalize_inputs_with_governance(
+            &workspace,
+            direct_goal,
+            &[input.to_path_buf()],
+            governance_intent,
+        )
+        .map_err(SessionCommandError::BriefIngestion)?;
+        let effective_goal = bundle.render_goal_text();
+
+        record.authored_brief = Some(bundle.clone());
+        runtime.capture_goal(&mut record, &effective_goal).map_err(map_runtime_error)?;
+        record.negotiation_packet = Some(NegotiatedDeliveryPacket::from_authored_brief(
+            &record.session_id,
+            &record.workspace_ref,
+            &effective_goal,
+            &bundle,
+        ));
+    }
+
+    if no_canon {
+        apply_capture_governance_selection(&mut record, GovernanceRuntimeKind::Local);
+        if let Some(bundle) = record.authored_brief.as_mut() {
+            let mut intent = bundle.governance_intent.clone().unwrap_or(GovernanceIntent {
+                requested: true,
+                runtime_preference: Some(GovernanceRuntimeKind::Local),
+                risk: None,
+                zone: None,
+                owner: None,
+                explicit_mode: None,
+                explicit_no_canon: true,
+            });
+            intent.requested = true;
+            intent.runtime_preference = Some(GovernanceRuntimeKind::Local);
+            intent.explicit_no_canon = true;
+            bundle.governance_intent = Some(intent);
+        }
+    }
+
     if record.goal.as_deref().map(str::trim).unwrap_or_default().is_empty() {
         return Err(SessionCommandError::MissingCapturedGoal);
     }
 
-    let plan_result = if confirm {
-        runtime.confirm_goal_plan(&mut record)
-    } else {
-        runtime.plan_task(&mut record, requested_flow, no_flow)
-    };
+    let plan_result = runtime.plan_task(&mut record, requested_flow, no_flow);
 
     if let Err(error) = plan_result {
         if matches!(&error, SessionRuntimeError::ClarificationRequired { .. }) {
@@ -318,15 +970,19 @@ pub fn execute_plan_with_target(
     }
     runtime.persist_session(&record).map_err(map_runtime_error)?;
 
-    let view = build_status_view(
-        &record,
-        suggested_next_command(&record),
-        if target.cluster_projection.is_some() {
-            format!("{} for the clustered delivery story", planning_summary(&record))
-        } else {
-            planning_summary(&record)
-        },
-    );
+    let planning_explanation = if target.cluster_projection.is_some() {
+        format!("{} for the clustered delivery story", planning_summary(&record))
+    } else {
+        planning_summary(&record)
+    };
+    let preview_view =
+        build_status_view(&record, suggested_next_command(&record), planning_explanation.clone());
+    persist_session_status_brief_artifact(
+        &workspace,
+        SessionBriefArtifactKind::Plan,
+        &preview_view,
+    )?;
+    let view = build_status_view(&record, suggested_next_command(&record), planning_explanation);
 
     Ok(report_with_session_guidance(
         CommandExitStatus::Succeeded,
@@ -423,8 +1079,18 @@ pub fn execute_run_with_target(
         return Ok(report_with_session_status(exit_status_for_session(record.latest_status), view));
     }
 
-    let response = runtime.run_to_terminal(&mut record).map_err(map_runtime_error)?;
+    let mut response = runtime.run_to_terminal(&mut record).map_err(map_runtime_error)?;
     runtime.persist_session(&record).map_err(map_runtime_error)?;
+
+    if response.final_context.cluster_delivery_story().ok().flatten().is_none()
+        && let Some(cluster_story) = cluster_delivery_story_for_record(&record)
+    {
+        response.final_context.set_cluster_delivery_story(&cluster_story).map_err(|error| {
+            SessionCommandError::InvalidRequest(format!(
+                "failed to project clustered delivery story into run output: {error}"
+            ))
+        })?;
+    }
 
     if response.terminal_status == TaskStatus::Failed && delegation_status_view(&record).is_some() {
         let view = build_status_view(
@@ -446,13 +1112,37 @@ pub fn execute_run_with_target(
         suggested_next_command(&record).unwrap_or_else(|| "boundline inspect".to_string());
     let routing_prefix = output::render_route_outcome(&routing_outcome(&record));
     let trace_location = Some(response.trace_location.clone());
+    let run_brief_ref = if let Some(summary) = trace_summary.as_ref() {
+        Some(persist_trace_summary_brief_artifact(
+            &workspace,
+            &record.session_id,
+            summary,
+            &next_command,
+        )?)
+    } else {
+        Some(persist_session_brief_artifact(
+            &workspace,
+            &record.session_id,
+            SessionBriefArtifactKind::Run,
+            &output::render_run_trace("run", trace.as_ref(), &response, &next_command),
+        )?)
+    };
+    let mut trace_summary = trace_summary;
+    if let (Some(summary), Some(run_brief_ref)) = (trace_summary.as_mut(), run_brief_ref.as_ref()) {
+        summary.run_brief_ref = Some(run_brief_ref.clone());
+    }
+    let mut terminal_output = format!(
+        "{routing_prefix}\n{}",
+        output::render_run_trace("run", trace.as_ref(), &response, &next_command),
+    );
+    if let Some(run_brief_ref) = run_brief_ref.as_ref() {
+        terminal_output.push('\n');
+        terminal_output.push_str(&format!("run_brief_ref: {run_brief_ref}"));
+    }
 
     Ok(report_with_trace_summary(
         exit_status_for_task(response.terminal_status),
-        format!(
-            "{routing_prefix}\n{}",
-            output::render_run_trace("run", trace.as_ref(), &response, &next_command),
-        ),
+        terminal_output,
         trace_location,
         trace_summary,
     ))
@@ -462,40 +1152,59 @@ pub fn execute_run_with_target(
 pub fn execute_status(
     workspace: Option<&Path>,
 ) -> Result<SessionCommandReport, SessionCommandError> {
-    execute_status_with_target(workspace, None)
+    execute_status_with_target(workspace, None, None)
 }
 
 /// Renders the current active session status for an explicit workspace or cluster target.
 pub fn execute_status_with_target(
     workspace: Option<&Path>,
     cluster: Option<&Path>,
+    session_id: Option<&str>,
 ) -> Result<SessionCommandReport, SessionCommandError> {
     let workspace = resolve_session_target(workspace, cluster, "status")?.owner_workspace;
     let runtime = SessionRuntime::for_workspace(&workspace);
-    match load_active_session(&workspace) {
+    match load_selected_session(&workspace, session_id) {
         Ok(mut record) => {
             let refreshed =
                 runtime.refresh_governance_state(&mut record).map_err(map_runtime_error)?;
             if refreshed {
-                runtime.persist_session(&record).map_err(map_runtime_error)?;
+                persist_resolved_session(&runtime, &record, session_id)?;
             }
             let compatibility_follow_up = latest_workspace_compatibility_follow_up(
                 &workspace,
                 record.latest_trace_ref.as_deref(),
             )?;
 
-            let view = build_status_view_with_follow_up(
+            let mut view = build_status_view_with_follow_up(
                 &record,
                 suggested_next_command(&record),
                 if compatibility_follow_up.is_some() {
-                    "current active session state for the workspace; latest compatibility follow-up remains inspect-only"
+                    if session_id.is_some() {
+                        "current selected session state for the workspace; latest compatibility follow-up remains inspect-only"
+                    } else {
+                        "current active session state for the workspace; latest compatibility follow-up remains inspect-only"
+                    }
                 } else if refreshed {
-                    "refreshed governance approval state for the active workspace session"
+                    if session_id.is_some() {
+                        "refreshed governance approval state for the selected workspace session"
+                    } else {
+                        "refreshed governance approval state for the active workspace session"
+                    }
+                } else if session_id.is_some() {
+                    "current selected session state for the workspace"
                 } else {
                     "current active session state for the workspace"
                 },
                 compatibility_follow_up,
             );
+            if view.cluster_delivery_story.is_none()
+                && let Some(trace_ref) = record.latest_trace_ref.as_deref()
+                && let Ok(trace) = runtime.trace_store().load(Path::new(trace_ref))
+                && let Ok(summary) = summarize_trace(Path::new(trace_ref), &trace)
+                && let Some(cluster_story) = summary.cluster_delivery_story
+            {
+                view.cluster_delivery_story = Some(cluster_story);
+            }
             Ok(report_with_session_guidance(
                 CommandExitStatus::Succeeded,
                 view,
@@ -528,16 +1237,17 @@ pub fn execute_status_with_target(
 
 /// Returns the next recommended command for the active session.
 pub fn execute_next(workspace: Option<&Path>) -> Result<SessionCommandReport, SessionCommandError> {
-    execute_next_with_target(workspace, None)
+    execute_next_with_target(workspace, None, None)
 }
 
 /// Resolves the `continue` surface from the persisted active session.
 pub fn execute_continue_with_target(
     workspace: Option<&Path>,
     cluster: Option<&Path>,
+    session_id: Option<&str>,
 ) -> Result<SessionCommandReport, SessionCommandError> {
     let workspace = resolve_session_target(workspace, cluster, "continue")?.owner_workspace;
-    let record = match load_active_session(&workspace) {
+    let record = match load_selected_session(&workspace, session_id) {
         Ok(record) => record,
         Err(SessionCommandError::MissingActiveSession) => {
             return Ok(report_with_text(
@@ -556,9 +1266,15 @@ pub fn execute_continue_with_target(
     let view = build_status_view(
         &record,
         Some(next_command.clone()),
-        format!(
-            "continue uses the active session state from .boundline/session.json; next recommended command is `{next_command}`"
-        ),
+        if session_id.is_some() {
+            format!(
+                "continue uses the selected session state resolved from `--session`; next recommended command is `{next_command}`"
+            )
+        } else {
+            format!(
+                "continue uses the active session state resolved through {SESSION_SOURCE_OF_TRUTH}; next recommended command is `{next_command}`"
+            )
+        },
     );
     Ok(report_with_session_status(CommandExitStatus::Succeeded, view))
 }
@@ -567,15 +1283,16 @@ pub fn execute_continue_with_target(
 pub fn execute_next_with_target(
     workspace: Option<&Path>,
     cluster: Option<&Path>,
+    session_id: Option<&str>,
 ) -> Result<SessionCommandReport, SessionCommandError> {
     let workspace = resolve_session_target(workspace, cluster, "next")?.owner_workspace;
     let runtime = SessionRuntime::for_workspace(&workspace);
-    match load_active_session(&workspace) {
+    match load_selected_session(&workspace, session_id) {
         Ok(mut record) => {
             let refreshed =
                 runtime.refresh_governance_state(&mut record).map_err(map_runtime_error)?;
             if refreshed {
-                runtime.persist_session(&record).map_err(map_runtime_error)?;
+                persist_resolved_session(&runtime, &record, session_id)?;
             }
             let next_command =
                 suggested_next_command(&record).ok_or(SessionCommandError::NotImplemented {
@@ -631,11 +1348,15 @@ pub fn execute_next_with_target(
 fn render_missing_active_session_bootstrap(workspace: &Path, command_name: &str) -> String {
     let initialized = workspace.join(".boundline").is_dir();
     let next_command = if initialized {
-        format!("boundline start --workspace {}", workspace.display())
+        format!("boundline session list --workspace {}", workspace.display())
     } else {
         format!("boundline init --workspace {}", workspace.display())
     };
-    let alternate = format!("boundline doctor --workspace {}", workspace.display());
+    let alternate = if initialized {
+        format!("boundline goal --workspace {} --goal <goal>", workspace.display())
+    } else {
+        format!("boundline doctor --workspace {}", workspace.display())
+    };
 
     format!(
         concat!(
@@ -643,14 +1364,15 @@ fn render_missing_active_session_bootstrap(workspace: &Path, command_name: &str)
             "command: {}\n",
             "workspace: {}\n",
             "workspace_initialized: {}\n",
-            "source_of_truth: .boundline/session.json\n",
-            "summary: no active session available; chat history is not authoritative\n",
+            "source_of_truth: {}\n",
+            "summary: no active session available; persisted session history may still exist and chat history is not authoritative\n",
             "next_command: {}\n",
             "repair_command: {}\n"
         ),
         command_name,
         workspace.display(),
         initialized,
+        SESSION_SOURCE_OF_TRUTH,
         next_command,
         alternate,
     )
@@ -705,13 +1427,30 @@ fn resolve_session_target(
 }
 
 fn load_active_session(workspace: &Path) -> Result<ActiveSessionRecord, SessionCommandError> {
+    load_selected_session(workspace, None)
+}
+
+fn load_selected_session(
+    workspace: &Path,
+    session_id: Option<&str>,
+) -> Result<ActiveSessionRecord, SessionCommandError> {
     let workspace_ref = workspace.to_string_lossy().into_owned();
     let store = FileSessionStore::for_workspace(workspace);
-    let Some(record) = store.load().map_err(map_store_error)? else {
-        return Err(SessionCommandError::MissingActiveSession);
+    let record = match session_id {
+        Some(session_id) => store
+            .load_session(session_id)
+            .map_err(|error| map_selected_store_error(session_id, error))?
+            .ok_or_else(|| SessionCommandError::UnknownSession {
+                session_id: session_id.to_string(),
+                workspace: workspace.to_path_buf(),
+            })?,
+        None => store
+            .load()
+            .map_err(map_store_error)?
+            .ok_or(SessionCommandError::MissingActiveSession)?,
     };
 
-    if record.workspace_ref != workspace_ref {
+    if !workspace_refs_match(workspace, &record.workspace_ref) {
         return Err(SessionCommandError::WorkspaceMismatch {
             expected: workspace_ref,
             actual: record.workspace_ref,
@@ -719,6 +1458,34 @@ fn load_active_session(workspace: &Path) -> Result<ActiveSessionRecord, SessionC
     }
 
     Ok(record)
+}
+
+fn workspace_refs_match(expected_workspace: &Path, actual_workspace_ref: &str) -> bool {
+    if expected_workspace == Path::new(actual_workspace_ref) {
+        return true;
+    }
+
+    match (fs::canonicalize(expected_workspace), fs::canonicalize(actual_workspace_ref)) {
+        (Ok(expected), Ok(actual)) => expected == actual,
+        _ => false,
+    }
+}
+
+fn persist_resolved_session(
+    runtime: &SessionRuntime,
+    record: &ActiveSessionRecord,
+    session_id: Option<&str>,
+) -> Result<(), SessionCommandError> {
+    if session_id.is_some() {
+        runtime
+            .session_store()
+            .persist_without_select(record)
+            .map_err(SessionCommandError::SessionStore)?;
+        return Ok(());
+    }
+
+    runtime.persist_session(record).map_err(map_runtime_error)?;
+    Ok(())
 }
 
 fn map_store_error(error: SessionStoreError) -> SessionCommandError {
@@ -730,6 +1497,15 @@ fn map_store_error(error: SessionStoreError) -> SessionCommandError {
     }
 }
 
+fn map_selected_store_error(session_id: &str, error: SessionStoreError) -> SessionCommandError {
+    match error {
+        SessionStoreError::InvalidRecord(message) => SessionCommandError::InvalidRequest(format!(
+            "session `{session_id}` is invalid: {message}"
+        )),
+        other => SessionCommandError::SessionStore(other),
+    }
+}
+
 fn map_runtime_error(error: SessionRuntimeError) -> SessionCommandError {
     match error {
         SessionRuntimeError::MissingGoal => SessionCommandError::MissingCapturedGoal,
@@ -737,8 +1513,8 @@ fn map_runtime_error(error: SessionRuntimeError) -> SessionCommandError {
             SessionCommandError::ClarificationRequired { headline, prompt }
         }
         SessionRuntimeError::MissingActiveTask => SessionCommandError::MissingPlannedTask,
-        SessionRuntimeError::PlanConfirmationRequired { flow_name } => {
-            SessionCommandError::PlanConfirmationRequired { flow_name }
+        SessionRuntimeError::PlanningGovernanceUnresolved { stage_key, state, reason } => {
+            SessionCommandError::PlanningGovernanceUnresolved { stage_key, state, reason }
         }
         SessionRuntimeError::MissingGoalPlan => SessionCommandError::MissingPlanProposal,
         SessionRuntimeError::UnknownFlow { requested, supported } => {
@@ -756,7 +1532,8 @@ fn map_runtime_error(error: SessionRuntimeError) -> SessionCommandError {
 
 fn exit_status_for_session(status: SessionStatus) -> CommandExitStatus {
     match status {
-        SessionStatus::Failed
+        SessionStatus::Blocked
+        | SessionStatus::Failed
         | SessionStatus::Exhausted
         | SessionStatus::Aborted
         | SessionStatus::Invalid => CommandExitStatus::NonSuccess,
@@ -824,6 +1601,13 @@ pub(crate) fn build_status_view_with_follow_up(
     let governance_handoff = record.governance_lifecycle.as_ref().and_then(|lifecycle| {
         governance_confidence_handoff(lifecycle.latest_reasoning_profile.as_ref())
     });
+    let workspace_path = Path::new(&record.workspace_ref);
+    let goal_brief_ref =
+        persisted_session_brief_ref(workspace_path, &session_goal_brief_ref(&record.session_id));
+    let session_plan_brief_ref =
+        persisted_session_brief_ref(workspace_path, &session_plan_brief_ref(&record.session_id));
+    let run_brief_ref =
+        persisted_session_brief_ref(workspace_path, &session_run_brief_ref(&record.session_id));
 
     SessionStatusView {
         session_id: record.session_id.clone(),
@@ -843,16 +1627,7 @@ pub(crate) fn build_status_view_with_follow_up(
             .negotiation_packet
             .as_ref()
             .map(|packet| packet.acceptance_boundary.success_headline.clone()),
-        cluster_delivery_story: record
-            .goal_plan
-            .as_ref()
-            .and_then(|goal_plan| goal_plan.cluster_delivery_story.clone())
-            .or_else(|| {
-                record
-                    .active_task
-                    .as_ref()
-                    .and_then(|task| task.context.cluster_delivery_story().ok().flatten())
-            }),
+        cluster_delivery_story: cluster_delivery_story_for_record(record),
         authored_input_summary: record.authored_brief.as_ref().map(|bundle| bundle.summary_text()),
         authored_input_sources: record
             .authored_brief
@@ -912,6 +1687,10 @@ pub(crate) fn build_status_view_with_follow_up(
             .authored_brief
             .as_ref()
             .and_then(AuthoredBriefBundle::clarification_missing_fields),
+        clarification_questions: record
+            .authored_brief
+            .as_ref()
+            .and_then(AuthoredBriefBundle::clarification_questions),
         requested_governance_runtime: governance_intent
             .and_then(|intent| intent.runtime_preference)
             .map(|runtime| requested_governance_runtime_text(runtime).to_string()),
@@ -958,6 +1737,9 @@ pub(crate) fn build_status_view_with_follow_up(
         current_step_index: record.active_task.as_ref().map(|task| task.plan.current_step_index),
         latest_status: record.latest_status,
         execution_path: execution_path_text(record),
+        goal_brief_ref,
+        session_plan_brief_ref,
+        run_brief_ref,
         latest_trace_ref: record.latest_trace_ref.clone(),
         latest_decision_status: latest_decision
             .map(|decision| decision_status_text(decision.status).to_string()),
@@ -1100,23 +1882,28 @@ pub(crate) fn build_status_view_with_follow_up(
         latest_governance_stage: record
             .active_task
             .as_ref()
-            .and_then(task_state_governance_stage_key),
+            .and_then(task_state_governance_stage_key)
+            .or_else(|| planning_governance_stage_key(record)),
         latest_governance_runtime: record
             .active_task
             .as_ref()
-            .and_then(task_state_governance_runtime_text),
+            .and_then(task_state_governance_runtime_text)
+            .or_else(|| planning_governance_runtime_text(record)),
         latest_governance_mode: record
             .active_task
             .as_ref()
-            .and_then(task_state_governance_mode_text),
+            .and_then(task_state_governance_mode_text)
+            .or_else(|| planning_governance_mode_text(record)),
         latest_governance_run_ref: record
             .active_task
             .as_ref()
-            .and_then(task_state_governance_canon_run_ref),
+            .and_then(task_state_governance_canon_run_ref)
+            .or_else(|| planning_governance_run_ref(record)),
         latest_governance_state: record
             .active_task
             .as_ref()
-            .and_then(task_state_governance_state_text),
+            .and_then(task_state_governance_state_text)
+            .or_else(|| planning_governance_state_text(record)),
         latest_governance_runtime_state: record
             .active_task
             .as_ref()
@@ -1141,6 +1928,7 @@ pub(crate) fn build_status_view_with_follow_up(
             .active_task
             .as_ref()
             .and_then(task_state_governance_blocked_reason)
+            .or_else(|| planning_governance_blocked_reason(record))
             .or_else(|| {
                 governance_handoff.as_ref().and_then(|handoff| {
                     matches!(
@@ -1153,7 +1941,8 @@ pub(crate) fn build_status_view_with_follow_up(
         latest_governance_packet_ref: record
             .active_task
             .as_ref()
-            .and_then(task_state_governance_packet_ref),
+            .and_then(task_state_governance_packet_ref)
+            .or_else(|| planning_governance_packet_ref(record)),
         latest_governance_packet_source_stage: record
             .active_task
             .as_ref()
@@ -1165,7 +1954,8 @@ pub(crate) fn build_status_view_with_follow_up(
         latest_governance_approval: record
             .active_task
             .as_ref()
-            .and_then(task_state_governance_approval_text),
+            .and_then(task_state_governance_approval_text)
+            .or_else(|| planning_governance_approval_text(record)),
         latest_governance_decision: record
             .active_task
             .as_ref()
@@ -1188,6 +1978,7 @@ pub(crate) fn build_status_view_with_follow_up(
             .active_task
             .as_ref()
             .and_then(task_state_governance_next_action)
+            .or_else(|| planning_governance_next_action(record))
             .or_else(|| {
                 governance_handoff.as_ref().and_then(|handoff| handoff.next_action.clone())
             }),
@@ -1208,6 +1999,16 @@ pub(crate) fn build_status_view_with_follow_up(
             .governance_lifecycle
             .as_ref()
             .and_then(|lc| lc.selected_mode.map(|mode| mode.as_str().to_string())),
+        governance_lifecycle_selected_mode_sequence: record.governance_lifecycle.as_ref().and_then(
+            |lc| {
+                (!lc.selected_mode_sequence.is_empty()).then_some(
+                    lc.selected_mode_sequence
+                        .iter()
+                        .map(|mode| mode.as_str().to_string())
+                        .collect(),
+                )
+            },
+        ),
         latest_reasoning_profile: record
             .governance_lifecycle
             .as_ref()
@@ -1333,7 +2134,7 @@ fn review_headline_from_task(task: &crate::domain::task::Task) -> Option<String>
 
 fn suggested_next_command(record: &ActiveSessionRecord) -> Option<String> {
     if record.authored_brief.as_ref().and_then(|bundle| bundle.clarification.as_ref()).is_some() {
-        return Some("boundline capture --goal <narrower goal>".to_string());
+        return Some(repair_capture_command(record));
     }
 
     let latest_checkpoint_restore_command = record
@@ -1348,11 +2149,14 @@ fn suggested_next_command(record: &ActiveSessionRecord) -> Option<String> {
     if record.goal_plan.as_ref().and_then(|goal_plan| goal_plan.context_pack.as_ref()).is_some_and(
         |pack| pack.credibility != crate::domain::goal_plan::ContextPackCredibility::Credible,
     ) {
-        return Some("boundline capture --goal <narrower goal>".to_string());
+        return Some("boundline goal --goal <narrower goal>".to_string());
     }
 
-    if let Some(task) = record.active_task.as_ref()
-        && let Some(governance_state) = task_state_governance_state_text(task)
+    if let Some(governance_state) = record
+        .active_task
+        .as_ref()
+        .and_then(task_state_governance_state_text)
+        .or_else(|| planning_governance_state_text(record))
     {
         match governance_state.as_str() {
             "awaiting_approval" => return Some("boundline status".to_string()),
@@ -1360,22 +2164,17 @@ fn suggested_next_command(record: &ActiveSessionRecord) -> Option<String> {
                 if let Some(restore_command) = latest_checkpoint_restore_command.clone() {
                     return Some(restore_command);
                 }
-                return Some("boundline inspect".to_string());
+                return Some(repair_planning_command(record));
             }
             _ => {}
         }
     }
 
     match record.latest_status {
-        SessionStatus::Initialized => Some("boundline capture --goal <goal>".to_string()),
+        SessionStatus::Initialized => Some("boundline goal --goal <goal>".to_string()),
         SessionStatus::GoalCaptured => Some("boundline plan".to_string()),
+        SessionStatus::Blocked => Some(repair_planning_command(record)),
         SessionStatus::Planned => {
-            if let Some(goal_plan) = record.goal_plan.as_ref()
-                && goal_plan.requires_confirmation()
-            {
-                return Some("boundline plan --confirm".to_string());
-            }
-
             if record.goal_plan.is_some() && record.active_task.is_none() {
                 return Some("boundline run".to_string());
             }
@@ -1389,8 +2188,58 @@ fn suggested_next_command(record: &ActiveSessionRecord) -> Option<String> {
         | SessionStatus::Aborted => {
             latest_checkpoint_restore_command.or_else(|| Some("boundline inspect".to_string()))
         }
-        SessionStatus::Invalid => Some("boundline start".to_string()),
+        SessionStatus::Invalid => Some("boundline goal --goal <goal>".to_string()),
     }
+}
+
+fn clarification_reason(record: &ActiveSessionRecord) -> Option<ClarificationReasonKind> {
+    record
+        .authored_brief
+        .as_ref()
+        .and_then(|bundle| bundle.clarification.as_ref())
+        .map(|clarification| clarification.reason_kind)
+}
+
+fn repair_capture_command(record: &ActiveSessionRecord) -> String {
+    match clarification_reason(record) {
+        Some(ClarificationReasonKind::MissingSource) => {
+            "boundline goal --goal <goal> --brief <additional-brief>".to_string()
+        }
+        Some(
+            ClarificationReasonKind::MissingContext
+            | ClarificationReasonKind::SourceConflict
+            | ClarificationReasonKind::UnsupportedSource
+            | ClarificationReasonKind::UnboundedRequest,
+        ) => "boundline goal --goal <narrower goal>".to_string(),
+        None => first_authored_brief_path(record)
+            .map(|path| format!("boundline goal --brief {path}"))
+            .unwrap_or_else(|| "boundline goal --goal <narrower goal>".to_string()),
+    }
+}
+
+fn repair_planning_command(record: &ActiveSessionRecord) -> String {
+    if planning_requires_reviewer_route_repair(record) {
+        return REVIEWER_ROUTE_REPAIR_COMMAND.to_string();
+    }
+
+    if planning_requires_input_repair(record) {
+        return repair_capture_command(record);
+    }
+
+    "boundline inspect".to_string()
+}
+
+fn first_authored_brief_path(record: &ActiveSessionRecord) -> Option<String> {
+    record.authored_brief.as_ref().and_then(|bundle| {
+        bundle
+            .sources
+            .iter()
+            .filter(|source| {
+                !matches!(source.kind, crate::domain::brief::InputSourceKind::DirectText)
+            })
+            .filter_map(|source| source.workspace_path.clone())
+            .next()
+    })
 }
 
 fn governance_refresh_requires_pause(record: &ActiveSessionRecord) -> bool {
@@ -1398,7 +2247,124 @@ fn governance_refresh_requires_pause(record: &ActiveSessionRecord) -> bool {
         .active_task
         .as_ref()
         .and_then(task_state_governance_state_text)
+        .or_else(|| planning_governance_state_text(record))
         .is_some_and(|state| matches!(state.as_str(), "awaiting_approval" | "blocked" | "failed"))
+}
+
+fn latest_planning_governance_record(
+    record: &ActiveSessionRecord,
+) -> Option<&crate::domain::governance::GovernedStageRecord> {
+    record.governance_lifecycle.as_ref().and_then(|lifecycle| {
+        lifecycle
+            .stage_records
+            .iter()
+            .rev()
+            .find(|stage_record| is_planning_stage_key(&stage_record.stage_key))
+    })
+}
+
+const REVIEWER_ROUTE_REPAIR_COMMAND: &str = "boundline config set --scope workspace --reviewer reviewer_primary --runtime <runtime-a> --model <model-a> && boundline config set --scope workspace --reviewer reviewer_secondary --runtime <runtime-b> --model <model-b>";
+const REVIEWER_ROUTE_REPAIR_KEYWORD: &str = "reviewer route";
+const DISCOVERY_INPUT_REPAIR_PREFIX: &str = "repair discovery inputs";
+const PLANNING_BRIEF_REPAIR_KEYWORD: &str = "planning brief";
+const CLARIFICATION_REPAIR_KEYWORD: &str = "clarification";
+
+fn planning_stage_council_next_action(record: &ActiveSessionRecord) -> Option<String> {
+    latest_planning_governance_record(record).and_then(|stage_record| {
+        stage_record.stage_council.as_ref().map(|outcome| outcome.next_action.clone())
+    })
+}
+
+fn planning_governance_repair_hint(record: &ActiveSessionRecord) -> Option<String> {
+    planning_stage_council_next_action(record)
+        .or_else(|| planning_governance_blocked_reason(record))
+}
+
+fn planning_requires_reviewer_route_repair(record: &ActiveSessionRecord) -> bool {
+    planning_governance_repair_hint(record)
+        .is_some_and(|hint| hint.to_ascii_lowercase().contains(REVIEWER_ROUTE_REPAIR_KEYWORD))
+}
+
+fn planning_requires_input_repair(record: &ActiveSessionRecord) -> bool {
+    planning_governance_repair_hint(record).is_some_and(|hint| {
+        let lower = hint.to_ascii_lowercase();
+        lower.contains(DISCOVERY_INPUT_REPAIR_PREFIX)
+            || lower.contains(PLANNING_BRIEF_REPAIR_KEYWORD)
+            || lower.contains(CLARIFICATION_REPAIR_KEYWORD)
+    })
+}
+
+fn planning_governance_state_text(record: &ActiveSessionRecord) -> Option<String> {
+    latest_planning_governance_record(record)
+        .map(|stage_record| stage_record.lifecycle_state.as_str().to_string())
+}
+
+fn planning_governance_stage_key(record: &ActiveSessionRecord) -> Option<String> {
+    latest_planning_governance_record(record).map(|stage_record| stage_record.stage_key.clone())
+}
+
+fn planning_governance_runtime_text(record: &ActiveSessionRecord) -> Option<String> {
+    latest_planning_governance_record(record)
+        .map(|stage_record| format!("{}", stage_record.runtime))
+}
+
+fn planning_governance_mode_text(record: &ActiveSessionRecord) -> Option<String> {
+    latest_planning_governance_record(record).and_then(|stage_record| {
+        planning_canon_mode_for_stage_key(&stage_record.stage_key)
+            .map(|mode| mode.as_str().to_string())
+    })
+}
+
+fn planning_governance_run_ref(record: &ActiveSessionRecord) -> Option<String> {
+    latest_planning_governance_record(record)
+        .and_then(|stage_record| stage_record.canon_run_ref.clone())
+}
+
+fn planning_governance_blocked_reason(record: &ActiveSessionRecord) -> Option<String> {
+    latest_planning_governance_record(record)
+        .and_then(|stage_record| stage_record.blocked_reason.clone())
+        .or_else(|| {
+            record
+                .governance_lifecycle
+                .as_ref()
+                .and_then(|lifecycle| lifecycle.terminal_reason.clone())
+        })
+}
+
+fn planning_governance_packet_ref(record: &ActiveSessionRecord) -> Option<String> {
+    latest_planning_governance_record(record)
+        .and_then(|stage_record| stage_record.packet_ref.clone())
+}
+
+fn planning_governance_approval_text(record: &ActiveSessionRecord) -> Option<String> {
+    latest_planning_governance_record(record).map(|stage_record| {
+        match stage_record.approval_state {
+            crate::domain::governance::ApprovalState::NotNeeded => "not_needed".to_string(),
+            crate::domain::governance::ApprovalState::Requested => "requested".to_string(),
+            crate::domain::governance::ApprovalState::Granted => "granted".to_string(),
+            crate::domain::governance::ApprovalState::Rejected => "rejected".to_string(),
+            crate::domain::governance::ApprovalState::Expired => "expired".to_string(),
+        }
+    })
+}
+
+fn planning_governance_next_action(record: &ActiveSessionRecord) -> Option<String> {
+    if let Some(next_action) = planning_stage_council_next_action(record) {
+        return Some(next_action);
+    }
+
+    match planning_governance_state_text(record).as_deref() {
+        Some("awaiting_approval") => {
+            Some("wait for approval and rerun boundline plan".to_string())
+        }
+        Some("blocked") | Some("failed") => Some(
+            planning_governance_repair_hint(record).unwrap_or_else(|| {
+                "answer clarification or repair planning brief before rerunning boundline plan; use boundline plan --no-canon only for local-only planning"
+                    .to_string()
+            }),
+        ),
+        _ => None,
+    }
 }
 
 fn next_command_summary(next_command: &str, refreshed: bool) -> String {
@@ -1417,22 +2383,48 @@ fn planning_summary(record: &ActiveSessionRecord) -> String {
     };
 
     let task_count = goal_plan.tasks.len();
+    if let Some(stage_record) = latest_planning_governance_record(record) {
+        match stage_record.lifecycle_state {
+            GovernanceLifecycleState::AwaitingApproval => {
+                return format!(
+                    "planned the active goal into {task_count} bounded goal-plan task(s); Canon planning stage `{}` is awaiting approval before planning can continue",
+                    stage_record.stage_key
+                );
+            }
+            GovernanceLifecycleState::Blocked | GovernanceLifecycleState::Failed => {
+                let reason = stage_record
+                    .blocked_reason
+                    .as_deref()
+                    .or(record
+                        .governance_lifecycle
+                        .as_ref()
+                        .and_then(|lifecycle| lifecycle.terminal_reason.as_deref()))
+                    .unwrap_or("planning governance is blocked");
+                return format!(
+                    "planned the active goal into {task_count} bounded goal-plan task(s); Canon planning stage `{}` is blocked: {reason}",
+                    stage_record.stage_key
+                );
+            }
+            _ => {}
+        }
+    }
+
     if goal_plan.requires_confirmation() {
         if let Some(flow) = goal_plan.flow.as_ref() {
             return format!(
-                "planned the active goal into {task_count} bounded goal-plan task(s); proposed `{}` flow is persisted and awaiting plan confirmation",
+                "planned the active goal into {task_count} bounded goal-plan task(s); proposed `{}` flow is ready for execution",
                 flow.flow_name
             );
         }
 
         if goal_plan.flow_skipped {
             return format!(
-                "planned the active goal into {task_count} bounded goal-plan task(s) with operator-skipped flow constraints; the proposed plan is awaiting confirmation"
+                "planned the active goal into {task_count} bounded goal-plan task(s) with operator-skipped flow constraints; the proposed plan is ready for execution"
             );
         }
 
         return format!(
-            "planned the active goal into {task_count} bounded goal-plan task(s); the proposed plan is awaiting confirmation"
+            "planned the active goal into {task_count} bounded goal-plan task(s); the proposed plan is ready for execution"
         );
     }
 
@@ -1484,14 +2476,22 @@ pub enum SessionCommandError {
     InvalidActiveSession(String),
     #[error("active session belongs to a different workspace: expected {expected}, got {actual}")]
     WorkspaceMismatch { expected: String, actual: String },
-    #[error("active session has no captured goal")]
+    #[error("session `{session_id}` does not exist in {}", workspace.display())]
+    UnknownSession { session_id: String, workspace: PathBuf },
+    #[error("active session has no goal")]
     MissingCapturedGoal,
     #[error("active session has no planned task")]
     MissingPlannedTask,
     #[error("active session has no proposed goal plan")]
     MissingPlanProposal,
-    #[error("active session has a proposed plan that must be confirmed before execution")]
-    PlanConfirmationRequired { flow_name: Option<String> },
+    #[error(
+        "active session planning governance for `{stage_key}` is `{state}` and must be resolved before confirmation or execution can continue"
+    )]
+    PlanningGovernanceUnresolved {
+        stage_key: String,
+        state: GovernanceLifecycleState,
+        reason: Option<String>,
+    },
     #[error("unknown flow `{requested}`; supported flows: {supported}")]
     UnknownFlow { requested: String, supported: String },
     #[error(
@@ -1500,6 +2500,8 @@ pub enum SessionCommandError {
     FlowReplacementRequiresReset { current: String, requested: String },
     #[error("active session flow state is invalid: {0}")]
     InvalidFlowState(String),
+    #[error("invalid session command request: {0}")]
+    InvalidRequest(String),
     #[error("session store operation failed: {0}")]
     SessionStore(#[from] SessionStoreError),
     #[error("session runtime operation failed: {0}")]
@@ -1512,14 +2514,22 @@ pub enum SessionCommandError {
     MissingClusterConfig { workspace: PathBuf, command_name: &'static str },
     #[error("failed to summarize the latest compatibility trace: {0}")]
     TraceSummary(String),
+    #[error("failed to write session brief artifact {artifact_ref}: {source}")]
+    BriefWrite { artifact_ref: String, source: std::io::Error },
+    #[error("failed to activate session branch `{branch_ref}` in {}: {source}", repo_root.display())]
+    GitBranchCreate { branch_ref: String, repo_root: PathBuf, source: std::io::Error },
+    #[error("git refused to activate session branch `{branch_ref}` in {}: {detail}", repo_root.display())]
+    GitBranchCreateFailed { branch_ref: String, repo_root: PathBuf, detail: String },
     #[error("{headline}: {prompt}")]
     ClarificationRequired { headline: String, prompt: String },
+    #[error("active session cannot be updated in place")]
+    GoalUpdateRequiresNewSession { status: SessionStatus },
     #[error("`{command_name}` session workflow is not implemented yet")]
     NotImplemented { command_name: &'static str, next_command: Option<&'static str> },
 }
 
 impl SessionCommandError {
-    fn message(&self) -> String {
+    pub(crate) fn message(&self) -> String {
         match self {
             Self::MissingActiveSession => {
                 "no active session found for the current workspace".to_string()
@@ -1530,18 +2540,20 @@ impl SessionCommandError {
                     "active session belongs to a different workspace: expected {expected}, got {actual}"
                 )
             }
-            Self::MissingCapturedGoal => "active session has no captured goal".to_string(),
+            Self::UnknownSession { session_id, workspace } => {
+                format!("session `{session_id}` does not exist in {}", workspace.display())
+            }
+            Self::MissingCapturedGoal => "active session has no goal".to_string(),
             Self::MissingPlannedTask => "active session has no planned task".to_string(),
             Self::MissingPlanProposal => {
                 "active session has no proposed goal plan; run `boundline plan` first".to_string()
             }
-            Self::PlanConfirmationRequired { flow_name } => match flow_name.as_deref() {
-                Some(flow_name) => format!(
-                    "active session has a proposed `{flow_name}` plan that must be confirmed before execution; run `boundline plan --confirm` to confirm the proposal"
-                ),
-                None => {
-                    "active session has a proposed plan that must be confirmed before execution; run `boundline plan --confirm` to confirm the proposal".to_string()
-                }
+            Self::PlanningGovernanceUnresolved { stage_key, state, reason } => {
+                let reason_suffix =
+                    reason.as_deref().map(|reason| format!(": {reason}")).unwrap_or_default();
+                format!(
+                    "active session planning governance for `{stage_key}` is `{state}` and must be resolved before confirmation or execution can continue{reason_suffix}"
+                )
             }
             Self::UnknownFlow { requested, supported } => {
                 format!("unknown flow `{requested}`; supported flows: {supported}")
@@ -1554,12 +2566,13 @@ impl SessionCommandError {
             Self::InvalidFlowState(message) => {
                 format!("active session flow state is invalid: {message}")
             }
+            Self::InvalidRequest(message) => message.clone(),
             Self::NotImplemented { command_name, .. } => {
                 format!("`{command_name}` session workflow is not implemented yet")
             }
             Self::WorkspaceResolution(error) => error.to_string(),
             Self::SessionStore(error) => error.to_string(),
-            Self::SessionRuntime(error) => error.to_string(),
+            Self::SessionRuntime(error) => Self::session_runtime_message(error),
             Self::BriefIngestion(error) => format!("failed to ingest authored brief: {error}"),
             Self::ClusterStore(error) => error.to_string(),
             Self::MissingClusterConfig { workspace, command_name } => {
@@ -1571,7 +2584,40 @@ impl SessionCommandError {
             Self::TraceSummary(message) => {
                 format!("failed to summarize the latest compatibility trace: {message}")
             }
+            Self::BriefWrite { artifact_ref, source } => {
+                format!("failed to write session brief artifact {artifact_ref}: {source}")
+            }
+            Self::GitBranchCreate { branch_ref, repo_root, source } => {
+                format!(
+                    "failed to activate session branch `{branch_ref}` in {}: {source}",
+                    repo_root.display()
+                )
+            }
+            Self::GitBranchCreateFailed { branch_ref, repo_root, detail } => {
+                format!(
+                    "git refused to activate session branch `{branch_ref}` in {}: {detail}",
+                    repo_root.display()
+                )
+            }
             Self::ClarificationRequired { headline, prompt } => format!("{headline}: {prompt}"),
+            Self::GoalUpdateRequiresNewSession { status } => {
+                let status_label = format!("{status:?}").to_lowercase();
+                format!(
+                    "active session status `{status_label}` cannot be updated in place; open a new session with `boundline goal --new --goal <goal>` instead"
+                )
+            }
+        }
+    }
+
+    fn session_runtime_message(error: &SessionRuntimeError) -> String {
+        match error {
+            SessionRuntimeError::FixtureRuntime(
+                FixtureRuntimeError::NoSynthesizeableGoalPlanTarget { goal, workspace },
+            ) => format!(
+                "{DIRECT_RUN_BOUNDED_CONTEXT_HEADLINE}: {DIRECT_RUN_BOUNDED_CONTEXT_REPAIR} for goal '{goal}' in workspace {}",
+                workspace.display()
+            ),
+            _ => error.to_string(),
         }
     }
 
@@ -1579,24 +2625,40 @@ impl SessionCommandError {
         match self {
             Self::MissingActiveSession
             | Self::WorkspaceMismatch { .. }
-            | Self::InvalidActiveSession(_) => Some("boundline start".to_string()),
-            Self::MissingCapturedGoal => Some("boundline capture --goal <goal>".to_string()),
+            | Self::InvalidActiveSession(_) => Some("boundline goal --goal <goal>".to_string()),
+            Self::UnknownSession { .. } => Some("boundline session list".to_string()),
+            Self::MissingCapturedGoal => Some("boundline goal --goal <goal>".to_string()),
             Self::MissingPlannedTask => Some("boundline plan".to_string()),
             Self::MissingPlanProposal => Some("boundline plan".to_string()),
-            Self::PlanConfirmationRequired { .. } => Some("boundline plan --confirm".to_string()),
+            Self::PlanningGovernanceUnresolved { state, .. } => match state {
+                GovernanceLifecycleState::AwaitingApproval => Some("boundline status".to_string()),
+                GovernanceLifecycleState::Blocked | GovernanceLifecycleState::Failed => {
+                    Some("boundline plan".to_string())
+                }
+                _ => Some("boundline plan".to_string()),
+            },
             Self::UnknownFlow { .. } => Some("boundline flow bug-fix".to_string()),
-            Self::FlowReplacementRequiresReset { .. } => Some("boundline start".to_string()),
-            Self::InvalidFlowState(_) => Some("boundline start".to_string()),
+            Self::FlowReplacementRequiresReset { .. } => {
+                Some("boundline goal --goal <goal>".to_string())
+            }
+            Self::InvalidFlowState(_) => Some("boundline goal --goal <goal>".to_string()),
+            Self::InvalidRequest(_) => None,
             Self::NotImplemented { next_command, .. } => next_command.map(str::to_string),
             Self::ClarificationRequired { .. } => {
-                Some("boundline capture --goal <narrower goal>".to_string())
+                Some("boundline goal --goal <narrower goal>".to_string())
+            }
+            Self::GoalUpdateRequiresNewSession { .. } => {
+                Some("boundline goal --goal <goal>".to_string())
             }
             Self::WorkspaceResolution(_)
             | Self::SessionStore(_)
             | Self::SessionRuntime(_)
-            | Self::ClusterStore(_) => None,
+            | Self::ClusterStore(_)
+            | Self::BriefWrite { .. }
+            | Self::GitBranchCreate { .. }
+            | Self::GitBranchCreateFailed { .. } => None,
             Self::TraceSummary(_) => None,
-            Self::BriefIngestion(_) => Some("boundline capture --goal <goal>".to_string()),
+            Self::BriefIngestion(_) => Some("boundline goal --goal <goal>".to_string()),
             Self::MissingClusterConfig { .. } => Some("boundline cluster init --workspace <primary> --cluster-id <id> --member <workspace> --member <workspace>".to_string()),
         }
     }
@@ -1606,19 +2668,24 @@ impl SessionCommandError {
 mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
+    use std::process::Command;
 
     use serde_json::json;
     use uuid::Uuid;
 
     use super::{
-        CommandExitStatus, SessionCommandError, build_status_view_with_follow_up, execute_capture,
-        execute_continue_with_target, execute_flow, execute_next, execute_plan, execute_run,
-        execute_start, execute_start_with_target, execute_status, execute_status_with_target,
+        CommandExitStatus, GIT_PROGRAM, REVIEWER_ROUTE_REPAIR_COMMAND, SessionCommandError,
+        build_status_view, build_status_view_with_follow_up, execute_continue_with_target,
+        execute_flow, execute_goal, execute_goal_update, execute_goal_with_target, execute_next,
+        execute_next_with_target, execute_plan, execute_plan_with_target_input, execute_run,
+        execute_session_list, execute_session_resume, execute_status, execute_status_with_target,
         exit_status_for_session, exit_status_for_task, latest_workspace_compatibility_follow_up,
-        load_active_session, map_runtime_error, map_store_error, render_error,
+        load_active_session, map_runtime_error, map_store_error,
+        persist_initialized_session_with_goal_hint, planning_governance_next_action, render_error,
         requested_governance_runtime_text, resolve_workspace, review_headline_from_task,
         suggested_next_command,
     };
+    use crate::adapters::checkpoint_store::FileCheckpointStore;
     use crate::adapters::config_store::FileConfigStore;
     use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
     use crate::adapters::trace_store::{FileTraceStore, TraceStore, TraceStoreError};
@@ -1647,6 +2714,9 @@ mod tests {
     use crate::domain::limits::TerminalCondition;
     use crate::domain::session::{
         ActiveSessionRecord, ProjectScaleSessionState, SessionStatus, VotingSessionState,
+        active_session_pointer_ref, legacy_session_record_ref, session_branch_ref,
+        session_checkpoints_root_ref, session_goal_brief_ref, session_plan_brief_ref,
+        session_record_ref, session_run_brief_ref, session_traces_root_ref,
     };
     use crate::domain::task::{Task, TaskStatus, TerminalReason};
     use crate::domain::trace::ExecutionTrace;
@@ -1777,6 +2847,29 @@ fn red_to_green_addition() {
         brief
     }
 
+    fn initialize_git_repo(workspace: &Path) {
+        let init = Command::new(GIT_PROGRAM)
+            .current_dir(workspace)
+            .arg("init")
+            .arg("--quiet")
+            .output()
+            .unwrap();
+        assert!(init.status.success(), "{}", String::from_utf8_lossy(&init.stderr));
+    }
+
+    fn current_git_branch(workspace: &Path) -> String {
+        let output = Command::new(GIT_PROGRAM)
+            .current_dir(workspace)
+            .arg("symbolic-ref")
+            .arg("--quiet")
+            .arg("--short")
+            .arg("HEAD")
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        String::from_utf8(output.stdout).unwrap().trim().to_string()
+    }
+
     fn write_review_execution_workspace(prefix: &str) -> PathBuf {
         let workspace = temp_workspace(prefix);
         fs::create_dir_all(workspace.join("src")).unwrap();
@@ -1855,14 +2948,11 @@ fn red_to_green_addition() {
                 reviewer_roles: std::collections::BTreeMap::from([
                     (
                         "safety".to_string(),
-                        ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-5.5".to_string() },
+                        ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-4.1".to_string() },
                     ),
                     (
                         "maintainability".to_string(),
-                        ModelRoute {
-                            runtime: RuntimeKind::Claude,
-                            model: "sonnet-4.6".to_string(),
-                        },
+                        ModelRoute { runtime: RuntimeKind::Claude, model: "sonnet-4".to_string() },
                     ),
                 ]),
                 ..RoutingConfig::default()
@@ -1936,7 +3026,7 @@ fn red_to_green_addition() {
                 latest_voting: None,
                 delight_feedback: None,
             }),
-            Some("boundline start".to_string())
+            Some("boundline goal --goal <goal>".to_string())
         );
     }
 
@@ -1999,7 +3089,7 @@ fn red_to_green_addition() {
             requested: "delivery".to_string(),
         };
         let text = render_error("flow", &reset_required);
-        assert!(text.contains("boundline start"), "{text}");
+        assert!(text.contains("boundline goal --goal <goal>"), "{text}");
 
         let not_implemented = SessionCommandError::NotImplemented {
             command_name: "next",
@@ -2025,13 +3115,22 @@ fn red_to_green_addition() {
         )
         .unwrap();
 
-        let report = execute_start_with_target(None, Some(&primary)).unwrap();
+        let report = execute_goal_with_target(
+            None,
+            Some(&primary),
+            Some("Bootstrap clustered delivery"),
+            &[],
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
 
         assert_eq!(report.exit_status, CommandExitStatus::Succeeded);
         assert!(
-            report
-                .terminal_output
-                .contains("active clustered session initialized for the current primary workspace"),
+            report.terminal_output.contains("current clustered delivery session"),
             "{}",
             report.terminal_output
         );
@@ -2042,35 +3141,40 @@ fn red_to_green_addition() {
         let workspace = write_execution_workspace("boundline-cli-session-success");
         let brief = write_context_brief(&workspace);
 
+        let goal = execute_goal(
+            Some(&workspace),
+            Some("Fix the failing add test"),
+            std::slice::from_ref(&brief),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(goal.exit_status, CommandExitStatus::Succeeded);
+        let session_id = goal.session_status.as_ref().unwrap().session_id.clone();
+        let goal_brief = workspace.join(session_goal_brief_ref(&session_id));
+        assert!(goal_brief.is_file(), "{}", goal_brief.display());
+        let goal_brief_text = fs::read_to_string(&goal_brief).unwrap();
+        assert!(goal_brief_text.contains("# Goal Brief"), "{goal_brief_text}");
+        assert!(goal_brief_text.contains("- goal: Fix the failing add test"), "{goal_brief_text}");
+
         assert_eq!(
-            execute_start(Some(&workspace)).unwrap().exit_status,
-            CommandExitStatus::Succeeded
-        );
-        assert_eq!(
-            execute_capture(
-                Some(&workspace),
-                Some("Fix the failing add test"),
-                std::slice::from_ref(&brief),
-                None,
-                None,
-                None,
-                None,
-            )
-            .unwrap()
-            .exit_status,
-            CommandExitStatus::Succeeded
-        );
-        assert_eq!(
-            execute_plan(Some(&workspace), None, false, false).unwrap().exit_status,
+            execute_plan(Some(&workspace), None, false).unwrap().exit_status,
             CommandExitStatus::Succeeded
         );
 
-        let planned = execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+        let planned = execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
         assert!(
             planned.terminal_output.contains("confirmed `bug-fix` flow"),
             "{}",
             planned.terminal_output
         );
+        let plan_brief = workspace.join(session_plan_brief_ref(&session_id));
+        assert!(plan_brief.is_file(), "{}", plan_brief.display());
+        let plan_brief_text = fs::read_to_string(&plan_brief).unwrap();
+        assert!(plan_brief_text.contains("# Plan Brief"), "{plan_brief_text}");
+        assert!(plan_brief_text.contains("- latest_status: planned"), "{plan_brief_text}");
 
         let run = execute_run(Some(&workspace)).unwrap();
         assert_eq!(run.exit_status, CommandExitStatus::Succeeded);
@@ -2080,6 +3184,17 @@ fn red_to_green_addition() {
             run.terminal_output
         );
         assert!(run.terminal_output.contains("decision "), "{}", run.terminal_output);
+        assert!(
+            run.terminal_output
+                .contains(&format!("run_brief_ref: {}", session_run_brief_ref(&session_id))),
+            "{}",
+            run.terminal_output
+        );
+        let run_brief = workspace.join(session_run_brief_ref(&session_id));
+        assert!(run_brief.is_file(), "{}", run_brief.display());
+        let run_brief_text = fs::read_to_string(&run_brief).unwrap();
+        assert!(run_brief_text.contains("# Run Brief"), "{run_brief_text}");
+        assert!(run_brief_text.contains("- latest_status: succeeded"), "{run_brief_text}");
 
         let status = execute_status(Some(&workspace)).unwrap();
         assert_eq!(status.exit_status, CommandExitStatus::Succeeded);
@@ -2096,6 +3211,604 @@ fn red_to_green_addition() {
             "{}",
             next.terminal_output
         );
+
+        let inspect = crate::cli::inspect::execute_inspect(None, Some(&workspace), None).unwrap();
+        assert!(
+            inspect
+                .terminal_output
+                .contains(&format!("goal_brief_ref: {}", session_goal_brief_ref(&session_id))),
+            "{}",
+            inspect.terminal_output
+        );
+        assert!(
+            inspect.terminal_output.contains(&format!(
+                "session_plan_brief_ref: {}",
+                session_plan_brief_ref(&session_id)
+            )),
+            "{}",
+            inspect.terminal_output
+        );
+        assert!(
+            inspect
+                .terminal_output
+                .contains(&format!("run_brief_ref: {}", session_run_brief_ref(&session_id))),
+            "{}",
+            inspect.terminal_output
+        );
+    }
+
+    #[test]
+    fn selected_session_status_next_and_continue_preserve_active_pointer() -> Result<(), String> {
+        let workspace = write_execution_workspace("boundline-cli-session-selected-status");
+        let canonical_workspace = workspace.canonicalize().map_err(|error| error.to_string())?;
+        let brief = write_context_brief(&workspace);
+
+        execute_goal(
+            Some(&workspace),
+            Some("Fix the failing add test"),
+            std::slice::from_ref(&brief),
+            None,
+            None,
+            None,
+            None,
+        )
+        .map_err(|error| error.to_string())?;
+        let first_record =
+            load_active_session(&canonical_workspace).map_err(|error| error.to_string())?;
+
+        execute_goal(
+            Some(&workspace),
+            Some("Ship the follow-up cleanup"),
+            std::slice::from_ref(&brief),
+            None,
+            None,
+            None,
+            None,
+        )
+        .map_err(|error| error.to_string())?;
+        let second_record =
+            load_active_session(&canonical_workspace).map_err(|error| error.to_string())?;
+
+        let status =
+            execute_status_with_target(Some(&workspace), None, Some(&first_record.session_id))
+                .map_err(|error| error.to_string())?;
+        let status_view =
+            status.session_status.ok_or_else(|| "expected status session view".to_string())?;
+        if status_view.session_id != first_record.session_id {
+            return Err(format!(
+                "expected selected status session {}, got {}",
+                first_record.session_id, status_view.session_id
+            ));
+        }
+
+        let next = execute_next_with_target(Some(&workspace), None, Some(&first_record.session_id))
+            .map_err(|error| error.to_string())?;
+        let next_view =
+            next.session_status.ok_or_else(|| "expected next session view".to_string())?;
+        if next_view.session_id != first_record.session_id {
+            return Err(format!(
+                "expected selected next session {}, got {}",
+                first_record.session_id, next_view.session_id
+            ));
+        }
+
+        let cont =
+            execute_continue_with_target(Some(&workspace), None, Some(&first_record.session_id))
+                .map_err(|error| error.to_string())?;
+        let continue_view =
+            cont.session_status.ok_or_else(|| "expected continue session view".to_string())?;
+        if continue_view.session_id != first_record.session_id {
+            return Err(format!(
+                "expected selected continue session {}, got {}",
+                first_record.session_id, continue_view.session_id
+            ));
+        }
+
+        let active_after =
+            load_active_session(&canonical_workspace).map_err(|error| error.to_string())?;
+        if active_after.session_id != second_record.session_id {
+            return Err(format!(
+                "expected active session {} to remain selected, got {}",
+                second_record.session_id, active_after.session_id
+            ));
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn execute_goal_records_explicit_governance_selection() {
+        let workspace = write_execution_workspace("boundline-cli-session-capture-governance");
+
+        let report = execute_goal(
+            Some(&workspace),
+            Some("Plan a governed delivery flow"),
+            &[],
+            Some(GovernanceRuntimeKind::Canon),
+            Some("medium"),
+            Some("engineering"),
+            Some("platform"),
+        )
+        .unwrap();
+
+        let view = report.session_status.expect("capture should return session status");
+        assert_eq!(view.governance_lifecycle_runtime.as_deref(), Some("canon"));
+        assert_eq!(view.governance_lifecycle_mode_selection.as_deref(), Some("auto-confirm"));
+        assert_eq!(view.governance_lifecycle_selected_mode, None);
+    }
+
+    #[test]
+    fn execute_goal_auto_starts_missing_session() {
+        let workspace = write_execution_workspace("boundline-cli-session-goal-autostart");
+        let brief = write_context_brief(&workspace);
+
+        let report = execute_goal(
+            Some(&workspace),
+            Some("Fix the failing add test"),
+            std::slice::from_ref(&brief),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(report.exit_status, CommandExitStatus::Succeeded);
+
+        let view = report.session_status.expect("goal should return session status");
+        assert_eq!(view.latest_status, SessionStatus::GoalCaptured);
+        assert!(
+            view.goal.as_deref().unwrap_or_default().contains("Fix the failing add test"),
+            "{:?}",
+            view.goal
+        );
+        assert_eq!(
+            view.authored_input_summary.as_deref(),
+            Some("direct_text + 1 markdown source(s)")
+        );
+    }
+
+    #[test]
+    fn execute_goal_update_reuses_active_session() {
+        let workspace = write_execution_workspace("boundline-cli-session-goal-updates-session");
+        let canonical_workspace = workspace.canonicalize().unwrap();
+        let brief = write_context_brief(&workspace);
+
+        execute_goal(
+            Some(&workspace),
+            Some("Fix the failing add test"),
+            std::slice::from_ref(&brief),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let first_record = load_active_session(&canonical_workspace).unwrap();
+
+        execute_goal_update(
+            Some(&workspace),
+            Some("Ship the follow-up cleanup"),
+            std::slice::from_ref(&brief),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let second_record = load_active_session(&canonical_workspace).unwrap();
+
+        assert_eq!(first_record.session_id, second_record.session_id);
+        assert_eq!(
+            second_record.goal.as_deref(),
+            Some(
+                "Ship the follow-up cleanup\n\n## brief.md\nInvestigate src/lib.rs and tests/red_to_green.rs before broad scanning."
+            )
+        );
+        assert!(canonical_workspace.join(session_record_ref(&second_record.session_id)).is_file());
+    }
+
+    #[test]
+    fn execute_goal_creates_new_session_when_existing_session_is_goal_captured() {
+        let workspace = write_execution_workspace("boundline-cli-session-goal-new-after-goal");
+        let canonical_workspace = workspace.canonicalize().unwrap();
+        let brief = write_context_brief(&workspace);
+
+        execute_goal(
+            Some(&workspace),
+            Some("Fix the failing add test"),
+            std::slice::from_ref(&brief),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let first_record = load_active_session(&canonical_workspace).unwrap();
+
+        execute_goal(
+            Some(&workspace),
+            Some("Ship the follow-up cleanup"),
+            std::slice::from_ref(&brief),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let new_record = load_active_session(&canonical_workspace).unwrap();
+
+        assert_ne!(first_record.session_id, new_record.session_id);
+        assert_eq!(new_record.latest_status, SessionStatus::GoalCaptured);
+        assert!(canonical_workspace.join(session_record_ref(&first_record.session_id)).is_file());
+        assert!(canonical_workspace.join(session_record_ref(&new_record.session_id)).is_file());
+    }
+
+    #[test]
+    fn execute_goal_update_reuses_planned_session() {
+        let workspace = write_execution_workspace("boundline-cli-session-goal-update-planned");
+        let canonical_workspace = workspace.canonicalize().unwrap();
+        let brief = write_context_brief(&workspace);
+
+        execute_goal(
+            Some(&workspace),
+            Some("Fix the failing add test"),
+            std::slice::from_ref(&brief),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        execute_plan(Some(&workspace), None, false).unwrap();
+        let planned_record = load_active_session(&canonical_workspace).unwrap();
+        assert_eq!(planned_record.latest_status, SessionStatus::Planned);
+
+        execute_goal_update(
+            Some(&workspace),
+            Some("Ship the follow-up cleanup"),
+            std::slice::from_ref(&brief),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let updated_record = load_active_session(&canonical_workspace).unwrap();
+
+        assert_eq!(planned_record.session_id, updated_record.session_id);
+        assert_eq!(updated_record.latest_status, SessionStatus::GoalCaptured);
+        assert_eq!(
+            updated_record.goal.as_deref(),
+            Some(
+                "Ship the follow-up cleanup\n\n## brief.md\nInvestigate src/lib.rs and tests/red_to_green.rs before broad scanning."
+            )
+        );
+    }
+
+    #[test]
+    fn execute_goal_switches_to_session_branch_when_git_repo_exists() {
+        let workspace = write_execution_workspace("boundline-cli-session-goal-branch");
+        let canonical_workspace = workspace.canonicalize().unwrap();
+        let brief = write_context_brief(&workspace);
+        initialize_git_repo(&workspace);
+
+        execute_goal(
+            Some(&workspace),
+            Some("Fix the failing add test"),
+            std::slice::from_ref(&brief),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let record = load_active_session(&canonical_workspace).unwrap();
+        assert_eq!(
+            current_git_branch(&canonical_workspace),
+            session_branch_ref(&record.session_id)
+        );
+    }
+
+    #[test]
+    fn session_history_list_reports_active_and_historical_sessions() -> Result<(), String> {
+        let workspace = write_execution_workspace("boundline-cli-session-history-list");
+        let canonical_workspace = workspace.canonicalize().map_err(|error| error.to_string())?;
+        let brief = write_context_brief(&workspace);
+
+        execute_goal(
+            Some(&workspace),
+            Some("Fix the failing add test"),
+            std::slice::from_ref(&brief),
+            None,
+            None,
+            None,
+            None,
+        )
+        .map_err(|error| error.to_string())?;
+        let first_record =
+            load_active_session(&canonical_workspace).map_err(|error| error.to_string())?;
+
+        execute_goal(
+            Some(&workspace),
+            Some("Ship the follow-up cleanup"),
+            std::slice::from_ref(&brief),
+            None,
+            None,
+            None,
+            None,
+        )
+        .map_err(|error| error.to_string())?;
+        let second_record =
+            load_active_session(&canonical_workspace).map_err(|error| error.to_string())?;
+
+        let report = execute_session_list(Some(&workspace)).map_err(|error| error.to_string())?;
+        if report.exit_status != CommandExitStatus::Succeeded {
+            return Err(format!(
+                "expected session list to succeed, got {:?}: {}",
+                report.exit_status, report.terminal_output
+            ));
+        }
+        if !report.terminal_output.contains("session_history:") {
+            return Err(format!("expected session history header, got {}", report.terminal_output));
+        }
+        if !report
+            .terminal_output
+            .contains(&format!("active_session: {}", second_record.session_id))
+        {
+            return Err(format!("expected active session in list, got {}", report.terminal_output));
+        }
+        if !report
+            .terminal_output
+            .contains(&format!("branch: {}", session_branch_ref(&second_record.session_id)))
+        {
+            return Err(format!("expected active branch in list, got {}", report.terminal_output));
+        }
+        let second_position = report
+            .terminal_output
+            .find(&second_record.session_id)
+            .ok_or_else(|| format!("missing second session {}", second_record.session_id))?;
+        let first_position = report
+            .terminal_output
+            .find(&first_record.session_id)
+            .ok_or_else(|| format!("missing first session {}", first_record.session_id))?;
+        if second_position >= first_position {
+            return Err(format!("expected newest session first, got {}", report.terminal_output));
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn session_history_resume_reactivates_selected_session_and_switches_branch()
+    -> Result<(), String> {
+        let workspace = write_execution_workspace("boundline-cli-session-history-resume");
+        let canonical_workspace = workspace.canonicalize().map_err(|error| error.to_string())?;
+        let brief = write_context_brief(&workspace);
+        initialize_git_repo(&workspace);
+
+        execute_goal(
+            Some(&workspace),
+            Some("Fix the failing add test"),
+            std::slice::from_ref(&brief),
+            None,
+            None,
+            None,
+            None,
+        )
+        .map_err(|error| error.to_string())?;
+        let first_record =
+            load_active_session(&canonical_workspace).map_err(|error| error.to_string())?;
+
+        execute_goal(
+            Some(&workspace),
+            Some("Ship the follow-up cleanup"),
+            std::slice::from_ref(&brief),
+            None,
+            None,
+            None,
+            None,
+        )
+        .map_err(|error| error.to_string())?;
+
+        let report = execute_session_resume(Some(&workspace), &first_record.session_id)
+            .map_err(|error| error.to_string())?;
+        if report.exit_status != CommandExitStatus::Succeeded {
+            return Err(format!(
+                "expected session resume to succeed, got {:?}: {}",
+                report.exit_status, report.terminal_output
+            ));
+        }
+        let view = match report.session_status {
+            Some(view) => view,
+            None => {
+                return Err(format!(
+                    "expected session resume to return status view, got {}",
+                    report.terminal_output
+                ));
+            }
+        };
+        if view.session_id != first_record.session_id {
+            return Err(format!(
+                "expected resumed session {}, got {}",
+                first_record.session_id, view.session_id
+            ));
+        }
+
+        let resumed_record =
+            load_active_session(&canonical_workspace).map_err(|error| error.to_string())?;
+        if resumed_record.session_id != first_record.session_id {
+            return Err(format!(
+                "expected active session {} after resume, got {}",
+                first_record.session_id, resumed_record.session_id
+            ));
+        }
+        if current_git_branch(&canonical_workspace) != session_branch_ref(&first_record.session_id)
+        {
+            return Err(format!(
+                "expected git branch {}, got {}",
+                session_branch_ref(&first_record.session_id),
+                current_git_branch(&canonical_workspace)
+            ));
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn session_history_resume_rejects_unknown_session_id() -> Result<(), String> {
+        let workspace = write_execution_workspace("boundline-cli-session-history-missing");
+
+        let error = execute_session_resume(Some(&workspace), "missing-session")
+            .err()
+            .ok_or_else(|| "expected session resume to fail for missing history".to_string())?;
+        match error {
+            SessionCommandError::UnknownSession { session_id, .. } => {
+                if session_id != "missing-session" {
+                    return Err(format!("expected missing-session error, got {session_id}"));
+                }
+            }
+            other => {
+                return Err(format!("expected unknown-session error, got {other:?}"));
+            }
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn execute_run_persists_trace_and_checkpoint_under_active_session_root() {
+        let workspace = write_execution_workspace("boundline-cli-session-run-session-root");
+        let canonical_workspace = workspace.canonicalize().unwrap();
+        let brief = write_context_brief(&workspace);
+
+        execute_goal(
+            Some(&workspace),
+            Some("Fix the failing add test"),
+            std::slice::from_ref(&brief),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
+        execute_run(Some(&workspace)).unwrap();
+
+        let record = load_active_session(&canonical_workspace).unwrap();
+        let trace_ref = record.latest_trace_ref.clone().unwrap();
+        assert!(trace_ref.contains(&session_traces_root_ref(&record.session_id)), "{trace_ref}");
+        assert!(Path::new(&trace_ref).is_file(), "{trace_ref}");
+
+        let checkpoint_store =
+            FileCheckpointStore::for_session(&canonical_workspace, &record.session_id);
+        let manifests = checkpoint_store.list().unwrap();
+        assert!(!manifests.is_empty(), "expected at least one checkpoint manifest");
+        let checkpoint_path = canonical_workspace
+            .join(session_checkpoints_root_ref(&record.session_id))
+            .join(format!("{}.json", manifests[0].checkpoint_id));
+        assert!(checkpoint_path.is_file(), "{}", checkpoint_path.display());
+    }
+
+    #[test]
+    fn execute_goal_autostart_persists_active_session_under_session_root() {
+        let workspace = write_execution_workspace("boundline-cli-session-goal-session-root");
+        let canonical_workspace = workspace.canonicalize().unwrap();
+        let brief = write_context_brief(&workspace);
+
+        execute_goal(
+            Some(&workspace),
+            Some("Fix the failing add test"),
+            std::slice::from_ref(&brief),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let record = load_active_session(&canonical_workspace).unwrap();
+        let session_path = canonical_workspace.join(session_record_ref(&record.session_id));
+        let pointer_path = canonical_workspace.join(active_session_pointer_ref());
+        let legacy_path = canonical_workspace.join(legacy_session_record_ref());
+
+        assert!(session_path.is_file(), "{}", session_path.display());
+        assert!(legacy_path.is_file(), "{}", legacy_path.display());
+        assert_eq!(fs::read_to_string(pointer_path).unwrap().trim(), record.session_id);
+
+        let status = execute_status(Some(&canonical_workspace)).unwrap();
+        let view = status.session_status.expect("status should expose session status");
+        assert_eq!(view.session_id, record.session_id);
+        assert_eq!(view.latest_status, SessionStatus::GoalCaptured);
+    }
+
+    #[test]
+    fn execute_plan_with_target_input_refreshes_authored_brief() {
+        let workspace = write_execution_workspace("boundline-cli-session-plan-input");
+        let plan_input = workspace.join("plan-input.md");
+
+        fs::write(
+            &plan_input,
+            "# Rust service brief\n\nImplement a rust microservice for user management.\n\n- API surface: create and read users over HTTP.\n- Persistence/security: SQLite with OAuth2 bearer checks.\n- Validation target: cargo test.\n",
+        )
+        .unwrap();
+
+        execute_goal(Some(&workspace), Some("placeholder goal"), &[], None, None, None, None)
+            .unwrap();
+
+        let report = execute_plan_with_target_input(
+            Some(&workspace),
+            None,
+            None,
+            false,
+            false,
+            Some(plan_input.as_path()),
+        )
+        .unwrap();
+
+        let view = report.session_status.expect("plan should return session status");
+        assert_eq!(
+            view.authored_input_sources,
+            Some(vec![
+                "direct_text: developer goal".to_string(),
+                "attached_markdown: plan-input.md".to_string(),
+            ])
+        );
+        assert_eq!(
+            view.authored_input_summary.as_deref(),
+            Some("direct_text + 1 markdown source(s)")
+        );
+        assert!(
+            view.goal.as_deref().unwrap_or_default().contains("placeholder goal"),
+            "{}",
+            report.terminal_output
+        );
+        assert!(
+            view.goal.as_deref().unwrap_or_default().contains("Rust service brief"),
+            "{}",
+            report.terminal_output
+        );
+    }
+
+    #[test]
+    fn execute_goal_uses_brief_content_for_session_slug_when_direct_goal_is_absent() {
+        let workspace = write_execution_workspace("boundline-cli-session-brief-slug");
+        let canonical_workspace = workspace.canonicalize().unwrap();
+        let brief = workspace.join("plan.md");
+
+        fs::write(
+            &brief,
+            "# Rust service brief\n\nImplement a rust microservice for user management.\n",
+        )
+        .unwrap();
+
+        execute_goal(Some(&workspace), None, std::slice::from_ref(&brief), None, None, None, None)
+            .unwrap();
+
+        let record = load_active_session(&canonical_workspace).unwrap();
+        assert!(record.session_id.ends_with("rust-service-brief"), "{}", record.session_id);
+        assert!(!record.session_id.ends_with("plan-md"), "{}", record.session_id);
     }
 
     #[test]
@@ -2148,8 +3861,7 @@ fn red_to_green_addition() {
         );
         FileConfigStore::for_workspace(&workspace).save_local(&config).unwrap();
 
-        execute_start(Some(&workspace)).unwrap();
-        execute_capture(
+        execute_goal(
             Some(&workspace),
             Some("fix the failing add test"),
             std::slice::from_ref(&brief),
@@ -2159,7 +3871,7 @@ fn red_to_green_addition() {
             None,
         )
         .unwrap();
-        let plan = execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+        let plan = execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
 
         assert!(plan.terminal_output.contains("runtime_capabilities:"), "{}", plan.terminal_output);
         assert!(plan.terminal_output.contains("slot_effort_policies:"), "{}", plan.terminal_output);
@@ -2197,11 +3909,7 @@ fn red_to_green_addition() {
         let brief = write_context_brief(&workspace);
 
         assert_eq!(
-            execute_start(Some(&workspace)).unwrap().exit_status,
-            CommandExitStatus::Succeeded
-        );
-        assert_eq!(
-            execute_capture(
+            execute_goal(
                 Some(&workspace),
                 Some("Fix the failing add test and review it"),
                 std::slice::from_ref(&brief),
@@ -2280,7 +3988,7 @@ fn red_to_green_addition() {
             status.terminal_output
         );
 
-        let inspect = crate::cli::inspect::execute_inspect(None, Some(&workspace)).unwrap();
+        let inspect = crate::cli::inspect::execute_inspect(None, Some(&workspace), None).unwrap();
         assert!(
             inspect.terminal_output.contains("review_trigger: pr_ready"),
             "{}",
@@ -2301,12 +4009,12 @@ fn red_to_green_addition() {
     }
 
     #[test]
-    fn execute_run_blocks_until_native_plan_is_confirmed() {
+    fn execute_run_succeeds_after_plan_without_explicit_confirmation() {
         let workspace = write_execution_workspace("boundline-cli-session-flow-confirmation");
         let brief = write_context_brief(&workspace);
 
-        execute_start(Some(&workspace)).unwrap();
-        execute_capture(
+        persist_initialized_session_with_goal_hint(&workspace, None, None).unwrap();
+        execute_goal(
             Some(&workspace),
             Some("Fix the failing add test"),
             std::slice::from_ref(&brief),
@@ -2316,19 +4024,84 @@ fn red_to_green_addition() {
             None,
         )
         .unwrap();
-        execute_plan(Some(&workspace), None, false, false).unwrap();
-
-        let error = execute_run(Some(&workspace)).unwrap_err();
-        assert!(matches!(error, SessionCommandError::PlanConfirmationRequired { .. }));
-
-        let rendered = render_error("run", &error);
-        assert!(rendered.contains("boundline plan --confirm"), "{rendered}");
-
-        let confirmed = execute_plan(Some(&workspace), None, false, true).unwrap();
-        assert!(confirmed.terminal_output.contains("execution_path: native_goal_plan"));
+        execute_plan(Some(&workspace), None, false).unwrap();
 
         let run = execute_run(Some(&workspace)).unwrap();
         assert_eq!(run.exit_status, CommandExitStatus::Succeeded);
+    }
+
+    #[test]
+    fn execute_run_blocks_on_unresolved_planning_governance() {
+        let workspace = write_execution_workspace("boundline-cli-session-plan-governance-gate");
+        let canonical_workspace = fs::canonicalize(&workspace).unwrap();
+
+        let draft_goal_plan = GoalPlan::new(
+            "Prepare governed feature",
+            vec![PlannedTask {
+                task_id: "planned-task-plan-governance".to_string(),
+                description: "Prepare governed plan".to_string(),
+                target: "src/lib.rs".to_string(),
+                expected_outcome: Some("planning governance clears".to_string()),
+                decision_type_hint: None,
+            }],
+        )
+        .unwrap();
+
+        let draft_record = ActiveSessionRecord {
+            session_id: "session-plan-governance-confirm".to_string(),
+            workspace_ref: canonical_workspace.to_string_lossy().into_owned(),
+            goal: Some("Prepare governed feature".to_string()),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: Some(draft_goal_plan),
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Planned,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 1,
+            updated_at: 2,
+            governance_lifecycle: Some(GovernedSessionLifecycle {
+                governance_runtime: GovernanceRuntimeKind::Canon,
+                explicit_opt_out: false,
+                mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+                selected_mode: Some(CanonMode::Requirements),
+                selected_mode_sequence: vec![CanonMode::Requirements, CanonMode::Architecture],
+                latest_reasoning_profile: None,
+                current_stage_index: 0,
+                stage_records: vec![GovernedStageRecord {
+                    stage_key: "plan:requirements".to_string(),
+                    runtime: GovernanceRuntimeKind::Canon,
+                    lifecycle_state: GovernanceLifecycleState::AwaitingApproval,
+                    required: true,
+                    autopilot_enabled: false,
+                    approval_state: ApprovalState::Requested,
+                    canon_run_ref: Some("canon-run-plan".to_string()),
+                    governance_attempt_id: "attempt-plan-1".to_string(),
+                    previous_governance_attempt_id: None,
+                    packet_ref: Some(".canon/planning-packet".to_string()),
+                    decision_ref: None,
+                    blocked_reason: Some("waiting for Canon approval".to_string()),
+                    stage_council: None,
+                }],
+                accumulated_context: Vec::new(),
+                terminal_reason: Some("awaiting approval: waiting for Canon approval".to_string()),
+                planning_input_fingerprint: None,
+            }),
+            project_scale: None,
+            latest_voting: None,
+            delight_feedback: None,
+        };
+        FileSessionStore::for_workspace(&workspace).persist(&draft_record).unwrap();
+
+        let run_error = execute_run(Some(&workspace)).unwrap_err();
+        assert!(matches!(run_error, SessionCommandError::PlanningGovernanceUnresolved { .. }));
+        let rendered_run = render_error("run", &run_error);
+        assert!(rendered_run.contains("plan:requirements"), "{rendered_run}");
+        assert!(rendered_run.contains("boundline status"), "{rendered_run}");
     }
 
     #[test]
@@ -2394,7 +4167,7 @@ fn red_to_green_addition() {
     fn active_session_status_and_next_surface_compatibility_follow_up_without_replacing_session() {
         let workspace = temp_workspace("boundline-cli-session-active-compat-follow-up");
 
-        execute_start(Some(&workspace)).unwrap();
+        persist_initialized_session_with_goal_hint(&workspace, None, None).unwrap();
 
         let mut trace = ExecutionTrace::new(
             "task-active-compat",
@@ -2444,7 +4217,7 @@ fn red_to_green_addition() {
             next.terminal_output
         );
         assert!(
-            next.terminal_output.contains("next_command: boundline capture --goal <goal>"),
+            next.terminal_output.contains("next_command: boundline goal --goal <goal>"),
             "{}",
             next.terminal_output
         );
@@ -2670,7 +4443,7 @@ fn red_to_green_addition() {
         };
         assert_eq!(
             suggested_next_command(&base_record),
-            Some("boundline capture --goal <narrower goal>".to_string())
+            Some("boundline goal --goal <narrower goal>".to_string())
         );
 
         let mut pending_flow_plan = GoalPlan::new(
@@ -2692,14 +4465,133 @@ fn red_to_green_addition() {
         let mut pending_flow_record = base_record.clone();
         pending_flow_record.goal_plan = Some(pending_flow_plan);
         pending_flow_record.latest_status = SessionStatus::Planned;
-        assert_eq!(
-            suggested_next_command(&pending_flow_record),
-            Some("boundline plan --confirm".to_string())
-        );
+        assert_eq!(suggested_next_command(&pending_flow_record), Some("boundline run".to_string()));
 
         let mut ready_run_record = pending_flow_record.clone();
         ready_run_record.goal_plan.as_mut().unwrap().confirm().unwrap();
         assert_eq!(suggested_next_command(&ready_run_record), Some("boundline run".to_string()));
+
+        let mut blocked_planning_record = ready_run_record.clone();
+        blocked_planning_record.latest_status = SessionStatus::Blocked;
+        blocked_planning_record.latest_trace_ref = None;
+        blocked_planning_record.authored_brief = Some(crate::domain::brief::AuthoredBriefBundle {
+            bundle_id: "bundle-blocked".to_string(),
+            primary_goal_text: Some("Fix the failing add test".to_string()),
+            sources: vec![crate::domain::brief::InputSourceReference {
+                source_id: "brief-1".to_string(),
+                kind: crate::domain::brief::InputSourceKind::AttachedMarkdown,
+                display_name: "brief.md".to_string(),
+                workspace_path: Some("brief.md".to_string()),
+                precedence: 0,
+                content: "Need Canon review context".to_string(),
+            }],
+            deduplicated_sources: Vec::new(),
+            governance_intent: None,
+            resolution_state: crate::domain::brief::AuthoredBriefResolutionState::Ready,
+            clarification: None,
+            derived_task_draft: None,
+            captured_at: 1,
+        });
+        blocked_planning_record.governance_lifecycle = Some(GovernedSessionLifecycle {
+            governance_runtime: GovernanceRuntimeKind::Canon,
+            explicit_opt_out: false,
+            mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+            selected_mode: Some(CanonMode::Discovery),
+            selected_mode_sequence: vec![CanonMode::Discovery],
+            latest_reasoning_profile: None,
+            current_stage_index: 0,
+            stage_records: vec![GovernedStageRecord {
+                stage_key: "plan:discovery".to_string(),
+                runtime: GovernanceRuntimeKind::Canon,
+                lifecycle_state: GovernanceLifecycleState::Blocked,
+                required: true,
+                autopilot_enabled: false,
+                approval_state: ApprovalState::Rejected,
+                canon_run_ref: Some("R-20260522-019e5141".to_string()),
+                governance_attempt_id: "attempt-plan-discovery".to_string(),
+                previous_governance_attempt_id: None,
+                packet_ref: Some(".canon/artifacts/R-20260522-019e5141/discovery".to_string()),
+                decision_ref: None,
+                blocked_reason: Some(
+                    "plan:discovery stage council blocked planning: configure distinct provider-backed reviewer routes before rerunning boundline plan".to_string(),
+                ),
+                stage_council: Some(crate::domain::stage_council::StageCouncilOutcome {
+                    producer_output: crate::domain::stage_council::StageCouncilArtifact {
+                        route_slot: "planning".to_string(),
+                        evidence_ref: ".boundline/governance/planning/discovery/brief.md".to_string(),
+                        summary: Some("planner produced the discovery artifact for council review".to_string()),
+                    },
+                    reviewer_findings: Vec::new(),
+                    vote_resolution: crate::domain::stage_council::StageCouncilVoteResolution {
+                        strategy: "bounded_majority".to_string(),
+                        accepted_findings: Vec::new(),
+                        rejected_findings: Vec::new(),
+                        independent_review: false,
+                    },
+                    adjudication: None,
+                    revised_output: crate::domain::stage_council::StageCouncilArtifact {
+                        route_slot: "planning".to_string(),
+                        evidence_ref: ".boundline/governance/planning/discovery/blocked.md".to_string(),
+                        summary: Some("stage council blocked planning discovery".to_string()),
+                    },
+                    status: crate::domain::stage_council::StageCouncilStatus::Blocked,
+                    next_action:
+                        "configure distinct provider-backed reviewer routes before rerunning boundline plan"
+                            .to_string(),
+                }),
+            }],
+            accumulated_context: Vec::new(),
+            terminal_reason: Some(
+                "plan:discovery stage council blocked planning: configure distinct provider-backed reviewer routes before rerunning boundline plan"
+                    .to_string(),
+            ),
+            planning_input_fingerprint: None,
+        });
+        assert_eq!(
+            suggested_next_command(&blocked_planning_record),
+            Some(REVIEWER_ROUTE_REPAIR_COMMAND.to_string())
+        );
+        assert_eq!(
+            planning_governance_next_action(&blocked_planning_record),
+            Some(
+                "configure distinct provider-backed reviewer routes before rerunning boundline plan"
+                    .to_string()
+            )
+        );
+
+        let mut clarification_record = base_record.clone();
+        clarification_record.authored_brief = Some(crate::domain::brief::AuthoredBriefBundle {
+            bundle_id: "bundle-clarification".to_string(),
+            primary_goal_text: Some("Fix the failing add test".to_string()),
+            sources: vec![crate::domain::brief::InputSourceReference {
+                source_id: "brief-2".to_string(),
+                kind: crate::domain::brief::InputSourceKind::AttachedMarkdown,
+                display_name: "brief.md".to_string(),
+                workspace_path: Some("brief.md".to_string()),
+                precedence: 0,
+                content: "Missing the business context".to_string(),
+            }],
+            deduplicated_sources: Vec::new(),
+            governance_intent: None,
+            resolution_state:
+                crate::domain::brief::AuthoredBriefResolutionState::ClarificationRequired,
+            clarification: Some(crate::domain::task::ClarificationRecord {
+                clarification_id: "clarification-1".to_string(),
+                reason_kind: crate::domain::task::ClarificationReasonKind::MissingContext,
+                prompt: "provide the missing business context".to_string(),
+                missing_fields: vec!["api_operations".to_string()],
+                questions: vec!["Which API operations are in scope first?".to_string()],
+                blocking_sources: vec!["brief.md".to_string()],
+                turn_index: 0,
+                status: crate::domain::task::ClarificationStatus::Open,
+            }),
+            derived_task_draft: None,
+            captured_at: 1,
+        });
+        assert_eq!(
+            suggested_next_command(&clarification_record),
+            Some("boundline goal --goal <narrower goal>".to_string())
+        );
 
         let checkpoint_plan = crate::domain::plan::Plan::new(vec![
             crate::domain::step::Step::tool("verify", "cargo", json!({})).unwrap(),
@@ -2737,7 +4629,8 @@ fn red_to_green_addition() {
         };
         let clarification_text = render_error("plan", &clarification_error);
         assert!(
-            clarification_text.contains("boundline capture --goal <narrower goal>"),
+            clarification_text.contains("next_command: boundline goal --goal <narrower goal>")
+                || clarification_text.contains("boundline goal --goal <narrower goal>"),
             "{clarification_text}"
         );
 
@@ -2755,7 +4648,7 @@ fn red_to_green_addition() {
     #[test]
     fn status_and_continue_bootstrap_distinguish_workspace_initialization() {
         let uninitialized = temp_workspace("boundline-cli-session-uninitialized");
-        let status_report = execute_status_with_target(Some(&uninitialized), None).unwrap();
+        let status_report = execute_status_with_target(Some(&uninitialized), None, None).unwrap();
         assert_eq!(status_report.exit_status, CommandExitStatus::Succeeded);
         assert!(
             status_report.terminal_output.contains("command: status"),
@@ -2775,7 +4668,7 @@ fn red_to_green_addition() {
 
         let initialized = temp_workspace("boundline-cli-session-initialized");
         fs::create_dir_all(initialized.join(".boundline")).unwrap();
-        let continue_report = execute_continue_with_target(Some(&initialized), None).unwrap();
+        let continue_report = execute_continue_with_target(Some(&initialized), None, None).unwrap();
         assert_eq!(continue_report.exit_status, CommandExitStatus::Succeeded);
         assert!(
             continue_report.terminal_output.contains("command: continue"),
@@ -2793,7 +4686,14 @@ fn red_to_green_addition() {
             continue_report.terminal_output
         );
         assert!(
-            continue_report.terminal_output.contains("next_command: boundline start --workspace "),
+            continue_report
+                .terminal_output
+                .contains("next_command: boundline session list --workspace "),
+            "{}",
+            continue_report.terminal_output
+        );
+        assert!(
+            continue_report.terminal_output.contains("repair_command: boundline goal --workspace "),
             "{}",
             continue_report.terminal_output
         );
@@ -2853,9 +4753,11 @@ fn red_to_green_addition() {
                     packet_ref: Some(".canon/runs/run-42".to_string()),
                     decision_ref: Some(".canon/runs/run-42/decision.md".to_string()),
                     blocked_reason: Some("waiting for review approval".to_string()),
+                    stage_council: None,
                 }],
                 accumulated_context: Vec::new(),
                 terminal_reason: None,
+                planning_input_fingerprint: None,
             }),
             project_scale: Some(ProjectScaleSessionState {
                 path: ProjectScalePath {
@@ -2899,12 +4801,16 @@ fn red_to_green_addition() {
 
         FileSessionStore::for_workspace(&workspace).persist(&record).unwrap();
 
-        let report = execute_continue_with_target(Some(&workspace), None).unwrap();
+        let report = execute_continue_with_target(Some(&workspace), None, None).unwrap();
         let view = report.session_status.unwrap();
 
         assert_eq!(view.governance_lifecycle_runtime.as_deref(), Some("canon"));
         assert_eq!(view.governance_lifecycle_mode_selection.as_deref(), Some("auto-confirm"));
         assert_eq!(view.governance_lifecycle_selected_mode.as_deref(), Some("review"));
+        assert_eq!(
+            view.governance_lifecycle_selected_mode_sequence.as_ref(),
+            Some(&vec!["review".to_string()])
+        );
         assert_eq!(
             view.project_scale_path.as_deref(),
             Some("requirements -> implementation -> verification")
@@ -2924,13 +4830,137 @@ fn red_to_green_addition() {
         assert_eq!(view.latest_voting_reviewed_evidence.as_deref(), Some("govern:review"));
         assert_eq!(view.latest_voting_blocking, Some(true));
         assert_eq!(view.latest_voting_next_action.as_deref(), Some("collect approval"));
-        assert_eq!(view.next_command.as_deref(), Some("boundline plan --confirm"));
+        assert_eq!(view.next_command.as_deref(), Some("boundline run"));
+        let expected_explanation = format!(
+            "continue uses the active session state resolved through {}",
+            super::SESSION_SOURCE_OF_TRUTH
+        );
         assert!(
-            report
-                .terminal_output
-                .contains("continue uses the active session state from .boundline/session.json"),
+            report.terminal_output.contains(&expected_explanation),
             "{}",
             report.terminal_output
+        );
+    }
+
+    #[test]
+    fn build_status_view_falls_back_to_planning_governance_lifecycle() {
+        let workspace = write_execution_workspace("boundline-cli-session-plan-governance");
+        let canonical_workspace = fs::canonicalize(&workspace).unwrap();
+        let goal_plan = GoalPlan::new(
+            "Prepare governed feature",
+            vec![PlannedTask {
+                task_id: "planned-task-plan-governance".to_string(),
+                description: "Prepare governed plan".to_string(),
+                target: "src/lib.rs".to_string(),
+                expected_outcome: Some("planning governance clears".to_string()),
+                decision_type_hint: None,
+            }],
+        )
+        .unwrap();
+
+        let record = ActiveSessionRecord {
+            session_id: "session-plan-governance".to_string(),
+            workspace_ref: canonical_workspace.to_string_lossy().into_owned(),
+            goal: Some("Prepare governed feature".to_string()),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: Some(goal_plan),
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Planned,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 1,
+            updated_at: 2,
+            governance_lifecycle: Some(GovernedSessionLifecycle {
+                governance_runtime: GovernanceRuntimeKind::Canon,
+                explicit_opt_out: false,
+                mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+                selected_mode: Some(crate::domain::governance::CanonMode::Requirements),
+                selected_mode_sequence: vec![
+                    crate::domain::governance::CanonMode::Requirements,
+                    crate::domain::governance::CanonMode::Architecture,
+                    crate::domain::governance::CanonMode::Backlog,
+                ],
+                latest_reasoning_profile: None,
+                current_stage_index: 0,
+                stage_records: vec![crate::domain::governance::GovernedStageRecord {
+                    stage_key: "plan:requirements".to_string(),
+                    runtime: GovernanceRuntimeKind::Canon,
+                    lifecycle_state:
+                        crate::domain::governance::GovernanceLifecycleState::AwaitingApproval,
+                    required: true,
+                    autopilot_enabled: false,
+                    approval_state: crate::domain::governance::ApprovalState::Requested,
+                    canon_run_ref: Some("canon-run-plan".to_string()),
+                    governance_attempt_id: "attempt-plan-1".to_string(),
+                    previous_governance_attempt_id: None,
+                    packet_ref: Some(".canon/planning-packet".to_string()),
+                    decision_ref: None,
+                    blocked_reason: Some("waiting for Canon approval".to_string()),
+                    stage_council: None,
+                }],
+                accumulated_context: Vec::new(),
+                terminal_reason: Some("awaiting approval: waiting for Canon approval".to_string()),
+                planning_input_fingerprint: None,
+            }),
+            project_scale: None,
+            delight_feedback: None,
+            latest_voting: None,
+        };
+
+        let view = build_status_view(
+            &record,
+            suggested_next_command(&record),
+            "current active session state for the workspace",
+        );
+
+        assert_eq!(view.latest_governance_stage.as_deref(), Some("plan:requirements"));
+        assert_eq!(view.latest_governance_runtime.as_deref(), Some("canon"));
+        assert_eq!(view.latest_governance_mode.as_deref(), Some("requirements"));
+        assert_eq!(view.latest_governance_run_ref.as_deref(), Some("canon-run-plan"));
+        assert_eq!(view.latest_governance_state.as_deref(), Some("awaiting_approval"));
+        assert_eq!(
+            view.latest_governance_blocked_reason.as_deref(),
+            Some("waiting for Canon approval")
+        );
+        assert_eq!(view.latest_governance_packet_ref.as_deref(), Some(".canon/planning-packet"));
+        assert_eq!(view.latest_governance_approval.as_deref(), Some("requested"));
+        assert_eq!(
+            view.governance_next_action.as_deref(),
+            Some("wait for approval and rerun boundline plan")
+        );
+        assert_eq!(view.next_command.as_deref(), Some("boundline status"));
+    }
+
+    #[test]
+    fn goal_with_explicit_slug_embeds_slug_in_session_record() {
+        let workspace = write_execution_workspace("boundline-cli-session-slug-override");
+
+        let report = execute_goal_with_target(
+            Some(&workspace),
+            None,
+            Some("Build a bounded user management microservice"),
+            &[],
+            None,
+            None,
+            None,
+            None,
+            Some("micro-rust-goal"),
+        )
+        .unwrap();
+
+        assert_eq!(report.exit_status, CommandExitStatus::Succeeded);
+
+        let store = FileSessionStore::for_workspace(&workspace);
+        let record = store.load().unwrap().unwrap();
+        assert!(
+            record.session_id.contains("micro-rust-goal"),
+            "session_id should embed the slug override, got: {}",
+            record.session_id
         );
     }
 }

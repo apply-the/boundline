@@ -547,7 +547,7 @@ mod tests {
             cluster_id: "delivery-a".to_string(),
             primary_workspace_ref: "/tmp/a".to_string(),
             member_workspace_refs: vec!["/tmp/a".to_string(), "/tmp/b".to_string()],
-            started_from_command: "boundline start --cluster /tmp/a".to_string(),
+            started_from_command: "boundline goal --cluster /tmp/a --goal <goal>".to_string(),
             updated_at: 1,
         }
     }
@@ -578,7 +578,7 @@ mod tests {
                 headline: "primary workspace running".to_string(),
                 terminal_reason: None,
             }],
-            started_from_command: "boundline start --cluster /tmp/a".to_string(),
+            started_from_command: "boundline goal --cluster /tmp/a --goal <goal>".to_string(),
             execution_condition: valid_condition(),
             updated_at: 1,
         }

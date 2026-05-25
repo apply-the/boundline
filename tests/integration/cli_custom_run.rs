@@ -21,8 +21,8 @@ fn custom_run_executes_the_fixture_vertical_slice_and_persists_a_trace() {
     assert!(text.contains("analyze"), "{text}");
     assert!(text.contains("code"), "{text}");
     assert!(text.contains("verify"), "{text}");
-    assert!(text.contains("changed_files: src/lib.rs"), "{text}");
-    assert!(text.contains("validation: passed"), "{text}");
+    assert!(text.contains("updated src/lib.rs from left - right to left + right"), "{text}");
+    assert!(text.contains("validation passed after 1 attempt(s) via cargo test --quiet"), "{text}");
     assert!(text.contains("terminal_status: succeeded"), "{text}");
     assert!(trace_path.as_ref().is_some_and(|path| path.exists()), "{text}");
 }
@@ -61,8 +61,8 @@ fn custom_run_replans_to_a_later_execution_attempt_after_failed_validation() {
     let text = terminal_text(&output);
 
     assert_eq!(output.status.code(), Some(0), "{text}");
-    assert!(text.contains("replan after verify-bad-fix"), "{text}");
-    assert!(text.contains("changed_files: src/lib.rs"), "{text}");
-    assert!(text.contains("validation: passed"), "{text}");
+    assert!(text.contains("step verify-bad-fix (tool) failed"), "{text}");
+    assert!(text.contains("latest_step=verify-good-fix (succeeded)"), "{text}");
+    assert!(text.contains("validation passed after 1 attempt(s) via cargo test --quiet"), "{text}");
     assert!(text.contains("terminal_status: succeeded"), "{text}");
 }

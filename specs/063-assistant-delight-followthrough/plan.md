@@ -41,7 +41,7 @@ surface.
   prioritize optimization-only or polish-only work ahead of delivery behavior
   (see Summary and Phase Plan).
 - PASS Primary workflow: The main operator path remains session-native
-  `start -> capture -> plan -> run -> status -> next -> inspect`; assistant
+  `goal -> plan -> run -> status -> next -> inspect`; assistant
   hosts remain wrappers over CLI and session authority, with Cursor and Gemini
   fallback paths explicit rather than implied (see Technical Context and
   [contracts/assistant-host-parity.md](./contracts/assistant-host-parity.md)).

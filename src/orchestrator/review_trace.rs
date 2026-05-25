@@ -988,7 +988,7 @@ mod tests {
             participants: vec![ParticipantAssignment {
                 role_id: "critic".to_string(),
                 participant_id: "critic-1".to_string(),
-                effective_route: "review:copilot:gpt-5.5".to_string(),
+                effective_route: "review:copilot:gpt-4.1".to_string(),
                 provider_family: Some("copilot".to_string()),
                 context_basis: "reasoning_profile_stage:bug-fix:verify".to_string(),
                 prompting_pattern: "critic".to_string(),
@@ -1236,7 +1236,7 @@ mod tests {
                 ParticipantAssignment {
                     role_id: "reviewer-pending".to_string(),
                     participant_id: "pending-1".to_string(),
-                    effective_route: "review:copilot:gpt-5.5".to_string(),
+                    effective_route: "review:copilot:gpt-4.1".to_string(),
                     provider_family: Some("copilot".to_string()),
                     context_basis: "reasoning_profile_stage:bug-fix:verify".to_string(),
                     prompting_pattern: "parallel".to_string(),
@@ -1246,7 +1246,7 @@ mod tests {
                 ParticipantAssignment {
                     role_id: "reviewer-running".to_string(),
                     participant_id: "running-1".to_string(),
-                    effective_route: "review:copilot:gpt-5.5".to_string(),
+                    effective_route: "review:copilot:gpt-4.1".to_string(),
                     provider_family: Some("copilot".to_string()),
                     context_basis: "reasoning_profile_stage:bug-fix:verify".to_string(),
                     prompting_pattern: "parallel".to_string(),
@@ -1256,7 +1256,7 @@ mod tests {
                 ParticipantAssignment {
                     role_id: "reviewer-failed".to_string(),
                     participant_id: "failed-1".to_string(),
-                    effective_route: "review:copilot:gpt-5.5".to_string(),
+                    effective_route: "review:copilot:gpt-4.1".to_string(),
                     provider_family: Some("copilot".to_string()),
                     context_basis: "reasoning_profile_stage:bug-fix:verify".to_string(),
                     prompting_pattern: "parallel".to_string(),
@@ -1266,7 +1266,7 @@ mod tests {
                 ParticipantAssignment {
                     role_id: "reviewer-omitted".to_string(),
                     participant_id: "omitted-1".to_string(),
-                    effective_route: "review:copilot:gpt-5.5".to_string(),
+                    effective_route: "review:copilot:gpt-4.1".to_string(),
                     provider_family: Some("copilot".to_string()),
                     context_basis: "reasoning_profile_stage:bug-fix:verify".to_string(),
                     prompting_pattern: "parallel".to_string(),
@@ -1332,14 +1332,14 @@ mod tests {
         if !trace.events.iter().any(|event| {
             event.event_type == TraceEventType::ReasoningParticipantStarted
                 && event.payload.get("summary").and_then(|value| value.as_str())
-                    == Some("route=review:copilot:gpt-5.5 status=pending")
+                    == Some("route=review:copilot:gpt-4.1 status=pending")
         }) {
             return Err("pending participant summary fallback was not recorded".to_string());
         }
         if !trace.events.iter().any(|event| {
             event.event_type == TraceEventType::ReasoningParticipantCompleted
                 && event.payload.get("summary").and_then(|value| value.as_str())
-                    == Some("route=review:copilot:gpt-5.5 status=omitted")
+                    == Some("route=review:copilot:gpt-4.1 status=omitted")
         }) {
             return Err("omitted participant summary fallback was not recorded".to_string());
         }

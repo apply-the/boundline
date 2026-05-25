@@ -8,7 +8,7 @@ const HOST_SUPPORT_MODES: &[(&str, &str)] = &[
     ("codex", "repo-local-full"),
     ("cursor", "copy-ready-assets"),
     ("copilot", "repo-local-full"),
-    ("gemini", "manual-fallback"),
+    ("antigravity", "repo-local-full"),
 ];
 
 fn asset_path(relative_path: &str) -> PathBuf {
@@ -43,7 +43,7 @@ fn support_modes_are_aligned_across_manifest_metadata_and_workflow() {
 }
 
 #[test]
-fn cursor_and_gemini_support_mode_notes_stay_explicit() {
+fn cursor_and_antigravity_support_mode_notes_stay_explicit() {
     let global_manifest = read_json("assistant/global/manifest.json");
     let plugin_metadata = read_json("assistant/plugin-metadata.json");
 
@@ -57,8 +57,8 @@ fn cursor_and_gemini_support_mode_notes_stay_explicit() {
         (
             "assistant/global/manifest.json",
             "support_mode_notes",
-            "gemini",
-            ["CLI-first", "manual fallback"],
+            "antigravity",
+            ["repo-local", "manual fallback"],
         ),
         (
             "assistant/plugin-metadata.json",
@@ -69,8 +69,8 @@ fn cursor_and_gemini_support_mode_notes_stay_explicit() {
         (
             "assistant/plugin-metadata.json",
             "supportModeNotes",
-            "gemini",
-            ["CLI-first", "manual fallback"],
+            "antigravity",
+            ["repo-local", "manual fallback"],
         ),
     ] {
         let source = if path == "assistant/global/manifest.json" {

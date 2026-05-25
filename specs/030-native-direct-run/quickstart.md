@@ -48,7 +48,7 @@ Expected behavior:
 
 ```bash
 cargo run --bin boundline -- start
-cargo run --bin boundline -- capture --goal "Fix the failing add test"
+cargo run --bin boundline -- goal --goal "Fix the failing add test"
 cargo run --bin boundline -- run --goal "Ship the checkout change"
 ```
 

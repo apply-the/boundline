@@ -11,7 +11,7 @@ This contract defines what the session CLI must persist and report when native p
 
 | Field | Source | Required | Notes |
 |-------|--------|----------|-------|
-| `goal` | active session | Yes | Planning requires a captured goal |
+| `goal` | active session | Yes | Planning requires a recorded goal |
 | `authored_brief` | active session | No | Used when present to enrich planning context |
 | `active_flow` | active session | No | Explicit operator-selected flow remains authoritative |
 | workspace signals | filesystem | Yes | Derived from the current workspace |
@@ -37,6 +37,6 @@ This contract defines what the session CLI must persist and report when native p
 
 ## Failure Contract
 
-- Planning without a captured goal MUST return an explicit remediation error.
+- Planning without a recorded goal MUST return an explicit remediation error.
 - Planning blocked by unresolved authored-input clarification MUST preserve the session and return a next-step message.
 - Planning that cannot derive a bounded plan MUST fail explicitly instead of creating an empty or placeholder session plan.

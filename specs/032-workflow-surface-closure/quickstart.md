@@ -30,7 +30,7 @@ cargo run --bin boundline -- workflow run governed-delivery --goal "Fix the fail
 
 Expected behavior:
 - The workflow command stays on the same primary session-native product story as
-  `start -> capture -> plan -> run`.
+  `goal -> plan -> run`.
 - Output keeps workflow identity and phase explicit while preserving routing,
   execution condition, and the same bounded `next_command` model.
 - If the active native route requires an unsupported assistant runtime, the run

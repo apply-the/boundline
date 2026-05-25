@@ -8,8 +8,6 @@ pub mod cluster;
 pub mod configuration;
 #[path = "../../../src/domain/context_intelligence.rs"]
 pub mod context_intelligence;
-#[path = "../../../src/domain/dashboard.rs"]
-pub mod dashboard;
 #[path = "../../../src/domain/decision.rs"]
 pub mod decision;
 #[path = "../../../src/domain/distribution.rs"]
@@ -48,8 +46,12 @@ pub mod reasoning;
 pub mod review;
 #[path = "../../../src/domain/routing_decision.rs"]
 pub mod routing_decision;
+#[path = "../../../src/domain/scaffold_manifest.rs"]
+pub mod scaffold_manifest;
 #[path = "../../../src/domain/session.rs"]
 pub mod session;
+#[path = "../../../src/domain/stage_council.rs"]
+pub mod stage_council;
 #[path = "../../../src/domain/step.rs"]
 pub mod step;
 #[path = "../../../src/domain/task.rs"]

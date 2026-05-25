@@ -4,7 +4,7 @@ use std::path::Path;
 
 use clap::ValueEnum;
 
-use crate::domain::configuration::RuntimeKind;
+use crate::domain::configuration::AssistantHostKind;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 #[value(rename_all = "kebab-case")]
@@ -13,7 +13,7 @@ pub enum AssistantHost {
     Codex,
     Cursor,
     Copilot,
-    Gemini,
+    Antigravity,
 }
 
 impl AssistantHost {
@@ -23,14 +23,14 @@ impl AssistantHost {
             Self::Codex => "codex",
             Self::Cursor => "cursor",
             Self::Copilot => "copilot",
-            Self::Gemini => "gemini",
+            Self::Antigravity => "antigravity",
         }
     }
 
     const fn install_mode(self) -> &'static str {
         match self {
             Self::Claude | Self::Codex | Self::Cursor => "copy_ready_assets",
-            Self::Copilot | Self::Gemini => "manual_fallback",
+            Self::Copilot | Self::Antigravity => "manual_fallback",
         }
     }
 
@@ -40,7 +40,7 @@ impl AssistantHost {
             Self::Codex => "assistant/global/codex",
             Self::Cursor => "assistant/global/cursor",
             Self::Copilot => "assistant/global/copilot",
-            Self::Gemini => "assistant/global/gemini",
+            Self::Antigravity => "assistant/global/antigravity",
         }
     }
 
@@ -58,8 +58,8 @@ impl AssistantHost {
             Self::Copilot => {
                 "Copilot environments vary; global command installation is not claimed for this host."
             }
-            Self::Gemini => {
-                "Gemini host support is fallback guidance; global command installation is not claimed for this host."
+            Self::Antigravity => {
+                "Antigravity exposes a repo-local command pack after `boundline init --assistant antigravity`, but global command installation is not claimed for this host and remains a manual fallback."
             }
         }
     }
@@ -166,7 +166,7 @@ pub enum AssistantSurface {
     Claude,
     Codex,
     Copilot,
-    Gemini,
+    Antigravity,
 }
 
 impl AssistantSurface {
@@ -176,7 +176,7 @@ impl AssistantSurface {
             Self::Claude => "Claude command pack",
             Self::Codex => "Codex command pack",
             Self::Copilot => "Copilot prompt pack",
-            Self::Gemini => "Gemini CLI notes",
+            Self::Antigravity => "Antigravity command pack",
         }
     }
 }
@@ -188,7 +188,7 @@ pub enum DocsExportSurface {
     Claude,
     Codex,
     Copilot,
-    Gemini,
+    Antigravity,
 }
 
 impl DocsExportSurface {
@@ -199,7 +199,7 @@ impl DocsExportSurface {
             Self::Claude => "Claude command pack docs",
             Self::Codex => "Codex command pack docs",
             Self::Copilot => "Copilot prompt pack docs",
-            Self::Gemini => "Gemini CLI docs",
+            Self::Antigravity => "Antigravity command pack docs",
         }
     }
 }
@@ -233,10 +233,14 @@ const README_ASSET: AssistantAsset = asset!(AssistantSurface::SharedReadme, "ass
 static SHARED_SCAFFOLD_ASSETS: &[AssistantAsset] = &[
     asset!(AssistantSurface::SharedReadme, "assistant/plugin-metadata.json"),
     asset!(AssistantSurface::SharedReadme, "assistant/commands/session-workflow.json"),
+    asset!(AssistantSurface::SharedReadme, "assistant/prompts/goal-template.md"),
     asset!(AssistantSurface::SharedReadme, "assistant/prompts/starter-prompts.md"),
     asset!(AssistantSurface::SharedReadme, "assistant/assets/boundline-plugin-icon.svg"),
     asset!(AssistantSurface::SharedReadme, "assistant/assets/boundline-plugin-logo.svg"),
 ];
+
+static SHARED_DOC_ASSETS: &[AssistantAsset] =
+    &[asset!(AssistantSurface::SharedReadme, "assistant/prompts/goal-template.md")];
 
 const CANON_DOCS_EXPORT_CONTENT: &str = r#"# Boundline And Canon
 
@@ -261,37 +265,18 @@ not use slugs or timestamps.
 "#;
 
 static CLAUDE_ASSETS: &[AssistantAsset] = &[
-    asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-architecture.md"),
-    asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-backlog.md"),
-    asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-capture.md"),
-    asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-change.md"),
+    asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-goal.md"),
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-config-set-canon.md"),
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-config-show.md"),
-    asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-discovery.md"),
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-doctor.md"),
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-govern.md"),
-    asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-implementation.md"),
-    asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-incident.md"),
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-init.md"),
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-inspect.md"),
-    asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-migration.md"),
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-next.md"),
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-plan.md"),
-    asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-refactor.md"),
-    asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-requirements.md"),
-    asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-review.md"),
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-run.md"),
-    asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-security-assessment.md"),
-    asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-start.md"),
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-status.md"),
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-step.md"),
-    asset!(
-        AssistantSurface::Claude,
-        "assistant/claude/commands/boundline-supply-chain-analysis.md"
-    ),
-    asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-system-assessment.md"),
-    asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-system-shaping.md"),
-    asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-verification.md"),
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-workflow-inspect.md"),
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-workflow-list.md"),
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-workflow-resume.md"),
@@ -305,34 +290,18 @@ static CLAUDE_PACKAGE_ASSETS: &[AssistantAsset] = &[
 ];
 
 static CODEX_ASSETS: &[AssistantAsset] = &[
-    asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-architecture.md"),
-    asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-backlog.md"),
-    asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-capture.md"),
-    asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-change.md"),
+    asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-goal.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-config-set-canon.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-config-show.md"),
-    asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-discovery.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-doctor.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-govern.md"),
-    asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-implementation.md"),
-    asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-incident.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-init.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-inspect.md"),
-    asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-migration.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-next.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-plan.md"),
-    asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-refactor.md"),
-    asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-requirements.md"),
-    asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-review.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-run.md"),
-    asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-security-assessment.md"),
-    asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-start.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-status.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-step.md"),
-    asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-supply-chain-analysis.md"),
-    asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-system-assessment.md"),
-    asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-system-shaping.md"),
-    asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-verification.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-workflow-inspect.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-workflow-list.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-workflow-resume.md"),
@@ -344,52 +313,21 @@ static CODEX_PACKAGE_ASSETS: &[AssistantAsset] =
     &[asset!(AssistantSurface::Codex, ".codex-plugin/plugin.json")];
 
 static COPILOT_ASSETS: &[AssistantAsset] = &[
-    asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-architecture.prompt.md"),
-    asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-backlog.prompt.md"),
-    asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-capture.prompt.md"),
-    asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-change.prompt.md"),
+    asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-goal.prompt.md"),
     asset!(
         AssistantSurface::Copilot,
         "assistant/copilot/prompts/boundline-config-set-canon.prompt.md"
     ),
     asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-config-show.prompt.md"),
-    asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-discovery.prompt.md"),
     asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-doctor.prompt.md"),
     asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-govern.prompt.md"),
-    asset!(
-        AssistantSurface::Copilot,
-        "assistant/copilot/prompts/boundline-implementation.prompt.md"
-    ),
-    asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-incident.prompt.md"),
     asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-init.prompt.md"),
     asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-inspect.prompt.md"),
-    asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-migration.prompt.md"),
     asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-next.prompt.md"),
     asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-plan.prompt.md"),
-    asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-refactor.prompt.md"),
-    asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-requirements.prompt.md"),
-    asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-review.prompt.md"),
     asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-run.prompt.md"),
-    asset!(
-        AssistantSurface::Copilot,
-        "assistant/copilot/prompts/boundline-security-assessment.prompt.md"
-    ),
-    asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-start.prompt.md"),
     asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-status.prompt.md"),
     asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-step.prompt.md"),
-    asset!(
-        AssistantSurface::Copilot,
-        "assistant/copilot/prompts/boundline-supply-chain-analysis.prompt.md"
-    ),
-    asset!(
-        AssistantSurface::Copilot,
-        "assistant/copilot/prompts/boundline-system-assessment.prompt.md"
-    ),
-    asset!(
-        AssistantSurface::Copilot,
-        "assistant/copilot/prompts/boundline-system-shaping.prompt.md"
-    ),
-    asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-verification.prompt.md"),
     asset!(
         AssistantSurface::Copilot,
         "assistant/copilot/prompts/boundline-workflow-inspect.prompt.md"
@@ -417,10 +355,76 @@ static COPILOT_PACKAGE_ASSETS: &[AssistantAsset] = &[
     asset!(AssistantSurface::Copilot, ".copilot-prompts/pack.json"),
 ];
 
-static GEMINI_ASSETS: &[AssistantAsset] =
-    &[asset!(AssistantSurface::Gemini, "assistant/gemini/README.md")];
+static ANTIGRAVITY_ASSETS: &[AssistantAsset] = &[
+    asset!(AssistantSurface::Antigravity, "assistant/antigravity/README.md"),
+    asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-goal.md"),
+    asset!(
+        AssistantSurface::Antigravity,
+        "assistant/antigravity/commands/boundline-config-set-canon.md"
+    ),
+    asset!(
+        AssistantSurface::Antigravity,
+        "assistant/antigravity/commands/boundline-config-show.md"
+    ),
+    asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-doctor.md"),
+    asset!(
+        AssistantSurface::Antigravity,
+        "assistant/antigravity/commands/boundline-doctor-context.md"
+    ),
+    asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-govern.md"),
+    asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-init.md"),
+    asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-inspect.md"),
+    asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-next.md"),
+    asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-next-best.md"),
+    asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-plan.md"),
+    asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-recover.md"),
+    asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-run.md"),
+    asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-status.md"),
+    asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-step.md"),
+    asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-why.md"),
+    asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-risk.md"),
+    asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-evidence.md"),
+    asset!(
+        AssistantSurface::Antigravity,
+        "assistant/antigravity/commands/boundline-assumptions.md"
+    ),
+    asset!(
+        AssistantSurface::Antigravity,
+        "assistant/antigravity/commands/boundline-hidden-impact.md"
+    ),
+    asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-challenge.md"),
+    asset!(
+        AssistantSurface::Antigravity,
+        "assistant/antigravity/commands/boundline-explain-plan.md"
+    ),
+    asset!(
+        AssistantSurface::Antigravity,
+        "assistant/antigravity/commands/boundline-workflow-inspect.md"
+    ),
+    asset!(
+        AssistantSurface::Antigravity,
+        "assistant/antigravity/commands/boundline-workflow-list.md"
+    ),
+    asset!(
+        AssistantSurface::Antigravity,
+        "assistant/antigravity/commands/boundline-workflow-resume.md"
+    ),
+    asset!(
+        AssistantSurface::Antigravity,
+        "assistant/antigravity/commands/boundline-workflow-run.md"
+    ),
+    asset!(
+        AssistantSurface::Antigravity,
+        "assistant/antigravity/commands/boundline-workflow-status.md"
+    ),
+];
 
-pub fn assets_for_assistants(assistants: &[RuntimeKind]) -> Vec<AssistantAsset> {
+static ANTIGRAVITY_PACKAGE_ASSETS: &[AssistantAsset] = &[
+    asset!(AssistantSurface::Antigravity, ".antigravity-plugin/manifest.json"),
+    asset!(AssistantSurface::Antigravity, ".antigravity-plugin/commands.json"),
+];
+
+pub fn assets_for_assistants(assistants: &[AssistantHostKind]) -> Vec<AssistantAsset> {
     if assistants.is_empty() {
         return Vec::new();
     }
@@ -428,24 +432,24 @@ pub fn assets_for_assistants(assistants: &[RuntimeKind]) -> Vec<AssistantAsset> 
     let mut assets = vec![README_ASSET.clone()];
     let mut seen = BTreeSet::from([README_ASSET.relative_path.to_string()]);
     extend_assets(&mut assets, &mut seen, SHARED_SCAFFOLD_ASSETS.iter().cloned());
-    for runtime in assistants.iter().copied() {
-        extend_assets(&mut assets, &mut seen, runtime_scaffold_assets(runtime));
-        extend_assets(&mut assets, &mut seen, runtime_package_assets(runtime).iter().cloned());
+    for host in assistants.iter().copied() {
+        extend_assets(&mut assets, &mut seen, host_scaffold_assets(host));
+        extend_assets(&mut assets, &mut seen, host_package_assets(host).iter().cloned());
     }
 
-    if assistants.iter().copied().any(|runtime| runtime == RuntimeKind::Copilot) {
+    if assistants.iter().copied().any(|host| host == AssistantHostKind::Copilot) {
         extend_assets(&mut assets, &mut seen, projected_copilot_prompt_assets());
     }
 
     assets
 }
 
-pub fn docs_assets_for_assistants(assistants: &[RuntimeKind]) -> Vec<DocsExportAsset> {
+pub fn docs_assets_for_assistants(assistants: &[AssistantHostKind]) -> Vec<DocsExportAsset> {
     docs_assets_for_assistants_under(assistants, Path::new("docs/boundline"))
 }
 
 pub fn docs_assets_for_assistants_under(
-    assistants: &[RuntimeKind],
+    assistants: &[AssistantHostKind],
     docs_root: &Path,
 ) -> Vec<DocsExportAsset> {
     let mut assets = vec![DocsExportAsset {
@@ -468,15 +472,25 @@ pub fn docs_assets_for_assistants_under(
         contents: README_ASSET.contents,
         surface: DocsExportSurface::AssistantShared,
     });
+    for asset in SHARED_DOC_ASSETS {
+        let relative_path = docs_relative_path_for_asset_under(docs_root, asset);
+        if seen.insert(relative_path.clone()) {
+            assets.push(DocsExportAsset {
+                relative_path,
+                contents: asset.contents,
+                surface: DocsExportSurface::AssistantShared,
+            });
+        }
+    }
 
-    for runtime in assistants.iter().copied() {
-        for asset in runtime_assets(runtime) {
+    for host in assistants.iter().copied() {
+        for asset in host_assets(host) {
             let relative_path = docs_relative_path_for_asset_under(docs_root, asset);
             if seen.insert(relative_path.clone()) {
                 assets.push(DocsExportAsset {
                     relative_path,
                     contents: asset.contents,
-                    surface: docs_surface_for_runtime(runtime),
+                    surface: docs_surface_for_host(host),
                 });
             }
         }
@@ -485,29 +499,29 @@ pub fn docs_assets_for_assistants_under(
     assets
 }
 
-fn runtime_assets(runtime: RuntimeKind) -> &'static [AssistantAsset] {
-    match runtime {
-        RuntimeKind::Claude => CLAUDE_ASSETS,
-        RuntimeKind::Codex => CODEX_ASSETS,
-        RuntimeKind::Copilot => COPILOT_ASSETS,
-        RuntimeKind::Gemini => GEMINI_ASSETS,
+fn host_assets(host: AssistantHostKind) -> &'static [AssistantAsset] {
+    match host {
+        AssistantHostKind::Claude => CLAUDE_ASSETS,
+        AssistantHostKind::Codex => CODEX_ASSETS,
+        AssistantHostKind::Copilot => COPILOT_ASSETS,
+        AssistantHostKind::Antigravity => ANTIGRAVITY_ASSETS,
     }
 }
 
-fn runtime_scaffold_assets(runtime: RuntimeKind) -> Vec<AssistantAsset> {
-    let mut assets = runtime_assets(runtime).to_vec();
-    if runtime == RuntimeKind::Copilot {
+fn host_scaffold_assets(host: AssistantHostKind) -> Vec<AssistantAsset> {
+    let mut assets = host_assets(host).to_vec();
+    if host == AssistantHostKind::Copilot {
         assets.extend(COPILOT_SHARED_ASSETS.iter().cloned());
     }
     assets
 }
 
-fn runtime_package_assets(runtime: RuntimeKind) -> &'static [AssistantAsset] {
-    match runtime {
-        RuntimeKind::Claude => CLAUDE_PACKAGE_ASSETS,
-        RuntimeKind::Codex => CODEX_PACKAGE_ASSETS,
-        RuntimeKind::Copilot => COPILOT_PACKAGE_ASSETS,
-        RuntimeKind::Gemini => &[],
+fn host_package_assets(host: AssistantHostKind) -> &'static [AssistantAsset] {
+    match host {
+        AssistantHostKind::Claude => CLAUDE_PACKAGE_ASSETS,
+        AssistantHostKind::Codex => CODEX_PACKAGE_ASSETS,
+        AssistantHostKind::Copilot => COPILOT_PACKAGE_ASSETS,
+        AssistantHostKind::Antigravity => ANTIGRAVITY_PACKAGE_ASSETS,
     }
 }
 
@@ -550,11 +564,11 @@ fn docs_relative_path_for_asset_under(docs_root: &Path, asset: &AssistantAsset) 
     docs_root.join("assistant").join(suffix).to_string_lossy().into_owned()
 }
 
-fn docs_surface_for_runtime(runtime: RuntimeKind) -> DocsExportSurface {
-    match runtime {
-        RuntimeKind::Claude => DocsExportSurface::Claude,
-        RuntimeKind::Codex => DocsExportSurface::Codex,
-        RuntimeKind::Copilot => DocsExportSurface::Copilot,
-        RuntimeKind::Gemini => DocsExportSurface::Gemini,
+fn docs_surface_for_host(host: AssistantHostKind) -> DocsExportSurface {
+    match host {
+        AssistantHostKind::Claude => DocsExportSurface::Claude,
+        AssistantHostKind::Codex => DocsExportSurface::Codex,
+        AssistantHostKind::Copilot => DocsExportSurface::Copilot,
+        AssistantHostKind::Antigravity => DocsExportSurface::Antigravity,
     }
 }

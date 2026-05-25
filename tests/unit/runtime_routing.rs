@@ -93,7 +93,7 @@ fn flow_policy_helpers_report_stage_id_and_progress() {
 }
 
 #[test]
-fn session_runtime_resolve_routing_outcome_blocks_pending_plan_confirmation() {
+fn session_runtime_resolve_routing_outcome_routes_native_for_proposed_plan() {
     let workspace = std::env::temp_dir().join("boundline-runtime-routing-pending");
     std::fs::create_dir_all(&workspace).unwrap();
     let runtime = SessionRuntime::for_workspace(&workspace);
@@ -121,9 +121,9 @@ fn session_runtime_resolve_routing_outcome_blocks_pending_plan_confirmation() {
     };
 
     let outcome = runtime.resolve_routing_outcome(&record).unwrap();
-    assert_eq!(outcome.mode, RoutingMode::Blocked);
+    assert_eq!(outcome.mode, RoutingMode::Native);
     assert_eq!(outcome.source, RoutingSource::GoalPlan);
-    assert!(outcome.reason.contains("plan confirmation"));
+    assert!(outcome.reason.contains("native execution"));
 }
 
 #[test]
@@ -192,7 +192,7 @@ fn plan_task_blocks_when_context_pack_is_not_credible() {
     let err = runtime.plan_task(&mut record, None, false).unwrap_err();
 
     assert!(matches!(err, SessionRuntimeError::ClarificationRequired { .. }));
-    assert_eq!(record.latest_status, SessionStatus::GoalCaptured);
+    assert_eq!(record.latest_status, SessionStatus::Blocked);
     let goal_plan = record.goal_plan.as_ref().unwrap();
     assert_eq!(goal_plan.status, boundline::domain::goal_plan::GoalPlanStatus::Draft);
     assert_eq!(goal_plan.context_credibility().as_deref(), Some("insufficient"));
@@ -203,7 +203,7 @@ fn plan_task_blocks_when_context_pack_is_not_credible() {
 }
 
 #[test]
-fn plan_task_uses_authored_brief_as_credible_context_on_empty_workspace() {
+fn plan_task_records_authored_brief_context_on_empty_workspace() {
     let workspace = std::env::temp_dir().join("boundline-runtime-routing-authored-context");
     std::fs::create_dir_all(&workspace).unwrap();
     let runtime = SessionRuntime::for_workspace(&workspace);
@@ -242,7 +242,7 @@ fn plan_task_uses_authored_brief_as_credible_context_on_empty_workspace() {
     assert!(
         goal_plan.context_provenance_lines().iter().any(|line| line.contains("authored_brief"))
     );
-    assert_eq!(record.latest_status, SessionStatus::GoalCaptured);
+    assert_eq!(record.latest_status, SessionStatus::Blocked);
 }
 
 #[test]
@@ -394,6 +394,9 @@ fn plan_task_blocks_on_negotiation_and_authored_brief_clarifications() {
             reason_kind: ClarificationReasonKind::UnboundedRequest,
             prompt: "narrow the request to one bounded outcome".to_string(),
             missing_fields: vec!["bounded_outcome".to_string()],
+            questions: vec![
+                "What single bounded outcome should Boundline address first?".to_string(),
+            ],
             blocking_sources: Vec::new(),
             turn_index: 0,
             status: ClarificationStatus::Open,

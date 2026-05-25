@@ -93,19 +93,21 @@ fn change_flow_stage_policies_are_correct() {
 }
 
 #[test]
-fn delivery_flow_has_four_stages() {
+fn delivery_flow_has_five_stages() {
     let policy = FlowPolicy::from_builtin("delivery").unwrap();
-    assert_eq!(policy.stage_policies.len(), 4);
+    assert_eq!(policy.stage_policies.len(), 5);
     assert_eq!(policy.stage_policies[0].stage_id, "requirements");
-    assert_eq!(policy.stage_policies[1].stage_id, "architecture");
-    assert_eq!(policy.stage_policies[2].stage_id, "backlog");
-    assert_eq!(policy.stage_policies[3].stage_id, "implementation");
+    assert_eq!(policy.stage_policies[1].stage_id, "system-shaping");
+    assert_eq!(policy.stage_policies[2].stage_id, "architecture");
+    assert_eq!(policy.stage_policies[3].stage_id, "backlog");
+    assert_eq!(policy.stage_policies[4].stage_id, "implementation");
 }
 
 #[test]
 fn delivery_implementation_allows_code_test_fix_replan() {
     let mut policy = FlowPolicy::from_builtin("delivery").unwrap();
-    policy.advance_stage().unwrap(); // requirements → architecture
+    policy.advance_stage().unwrap(); // requirements → system-shaping
+    policy.advance_stage().unwrap(); // system-shaping → architecture
     policy.advance_stage().unwrap(); // architecture → backlog
     policy.advance_stage().unwrap(); // backlog → implementation
     assert!(policy.is_allowed(DecisionType::Code));

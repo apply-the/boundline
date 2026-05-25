@@ -75,6 +75,7 @@ fn task_context_round_trips_governance_state_records() {
         previous_governance_attempt_id: None,
         packet_ref: Some("packet-1".to_string()),
         decision_ref: Some("decision-1".to_string()),
+        stage_council: None,
         blocked_reason: None,
     };
     let packet = GovernedStagePacket {
@@ -243,6 +244,7 @@ fn task_context_round_trips_clarification_and_derived_draft_records() {
         reason_kind: ClarificationReasonKind::UnboundedRequest,
         prompt: "Narrow the request to one bounded outcome".to_string(),
         missing_fields: vec!["bounded_scope".to_string()],
+        questions: vec!["What single bounded outcome should Boundline address first?".to_string()],
         blocking_sources: vec!["source-1".to_string()],
         turn_index: 1,
         status: ClarificationStatus::Open,

@@ -18,7 +18,10 @@ use crate::domain::limits::TerminalCondition;
 use crate::domain::reasoning::ProfileActivationRecord;
 use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::session::{DelightFeedbackSignal, RoutingMode, RoutingOutcome, RoutingSource};
-use crate::domain::session::{governance_next_action_for_state, governance_packet_provenance_text};
+use crate::domain::session::{
+    governance_next_action_for_state, governance_packet_provenance_text, session_goal_brief_ref,
+    session_plan_brief_ref, session_run_brief_ref,
+};
 use crate::domain::step::{StepKind, StepStatus};
 use crate::domain::task::{TaskStatus, TerminalReason};
 use crate::domain::tool_result::ToolResult;
@@ -46,12 +49,27 @@ const KEY_SUMMARY: &str = "summary";
 const KEY_TARGET: &str = "target";
 const KEY_VOTE_RESOLUTION: &str = "vote_resolution";
 
+fn trace_workspace_root(trace_ref: &Path) -> Option<PathBuf> {
+    let mut current = trace_ref.parent()?;
+    loop {
+        if current.file_name().and_then(|name| name.to_str()) == Some(".boundline") {
+            return current.parent().map(Path::to_path_buf);
+        }
+        current = current.parent()?;
+    }
+}
+
+fn persisted_session_brief_ref(workspace: &Path, brief_ref: &str) -> Option<String> {
+    workspace.join(brief_ref).is_file().then(|| brief_ref.to_string())
+}
+
 /// Result returned by `inspect` after loading a trace, summarizing it, and
 /// rendering the terminal-facing output.
 #[derive(Debug, Clone, PartialEq)]
 pub struct InspectCommandReport {
     pub exit_status: CommandExitStatus,
     pub terminal_output: String,
+    pub inspection_target: Option<String>,
     pub trace_location: Option<String>,
     pub trace_summary: Option<TraceSummaryView>,
 }
@@ -79,8 +97,9 @@ impl TraceResolutionTarget {
 pub fn execute_inspect(
     trace: Option<&Path>,
     workspace: Option<&Path>,
+    session_id: Option<&str>,
 ) -> Result<InspectCommandReport, InspectCommandError> {
-    let (inspection_target, trace_ref, trace) = load_trace(trace, workspace)?;
+    let (inspection_target, trace_ref, trace) = load_trace(trace, workspace, session_id)?;
     let summary = summarize_trace(&trace_ref, &trace)?;
     let exit_status = if summary.terminal_status == TaskStatus::Succeeded {
         CommandExitStatus::Succeeded
@@ -95,6 +114,7 @@ pub fn execute_inspect(
             inspection_target.as_str(),
             output::next_command_after_inspect(summary.terminal_status),
         ),
+        inspection_target: Some(inspection_target.as_str().to_string()),
         trace_location: Some(trace_ref.to_string_lossy().into_owned()),
         trace_summary: Some(summary),
     })
@@ -105,10 +125,26 @@ pub fn execute_inspect(
 pub fn render_error(
     trace: Option<&Path>,
     workspace: Option<&Path>,
+    session_id: Option<&str>,
     error: &InspectCommandError,
 ) -> String {
+    if let InspectCommandError::UnknownSession(selected_session_id) = error {
+        let session_scope =
+            workspace.map(|path| format!(" in {}", path.display())).unwrap_or_default();
+        return output::render_session_error(
+            "inspect",
+            &format!("session `{selected_session_id}` does not exist{session_scope}"),
+            Some("boundline session list"),
+        );
+    }
+
     if let InspectCommandError::InvalidSession(message) = error {
-        return output::render_session_error("inspect", message, Some("boundline start"));
+        let next_command = if session_id.is_some() {
+            Some("boundline session list")
+        } else {
+            Some("boundline goal --goal <goal>")
+        };
+        return output::render_session_error("inspect", message, next_command);
     }
 
     let inspection_target = inspection_target_for(trace, workspace);
@@ -119,7 +155,14 @@ pub fn render_error(
         InspectCommandError::MissingLatestTrace | InspectCommandError::TraceStore(_) => {
             "failed to read the requested trace"
         }
-        InspectCommandError::SessionStore(_) => "failed to read the active session",
+        InspectCommandError::SessionStore(_) => {
+            if session_id.is_some() {
+                "failed to read the selected session"
+            } else {
+                "failed to read the active session"
+            }
+        }
+        InspectCommandError::UnknownSession(_) => "selected session does not exist",
         InspectCommandError::InvalidSession(_) => "active session is invalid",
         InspectCommandError::Summary(_) => "failed to summarize the requested trace",
     };
@@ -573,6 +616,16 @@ pub fn summarize_trace(
         &recovery_events,
         terminal_projection,
     ));
+    let workspace_root = trace_workspace_root(trace_ref.as_ref());
+    let goal_brief_ref = workspace_root.as_ref().and_then(|workspace| {
+        persisted_session_brief_ref(workspace, &session_goal_brief_ref(&trace.session_id))
+    });
+    let session_plan_brief_ref = workspace_root.as_ref().and_then(|workspace| {
+        persisted_session_brief_ref(workspace, &session_plan_brief_ref(&trace.session_id))
+    });
+    let run_brief_ref = workspace_root.as_ref().and_then(|workspace| {
+        persisted_session_brief_ref(workspace, &session_run_brief_ref(&trace.session_id))
+    });
 
     Ok(TraceSummaryView {
         trace_ref: trace_ref.as_ref().to_string_lossy().into_owned(),
@@ -589,6 +642,9 @@ pub fn summarize_trace(
         authored_input_summary: input_projection.authored_input_summary,
         authored_input_sources: input_projection.authored_input_sources,
         authored_input_deduplicated_sources: input_projection.authored_input_deduplicated_sources,
+        goal_brief_ref,
+        session_plan_brief_ref,
+        run_brief_ref,
         context_summary: context_projection.summary,
         context_credibility: context_projection.credibility,
         context_primary_inputs: context_projection.primary_inputs,
@@ -693,14 +749,11 @@ fn build_inspect_context_view(
 
 fn build_inspect_council_view(
     review_timeline: &[String],
-    governance_timeline: &[String],
+    _governance_timeline: &[String],
     reasoning_profile: Option<&ProfileActivationRecord>,
     terminal: InspectTerminalProjection<'_>,
 ) -> InspectClosureView {
     let mut narrative_lines = review_timeline.to_vec();
-    if narrative_lines.is_empty() {
-        narrative_lines.extend(governance_timeline.iter().cloned());
-    }
     if let Some(reasoning_profile) = reasoning_profile {
         narrative_lines.push(format!(
             "reasoning_profile: {} ({})",
@@ -713,9 +766,6 @@ fn build_inspect_council_view(
     if !review_timeline.is_empty() {
         source_attribution.push("review_timeline".to_string());
     }
-    if !governance_timeline.is_empty() {
-        source_attribution.push("governance_timeline".to_string());
-    }
     if reasoning_profile.is_some() {
         source_attribution.push("reasoning_profile".to_string());
     }
@@ -725,12 +775,10 @@ fn build_inspect_council_view(
         missing_inputs.push("review_timeline".to_string());
     }
 
-    let headline = if !review_timeline.is_empty() {
+    let headline = if !review_timeline.is_empty() || reasoning_profile.is_some() {
         "council activity was recorded for this trace".to_string()
-    } else if !governance_timeline.is_empty() {
-        "governance state is available, but no council review lines were recorded".to_string()
     } else {
-        "council activity was not recorded for this trace".to_string()
+        "no council activity was recorded".to_string()
     };
 
     InspectClosureView {
@@ -1326,8 +1374,12 @@ fn format_evidence_input(value: &serde_json::Value) -> Option<String> {
 fn load_trace(
     trace: Option<&Path>,
     workspace: Option<&Path>,
+    session_id: Option<&str>,
 ) -> Result<(TraceResolutionTarget, PathBuf, ExecutionTrace), InspectCommandError> {
-    let session_trace_ref = workspace.map(resolve_session_trace_ref).transpose()?.flatten();
+    let session_trace_ref = workspace
+        .map(|workspace_path| resolve_session_trace_ref(workspace_path, session_id))
+        .transpose()?
+        .flatten();
     let (target, trace_path) = resolve_trace_path(trace, workspace, session_trace_ref.as_deref())?;
 
     let trace = match target {
@@ -1347,14 +1399,32 @@ fn load_trace(
     Ok((target, trace_path, trace))
 }
 
-fn resolve_session_trace_ref(workspace: &Path) -> Result<Option<String>, InspectCommandError> {
-    match FileSessionStore::for_workspace(workspace).load() {
-        Ok(Some(record)) => Ok(record.latest_trace_ref),
-        Ok(None) => Ok(None),
-        Err(SessionStoreError::InvalidRecord(message)) => Err(InspectCommandError::InvalidSession(
-            format!("active session is invalid: {message}"),
-        )),
-        Err(error) => Err(InspectCommandError::SessionStore(error)),
+fn resolve_session_trace_ref(
+    workspace: &Path,
+    session_id: Option<&str>,
+) -> Result<Option<String>, InspectCommandError> {
+    let store = FileSessionStore::for_workspace(workspace);
+    match session_id {
+        Some(session_id) => match store.load_session(session_id) {
+            Ok(Some(record)) => Ok(record.latest_trace_ref),
+            Ok(None) => Err(InspectCommandError::UnknownSession(session_id.to_string())),
+            Err(SessionStoreError::InvalidRecord(message)) => {
+                Err(InspectCommandError::InvalidSession(format!(
+                    "session `{session_id}` is invalid: {message}"
+                )))
+            }
+            Err(error) => Err(InspectCommandError::SessionStore(error)),
+        },
+        None => match store.load() {
+            Ok(Some(record)) => Ok(record.latest_trace_ref),
+            Ok(None) => Ok(None),
+            Err(SessionStoreError::InvalidRecord(message)) => {
+                Err(InspectCommandError::InvalidSession(format!(
+                    "active session is invalid: {message}"
+                )))
+            }
+            Err(error) => Err(InspectCommandError::SessionStore(error)),
+        },
     }
 }
 
@@ -1724,6 +1794,8 @@ pub enum InspectCommandError {
     MissingLatestTrace,
     #[error("failed to read the active session: {0}")]
     SessionStore(#[from] SessionStoreError),
+    #[error("session `{0}` does not exist")]
+    UnknownSession(String),
     #[error("{0}")]
     InvalidSession(String),
     #[error("failed to read the requested trace: {0}")]
@@ -1765,7 +1837,7 @@ mod tests {
         review_timeline_line, reviewer_line, string_array_field, success_headline, summarize_trace,
         synthesized_in_progress_reason,
     };
-    use crate::adapters::session_store::SessionStoreError;
+    use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
     use crate::adapters::trace_store::{FileTraceStore, TraceStore};
     use crate::domain::guidance::GuidanceGuardianProjection;
     use crate::domain::limits::TerminalCondition;
@@ -1794,11 +1866,11 @@ mod tests {
         let session_error = InspectCommandError::SessionStore(SessionStoreError::Read(
             std::io::Error::other("read failed"),
         ));
-        let session_text = render_error(None, Some(workspace.as_path()), &session_error);
+        let session_text = render_error(None, Some(workspace.as_path()), None, &session_error);
         assert!(session_text.contains("failed to read the active session"), "{session_text}");
 
         let summary_error = InspectCommandError::Summary(TraceSummaryError::MissingTerminalStatus);
-        let summary_text = render_error(None, Some(workspace.as_path()), &summary_error);
+        let summary_text = render_error(None, Some(workspace.as_path()), None, &summary_error);
         assert!(summary_text.contains("failed to summarize the requested trace"), "{summary_text}");
     }
 
@@ -2210,10 +2282,89 @@ mod tests {
         assert_eq!(session_path, PathBuf::from("relative/trace.json"));
 
         let (target, loaded_path, loaded_trace) =
-            super::load_trace(Some(trace_path.as_path()), Some(&workspace)).unwrap();
+            super::load_trace(Some(trace_path.as_path()), Some(&workspace), None).unwrap();
         assert_eq!(target, TraceResolutionTarget::ExplicitTrace);
         assert_eq!(loaded_path, trace_path);
         assert_eq!(loaded_trace.goal, "Inspect trace");
+    }
+
+    #[test]
+    fn resolve_session_trace_ref_prefers_selected_session_without_switching_active_pointer()
+    -> Result<(), String> {
+        let workspace = temp_workspace("boundline-inspect-selected-session");
+        let store = FileSessionStore::for_workspace(&workspace);
+        let active_record = ActiveSessionRecord {
+            session_id: "active-session".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: None,
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Initialized,
+            latest_terminal_reason: None,
+            latest_trace_ref: Some("active/trace.json".to_string()),
+            created_at: 1,
+            updated_at: 1,
+            governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
+            delight_feedback: None,
+        };
+        let selected_record = ActiveSessionRecord {
+            session_id: "selected-session".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: None,
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Initialized,
+            latest_terminal_reason: None,
+            latest_trace_ref: Some("selected/trace.json".to_string()),
+            created_at: 2,
+            updated_at: 2,
+            governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
+            delight_feedback: None,
+        };
+
+        store.persist(&active_record).map_err(|error| error.to_string())?;
+        store.persist_without_select(&selected_record).map_err(|error| error.to_string())?;
+
+        let selected_trace = resolve_session_trace_ref(&workspace, Some("selected-session"))
+            .map_err(|error| error.to_string())?;
+        if selected_trace.as_deref() != Some("selected/trace.json") {
+            return Err(format!("expected selected trace ref, got {selected_trace:?}"));
+        }
+
+        let active_trace =
+            resolve_session_trace_ref(&workspace, None).map_err(|error| error.to_string())?;
+        if active_trace.as_deref() != Some("active/trace.json") {
+            return Err(format!("expected active trace ref, got {active_trace:?}"));
+        }
+
+        let active_after = store
+            .load()
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| "expected active session record".to_string())?;
+        if active_after.session_id != active_record.session_id {
+            return Err(format!(
+                "expected active session {} to remain selected, got {}",
+                active_record.session_id, active_after.session_id
+            ));
+        }
+
+        Ok(())
     }
 
     #[test]
@@ -2286,7 +2437,7 @@ mod tests {
         .unwrap();
 
         assert!(matches!(
-            resolve_session_trace_ref(&workspace).unwrap_err(),
+            resolve_session_trace_ref(&workspace, None).unwrap_err(),
             InspectCommandError::InvalidSession(message) if message.contains("active session is invalid")
         ));
     }

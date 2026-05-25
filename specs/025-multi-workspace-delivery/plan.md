@@ -41,7 +41,7 @@ modified Rust files, clippy cleanup, and formatting.
 
 - Delivery identity: Explain how this feature directly improves bounded engineering task delivery.
 - Delivery-first scope: Confirm execution, orchestration, decomposition, or validation work is prioritized ahead of optimization or polish.
-- Primary workflow: State whether the main operator path is session-native (`start -> capture -> plan -> run -> status -> next -> inspect`) and identify any explicit compatibility path that remains available.
+- Primary workflow: State whether the main operator path is session-native (`goal -> plan -> run -> status -> next -> inspect`) and identify any explicit compatibility path that remains available.
 - Bounded execution: Identify explicit start conditions, terminal conditions, and max step or retry limits.
 - Stateful execution: Describe shared task context, read and write points, and justify any stateless segment.
 - Mutable planning: Describe initial planning plus replanning, step insertion, or replacement behavior.

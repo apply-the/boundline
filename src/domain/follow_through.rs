@@ -87,7 +87,7 @@ impl FollowThroughProjection {
                 next_action: view
                     .next_command
                     .clone()
-                    .or_else(|| Some("boundline capture --goal <narrower goal>".to_string())),
+                    .or_else(|| Some("boundline goal --goal <narrower goal>".to_string())),
                 stop_reason: view
                     .context_staleness_reason
                     .clone()
@@ -298,6 +298,7 @@ mod tests {
             clarification_headline: None,
             clarification_prompt: None,
             clarification_missing_fields: None,
+            clarification_questions: None,
             requested_governance_runtime: None,
             requested_governance_risk: None,
             requested_governance_zone: None,
@@ -322,6 +323,9 @@ mod tests {
             current_step_index: None,
             latest_status: SessionStatus::Running,
             execution_path: None,
+            goal_brief_ref: None,
+            session_plan_brief_ref: None,
+            run_brief_ref: None,
             latest_trace_ref: None,
             latest_decision_status: Some("failed".to_string()),
             latest_decision_target: Some("verify-fix-add".to_string()),
@@ -372,6 +376,7 @@ mod tests {
             governance_lifecycle_opt_out: None,
             governance_lifecycle_mode_selection: None,
             governance_lifecycle_selected_mode: None,
+            governance_lifecycle_selected_mode_sequence: None,
             latest_reasoning_profile: None,
             project_scale_path: None,
             project_scale_current_stage: None,
@@ -467,7 +472,7 @@ mod tests {
         assert_eq!(context_projection.evidence_source, Some("session:context_pack".to_string()));
         assert_eq!(
             context_projection.next_action,
-            Some("boundline capture --goal <narrower goal>".to_string())
+            Some("boundline goal --goal <narrower goal>".to_string())
         );
         assert_eq!(context_projection.stop_reason, Some("trace snapshot is stale".to_string()));
     }
@@ -543,7 +548,7 @@ mod tests {
                 ),
                 ..TraceSummaryView::default()
             },
-            Some("boundline capture --goal <narrower goal>"),
+            Some("boundline goal --goal <narrower goal>"),
         );
         assert_eq!(
             context_projection.guidance,

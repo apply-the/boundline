@@ -26,7 +26,7 @@ DirectRunBootstrapRequest
 - `compatibility_requested` is the only valid reason to choose the subordinate
   compatibility route.
 - `active_session_present` must not be ignored when the existing session has
-  meaningful captured, planned, or in-flight work.
+  meaningful recorded, planned, or in-flight work.
 
 ### Direct Run Route Choice
 

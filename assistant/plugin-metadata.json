@@ -2,7 +2,7 @@
   "name": "boundline",
   "displayName": "Boundline Assistant Support",
   "version": "0.64.0",
-  "description": "Local delivery orchestrator for bounded engineering work",
+  "description": "CLI-authoritative assistant support for bounded engineering work",
   "author": {
     "name": "Apply The",
     "url": "https://github.com/apply-the"
@@ -19,14 +19,13 @@
     "ai-assisted-software-delivery"
   ],
   "positioning": [
-    "Local delivery orchestrator for bounded engineering work",
+    "CLI-authoritative assistant support for bounded engineering work",
     "Plan, act, verify, trace",
     "Turns bounded engineering goals into verified workspace changes",
     "Session-native runtime for AI-assisted software delivery"
   ],
   "defaultPalette": [
-    "/boundline:start",
-    "/boundline:capture",
+    "/boundline:goal",
     "/boundline:plan",
     "/boundline:run",
     "/boundline:status",
@@ -46,12 +45,8 @@
   ],
   "capabilities": [
     {
-      "id": "/boundline:start",
-      "label": "start"
-    },
-    {
-      "id": "/boundline:capture",
-      "label": "capture"
+      "id": "/boundline:goal",
+      "label": "goal"
     },
     {
       "id": "/boundline:plan",
@@ -124,6 +119,8 @@
   "requiredPaths": [
     ".claude-plugin/manifest.json",
     ".claude-plugin/commands.json",
+    ".antigravity-plugin/manifest.json",
+    ".antigravity-plugin/commands.json",
     ".codex-plugin/plugin.json",
     ".cursor-plugin/manifest.json",
     ".cursor-plugin/commands.json",
@@ -159,6 +156,12 @@
       "displayName": "Copilot prompt pack",
       "packagePath": ".copilot-prompts",
       "manifestPath": ".copilot-prompts/pack.json"
+    },
+    {
+      "id": "antigravity",
+      "displayName": "Antigravity",
+      "packagePath": ".antigravity-plugin",
+      "manifestPath": ".antigravity-plugin/manifest.json"
     }
   ],
   "hostSupportScope": "supportedHosts lists packaged repo-local assets; supportModes declares whether each host is repo-local-full, copy-ready-assets, or manual-fallback",
@@ -167,14 +170,14 @@
     "codex": "repo-local-full",
     "cursor": "copy-ready-assets",
     "copilot": "repo-local-full",
-    "gemini": "manual-fallback"
+    "antigravity": "repo-local-full"
   },
   "supportModeNotes": {
     "claude": "Repository-managed command assets expose the shared Boundline session workflow and delight follow-through surfaces directly.",
     "codex": "Repository-managed command assets expose the shared Boundline session workflow and delight follow-through surfaces directly.",
     "cursor": "Cursor remains in copy-ready-assets support mode: assets are copy-ready rather than self-registering, installation details remain environment-specific, and the CLI stays authoritative.",
     "copilot": "Repository-managed prompt assets expose the Boundline delight surface directly even though global bootstrap installation remains a manual fallback.",
-    "gemini": "Gemini remains an explicit CLI-first manual fallback until a richer parity path is intentionally promoted."
+    "antigravity": "Repository-managed Antigravity repo-local command assets expose the shared Boundline session workflow directly after `boundline init --assistant antigravity`, while global bootstrap remains a manual fallback."
   },
   "copilot": {
     "manifestSupported": false,

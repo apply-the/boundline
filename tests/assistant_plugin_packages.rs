@@ -116,7 +116,10 @@ fn metadata_paths_and_versions_are_aligned() {
     let metadata = read_json("assistant/plugin-metadata.json");
 
     assert_eq!(metadata["version"], version);
-    assert_eq!(metadata["description"], "Local delivery orchestrator for bounded engineering work");
+    assert_eq!(
+        metadata["description"],
+        "CLI-authoritative assistant support for bounded engineering work"
+    );
 
     for path in string_array(&metadata, "requiredPaths").expect("required paths parse") {
         assert!(root.join(path).exists(), "shared metadata path is missing: {path}");

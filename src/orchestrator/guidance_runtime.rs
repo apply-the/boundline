@@ -357,7 +357,7 @@ pub fn execute_guardians_for_phase(
         let evaluation = if guardian_kind_requires_route(guardian.kind) {
             match semantic_route_availability(workspace_ref, request.phase) {
                 SemanticRouteAvailability::Available(slot) => {
-                    evaluate_semantic_guardian(guardian, request, slot)
+                    evaluate_semantic_guardian(guardian, slot)
                 }
                 SemanticRouteAvailability::Unavailable { slot, reason } => {
                     GuardianEvaluation::Degraded { route_slot: slot, reason }
@@ -1087,40 +1087,15 @@ fn evaluate_deterministic_guardian(
 
 fn evaluate_semantic_guardian(
     guardian: &GuardianCapability,
-    request: &GuardianExecutionRequest,
     route_slot: RouteSlot,
 ) -> GuardianEvaluation {
-    let summary = format!(
-        "semantic review staged on {} with a {} guardian budget of {}s",
-        route_slot.as_str(),
-        guardian.kind.as_str(),
-        GUARDIAN_TIMEOUT.as_secs()
-    );
-    GuardianEvaluation::Completed {
-        route_slot: Some(route_slot),
-        new_findings: vec![GuardianFinding {
-            finding_id: format!("{}-semantic-review", guardian.guardian_id),
-            guardian_id: guardian.guardian_id.clone(),
-            rule_id: guardian
-                .rules
-                .first()
-                .cloned()
-                .unwrap_or_else(|| "semantic_review".to_string()),
-            disposition: guardian.severity_floor,
-            summary: format!("{} reviewed {}", guardian.title, request.target_ref),
-            evidence_refs: request.evidence_refs.clone(),
-            confidence: FindingConfidence::Medium,
-            recommended_action: format!(
-                "review {} against {} via {}",
-                request.target_ref,
-                guardian.title.to_ascii_lowercase(),
-                route_slot.as_str()
-            ),
-            authority_source: guardian.authority_source,
-            source_ref: guardian.source_ref.clone(),
-            phase: request.phase,
-        }],
-        summary,
+    GuardianEvaluation::Degraded {
+        route_slot,
+        reason: format!(
+            "semantic guardian {} requires real provider execution on route {}; placeholder semantic review output is disabled",
+            guardian.guardian_id,
+            route_slot.as_str()
+        ),
     }
 }
 
@@ -1357,9 +1332,9 @@ mod tests {
         GuardianEvaluation, SemanticRouteAvailability, blocking_outcome_text,
         compare_authority_precedence, discover_optional_canon_guidance,
         discover_workspace_guardians, discover_workspace_guidance, display_relative_path,
-        evaluate_deterministic_guardian, guardian_changed_files, guardian_findings_summary,
-        guardian_kind_requires_route, guidance_relevance_score, has_blocking_findings,
-        markdown_title, normalize_finding_suffix, normalized_identifier,
+        evaluate_deterministic_guardian, evaluate_semantic_guardian, guardian_changed_files,
+        guardian_findings_summary, guardian_kind_requires_route, guidance_relevance_score,
+        has_blocking_findings, markdown_title, normalize_finding_suffix, normalized_identifier,
         order_guardians_for_execution, planning_runtime_evidence, resolve_capabilities_for_phase,
         resolve_guidance_candidates, route_slot_for_phase, semantic_route_availability,
         should_short_circuit_semantic_guards, skipped_source_line, title_from_identifier,
@@ -1606,6 +1581,20 @@ mod tests {
         assert_eq!(normalize_finding_suffix("src/lib.rs"), "src-lib-rs");
         assert_eq!(route_slot_for_phase(CapabilityPhase::Architecture), Some(RouteSlot::Planning));
         assert_eq!(route_slot_for_phase(CapabilityPhase::Review), Some(RouteSlot::Review));
+    }
+
+    #[test]
+    fn semantic_guardian_requires_real_provider_execution_or_degrades() {
+        let semantic_guardian =
+            guardian("semantic_guard", GuardianKind::Llm, GuidanceAuthoritySource::BuiltIn);
+
+        match evaluate_semantic_guardian(&semantic_guardian, RouteSlot::Verification) {
+            GuardianEvaluation::Degraded { route_slot, reason } => {
+                assert_eq!(route_slot, RouteSlot::Verification);
+                assert!(reason.contains("real provider execution"));
+            }
+            other => panic!("expected semantic guardian degradation, got {other:?}"),
+        }
     }
 
     #[test]
@@ -1998,7 +1987,7 @@ mod tests {
         let mut supported = RoutingConfig::default();
         supported.set_slot(
             RouteSlot::Verification,
-            ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-5.4".to_string() },
+            ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-4o".to_string() },
         );
         supported.set_runtime_capability(
             RuntimeKind::Codex,
@@ -2021,7 +2010,7 @@ mod tests {
         let mut unsupported = RoutingConfig::default();
         unsupported.set_slot(
             RouteSlot::Verification,
-            ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-5.4".to_string() },
+            ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-4o".to_string() },
         );
         unsupported.set_runtime_capability(
             RuntimeKind::Codex,

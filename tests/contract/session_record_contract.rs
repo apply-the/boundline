@@ -4,9 +4,9 @@ use crate::workspace_fixture::{run_boundline_in, temp_fixture_workspace, termina
 use boundline::domain::session::{ActiveSessionRecord, SessionStatus};
 
 #[test]
-fn start_creates_a_valid_workspace_scoped_session_record() {
+fn goal_creates_a_valid_workspace_scoped_session_record() {
     let workspace = temp_fixture_workspace("boundline-session-contract");
-    let output = run_boundline_in(&workspace, &["start"]);
+    let output = run_boundline_in(&workspace, &["goal", "--goal", "Fix the failing add test"]);
     let text = terminal_text(&output);
     let session_path = workspace.join(".boundline").join("session.json");
 
@@ -18,7 +18,7 @@ fn start_creates_a_valid_workspace_scoped_session_record() {
     record.validate().unwrap();
 
     assert_eq!(record.workspace_ref, workspace.canonicalize().unwrap().to_string_lossy());
-    assert_eq!(record.latest_status, SessionStatus::Initialized);
-    assert_eq!(record.goal, None);
+    assert_eq!(record.latest_status, SessionStatus::GoalCaptured);
+    assert_eq!(record.goal.as_deref(), Some("Fix the failing add test"));
     assert_eq!(record.active_task, None);
 }

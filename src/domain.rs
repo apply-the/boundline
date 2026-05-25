@@ -1,9 +1,8 @@
 pub mod brief;
 pub mod checkpoint;
 pub mod cluster;
-pub mod context_intelligence;
 pub mod configuration;
-pub mod dashboard;
+pub mod context_intelligence;
 pub mod decision;
 pub mod distribution;
 pub mod domain_templates;
@@ -23,6 +22,7 @@ pub mod project_memory;
 pub mod review;
 pub mod routing_decision;
 pub mod session;
+pub mod stage_council;
 pub mod step;
 pub mod task;
 pub mod task_context;

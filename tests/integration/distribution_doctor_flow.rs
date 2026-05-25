@@ -6,7 +6,7 @@ use std::process::Command;
 use boundline::SUPPORTED_CANON_VERSION;
 use uuid::Uuid;
 
-use crate::workspace_fixture::terminal_text;
+use crate::workspace_fixture::{target_test_cwd, target_test_dir, terminal_text};
 
 const FULL_CAPABILITIES: &str = include_str!("../fixtures/canon_capabilities_full.json");
 const MISSING_OPERATION_CAPABILITIES: &str =
@@ -14,13 +14,19 @@ const MISSING_OPERATION_CAPABILITIES: &str =
 const MISSING_MODE_CAPABILITIES: &str =
     include_str!("../fixtures/canon_capabilities_missing_mode.json");
 
+fn isolated_homebrew_prefix() -> PathBuf {
+    target_test_dir(&format!("boundline-doctor-homebrew-disabled-{}", Uuid::new_v4()))
+}
+
 #[test]
 fn doctor_install_reports_a_ready_install_when_canon_matches() {
     let canon_dir = fake_canon_directory(SUPPORTED_CANON_VERSION);
+    let homebrew_prefix = isolated_homebrew_prefix();
     let output = Command::new(env!("CARGO_BIN_EXE_boundline"))
         .args(["doctor", "--install"])
         .env("PATH", &canon_dir)
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .env("HOMEBREW_PREFIX", &homebrew_prefix)
+        .current_dir(target_test_cwd("boundline-doctor-install-cwd"))
         .output()
         .unwrap();
     let text = terminal_text(&output);
@@ -40,10 +46,12 @@ fn doctor_install_reports_missing_canon_governance_operation() {
         SUPPORTED_CANON_VERSION,
         MISSING_OPERATION_CAPABILITIES,
     );
+    let homebrew_prefix = isolated_homebrew_prefix();
     let output = Command::new(env!("CARGO_BIN_EXE_boundline"))
         .args(["doctor", "--install"])
         .env("PATH", &canon_dir)
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .env("HOMEBREW_PREFIX", &homebrew_prefix)
+        .current_dir(target_test_cwd("boundline-doctor-missing-op-cwd"))
         .output()
         .unwrap();
     let text = terminal_text(&output);
@@ -58,10 +66,12 @@ fn doctor_install_reports_missing_canon_governance_operation() {
 fn doctor_install_reports_missing_canon_mode() {
     let canon_dir =
         fake_canon_directory_with_capabilities(SUPPORTED_CANON_VERSION, MISSING_MODE_CAPABILITIES);
+    let homebrew_prefix = isolated_homebrew_prefix();
     let output = Command::new(env!("CARGO_BIN_EXE_boundline"))
         .args(["doctor", "--install"])
         .env("PATH", &canon_dir)
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .env("HOMEBREW_PREFIX", &homebrew_prefix)
+        .current_dir(target_test_cwd("boundline-doctor-missing-mode-cwd"))
         .output()
         .unwrap();
     let text = terminal_text(&output);
@@ -75,10 +85,12 @@ fn doctor_install_reports_missing_canon_mode() {
 #[test]
 fn doctor_install_keeps_workspace_doctor_follow_up_visible() {
     let canon_dir = fake_canon_directory(SUPPORTED_CANON_VERSION);
+    let homebrew_prefix = isolated_homebrew_prefix();
     let output = Command::new(env!("CARGO_BIN_EXE_boundline"))
         .args(["doctor", "--install"])
         .env("PATH", &canon_dir)
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .env("HOMEBREW_PREFIX", &homebrew_prefix)
+        .current_dir(target_test_cwd("boundline-doctor-follow-up-cwd"))
         .output()
         .unwrap();
     let text = terminal_text(&output);
@@ -96,9 +108,7 @@ fn fake_canon_directory(version: &str) -> PathBuf {
 }
 
 fn fake_canon_directory_with_capabilities(version: &str, capabilities: &str) -> PathBuf {
-    let directory =
-        std::env::temp_dir().join(format!("boundline-distribution-flow-{}", Uuid::new_v4()));
-    fs::create_dir_all(&directory).unwrap();
+    let directory = target_test_dir(&format!("boundline-distribution-flow-{}", Uuid::new_v4()));
     let canon = directory.join("canon");
     fs::write(
         &canon,

@@ -2,8 +2,8 @@
 
 ## Purpose
 
-This document captures the next Boundline roadmap after the delivered
-interactive dashboard release and normalizes it around Boundline ownership.
+This document captures the next Boundline roadmap and normalizes it around
+Boundline ownership.
 
 Canon remains a governed knowledge and packet authority. Boundline owns runtime
 movement, inspection, admission control, execution boundaries, guidance,
@@ -25,7 +25,8 @@ a companion dependency that Boundline consumes through stable contracts.
 | A2 | External Capability Provider Protocol | New architecture feature | Boundline-owned permissioned provider contract before one-off adapters, including open-model adapters. |
 | A3 | Evals And Runtime Observability | New quality layer | Local eval corpus, JSONL trace export, and regression checks for runtime behavior. |
 | A4 | Boundline Help-Next And Documentation Architecture | Operator UX feature | `boundline help-next`, state-aware docs links, and Diataxis-style Boundline docs. |
-| A5 | Guidance Catalog Operational Hardening | Extend delivered S2.1/S055 work | Stronger selective activation, skipped-guidance explanations, and budget admission. |
+| A5 | Constitution Command And Standards Surface | New planning and standards feature | Add `boundline constitution create` and `boundline constitution update` as follow-on commands that create repo-visible standards, support scoped principles, and later let planning or status remind operators when no constitution exists. This remains a follow-up to planning-UX work and is not scaffolded by `init`. |
+| A6 | Guidance Catalog Operational Hardening | Extend delivered S2.1/S055 work | Stronger selective activation, skipped-guidance explanations, and budget admission. |
 | B1 | Review Council Hardening | Extend delivered S3/S056 work | Make councils more measurable, cost-bounded, and tied to findings and zones. |
 | B2 | Adaptive Governance Calibration Hardening | Extend delivered S4/S057 work | Promote controls from advisory to catch, rule, or hook based on evidence. |
 | B3 | Sandboxed Execution And Secret Inheritance | New safety feature | Local sandbox modes, write scopes, secret handles, artifact capture, commit/rollback. |
@@ -167,6 +168,30 @@ Boundline should own:
 - Boundline docs focused on governed movement
 
 Canon help and Canon mode documentation remain Canon-owned companion work.
+
+### Constitution Command And Standards Surface
+
+This is a follow-up feature after planning-trust hardening, not part of the
+current planning UX slice.
+
+V1 should support:
+
+- `boundline constitution create`
+- `boundline constitution update`
+- scoped principles rather than one monolithic policy blob
+- repo-visible standards that planning and status can reference later
+- later reminder behavior when no constitution exists
+
+Hard boundaries:
+
+- `init` must not scaffold the constitution automatically
+- the constitution command must not become a second governance runtime
+- Canon may consume constitution outputs later, but Boundline owns the command
+  surface and workspace behavior
+  
+The first planning-UX slice should only reserve the roadmap slot for this work
+and keep current status or planning output neutral until the constitution
+feature actually ships.
 
 ### Sandboxed Execution And Secret Inheritance
 

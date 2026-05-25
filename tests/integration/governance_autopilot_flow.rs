@@ -8,9 +8,8 @@ use crate::workspace_fixture::{
 };
 
 fn bootstrap_bug_fix(workspace: &Path) {
-    assert_eq!(run_boundline_in(workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(workspace, &["capture", "--goal", "Fix the failing checkout flow"])
+        run_boundline_in(workspace, &["goal", "--goal", "Fix the failing checkout flow"])
             .status
             .code(),
         Some(0)
@@ -20,14 +19,10 @@ fn bootstrap_bug_fix(workspace: &Path) {
 }
 
 fn bootstrap_change(workspace: &Path) {
-    assert_eq!(run_boundline_in(workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(
-            workspace,
-            &["capture", "--goal", "Update the checkout confirmation copy"]
-        )
-        .status
-        .code(),
+        run_boundline_in(workspace, &["goal", "--goal", "Update the checkout confirmation copy"])
+            .status
+            .code(),
         Some(0)
     );
     assert_eq!(run_boundline_in(workspace, &["flow", "change"]).status.code(), Some(0));
@@ -83,7 +78,12 @@ fn governance_autopilot_flow_selects_mode_and_refreshes_after_approval() {
         ),
         "{run_text}"
     );
-    assert!(run_text.contains("execution_condition: waiting - governance approval is still pending for bug-fix:investigate"), "{run_text}");
+    assert!(
+        run_text.contains(
+            "execution_condition: waiting - governance approval is still pending before execution can continue"
+        ),
+        "{run_text}"
+    );
 
     let status = run_boundline_in(&workspace, &["status"]);
     let status_text = terminal_text(&status);
@@ -109,7 +109,11 @@ fn governance_autopilot_flow_selects_mode_and_refreshes_after_approval() {
         "{refreshed_text}"
     );
 
-    let session = fs::read_to_string(workspace.join(".boundline/session.json")).unwrap();
+    let session_id = fs::read_to_string(workspace.join(".boundline/active-session")).unwrap();
+    let session = fs::read_to_string(
+        workspace.join(format!(".boundline/sessions/{}/session.json", session_id.trim())),
+    )
+    .unwrap();
     assert!(
         session.contains("\"authority_governance\""),
         "baseline authority contract should persist after approval refresh: {session}"
@@ -243,7 +247,9 @@ fn governance_autopilot_flow_refreshes_security_assessment_approval_through_stat
         "{run_text}"
     );
     assert!(
-        run_text.contains("run: governance approval is still pending for bug-fix:verify"),
+        run_text.contains(
+            "execution_condition: waiting - governance approval is still pending before execution can continue"
+        ),
         "{run_text}"
     );
 
@@ -279,9 +285,8 @@ fn governance_autopilot_flow_rejects_unsupported_future_canon_mode_configuration
     let workspace =
         temp_canon_security_assessment_workspace("boundline-governance-unsupported-security-mode");
     rewrite_governance_canon_mode(&workspace, "supply-chain-analysis");
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(&workspace, &["capture", "--goal", "Fix the failing checkout flow"])
+        run_boundline_in(&workspace, &["goal", "--goal", "Fix the failing checkout flow"])
             .status
             .code(),
         Some(0)

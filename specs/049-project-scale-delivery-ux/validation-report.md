@@ -7,7 +7,7 @@ Quickstart evidence:
 - Global assistant bootstrap: `boundline assistant install --host codex --scope user` reported `assistant_global_package`.
 - Uninitialized workspace: `status` and `continue` reported `workspace_initialized: false` and did not infer chat state.
 - Repo-local init: `boundline init --assistant codex` generated repo-local assistant setup and JSON status reported `workspace_initialized: true` with `boundline start` guidance.
-- Project-scale path: `start -> capture -> plan` for "Build a customer onboarding capability with audit logging" persisted `project_scale_path: discovery -> requirements -> system-shaping -> architecture -> backlog -> implementation -> verification -> pr-review`.
+- Project-scale path: `goal -> plan` for "Build a customer onboarding capability with audit logging" persisted `project_scale_path: discovery -> requirements -> system-shaping -> architecture -> backlog -> implementation -> verification -> pr-review`.
 - Governed stages: `boundline govern --mode architecture`, `security-assessment`, and `pr-review` returned `govern: staged`.
 - Voting boundary: high-risk architecture persisted `latest_voting_trigger: high_impact_architecture`.
 

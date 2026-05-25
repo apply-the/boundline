@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use boundline::adapters::session_store::{FileSessionStore, SessionStore};
-use boundline::cli::session::{execute_capture, execute_plan, execute_start};
+use boundline::cli::session::{execute_goal, execute_plan};
 use boundline::domain::context_intelligence::{
     HybridOutcome, RemoteTransmissionPolicyState, RetrievalMatchOrigin, RetrievalMode,
     SemanticCapabilityState, SemanticPolicyState,
@@ -19,18 +19,9 @@ fn write_local_context_workspace(prefix: &str) -> PathBuf {
 fn advanced_context_consumer_contract_persists_local_only_projection_shape() {
     let workspace = write_local_context_workspace("boundline-context-consumer-contract");
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
-        Some(&workspace),
-        Some("fix the failing add path"),
-        &[],
-        None,
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+    execute_goal(Some(&workspace), Some("fix the failing add path"), &[], None, None, None, None)
+        .unwrap();
+    execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
 
     let session = FileSessionStore::for_workspace(&workspace).load().unwrap().unwrap();
     let advanced_context = session

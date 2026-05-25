@@ -50,7 +50,7 @@ fn workflow_list_surfaces_names_metadata_and_invocation_guidance() {
     );
     assert!(
         text.contains(
-            "stages: discovery -> requirements -> domain-language -> domain-model -> system-shaping -> architecture -> backlog -> implementation -> verification -> pr-review"
+            "stages: discovery -> requirements -> system-shaping -> architecture -> backlog -> implementation -> verification -> pr-review"
         ),
         "{text}"
     );

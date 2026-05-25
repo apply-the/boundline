@@ -2,8 +2,7 @@
   "commandsRef": "assistant/commands/session-workflow.json",
   "host": "claude-code",
   "bindings": [
-    {"id": "/boundline:start", "commandRef": "/boundline:start"},
-    {"id": "/boundline:capture", "commandRef": "/boundline:capture"},
+    {"id": "/boundline:goal", "commandRef": "/boundline:goal"},
     {"id": "/boundline:plan", "commandRef": "/boundline:plan"},
     {"id": "/boundline:run", "commandRef": "/boundline:run"},
     {"id": "/boundline:status", "commandRef": "/boundline:status"},

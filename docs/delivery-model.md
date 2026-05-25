@@ -34,19 +34,18 @@ Update context: persist session state, trace events, checkpoint references,
 Canon packet refs, voting refs, next command, and any clarification or approval
 requirement.
 
-## Operator Dashboard
+## Operator Surfaces
 
-The dashboard presents this loop as a terminal surface without changing the
-loop. Its first screen is a projection of the active workspace, session, plan,
-current stage, current step, latest condition, timeline, and next bounded
-action. Deeper panels expose the available evidence, findings, checkpoints,
-diagnostics, and read-only governed references already known to Boundline.
+The CLI and generated assistant command packs present this loop without
+changing it. `status`, `next`, and `inspect` are projections of the active
+workspace, session, plan, current stage, current step, latest condition,
+timeline, and next bounded action.
 
-Actions from the dashboard are valid only when they map to existing runtime
+Any assistant narration is valid only when it maps to existing runtime
 boundaries such as confirmation, rejection with reason, replanning, recovery,
-launch, or continued bounded execution. When the terminal or workspace is not
-ready for interaction, the dashboard degrades to a reason plus a normal command
-fallback instead of inventing a dashboard-only path.
+launch, or continued bounded execution. When the workspace is not ready,
+Boundline degrades to a reason plus a normal command fallback instead of
+inventing a chat-only path.
 
 ## Stop Rules
 

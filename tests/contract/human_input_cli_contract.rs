@@ -4,10 +4,10 @@ use boundline::cli::{Cli, DeveloperCommand};
 use clap::Parser;
 
 #[test]
-fn capture_accepts_brief_only_invocation_with_multiple_briefs() {
+fn goal_accepts_brief_only_invocation_with_multiple_briefs() {
     let cli = Cli::try_parse_from([
         "boundline",
-        "capture",
+        "goal",
         "--workspace",
         "/tmp/ws",
         "--brief",
@@ -17,20 +17,20 @@ fn capture_accepts_brief_only_invocation_with_multiple_briefs() {
     ])
     .unwrap();
     match cli.command {
-        DeveloperCommand::Capture { workspace, goal, brief, .. } => {
+        Some(DeveloperCommand::Goal { workspace, goal, brief, .. }) => {
             assert_eq!(workspace, Some(PathBuf::from("/tmp/ws")));
             assert!(goal.is_none(), "goal should be optional when --brief is provided");
             assert_eq!(brief, vec![PathBuf::from("docs/brief.md"), PathBuf::from("docs/extra.md")]);
         }
-        other => panic!("expected Capture, got {other:?}"),
+        other => panic!("expected Goal, got {other:?}"),
     }
 }
 
 #[test]
-fn capture_accepts_goal_with_a_single_brief() {
+fn goal_accepts_goal_with_a_single_brief() {
     let cli = Cli::try_parse_from([
         "boundline",
-        "capture",
+        "goal",
         "--workspace",
         ".",
         "--goal",
@@ -40,11 +40,11 @@ fn capture_accepts_goal_with_a_single_brief() {
     ])
     .unwrap();
     match cli.command {
-        DeveloperCommand::Capture { goal, brief, .. } => {
+        Some(DeveloperCommand::Goal { goal, brief, .. }) => {
             assert_eq!(goal.as_deref(), Some("Fix the bug"));
             assert_eq!(brief, vec![PathBuf::from("brief.md")]);
         }
-        other => panic!("expected Capture, got {other:?}"),
+        other => panic!("expected Goal, got {other:?}"),
     }
 }
 
@@ -53,7 +53,7 @@ fn run_accepts_brief_only_invocation() {
     let cli = Cli::try_parse_from(["boundline", "run", "--workspace", ".", "--brief", "brief.md"])
         .unwrap();
     match cli.command {
-        DeveloperCommand::Run { goal, brief, .. } => {
+        Some(DeveloperCommand::Run { goal, brief, .. }) => {
             assert!(goal.is_none());
             assert_eq!(brief, vec![PathBuf::from("brief.md")]);
         }
@@ -62,15 +62,15 @@ fn run_accepts_brief_only_invocation() {
 }
 
 #[test]
-fn capture_without_goal_or_brief_still_parses_clap() {
+fn goal_without_goal_or_brief_still_parses_clap() {
     // Validation is performed at session level; clap itself accepts the bare invocation
     // because both --goal and --brief are optional.
-    let cli = Cli::try_parse_from(["boundline", "capture", "--workspace", "."]).unwrap();
+    let cli = Cli::try_parse_from(["boundline", "goal", "--workspace", "."]).unwrap();
     match cli.command {
-        DeveloperCommand::Capture { goal, brief, .. } => {
+        Some(DeveloperCommand::Goal { goal, brief, .. }) => {
             assert!(goal.is_none());
             assert!(brief.is_empty());
         }
-        other => panic!("expected Capture, got {other:?}"),
+        other => panic!("expected Goal, got {other:?}"),
     }
 }

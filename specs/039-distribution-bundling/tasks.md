@@ -40,7 +40,7 @@ bounded, inspectable value independently.
 
 **Goal**: Let supported macOS and Windows users install Boundline from an official channel, verify the paired Canon state, and reach the first session-native path without a source checkout.
 
-**Independent Test**: Install from the official channel metadata or fixture, run `boundline doctor --install`, and verify the CLI plus Canon pairing state before entering `doctor -> start -> capture -> plan -> run`.
+**Independent Test**: Install from the official channel metadata or fixture, run `boundline doctor --install`, and verify the CLI plus Canon pairing state before entering `doctor -> goal -> plan -> run`.
 
 ### Tests for User Story 1
 

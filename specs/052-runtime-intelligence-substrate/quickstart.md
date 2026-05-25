@@ -5,7 +5,7 @@
 Run:
 
 ```bash
-boundline capture --goal "repair the bounded failing test"
+boundline goal --goal "repair the bounded failing test"
 ```
 
 Expected result:

@@ -244,6 +244,7 @@ impl SessionRuntime {
                 task.plan.revision
             ),
             previous_governance_attempt_id: None,
+            stage_council: None,
             packet_ref: None,
             decision_ref: decision.as_ref().map(|decision| decision.decision_id.clone()),
             blocked_reason: Some(block.reason.clone()),
@@ -283,7 +284,7 @@ impl SessionRuntime {
                 "latest_governance_approval_provenance": projection.approval_provenance.clone(),
             }),
         );
-        let trace_location = self.persist_trace(trace)?;
+        let trace_location = self.persist_trace(&session.session_id, trace)?;
         session.latest_trace_ref = Some(trace_location);
         session.updated_at = current_timestamp_millis();
 
@@ -315,7 +316,7 @@ impl SessionRuntime {
         activation: &ProfileActivationRecord,
     ) -> Result<(), SessionRuntimeError> {
         record_reasoning_profile_events(trace, step_id, plan_revision, activation);
-        let trace_location = self.persist_trace(trace)?;
+        let trace_location = self.persist_trace(&session.session_id, trace)?;
         session.latest_status = SessionStatus::Running;
         session.latest_terminal_reason = None;
         session.latest_trace_ref = Some(trace_location);
@@ -951,6 +952,7 @@ pub(super) fn store_latest_reasoning_profile(
         stage_records: Vec::new(),
         accumulated_context: Vec::new(),
         terminal_reason: None,
+        planning_input_fingerprint: None,
     });
 }
 

@@ -38,7 +38,7 @@ coverage above 95% for modified Rust files.
 
 - **PASS** Delivery identity: The slice directly changes how Boundline derives and controls bounded engineering work by making planning evidence-driven and operator-confirmed. See Summary and Technical Context.
 - **PASS** Delivery-first scope: The plan prioritizes planning, confirmation, replanning, bounded execution, and operator follow-through ahead of optimization or polish. See Summary, Technical Context, and research decisions.
-- **PASS** Primary workflow: The main operator path remains session-native `start -> capture -> plan -> run -> status -> next -> inspect`; explicit compatibility follow-up remains available but subordinate and trace-authoritative. See Summary, Technical Context, quickstart, and contracts.
+- **PASS** Primary workflow: The main operator path remains session-native `goal -> plan -> run -> status -> next -> inspect`; explicit compatibility follow-up remains available but subordinate and trace-authoritative. See Summary, Technical Context, quickstart, and contracts.
 - **PASS** Bounded execution: The design keeps one active proposal or replan revision at a time, preserves existing session/run limits, and requires explicit confirmation or explicit stop. See Technical Context, research, and contracts.
 - **PASS** Stateful execution: Planning inference, proposal confirmation state, replan lineage, and workflow guardrails remain persisted in goal-plan/session and trace state. See Summary, data model, and contracts.
 - **PASS** Mutable planning: The plan explicitly supports proposal supersession and bounded replanning when new evidence invalidates the prior shape. See Summary, research, and data model.

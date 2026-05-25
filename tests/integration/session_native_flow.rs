@@ -9,9 +9,7 @@ use boundline::adapters::session_store::{FileSessionStore, SessionStore};
 use boundline::adapters::tool::FnToolAdapter;
 use boundline::adapters::trace_store::FileTraceStore;
 use boundline::cli::inspect::execute_inspect;
-use boundline::cli::session::{
-    execute_capture, execute_plan, execute_run, execute_start, execute_status,
-};
+use boundline::cli::session::{execute_goal, execute_plan, execute_run, execute_status};
 use boundline::domain::configuration::{
     CapabilityState, ConfigFile, EffortFallbackPolicy, EffortLevel, ModelRoute, RouteSlot,
     RoutingConfig, RuntimeCapabilityProfile, RuntimeKind, SlotEffortPolicy,
@@ -288,10 +286,8 @@ fn blocked_native_run_surfaces_delegation_across_status_and_inspect() {
     );
     FileConfigStore::for_workspace(&ws).save_local(&config).unwrap();
 
-    execute_start(Some(&ws)).unwrap();
-    execute_capture(Some(&ws), Some("fix the failing add test"), &[], None, None, None, None)
-        .unwrap();
-    let plan = execute_plan(Some(&ws), Some("bug-fix"), false, false).unwrap();
+    execute_goal(Some(&ws), Some("fix the failing add test"), &[], None, None, None, None).unwrap();
+    let plan = execute_plan(Some(&ws), Some("bug-fix"), false).unwrap();
     assert!(plan.terminal_output.contains("runtime_capabilities:"), "{}", plan.terminal_output);
     assert!(plan.terminal_output.contains("slot_effort_policies:"), "{}", plan.terminal_output);
     assert!(plan.terminal_output.contains("routing policy:"), "{}", plan.terminal_output);
@@ -325,7 +321,7 @@ fn blocked_native_run_surfaces_delegation_across_status_and_inspect() {
         status.terminal_output
     );
 
-    let inspect = execute_inspect(None, Some(&ws)).unwrap();
+    let inspect = execute_inspect(None, Some(&ws), None).unwrap();
     assert!(
         inspect.terminal_output.contains("delegation_mode: handoff_required"),
         "{}",
@@ -359,7 +355,7 @@ fn decision_loop_with_flow_inference_and_policy() {
     fs::create_dir_all(ws.join("src")).unwrap();
     fs::write(ws.join("src/main.rs"), "fn main() {}").unwrap();
 
-    let goal = "implement a dashboard feature";
+    let goal = "update the existing dashboard flow to add audit logging";
     let flow = infer_flow(goal).unwrap();
     assert_eq!(flow.flow_name, "change");
 
@@ -453,7 +449,7 @@ fn decision_loop_exhaustion_at_step_limit() {
 }
 
 #[test]
-fn cli_plan_persists_goal_plan_and_proposed_flow_before_confirmation() {
+fn cli_plan_persists_goal_plan_and_proposed_flow() {
     let ws = temp_workspace("snf-cli-plan-proposed");
 
     fs::write(
@@ -474,45 +470,23 @@ fn cli_plan_persists_goal_plan_and_proposed_flow_before_confirmation() {
     )
     .unwrap();
 
-    execute_start(Some(&ws)).unwrap();
-    execute_capture(Some(&ws), Some("fix the failing add test"), &[], None, None, None, None)
-        .unwrap();
+    execute_goal(Some(&ws), Some("fix the failing add test"), &[], None, None, None, None).unwrap();
 
-    let planned = execute_plan(Some(&ws), None, false, false).unwrap();
+    let planned = execute_plan(Some(&ws), None, false).unwrap();
     assert!(
-        planned
-            .terminal_output
-            .contains("proposed `bug-fix` flow is persisted and awaiting plan confirmation"),
+        planned.terminal_output.contains("proposed `bug-fix` flow is ready for execution"),
         "{}",
         planned.terminal_output
     );
     assert!(
-        planned
-            .terminal_output
-            .contains("execution_path: native_goal_plan_pending_plan_confirmation"),
-        "{}",
-        planned.terminal_output
-    );
-    assert!(
-        planned.terminal_output.contains(
-            "execution_condition: blocked - plan confirmation is still pending before native execution"
-        ),
+        planned.terminal_output.contains("execution_path: native_goal_plan"),
         "{}",
         planned.terminal_output
     );
 
     let status = execute_status(Some(&ws)).unwrap();
     assert!(
-        status
-            .terminal_output
-            .contains("execution_path: native_goal_plan_pending_plan_confirmation"),
-        "{}",
-        status.terminal_output
-    );
-    assert!(
-        status.terminal_output.contains(
-            "execution_condition: blocked - plan confirmation is still pending before native execution"
-        ),
+        status.terminal_output.contains("execution_path: native_goal_plan"),
         "{}",
         status.terminal_output
     );
@@ -529,13 +503,9 @@ fn cli_plan_persists_goal_plan_and_proposed_flow_before_confirmation() {
 fn cli_plan_blocks_when_context_pack_is_not_credible() {
     let ws = temp_workspace("snf-cli-plan-blocked-context");
 
-    execute_start(Some(&ws)).unwrap();
-    let mut record = FileSessionStore::for_workspace(&ws).load().unwrap().unwrap();
-    record.goal = Some("investigate a thing".to_string());
-    record.latest_status = SessionStatus::GoalCaptured;
-    FileSessionStore::for_workspace(&ws).persist(&record).unwrap();
+    execute_goal(Some(&ws), Some("investigate a thing"), &[], None, None, None, None).unwrap();
 
-    let error = execute_plan(Some(&ws), None, false, false).unwrap_err();
+    let error = execute_plan(Some(&ws), None, false).unwrap_err();
     let error_text = error.to_string();
     assert!(error_text.contains("bounded context required before planning"), "{error_text}");
 
@@ -543,7 +513,35 @@ fn cli_plan_blocks_when_context_pack_is_not_credible() {
     assert!(status.terminal_output.contains("context_credibility: insufficient"));
     assert!(status.terminal_output.contains("context_summary: no credible bounded context"));
     assert!(
-        status.terminal_output.contains("next_command: boundline capture --goal <narrower goal>"),
+        status.terminal_output.contains("next_command: boundline goal --goal <narrower goal>"),
+        "{}",
+        status.terminal_output
+    );
+}
+
+#[test]
+fn cli_plan_supports_greenfield_goal_seed_for_empty_workspace() {
+    let ws = temp_workspace("snf-cli-plan-greenfield");
+
+    execute_goal(Some(&ws), Some("build a react dashboard"), &[], None, None, None, None).unwrap();
+
+    execute_plan(Some(&ws), None, false).unwrap();
+
+    let status = execute_status(Some(&ws)).unwrap();
+    assert!(
+        status.terminal_output.contains("context_credibility: credible"),
+        "{}",
+        status.terminal_output
+    );
+    assert!(
+        status
+            .terminal_output
+            .contains("context_summary: bounded context from greenfield goal seed"),
+        "{}",
+        status.terminal_output
+    );
+    assert!(
+        status.terminal_output.contains("build a react dashboard"),
         "{}",
         status.terminal_output
     );
@@ -578,8 +576,7 @@ fn session_native_cli_surfaces_context_projection_on_status_run_and_inspect() {
     let brief = ws.join("brief.md");
     fs::write(&brief, "Focus on src/context_router.rs for the bounded change.\n").unwrap();
 
-    execute_start(Some(&ws)).unwrap();
-    execute_capture(
+    execute_goal(
         Some(&ws),
         Some("build a context router"),
         std::slice::from_ref(&brief),
@@ -589,8 +586,7 @@ fn session_native_cli_surfaces_context_projection_on_status_run_and_inspect() {
         None,
     )
     .unwrap();
-    execute_plan(Some(&ws), None, false, false).unwrap();
-    execute_plan(Some(&ws), None, false, true).unwrap();
+    execute_plan(Some(&ws), None, false).unwrap();
 
     let status = execute_status(Some(&ws)).unwrap();
     assert!(status.terminal_output.contains("context_summary:"), "{}", status.terminal_output);
@@ -608,7 +604,7 @@ fn session_native_cli_surfaces_context_projection_on_status_run_and_inspect() {
     let run = execute_run(Some(&ws)).unwrap();
     assert!(run.terminal_output.contains("context_summary:"), "{}", run.terminal_output);
 
-    let inspect = execute_inspect(None, Some(&ws)).unwrap();
+    let inspect = execute_inspect(None, Some(&ws), None).unwrap();
     assert!(inspect.terminal_output.contains("context_summary:"), "{}", inspect.terminal_output);
     assert!(
         inspect.terminal_output.contains("context_credibility: credible"),
@@ -639,8 +635,7 @@ fn cli_plan_supports_explicit_no_flow_for_native_session() {
     )
     .unwrap();
 
-    execute_start(Some(&ws)).unwrap();
-    execute_capture(
+    execute_goal(
         Some(&ws),
         Some("implement workspace summary output"),
         &[],
@@ -651,7 +646,7 @@ fn cli_plan_supports_explicit_no_flow_for_native_session() {
     )
     .unwrap();
 
-    let planned = execute_plan(Some(&ws), None, true, false).unwrap();
+    let planned = execute_plan(Some(&ws), None, true).unwrap();
     assert!(
         planned.terminal_output.contains("operator-skipped flow constraints"),
         "{}",
@@ -715,10 +710,8 @@ fn cli_session_native_run_persists_decisions_and_applies_real_changes() {
     )
     .unwrap();
 
-    execute_start(Some(&ws)).unwrap();
-    execute_capture(Some(&ws), Some("fix the failing add test"), &[], None, None, None, None)
-        .unwrap();
-    execute_plan(Some(&ws), Some("bug-fix"), false, false).unwrap();
+    execute_goal(Some(&ws), Some("fix the failing add test"), &[], None, None, None, None).unwrap();
+    execute_plan(Some(&ws), Some("bug-fix"), false).unwrap();
 
     let run = execute_run(Some(&ws)).unwrap();
     assert!(run.terminal_output.contains("terminal_status: succeeded"), "{}", run.terminal_output);

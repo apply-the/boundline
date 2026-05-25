@@ -31,8 +31,8 @@ pub use domain::cluster::{
     WorkspaceParticipationKind, WorkspaceParticipationRecord,
 };
 pub use domain::configuration::{
-    ConfigFile, ConfigShowScope, ConfigWriteScope, EffectiveRouting, InitTemplate, ModelRoute,
-    RouteSlot, RoutingConfig, RoutingOverrides, RuntimeKind, SourcedRoute, ValueSource,
+    ConfigFile, ConfigShowScope, ConfigWriteScope, EffectiveRouting, InitConfigScope, InitTemplate,
+    ModelRoute, RouteSlot, RoutingConfig, RoutingOverrides, RuntimeKind, SourcedRoute, ValueSource,
     resolve_effective_routing,
 };
 pub use domain::distribution::{

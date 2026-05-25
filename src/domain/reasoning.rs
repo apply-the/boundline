@@ -1817,7 +1817,7 @@ mod tests {
                 ParticipantAssignment {
                     role_id: "reviewer-a".to_string(),
                     participant_id: "participant-a".to_string(),
-                    effective_route: "review:claude:sonnet-4.6".to_string(),
+                    effective_route: "review:claude:sonnet-4".to_string(),
                     provider_family: Some("claude".to_string()),
                     context_basis: "governance_stage:verify".to_string(),
                     prompting_pattern: "blind_reviewer".to_string(),

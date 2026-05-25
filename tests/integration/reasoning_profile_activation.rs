@@ -29,9 +29,8 @@ const SELF_CONSISTENCY_PARTICIPANT_LINE: &str =
     "reasoning_participants: self_consistency_path=verification:";
 
 fn bootstrap_bug_fix(workspace: &Path) {
-    assert_eq!(run_boundline_in(workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(workspace, &["capture", "--goal", "Fix the failing checkout flow"])
+        run_boundline_in(workspace, &["goal", "--goal", "Fix the failing checkout flow"])
             .status
             .code(),
         Some(0)
@@ -269,14 +268,11 @@ fn save_distinct_review_routing(workspace: &Path) {
                 reviewer_roles: std::collections::BTreeMap::from([
                     (
                         REVIEWER_PRIMARY_ROLE_ID.to_string(),
-                        ModelRoute {
-                            runtime: RuntimeKind::Claude,
-                            model: "sonnet-4.6".to_string(),
-                        },
+                        ModelRoute { runtime: RuntimeKind::Claude, model: "sonnet-4".to_string() },
                     ),
                     (
                         REVIEWER_SECONDARY_ROLE_ID.to_string(),
-                        ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-5.5".to_string() },
+                        ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-4.1".to_string() },
                     ),
                 ]),
                 ..RoutingConfig::default()
@@ -329,7 +325,7 @@ fn verification_stage_activation_surfaces_reasoning_profile_lines() {
         "{status_text}"
     );
 
-    let inspect = run_boundline_in(&workspace, &["inspect", "--workspace", "."]);
+    let inspect = run_boundline_in(&workspace, &["--verbose", "inspect", "--workspace", "."]);
     let inspect_text = terminal_text(&inspect);
     assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
     assert!(
@@ -361,7 +357,7 @@ fn status_and_inspect_surface_reasoning_profile_summary_details() {
         assert!(status_text.contains(needle), "{status_text}");
     }
 
-    let inspect = run_boundline_in(&workspace, &["inspect", "--workspace", "."]);
+    let inspect = run_boundline_in(&workspace, &["--verbose", "inspect", "--workspace", "."]);
     let inspect_text = terminal_text(&inspect);
     assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
     for needle in [
@@ -422,7 +418,7 @@ fn verification_stage_without_reasoning_profile_preserves_unchanged_projection_p
     assert_eq!(status.status.code(), Some(0), "{status_text}");
     assert!(!status_text.contains("latest_reasoning_profile_id:"), "{status_text}");
 
-    let inspect = run_boundline_in(&workspace, &["inspect", "--workspace", "."]);
+    let inspect = run_boundline_in(&workspace, &["--verbose", "inspect", "--workspace", "."]);
     let inspect_text = terminal_text(&inspect);
     assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
     assert!(!inspect_text.contains("reasoning_profile_id:"), "{inspect_text}");
@@ -457,7 +453,7 @@ fn independent_pair_review_positive_path_surfaces_terminal_reasoning_outcome()
         assert!(status_text.contains(needle), "{status_text}");
     }
 
-    let inspect = run_boundline_in(&workspace, &["inspect", "--workspace", "."]);
+    let inspect = run_boundline_in(&workspace, &["--verbose", "inspect", "--workspace", "."]);
     let inspect_text = terminal_text(&inspect);
     assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
     for needle in [
@@ -511,7 +507,7 @@ fn heterogeneous_security_review_positive_path_surfaces_terminal_reasoning_outco
         assert!(status_text.contains(needle), "{status_text}");
     }
 
-    let inspect = run_boundline_in(&workspace, &["inspect", "--workspace", "."]);
+    let inspect = run_boundline_in(&workspace, &["--verbose", "inspect", "--workspace", "."]);
     let inspect_text = terminal_text(&inspect);
     assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
     for needle in [
@@ -554,7 +550,7 @@ fn bounded_reflexion_positive_path_surfaces_terminal_reasoning_outcome()
         assert!(status_text.contains(needle), "{status_text}");
     }
 
-    let inspect = run_boundline_in(&workspace, &["inspect", "--workspace", "."]);
+    let inspect = run_boundline_in(&workspace, &["--verbose", "inspect", "--workspace", "."]);
     let inspect_text = terminal_text(&inspect);
     assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
     for needle in [

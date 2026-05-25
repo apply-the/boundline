@@ -3,7 +3,6 @@ use crate::workspace_fixture::{run_boundline_in, temp_fixture_workspace, termina
 #[test]
 fn high_impact_architecture_govern_stage_persists_blocking_voting_state() {
     let workspace = temp_fixture_workspace("boundline-voting-architecture");
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
 
     let govern = run_boundline_in(
         &workspace,

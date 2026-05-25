@@ -26,9 +26,8 @@ fi
 fn run_in_optional_governance_workspace_uses_native_goal_plan_path() {
     let workspace = temp_optional_governance_workspace("boundline-session-governance-local");
 
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(&workspace, &["capture", "--goal", "Fix the failing checkout flow"])
+        run_boundline_in(&workspace, &["goal", "--goal", "Fix the failing checkout flow"])
             .status
             .code(),
         Some(0)
@@ -86,9 +85,8 @@ fn run_in_optional_governance_workspace_uses_native_goal_plan_path() {
 fn required_governance_workspace_blocks_on_native_goal_plan_path() {
     let workspace = temp_required_governance_workspace("boundline-session-governance-required");
 
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(&workspace, &["capture", "--goal", "Fix the failing checkout flow"])
+        run_boundline_in(&workspace, &["goal", "--goal", "Fix the failing checkout flow"])
             .status
             .code(),
         Some(0)
@@ -129,9 +127,8 @@ fn required_governance_workspace_blocks_on_native_goal_plan_path() {
 fn approval_workspace_waits_on_investigate_governance_before_execution() {
     let workspace = temp_canon_approval_workspace("boundline-session-governance-approval-pending");
 
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(&workspace, &["capture", "--goal", "Fix the failing checkout flow"])
+        run_boundline_in(&workspace, &["goal", "--goal", "Fix the failing checkout flow"])
             .status
             .code(),
         Some(0)
@@ -156,9 +153,8 @@ fn approval_workspace_waits_on_investigate_governance_before_execution() {
 fn approval_workspace_run_resumes_after_operator_grant() {
     let workspace = temp_canon_approval_workspace("boundline-session-governance-approval-resume");
 
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(&workspace, &["capture", "--goal", "Fix the failing checkout flow"])
+        run_boundline_in(&workspace, &["goal", "--goal", "Fix the failing checkout flow"])
             .status
             .code(),
         Some(0)
@@ -194,9 +190,8 @@ fn approval_workspace_next_refreshes_and_step_graduates_requested_adaptive_postu
         temp_canon_approval_workspace("boundline-session-governance-adaptive-graduation");
     rewrite_approval_stub_with_governed_adaptive_companion(&workspace);
 
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(&workspace, &["capture", "--goal", "Fix the failing checkout flow"])
+        run_boundline_in(&workspace, &["goal", "--goal", "Fix the failing checkout flow"])
             .status
             .code(),
         Some(0)

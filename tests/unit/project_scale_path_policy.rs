@@ -21,8 +21,6 @@ fn broad_unclear_idea_proposes_idea_to_code_path() {
         vec![
             ProjectScaleStageKind::Discovery,
             ProjectScaleStageKind::Requirements,
-            ProjectScaleStageKind::DomainLanguage,
-            ProjectScaleStageKind::DomainModel,
             ProjectScaleStageKind::SystemShaping,
             ProjectScaleStageKind::Architecture,
             ProjectScaleStageKind::Backlog,

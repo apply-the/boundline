@@ -26,7 +26,7 @@ output mode on the existing session-native and inspection commands.
 1. Run:
 
    ```bash
-   cargo run --bin boundline -- capture --goal "Fix the failing add test" --json
+   cargo run --bin boundline -- goal --goal "Fix the failing add test" --json
    cargo run --bin boundline -- plan --json
    cargo run --bin boundline -- status --json
    cargo run --bin boundline -- next --json

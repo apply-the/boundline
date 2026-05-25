@@ -6,12 +6,12 @@ pub mod checkpoint_store;
 pub mod cluster_store;
 #[path = "../../../src/adapters/config_store.rs"]
 pub mod config_store;
-#[path = "../../../src/adapters/dashboard_action.rs"]
-pub mod dashboard_action;
-#[path = "../../../src/adapters/dashboard_state.rs"]
-pub mod dashboard_state;
+#[path = "../../../src/adapters/env_layer.rs"]
+pub mod env_layer;
 #[path = "../../../src/adapters/governance_runtime.rs"]
 pub mod governance_runtime;
+#[path = "../../../src/adapters/provider_runtime.rs"]
+pub mod provider_runtime;
 #[path = "../../../src/adapters/session_store.rs"]
 pub mod session_store;
 #[path = "../../../src/adapters/tool.rs"]

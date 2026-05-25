@@ -21,20 +21,20 @@
     "codex": "copy_ready_assets",
     "cursor": "copy_ready_assets",
     "copilot": "manual_fallback",
-    "gemini": "manual_fallback"
+    "antigravity": "manual_fallback"
   },
   "support_modes": {
     "claude": "repo-local-full",
     "codex": "repo-local-full",
     "cursor": "copy-ready-assets",
     "copilot": "repo-local-full",
-    "gemini": "manual-fallback"
+    "antigravity": "repo-local-full"
   },
   "support_mode_notes": {
     "claude": "Repository-managed command assets expose the shared Boundline session workflow and delight follow-through surfaces directly.",
     "codex": "Repository-managed command assets expose the shared Boundline session workflow and delight follow-through surfaces directly.",
     "cursor": "Cursor remains in copy-ready-assets support mode: bootstrap assets are copy-ready, local installation details stay environment-specific, and the CLI remains authoritative.",
     "copilot": "Repository-managed prompt assets expose the Boundline delight surface directly even though global bootstrap installation remains a manual fallback.",
-    "gemini": "Gemini remains an explicit CLI-first manual fallback until a richer parity path is intentionally promoted."
+    "antigravity": "Antigravity now ships a repo-local command pack after `boundline init --assistant antigravity`, while user-global bootstrap installation remains an explicit manual fallback."
   }
 }

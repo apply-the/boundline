@@ -15,7 +15,10 @@ use crate::domain::review::{
     VotingBoundaryDecision, VotingBoundaryInput, VotingBoundaryTrigger, VotingStageRisk,
     voting_boundary_decision,
 };
-use crate::domain::session::VotingSessionState;
+use crate::domain::session::{
+    ActiveSessionRecord, SessionStatus, VotingSessionState, date_prefix_from_millis,
+    generate_session_ref,
+};
 
 #[derive(Debug, Clone)]
 pub struct GovernRequest<'a> {
@@ -54,12 +57,49 @@ pub fn execute_govern(request: GovernRequest<'_>) -> Result<GovernCommandReport,
     validate_canon_capabilities_for_mode(&snapshot, mode).map_err(GovernError::UnsupportedMode)?;
 
     let store = FileSessionStore::for_workspace(&workspace);
-    let mut record = store.load().map_err(GovernError::SessionStore)?.ok_or_else(|| {
-        GovernError::MissingSession(format!(
-            ".boundline/session.json is missing; run `boundline start --workspace {}` before governed stage work",
-            workspace.display()
-        ))
-    })?;
+    let mut record = match store.load().map_err(GovernError::SessionStore)? {
+        Some(record) => record,
+        None => {
+            let has_authored_input =
+                request.goal.map(str::trim).is_some_and(|goal| !goal.is_empty())
+                    || !request.brief.is_empty()
+                    || request.base.is_some()
+                    || request.head.is_some();
+            if !has_authored_input {
+                return Err(GovernError::MissingSession(format!(
+                    ".boundline/session.json is missing; run `boundline goal --workspace {} --goal <goal>` before governed stage work",
+                    workspace.display()
+                )));
+            }
+
+            let created_at = crate::domain::trace::current_timestamp_millis();
+            let date_prefix = date_prefix_from_millis(created_at);
+            let daily_seq =
+                crate::cli::session::count_sessions_for_date(&workspace, &date_prefix) + 1;
+            ActiveSessionRecord {
+                session_id: generate_session_ref(request.goal, &date_prefix, daily_seq, None),
+                workspace_ref: workspace.to_string_lossy().into_owned(),
+                goal: None,
+                authored_brief: None,
+                negotiation_packet: None,
+                active_flow: None,
+                active_task: None,
+                goal_plan: None,
+                workflow_progress: None,
+                decisions: Vec::new(),
+                active_flow_policy: None,
+                latest_status: SessionStatus::Initialized,
+                latest_terminal_reason: None,
+                latest_trace_ref: None,
+                created_at,
+                updated_at: created_at,
+                governance_lifecycle: None,
+                project_scale: None,
+                latest_voting: None,
+                delight_feedback: None,
+            }
+        }
+    };
 
     if let Some(goal) = request.goal.map(str::trim).filter(|goal| !goal.is_empty()) {
         record.goal = Some(goal.to_string());
@@ -101,6 +141,7 @@ pub fn execute_govern(request: GovernRequest<'_>) -> Result<GovernCommandReport,
             previous_governance_attempt_id: None,
             packet_ref: Some(packet_ref.clone()),
             decision_ref: None,
+            stage_council: None,
             blocked_reason: Some(
                 "Canon execution is staged through Boundline; run the reported next command after supplying required inputs or approvals"
                     .to_string(),
@@ -108,6 +149,7 @@ pub fn execute_govern(request: GovernRequest<'_>) -> Result<GovernCommandReport,
         }],
         accumulated_context: Vec::new(),
         terminal_reason: None,
+        planning_input_fingerprint: None,
     });
     record.latest_voting = voting_state_for_request(mode, &request);
     record.updated_at = crate::domain::trace::current_timestamp_millis();
@@ -284,8 +326,7 @@ mod tests {
         CanonMode, CommandExitStatus, FileSessionStore, GovernError, GovernRequest, SessionStore,
         VotingBoundaryTrigger, execute_govern, voting_stage_for_mode, voting_state_for_request,
     };
-    use crate::cli::session;
-    use crate::domain::session::SessionStatus;
+    use crate::domain::session::{ActiveSessionRecord, SessionStatus};
 
     fn temp_workspace(label: &str) -> PathBuf {
         let workspace =
@@ -316,10 +357,36 @@ mod tests {
         }
     }
 
+    fn persist_initialized_session(workspace: &Path) {
+        let record = ActiveSessionRecord {
+            session_id: format!("govern-test-{}", Uuid::new_v4()),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: None,
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Initialized,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 1,
+            updated_at: 1,
+            governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
+            delight_feedback: None,
+        };
+        FileSessionStore::for_workspace(workspace).persist(&record).unwrap();
+    }
+
     #[test]
     fn execute_govern_requires_authored_input_when_session_goal_is_empty() {
         let workspace = temp_workspace("missing-input");
-        session::execute_start_with_target(Some(workspace.as_path()), None).unwrap();
+        persist_initialized_session(&workspace);
 
         let error = execute_govern(request_for_mode(
             Some(workspace.as_path()),
@@ -336,7 +403,7 @@ mod tests {
     #[test]
     fn execute_govern_updates_initialized_session_with_trimmed_goal_and_vote_state() {
         let workspace = temp_workspace("goal-persist");
-        session::execute_start_with_target(Some(workspace.as_path()), None).unwrap();
+        persist_initialized_session(&workspace);
 
         let mut request = request_for_mode(
             Some(workspace.as_path()),
@@ -359,6 +426,31 @@ mod tests {
         assert_eq!(vote.trigger, "high_impact_architecture");
         assert_eq!(vote.result, "pending");
         assert!(vote.blocking);
+    }
+
+    #[test]
+    fn execute_govern_bootstraps_missing_session_when_goal_is_supplied() {
+        let workspace = temp_workspace("bootstrap-missing-session");
+
+        let report = execute_govern(request_for_mode(
+            Some(workspace.as_path()),
+            CanonMode::Architecture,
+            Some("Bootstrap governed architecture"),
+            None,
+        ))
+        .unwrap();
+
+        assert_eq!(report.exit_status, CommandExitStatus::Succeeded);
+        assert!(report.terminal_output.contains("govern: staged"), "{}", report.terminal_output);
+
+        let store = FileSessionStore::for_workspace(&workspace);
+        let record = store.load().unwrap().unwrap();
+        assert_eq!(record.goal.as_deref(), Some("Bootstrap governed architecture"));
+        assert_eq!(record.latest_status, SessionStatus::GoalCaptured);
+        assert_eq!(
+            record.governance_lifecycle.as_ref().and_then(|lifecycle| lifecycle.selected_mode),
+            Some(CanonMode::Architecture)
+        );
     }
 
     #[test]

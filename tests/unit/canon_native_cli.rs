@@ -72,6 +72,7 @@ fn governed_session_lifecycle_json_roundtrip() {
             previous_governance_attempt_id: None,
             packet_ref: Some(".canon/runs/run-001".to_string()),
             decision_ref: None,
+            stage_council: None,
             blocked_reason: None,
         }],
         accumulated_context: vec![GovernedDocumentRef {
@@ -83,6 +84,7 @@ fn governed_session_lifecycle_json_roundtrip() {
         }],
         latest_reasoning_profile: None,
         terminal_reason: None,
+        planning_input_fingerprint: None,
     };
 
     let json = serde_json::to_string_pretty(&lifecycle).unwrap();
@@ -103,6 +105,7 @@ fn governed_session_lifecycle_json_with_opt_out() {
         accumulated_context: Vec::new(),
         latest_reasoning_profile: None,
         terminal_reason: None,
+        planning_input_fingerprint: None,
     };
 
     let json = serde_json::to_string(&lifecycle).unwrap();
@@ -232,6 +235,7 @@ fn governance_input_documents_includes_clarification_answers() {
         reason_kind: ClarificationReasonKind::MissingContext,
         prompt: "What authentication method should be used?".to_string(),
         missing_fields: vec!["auth_method".to_string()],
+        questions: vec!["What authentication method should be used?".to_string()],
         blocking_sources: Vec::new(),
         turn_index: 1,
         status: ClarificationStatus::Answered,
@@ -324,7 +328,7 @@ fn bounded_governance_context_includes_reused_packets_from_accumulated_context()
         initial_state,
     );
 
-    // Use the second stage (architecture) as the downstream metadata
+    // Use the immediate downstream delivery stage so requirements packet reuse stays valid.
     let flow = built_in_flow("delivery").unwrap();
     let stage = flow.stage(1).unwrap();
     let metadata = FlowStepMetadata {
@@ -607,6 +611,7 @@ fn lifecycle_requires_refresh_detects_approval_pending() {
         accumulated_context: Vec::new(),
         latest_reasoning_profile: None,
         terminal_reason: None,
+        planning_input_fingerprint: None,
     });
     assert!(!lifecycle_requires_refresh(&session));
 

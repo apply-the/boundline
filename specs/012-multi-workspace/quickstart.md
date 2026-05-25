@@ -63,7 +63,7 @@ cargo run --bin boundline -- config set \
   --scope cluster \
   --slot planning \
   --runtime codex \
-  --model gpt-5-codex
+  --model openai/gpt-5.4
 
 cargo run --bin boundline -- config show \
   --workspace <secondary-workspace> \

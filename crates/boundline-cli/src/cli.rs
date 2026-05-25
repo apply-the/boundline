@@ -6,8 +6,6 @@ pub mod checkpoint;
 pub mod cluster;
 #[path = "../../../src/cli/config.rs"]
 pub mod config;
-#[path = "../../../src/cli/dashboard.rs"]
-pub mod dashboard;
 #[path = "../../../src/cli/diagnostics.rs"]
 pub mod diagnostics;
 #[path = "../../../src/cli/govern.rs"]
@@ -16,6 +14,8 @@ pub mod govern;
 pub mod init;
 #[path = "../../../src/cli/inspect.rs"]
 pub mod inspect;
+#[path = "../../../src/cli/orchestrate.rs"]
+pub mod orchestrate;
 #[path = "../../../src/cli/output.rs"]
 pub mod output;
 #[path = "../../../src/cli/run.rs"]

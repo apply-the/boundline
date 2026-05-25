@@ -30,7 +30,7 @@ run, explicit workspace participation, and cluster-aware follow-up authority.
 ```text
 cargo run --bin boundline -- cluster init --workspace <primary-workspace> --cluster-id delivery-b --member <primary-workspace> --member <secondary-workspace>
 cargo run --bin boundline -- start --cluster <primary-workspace>
-cargo run --bin boundline -- capture --cluster <primary-workspace> --goal "Implement the shared API and update the dependent client"
+cargo run --bin boundline -- goal --cluster <primary-workspace> --goal "Implement the shared API and update the dependent client"
 cargo run --bin boundline -- plan --cluster <primary-workspace> --flow change
 cargo run --bin boundline -- run --cluster <primary-workspace>
 cargo run --bin boundline -- status --cluster <primary-workspace>

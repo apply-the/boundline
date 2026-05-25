@@ -125,7 +125,7 @@ Represents one persisted change applied to the active session after a command or
 
 | Field | Shape | Required | Notes |
 |-------|-------|----------|-------|
-| `trigger_command` | Enum | Yes | `start`, `capture`, `plan`, `step`, `run`, `status`, `next`, or `inspect` when session state is updated from inspection evidence |
+| `trigger_command` | Enum | Yes | `start`, `goal`, `plan`, `step`, `run`, `status`, `next`, or `inspect` when session state is updated from inspection evidence |
 | `from_status` | `SessionStatus` or null | No | Null only when the session is created for the first time |
 | `to_status` | `SessionStatus` | Yes | New persisted state |
 | `trace_ref` | Path-like string or null | No | Updated latest trace reference when the transition emitted or reused one |
@@ -173,7 +173,7 @@ Defines the required behavior, inputs, and user-visible outputs of the session-b
 | Command | Purpose |
 |---------|---------|
 | `boundline start` | Establish a new active session for the current workspace |
-| `boundline capture` | Store or replace the current bounded goal in the active session |
+| `boundline goal` | Store or replace the current bounded goal in the active session |
 | `boundline plan` | Create an executable plan from the active session goal |
 | `boundline step` | Execute exactly one next step from the active session |
 | `boundline run` | Continue execution until the task reaches a terminal state |
@@ -184,7 +184,7 @@ Defines the required behavior, inputs, and user-visible outputs of the session-b
 
 - Every session-backed command MUST resolve the active session automatically from the current workspace or an explicit workspace override when one is provided.
 - `start` MUST create or replace the active session only through an explicit user action.
-- `capture` MUST fail clearly when no active session exists.
+- `goal` MUST fail clearly when no active session exists.
 - `plan` MUST fail clearly when the active session has no goal.
 - `step` MUST execute at most one executable step and MUST persist updated session and trace state before returning.
 - `run` MUST reuse the current active task snapshot when one exists; otherwise it may initialize execution from the active goal and a freshly created plan.
@@ -196,7 +196,7 @@ Defines the required behavior, inputs, and user-visible outputs of the session-b
 | Situation | Required Result |
 |-----------|-----------------|
 | No active session | Explicit message telling the user to run `boundline start` |
-| Session exists without goal | Explicit message telling the user to use `boundline capture` |
+| Session exists without goal | Explicit message telling the user to use `boundline goal` |
 | Session exists without plan | Explicit message telling the user to use `boundline plan` |
 | Session is corrupted or unreadable | Explicit recovery message and no hidden fallback |
 | Latest trace reference is missing | Status or next output must surface the mismatch and guide the user to recover deliberately |
@@ -245,7 +245,7 @@ Defines the persisted shape and behavioral guarantees of the workspace-scoped se
 ## Update Guarantees
 
 - `start` MUST initialize a fresh session record.
-- `capture` MUST update goal-related fields without dropping unrelated valid session state.
+- `goal` MUST update goal-related fields without dropping unrelated valid session state.
 - `plan` MUST write a new active task snapshot and reset execution position.
 - `step` and `run` MUST persist updated task, status, and trace fields before returning control to the user.
 - Terminal execution MUST preserve the latest task outcome until the user explicitly starts fresh or replaces the active goal.
@@ -268,7 +268,7 @@ Defines how assistant command packs must reuse and respect the active Boundline 
 | Assistant Command | Preferred Session-Backed CLI Surface |
 |-------------------|--------------------------------------|
 | `/boundline-start` | `boundline start` |
-| `/boundline-plan` | `boundline capture` followed by `boundline plan` when a goal must be established first |
+| `/boundline-plan` | `boundline goal` followed by `boundline plan` when a goal must be established first |
 | `/boundline-step` | `boundline step` |
 | `/boundline-run` | `boundline run` |
 | `/boundline-status` | `boundline status` |
@@ -314,12 +314,12 @@ Expected outcome:
 - The session becomes the active interaction state for later commands.
 - No goal or task plan is required yet.
 
-### 2. Capture a bounded goal
+### 2. Record a bounded goal
 
 Run:
 
 ```bash
-cargo run --bin boundline -- capture --goal "Summarize the current bounded developer flow"
+cargo run --bin boundline -- goal --goal "Summarize the current bounded developer flow"
 ```
 
 Expected outcome:
@@ -409,7 +409,7 @@ If a session-backed command is invoked before `start`, expected output should te
 
 ### Missing goal
 
-If `plan`, `step`, or `run` is invoked before goal capture, expected output should route the user to `capture`.
+If `plan`, `step`, or `run` is invoked before goal capture, expected output should route the user to `goal`.
 
 ### Corrupted or stale session
 
@@ -431,7 +431,7 @@ cargo test --all-targets
 
 ## Minimum Validation Scenarios
 
-1. A developer can start a session, capture a goal, plan, and run without re-entering goal context.
+1. A developer can start a session, record a goal, plan, and run without re-entering goal context.
 2. A planned session can advance through repeated `step` invocations while preserving task context and trace continuity.
 3. `status` and `next` provide explicit, aligned guidance from the same active session.
 4. Assistant commands reuse the active session instead of asking for preserved goal or trace information again.

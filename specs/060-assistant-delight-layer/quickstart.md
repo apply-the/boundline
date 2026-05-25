@@ -36,7 +36,7 @@ Canonical rule:
 
 ```bash
 cargo run --bin boundline -- start --workspace <workspace>
-cargo run --bin boundline -- capture --workspace <workspace> --goal "explain the active bounded plan"
+cargo run --bin boundline -- goal --workspace <workspace> --goal "explain the active bounded plan"
 cargo run --bin boundline -- plan --workspace <workspace>
 ```
 

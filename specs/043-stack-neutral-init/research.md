@@ -17,7 +17,7 @@
 
 **Decision**: Use the built-in routing defaults already defined in `src/domain/configuration.rs` as the single source of truth for assistant-model defaults, then derive a per-runtime default model catalog from those routes for `init`.
 
-**Rationale**: The repository already documents and tests a built-in route catalog: Codex uses `gpt-5-codex`, Copilot uses `gpt-5.4`, Claude uses `sonnet-4`, and Gemini uses `gemini-2.5-pro`. Reusing that existing catalog avoids introducing a second hard-coded table in `init`, keeps effective routing and initialization aligned, and gives docs one authoritative set of defaults.
+**Rationale**: The repository already documents and tests a built-in route catalog: Codex uses `openai/gpt-5.4`, Copilot uses `gpt-5.4`, Claude uses `sonnet-4`, and Gemini uses `gemini-2.5-pro`. Reusing that existing catalog avoids introducing a second hard-coded table in `init`, keeps effective routing and initialization aligned, and gives docs one authoritative set of defaults.
 
 **Alternatives considered**:
 - Add a second init-only model map: rejected because it would drift from effective routing and docs.

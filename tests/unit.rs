@@ -4,14 +4,8 @@ mod workspace_fixture;
 #[path = "support/runtime_refoundation.rs"]
 mod runtime_refoundation;
 
-#[path = "support/dashboard_fixture.rs"]
-mod dashboard_fixture;
-
 #[path = "unit/step_state.rs"]
 mod step_state;
-
-#[path = "unit/dashboard_module_boundaries.rs"]
-mod dashboard_module_boundaries;
 
 #[path = "unit/recovery_policy.rs"]
 mod recovery_policy;

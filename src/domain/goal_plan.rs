@@ -1409,7 +1409,7 @@ mod tests {
 
         let plan = build_plan()
             .with_expert_selection(expert_selection)
-            .with_routing_policy_summary("planning route=copilot/gpt-5.5 [workspace]")
+            .with_routing_policy_summary("planning route=copilot/gpt-4.1 [workspace]")
             .with_compacted_canon_memory(CompactedCanonMemory {
                 headline: "Canon packet remains usable".to_string(),
                 credibility: MemoryCredibilityState::Credible,
@@ -1433,7 +1433,7 @@ mod tests {
 
         assert_eq!(
             plan.routing_policy_summary.as_deref(),
-            Some("planning route=copilot/gpt-5.5 [workspace]")
+            Some("planning route=copilot/gpt-4.1 [workspace]")
         );
         assert_eq!(
             plan.context_primary_inputs(),

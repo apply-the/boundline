@@ -1,9 +1,7 @@
 use std::fs;
 
 use boundline::adapters::session_store::{FileSessionStore, SessionStore};
-use boundline::cli::session::{
-    execute_capture, execute_plan, execute_run, execute_start, execute_status,
-};
+use boundline::cli::session::{execute_goal, execute_plan, execute_run, execute_status};
 
 use crate::workspace_fixture::{run_boundline_in, temp_fixture_workspace, terminal_text};
 
@@ -17,18 +15,9 @@ fn verification_guardian_projection_is_phase_gated_and_reused_by_status_and_insp
     )
     .unwrap();
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
-        Some(&workspace),
-        Some("fix the failing add test"),
-        &[],
-        None,
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    let plan_report = execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+    execute_goal(Some(&workspace), Some("fix the failing add test"), &[], None, None, None, None)
+        .unwrap();
+    let plan_report = execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
 
     let planned_session = FileSessionStore::for_workspace(&workspace).load().unwrap().unwrap();
     let planned_goal_plan = planned_session.goal_plan.expect("goal plan should be persisted");
@@ -47,7 +36,7 @@ fn verification_guardian_projection_is_phase_gated_and_reused_by_status_and_insp
 
     execute_run(Some(&workspace)).unwrap();
     let status_report = execute_status(Some(&workspace)).unwrap();
-    let inspect_output = run_boundline_in(&workspace, &["inspect"]);
+    let inspect_output = run_boundline_in(&workspace, &["--verbose", "inspect"]);
     let inspect_text = terminal_text(&inspect_output);
 
     let session = FileSessionStore::for_workspace(&workspace).load().unwrap().unwrap();

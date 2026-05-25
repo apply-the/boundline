@@ -30,8 +30,19 @@ If shell execution is unavailable, provide this exact copyable command:
 Wait for pasted output and then recommend exactly one next command.
 
 ## Output Interpretation
+Provide a conversational, human-readable summary of the session state. Do NOT use raw JSON keys or snake_case field names (like `next_command`, `latest_status`, `authored_input_summary`, etc.) in your response. Translate all state into natural language.
+For the next step or follow-up commands, provide them as clickable buttons or action links (e.g., Markdown command links) instead of plain text recommendations.
 Summarize `routing`, `route_owner`, `route_config_projection`, `execution_condition`, `continuity_authority`, `compatibility_follow_up`, `compatibility_trace_ref`, `latest_status`, `latest_selection_headline`, `latest_selection_reason`, `latest_checkpoint_id`, `latest_checkpoint_scope`, `latest_checkpoint_restore_command`, `context_summary`, `context_credibility`, `context_primary_inputs`, `context_provenance`, `context_staleness_reason`, `delegation_mode`, `delegation_packet_id`, `delegation_packet_kind`, `delegation_packet_state`, `delegation_target_owner`, `delegation_headline`, `delegation_evidence_summary`, `explanation`, `follow_through_guidance`, `follow_through_evidence_source`, `follow_through_next_action`, `follow_through_stop_reason`, `governance_next_action`, and the CLI-reported `next_command`. Preserve `latest_trace_ref` when present so `/boundline-inspect` can reuse it, and keep any `effective_routing`, `assistant_bindings`, `runtime_capabilities`, or `slot_effort_policies` values surfaced inside `route_config_projection`. When the context fields include domain-template selection, winning standards source, or external-input status, preserve that wording exactly and treat missing or stale required domain inputs as a real stop condition. When the context or governance fields are Canon-grounded, preserve governed artifact refs, credibility, and stale-memory wording exactly and treat non-credible governed memory as a real stop condition. When checkpoint fields appear, preserve them exactly and prefer the reported restore command over generic restart advice.
 
 ## Next-Step Routing
-Prefer the CLI-reported `next_command`; if it points to inspect or `continuity_authority: compatibility_trace` is present, route to `/boundline-inspect`. Route to `/boundline-start` only when the CLI reports no active session and no compatibility follow-up.
-Allowed follow-up commands: `/boundline-step`, `/boundline-inspect`, `/boundline-status`, `/boundline-plan`, `/boundline-start`.
+Surface exactly two action links: one **primary** (advance) and one **secondary** (refine/inspect, shown only when the condition is met).
+
+**Primary** (always shown): the CLI-reported `next_command`.
+**Secondary** (shown only when context needs review before acting, or `continuity_authority: compatibility_trace` is present): `/boundline-status` — review session status.
+
+If the secondary condition is not met, show only the primary button.
+Before the action links, include one brief natural-language sentence summarizing why these actions are offered.
+Prefer an emitted `phase_request.assistant_resume_command` when present — it overrides the primary.
+Route to `/boundline-goal` only when the CLI reports no active session and no compatibility follow-up.
+
+Allowed follow-up commands: `/boundline-step`, `/boundline-inspect`, `/boundline-status`, `/boundline-plan`, `/boundline-goal`.

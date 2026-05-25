@@ -86,9 +86,8 @@ fn load_session_record(workspace: &std::path::Path) -> ActiveSessionRecord {
 #[test]
 fn flow_command_binds_bug_fix_to_the_active_session() {
     let workspace = temp_workspace(0);
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(&workspace, &["capture", "--goal", "Fix the failing checkout flow"])
+        run_boundline_in(&workspace, &["goal", "--goal", "Fix the failing checkout flow"])
             .status
             .code(),
         Some(0)
@@ -113,7 +112,12 @@ fn flow_command_binds_bug_fix_to_the_active_session() {
 #[test]
 fn flow_command_rejects_unknown_flow_names_with_guidance() {
     let workspace = temp_workspace(0);
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
+    assert_eq!(
+        run_boundline_in(&workspace, &["goal", "--goal", "Fix the failing checkout flow"])
+            .status
+            .code(),
+        Some(0)
+    );
 
     let output = run_boundline_in(&workspace, &["flow", "unknown-flow"]);
     let text = terminal_text(&output);

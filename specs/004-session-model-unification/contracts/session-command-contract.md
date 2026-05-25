@@ -9,7 +9,7 @@ Defines the required behavior, inputs, and user-visible outputs of the session-b
 | Command | Purpose |
 |---------|---------|
 | `boundline start` | Establish a new active session for the current workspace |
-| `boundline capture` | Store or replace the current bounded goal in the active session |
+| `boundline goal` | Store or replace the current bounded goal in the active session |
 | `boundline plan` | Create an executable plan from the active session goal |
 | `boundline step` | Execute exactly one next step from the active session |
 | `boundline run` | Continue execution until the task reaches a terminal state |
@@ -20,7 +20,7 @@ Defines the required behavior, inputs, and user-visible outputs of the session-b
 
 - Every session-backed command MUST resolve the active session automatically from the current workspace or an explicit workspace override when one is provided.
 - `start` MUST create or replace the active session only through an explicit user action.
-- `capture` MUST fail clearly when no active session exists.
+- `goal` MUST fail clearly when no active session exists.
 - `plan` MUST fail clearly when the active session has no goal.
 - `step` MUST execute at most one executable step and MUST persist updated session and trace state before returning.
 - `run` MUST reuse the current active task snapshot when one exists; otherwise it may initialize execution from the active goal and a freshly created plan.
@@ -32,7 +32,7 @@ Defines the required behavior, inputs, and user-visible outputs of the session-b
 | Situation | Required Result |
 |-----------|-----------------|
 | No active session | Explicit message telling the user to run `boundline start` |
-| Session exists without goal | Explicit message telling the user to use `boundline capture` |
+| Session exists without goal | Explicit message telling the user to use `boundline goal` |
 | Session exists without plan | Explicit message telling the user to use `boundline plan` |
 | Session is corrupted or unreadable | Explicit recovery message and no hidden fallback |
 | Latest trace reference is missing | Status or next output must surface the mismatch and guide the user to recover deliberately |

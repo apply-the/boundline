@@ -4,7 +4,9 @@ use boundline::FileConfigStore;
 use boundline::FileTraceStore;
 use boundline::adapters::session_store::SessionStoreError;
 use boundline::adapters::trace_store::TraceStore;
-use boundline::cli::assistant_assets::{AssistantHost, AssistantInstallScope};
+use boundline::cli::assistant_assets::{
+    AssistantHost, AssistantInstallScope, assets_for_assistants, docs_assets_for_assistants_under,
+};
 use boundline::cli::diagnostics::{
     DiagnosticsCheck, DiagnosticsReport, DiagnosticsStatus, DiagnosticsSubject,
 };
@@ -33,7 +35,9 @@ use boundline::domain::cluster::{
     ClusterRouteOwner, ClusteredExecutionCondition, ClusteredExecutionKind,
     WorkspaceParticipationKind, WorkspaceParticipationRecord,
 };
-use boundline::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
+use boundline::domain::configuration::{
+    AssistantHostKind, ConfigFile, InitConfigScope, ModelRoute, RoutingConfig, RuntimeKind,
+};
 use boundline::domain::context_intelligence::{
     AdvancedContextProjection, AuthorityRank, CandidateSelectionState, HybridOutcome,
     ImpactAnalysisFinding, ImpactFindingKind, ImpactFindingSeverity, ImpactFindingStatus,
@@ -307,6 +311,7 @@ fn inspect_invalid_session_errors_reuse_session_guidance() {
     let rendered = render_error(
         None,
         Some(std::path::Path::new("/tmp/workspace")),
+        None,
         &InspectCommandError::InvalidSession(
             "active session is invalid: workspace_ref must not be empty".to_string(),
         ),
@@ -314,7 +319,7 @@ fn inspect_invalid_session_errors_reuse_session_guidance() {
 
     assert!(rendered.contains("inspect: session error"), "{rendered}");
     assert!(rendered.contains("reason: active session is invalid:"), "{rendered}");
-    assert!(rendered.contains("next_command: boundline start"), "{rendered}");
+    assert!(rendered.contains("next_command: boundline goal --goal <goal>"), "{rendered}");
 }
 
 #[test]
@@ -513,7 +518,7 @@ fn inspect_failure_renderer_includes_workspace_ref_when_provided() {
 
 #[test]
 fn render_error_with_missing_trace_reference_uses_explicit_trace_correction() {
-    let rendered = render_error(None, None, &InspectCommandError::MissingTraceReference);
+    let rendered = render_error(None, None, None, &InspectCommandError::MissingTraceReference);
 
     assert!(rendered.contains("inspect: trace read failure"));
     assert!(rendered.contains("terminal_reason: inspect requires --trace or --workspace"));
@@ -526,6 +531,7 @@ fn render_error_with_workspace_path_uses_workspace_correction_cues() {
     let rendered = render_error(
         None,
         Some(std::path::Path::new("/tmp/my-workspace")),
+        None,
         &InspectCommandError::MissingLatestTrace,
     );
 
@@ -543,6 +549,7 @@ fn render_error_with_workspace_path_uses_workspace_correction_cues() {
 fn render_error_with_summary_failure_uses_summary_terminal_reason() {
     let rendered = render_error(
         Some(std::path::Path::new("/tmp/trace.json")),
+        None,
         None,
         &InspectCommandError::Summary(TraceSummaryError::MissingTerminalStatus),
     );
@@ -798,7 +805,7 @@ fn execute_inspect_explicit_trace_covers_inspection_target_and_next_command() {
     let store = FileTraceStore::new(&dir);
     let trace_path = store.persist(&trace).unwrap();
 
-    let report = execute_inspect(Some(&trace_path), None).unwrap();
+    let report = execute_inspect(Some(&trace_path), None, None).unwrap();
     let output = &report.terminal_output;
 
     assert!(output.contains("inspection_target: explicit-trace"), "{output}");
@@ -816,7 +823,7 @@ fn execute_inspect_workspace_covers_latest_workspace_trace_target() {
     let store = FileTraceStore::for_workspace(&workspace);
     store.persist(&trace).unwrap();
 
-    let report = execute_inspect(None, Some(&workspace)).unwrap();
+    let report = execute_inspect(None, Some(&workspace), None).unwrap();
     let output = &report.terminal_output;
 
     assert!(output.contains("inspection_target: latest-workspace-trace"), "{output}");
@@ -852,7 +859,7 @@ fn execute_inspect_surfaces_goal_plan_negotiation_projection() {
     let store = FileTraceStore::new(&dir);
     let trace_path = store.persist(&trace).unwrap();
 
-    let report = execute_inspect(Some(&trace_path), None).unwrap();
+    let report = execute_inspect(Some(&trace_path), None, None).unwrap();
     let output = &report.terminal_output;
 
     assert!(
@@ -900,7 +907,7 @@ fn execute_inspect_surfaces_context_projection() {
     let store = FileTraceStore::new(&dir);
     let trace_path = store.persist(&trace).unwrap();
 
-    let report = execute_inspect(Some(&trace_path), None).unwrap();
+    let report = execute_inspect(Some(&trace_path), None, None).unwrap();
     let output = &report.terminal_output;
 
     assert!(output.contains("context_summary: bounded context from 1 primary input(s)"));
@@ -939,7 +946,7 @@ fn execute_inspect_surfaces_task_started_negotiation_projection() {
     let store = FileTraceStore::new(&dir);
     let trace_path = store.persist(&trace).unwrap();
 
-    let report = execute_inspect(Some(&trace_path), None).unwrap();
+    let report = execute_inspect(Some(&trace_path), None, None).unwrap();
     let output = &report.terminal_output;
 
     assert!(
@@ -1316,7 +1323,7 @@ fn render_session_status_surfaces_workflow_phase_and_pause_reason() {
         active_workflow: Some("default".to_string()),
         workflow_phase: Some("capture".to_string()),
         workflow_next_action: Some(
-            "boundline capture --workspace /tmp/session-workflow --goal <goal>".to_string(),
+            "boundline goal --workspace /tmp/session-workflow --goal <goal>".to_string(),
         ),
         continuity_authority: None,
         compatibility_follow_up: None,
@@ -1379,7 +1386,7 @@ fn render_session_status_surfaces_workflow_phase_and_pause_reason() {
     );
     assert!(
         rendered.contains(
-            "next_command: boundline capture --workspace /tmp/session-workflow --goal <goal>"
+            "next_command: boundline goal --workspace /tmp/session-workflow --goal <goal>"
         ),
         "{rendered}"
     );
@@ -1409,7 +1416,7 @@ fn resolve_trace_path_prefers_session_trace_ref_when_available() {
 
 #[test]
 fn execute_inspect_with_no_args_returns_missing_trace_reference_error() {
-    let result = execute_inspect(None, None);
+    let result = execute_inspect(None, None, None);
     assert!(matches!(result, Err(InspectCommandError::MissingTraceReference)), "{result:?}");
 }
 
@@ -1419,7 +1426,7 @@ fn execute_inspect_with_empty_workspace_returns_missing_latest_trace_error() {
     let workspace = std::env::temp_dir().join(format!("boundline-unit-empty-{}", Uuid::new_v4()));
     fs::create_dir_all(&workspace).unwrap();
 
-    let result = execute_inspect(None, Some(&workspace));
+    let result = execute_inspect(None, Some(&workspace), None);
     assert!(matches!(result, Err(InspectCommandError::MissingLatestTrace)), "{result:?}");
 }
 
@@ -1597,6 +1604,41 @@ fn summarize_trace_uses_goal_plan_projection_and_decision_evidence_fallbacks() {
 }
 
 #[test]
+fn summarize_trace_reports_no_council_activity_without_review_evidence() {
+    let mut trace = ExecutionTrace::new("task-council", "session", "Governed goal");
+    trace.terminal_status = Some(TaskStatus::Failed);
+    trace.terminal_reason = Some(TerminalReason::new(
+        TerminalCondition::NoCredibleNextStep,
+        "blocked after governance",
+        None,
+    ));
+    trace.events.push(TraceEvent {
+        event_id: "e1".to_string(),
+        event_type: TraceEventType::GovernanceBlocked,
+        step_id: Some("plan".to_string()),
+        plan_revision: 1,
+        payload: json!({
+            "stage_key": "plan:discovery",
+            "reason": "stage council blocked planning"
+        }),
+        recorded_at: 0,
+    });
+
+    let summary = summarize_trace(PathBuf::from("/tmp/trace.json"), &trace).unwrap();
+    let council =
+        summary.inspect_council.as_ref().expect("inspect summary should include a council closure");
+    assert_eq!(council.headline, "no council activity was recorded");
+    assert!(council.narrative_lines.is_empty());
+    assert!(council.source_attribution.is_empty());
+
+    let rendered = render_trace_summary(&summary, "explicit-trace", "/boundline-next");
+    assert!(
+        rendered.contains("inspect_council_headline: no council activity was recorded"),
+        "{rendered}"
+    );
+}
+
+#[test]
 fn summarize_trace_extracts_advanced_context_from_goal_plan_payload() {
     use boundline::domain::trace::TraceEvent;
 
@@ -1741,7 +1783,12 @@ fn command_names_render_for_all_four_subcommands() {
         "run"
     );
     assert_eq!(
-        command_name(&DeveloperCommand::Inspect { trace: None, workspace: None, cluster: None }),
+        command_name(&DeveloperCommand::Inspect {
+            trace: None,
+            workspace: None,
+            cluster: None,
+            session: None,
+        }),
         "inspect"
     );
 }
@@ -1862,11 +1909,11 @@ fn render_session_status_projects_workspace_routing_defaults() {
         routing: RoutingConfig {
             planning: Some(ModelRoute {
                 runtime: RuntimeKind::Codex,
-                model: "gpt-5-codex".to_string(),
+                model: "o4-mini".to_string(),
             }),
             implementation: Some(ModelRoute {
                 runtime: RuntimeKind::Copilot,
-                model: "gpt-5.4".to_string(),
+                model: "gpt-4o".to_string(),
             }),
             ..RoutingConfig::default()
         },
@@ -1941,20 +1988,20 @@ fn render_session_status_projects_workspace_routing_defaults() {
         latest_governance_decision: None,
         latest_governance_candidates: None,
         governance_next_action: None,
-        next_command: Some("boundline capture --goal <goal>".to_string()),
+        next_command: Some("boundline goal --goal <goal>".to_string()),
         explanation: "session is waiting for a goal".to_string(),
         ..Default::default()
     });
 
     assert!(
         rendered.contains(
-            "route_config_projection: workspace_routing: planning=codex/gpt-5-codex, implementation=copilot/gpt-5.4"
+            "route_config_projection: workspace_routing: planning=codex/o4-mini, implementation=copilot/gpt-4o"
         ),
         "{rendered}"
     );
     assert!(
         rendered.contains(
-            "effective_routing: planning=codex/gpt-5-codex [workspace], implementation=copilot/gpt-5.4 [workspace], verification=copilot/gpt-5.5 [built-in], review=claude/sonnet-4.6 [built-in], adjudication=codex/gpt-5-codex [built-in]"
+            "effective_routing: planning=codex/o4-mini [workspace], implementation=copilot/gpt-4o [workspace], verification=copilot/gpt-4.1 [built-in], review=claude/sonnet-4 [built-in], adjudication=codex/o4-mini [built-in]"
         ),
         "{rendered}"
     );
@@ -2148,8 +2195,8 @@ fn render_trace_summary_prefers_persisted_routing_snapshot_over_current_workspac
             "input": {
                 "routing_projection": {
                     "effective_routing": [
-                        "planning=codex/gpt-5-codex [workspace]",
-                        "verification=copilot/gpt-5.4 [built-in]"
+                        "planning=codex/o4-mini [workspace]",
+                        "verification=copilot/gpt-4o [built-in]"
                     ],
                     "assistant_bindings": [
                         "planning=codex",
@@ -2167,7 +2214,7 @@ fn render_trace_summary_prefers_persisted_routing_snapshot_over_current_workspac
 
     assert!(
         rendered.contains(
-            "route_config_projection: effective_routing: planning=codex/gpt-5-codex [workspace], verification=copilot/gpt-5.4 [built-in] | assistant_bindings: planning=codex, verification=copilot"
+            "route_config_projection: effective_routing: planning=codex/o4-mini [workspace], verification=copilot/gpt-4o [built-in] | assistant_bindings: planning=codex, verification=copilot"
         ),
         "{rendered}"
     );
@@ -2723,31 +2770,38 @@ fn command_names_render_for_all_remaining_subcommands() {
     let cases: &[(&DeveloperCommand, &str)] = &[
         (
             &DeveloperCommand::Checkpoint {
-                command: CheckpointSubcommand::List { workspace: None, cluster: None },
+                command: CheckpointSubcommand::List {
+                    workspace: None,
+                    cluster: None,
+                    session: None,
+                },
             },
             "checkpoint",
         ),
-        (&DeveloperCommand::Start { workspace: None, cluster: None }, "start"),
         (
-            &DeveloperCommand::Capture {
+            &DeveloperCommand::Goal {
                 workspace: None,
                 cluster: None,
+                update: false,
+                new_session: false,
                 goal: None,
                 brief: Vec::new(),
                 governance: None,
                 risk: None,
                 zone: None,
                 owner: None,
+                slug: None,
             },
-            "capture",
+            "goal",
         ),
         (
             &DeveloperCommand::Plan {
                 workspace: None,
                 cluster: None,
+                input: None,
                 flow: None,
                 no_flow: false,
-                confirm: false,
+                no_canon: false,
             },
             "plan",
         ),
@@ -2756,9 +2810,9 @@ fn command_names_render_for_all_remaining_subcommands() {
             &DeveloperCommand::Workflow { command: WorkflowSubcommand::List { workspace: None } },
             "workflow",
         ),
-        (&DeveloperCommand::Status { workspace: None, cluster: None }, "status"),
-        (&DeveloperCommand::Next { workspace: None, cluster: None }, "next"),
-        (&DeveloperCommand::Continue { workspace: None, cluster: None }, "continue"),
+        (&DeveloperCommand::Status { workspace: None, cluster: None, session: None }, "status"),
+        (&DeveloperCommand::Next { workspace: None, cluster: None, session: None }, "next"),
+        (&DeveloperCommand::Continue { workspace: None, cluster: None, session: None }, "continue"),
         (
             &DeveloperCommand::Govern {
                 workspace: None,
@@ -2787,6 +2841,7 @@ fn command_names_render_for_all_remaining_subcommands() {
         ),
         (
             &DeveloperCommand::Init {
+                scope: InitConfigScope::Workspace,
                 workspace: std::path::PathBuf::from("."),
                 non_interactive: false,
                 template: None,
@@ -2858,6 +2913,24 @@ fn summarize_trace_extracts_delight_feedback_signal_from_events() {
     let signal = summary.delight_feedback.as_ref().unwrap();
     assert_eq!(signal.total_explanations, 5);
     assert_eq!(signal.attributed_explanations, 3);
+}
+
+#[test]
+fn assistant_asset_catalog_exports_goal_template_for_scaffold_and_docs() {
+    let scaffold_assets = assets_for_assistants(&[AssistantHostKind::Copilot]);
+    let goal_template = scaffold_assets
+        .iter()
+        .find(|asset| asset.relative_path == "assistant/prompts/goal-template.md")
+        .expect("assistant scaffold should include the goal template");
+    assert!(goal_template.contents.contains("/boundline:goal"));
+
+    let docs_assets = docs_assets_for_assistants_under(
+        &[AssistantHostKind::Copilot],
+        &PathBuf::from("docs/boundline"),
+    );
+    assert!(docs_assets.iter().any(|asset| {
+        asset.relative_path == "docs/boundline/assistant/prompts/goal-template.md"
+    }));
 }
 
 fn sample_cluster_delivery_story() -> ClusterDeliveryStory {

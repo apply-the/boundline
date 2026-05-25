@@ -19,8 +19,8 @@ use boundline::domain::task_context::{
     LATEST_GOVERNANCE_STAGE_KEY,
 };
 use boundline::orchestrator::governance::{
-    GovernanceProjectionSnapshot, governance_input_documents, overlay_stage_policy_with_intent,
-    requested_governance_intent,
+    GovernanceProjectionSnapshot, default_stage_canon_mode, governance_input_documents,
+    overlay_stage_policy_with_intent, requested_governance_intent,
 };
 use boundline::{
     ApprovalState, AuthoredBriefBundle, AutopilotAction, AutopilotDecisionRecord, CanonMode,
@@ -50,6 +50,7 @@ fn sample_record() -> GovernedStageRecord {
         previous_governance_attempt_id: None,
         packet_ref: Some(".boundline/governance/bug-fix-investigate/attempt-1".to_string()),
         decision_ref: Some("decision-1".to_string()),
+        stage_council: None,
         blocked_reason: None,
     }
 }
@@ -778,6 +779,7 @@ fn canon_mode_helpers_expose_primary_documents_and_context_requirements() {
 fn supported_canon_modes_include_expected_stage_whitelist_entries() {
     let expectations = [
         ("delivery", "requirements", vec![CanonMode::Requirements]),
+        ("delivery", "system-shaping", vec![CanonMode::SystemShaping]),
         ("delivery", "architecture", vec![CanonMode::Architecture]),
         ("delivery", "backlog", vec![CanonMode::Backlog]),
         ("delivery", "implementation", vec![CanonMode::Implementation]),
@@ -816,6 +818,47 @@ fn supported_canon_modes_include_expected_stage_whitelist_entries() {
     }
 
     assert!(supported_canon_modes_for_stage("delivery", "unknown").is_empty());
+}
+
+#[test]
+fn default_stage_canon_mode_uses_authoritative_stage_candidate_order() {
+    let investigate_policy = StageGovernancePolicy {
+        flow_name: "bug-fix".to_string(),
+        stage_id: "investigate".to_string(),
+        enabled: true,
+        required: true,
+        autopilot: false,
+        require_adaptive_companion: false,
+        runtime: Some(GovernanceRuntimeKind::Canon),
+        canon_mode: None,
+        system_context: Some(SystemContextBinding::Existing),
+        risk: Some("medium".to_string()),
+        zone: Some("engineering".to_string()),
+        owner: Some("platform".to_string()),
+        reasoning_profile: None,
+    };
+    assert_eq!(
+        default_stage_canon_mode(&investigate_policy, GovernanceRuntimeKind::Local),
+        Some(CanonMode::Discovery)
+    );
+
+    let verify_policy =
+        StageGovernancePolicy { stage_id: "verify".to_string(), ..investigate_policy.clone() };
+    assert_eq!(
+        default_stage_canon_mode(&verify_policy, GovernanceRuntimeKind::Local),
+        Some(CanonMode::SecurityAssessment)
+    );
+
+    let inherited_canon_policy =
+        StageGovernancePolicy { runtime: None, ..investigate_policy.clone() };
+    assert_eq!(
+        default_stage_canon_mode(&inherited_canon_policy, GovernanceRuntimeKind::Canon),
+        Some(CanonMode::Discovery)
+    );
+    assert_eq!(
+        default_stage_canon_mode(&inherited_canon_policy, GovernanceRuntimeKind::Local),
+        None
+    );
 }
 
 #[test]
@@ -916,6 +959,7 @@ fn governance_reuse_binding_uses_immediate_upstream_stage_context() {
             previous_governance_attempt_id: None,
             packet_ref: Some(".canon/runs/canon-run-1".to_string()),
             decision_ref: None,
+            stage_council: None,
             blocked_reason: None,
         })
         .unwrap();
@@ -975,6 +1019,7 @@ fn governance_reuse_binding_supports_same_stage_rerun() {
             previous_governance_attempt_id: Some("attempt-1".to_string()),
             packet_ref: Some(".canon/runs/canon-run-2".to_string()),
             decision_ref: None,
+            stage_council: None,
             blocked_reason: None,
         })
         .unwrap();

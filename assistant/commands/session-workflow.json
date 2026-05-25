@@ -6,17 +6,37 @@
   "delightSignalAuthority": "CLI-reported time_to_first_useful_answer_ms, time_to_first_useful_answer_command, explanation_attribution_rate, next_action_acceptance_rate, and latest_next_action_outcome lines",
   "hostSupportModeAuthority": "assistant/global/manifest.json and assistant/plugin-metadata.json declare whether each host is repo-local-full, copy-ready-assets, or manual-fallback; the CLI remains authoritative for output and state",
   "projectScaleAuthority": "CLI-reported project_scale_path, project_scale_current_stage, project_scale_next_action, checkpoint refs, trace refs",
+  "briefArtifactAuthority": ".boundline/briefs/goal.md, .boundline/briefs/plan.md, and .boundline/briefs/run.md are the runtime-owned latest operator briefs; stage-specific planning briefs stay under .boundline/governance/planning/<stage>/brief.md",
   "palettePolicy": "Keep the default palette compact; explain-plan and doctor-context remain contextual follow-ups",
+  "operatorBriefContract": {
+    "defaultHumanReadableMode": "compact",
+    "defaultFields": [
+      "goal",
+      "authored_input_summary",
+      "authored_input_sources",
+      "routing",
+      "execution_condition",
+      "summary",
+      "artifacts",
+      "latest_status",
+      "next_command"
+    ],
+    "detailEscapes": [
+      "--verbose",
+      "inspect",
+      "trace refs",
+      "governed artifacts"
+    ]
+  },
   "hostSupportModes": {
     "claude": "repo-local-full",
     "codex": "repo-local-full",
     "cursor": "copy-ready-assets",
     "copilot": "repo-local-full",
-    "gemini": "manual-fallback"
+    "antigravity": "repo-local-full"
   },
   "defaultPalette": [
-    "/boundline:start",
-    "/boundline:capture",
+    "/boundline:goal",
     "/boundline:plan",
     "/boundline:run",
     "/boundline:status",
@@ -43,28 +63,16 @@
   ],
   "commands": [
     {
-      "id": "/boundline:start",
-      "label": "start",
-      "purpose": "Open or reset the active Boundline session for a workspace.",
-      "boundlineCommand": "cargo run --bin boundline -- start --json",
+      "id": "/boundline:goal",
+      "label": "goal",
+      "purpose": "Open a new session goal or refine the active one, optionally with a supporting brief.",
+      "boundlineCommand": "cargo run --bin boundline -- orchestrate --goal <goal> --brief <path> --until phase-request --json-stream",
       "skillRefs": {
-        "claude": "assistant/claude/commands/boundline-start.md",
-        "codex": "assistant/codex/commands/boundline-start.md",
-        "copilot": "assistant/copilot/prompts/boundline-start.prompt.md"
+        "claude": "assistant/claude/commands/boundline-goal.md",
+        "codex": "assistant/codex/commands/boundline-goal.md",
+        "copilot": "assistant/copilot/prompts/boundline-goal.prompt.md"
       },
-      "stateHandling": "Read .boundline/session.json through CLI output and preserve next_command plus blocked, clarification-required, failed, exhausted, and terminal states."
-    },
-    {
-      "id": "/boundline:capture",
-      "label": "capture",
-      "purpose": "Persist a goal or brief into the active session.",
-      "boundlineCommand": "cargo run --bin boundline -- capture --goal <goal> --json",
-      "skillRefs": {
-        "claude": "assistant/claude/commands/boundline-capture.md",
-        "codex": "assistant/codex/commands/boundline-capture.md",
-        "copilot": "assistant/copilot/prompts/boundline-capture.prompt.md"
-      },
-      "stateHandling": "Preserve .boundline/session.json, CLI-authored input fields, next_command, and explicit blocked, clarification-required, failed, exhausted, and terminal states."
+      "stateHandling": "Use orchestrate to open or refine the active session goal through a runtime-owned phase_request boundary; preserve .boundline/session.json, phase_request.request_id, authored input fields, assistant-safe resume routes, next_command, and explicit blocked, clarification-required, failed, exhausted, and terminal states. When goal clarification is requested, stop automatic continuation, collect one answer, and resume with the emitted request_id plus --answer contract."
     },
     {
       "id": "/boundline:plan",

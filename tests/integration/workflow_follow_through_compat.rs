@@ -9,11 +9,10 @@ use crate::workspace_fixture::{
 fn direct_session_native_commands_remain_available_with_discovery_enabled_workflows() {
     let workspace = temp_workflow_discovery_workspace("workflow-follow-through-compat-native");
 
-    assert_eq!(run_boundline_in(&workspace, &["start", "--workspace", "."]).status.code(), Some(0));
     assert_eq!(
         run_boundline_in(
             &workspace,
-            &["capture", "--workspace", ".", "--goal", "Fix the failing add test"],
+            &["goal", "--workspace", ".", "--goal", "Fix the failing add test"],
         )
         .status
         .code(),
@@ -48,6 +47,6 @@ fn explicit_compatibility_run_remains_available_with_discovery_enabled_workflows
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(0), "{run_text}");
     assert!(run_text.contains("routing: compatibility"), "{run_text}");
-    assert!(run_text.contains("execution_path: fixture_compatibility"), "{run_text}");
+    assert!(run_text.contains("next_command: /boundline-status"), "{run_text}");
     assert!(!run_text.contains("workflow:"), "{run_text}");
 }

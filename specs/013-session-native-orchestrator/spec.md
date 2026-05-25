@@ -13,11 +13,11 @@ A developer runs `boundline run` on an active session. Instead of replaying stat
 
 **Why this priority**: This is the core product shift. Without an explicit observe→decide→act→verify→update loop, Boundline remains a static plan replayer. Every other story in this spec depends on the runtime owning next-action selection from live state.
 
-**Independent Test**: Can be tested by running `boundline run` on a session with a captured goal and verifying that the engine produces a sequence of typed, inspectable decision objects in the trace, each with type, target, rationale, expected outcome, and evidence inputs.
+**Independent Test**: Can be tested by running `boundline run` on a session with a recorded goal and verifying that the engine produces a sequence of typed, inspectable decision objects in the trace, each with type, target, rationale, expected outcome, and evidence inputs.
 
 **Acceptance Scenarios**:
 
-1. **Given** a session with a captured goal and workspace context, **When** `boundline run` is invoked, **Then** the engine enters an observe→decide→act→verify→update loop, produces at least one decision object in the trace, and terminates in an explicit terminal state (success, failure, or limit-reached).
+1. **Given** a session with a recorded goal and workspace context, **When** `boundline run` is invoked, **Then** the engine enters an observe→decide→act→verify→update loop, produces at least one decision object in the trace, and terminates in an explicit terminal state (success, failure, or limit-reached).
 2. **Given** a running loop where the previous action's verification fails, **When** the engine selects the next decision, **Then** the decision references the failed verification evidence and selects a bounded recovery action (fix or replan), and the recovery decision is recorded in the trace.
 3. **Given** a session that has reached its configured maximum step count, **When** the engine evaluates whether to continue, **Then** execution stops with an explicit exhaustion terminal state and a trace entry documenting the limit and accumulated evidence.
 
@@ -25,17 +25,17 @@ A developer runs `boundline run` on an active session. Instead of replaying stat
 
 ### User Story 2 - Goal-Derived Planning (Priority: P2)
 
-A developer runs `boundline plan` on an active session that has a captured goal. Instead of requiring a pre-authored execution profile or init template, Boundline derives an initial bounded task draft from the goal text, the current workspace state (file tree, existing config, language/framework signals), collected documents (if any were captured), and available Canon artifacts (if the workspace has `.canon/` with governed outputs). The resulting plan is shown to the developer for confirmation before execution begins.
+A developer runs `boundline plan` on an active session that has a recorded goal. Instead of requiring a pre-authored execution profile or init template, Boundline derives an initial bounded task draft from the goal text, the current workspace state (file tree, existing config, language/framework signals), collected documents (if any were captured), and available Canon artifacts (if the workspace has `.canon/` with governed outputs). The resulting plan is shown to the developer for confirmation before execution begins.
 
 **Why this priority**: Shifting the planning input from static templates to goal + workspace + documents is the second-largest product change. The decision loop (US1) needs a plan to execute against, and that plan must come from real context rather than a predeclared manifest.
 
-**Independent Test**: Can be tested by running `boundline start` then `boundline capture --goal "fix the broken auth middleware"` then `boundline plan`, and verifying that the session produces a bounded task list derived from workspace state without requiring `boundline init` or a pre-existing execution profile.
+**Independent Test**: Can be tested by running `boundline start` then `boundline goal --goal "fix the broken auth middleware"` then `boundline plan`, and verifying that the session produces a bounded task list derived from workspace state without requiring `boundline init` or a pre-existing execution profile.
 
 **Acceptance Scenarios**:
 
-1. **Given** a session with a captured goal and a Rust workspace, **When** `boundline plan` is invoked, **Then** Boundline produces a bounded task draft that references files and structures actually present in the workspace, and persists the plan in the session state.
-2. **Given** a session with a captured goal and a workspace containing `.canon/` artifacts, **When** `boundline plan` is invoked, **Then** the plan includes references to relevant Canon artifacts as evidence inputs, and the plan is bounded (limited number of tasks, each with an explicit expected outcome).
-3. **Given** a session where `boundline plan` is invoked without a prior captured goal, **When** the command runs, **Then** it returns an explicit error indicating that a goal must be captured first.
+1. **Given** a session with a recorded goal and a Rust workspace, **When** `boundline plan` is invoked, **Then** Boundline produces a bounded task draft that references files and structures actually present in the workspace, and persists the plan in the session state.
+2. **Given** a session with a recorded goal and a workspace containing `.canon/` artifacts, **When** `boundline plan` is invoked, **Then** the plan includes references to relevant Canon artifacts as evidence inputs, and the plan is bounded (limited number of tasks, each with an explicit expected outcome).
+3. **Given** a session where `boundline plan` is invoked without a prior recorded goal, **When** the command runs, **Then** it returns an explicit error indicating that a goal must be captured first.
 
 ---
 
@@ -49,7 +49,7 @@ A developer runs `boundline plan` on an active session. Instead of requiring exp
 
 **Acceptance Scenarios**:
 
-1. **Given** a session with a captured goal containing "fix the failing test in auth.rs", **When** `boundline plan` is invoked, **Then** Boundline proposes the `bug-fix` flow with an explicit confirmation prompt showing the inferred flow and the reason for inference.
+1. **Given** a session with a recorded goal containing "fix the failing test in auth.rs", **When** `boundline plan` is invoked, **Then** Boundline proposes the `bug-fix` flow with an explicit confirmation prompt showing the inferred flow and the reason for inference.
 2. **Given** an inferred flow proposal, **When** the developer overrides with `--flow delivery`, **Then** the session uses the `delivery` flow instead and records the override in the session state.
 3. **Given** an inferred flow proposal, **When** the developer skips flow entirely with `--no-flow`, **Then** the session proceeds without flow constraints and the decision loop operates with the full set of decision types.
 
@@ -93,12 +93,12 @@ The existing `fixture.rs` execution path continues to work for explicitly declar
 
 **Why this priority**: Preserving backward compatibility ensures existing workflows and tests are not broken by the realignment. This is lower priority because it requires no new capability, only correct routing between the new and old paths.
 
-**Independent Test**: Can be tested by verifying that `boundline run` with an existing `.boundline/execution.json` still executes the fixture path, while `boundline run` on a session with only a captured goal uses the new decision loop.
+**Independent Test**: Can be tested by verifying that `boundline run` with an existing `.boundline/execution.json` still executes the fixture path, while `boundline run` on a session with only a recorded goal uses the new decision loop.
 
 **Acceptance Scenarios**:
 
 1. **Given** a workspace with an existing `.boundline/execution.json` and no active session goal, **When** `boundline run` is invoked, **Then** the fixture execution path is used and behavior matches the current v0.12.0 output.
-2. **Given** a workspace with an active session that has a captured goal and no execution profile, **When** `boundline run` is invoked, **Then** the new decision loop is used, not the fixture path.
+2. **Given** a workspace with an active session that has a recorded goal and no execution profile, **When** `boundline run` is invoked, **Then** the new decision loop is used, not the fixture path.
 3. **Given** a workspace with both an active session goal and an existing execution profile, **When** `boundline run` is invoked, **Then** the session-native path takes precedence and the execution profile is ignored unless the developer explicitly opts into it with `--profile`.
 
 ### Edge Cases
@@ -123,7 +123,7 @@ The existing `fixture.rs` execution path continues to work for explicitly declar
 - **FR-008**: System MUST apply explicit execution limits (maximum steps, maximum retries per decision) and terminate with an explicit terminal state when limits are reached.
 - **FR-009**: System MUST handle decision verification failures by selecting a bounded recovery action (fix or replan) and recording the failure evidence in the next decision's inputs.
 - **FR-010**: System MUST preserve backward compatibility with the existing fixture-based execution path when an explicit execution profile is present.
-- **FR-011**: System MUST route `boundline run` to the new decision loop when a session has a captured goal, and to the fixture path only when an explicit execution profile is the sole input.
+- **FR-011**: System MUST route `boundline run` to the new decision loop when a session has a recorded goal, and to the fixture path only when an explicit execution profile is the sole input.
 - **FR-012**: System MUST produce explicit terminal states for all execution outcomes: success, failure, exhaustion, and no-actionable-state.
 
 ### Scope Boundaries *(mandatory)*
@@ -142,7 +142,7 @@ The existing `fixture.rs` execution path continues to work for explicitly declar
 
 ### Measurable Outcomes
 
-- **SC-001**: A developer can complete a bounded engineering task (e.g., fix a broken test, implement a small function) through `start → capture → plan → run → inspect` without invoking `boundline init` or authoring an execution profile.
+- **SC-001**: A developer can complete a bounded engineering task (e.g., fix a broken test, implement a small function) through `goal → plan → run → inspect` without invoking `boundline init` or authoring an execution profile.
 - **SC-002**: 100% of `boundline run` executions terminate in an explicit terminal state (success, failure, exhaustion, or no-actionable-state) within configured step limits.
 - **SC-003**: Every decision made during execution is recorded as a typed, inspectable decision object in the session trace, and can be retrieved through `boundline inspect` within 2 seconds.
 - **SC-004**: `boundline plan` derives a bounded task draft from goal and workspace state in under 5 seconds for workspaces with up to 1000 files.

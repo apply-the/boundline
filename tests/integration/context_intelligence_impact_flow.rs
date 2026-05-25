@@ -2,9 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use boundline::cli::inspect::execute_inspect;
-use boundline::cli::session::{
-    execute_capture, execute_plan, execute_run, execute_start, execute_status,
-};
+use boundline::cli::session::{execute_goal, execute_plan, execute_run, execute_status};
 
 use crate::workspace_fixture::temp_empty_workspace;
 
@@ -30,8 +28,7 @@ fn write_impact_workspace(prefix: &str) -> PathBuf {
 fn status_and_inspect_surface_missing_test_impact_findings() {
     let workspace = write_impact_workspace("boundline-context-intelligence-impact");
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
+    execute_goal(
         Some(&workspace),
         Some("reconcile src/engine.rs and add the missing focused test"),
         &[],
@@ -41,10 +38,10 @@ fn status_and_inspect_surface_missing_test_impact_findings() {
         None,
     )
     .unwrap();
-    execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+    execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
     let status = execute_status(Some(&workspace)).unwrap();
     execute_run(Some(&workspace)).unwrap();
-    let inspect = execute_inspect(None, Some(&workspace)).unwrap();
+    let inspect = execute_inspect(None, Some(&workspace), None).unwrap();
 
     let status_output = status.terminal_output.as_str();
     assert!(status_output.contains("impact_finding_count: 1"), "{status_output}");

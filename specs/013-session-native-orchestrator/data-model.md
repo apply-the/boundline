@@ -57,7 +57,7 @@ and Canon artifacts. Created during `boundline plan`, consumed during `boundline
 ```text
 GoalPlan
 ├── plan_id: String (UUID)
-├── goal_text: String (captured goal from session)
+├── goal_text: String (recorded goal from session)
 ├── tasks: Vec<PlannedTask>
 │   └── PlannedTask
 │       ├── task_id: String

@@ -17,9 +17,9 @@ live planning evidence rather than as downstream governance residue.
 planning still treats Canon as a side channel, the feature has not changed how
 Boundline reasons about bounded delivery.
 
-**Independent Test**: Capture a bounded goal in a workspace that already
+**Independent Test**: Record a bounded goal in a workspace that already
 contains reusable Canon artifacts and capability signals, then run
-`start -> capture -> plan`. The resulting proposal must reflect Canon-grounded
+`goal -> plan`. The resulting proposal must reflect Canon-grounded
 constraints, packet reuse, or capability-aware verification intent in a way that
 changes the proposed plan compared with workspace-only reasoning.
 
@@ -158,7 +158,7 @@ with the shipped behavior.
 - **FR-006**: System MUST detect when Canon-grounded memory is stale,
   contradicted, missing, or insufficient and MUST stop, refresh, or replan
   explicitly rather than silently treating that memory as authoritative.
-- **FR-007**: System MUST keep Canon influence bounded by the captured goal,
+- **FR-007**: System MUST keep Canon influence bounded by the recorded goal,
   negotiated delivery packet, current acceptance boundary, and explicit execution
   limits instead of allowing Canon artifacts to widen scope opportunistically.
 - **FR-008**: System MUST preserve bounded operator control by surfacing when

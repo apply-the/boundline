@@ -40,14 +40,14 @@
 
 ## Phase 3: User Story 1 - Session-Native Runtime Path (Priority: P1) 🎯 MVP
 
-**Goal**: Make `start -> capture -> plan -> run -> inspect` the primary bounded delivery path driven by live state.
+**Goal**: Make `goal -> plan -> run -> inspect` the primary bounded delivery path driven by live state.
 
 **Independent Test**: Run the full session-native CLI journey on a workspace without a declarative execution profile and verify that Boundline persists a bounded task draft, executes bounded decisions from live state, and records explicit terminal reasoning.
 
 ### Tests for User Story 1
 
 - [X] T008 [P] [US1] Add contract coverage for bounded task draft handoff and persisted decisions in `tests/contract/runtime_refoundation_contract.rs`
-- [X] T009 [P] [US1] Add integration coverage for `start -> capture -> plan -> run -> inspect` without declarative profiles in `tests/integration/runtime_refoundation_flow.rs`
+- [X] T009 [P] [US1] Add integration coverage for `goal -> plan -> run -> inspect` without declarative profiles in `tests/integration/runtime_refoundation_flow.rs`
 - [X] T010 [P] [US1] Add integration coverage for recovery, exhaustion, and no-actionable termination in `tests/integration/runtime_refoundation_failure.rs`
 
 ### Implementation for User Story 1
@@ -151,7 +151,7 @@
 ```bash
 # Launch User Story 1 validation work together:
 Task: "Add contract coverage for bounded task draft handoff and persisted decisions in tests/contract/runtime_refoundation_contract.rs"
-Task: "Add integration coverage for start -> capture -> plan -> run -> inspect without declarative profiles in tests/integration/runtime_refoundation_flow.rs"
+Task: "Add integration coverage for goal -> plan -> run -> inspect without declarative profiles in tests/integration/runtime_refoundation_flow.rs"
 
 # Launch independent User Story 1 implementation work together after validations exist:
 Task: "Persist the authoritative bounded task draft during planning in src/cli/session.rs, src/orchestrator/goal_planner.rs, and src/orchestrator/session_runtime.rs"

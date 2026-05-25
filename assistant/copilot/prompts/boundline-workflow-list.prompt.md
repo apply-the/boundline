@@ -24,8 +24,10 @@ If shell execution is unavailable, ask only for the missing workspace and then p
 Wait for the user to paste the output before continuing.
 
 ## Output Interpretation
+Provide a conversational, human-readable summary of the session state. Do NOT use raw JSON keys or snake_case field names (like `next_command`, `latest_status`, `authored_input_summary`, etc.) in your response. Translate all state into natural language.
+For the next step or follow-up commands, provide them as clickable buttons or action links (e.g., Markdown command links) instead of plain text recommendations.
 Summarize `workflow registry status`, `workflow_count`, each surfaced `workflow`, `summary`, `recommended_when`, `phases`, `invoke_with`, and `explanation`. Keep the result on the Boundline-owned workflow surface and route to `/boundline-workflow-run` once the user chooses a workflow.
 
 ## Next-Step Routing
 If the user chooses a workflow name, route to `/boundline-workflow-run`. Otherwise preserve the discovered `invoke_with` guidance instead of inventing provider-specific commands.
-Allowed follow-up commands: `/boundline-workflow-run`, `/boundline-status`, `/boundline-start`.
+Allowed follow-up commands: `/boundline-workflow-run`, `/boundline-status`, `/boundline-goal`.

@@ -11,7 +11,7 @@ The first slice covers these commands when structured output is explicitly
 requested:
 
 - `boundline start`
-- `boundline capture`
+- `boundline goal`
 - `boundline flow`
 - `boundline plan`
 - `boundline step`
@@ -55,7 +55,7 @@ Structured output MUST serialize one envelope object per command invocation.
 
 ### Session-Oriented Commands
 
-`start`, `capture`, `flow`, `plan`, `step`, `status`, and `next` MUST provide:
+`start`, `goal`, `flow`, `plan`, `step`, `status`, and `next` MUST provide:
 
 - `session_status`: populated with the serialized `SessionStatusView`
 - `trace_summary`: omitted or `null`

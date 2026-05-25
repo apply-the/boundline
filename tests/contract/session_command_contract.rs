@@ -4,13 +4,10 @@ use crate::workspace_fixture::{run_boundline_in, temp_fixture_workspace, termina
 use boundline::domain::session::{ActiveSessionRecord, SessionStatus};
 
 #[test]
-fn capture_and_plan_persist_the_active_goal_and_native_goal_plan() {
+fn goal_and_plan_persist_the_active_goal_and_native_goal_plan() {
     let workspace = temp_fixture_workspace("boundline-session-command-contract");
-    let start = run_boundline_in(&workspace, &["start"]);
-    assert_eq!(start.status.code(), Some(0), "{}", terminal_text(&start));
-
-    let capture = run_boundline_in(&workspace, &["capture", "--goal", "Fix the failing add test"]);
-    assert_eq!(capture.status.code(), Some(0), "{}", terminal_text(&capture));
+    let goal = run_boundline_in(&workspace, &["goal", "--goal", "Fix the failing add test"]);
+    assert_eq!(goal.status.code(), Some(0), "{}", terminal_text(&goal));
 
     let plan = run_boundline_in(&workspace, &["plan"]);
     assert_eq!(plan.status.code(), Some(0), "{}", terminal_text(&plan));

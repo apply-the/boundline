@@ -291,6 +291,24 @@ fn build_goal_plan_with_sources_fails_when_context_is_insufficient() {
 }
 
 #[test]
+fn build_goal_plan_supports_greenfield_constructive_goal_in_empty_workspace() {
+    let ws = temp_workspace("gp-greenfield");
+
+    let plan = build_goal_plan("build a react dashboard", &ws).unwrap();
+
+    assert_eq!(plan.context_credibility().as_deref(), Some("credible"));
+    assert!(
+        plan.context_summary()
+            .as_deref()
+            .is_some_and(|summary| summary.contains("greenfield goal seed"))
+    );
+    assert!(plan.context_pack.as_ref().is_some_and(|pack| {
+        pack.selected_targets.iter().any(|target| target.starts_with("goal:"))
+    }));
+    assert!(plan.context_primary_inputs().iter().any(|input| input == "build a react dashboard"));
+}
+
+#[test]
 fn build_goal_plan_inferrs_bug_fix_from_source_and_test_evidence_without_bug_keywords() {
     let ws = temp_workspace("gp-evidence-bug-fix");
     std::fs::write(

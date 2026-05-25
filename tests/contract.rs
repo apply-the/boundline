@@ -7,32 +7,8 @@ mod runtime_refoundation;
 #[path = "support/assistant_delight_support.rs"]
 mod assistant_delight_support;
 
-#[path = "support/dashboard_fixture.rs"]
-mod dashboard_fixture;
-
 #[path = "contract/orchestrator_run.rs"]
 mod orchestrator_run;
-
-#[path = "contract/dashboard_snapshot_contract.rs"]
-mod dashboard_snapshot_contract;
-
-#[path = "contract/dashboard_command_contract.rs"]
-mod dashboard_command_contract;
-
-#[path = "contract/dashboard_render_contract.rs"]
-mod dashboard_render_contract;
-
-#[path = "contract/dashboard_branding_contract.rs"]
-mod dashboard_branding_contract;
-
-#[path = "contract/dashboard_inspection_contract.rs"]
-mod dashboard_inspection_contract;
-
-#[path = "contract/dashboard_action_contract.rs"]
-mod dashboard_action_contract;
-
-#[path = "contract/dashboard_release_docs_contract.rs"]
-mod dashboard_release_docs_contract;
 
 #[path = "contract/endpoint_execution.rs"]
 mod endpoint_execution;

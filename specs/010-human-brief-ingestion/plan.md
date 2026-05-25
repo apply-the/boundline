@@ -5,7 +5,7 @@
 
 ## Summary
 
-Allow developers to start Boundline work from plain text and Markdown briefs by extending the existing session-oriented `capture` and `run` entry points with human-facing inputs, workspace-bounded source resolution, explicit clarification when the brief is not credible, and optional governance intent expressed in business terms. The smallest shippable slice keeps the current manifest-driven execution profile as an advanced automation path, normalizes human-authored input into one inspectable brief bundle persisted with session and task state, reuses existing `status`, `next`, `inspect`, and trace surfaces for provenance, and maps high-level governance intent into the existing governance runtime abstraction without asking the user to author JSON manifests or stage wiring.
+Allow developers to start Boundline work from plain text and Markdown briefs by extending the existing session-oriented `goal` and `run` entry points with human-facing inputs, workspace-bounded source resolution, explicit clarification when the brief is not credible, and optional governance intent expressed in business terms. The smallest shippable slice keeps the current manifest-driven execution profile as an advanced automation path, normalizes human-authored input into one inspectable brief bundle persisted with session and task state, reuses existing `status`, `next`, `inspect`, and trace surfaces for provenance, and maps high-level governance intent into the existing governance runtime abstraction without asking the user to author JSON manifests or stage wiring.
 
 ## Technical Context
 
@@ -34,7 +34,7 @@ Allow developers to start Boundline work from plain text and Markdown briefs by 
 - Tool-agent symmetry: PASS. Human input capture, workspace file resolution, clarification, governance mapping, and later execution remain explicit commands and state transitions rather than hidden heuristics. See Summary and contracts.
 - Observability and explicit intelligence: PASS. Input provenance, deduplication order, clarification blocks, governance intent, and derived next actions are surfaced through existing status, inspect, and trace contracts instead of raw logs or hidden state. See Technical Context and contracts.
 - Non-goals and external separation: PASS. Canon stays optional behind the existing governance runtime abstraction, the plan does not introduce a chat UI, long-term memory, councils, or deployment automation, and manifest-driven automation remains available without defining the default human path. See Summary and Technical Context.
-- Minimal slice: PASS. The smallest independently valuable capability is starting `capture` or `run` from plain text and Markdown briefs, preserving source provenance, asking for missing business context explicitly, and optionally carrying human governance intent into the existing governed runtime. See Summary.
+- Minimal slice: PASS. The smallest independently valuable capability is starting `goal` or `run` from plain text and Markdown briefs, preserving source provenance, asking for missing business context explicitly, and optionally carrying human governance intent into the existing governed runtime. See Summary.
 
 ## Project Structure
 
@@ -47,7 +47,7 @@ specs/010-human-brief-ingestion/
 ├── data-model.md
 ├── quickstart.md
 ├── contracts/
-│   ├── capture-run-cli-contract.md
+│   ├── goal-run-cli-contract.md
 │   ├── human-governance-intent-contract.md
 │   └── session-input-observability-contract.md
 └── tasks.md

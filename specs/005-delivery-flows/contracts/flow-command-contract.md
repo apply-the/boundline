@@ -25,7 +25,7 @@ On success, the command must:
 1. Bind the selected flow to the active session.
 2. Initialize the current stage to the first stage of that flow.
 3. Reset any stale terminal reason or trace reference that would misrepresent the newly selected flow.
-4. Preserve the captured goal already stored in the session.
+4. Preserve the recorded goal already stored in the session.
 
 ## Success Output Requirements
 

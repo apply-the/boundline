@@ -71,6 +71,7 @@ fn build_view(record: &ActiveSessionRecord) -> SessionStatusView {
         clarification_headline: None,
         clarification_prompt: None,
         clarification_missing_fields: None,
+        clarification_questions: None,
         requested_governance_runtime: None,
         requested_governance_risk: None,
         requested_governance_zone: None,
@@ -187,7 +188,7 @@ fn session_status_view_accepts_session_owned_workflow_progress_without_goal_plan
                 "workflow is waiting for a captured goal before it can continue".to_string(),
             ),
             next_action: Some(
-                "boundline capture --workspace /tmp/boundline-workflow-session-owned --goal <goal>"
+                "boundline goal --workspace /tmp/boundline-workflow-session-owned --goal <goal>"
                     .to_string(),
             ),
             routing_summary: Some("routing: blocked (session_state) - session has no goal plan or compatibility task to route".to_string()),
@@ -210,6 +211,6 @@ fn session_status_view_accepts_session_owned_workflow_progress_without_goal_plan
     assert_eq!(view.active_workflow.as_deref(), Some("default"));
     assert_eq!(view.workflow_phase.as_deref(), Some("capture"));
     assert!(view.workflow_next_action.as_deref().unwrap().contains(
-        "boundline capture --workspace /tmp/boundline-workflow-session-owned --goal <goal>"
+        "boundline goal --workspace /tmp/boundline-workflow-session-owned --goal <goal>"
     ));
 }

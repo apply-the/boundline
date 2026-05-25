@@ -215,7 +215,7 @@ mod tests {
     fn parses_projection_from_task_input() {
         let projection = RoutingDecisionProjection::from_task_input(&json!({
             "routing_projection": {
-                "effective_routing": ["planning=codex/gpt-5-codex [workspace]"],
+                "effective_routing": ["planning=codex/o4-mini [workspace]"],
                 "assistant_bindings": ["planning=codex"],
                 "runtime_capabilities": ["codex=continuation=supported [workspace]"],
                 "slot_effort_policies": ["implementation=level=high, fallback=preserve [global]"]
@@ -225,7 +225,7 @@ mod tests {
 
         assert_eq!(
             projection.effective_routing,
-            vec!["planning=codex/gpt-5-codex [workspace]".to_string()]
+            vec!["planning=codex/o4-mini [workspace]".to_string()]
         );
         assert_eq!(projection.assistant_bindings, vec!["planning=codex".to_string()]);
         assert_eq!(
@@ -244,7 +244,7 @@ mod tests {
             planning: SourcedRoute {
                 route: crate::domain::configuration::ModelRoute {
                     runtime: RuntimeKind::Codex,
-                    model: "gpt-5-codex".to_string(),
+                    model: "o4-mini".to_string(),
                 },
                 source: ValueSource::Workspace,
             },
@@ -258,7 +258,7 @@ mod tests {
             verification: SourcedRoute {
                 route: crate::domain::configuration::ModelRoute {
                     runtime: RuntimeKind::Copilot,
-                    model: "gpt-5.4".to_string(),
+                    model: "gpt-4o".to_string(),
                 },
                 source: ValueSource::Global,
             },
@@ -269,10 +269,11 @@ mod tests {
                 },
                 source: ValueSource::Cluster,
             },
+            chat: None,
             adjudication: SourcedRoute {
                 route: crate::domain::configuration::ModelRoute {
                     runtime: RuntimeKind::Codex,
-                    model: "gpt-5-codex".to_string(),
+                    model: "o4-mini".to_string(),
                 },
                 source: ValueSource::Cli,
             },
@@ -330,7 +331,7 @@ mod tests {
         assert!(
             projection
                 .effective_routing
-                .contains(&"planning=codex/gpt-5-codex [workspace]".to_string())
+                .contains(&"planning=codex/o4-mini [workspace]".to_string())
         );
         assert!(
             projection

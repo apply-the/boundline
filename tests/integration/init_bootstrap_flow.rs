@@ -1,20 +1,21 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use uuid::Uuid;
+use crate::workspace_fixture::{
+    TempGitWorkspace, run_boundline_in, run_boundline_in_with_env, temp_git_workspace,
+    terminal_text,
+};
 
-use crate::workspace_fixture::{run_boundline_in, run_boundline_in_with_env, terminal_text};
-
-fn empty_workspace(prefix: &str) -> PathBuf {
-    let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
-    fs::create_dir_all(workspace.join("src")).unwrap();
-    fs::create_dir_all(workspace.join("tests")).unwrap();
-    fs::write(
-        workspace.join("Cargo.toml"),
-        "[package]\nname = \"boundline-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
-    )
-    .unwrap();
-    workspace
+fn empty_workspace(prefix: &str) -> TempGitWorkspace {
+    TempGitWorkspace::with_initializer(prefix, |workspace| {
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::create_dir_all(workspace.join("tests")).unwrap();
+        fs::write(
+            workspace.join("Cargo.toml"),
+            "[package]\nname = \"boundline-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        )
+        .unwrap();
+    })
 }
 
 fn run_init_in(workspace: &Path, args: &[&str]) -> std::process::Output {
@@ -79,15 +80,15 @@ fn init_scaffolds_execution_and_config_files() {
     assert!(workspace.join("assistant/prompts/copilot-command-pack.md").is_file());
     assert!(workspace.join("assistant/assets/boundline-plugin-icon.svg").is_file());
     assert!(workspace.join("assistant/assets/boundline-plugin-logo.svg").is_file());
-    assert!(workspace.join("assistant/claude/commands/boundline-start.md").is_file());
-    assert!(workspace.join("assistant/codex/commands/boundline-start.md").is_file());
-    assert!(workspace.join("assistant/copilot/prompts/boundline-start.prompt.md").is_file());
+    assert!(workspace.join("assistant/claude/commands/boundline-goal.md").is_file());
+    assert!(workspace.join("assistant/codex/commands/boundline-goal.md").is_file());
+    assert!(workspace.join("assistant/copilot/prompts/boundline-goal.prompt.md").is_file());
     assert!(workspace.join(".claude-plugin/manifest.json").is_file());
     assert!(workspace.join(".claude-plugin/commands.json").is_file());
     assert!(workspace.join(".codex-plugin/plugin.json").is_file());
     assert!(workspace.join(".copilot-prompts/README.md").is_file());
     assert!(workspace.join(".copilot-prompts/pack.json").is_file());
-    assert!(workspace.join(".github/prompts/boundline-start.prompt.md").is_file());
+    assert!(workspace.join(".github/prompts/boundline-goal.prompt.md").is_file());
 
     let config = fs::read_to_string(workspace.join(".boundline/config.toml")).unwrap();
     assert!(config.contains("assistant_runtimes"));
@@ -310,7 +311,7 @@ fn init_previews_existing_assistant_assets_without_force() {
     let workspace = empty_workspace("boundline-init-assistant-preview");
     fs::create_dir_all(workspace.join("assistant/copilot/prompts")).unwrap();
     fs::write(
-        workspace.join("assistant/copilot/prompts/boundline-start.prompt.md"),
+        workspace.join("assistant/copilot/prompts/boundline-goal.prompt.md"),
         "outdated command pack",
     )
     .unwrap();
@@ -341,7 +342,7 @@ fn init_auto_seeds_routes_from_selected_assistant() {
     assert!(init_text.contains("route_setup:"), "{init_text}");
     assert!(init_text.contains("assistant_defaults: copilot"), "{init_text}");
     assert!(
-        init_text.contains("seeded planning: copilot:gpt-5.5 [assistant-default]"),
+        init_text.contains("seeded planning: copilot:gpt-4.1 [assistant-default]"),
         "{init_text}"
     );
 
@@ -349,7 +350,7 @@ fn init_auto_seeds_routes_from_selected_assistant() {
     assert!(config.contains("assistant_runtimes = [\"copilot\"]"), "{config}");
     assert!(config.contains("[routing.planning]"), "{config}");
     assert!(config.contains("runtime = \"copilot\""), "{config}");
-    assert!(config.contains("model = \"gpt-5.5\""), "{config}");
+    assert!(config.contains("model = \"gpt-4.1\""), "{config}");
 }
 
 #[test]
@@ -374,7 +375,7 @@ fn init_falls_back_to_available_selected_assistant_when_preferred_runtime_is_una
     assert_eq!(init.status.code(), Some(0), "{init_text}");
     assert!(
         init_text.contains(
-            "seeded planning: copilot:gpt-5.5 [assistant-default fallback-from=codex-unavailable]"
+            "seeded planning: copilot:gpt-4.1 [assistant-default fallback-from=codex-unavailable]"
         ),
         "{init_text}"
     );
@@ -403,7 +404,7 @@ fn init_stops_when_selected_assistant_defaults_are_unavailable() {
         init_text.contains("init error: no available assistant defaults remain"),
         "{init_text}"
     );
-    assert!(init_text.contains("--route planning=copilot:gpt-5.5"), "{init_text}");
+    assert!(init_text.contains("--route planning=copilot:gpt-4.1"), "{init_text}");
 }
 
 #[test]
@@ -427,7 +428,7 @@ fn init_keeps_explicit_route_and_seeds_remaining_slots() {
     assert!(init_text.contains("route_setup:"), "{init_text}");
     assert!(init_text.contains("explicit planning: copilot:gpt-4o [explicit]"), "{init_text}");
     assert!(
-        init_text.contains("seeded verification: copilot:gpt-5.5 [assistant-default]"),
+        init_text.contains("seeded verification: copilot:gpt-4.1 [assistant-default]"),
         "{init_text}"
     );
     assert!(
@@ -437,7 +438,7 @@ fn init_keeps_explicit_route_and_seeds_remaining_slots() {
 
     let config = fs::read_to_string(workspace.join(".boundline/config.toml")).unwrap();
     assert!(config.contains("model = \"gpt-4o\""), "{config}");
-    assert!(config.contains("model = \"gpt-5.5\""), "{config}");
+    assert!(config.contains("model = \"gpt-4.1\""), "{config}");
 }
 
 #[test]
@@ -452,8 +453,13 @@ fn init_reports_when_no_workspace_local_routes_are_recorded() {
     assert!(init_text.contains("route_setup:"), "{init_text}");
     assert!(
         init_text.contains(
-            "workspace-local routes: none recorded; add --assistant or --route later to pin workspace-specific defaults"
+            "assistant_defaults: none selected; no assistant-seeded routes were recorded"
         ),
+        "{init_text}"
+    );
+    assert!(
+        init_text
+            .contains("routes: none recorded; add --assistant or --route later to pin defaults"),
         "{init_text}"
     );
     assert!(init_text.contains("next_steps:"), "{init_text}");
@@ -480,7 +486,7 @@ fn init_rejects_malformed_route_with_actionable_example_and_no_mutation() {
     assert_ne!(init.status.code(), Some(0), "{init_text}");
     assert!(init_text.contains("init error:"), "{init_text}");
     assert!(init_text.contains("SLOT=RUNTIME:MODEL"), "{init_text}");
-    assert!(init_text.contains("planning=copilot:gpt-5.5"), "{init_text}");
+    assert!(init_text.contains("planning=copilot:gpt-4.1"), "{init_text}");
     assert!(!workspace.join(".boundline/config.toml").exists(), "{init_text}");
     assert!(!workspace.join(".boundline/execution.json").exists(), "{init_text}");
 }
@@ -553,7 +559,7 @@ fn init_writes_canon_preferences_and_model_routes_when_flags_are_supplied() {
             "--route",
             "planning=copilot:gpt-4o",
             "--route",
-            "implementation=codex:gpt-5-codex",
+            "implementation=codex:o4-mini",
         ],
     );
     let init_text = terminal_text(&init);
@@ -568,7 +574,7 @@ fn init_writes_canon_preferences_and_model_routes_when_flags_are_supplied() {
     assert!(config.contains("model = \"gpt-4o\""), "{config}");
     assert!(config.contains("[routing.implementation]"), "{config}");
     assert!(config.contains("runtime = \"codex\""), "{config}");
-    assert!(config.contains("model = \"gpt-5-codex\""), "{config}");
+    assert!(config.contains("model = \"o4-mini\""), "{config}");
 }
 
 #[test]
@@ -686,9 +692,7 @@ fn init_adds_kubernetes_related_gitignore_defaults_when_cues_are_present() {
 
 #[test]
 fn init_uses_only_universal_hygiene_when_no_stack_is_credible() {
-    let workspace =
-        std::env::temp_dir().join(format!("boundline-init-hygiene-empty-{}", Uuid::new_v4()));
-    fs::create_dir_all(workspace.join(".git")).unwrap();
+    let workspace = temp_git_workspace("boundline-init-hygiene-empty");
 
     let init = run_init_in(
         &workspace,

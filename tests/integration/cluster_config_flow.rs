@@ -36,7 +36,7 @@ fn cluster_scope_config_is_used_for_effective_resolution_until_workspace_overrid
             "--runtime",
             "codex",
             "--model",
-            "gpt-5-codex",
+            "o4-mini",
         ],
     );
     assert_eq!(set_cluster.status.code(), Some(0), "{}", terminal_text(&set_cluster));
@@ -56,10 +56,7 @@ fn cluster_scope_config_is_used_for_effective_resolution_until_workspace_overrid
     );
     let show_cluster_text = terminal_text(&show_cluster);
     assert_eq!(show_cluster.status.code(), Some(0), "{show_cluster_text}");
-    assert!(
-        show_cluster_text.contains("planning: codex:gpt-5-codex [cluster]"),
-        "{show_cluster_text}"
-    );
+    assert!(show_cluster_text.contains("planning: codex:o4-mini [cluster]"), "{show_cluster_text}");
 
     let set_workspace = run_boundline_in(
         &secondary,
@@ -75,7 +72,7 @@ fn cluster_scope_config_is_used_for_effective_resolution_until_workspace_overrid
             "--runtime",
             "copilot",
             "--model",
-            "gpt-5.4",
+            "gpt-4o",
         ],
     );
     assert_eq!(set_workspace.status.code(), Some(0), "{}", terminal_text(&set_workspace));
@@ -96,7 +93,7 @@ fn cluster_scope_config_is_used_for_effective_resolution_until_workspace_overrid
     let show_workspace_text = terminal_text(&show_workspace);
     assert_eq!(show_workspace.status.code(), Some(0), "{show_workspace_text}");
     assert!(
-        show_workspace_text.contains("planning: copilot:gpt-5.4 [workspace]"),
+        show_workspace_text.contains("planning: copilot:gpt-4o [workspace]"),
         "{show_workspace_text}"
     );
 }

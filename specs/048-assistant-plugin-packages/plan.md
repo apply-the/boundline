@@ -15,7 +15,7 @@ Add repository-local host package surfaces that make Boundline discoverable from
 **Testing**: `cargo test --test assistant_plugin_packages`, `bash scripts/validate-assistant-plugins.sh`, `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test`, and touched-file coverage with `cargo llvm-cov`  
 **Target Platform**: Local developer repositories and CI on macOS/Linux/Windows-friendly metadata; validation script targets Unix-like shells used by the repo scripts  
 **Project Type**: Rust CLI workspace with repository-managed assistant command packs and local runtime state under `.boundline/`  
-**Execution Model**: Sequential package discovery and command guidance; host commands route users into `start -> capture -> plan -> run -> status -> inspect` and recovery via CLI-reported state/next command  
+**Execution Model**: Sequential package discovery and command guidance; host commands route users into `goal -> plan -> run -> status -> inspect` and recovery via CLI-reported state/next command  
 **Observability Surface**: Host manifests, shared command definition JSON, starter prompts, docs, README mapping table, validation test output, and `validation-report.md` closeout evidence  
 **Performance Goals**: Package validation should remain a lightweight test target and should not invoke live Boundline sessions or provider APIs  
 **Constraints**: Version bump is the first implementation step; `.boundline/session.json` remains authoritative; no divergent host behavior; no invented Copilot plugin format; no runtime redesign; no user hand-edited manifests for normal operation; final touched-Rust-file coverage must be at least 95%  
@@ -27,7 +27,7 @@ Add repository-local host package surfaces that make Boundline discoverable from
 
 - **PASS** Delivery identity: The feature improves delivery by making chat surfaces enter the same bounded Boundline runtime instead of using ad hoc CLI snippets. See Summary.
 - **PASS** Delivery-first scope: Work is package discovery, command mapping, validation, and docs before any polish. No runtime UX or unrelated provider work is introduced.
-- **PASS** Primary workflow: The primary operator path remains session-native (`start -> capture -> plan -> run -> status -> next -> inspect`). Copilot is an explicit prompt-pack compatibility surface.
+- **PASS** Primary workflow: The primary operator path remains session-native (`goal -> plan -> run -> status -> next -> inspect`). Copilot is an explicit prompt-pack compatibility surface.
 - **PASS** Bounded execution: Host commands do not run loops; they call or guide one CLI command at a time and preserve CLI-reported terminal, blocked, failed, exhausted, or clarification-required states.
 - **PASS** Stateful execution: `.boundline/session.json` remains authoritative, and commands must report current runtime state and next action from the CLI output.
 - **PASS** Mutable planning: Chat packaging preserves `plan`, `plan --confirm`, `run`, status, and inspect surfaces without adding hidden planning.

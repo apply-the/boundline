@@ -147,7 +147,7 @@ defaults to Canon governance without requiring `--governance canon`.  Explicit
 opt-out via `--governance local` or `--no-canon` overrides.
 
 **Rationale**: The existing `execute_native_direct_run()` in `src/cli/run.rs`
-chains `start` → `capture` → `plan` → `run`.  Currently, governance runtime
+chains `start` → `goal` → `plan` → `run`.  Currently, governance runtime
 selection is explicit.  The change adds a resolution step after workspace
 resolution:
 1. Load workspace config

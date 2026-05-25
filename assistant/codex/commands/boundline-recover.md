@@ -2,6 +2,10 @@
 
 Shared guidance: `assistant/README.md`
 
+## Install Boundary
+Before using the workspace path in a fresh environment, prefer `boundline doctor --install` and the README quick path.
+Boundline owns orchestration; Canon is only the optional governed companion.
+
 ## Intent
 Recover from a Boundline session that is blocked, clarification-required, failed, exhausted, or terminal by asking the real runtime for current state first.
 
@@ -19,4 +23,10 @@ If shell execution is unavailable, provide this exact copyable command:
 Wait for pasted output before recommending recovery.
 
 ## Output Interpretation
-`.boundline/session.json` remains authoritative. Do not infer recovery from chat history. Preserve `next_command`, checkpoint restore guidance, and explicit blocked, clarification-required, failed, exhausted, or terminal wording.
+Provide a conversational, human-readable summary of the session state. Do NOT use raw JSON keys or snake_case field names (like `next_command`, `latest_status`, `authored_input_summary`, etc.) in your response. Translate all state into natural language.
+For the next step or follow-up commands, provide them as clickable buttons or action links (e.g., Markdown command links) instead of plain text recommendations.
+Reply as a compact operator brief by default: preserve `execution_condition` when status or inspect reports it, recovery blockers or checkpoint restore guidance, `latest_status`, and the CLI-reported `next_command`. Only surface raw status or inspect dumps when the user explicitly asks for deeper detail or wants the CLI `--verbose` view. `.boundline/session.json` remains authoritative, and recovery must not be inferred from chat history. Preserve blocked, clarification-required, failed, exhausted, or terminal wording exactly.
+
+## Next-Step Routing
+Prefer the CLI-reported `next_command`, `latest_checkpoint_restore_command`, or `corrected_command`. Route to `/boundline-inspect` only when status says more evidence is needed, and route to `/boundline-goal` only when the runtime reports no usable active session.
+Allowed follow-up commands: `/boundline-status`, `/boundline-inspect`, `/boundline-next`, `/boundline-goal`.

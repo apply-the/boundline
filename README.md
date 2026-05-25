@@ -21,7 +21,9 @@ Large work is supported by decomposition, not by unbounded autonomy.
 Point it at a workspace, give it an idea, brief, or bounded goal, then move
 through explicit sessions for planning, execution, inspection, recovery, and
 governed delivery when needed. Canon is optional: most users can ignore it
-unless they need governed stages or governed artifacts.
+unless they need governed stages or governed artifacts. Boundline remains the
+delivery orchestrator whether Canon is enabled or not; Canon governs specific
+bounded stages through an adapter surface.
 
 
 ## Quick Path Brutale
@@ -47,15 +49,13 @@ boundline init --assistant codex
 boundline run --goal "Fix the failing add test"
 boundline status
 boundline inspect
-boundline dashboard
 ```
 
 If you want to review the plan before execution, use the explicit flow instead:
 
 ```bash
 cd <workspace>
-boundline start
-boundline capture --goal "Fix the failing add test"
+boundline goal --goal "Fix the failing add test"
 boundline plan
 boundline plan --confirm
 boundline run
@@ -63,35 +63,32 @@ boundline status
 boundline inspect
 ```
 
+A session goal is the natural-language objective for the current bounded run.
+`plan` turns that goal into bounded tasks or targets, `plan --confirm`
+authorizes a proposed plan when confirmation is required, and only then does
+`run` continue execution.
+
 Plain English version of that flow:
 
-- `start` opens the session.
-- `capture` records the goal.
+- `goal` opens the session and records the goal.
+- `goal --update` revises the active goal later without reopening the session.
 - `plan` drafts the work.
 - `plan --confirm` approves that draft.
 - `run` executes it.
 - `status` and `inspect` tell you what happened.
 
-The primary product route stays explicit: `session-native: start a session -> capture a goal -> plan -> confirm -> run -> status -> inspect`.
+The primary product route stays explicit: `session-native: start a session with goal -> plan -> confirm -> run -> status -> inspect`.
 
-## Interactive Dashboard
+## CLI And Chat Views
 
-`boundline-dashboard` is the dedicated terminal entrypoint for an
-operator-facing view over the same runtime state used by `status`, `next`, and
-`inspect`:
+Use `boundline status --workspace <workspace>` for a compact operator view and
+`boundline inspect --workspace <workspace>` for the detailed runtime
+projection.
 
-```bash
-boundline-dashboard --workspace <workspace>
-boundline-dashboard --workspace <workspace> --snapshot-json
-boundline dashboard --workspace <workspace>
-```
-
-The dashboard reads existing `.boundline/session.json` and trace projections,
-shows the current goal, stage, step, timeline, panels, next action, and
-blocking reason, and uses a simple terminal `boundline` wordmark. In degraded
-or non-interactive environments it reports the reason and points back to valid
-normal commands such as `boundline status`, `boundline inspect`,
-`boundline plan --confirm`, or `boundline run`.
+After `boundline init --assistant <host>`, the generated assistant command
+packs can surface that same session-native state in chat. The CLI and host
+chat surfaces read and write the same `.boundline/session.json` and trace
+artifacts; there is no separate terminal UI runtime.
 
 ## Use Boundline from chat
 
@@ -103,11 +100,12 @@ commands before workspace init:
 
 ```bash
 boundline assistant install --host codex --scope user
+boundline assistant install --host antigravity --scope user
 ```
 
 The global bootstrap commands are `/boundline:init`, `/boundline:doctor`,
-`/boundline:help`, `/boundline:status`, and `/boundline:continue`. Copilot and
-Gemini are documented fallback paths rather than claimed universal global
+`/boundline:help`, `/boundline:status`, and `/boundline:continue`. Copilot,
+Gemini, and Antigravity are documented fallback paths rather than claimed universal global
 command installs.
 
 In this repository, those package folders are:
@@ -141,14 +139,14 @@ discovery. `assistant/copilot/prompts/` remains the Boundline-owned source copy,
 and you can still reference those generated prompt files explicitly via `#file`
 when you want ad hoc prompt use instead of repo-local discovery.
 
-The chat commands are namespaced as `/boundline:*`: start, capture, plan, run,
-status, inspect, recover, and conditional govern. They guide the assistant into
+The chat commands are namespaced as `/boundline:*`: goal, plan, run,
+status, continue, inspect, recover, and conditional govern. They guide the assistant into
 Boundline's real CLI/runtime instead of making chat history authoritative.
 
 Think of the chat surface in three layers:
 
 - global bootstrap commands for install, readiness, and scaffolding such as `/boundline:init` and `/boundline:doctor`
-- repo-local runtime commands for session state and trace-backed execution such as `/boundline:start`, `/boundline:capture`, `/boundline:plan`, `/boundline:run`, `/boundline:status`, `/boundline:next`, `/boundline:inspect`, and `/boundline:recover`
+- repo-local runtime commands for session state and trace-backed execution such as `/boundline:goal`, `/boundline:plan`, `/boundline:run`, `/boundline:status`, `/boundline:next`, `/boundline:inspect`, and `/boundline:recover`
 - guided delivery-intent commands for workflows, governed modes, or named delivery phases when the operator wants a bounded intent surface instead of raw runtime subcommands
 
 Exact host-specific install locations, validation steps, and package
@@ -169,8 +167,7 @@ for the fast path, or the explicit session-native loop when you
 want to inspect and confirm the plan:
 
 ```bash
-boundline start
-boundline capture --goal "Fix the failing add test"
+boundline goal --goal "Fix the failing add test"
 boundline plan
 boundline plan --confirm
 boundline run
@@ -199,7 +196,7 @@ route defaults for the selected assistant and reports the result in the
 `inspect_or_edit` follow-up command. In guided mode, the route prompt now lists
 supported slots inline, explains that blank input is allowed when assistant
 defaults can seed the missing slots, and shows a valid
-`SLOT=RUNTIME:MODEL` example such as `planning=copilot:gpt-5.4`. If a selected
+`SLOT=RUNTIME:MODEL` example such as `planning=copilot:gpt-4o`. If a selected
 runtime is unavailable for the missing defaults, init either falls back to
 another selected available assistant and marks that fallback in `route_setup`,
 or stops explicitly when no selected assistant can credibly fill the remaining
@@ -307,13 +304,13 @@ Advanced execution-profile workflows are documented outside this README.
 | `boundline doctor --install` | Verify the installed Boundline plus Canon pairing |
 | `boundline doctor` | Check that a workspace is ready |
 | `boundline run --goal "..."` | Fastest way to do something useful |
-| `boundline start` | Open or reset the active session |
-| `boundline capture --goal "..."` | Save the goal or brief into the session |
+| `boundline goal --goal "..."` | Open a new session goal or save new goal/brief input |
+| `boundline goal --update --goal "..."` | Revise the active session goal |
 | `boundline flow bug-fix|change|delivery` | Force the change type instead of inferring it |
 | `boundline plan` | Generate the proposed plan |
 | `boundline plan --confirm` | Approve that plan so execution can continue |
 | `boundline step` | Run one step at a time |
-| `boundline checkpoint list|restore` | Inspect or restore the latest local rollback points |
+| `boundline checkpoint list`/`boundline checkpoint restore` | Inspect or restore the latest local rollback points |
 | `boundline status` | See the current state and suggested follow-up |
 | `boundline next` | Ask Boundline for the next action |
 | `boundline inspect` | Read the latest trace in more detail |
@@ -356,8 +353,7 @@ boundline init --assistant claude --assistant codex --assistant copilot --export
 Run from a Markdown brief:
 
 ```bash
-boundline start
-boundline capture --brief docs/brief.md
+boundline goal --brief docs/brief.md
 boundline plan
 boundline plan --confirm
 boundline run

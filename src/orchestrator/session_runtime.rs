@@ -1,13 +1,19 @@
 //! Workspace-scoped session orchestration for planning, execution, governance,
 //! checkpoints, and persisted trace updates.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
 
 use crate::adapters::checkpoint_store::{CheckpointStoreError, FileCheckpointStore};
 use crate::adapters::governance_runtime::{
     CanonCliRuntime, GovernanceRequestKind, GovernanceRuntime, GovernanceRuntimeRequest,
     LocalGovernanceRuntime,
+};
+use crate::adapters::provider_runtime::{
+    ProviderReviewDisposition, ProviderReviewRequest, ProviderRevisionRequest,
+    ProviderWorkspaceFile, review_workspace, revise_artifact, route_is_available,
 };
 use serde::Serialize;
 use serde_json::{Map, Value, json};
@@ -23,7 +29,7 @@ use crate::domain::cluster::{
     ClusteredExecutionKind, WorkspaceParticipationKind, WorkspaceParticipationRecord,
 };
 use crate::domain::configuration::{
-    EffectiveRouting, EffortFallbackPolicy, RouteSlot, RoutingConfig, RoutingOverrides,
+    EffectiveRouting, EffortFallbackPolicy, ModelRoute, RouteSlot, RoutingConfig, RoutingOverrides,
     RuntimeKind, resolve_effective_routing, resolve_effective_runtime_capabilities,
     resolve_effective_slot_effort_policies,
 };
@@ -34,10 +40,14 @@ use crate::domain::flow::{FlowStepMetadata, built_in_flow, supported_flow_names_
 use crate::domain::flow_policy::FlowPolicy;
 use crate::domain::goal_plan::GoalPlan;
 use crate::domain::governance::{
-    ApprovalState, CanonEvidenceInspectSummary, CanonMode, CanonModeSelectionPreference,
-    CanonPossibleActionSummary, CanonRecommendedActionSummary, CompactedCanonMemory,
+    ApprovalState, CanonAuthorityZone, CanonEvidenceInspectSummary, CanonIntendedPersona,
+    CanonMode, CanonModeSelectionPreference, CanonPossibleActionSummary,
+    CanonRecommendedActionSummary, CanonRiskClass, CompactedCanonMemory, CouncilProfile,
     GovernanceLifecycleState, GovernanceRuntimeKind, GovernedSessionLifecycle, GovernedStageRecord,
-    MemoryCredibilityState, PacketReadiness, resolved_canon_mode,
+    MemoryCredibilityState, PacketReadiness, SystemContextBinding,
+    planned_canon_mode_sequence_for_flow, planning_canon_mode_for_stage_key,
+    planning_canon_mode_sequence, planning_stage_brief_ref, planning_stage_key_for_mode,
+    resolved_canon_mode,
 };
 use crate::domain::guidance::{CapabilityPhase, GuidanceGuardianProjection};
 use crate::domain::limits::{RunLimits, TerminalCondition};
@@ -57,12 +67,22 @@ use crate::domain::reasoning::{
     ReasoningParticipantRoleKind, ReasoningParticipantStatus, ReasoningProfileDefinition,
     ReasoningRoutePreference,
 };
-use crate::domain::review::{ReviewOutcome, ReviewTrigger};
+use crate::domain::review::{ReviewOutcome, ReviewProfile, ReviewTrigger};
+use crate::domain::review::{
+    ReviewerDefinition, ReviewerDisposition, ReviewerFinding, ReviewerParticipation,
+    ReviewerParticipationStatus, VoteDecision, VoteRuleDefinition, resolve_council_assembly,
+};
 use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::session::{
     ActiveSessionRecord, ContinuityAuthority, DelegationContinuityMode, DelegationContinuityState,
     DelegationPacket, DelegationPacketKind, DelegationPacketState, DelegationStatusView,
-    ProjectScaleSessionState, SessionCommand, SessionStatus, governance_next_action_for_state,
+    ProjectScaleSessionState, SessionCommand, SessionStatus, VotingSessionState,
+    governance_next_action_for_state,
+};
+use crate::domain::stage_council::{
+    StageCouncilAdjudication, StageCouncilArtifact, StageCouncilFinding,
+    StageCouncilFindingDisposition, StageCouncilOutcome, StageCouncilRequest, StageCouncilStatus,
+    StageCouncilVoteResolution,
 };
 use crate::domain::step::{
     ErrorInfo, ExecutionStatus, Recoverability, Step, StepAttempt, StepExecutionRequest,
@@ -87,10 +107,12 @@ use crate::orchestrator::goal_planner::{
 use crate::orchestrator::governance::{
     GovernanceStepDecision, append_governed_document_to_lifecycle, bounded_governance_context,
     build_autopilot_decision, clarification_prompt_from_response, compacted_canon_memory_for_block,
-    compacted_canon_memory_from_response, enrich_bounded_context_with_accumulated,
-    governance_input_documents, governance_projection_snapshot, governance_stage_key,
-    governance_state_patch, governed_document_ref_from_response, overlay_stage_policy_with_intent,
-    requested_governance_intent, runtime_command_available, selected_stage_policy,
+    compacted_canon_memory_from_response, default_stage_canon_mode,
+    enrich_bounded_context_with_accumulated, governance_input_documents,
+    governance_projection_snapshot, governance_stage_key, governance_state_patch,
+    governed_document_ref_from_response, overlay_stage_policy_with_intent,
+    planning_governance_input_documents, requested_governance_intent, runtime_command_available,
+    selected_stage_policy,
 };
 use crate::orchestrator::guidance_runtime::{
     GuardianExecutionRequest, execute_guardians_for_phase,
@@ -126,6 +148,104 @@ use reasoning::{
     reasoning_status_for_activation,
 };
 
+const NATIVE_REVIEWER_AGENT_NAME: &str = "reviewer";
+const NATIVE_REVIEW_VOTER_TOOL_NAME: &str = "review-voter";
+const NATIVE_REVIEW_FINALIZER_TOOL_NAME: &str = "review-finalizer";
+const NATIVE_REVIEW_PHASE: &str = "review";
+const NATIVE_REVIEW_VOTE_PHASE: &str = "review-vote";
+const NATIVE_REVIEW_FINALIZE_PHASE: &str = "review-finalize";
+const NATIVE_REVIEW_STEP_PREFIX: &str = "native-review";
+const NATIVE_REVIEW_VOTE_STEP_ID: &str = "native-review-vote";
+const NATIVE_REVIEW_FINALIZE_STEP_ID: &str = "native-review-finalize";
+const LATEST_ATTEMPT_ID_KEY: &str = "latest_attempt_id";
+const LATEST_CHANGED_FILES_KEY: &str = "latest_changed_files";
+const LATEST_REVIEW_OUTCOME_KEY: &str = "latest_review_outcome";
+const LATEST_VALIDATION_STATUS_KEY: &str = "latest_validation_status";
+const NEXT_REVIEW_TRIGGER_KEY: &str = "next_review_trigger";
+const VALIDATION_STATUS_PASSED: &str = "passed";
+const VALIDATION_STATUS_FAILED: &str = "failed";
+const PLANNING_STAGE_BRIEF_TITLE: &str = "# Canon Planning Stage Brief";
+const PLANNING_STAGE_OUTPUT_LANGUAGE_HEADING: &str = "## Output Language";
+const PLANNING_STAGE_OUTPUT_LANGUAGE_INSTRUCTION: &str = "Write all generated content in English, regardless of the language of the input text. Preserve proper nouns, product names, system names, and code identifiers exactly as provided in the input.";
+const PLANNING_STAGE_OVERVIEW_HEADING: &str = "## Stage Overview";
+const PLANNING_STAGE_CONTEXT_HEADING: &str = "## Bounded Context";
+const PLANNING_STAGE_AUTHORED_INPUTS_HEADING: &str = "## Authored Inputs";
+const PLANNING_STAGE_CANON_MEMORY_HEADING: &str = "## Canon Memory";
+const PLANNING_STAGE_WORKFLOW_HEADING: &str = "## Workflow";
+const PLANNING_DEFAULT_TARGET: &str = "workspace";
+const PLANNING_UNSPECIFIED_FLOW: &str = "unspecified";
+const SYSTEM_CONTEXT_NEW_TEXT: &str = "new";
+const SYSTEM_CONTEXT_EXISTING_TEXT: &str = "existing";
+
+/// Computes a stable fingerprint of the inputs that determine planning
+/// governance outcomes: the goal text and the authored brief content.
+/// Used to skip redundant Canon invocations when the inputs have not changed.
+fn compute_planning_input_fingerprint(goal: &str, session: &ActiveSessionRecord) -> String {
+    let mut hasher = DefaultHasher::new();
+    goal.hash(&mut hasher);
+    if let Some(brief) = session.authored_brief.as_ref() {
+        for source in &brief.sources {
+            source.content.hash(&mut hasher);
+        }
+    }
+    if let Some(packet) = session.negotiation_packet.as_ref() {
+        packet.resolution_state.as_str().hash(&mut hasher);
+    }
+    format!("{:016x}", hasher.finish())
+}
+
+/// Returns `true` when the authored brief supplies enough content for Canon
+/// to govern the given planning mode meaningfully.  Discovery is always
+/// sufficient because its purpose is to gather information.
+fn planning_brief_has_sufficient_content(
+    context_sources: &PlanningContextSources,
+    mode: Option<CanonMode>,
+) -> bool {
+    match mode {
+        Some(CanonMode::Discovery) | None => true,
+        Some(
+            CanonMode::Requirements
+            | CanonMode::SystemShaping
+            | CanonMode::Architecture
+            | CanonMode::Backlog,
+        ) => !context_sources.authored_input_documents.is_empty(),
+        Some(_) => true,
+    }
+}
+
+/// Per-mode message describing what authored content Canon needs before the
+/// governance stage can proceed.
+fn planning_brief_insufficiency_reason(mode: Option<CanonMode>) -> String {
+    match mode {
+        Some(CanonMode::Requirements) => {
+            "the authored brief does not contain enough content for requirements governance; \
+             author a plan describing the problem statement, outcome, constraints, options, \
+             tradeoffs, scope cuts, and decision checklist before proceeding"
+                .to_string()
+        }
+        Some(CanonMode::SystemShaping) => {
+            "the authored brief does not contain enough content for system-shaping governance; \
+             author system context, integration boundaries, and shaping constraints before proceeding"
+                .to_string()
+        }
+        Some(CanonMode::Architecture) => {
+            "the authored brief does not contain enough content for architecture governance; \
+             author the system structure, component boundaries, and technology decisions before proceeding"
+                .to_string()
+        }
+        Some(CanonMode::Backlog) => {
+            "the authored brief does not contain enough content for backlog governance; \
+             author the delivery sequence, task breakdown, and acceptance criteria before proceeding"
+                .to_string()
+        }
+        _ => {
+            "the authored brief does not contain enough content for planning governance; \
+             author the required sections before proceeding"
+                .to_string()
+        }
+    }
+}
+
 /// Workspace-scoped orchestrator that coordinates session persistence,
 /// checkpoint capture, trace updates, and the handoff between native and
 /// compatibility execution paths.
@@ -137,9 +257,35 @@ pub struct SessionRuntime {
     trace_store: FileTraceStore,
 }
 
+#[derive(Default)]
+struct NativeReviewExecution {
+    events: Vec<TraceEvent>,
+    terminal_reason: Option<TerminalReason>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 struct DelegationTraceDetails {
     delegation: Option<DelegationStatusView>,
+}
+
+#[derive(Debug, Clone)]
+struct ResolvedPlanningGovernanceDefaults {
+    system_context: SystemContextBinding,
+    risk: String,
+    zone: String,
+    owner: String,
+}
+
+#[derive(Debug, Clone)]
+struct PreparedPlanningGovernanceRequest {
+    request: GovernanceRuntimeRequest,
+    stage_council: Option<StageCouncilOutcome>,
+}
+
+#[derive(Debug, Clone)]
+struct StageCouncilReviewerRoute {
+    reviewer: ReviewerDefinition,
+    route: ModelRoute,
 }
 
 // Persisted goal-plan projection written into trace payloads so inspect can
@@ -254,6 +400,54 @@ fn project_scale_state_for_goal(goal: &str, next_action: &str) -> Option<Project
     })
 }
 
+const PROJECT_SCALE_BROAD_GOAL_CUES: &[&str] =
+    &["capability", "project", "initiative", "platform", "onboarding", "architecture"];
+const PROJECT_SCALE_EXISTING_SYSTEM_CHANGE_CUES: &[&str] =
+    &["existing", "modify", "change", "update", "extend", "refactor", "fix"];
+const PROJECT_SCALE_CONCRETE_DELIVERY_BUILD_CUES: &[&str] =
+    &["implement", "build", "create", "deliver", "ship", "first slice"];
+const PROJECT_SCALE_CONCRETE_DELIVERY_SHAPE_CUES: &[&str] = &[
+    "microservice",
+    "microservizio",
+    "service",
+    "api",
+    "apis",
+    "endpoint",
+    "endpoints",
+    "grpc",
+    "rest",
+    "oauth",
+    "authorization",
+    "authenticated",
+    "authenticates",
+    "role",
+    "roles",
+    "user management",
+];
+const PROJECT_SCALE_CAPABILITY_STRUCTURE_CUES: &[&str] = &["capability", "platform", "system"];
+const PROJECT_SCALE_ARCHITECTURE_MATERIAL_CUES: &[&str] =
+    &["architecture", "audit", "auth", "schema", "integration", "capability"];
+
+fn project_scale_goal_contains_cue(lower: &str, cue: &str) -> bool {
+    if cue.contains(' ') {
+        return lower.contains(cue);
+    }
+
+    lower
+        .split(|character: char| !character.is_alphanumeric() && character != '-')
+        .filter(|word| !word.is_empty())
+        .any(|word| word == cue)
+}
+
+fn project_scale_goal_contains_any(lower: &str, cues: &[&str]) -> bool {
+    cues.iter().any(|cue| project_scale_goal_contains_cue(lower, cue))
+}
+
+fn has_concrete_delivery_goal_shape(lower: &str) -> bool {
+    project_scale_goal_contains_any(lower, PROJECT_SCALE_CONCRETE_DELIVERY_BUILD_CUES)
+        && project_scale_goal_contains_any(lower, PROJECT_SCALE_CONCRETE_DELIVERY_SHAPE_CUES)
+}
+
 fn project_scale_input_for_goal(goal: &str) -> Option<ProjectScaleInput> {
     let lower = goal.to_ascii_lowercase();
     let operational_entry = if lower.contains("supply chain") || lower.contains("supply-chain") {
@@ -270,13 +464,11 @@ fn project_scale_input_for_goal(goal: &str) -> Option<ProjectScaleInput> {
         None
     };
 
+    let concrete_delivery_goal = has_concrete_delivery_goal_shape(&lower);
+
     let broad_goal = operational_entry.is_some()
-        || lower.contains("capability")
-        || lower.contains("project")
-        || lower.contains("initiative")
-        || lower.contains("platform")
-        || lower.contains("onboarding")
-        || lower.contains("architecture")
+        || concrete_delivery_goal
+        || project_scale_goal_contains_any(&lower, PROJECT_SCALE_BROAD_GOAL_CUES)
         || lower.split_whitespace().count() >= 10;
 
     if !broad_goal {
@@ -284,25 +476,16 @@ fn project_scale_input_for_goal(goal: &str) -> Option<ProjectScaleInput> {
     }
 
     let existing_system_change = operational_entry.is_none()
-        && (lower.contains("existing")
-            || lower.contains("modify")
-            || lower.contains("change")
-            || lower.contains("refactor")
-            || lower.contains("fix"));
+        && project_scale_goal_contains_any(&lower, PROJECT_SCALE_EXISTING_SYSTEM_CHANGE_CUES);
 
     Some(ProjectScaleInput {
         goal: goal.to_string(),
-        problem_unclear: !existing_system_change,
+        problem_unclear: !existing_system_change && !concrete_delivery_goal,
         product_scope_unclear: !existing_system_change,
-        capability_structure_unclear: lower.contains("capability")
-            || lower.contains("platform")
-            || lower.contains("system"),
-        architecture_material: lower.contains("architecture")
-            || lower.contains("audit")
-            || lower.contains("auth")
-            || lower.contains("schema")
-            || lower.contains("integration")
-            || lower.contains("capability"),
+        capability_structure_unclear: !concrete_delivery_goal
+            && project_scale_goal_contains_any(&lower, PROJECT_SCALE_CAPABILITY_STRUCTURE_CUES),
+        architecture_material: concrete_delivery_goal
+            || project_scale_goal_contains_any(&lower, PROJECT_SCALE_ARCHITECTURE_MATERIAL_CUES),
         existing_system_change,
         operational_entry,
     })
@@ -396,6 +579,7 @@ impl SessionRuntime {
         session.active_task = None;
         session.goal_plan = None;
         session.decisions.clear();
+        self.ensure_workspace_governance_lifecycle(session);
         session.latest_status = SessionStatus::GoalCaptured;
         session.latest_terminal_reason = None;
         session.latest_trace_ref = None;
@@ -484,6 +668,19 @@ impl SessionRuntime {
         &self,
         session: &mut ActiveSessionRecord,
     ) -> Result<(), SessionRuntimeError> {
+        if session.goal_plan.is_none() {
+            return Err(SessionRuntimeError::MissingGoalPlan);
+        }
+        if let Some(stage_record) = self.unresolved_planning_governance_record(session) {
+            return Err(SessionRuntimeError::PlanningGovernanceUnresolved {
+                stage_key: stage_record.stage_key.clone(),
+                state: stage_record.lifecycle_state,
+                reason: stage_record.blocked_reason.clone().or_else(|| {
+                    session.governance_lifecycle.as_ref().and_then(|l| l.terminal_reason.clone())
+                }),
+            });
+        }
+
         let goal_plan = session.goal_plan.as_mut().ok_or(SessionRuntimeError::MissingGoalPlan)?;
         if goal_plan.requires_confirmation() {
             goal_plan
@@ -605,6 +802,14 @@ impl SessionRuntime {
         if let Some(packet) = self.session_negotiation_packet(session, &goal)
             && packet.resolution_state == NegotiationResolutionState::PendingClarification
         {
+            session.active_task = None;
+            session.goal_plan = None;
+            session.project_scale = project_scale_state.clone();
+            session.decisions.clear();
+            session.latest_status = SessionStatus::GoalCaptured;
+            session.latest_terminal_reason = None;
+            session.latest_trace_ref = None;
+            session.updated_at = current_timestamp_millis();
             let prompt = packet
                 .constraints
                 .iter()
@@ -624,6 +829,14 @@ impl SessionRuntime {
         if let Some(authored_brief) = session.authored_brief.as_ref()
             && authored_brief.clarification.is_some()
         {
+            session.active_task = None;
+            session.goal_plan = None;
+            session.project_scale = project_scale_state.clone();
+            session.decisions.clear();
+            session.latest_status = SessionStatus::GoalCaptured;
+            session.latest_terminal_reason = None;
+            session.latest_trace_ref = None;
+            session.updated_at = current_timestamp_millis();
             return Err(SessionRuntimeError::ClarificationRequired {
                 headline: authored_brief
                     .clarification_headline()
@@ -666,7 +879,7 @@ impl SessionRuntime {
                 session.project_scale = project_scale_state_for_goal(&goal, "repair_context");
                 session.decisions.clear();
                 session.active_flow_policy = preserved_flow_policy.clone();
-                session.latest_status = SessionStatus::GoalCaptured;
+                session.latest_status = SessionStatus::Blocked;
                 session.latest_terminal_reason = None;
                 session.latest_trace_ref = None;
                 session.updated_at = current_timestamp_millis();
@@ -680,6 +893,30 @@ impl SessionRuntime {
                 return Err(SessionRuntimeError::GoalPlan(error.to_string()));
             }
         };
+        if session.authored_brief.is_none()
+            && plain_goal_requires_planning_clarification(&goal, &context_sources)
+        {
+            self.apply_negotiation_projection(session, &goal, &mut goal_plan);
+            if no_flow {
+                goal_plan.mark_flow_skipped();
+            }
+
+            session.active_flow = native_flow_state.clone();
+            session.active_task = None;
+            session.goal_plan = Some(goal_plan);
+            session.project_scale = project_scale_state_for_goal(&goal, "repair_context");
+            session.decisions.clear();
+            session.active_flow_policy = preserved_flow_policy.clone();
+            session.latest_status = SessionStatus::Blocked;
+            session.latest_terminal_reason = None;
+            session.latest_trace_ref = None;
+            session.updated_at = current_timestamp_millis();
+
+            return Err(SessionRuntimeError::ClarificationRequired {
+                headline: "bounded context required before planning".to_string(),
+                prompt: plain_goal_planning_clarification_prompt(),
+            });
+        }
 
         if let Some(previous_goal_plan) = session.goal_plan.as_ref() {
             let previous_revision = previous_goal_plan.proposal_revision;
@@ -694,6 +931,15 @@ impl SessionRuntime {
             });
         }
 
+        let planned_governed_flow_name = if no_flow {
+            None
+        } else {
+            native_flow_state
+                .as_ref()
+                .map(|flow| flow.flow_name.clone())
+                .or_else(|| goal_plan.flow.as_ref().map(|flow| flow.flow_name.clone()))
+        };
+
         self.apply_negotiation_projection(session, &goal, &mut goal_plan);
         if no_flow {
             goal_plan.mark_flow_skipped();
@@ -704,18 +950,1095 @@ impl SessionRuntime {
                 .map_err(|error| SessionRuntimeError::GoalPlan(error.to_string()))?;
         }
 
+        self.ensure_workspace_governance_lifecycle(session);
+        let planning_fingerprint = compute_planning_input_fingerprint(&goal, session);
+        self.reset_planning_governance_state(session, &planning_fingerprint);
+        self.sync_governed_planning_sequence(session, planned_governed_flow_name.as_deref());
+        let planning_requests =
+            self.prepare_planning_governance_requests(session, &goal_plan, &context_sources)?;
+        self.execute_planning_governance_requests(
+            session,
+            &mut goal_plan,
+            planning_requests,
+            &context_sources,
+        )?;
+        if let Some(lifecycle) = session.governance_lifecycle.as_mut() {
+            lifecycle.planning_input_fingerprint = Some(planning_fingerprint);
+        }
+        let planning_blocked = self.unresolved_planning_governance_record(session).is_some();
+
         session.active_flow = native_flow_state;
         session.active_task = None;
         session.goal_plan = Some(goal_plan);
         session.project_scale = project_scale_state;
         session.decisions.clear();
         session.active_flow_policy = preserved_flow_policy;
-        session.latest_status = SessionStatus::Planned;
+        session.latest_status =
+            if planning_blocked { SessionStatus::Blocked } else { SessionStatus::Planned };
         session.latest_terminal_reason = None;
         session.latest_trace_ref = None;
         session.updated_at = current_timestamp_millis();
 
         Ok(())
+    }
+
+    fn ensure_workspace_governance_lifecycle(&self, session: &mut ActiveSessionRecord) {
+        if session.governance_lifecycle.is_some() {
+            return;
+        }
+
+        let Some(governance_runtime) = self.resolve_workspace_governance_runtime(session) else {
+            return;
+        };
+
+        session.governance_lifecycle = Some(GovernedSessionLifecycle {
+            governance_runtime,
+            explicit_opt_out: governance_runtime == GovernanceRuntimeKind::Local,
+            mode_selection_preference: self.resolve_workspace_mode_selection_preference(),
+            selected_mode: session
+                .authored_brief
+                .as_ref()
+                .and_then(|bundle| bundle.governance_intent.as_ref())
+                .and_then(|intent| intent.explicit_mode),
+            selected_mode_sequence: Vec::new(),
+            latest_reasoning_profile: None,
+            current_stage_index: 0,
+            stage_records: Vec::new(),
+            accumulated_context: Vec::new(),
+            terminal_reason: None,
+            planning_input_fingerprint: None,
+        });
+    }
+
+    fn reset_planning_governance_state(
+        &self,
+        session: &mut ActiveSessionRecord,
+        new_fingerprint: &str,
+    ) {
+        let Some(lifecycle) = session.governance_lifecycle.as_mut() else {
+            return;
+        };
+
+        if lifecycle.planning_input_fingerprint.as_deref() == Some(new_fingerprint)
+            && lifecycle
+                .stage_records
+                .iter()
+                .any(|record| planning_canon_mode_for_stage_key(&record.stage_key).is_some())
+        {
+            return;
+        }
+
+        lifecycle
+            .stage_records
+            .retain(|record| planning_canon_mode_for_stage_key(&record.stage_key).is_none());
+        lifecycle
+            .accumulated_context
+            .retain(|reference| planning_canon_mode_for_stage_key(&reference.stage_key).is_none());
+        lifecycle.current_stage_index = 0;
+        lifecycle.terminal_reason = None;
+    }
+
+    fn resolve_workspace_governance_runtime(
+        &self,
+        session: &ActiveSessionRecord,
+    ) -> Option<GovernanceRuntimeKind> {
+        if let Some(governance_intent) =
+            session.authored_brief.as_ref().and_then(|bundle| bundle.governance_intent.as_ref())
+        {
+            if governance_intent.explicit_no_canon {
+                return Some(GovernanceRuntimeKind::Local);
+            }
+            if let Some(runtime_preference) = governance_intent.runtime_preference {
+                return Some(runtime_preference);
+            }
+        }
+
+        let local_config =
+            FileConfigStore::for_workspace(&self.workspace_ref).load_local().ok().flatten();
+        let global_config = FileConfigStore::load_global().ok().flatten();
+
+        load_workspace_execution_profile(&self.workspace_ref)
+            .ok()
+            .and_then(|profile| profile.governance.map(|governance| governance.default_runtime))
+            .or_else(|| {
+                (local_config.as_ref().and_then(|config| config.canon.as_ref()).is_some()
+                    || global_config.as_ref().and_then(|config| config.canon.as_ref()).is_some())
+                .then_some(GovernanceRuntimeKind::Canon)
+            })
+    }
+
+    fn resolve_workspace_mode_selection_preference(&self) -> CanonModeSelectionPreference {
+        let local_config =
+            FileConfigStore::for_workspace(&self.workspace_ref).load_local().ok().flatten();
+        let global_config = FileConfigStore::load_global().ok().flatten();
+
+        local_config
+            .and_then(|config| config.canon.map(|canon| canon.mode_selection))
+            .or_else(|| {
+                global_config.and_then(|config| config.canon.map(|canon| canon.mode_selection))
+            })
+            .unwrap_or_default()
+    }
+
+    fn sync_governed_planning_sequence(
+        &self,
+        session: &mut ActiveSessionRecord,
+        flow_name: Option<&str>,
+    ) {
+        let Some(flow_name) = flow_name else {
+            return;
+        };
+        let Some(lifecycle) = session.governance_lifecycle.as_mut() else {
+            return;
+        };
+        if lifecycle.governance_runtime != GovernanceRuntimeKind::Canon
+            || lifecycle.explicit_opt_out
+            || !lifecycle.selected_mode_sequence.is_empty()
+        {
+            return;
+        }
+
+        let planned_sequence = planned_canon_mode_sequence_for_flow(flow_name);
+        if planned_sequence.is_empty() {
+            return;
+        }
+
+        if lifecycle.selected_mode.is_none() {
+            lifecycle.selected_mode = planned_sequence.first().copied();
+        }
+        lifecycle.selected_mode_sequence = planned_sequence;
+    }
+
+    fn prepare_planning_governance_requests(
+        &self,
+        session: &mut ActiveSessionRecord,
+        goal_plan: &GoalPlan,
+        context_sources: &PlanningContextSources,
+    ) -> Result<Vec<PreparedPlanningGovernanceRequest>, SessionRuntimeError> {
+        let Some(lifecycle) = session.governance_lifecycle.as_ref() else {
+            return Ok(Vec::new());
+        };
+        if lifecycle.governance_runtime != GovernanceRuntimeKind::Canon
+            || lifecycle.explicit_opt_out
+        {
+            return Ok(Vec::new());
+        }
+
+        planning_canon_mode_sequence(&lifecycle.selected_mode_sequence)
+            .into_iter()
+            .map(|mode| {
+                self.build_planning_governance_request(session, goal_plan, context_sources, mode)
+            })
+            .collect()
+    }
+
+    fn execute_planning_governance_requests(
+        &self,
+        session: &mut ActiveSessionRecord,
+        goal_plan: &mut GoalPlan,
+        requests: Vec<PreparedPlanningGovernanceRequest>,
+        context_sources: &PlanningContextSources,
+    ) -> Result<(), SessionRuntimeError> {
+        if requests.is_empty() {
+            return Ok(());
+        }
+
+        let canon = self.resolve_planning_canon_runtime();
+
+        for (stage_index, prepared) in requests.into_iter().enumerate() {
+            let mut request = prepared.request;
+            if self.planning_stage_already_ready(session, &request.stage_key) {
+                self.set_planning_stage_progress(session, stage_index + 1, None);
+                continue;
+            }
+
+            if self.planning_stage_has_unresolved_gate(session, &request.stage_key) {
+                self.set_planning_stage_progress(
+                    session,
+                    stage_index,
+                    self.latest_planning_stage_reason(session),
+                );
+                break;
+            }
+
+            if !planning_brief_has_sufficient_content(context_sources, request.mode) {
+                self.record_planning_governance_block(
+                    session,
+                    goal_plan,
+                    &request,
+                    stage_index,
+                    planning_brief_insufficiency_reason(request.mode),
+                    prepared.stage_council.clone(),
+                );
+                break;
+            }
+
+            self.set_planning_stage_progress(session, stage_index, None);
+
+            if let Some(outcome) = prepared.stage_council.clone()
+                && outcome.status == StageCouncilStatus::Blocked
+            {
+                self.record_planning_governance_block(
+                    session,
+                    goal_plan,
+                    &request,
+                    stage_index,
+                    planning_stage_council_block_reason(&request.stage_key, &outcome),
+                    Some(outcome),
+                );
+                break;
+            }
+
+            let Some(canon) = canon.as_ref() else {
+                self.record_planning_governance_block(
+                    session,
+                    goal_plan,
+                    &request,
+                    stage_index,
+                    "planning governance requires Canon initialization, but .boundline/execution.json is missing governance.canon"
+                        .to_string(),
+                    prepared.stage_council.clone(),
+                );
+                break;
+            };
+
+            enrich_bounded_context_with_accumulated(
+                &mut request.bounded_context,
+                &self.planning_accumulated_context(session),
+            );
+
+            if !runtime_command_available(&canon.command) {
+                self.record_planning_governance_block(
+                    session,
+                    goal_plan,
+                    &request,
+                    stage_index,
+                    format!(
+                        "planning governance requires Canon, but command '{}' is unavailable",
+                        canon.command
+                    ),
+                    prepared.stage_council.clone(),
+                );
+                break;
+            }
+
+            if let Some(reason) = canon_workspace_scope_mismatch_reason(&self.workspace_ref) {
+                self.record_planning_governance_block(
+                    session,
+                    goal_plan,
+                    &request,
+                    stage_index,
+                    reason,
+                    prepared.stage_council.clone(),
+                );
+                break;
+            }
+
+            let response = CanonCliRuntime::new(canon.command.clone())
+                .with_working_directory(&self.workspace_ref)
+                .execute(&request)
+                .map_err(|error| SessionRuntimeError::GovernanceRuntime(error.to_string()))?;
+
+            let should_halt = self.record_planning_governance_response(
+                session,
+                goal_plan,
+                &request,
+                response,
+                stage_index,
+                prepared.stage_council,
+            )?;
+            if should_halt {
+                break;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn resolve_planning_canon_runtime(
+        &self,
+    ) -> Option<crate::domain::governance::CanonRuntimeConfig> {
+        load_workspace_execution_profile(&self.workspace_ref)
+            .ok()
+            .and_then(|profile| profile.governance.and_then(|governance| governance.canon))
+    }
+
+    fn planning_stage_already_ready(&self, session: &ActiveSessionRecord, stage_key: &str) -> bool {
+        self.latest_planning_stage_record(session, stage_key)
+            .is_some_and(|record| record.lifecycle_state == GovernanceLifecycleState::GovernedReady)
+    }
+
+    fn planning_stage_has_unresolved_gate(
+        &self,
+        session: &ActiveSessionRecord,
+        stage_key: &str,
+    ) -> bool {
+        self.latest_planning_stage_record(session, stage_key).is_some_and(|record| {
+            matches!(
+                record.lifecycle_state,
+                GovernanceLifecycleState::AwaitingApproval
+                    | GovernanceLifecycleState::Blocked
+                    | GovernanceLifecycleState::Failed
+            )
+        })
+    }
+
+    fn latest_planning_stage_reason(&self, session: &ActiveSessionRecord) -> Option<String> {
+        session.governance_lifecycle.as_ref().and_then(|lifecycle| {
+            lifecycle
+                .stage_records
+                .iter()
+                .rev()
+                .find(|record| planning_canon_mode_for_stage_key(&record.stage_key).is_some())
+                .and_then(|record| record.blocked_reason.clone())
+                .or_else(|| lifecycle.terminal_reason.clone())
+        })
+    }
+
+    fn planning_accumulated_context(
+        &self,
+        session: &ActiveSessionRecord,
+    ) -> Vec<crate::domain::governance::GovernedDocumentRef> {
+        session
+            .governance_lifecycle
+            .as_ref()
+            .map(|lifecycle| lifecycle.accumulated_context.clone())
+            .unwrap_or_default()
+    }
+
+    fn set_planning_stage_progress(
+        &self,
+        session: &mut ActiveSessionRecord,
+        stage_index: usize,
+        terminal_reason: Option<String>,
+    ) {
+        let Some(lifecycle) = session.governance_lifecycle.as_mut() else {
+            return;
+        };
+
+        lifecycle.current_stage_index = stage_index;
+        lifecycle.terminal_reason = terminal_reason;
+    }
+
+    fn record_planning_governance_block(
+        &self,
+        session: &mut ActiveSessionRecord,
+        goal_plan: &mut GoalPlan,
+        request: &GovernanceRuntimeRequest,
+        stage_index: usize,
+        reason: String,
+        stage_council: Option<StageCouncilOutcome>,
+    ) {
+        let record = GovernedStageRecord {
+            stage_key: request.stage_key.clone(),
+            runtime: GovernanceRuntimeKind::Canon,
+            lifecycle_state: GovernanceLifecycleState::Blocked,
+            required: true,
+            autopilot_enabled: request.autopilot,
+            approval_state: ApprovalState::NotNeeded,
+            canon_run_ref: None,
+            governance_attempt_id: request.governance_attempt_id.clone(),
+            previous_governance_attempt_id: self
+                .latest_planning_stage_record(session, &request.stage_key)
+                .map(|record| record.governance_attempt_id.clone()),
+            packet_ref: None,
+            decision_ref: None,
+            stage_council,
+            blocked_reason: Some(reason.clone()),
+        };
+
+        self.upsert_planning_stage_record(session, record, stage_index, Some(reason.clone()));
+        goal_plan.compacted_canon_memory = compacted_canon_memory_for_block(
+            &request.stage_key,
+            GovernanceRuntimeKind::Canon,
+            &reason,
+        );
+    }
+
+    fn record_planning_governance_response(
+        &self,
+        session: &mut ActiveSessionRecord,
+        goal_plan: &mut GoalPlan,
+        request: &GovernanceRuntimeRequest,
+        response: crate::adapters::governance_runtime::GovernanceRuntimeResponse,
+        stage_index: usize,
+        stage_council: Option<StageCouncilOutcome>,
+    ) -> Result<bool, SessionRuntimeError> {
+        let packet_rejected = response.packet.as_ref().is_some_and(|packet| {
+            matches!(packet.readiness, PacketReadiness::Incomplete | PacketReadiness::Rejected)
+        });
+        let effective_status =
+            if packet_rejected { GovernanceLifecycleState::Blocked } else { response.status };
+        let blocked_reason = if packet_rejected {
+            Some(
+                response
+                    .packet
+                    .as_ref()
+                    .map(|packet| {
+                        let detail = if !packet.missing_sections.is_empty() {
+                            format!(": missing sections {}", packet.missing_sections.join(", "))
+                        } else if !response.message.trim().is_empty() {
+                            format!(": {}", response.message)
+                        } else {
+                            String::new()
+                        };
+                        format!(
+                            "governance packet was {:?} for planning stage {}{}",
+                            packet.readiness, request.stage_key, detail
+                        )
+                    })
+                    .unwrap_or_else(|| {
+                        format!(
+                            "governance packet was rejected for planning stage {}",
+                            request.stage_key
+                        )
+                    }),
+            )
+        } else {
+            matches!(
+                response.status,
+                GovernanceLifecycleState::Blocked | GovernanceLifecycleState::Failed
+            )
+            .then(|| response.message.clone())
+        };
+
+        let record = GovernedStageRecord {
+            stage_key: request.stage_key.clone(),
+            runtime: GovernanceRuntimeKind::Canon,
+            lifecycle_state: effective_status,
+            required: true,
+            autopilot_enabled: request.autopilot,
+            approval_state: response.approval_state,
+            canon_run_ref: response.run_ref.clone(),
+            governance_attempt_id: request.governance_attempt_id.clone(),
+            previous_governance_attempt_id: self
+                .latest_planning_stage_record(session, &request.stage_key)
+                .map(|record| record.governance_attempt_id.clone()),
+            packet_ref: response.packet.as_ref().map(|packet| packet.packet_ref.clone()),
+            decision_ref: None,
+            stage_council,
+            blocked_reason: blocked_reason.clone(),
+        };
+
+        self.upsert_planning_stage_record(session, record, stage_index, blocked_reason.clone());
+        goal_plan.compacted_canon_memory = compacted_canon_memory_from_response(
+            &request.stage_key,
+            GovernanceRuntimeKind::Canon,
+            &response,
+        );
+
+        if effective_status == GovernanceLifecycleState::GovernedReady
+            && let Some(mode) = request.mode
+        {
+            let doc_ref = governed_document_ref_from_response(&request.stage_key, mode, &response);
+            append_governed_document_to_lifecycle(session, doc_ref);
+            self.set_planning_stage_progress(session, stage_index + 1, None);
+            return Ok(false);
+        }
+
+        Ok(matches!(
+            effective_status,
+            GovernanceLifecycleState::AwaitingApproval
+                | GovernanceLifecycleState::Blocked
+                | GovernanceLifecycleState::Failed
+        ))
+    }
+
+    fn latest_planning_stage_record<'a>(
+        &self,
+        session: &'a ActiveSessionRecord,
+        stage_key: &str,
+    ) -> Option<&'a GovernedStageRecord> {
+        session.governance_lifecycle.as_ref().and_then(|lifecycle| {
+            lifecycle.stage_records.iter().rev().find(|record| record.stage_key == stage_key)
+        })
+    }
+
+    fn upsert_planning_stage_record(
+        &self,
+        session: &mut ActiveSessionRecord,
+        record: GovernedStageRecord,
+        stage_index: usize,
+        terminal_reason: Option<String>,
+    ) {
+        let Some(lifecycle) = session.governance_lifecycle.as_mut() else {
+            return;
+        };
+
+        if let Some(existing_index) = lifecycle
+            .stage_records
+            .iter()
+            .position(|existing| existing.stage_key == record.stage_key)
+        {
+            lifecycle.stage_records[existing_index] = record;
+        } else {
+            lifecycle.stage_records.push(record);
+        }
+        lifecycle.current_stage_index = stage_index;
+        lifecycle.terminal_reason = terminal_reason;
+    }
+
+    fn build_planning_governance_request(
+        &self,
+        session: &mut ActiveSessionRecord,
+        goal_plan: &GoalPlan,
+        context_sources: &PlanningContextSources,
+        mode: CanonMode,
+    ) -> Result<PreparedPlanningGovernanceRequest, SessionRuntimeError> {
+        let stage_key = planning_stage_key_for_mode(mode).ok_or_else(|| {
+            SessionRuntimeError::ExecutionInvariant(format!(
+                "planning governance stage key is unavailable for Canon mode {}",
+                mode.as_str()
+            ))
+        })?;
+        let mut stage_brief_ref =
+            self.materialize_planning_stage_brief(stage_key, mode, goal_plan, context_sources)?;
+        let stage_council = if mode == CanonMode::Discovery {
+            let council_request =
+                discovery_stage_council_request(stage_key, &goal_plan.goal_text, &stage_brief_ref);
+            let outcome = self.execute_discovery_stage_council(&council_request)?;
+            session.latest_voting = Some(stage_council_voting_session_state(stage_key, &outcome));
+            stage_brief_ref = outcome.revised_output.evidence_ref.clone();
+            Some(outcome)
+        } else {
+            None
+        };
+        let defaults = self.resolve_planning_governance_defaults(session, mode)?;
+        let input_documents = planning_governance_input_documents(
+            session.authored_brief.as_ref(),
+            &stage_brief_ref,
+            goal_plan.compacted_canon_memory.as_ref(),
+        );
+
+        Ok(PreparedPlanningGovernanceRequest {
+            request: GovernanceRuntimeRequest {
+                request_kind: GovernanceRequestKind::Start,
+                governance_attempt_id: Uuid::new_v4().to_string(),
+                stage_key: stage_key.to_string(),
+                goal: goal_plan.goal_text.clone(),
+                workspace_ref: self.workspace_ref.to_string_lossy().into_owned(),
+                autopilot: false,
+                mode: Some(mode),
+                system_context: Some(defaults.system_context),
+                risk: Some(defaults.risk),
+                zone: Some(defaults.zone),
+                owner: Some(defaults.owner),
+                run_ref: None,
+                packet_ref: None,
+                bounded_context: crate::adapters::governance_runtime::GovernanceBoundedContext {
+                    read_targets: self.planning_governance_read_targets(goal_plan, context_sources),
+                    stage_brief_ref: Some(stage_brief_ref),
+                    reused_packets: Vec::new(),
+                },
+                input_documents,
+            },
+            stage_council,
+        })
+    }
+
+    fn resolve_planning_governance_defaults(
+        &self,
+        session: &ActiveSessionRecord,
+        mode: CanonMode,
+    ) -> Result<ResolvedPlanningGovernanceDefaults, SessionRuntimeError> {
+        let canon_preferences = FileConfigStore::for_workspace(&self.workspace_ref)
+            .load_local()
+            .ok()
+            .flatten()
+            .and_then(|config| config.canon);
+        let governance_intent =
+            session.authored_brief.as_ref().and_then(|bundle| bundle.governance_intent.as_ref());
+
+        let system_context = canon_preferences
+            .as_ref()
+            .and_then(|prefs| prefs.default_system_context.as_deref())
+            .and_then(parse_planning_system_context)
+            .unwrap_or_else(|| default_planning_system_context(mode));
+        let risk = governance_intent
+            .and_then(|intent| intent.risk.clone())
+            .or_else(|| canon_preferences.as_ref().and_then(|prefs| prefs.default_risk.clone()))
+            .map(|risk| {
+                CanonRiskClass::canonicalize_label(&risk).map(str::to_string).unwrap_or(risk)
+            })
+            .ok_or_else(|| missing_planning_governance_field(mode, "risk"))?;
+        let zone = governance_intent
+            .and_then(|intent| intent.zone.clone())
+            .or_else(|| canon_preferences.as_ref().and_then(|prefs| prefs.default_zone.clone()))
+            .map(|zone| {
+                CanonAuthorityZone::canonicalize_label(&zone).map(str::to_string).unwrap_or(zone)
+            })
+            .ok_or_else(|| missing_planning_governance_field(mode, "zone"))?;
+        let owner = governance_intent
+            .and_then(|intent| intent.owner.clone())
+            .or_else(|| canon_preferences.as_ref().and_then(|prefs| prefs.default_owner.clone()))
+            .map(|owner| {
+                CanonIntendedPersona::canonicalize_label(&owner)
+                    .map(str::to_string)
+                    .unwrap_or(owner)
+            })
+            .ok_or_else(|| missing_planning_governance_field(mode, "owner"))?;
+
+        Ok(ResolvedPlanningGovernanceDefaults { system_context, risk, zone, owner })
+    }
+
+    fn planning_governance_read_targets(
+        &self,
+        goal_plan: &GoalPlan,
+        context_sources: &PlanningContextSources,
+    ) -> Vec<String> {
+        let mut read_targets = Vec::new();
+        let mut seen = BTreeSet::new();
+
+        for target in goal_plan
+            .context_pack
+            .as_ref()
+            .map(|context_pack| context_pack.selected_targets.as_slice())
+            .unwrap_or_default()
+        {
+            if seen.insert(target.clone()) {
+                read_targets.push(target.clone());
+            }
+        }
+        for target in &context_sources.execution_profile_read_targets {
+            if seen.insert(target.clone()) {
+                read_targets.push(target.clone());
+            }
+        }
+        for target in &context_sources.latest_changed_files {
+            if seen.insert(target.clone()) {
+                read_targets.push(target.clone());
+            }
+        }
+
+        read_targets
+    }
+
+    fn materialize_planning_stage_brief(
+        &self,
+        stage_key: &str,
+        mode: CanonMode,
+        goal_plan: &GoalPlan,
+        context_sources: &PlanningContextSources,
+    ) -> Result<String, SessionRuntimeError> {
+        let stage_brief_ref = planning_stage_brief_ref(stage_key).ok_or_else(|| {
+            SessionRuntimeError::GoalPlan(format!(
+                "failed to resolve planning stage brief path for {stage_key}"
+            ))
+        })?;
+        let stage_brief_path = self.workspace_ref.join(&stage_brief_ref);
+        let stage_directory = stage_brief_path.parent().ok_or_else(|| {
+            SessionRuntimeError::GoalPlan(format!(
+                "failed to resolve planning stage brief directory for {stage_key}"
+            ))
+        })?;
+        fs::create_dir_all(stage_directory).map_err(|error| {
+            SessionRuntimeError::GoalPlan(format!(
+                "failed to create planning governance directory for {stage_key}: {error}"
+            ))
+        })?;
+
+        fs::write(
+            &stage_brief_path,
+            render_planning_stage_brief(stage_key, mode, goal_plan, context_sources),
+        )
+        .map_err(|error| {
+            SessionRuntimeError::GoalPlan(format!(
+                "failed to write planning stage brief for {stage_key}: {error}"
+            ))
+        })?;
+
+        Ok(stage_brief_ref)
+    }
+
+    fn execute_discovery_stage_council(
+        &self,
+        request: &StageCouncilRequest,
+    ) -> Result<StageCouncilOutcome, SessionRuntimeError> {
+        let current_artifact_ref = request.current_artifact_ref.as_ref().ok_or_else(|| {
+            SessionRuntimeError::ExecutionInvariant(
+                "stage council requires current_artifact_ref for discovery planning".to_string(),
+            )
+        })?;
+        let current_artifact_path = self.workspace_ref.join(current_artifact_ref);
+        let current_artifact = fs::read_to_string(&current_artifact_path).map_err(|error| {
+            SessionRuntimeError::GoalPlan(format!(
+                "failed to read discovery stage artifact {}: {error}",
+                current_artifact_path.display()
+            ))
+        })?;
+        let producer_ref =
+            self.write_stage_council_artifact(request, "producer", &current_artifact)?;
+        let producer_output = StageCouncilArtifact {
+            route_slot: request.producer_slot.clone(),
+            evidence_ref: producer_ref.clone(),
+            summary: Some("planner produced the discovery artifact for council review".to_string()),
+        };
+        let routing = self.planning_council_effective_routing();
+        let reviewer_routes = discovery_stage_council_reviewers(&routing);
+        let reviewers =
+            reviewer_routes.iter().map(|route| route.reviewer.clone()).collect::<Vec<_>>();
+        let participants = reviewer_routes
+            .iter()
+            .map(|route| {
+                let available = route_is_available(&route.route);
+                ReviewerParticipation {
+                    reviewer_id: route.reviewer.reviewer_id.clone(),
+                    status: if available {
+                        ReviewerParticipationStatus::Completed
+                    } else {
+                        ReviewerParticipationStatus::Omitted
+                    },
+                    reason: (!available).then(|| {
+                        format!(
+                            "route {} is unavailable for provider-backed council review",
+                            route
+                                .reviewer
+                                .source
+                                .clone()
+                                .unwrap_or_else(|| model_route_label(&route.route))
+                        )
+                    }),
+                    effective_route: route.reviewer.source.clone(),
+                }
+            })
+            .collect::<Vec<_>>();
+
+        if let Err(error) =
+            resolve_council_assembly(CouncilProfile::YellowPair, &reviewers, &participants)
+        {
+            return self.stage_council_blocked_outcome(
+                request,
+                &producer_output,
+                &error.to_string(),
+                "configure distinct provider-backed reviewer routes before rerunning boundline plan",
+            );
+        }
+
+        let artifact_file = ProviderWorkspaceFile {
+            path: producer_ref.clone(),
+            contents: current_artifact.clone(),
+        };
+        let prior_context = json!({
+            "stage_key": request.stage_key,
+            "target_refs": request.target_refs,
+            "constraints": request.constraints,
+            "current_artifact_ref": current_artifact_ref,
+        });
+        let mut effective_routes = BTreeMap::new();
+        let mut review_findings = Vec::new();
+        let mut stage_findings = Vec::new();
+
+        for reviewer_route in &reviewer_routes {
+            let effective_route = reviewer_route
+                .reviewer
+                .source
+                .clone()
+                .unwrap_or_else(|| model_route_label(&reviewer_route.route));
+            effective_routes
+                .insert(reviewer_route.reviewer.reviewer_id.clone(), effective_route.clone());
+            let response = match review_workspace(
+                &reviewer_route.route,
+                &ProviderReviewRequest {
+                    goal: request.goal.clone(),
+                    phase: request.phase.clone(),
+                    reviewer_id: reviewer_route.reviewer.reviewer_id.clone(),
+                    reviewer_role: reviewer_route.reviewer.role.clone(),
+                    attempt_id: format!(
+                        "{}-{}",
+                        request.stage_key.replace(':', "-"),
+                        reviewer_route.reviewer.reviewer_id
+                    ),
+                    files: vec![artifact_file.clone()],
+                    prior_context: prior_context.clone(),
+                },
+            ) {
+                Ok(response) => response,
+                Err(error) => {
+                    return self.stage_council_blocked_outcome(
+                        request,
+                        &producer_output,
+                        &format!(
+                            "reviewer {} failed: {error}",
+                            reviewer_route.reviewer.reviewer_id
+                        ),
+                        "restore provider review availability before rerunning boundline plan",
+                    );
+                }
+            };
+
+            let mut finding = ReviewerFinding::new(
+                reviewer_route.reviewer.reviewer_id.clone(),
+                reviewer_disposition_from_provider(response.disposition),
+                response.summary.clone(),
+            );
+            finding.details = response.details.clone();
+            finding.runtime_role = Some(reviewer_route.reviewer.role.clone());
+            finding.required_action = response.required_action.clone();
+            finding.evidence_refs = if response.evidence_refs.is_empty() {
+                vec![producer_ref.clone()]
+            } else {
+                response.evidence_refs.clone()
+            };
+            review_findings.push(finding);
+
+            stage_findings.push(StageCouncilFinding {
+                reviewer_id: reviewer_route.reviewer.reviewer_id.clone(),
+                effective_route,
+                disposition: stage_council_disposition_from_provider(response.disposition),
+                summary: response.summary,
+                accepted: false,
+            });
+        }
+
+        let vote_resolution = VoteRuleDefinition::default()
+            .resolve(&reviewers, &review_findings, Some(&effective_routes))
+            .map_err(|error| SessionRuntimeError::ExecutionInvariant(error.to_string()))?;
+        let mut accepted_findings = stage_findings
+            .iter()
+            .filter(|finding| finding.disposition != StageCouncilFindingDisposition::Approve)
+            .map(|finding| finding.reviewer_id.clone())
+            .collect::<Vec<_>>();
+        let mut rejected_findings = stage_findings
+            .iter()
+            .filter(|finding| finding.disposition == StageCouncilFindingDisposition::Approve)
+            .map(|finding| finding.reviewer_id.clone())
+            .collect::<Vec<_>>();
+        let mut adjudication = None;
+        let mut blocking = stage_findings
+            .iter()
+            .any(|finding| finding.disposition == StageCouncilFindingDisposition::Block)
+            || vote_resolution.decision == VoteDecision::Rejected;
+
+        if vote_resolution.decision == VoteDecision::NeedsAdjudication {
+            if !route_is_available(&routing.adjudication.route) {
+                return self.stage_council_blocked_outcome(
+                    request,
+                    &producer_output,
+                    "adjudication was required but the adjudication route is unavailable",
+                    "configure an adjudication route before rerunning boundline plan",
+                );
+            }
+
+            let adjudication_response = match review_workspace(
+                &routing.adjudication.route,
+                &ProviderReviewRequest {
+                    goal: request.goal.clone(),
+                    phase: format!("{}-adjudication", request.phase),
+                    reviewer_id: "arbiter".to_string(),
+                    reviewer_role: "discovery adjudicator".to_string(),
+                    attempt_id: format!("{}-arbiter", request.stage_key.replace(':', "-")),
+                    files: vec![artifact_file.clone()],
+                    prior_context: json!({
+                        "review_findings": review_findings.clone(),
+                        "stage_findings": stage_findings.clone(),
+                    }),
+                },
+            ) {
+                Ok(response) => response,
+                Err(error) => {
+                    return self.stage_council_blocked_outcome(
+                        request,
+                        &producer_output,
+                        &format!("adjudication failed: {error}"),
+                        "restore adjudication availability before rerunning boundline plan",
+                    );
+                }
+            };
+
+            adjudication = Some(StageCouncilAdjudication {
+                adjudicator_route: model_route_label(&routing.adjudication.route),
+                decision: provider_review_disposition_text(adjudication_response.disposition)
+                    .to_string(),
+                rationale: adjudication_response.summary.clone(),
+            });
+
+            match adjudication_response.disposition {
+                ProviderReviewDisposition::Approve => {
+                    accepted_findings.clear();
+                    rejected_findings = stage_findings
+                        .iter()
+                        .filter(|finding| {
+                            finding.disposition != StageCouncilFindingDisposition::Approve
+                        })
+                        .map(|finding| finding.reviewer_id.clone())
+                        .collect();
+                    blocking = false;
+                }
+                ProviderReviewDisposition::Concern => {
+                    blocking = false;
+                }
+                ProviderReviewDisposition::Block => {
+                    blocking = true;
+                }
+            }
+        }
+
+        for finding in &mut stage_findings {
+            finding.accepted = accepted_findings.contains(&finding.reviewer_id);
+        }
+
+        let mut revised_summary = Some(
+            "reviser preserved the producer artifact because no council findings were accepted"
+                .to_string(),
+        );
+        let revised_artifact_text = if blocking {
+            revised_summary = Some("stage council blocked planning discovery".to_string());
+            render_stage_council_blocked_markdown(request, &stage_findings, &accepted_findings)
+        } else {
+            let accepted_feedback = stage_findings
+                .iter()
+                .filter(|finding| finding.accepted)
+                .map(|finding| format!("{}: {}", finding.reviewer_id, finding.summary))
+                .collect::<Vec<_>>();
+            if accepted_feedback.is_empty() {
+                current_artifact.clone()
+            } else {
+                if !route_is_available(&routing.planning.route) {
+                    return self.stage_council_blocked_outcome(
+                        request,
+                        &producer_output,
+                        "reviser route is unavailable for provider-backed council revision",
+                        "configure a planning route before rerunning boundline plan",
+                    );
+                }
+                match revise_artifact(
+                    &routing.planning.route,
+                    &ProviderRevisionRequest {
+                        goal: request.goal.clone(),
+                        phase: request.phase.clone(),
+                        reviser_id: "reviser".to_string(),
+                        target_refs: request.target_refs.clone(),
+                        current_artifact: current_artifact.clone(),
+                        accepted_feedback,
+                        prior_context: json!({
+                            "review_findings": stage_findings.clone(),
+                            "adjudication": adjudication.clone(),
+                        }),
+                    },
+                ) {
+                    Ok(response) => {
+                        revised_summary = Some(response.summary);
+                        response.revised_artifact
+                    }
+                    Err(error) => {
+                        return self.stage_council_blocked_outcome(
+                            request,
+                            &producer_output,
+                            &format!("reviser failed: {error}"),
+                            "restore revision availability before rerunning boundline plan",
+                        );
+                    }
+                }
+            }
+        };
+
+        let revised_ref =
+            self.write_stage_council_artifact(request, "revised", &revised_artifact_text)?;
+        let outcome = StageCouncilOutcome {
+            producer_output,
+            reviewer_findings: stage_findings,
+            vote_resolution: StageCouncilVoteResolution {
+                strategy: "bounded_majority".to_string(),
+                accepted_findings,
+                rejected_findings,
+                independent_review: true,
+            },
+            adjudication,
+            revised_output: StageCouncilArtifact {
+                route_slot: request.producer_slot.clone(),
+                evidence_ref: revised_ref,
+                summary: revised_summary,
+            },
+            status: if blocking {
+                StageCouncilStatus::Blocked
+            } else {
+                StageCouncilStatus::Proceed
+            },
+            next_action: if blocking {
+                "repair discovery inputs and rerun boundline plan".to_string()
+            } else {
+                "continue planning discovery".to_string()
+            },
+        };
+        outcome.validate().map_err(SessionRuntimeError::ExecutionInvariant)?;
+        Ok(outcome)
+    }
+
+    fn planning_council_effective_routing(&self) -> EffectiveRouting {
+        let workspace_routing =
+            FileConfigStore::for_workspace(&self.workspace_ref).local_routing().ok().flatten();
+        let cluster_routing = FileClusterStore::for_workspace(&self.workspace_ref)
+            .load()
+            .ok()
+            .flatten()
+            .map(|config| config.routing);
+        let global_routing = FileConfigStore::global_routing().ok().flatten();
+        resolve_effective_routing(
+            &RoutingOverrides::default(),
+            workspace_routing.as_ref(),
+            cluster_routing.as_ref(),
+            global_routing.as_ref(),
+        )
+    }
+
+    fn stage_council_blocked_outcome(
+        &self,
+        request: &StageCouncilRequest,
+        producer_output: &StageCouncilArtifact,
+        reason: &str,
+        next_action: &str,
+    ) -> Result<StageCouncilOutcome, SessionRuntimeError> {
+        let revised_ref = self.write_stage_council_artifact(
+            request,
+            "blocked",
+            &render_stage_council_blocked_note(reason),
+        )?;
+        let outcome = StageCouncilOutcome {
+            producer_output: producer_output.clone(),
+            reviewer_findings: Vec::new(),
+            vote_resolution: StageCouncilVoteResolution {
+                strategy: "bounded_majority".to_string(),
+                accepted_findings: Vec::new(),
+                rejected_findings: Vec::new(),
+                independent_review: false,
+            },
+            adjudication: None,
+            revised_output: StageCouncilArtifact {
+                route_slot: request.producer_slot.clone(),
+                evidence_ref: revised_ref,
+                summary: Some("stage council blocked planning discovery".to_string()),
+            },
+            status: StageCouncilStatus::Blocked,
+            next_action: next_action.to_string(),
+        };
+        outcome.validate().map_err(SessionRuntimeError::ExecutionInvariant)?;
+        Ok(outcome)
+    }
+
+    fn write_stage_council_artifact(
+        &self,
+        request: &StageCouncilRequest,
+        suffix: &str,
+        contents: &str,
+    ) -> Result<String, SessionRuntimeError> {
+        let relative_ref =
+            format!(".boundline/council/{}-{suffix}.md", request.stage_key.replace(':', "-"));
+        let artifact_path = self.workspace_ref.join(&relative_ref);
+        if let Some(parent) = artifact_path.parent() {
+            fs::create_dir_all(parent).map_err(|error| {
+                SessionRuntimeError::GoalPlan(format!(
+                    "failed to create council artifact directory {}: {error}",
+                    parent.display()
+                ))
+            })?;
+        }
+        fs::write(&artifact_path, contents).map_err(|error| {
+            SessionRuntimeError::GoalPlan(format!(
+                "failed to write stage council artifact {}: {error}",
+                artifact_path.display()
+            ))
+        })?;
+        Ok(relative_ref)
     }
 
     /// Advances the active session by exactly one bounded step.
@@ -738,7 +2061,7 @@ impl SessionRuntime {
         let runtime = self.build_runtime(session)?;
         let _ = self.execute_single_step(session, &runtime)?;
         if let Some(projection) = checkpoint_projection.as_ref() {
-            self.refresh_checkpoint_projection(projection)?;
+            self.refresh_checkpoint_projection(session, projection)?;
         }
         Ok(())
     }
@@ -809,7 +2132,7 @@ impl SessionRuntime {
         if session.goal_plan.is_some() {
             let response = self.run_native_goal_plan(session, checkpoint_projection.clone())?;
             if let Some(projection) = checkpoint_projection.as_ref() {
-                self.refresh_checkpoint_projection(projection)?;
+                self.refresh_checkpoint_projection(session, projection)?;
             }
             return Ok(response);
         }
@@ -819,7 +2142,7 @@ impl SessionRuntime {
         loop {
             if let Some(response) = self.execute_single_step(session, &runtime)? {
                 if let Some(projection) = checkpoint_projection.as_ref() {
-                    self.refresh_checkpoint_projection(projection)?;
+                    self.refresh_checkpoint_projection(session, projection)?;
                 }
                 return Ok(response);
             }
@@ -1225,11 +2548,21 @@ impl SessionRuntime {
         let Some(mut goal_plan) = session.goal_plan.clone() else {
             return Err(SessionRuntimeError::MissingGoalPlan);
         };
+        if let Some(stage_record) = self.unresolved_planning_governance_record(session) {
+            return Err(SessionRuntimeError::PlanningGovernanceUnresolved {
+                stage_key: stage_record.stage_key.clone(),
+                state: stage_record.lifecycle_state,
+                reason: stage_record.blocked_reason.clone().or_else(|| {
+                    session.governance_lifecycle.as_ref().and_then(|l| l.terminal_reason.clone())
+                }),
+            });
+        }
 
         if goal_plan.requires_confirmation() {
-            return Err(SessionRuntimeError::PlanConfirmationRequired {
-                flow_name: goal_plan.flow.as_ref().map(|flow| flow.flow_name.clone()),
-            });
+            goal_plan
+                .confirm()
+                .map_err(|error| SessionRuntimeError::GoalPlan(error.to_string()))?;
+            session.goal_plan = Some(goal_plan.clone());
         }
 
         if let Some(delegation) = self.goal_plan_delegation_view(&goal_plan)
@@ -1259,6 +2592,12 @@ impl SessionRuntime {
                     checkpoint_projection: checkpoint_projection.clone(),
                     terminal_reason: reason,
                     limits: RunLimits::default(),
+                    native_context: TaskContext::new(
+                        session.session_id.clone(),
+                        session.workspace_ref.clone(),
+                        RunLimits::default(),
+                        Map::new(),
+                    ),
                     record_terminal_event: true,
                     projected_task: None,
                 },
@@ -1287,6 +2626,12 @@ impl SessionRuntime {
                     checkpoint_projection: checkpoint_projection.clone(),
                     terminal_reason: reason,
                     limits: RunLimits::default(),
+                    native_context: TaskContext::new(
+                        session.session_id.clone(),
+                        session.workspace_ref.clone(),
+                        RunLimits::default(),
+                        Map::new(),
+                    ),
                     record_terminal_event: true,
                     projected_task: None,
                 },
@@ -1314,8 +2659,8 @@ impl SessionRuntime {
             self.trace_store.clone(),
             runtime.profile.limits.max_steps,
         );
-        let (terminal, decisions, mut trace) = decision_loop
-            .run_with_options(
+        let (terminal, decisions, mut trace, mut native_task_context) = decision_loop
+            .run_with_options_and_context(
                 &goal_plan,
                 session.active_flow_policy.as_ref(),
                 &session.workspace_ref,
@@ -1323,24 +2668,42 @@ impl SessionRuntime {
                 enable_flow_retry_probe,
             )
             .map_err(|error| SessionRuntimeError::DecisionLoop(error.to_string()))?;
-        let reason = self.native_terminal_reason(&terminal);
-        if task_status_for_condition(reason.condition) == TaskStatus::Succeeded {
-            self.propagate_cluster_delivery_changes(&goal_plan, &runtime)?;
+        let mut reason = self.native_terminal_reason(&terminal);
+        self.backfill_native_execution_state(
+            &runtime,
+            &mut native_task_context,
+            task_status_for_condition(reason.condition),
+        );
+        let native_review = if task_status_for_condition(reason.condition) == TaskStatus::Succeeded
+        {
+            let native_review = self.execute_native_review_sequence(
+                session,
+                &runtime,
+                &goal_plan,
+                &mut native_task_context,
+            )?;
+            if let Some(review_reason) = native_review.terminal_reason.clone() {
+                reason = review_reason;
+            }
+            if task_status_for_condition(reason.condition) == TaskStatus::Succeeded {
+                self.propagate_cluster_delivery_changes(&goal_plan, &runtime)?;
+            }
+            native_review
+        } else {
+            NativeReviewExecution::default()
+        };
+        if !native_review.events.is_empty() {
+            self.insert_trace_events_before_terminal(&mut trace, native_review.events);
         }
         if !governance_events.is_empty() {
-            let insert_at = trace
-                .events
-                .iter()
-                .rposition(|event| event.event_type == TraceEventType::TerminalRecorded)
-                .unwrap_or(trace.events.len());
-            trace.events.splice(insert_at..insert_at, governance_events);
+            self.insert_trace_events_before_terminal(&mut trace, governance_events);
         }
         let projected_task = native_governance_task.map(|task| {
             self.finalize_native_projected_task(
                 task,
-                &runtime,
                 task_status_for_condition(reason.condition),
                 &reason,
+                &native_task_context,
             )
         });
 
@@ -1353,6 +2716,7 @@ impl SessionRuntime {
                 checkpoint_projection,
                 terminal_reason: reason,
                 limits: runtime.profile.limits.clone(),
+                native_context: native_task_context,
                 record_terminal_event: false,
                 projected_task,
             },
@@ -1452,9 +2816,13 @@ impl SessionRuntime {
             );
         }
         trace.finalize(terminal_status, terminal_reason.clone());
-        let trace_location = self.persist_trace(&mut trace)?;
-        let mut final_context =
-            self.build_native_task_context(session, input.limits, &goal_plan)?;
+        let trace_location = self.persist_trace(&session.session_id, &mut trace)?;
+        let mut final_context = self.build_native_task_context(
+            session,
+            input.limits,
+            &goal_plan,
+            &input.native_context,
+        )?;
         if let Some(checkpoint_projection) = input.checkpoint_projection.as_ref() {
             apply_checkpoint_projection_to_context(&mut final_context, checkpoint_projection);
         }
@@ -1500,6 +2868,7 @@ impl SessionRuntime {
         session: &ActiveSessionRecord,
         limits: crate::domain::limits::RunLimits,
         goal_plan: &GoalPlan,
+        native_context: &TaskContext,
     ) -> Result<TaskContext, SessionRuntimeError> {
         let mut context = TaskContext::new(
             session.session_id.clone(),
@@ -1538,7 +2907,355 @@ impl SessionRuntime {
                 .set_cluster_delivery_story(story)
                 .map_err(|error| SessionRuntimeError::TaskContext(error.to_string()))?;
         }
+        self.merge_native_task_context(&mut context, native_context);
         Ok(context)
+    }
+
+    fn merge_native_task_context(&self, context: &mut TaskContext, native_context: &TaskContext) {
+        context.apply_state_patch(&native_context.state);
+        for history_ref in &native_context.history_refs {
+            context.push_history_ref(history_ref.clone());
+        }
+        if let Some(last_result) = native_context.last_result.clone() {
+            context.set_last_result(last_result);
+        }
+    }
+
+    fn backfill_native_execution_state(
+        &self,
+        runtime: &FixtureRuntime,
+        native_context: &mut TaskContext,
+        terminal_status: TaskStatus,
+    ) {
+        if !native_context.state.contains_key(LATEST_CHANGED_FILES_KEY) {
+            let changed_files = runtime
+                .profile
+                .attempts
+                .iter()
+                .flat_map(|attempt| attempt.changes.iter().map(|change| change.path.clone()))
+                .collect::<Vec<_>>();
+            if !changed_files.is_empty() {
+                native_context
+                    .state
+                    .insert(LATEST_CHANGED_FILES_KEY.to_string(), json!(changed_files));
+            }
+        }
+
+        native_context.state.insert(
+            LATEST_VALIDATION_STATUS_KEY.to_string(),
+            json!(if terminal_status == TaskStatus::Succeeded {
+                VALIDATION_STATUS_PASSED
+            } else {
+                VALIDATION_STATUS_FAILED
+            }),
+        );
+    }
+
+    fn insert_trace_events_before_terminal(
+        &self,
+        trace: &mut ExecutionTrace,
+        events: Vec<TraceEvent>,
+    ) {
+        let insert_at = trace
+            .events
+            .iter()
+            .rposition(|event| event.event_type == TraceEventType::TerminalRecorded)
+            .unwrap_or(trace.events.len());
+        trace.events.splice(insert_at..insert_at, events);
+    }
+
+    fn execute_native_review_sequence(
+        &self,
+        session: &ActiveSessionRecord,
+        runtime: &FixtureRuntime,
+        goal_plan: &GoalPlan,
+        native_context: &mut TaskContext,
+    ) -> Result<NativeReviewExecution, SessionRuntimeError> {
+        let Some(review) = runtime.profile.review.as_ref() else {
+            return Ok(NativeReviewExecution::default());
+        };
+        let Some(trigger) = Self::native_review_trigger(review) else {
+            return Ok(NativeReviewExecution::default());
+        };
+
+        native_context.state.insert(NEXT_REVIEW_TRIGGER_KEY.to_string(), json!(trigger));
+        let attempt_id = native_context
+            .state
+            .get(LATEST_ATTEMPT_ID_KEY)
+            .and_then(Value::as_str)
+            .unwrap_or(goal_plan.plan_id.as_str())
+            .to_string();
+        let mut review_trace = ExecutionTrace::new(
+            goal_plan.plan_id.clone(),
+            session.session_id.clone(),
+            goal_plan.goal_text.clone(),
+        );
+
+        for reviewer in &review.reviewers {
+            let mut step = Step::agent(
+                format!("{NATIVE_REVIEW_STEP_PREFIX}-{}", reviewer.reviewer_id),
+                NATIVE_REVIEWER_AGENT_NAME,
+                json!({
+                    "phase": NATIVE_REVIEW_PHASE,
+                    "attempt_id": attempt_id.clone(),
+                    "reviewer_id": reviewer.reviewer_id.clone(),
+                    "adjudication": false,
+                    "default_review_trigger": trigger,
+                }),
+            )
+            .map_err(|error| SessionRuntimeError::ExecutionInvariant(error.to_string()))?;
+            let result = self.execute_native_follow_up_step(
+                runtime,
+                native_context,
+                &mut review_trace,
+                &mut step,
+                goal_plan.proposal_revision,
+            )?;
+            if result.status == ExecutionStatus::Failed {
+                return Ok(NativeReviewExecution {
+                    events: review_trace.events,
+                    terminal_reason: Self::native_review_terminal_reason(
+                        native_context,
+                        result.error.as_ref().map(|error| error.message.as_str()),
+                    ),
+                });
+            }
+        }
+
+        let mut vote_step = Step::tool(
+            NATIVE_REVIEW_VOTE_STEP_ID,
+            NATIVE_REVIEW_VOTER_TOOL_NAME,
+            json!({
+                "phase": NATIVE_REVIEW_VOTE_PHASE,
+                "attempt_id": attempt_id.clone(),
+            }),
+        )
+        .map_err(|error| SessionRuntimeError::ExecutionInvariant(error.to_string()))?;
+        let vote_result = self.execute_native_follow_up_step(
+            runtime,
+            native_context,
+            &mut review_trace,
+            &mut vote_step,
+            goal_plan.proposal_revision,
+        )?;
+        if vote_result.status == ExecutionStatus::Failed {
+            return Ok(NativeReviewExecution {
+                events: review_trace.events,
+                terminal_reason: Self::native_review_terminal_reason(
+                    native_context,
+                    vote_result.error.as_ref().map(|error| error.message.as_str()),
+                ),
+            });
+        }
+
+        if review.adjudication.enabled {
+            let adjudicator_id = review.adjudication.reviewer_id.as_ref().ok_or_else(|| {
+                SessionRuntimeError::ExecutionInvariant(
+                    "native review adjudication is enabled without an adjudicator".to_string(),
+                )
+            })?;
+            let mut step = Step::agent(
+                format!("{NATIVE_REVIEW_STEP_PREFIX}-adjudicate"),
+                NATIVE_REVIEWER_AGENT_NAME,
+                json!({
+                    "phase": NATIVE_REVIEW_PHASE,
+                    "attempt_id": attempt_id.clone(),
+                    "reviewer_id": adjudicator_id,
+                    "adjudication": true,
+                    "default_review_trigger": trigger,
+                }),
+            )
+            .map_err(|error| SessionRuntimeError::ExecutionInvariant(error.to_string()))?;
+            let result = self.execute_native_follow_up_step(
+                runtime,
+                native_context,
+                &mut review_trace,
+                &mut step,
+                goal_plan.proposal_revision,
+            )?;
+            if result.status == ExecutionStatus::Failed {
+                return Ok(NativeReviewExecution {
+                    events: review_trace.events,
+                    terminal_reason: Self::native_review_terminal_reason(
+                        native_context,
+                        result.error.as_ref().map(|error| error.message.as_str()),
+                    ),
+                });
+            }
+        }
+
+        let mut finalize_step = Step::tool(
+            NATIVE_REVIEW_FINALIZE_STEP_ID,
+            NATIVE_REVIEW_FINALIZER_TOOL_NAME,
+            json!({
+                "phase": NATIVE_REVIEW_FINALIZE_PHASE,
+                "attempt_id": attempt_id,
+            }),
+        )
+        .map_err(|error| SessionRuntimeError::ExecutionInvariant(error.to_string()))?;
+        let finalize_result = self.execute_native_follow_up_step(
+            runtime,
+            native_context,
+            &mut review_trace,
+            &mut finalize_step,
+            goal_plan.proposal_revision,
+        )?;
+
+        Ok(NativeReviewExecution {
+            events: review_trace.events,
+            terminal_reason: Self::native_review_terminal_reason(
+                native_context,
+                finalize_result.error.as_ref().map(|error| error.message.as_str()),
+            ),
+        })
+    }
+
+    fn execute_native_follow_up_step(
+        &self,
+        runtime: &FixtureRuntime,
+        native_context: &mut TaskContext,
+        trace: &mut ExecutionTrace,
+        step: &mut Step,
+        plan_revision: usize,
+    ) -> Result<StepExecutionResult, SessionRuntimeError> {
+        step.mark_running();
+        let started_at = current_timestamp_millis();
+        let mut attempt = StepAttempt::new(step.id.clone(), step.input.clone(), started_at);
+        trace.record_event(
+            TraceEventType::StepStarted,
+            Some(step.id.clone()),
+            plan_revision,
+            json!({
+                "attempt_number": step.attempt_count,
+                "input": step.input.clone(),
+                "step_kind": step.kind,
+            }),
+        );
+        record_review_step_started(
+            trace,
+            &step.id,
+            &step.input,
+            &native_context.state,
+            plan_revision,
+        );
+
+        let result = self.normalize_result(self.execute_step(runtime, step, native_context), step);
+        attempt.complete(&result, current_timestamp_millis());
+        native_context.push_history_ref(attempt.attempt_id.clone());
+
+        match result.status {
+            ExecutionStatus::Succeeded => {
+                let output = result.output.clone().ok_or_else(|| {
+                    SessionRuntimeError::ExecutionInvariant(format!(
+                        "native review step {} reported success without output",
+                        step.id
+                    ))
+                })?;
+                step.mark_succeeded(output.clone());
+                native_context.apply_success_output(&step.id, &output, result.state_patch.as_ref());
+                native_context.set_last_result(StepResultSummary::from_step(step));
+                trace.record_event(
+                    TraceEventType::StepCompleted,
+                    Some(step.id.clone()),
+                    plan_revision,
+                    json!({
+                        "attempt_id": attempt.attempt_id,
+                        "status": "succeeded",
+                        "output": output,
+                        "evidence": result.evidence,
+                    }),
+                );
+            }
+            ExecutionStatus::Failed => {
+                let error = result.error.clone().ok_or_else(|| {
+                    SessionRuntimeError::ExecutionInvariant(format!(
+                        "native review step {} reported failure without error",
+                        step.id
+                    ))
+                })?;
+                step.mark_failed(error.clone(), result.recoverability);
+                native_context.apply_failure_error(&step.id, &error);
+                if let Some(state_patch) = result.state_patch.as_ref() {
+                    native_context.apply_state_patch(state_patch);
+                }
+                native_context.set_last_result(StepResultSummary::from_step(step));
+                trace.record_event(
+                    TraceEventType::StepCompleted,
+                    Some(step.id.clone()),
+                    plan_revision,
+                    json!({
+                        "attempt_id": attempt.attempt_id,
+                        "status": "failed",
+                        "error": error,
+                        "recoverability": result.recoverability,
+                        "evidence": result.evidence,
+                    }),
+                );
+            }
+        }
+
+        record_review_step_completed(
+            trace,
+            &step.id,
+            &step.input,
+            &result,
+            &native_context.state,
+            plan_revision,
+        );
+
+        Ok(result)
+    }
+
+    fn native_review_trigger(review: &ReviewProfile) -> Option<ReviewTrigger> {
+        review
+            .triggers
+            .iter()
+            .copied()
+            .find(|trigger| !matches!(trigger, ReviewTrigger::ValidationFailed))
+            .or_else(|| review.triggers.first().copied())
+    }
+
+    fn native_review_terminal_reason(
+        native_context: &TaskContext,
+        failure_message: Option<&str>,
+    ) -> Option<TerminalReason> {
+        let outcome = native_context
+            .state
+            .get(LATEST_REVIEW_OUTCOME_KEY)
+            .cloned()
+            .and_then(|value| serde_json::from_value::<ReviewOutcome>(value).ok());
+        let mut details = Map::new();
+        for key in [
+            "latest_review_trigger",
+            "latest_review_findings",
+            "latest_review_participants",
+            "latest_review_vote_resolution",
+            "latest_review_vote",
+        ] {
+            if let Some(value) = native_context.state.get(key).cloned() {
+                details.insert(key.to_string(), value);
+            }
+        }
+        let details = (!details.is_empty()).then_some(Value::Object(details));
+
+        match outcome {
+            Some(ReviewOutcome::Accepted) => None,
+            Some(ReviewOutcome::Rejected) => Some(build_terminal_reason(
+                TerminalCondition::TaskNotCredible,
+                failure_message.unwrap_or("native review rejected the delivery result"),
+                details,
+            )),
+            Some(ReviewOutcome::Escalated) => Some(build_terminal_reason(
+                TerminalCondition::NoCredibleNextStep,
+                failure_message.unwrap_or("native review escalated and requires follow-up"),
+                details,
+            )),
+            Some(ReviewOutcome::Failed) | None => Some(build_terminal_reason(
+                TerminalCondition::UnrecoverableError,
+                failure_message.unwrap_or("native review failed"),
+                details,
+            )),
+        }
     }
 
     fn prepare_native_governance_projection(
@@ -1642,37 +3359,11 @@ impl SessionRuntime {
     fn finalize_native_projected_task(
         &self,
         mut task: Task,
-        runtime: &FixtureRuntime,
         terminal_status: TaskStatus,
         terminal_reason: &TerminalReason,
+        native_context: &TaskContext,
     ) -> Task {
-        let changed_files = runtime
-            .profile
-            .attempts
-            .iter()
-            .flat_map(|attempt| attempt.changes.iter().map(|change| change.path.clone()))
-            .collect::<Vec<_>>();
-        if !changed_files.is_empty() {
-            task.context.state.insert("latest_changed_files".to_string(), json!(changed_files));
-        }
-        task.context.state.insert(
-            "latest_validation_status".to_string(),
-            json!(if terminal_status == TaskStatus::Succeeded { "passed" } else { "failed" }),
-        );
-        if terminal_status == TaskStatus::Succeeded
-            && let Some(review) = runtime.profile.review.as_ref()
-            && let Some(trigger) = review
-                .triggers
-                .iter()
-                .copied()
-                .find(|trigger| !matches!(trigger, ReviewTrigger::ValidationFailed))
-                .or_else(|| review.triggers.first().copied())
-        {
-            task.context.state.insert("latest_review_trigger".to_string(), json!(trigger));
-            task.context
-                .state
-                .insert("latest_review_outcome".to_string(), json!(ReviewOutcome::Accepted));
-        }
+        task.context.apply_state_patch(&native_context.state);
         task.apply_terminal(terminal_status, terminal_reason.clone());
         task
     }
@@ -2337,7 +4028,7 @@ impl SessionRuntime {
             &task.context.state,
             task.plan.revision,
         );
-        let trace_location = self.persist_trace(trace)?;
+        let trace_location = self.persist_trace(&session.session_id, trace)?;
         session.latest_trace_ref = Some(trace_location);
 
         let result = self.execute_step(runtime, &step_snapshot, &task.context);
@@ -2441,7 +4132,7 @@ impl SessionRuntime {
                 }
 
                 task.plan.advance();
-                let trace_location = self.persist_trace(trace)?;
+                let trace_location = self.persist_trace(&session.session_id, trace)?;
                 session.latest_status = SessionStatus::Running;
                 session.latest_terminal_reason = None;
                 session.latest_trace_ref = Some(trace_location);
@@ -2485,7 +4176,7 @@ impl SessionRuntime {
 
                 match decide_recovery(task, &task.plan.steps[step_index], &result) {
                     RecoveryDecision::Continue => {
-                        let trace_location = self.persist_trace(trace)?;
+                        let trace_location = self.persist_trace(&session.session_id, trace)?;
                         session.latest_status = SessionStatus::Running;
                         session.latest_terminal_reason = None;
                         session.latest_trace_ref = Some(trace_location);
@@ -2519,7 +4210,7 @@ impl SessionRuntime {
                             task.plan.revision,
                             payload,
                         );
-                        let trace_location = self.persist_trace(trace)?;
+                        let trace_location = self.persist_trace(&session.session_id, trace)?;
                         session.latest_status = SessionStatus::Running;
                         session.latest_terminal_reason = None;
                         session.latest_trace_ref = Some(trace_location);
@@ -2583,7 +4274,7 @@ impl SessionRuntime {
                             revision.to_revision,
                             payload,
                         );
-                        let trace_location = self.persist_trace(trace)?;
+                        let trace_location = self.persist_trace(&session.session_id, trace)?;
                         session.latest_status = SessionStatus::Running;
                         session.latest_terminal_reason = None;
                         session.latest_trace_ref = Some(trace_location);
@@ -3061,7 +4752,8 @@ impl SessionRuntime {
             .as_ref()
             .and_then(|record| record.selected_mode)
             .or_else(|| resolved_canon_mode(policy, governance.default_runtime))
-            .or(existing_stage_mode);
+            .or(existing_stage_mode)
+            .or_else(|| default_stage_canon_mode(policy, governance.default_runtime));
         let mut selected_runtime = requested_runtime;
         if requested_runtime == GovernanceRuntimeKind::Canon
             && (mode.is_none() || !canon_available)
@@ -3140,7 +4832,7 @@ impl SessionRuntime {
                         autopilot_enabled: policy.autopilot,
                         runtime: GovernanceRuntimeKind::Canon,
                         reason: format!(
-                            "governance stage {stage_key} requires an explicit Canon mode"
+                            "Boundline could not determine a Canon mode for governance stage {stage_key}"
                         ),
                     },
                     decision.clone(),
@@ -3156,9 +4848,19 @@ impl SessionRuntime {
                 autopilot: policy.autopilot,
                 mode: Some(mode_value),
                 system_context: policy.system_context.or(canon.default_system_context),
-                risk: policy.risk.clone().or_else(|| canon.default_risk.clone()),
-                zone: policy.zone.clone().or_else(|| canon.default_zone.clone()),
-                owner: policy.owner.clone().or_else(|| canon.default_owner.clone()),
+                risk: policy.risk.clone().or_else(|| canon.default_risk.clone()).map(|risk| {
+                    CanonRiskClass::canonicalize_label(&risk).map(str::to_string).unwrap_or(risk)
+                }),
+                zone: policy.zone.clone().or_else(|| canon.default_zone.clone()).map(|zone| {
+                    CanonAuthorityZone::canonicalize_label(&zone)
+                        .map(str::to_string)
+                        .unwrap_or(zone)
+                }),
+                owner: policy.owner.clone().or_else(|| canon.default_owner.clone()).map(|owner| {
+                    CanonIntendedPersona::canonicalize_label(&owner)
+                        .map(str::to_string)
+                        .unwrap_or(owner)
+                }),
                 run_ref: existing_record.as_ref().and_then(|record| record.canon_run_ref.clone()),
                 packet_ref: existing_record
                     .as_ref()
@@ -3355,7 +5057,7 @@ impl SessionRuntime {
                     "packet_binding_reason": packet_reuse.as_ref().map(|binding| binding.binding_reason),
                 }),
             );
-            let trace_location = self.persist_trace(trace)?;
+            let trace_location = self.persist_trace(&session.session_id, trace)?;
             session.latest_status = SessionStatus::Running;
             session.latest_terminal_reason = None;
             session.latest_trace_ref = Some(trace_location);
@@ -3393,9 +5095,19 @@ impl SessionRuntime {
                             .packet
                             .as_ref()
                             .map(|packet| {
+                                let detail = if !packet.missing_sections.is_empty() {
+                                    format!(
+                                        ": missing sections {}",
+                                        packet.missing_sections.join(", ")
+                                    )
+                                } else if !response.message.trim().is_empty() {
+                                    format!(": {}", response.message)
+                                } else {
+                                    String::new()
+                                };
                                 format!(
-                                    "governance packet was {:?} for stage {stage_key}",
-                                    packet.readiness
+                                    "governance packet was {:?} for stage {stage_key}{}",
+                                    packet.readiness, detail
                                 )
                             })
                             .unwrap_or_else(|| {
@@ -3422,6 +5134,7 @@ impl SessionRuntime {
             previous_governance_attempt_id: previous_attempt_id,
             packet_ref: response.packet.as_ref().map(|packet| packet.packet_ref.clone()),
             decision_ref: decision.as_ref().map(|decision| decision.decision_id.clone()),
+            stage_council: None,
             blocked_reason: blocked_reason.clone(),
         };
         let compacted_canon_memory =
@@ -3499,7 +5212,7 @@ impl SessionRuntime {
                         "adaptive_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.adaptive_provenance_lines.clone()).unwrap_or_default(),
                     }),
                 );
-                let trace_location = self.persist_trace(trace)?;
+                let trace_location = self.persist_trace(&session.session_id, trace)?;
                 session.latest_status = SessionStatus::Running;
                 session.latest_terminal_reason = None;
                 session.latest_trace_ref = Some(trace_location);
@@ -3581,7 +5294,7 @@ impl SessionRuntime {
                         reasoning_profile,
                     );
                 }
-                let trace_location = self.persist_trace(trace)?;
+                let trace_location = self.persist_trace(&session.session_id, trace)?;
                 session.latest_status = SessionStatus::Running;
                 session.latest_terminal_reason = None;
                 session.latest_trace_ref = Some(trace_location);
@@ -3611,7 +5324,7 @@ impl SessionRuntime {
                         "adaptive_provenance_lines": compacted_canon_memory.as_ref().map(|memory| memory.adaptive_provenance_lines.clone()).unwrap_or_default(),
                     }),
                 );
-                let trace_location = self.persist_trace(trace)?;
+                let trace_location = self.persist_trace(&session.session_id, trace)?;
                 session.latest_status = SessionStatus::Running;
                 session.latest_terminal_reason = None;
                 session.latest_trace_ref = Some(trace_location);
@@ -3683,10 +5396,27 @@ impl SessionRuntime {
                 }),
             );
         }
-        let trace_location = self.persist_trace(&mut trace)?;
+        let trace_location = self.persist_trace(&session.session_id, &mut trace)?;
         session.latest_trace_ref = Some(trace_location);
 
         Ok(trace)
+    }
+
+    fn unresolved_planning_governance_record<'a>(
+        &self,
+        session: &'a ActiveSessionRecord,
+    ) -> Option<&'a GovernedStageRecord> {
+        session.governance_lifecycle.as_ref().and_then(|lifecycle| {
+            lifecycle.stage_records.iter().rev().find(|record| {
+                planning_canon_mode_for_stage_key(&record.stage_key).is_some()
+                    && matches!(
+                        record.lifecycle_state,
+                        GovernanceLifecycleState::AwaitingApproval
+                            | GovernanceLifecycleState::Blocked
+                            | GovernanceLifecycleState::Failed
+                    )
+            })
+        })
     }
 
     fn existing_terminal_response(
@@ -3958,7 +5688,7 @@ impl SessionRuntime {
         );
         task.apply_terminal(terminal_status, reason.clone());
         trace.finalize(terminal_status, reason.clone());
-        let trace_location = self.persist_trace(trace)?;
+        let trace_location = self.persist_trace(&session.session_id, trace)?;
 
         session.latest_status = session_status_for_task_status(terminal_status);
         session.latest_terminal_reason = Some(reason.clone());
@@ -3977,11 +5707,16 @@ impl SessionRuntime {
 
     // Persist twice so the stored trace payload also contains its own final
     // trace location for downstream inspect and status rendering.
-    fn persist_trace(&self, trace: &mut ExecutionTrace) -> Result<String, SessionRuntimeError> {
-        let path = self.trace_store.persist(trace).map_err(SessionRuntimeError::TraceStore)?;
+    fn persist_trace(
+        &self,
+        session_id: &str,
+        trace: &mut ExecutionTrace,
+    ) -> Result<String, SessionRuntimeError> {
+        let trace_store = FileTraceStore::for_session(&self.workspace_ref, session_id);
+        let path = trace_store.persist(trace).map_err(SessionRuntimeError::TraceStore)?;
         let trace_location = path.to_string_lossy().into_owned();
         trace.set_trace_location(trace_location.clone());
-        self.trace_store.persist(trace).map_err(SessionRuntimeError::TraceStore)?;
+        trace_store.persist(trace).map_err(SessionRuntimeError::TraceStore)?;
         Ok(trace_location)
     }
 }
@@ -4011,6 +5746,7 @@ struct NativePersistenceInput {
     checkpoint_projection: Option<CheckpointProjectionState>,
     terminal_reason: TerminalReason,
     limits: RunLimits,
+    native_context: TaskContext,
     record_terminal_event: bool,
     projected_task: Option<Task>,
 }
@@ -4048,6 +5784,32 @@ fn cluster_workspace_is_blocked(workspace_ref: &str) -> bool {
     })
 }
 
+fn canon_workspace_scope_mismatch_reason(workspace: &Path) -> Option<String> {
+    let workspace = workspace.canonicalize().unwrap_or_else(|_| workspace.to_path_buf());
+    let git_root = nearest_git_root(&workspace)?;
+    if git_root == workspace {
+        return None;
+    }
+
+    Some(format!(
+        "planning governance requires a Canon workspace root, but Canon would target git root {} instead of workspace {}; use the repository root as the Boundline workspace or initialize a dedicated nested repository first",
+        git_root.display(),
+        workspace.display()
+    ))
+}
+
+fn nearest_git_root(start: &Path) -> Option<PathBuf> {
+    let mut current = start.canonicalize().unwrap_or_else(|_| start.to_path_buf());
+    loop {
+        if current.join(".git").exists() {
+            return Some(current);
+        }
+        if !current.pop() {
+            return None;
+        }
+    }
+}
+
 /// Errors surfaced while orchestrating session-native planning, execution,
 /// governance, checkpoints, and persisted trace/session updates.
 #[derive(Debug, Error)]
@@ -4076,8 +5838,14 @@ pub enum SessionRuntimeError {
     MissingActiveTask,
     #[error("active session has no proposed goal plan")]
     MissingGoalPlan,
-    #[error("active session has a proposed plan that must be confirmed before execution")]
-    PlanConfirmationRequired { flow_name: Option<String> },
+    #[error(
+        "active session planning governance for `{stage_key}` is `{state}` and must be resolved before confirmation or execution can continue"
+    )]
+    PlanningGovernanceUnresolved {
+        stage_key: String,
+        state: GovernanceLifecycleState,
+        reason: Option<String>,
+    },
     #[error("active session is missing the persisted trace reference")]
     MissingTraceReference,
     #[error("active task is missing a terminal reason")]
@@ -4100,6 +5868,830 @@ pub enum SessionRuntimeError {
     GovernanceRuntime(String),
     #[error("session runtime execution invariant failed: {0}")]
     ExecutionInvariant(String),
+}
+
+fn default_planning_system_context(mode: CanonMode) -> SystemContextBinding {
+    if mode.requires_existing_context() {
+        SystemContextBinding::Existing
+    } else {
+        SystemContextBinding::New
+    }
+}
+
+fn parse_planning_system_context(raw: &str) -> Option<SystemContextBinding> {
+    match raw.trim() {
+        SYSTEM_CONTEXT_NEW_TEXT => Some(SystemContextBinding::New),
+        SYSTEM_CONTEXT_EXISTING_TEXT => Some(SystemContextBinding::Existing),
+        _ => None,
+    }
+}
+
+fn missing_planning_governance_field(mode: CanonMode, field: &'static str) -> SessionRuntimeError {
+    SessionRuntimeError::GoalPlan(format!(
+        "planning governance for Canon mode {} requires field '{field}'",
+        mode.as_str()
+    ))
+}
+
+fn render_planning_stage_brief(
+    stage_key: &str,
+    mode: CanonMode,
+    goal_plan: &GoalPlan,
+    context_sources: &PlanningContextSources,
+) -> String {
+    let flow_name = goal_plan
+        .flow
+        .as_ref()
+        .map(|flow| flow.flow_name.as_str())
+        .unwrap_or(PLANNING_UNSPECIFIED_FLOW);
+    let target_summary = goal_plan
+        .context_pack
+        .as_ref()
+        .filter(|context_pack| !context_pack.selected_targets.is_empty())
+        .map(|context_pack| context_pack.selected_targets.join(", "))
+        .unwrap_or_else(|| PLANNING_DEFAULT_TARGET.to_string());
+    let context_summary = goal_plan
+        .context_summary()
+        .unwrap_or_else(|| "no bounded context summary recorded".to_string());
+    let primary_inputs = goal_plan.context_primary_inputs();
+    let primary_inputs =
+        if primary_inputs.is_empty() { "none".to_string() } else { primary_inputs.join(", ") };
+    let authored_inputs = if context_sources.authored_input_sources.is_empty() {
+        "none".to_string()
+    } else {
+        context_sources.authored_input_sources.join(", ")
+    };
+
+    let mut brief = format!(
+        concat!(
+            "{title}\n\n",
+            "{output_lang_heading}\n",
+            "- instruction: {output_lang_instruction}\n\n",
+            "{overview}\n",
+            "- stage_key: {stage_key}\n",
+            "- canon_mode: {mode}\n",
+            "- flow: {flow_name}\n",
+            "- goal: {goal}\n",
+            "- targets: {targets}\n\n",
+            "{workflow}\n",
+            "- planning_rationale: {planning_rationale}\n",
+            "- verification_strategy: {verification_strategy}\n\n",
+            "{context}\n",
+            "- summary: {context_summary}\n",
+            "- primary_inputs: {primary_inputs}\n\n",
+            "{authored}\n",
+            "- authored_input_summary: {authored_input_summary}\n",
+            "- authored_input_sources: {authored_inputs}\n"
+        ),
+        title = PLANNING_STAGE_BRIEF_TITLE,
+        output_lang_heading = PLANNING_STAGE_OUTPUT_LANGUAGE_HEADING,
+        output_lang_instruction = PLANNING_STAGE_OUTPUT_LANGUAGE_INSTRUCTION,
+        overview = PLANNING_STAGE_OVERVIEW_HEADING,
+        workflow = PLANNING_STAGE_WORKFLOW_HEADING,
+        context = PLANNING_STAGE_CONTEXT_HEADING,
+        authored = PLANNING_STAGE_AUTHORED_INPUTS_HEADING,
+        stage_key = stage_key,
+        mode = mode.as_str(),
+        flow_name = flow_name,
+        goal = goal_plan.goal_text,
+        targets = target_summary,
+        planning_rationale = goal_plan.planning_rationale.as_deref().unwrap_or("none"),
+        verification_strategy = goal_plan.verification_strategy.as_deref().unwrap_or("none"),
+        context_summary = context_summary,
+        primary_inputs = primary_inputs,
+        authored_input_summary =
+            context_sources.authored_input_summary.as_deref().unwrap_or("none"),
+        authored_inputs = authored_inputs,
+    );
+
+    if let Some(memory) = goal_plan.compacted_canon_memory.as_ref() {
+        brief.push_str("\n\n");
+        brief.push_str(PLANNING_STAGE_CANON_MEMORY_HEADING);
+        brief.push('\n');
+        brief.push_str("- summary: ");
+        brief.push_str(&memory.summary_text());
+        brief.push('\n');
+        brief.push_str("- credibility: ");
+        brief.push_str(memory.credibility.as_str());
+        brief.push('\n');
+    }
+
+    brief.push_str("\n\n## Problem Domain\n");
+    brief.push_str("- domain: ");
+    brief.push_str(&planning_problem_domain(goal_plan));
+    brief.push('\n');
+
+    brief.push_str("\n## Known Facts\n");
+    brief.push_str("- goal: ");
+    brief.push_str(&goal_plan.goal_text);
+    brief.push('\n');
+    brief.push_str("- selected_targets: ");
+    brief.push_str(&target_summary);
+    brief.push('\n');
+    brief.push_str("- primary_inputs: ");
+    brief.push_str(&primary_inputs);
+    brief.push('\n');
+    brief.push_str("- authored_inputs: ");
+    brief.push_str(&authored_inputs);
+    brief.push('\n');
+
+    // Insert the structured goal decomposition between Known Facts and Unknowns.
+    // This section gives Canon templates the authored body sections they need
+    // (Problem, Outcome, Constraints, Entities, Operations, Validation) so they
+    // produce substantive content instead of "NOT CAPTURED" placeholder stubs.
+    if let Some(decomposition_section) = render_goal_decomposition_section(&goal_plan.goal_text) {
+        brief.push_str(&decomposition_section);
+    }
+
+    brief.push_str("\n## Unknowns\n");
+    for unknown in planning_unknown_markers(goal_plan, context_sources) {
+        brief.push_str("- ");
+        brief.push_str(&unknown);
+        brief.push('\n');
+    }
+
+    brief.push_str("\n## Assumptions\n");
+    for assumption in planning_assumptions(goal_plan) {
+        brief.push_str("- ");
+        brief.push_str(&assumption);
+        brief.push('\n');
+    }
+
+    brief.push_str("\n## Validation Targets\n");
+    brief.push_str("- strategy: ");
+    brief.push_str(goal_plan.verification_strategy.as_deref().unwrap_or(
+        "operator must provide validation command or acceptance evidence before execution",
+    ));
+    brief.push('\n');
+
+    brief.push_str("\n## Confidence Levels\n");
+    brief.push_str("- context_pack: ");
+    brief.push_str(
+        goal_plan
+            .context_pack
+            .as_ref()
+            .map(|context_pack| context_pack.credibility.as_str())
+            .unwrap_or("unavailable"),
+    );
+    brief.push('\n');
+    brief.push_str("- authored_input: ");
+    brief.push_str(if context_sources.authored_input_summary.is_some() {
+        "operator_authored"
+    } else {
+        "not_provided"
+    });
+    brief.push('\n');
+
+    brief.push_str("\n## Discovery Handoff\n");
+    brief.push_str("- handoff: use known facts as bounded evidence, preserve unknowns as questions, and reject the packet if discovery cannot convert assumptions into actionable requirements.\n");
+
+    brief
+}
+
+fn planning_problem_domain(goal_plan: &GoalPlan) -> String {
+    let lower = goal_plan.goal_text.to_ascii_lowercase();
+    if lower.contains("user") || lower.contains("oauth") || lower.contains("auth") {
+        "user management and authentication".to_string()
+    } else if lower.contains("api") || lower.contains("grpc") || lower.contains("service") {
+        "service/API delivery".to_string()
+    } else {
+        "bounded delivery target from captured goal".to_string()
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Goal Decomposition
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Structured decomposition of a goal string into the semantic sections that
+/// Canon governance templates expect as authored body content.
+///
+/// # Why this exists
+///
+/// Canon's requirements template generates multiple artifacts (prd.md,
+/// tradeoffs.md, constraints.md, etc.) by reading structured sections from the
+/// planning brief. When the brief contains only a flat goal string under
+/// `## Known Facts`, Canon cannot locate a `## Problem`, `## Outcome`, or
+/// `## Constraints` section and emits "NOT CAPTURED" placeholder stubs for
+/// every missing section in every output artifact.
+///
+/// `decompose_goal_text` performs best-effort deterministic parsing of the
+/// goal string to extract these sections. The decomposition is keyword-based
+/// and does NOT invoke an external LLM; it splits on well-known structural
+/// markers ("Persistence:", "Auth:", "Intended outcome:", entity/operation
+/// patterns) to produce content Canon can reference as authored body.
+///
+/// # Degradation contract
+///
+/// If a section cannot be extracted, its field is `None` (or empty vec).
+/// The brief renderer writes only the sections that have content, so an
+/// empty decomposition produces output identical to the previous behavior.
+/// This guarantees backward compatibility with goals that don't follow
+/// recognizable patterns.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct GoalDecomposition {
+    /// The core problem statement: what is being built and why.
+    /// Extracted from text preceding structural markers like "Persistence:"
+    /// or "Intended outcome:".
+    pub problem: Option<String>,
+
+    /// The desired deliverable outcome.
+    /// Extracted from text following "Intended outcome:" or "Desired outcome:".
+    pub outcome: Option<String>,
+
+    /// Technical constraints binding the implementation.
+    /// Each entry is a single constraint (e.g. "Persistence: in-memory",
+    /// "Auth: OAuth2 JWT at service level").
+    pub constraints: Vec<String>,
+
+    /// Domain entities with their attributes.
+    /// Extracted from "Users: first name, last name, ..." or similar patterns.
+    pub entities: Vec<String>,
+
+    /// API operations, endpoints, or RPC methods in scope.
+    /// Extracted from comma-separated lists of operation names or CRUD
+    /// expansion patterns.
+    pub operations: Vec<String>,
+
+    /// The validation strategy or acceptance criteria.
+    /// Extracted from "Validation:" markers or test command references.
+    pub validation: Option<String>,
+}
+
+impl GoalDecomposition {
+    /// Returns `true` when the decomposition extracted at least one
+    /// substantive section that Canon templates can consume.
+    pub fn has_content(&self) -> bool {
+        self.problem.is_some()
+            || self.outcome.is_some()
+            || !self.constraints.is_empty()
+            || !self.entities.is_empty()
+            || !self.operations.is_empty()
+            || self.validation.is_some()
+    }
+}
+
+/// Performs best-effort structured decomposition of a goal string.
+///
+/// Parses the goal text for recognizable patterns and extracts semantic
+/// sections that align with Canon template expectations. The extraction is
+/// deterministic and keyword-driven; no external LLM call is made.
+///
+/// # Recognized patterns
+///
+/// | Pattern | Extracted as |
+/// |---------|-------------|
+/// | Text before first structural marker | `problem` |
+/// | "Intended outcome:" / "Desired outcome:" | `outcome` |
+/// | "Persistence:" clause | constraint |
+/// | "Auth:" / "OAuth2" clause | constraint |
+/// | "edition YYYY" / framework mentions | constraint |
+/// | "Users:" or entity-attribute lists | entity |
+/// | Comma-separated PascalCase names | operations |
+/// | "CRUD" keyword expansion | operations |
+/// | "Validation:" / test command | `validation` |
+///
+/// # Examples
+///
+/// ```text
+/// goal = "Rust microservice (edition 2024), Axum + gRPC, user management
+///         service. Users: first name, last name, email, role (Admin | User).
+///         Persistence: in-memory. Auth: OAuth2 JWT. gRPC operations:
+///         CreateUser, GetUser, ListUsers, UpdateUser, DeleteUser.
+///         Intended outcome: a complete Cargo workspace with unit tests.
+///         Validation: shell script with curl/grpcurl smoke tests."
+///
+/// result.problem = Some("Rust microservice (edition 2024), Axum + gRPC, user management service")
+/// result.outcome = Some("a complete Cargo workspace with unit tests")
+/// result.constraints = ["Persistence: in-memory store with no external database...",
+///                       "Auth: OAuth2 JWT validated at service level",
+///                       "Rust edition 2024", "Axum HTTP framework", "gRPC RPC surface"]
+/// result.entities = ["Users: first name, last name, email, role (Admin | User)"]
+/// result.operations = ["CreateUser", "GetUser", "ListUsers", "UpdateUser", "DeleteUser"]
+/// result.validation = Some("shell script with curl/grpcurl smoke tests against running server")
+/// ```
+pub fn decompose_goal_text(goal: &str) -> GoalDecomposition {
+    let mut decomposition = GoalDecomposition::default();
+    let goal_trimmed = goal.trim();
+    if goal_trimmed.is_empty() {
+        return decomposition;
+    }
+
+    // ── Extract outcome (text after "Intended outcome:" or "Desired outcome:") ──
+    let outcome_markers = ["intended outcome:", "desired outcome:"];
+    let lower = goal_trimmed.to_ascii_lowercase();
+    for marker in &outcome_markers {
+        if let Some(pos) = lower.find(marker) {
+            let after = &goal_trimmed[pos + marker.len()..];
+            let outcome_text =
+                after.split_once('.').map(|(sentence, _)| sentence.trim()).unwrap_or(after.trim());
+            if !outcome_text.is_empty() {
+                decomposition.outcome = Some(outcome_text.to_string());
+            }
+            break;
+        }
+    }
+
+    // ── Extract validation (text after "Validation:") ──
+    let validation_markers = ["validation:", "acceptance:"];
+    for marker in &validation_markers {
+        if let Some(pos) = lower.find(marker) {
+            let after = &goal_trimmed[pos + marker.len()..];
+            let validation_text =
+                after.split_once('.').map(|(sentence, _)| sentence.trim()).unwrap_or(after.trim());
+            if !validation_text.is_empty() {
+                decomposition.validation = Some(validation_text.to_string());
+            }
+            break;
+        }
+    }
+    // Fallback: detect test commands as validation
+    if decomposition.validation.is_none() {
+        let test_commands = ["cargo test", "npm test", "pytest", "go test"];
+        for cmd in &test_commands {
+            if lower.contains(cmd) {
+                decomposition.validation = Some(format!("{cmd} (detected from goal text)"));
+                break;
+            }
+        }
+    }
+
+    // ── Extract constraints ──
+    // Persistence clause
+    if let Some(pos) = lower.find("persistence:") {
+        let after = &goal_trimmed[pos + "persistence:".len()..];
+        let clause = after.split_once('.').map(|(s, _)| s.trim()).unwrap_or(after.trim());
+        if !clause.is_empty() {
+            decomposition.constraints.push(format!("Persistence: {clause}"));
+        }
+    }
+    // Auth clause
+    if let Some(pos) = lower.find("auth:") {
+        let after = &goal_trimmed[pos + "auth:".len()..];
+        let clause = after.split_once('.').map(|(s, _)| s.trim()).unwrap_or(after.trim());
+        if !clause.is_empty() {
+            decomposition.constraints.push(format!("Auth: {clause}"));
+        }
+    }
+    // Edition constraint
+    if lower.contains("edition 2024") || lower.contains("edition 2021") {
+        let edition = if lower.contains("edition 2024") { "2024" } else { "2021" };
+        decomposition.constraints.push(format!("Rust edition {edition}"));
+    }
+    // Framework constraints
+    if lower.contains("axum") {
+        decomposition.constraints.push("Axum HTTP framework".to_string());
+    }
+    if lower.contains("grpc") {
+        decomposition.constraints.push("gRPC RPC surface".to_string());
+    }
+    if lower.contains("actix") {
+        decomposition.constraints.push("Actix-web HTTP framework".to_string());
+    }
+    if lower.contains("tonic") {
+        decomposition.constraints.push("Tonic gRPC framework".to_string());
+    }
+
+    // ── Extract entities ──
+    // Pattern: "Users: attr, attr, attr" or "Entity: attr, attr"
+    let entity_markers = ["users:", "user:", "entities:", "entity:"];
+    for marker in &entity_markers {
+        if let Some(pos) = lower.find(marker) {
+            let capitalized_marker = &goal_trimmed[pos..pos + marker.len()];
+            let after = &goal_trimmed[pos + marker.len()..];
+            let clause = after.split_once('.').map(|(s, _)| s.trim()).unwrap_or(after.trim());
+            if !clause.is_empty() {
+                decomposition.entities.push(format!("{capitalized_marker} {clause}"));
+            }
+        }
+    }
+
+    // ── Extract operations ──
+    // Pattern: comma-separated PascalCase names (e.g. CreateUser, GetUser, ...)
+    let operation_patterns =
+        ["operations:", "operations in scope:", "rpcs:", "endpoints:", "methods:"];
+    for marker in &operation_patterns {
+        if let Some(pos) = lower.find(marker) {
+            let after = &goal_trimmed[pos + marker.len()..];
+            let clause = after.split_once('.').map(|(s, _)| s.trim()).unwrap_or(after.trim());
+            for op in clause.split(',') {
+                let op = op.trim();
+                if !op.is_empty() && op.len() < 60 {
+                    decomposition.operations.push(op.to_string());
+                }
+            }
+            break;
+        }
+    }
+    // Fallback: detect PascalCase comma-separated lists like "CreateUser, GetUser, ..."
+    if decomposition.operations.is_empty() {
+        let pascal_ops: Vec<&str> = goal_trimmed
+            .split(',')
+            .map(|s| s.trim())
+            .filter(|s| {
+                s.len() > 3
+                    && s.len() < 40
+                    && s.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+                    && s.chars().any(|c| c.is_ascii_lowercase())
+                    && s.chars().all(|c| c.is_alphanumeric())
+            })
+            .collect();
+        // Only use if we found 3+ consecutive PascalCase items (likely operations)
+        if pascal_ops.len() >= 3 {
+            decomposition.operations = pascal_ops.into_iter().map(|s| s.to_string()).collect();
+        }
+    }
+
+    // ── Extract problem (text before the first structural marker) ──
+    let structural_markers = [
+        "persistence:",
+        "auth:",
+        "intended outcome:",
+        "desired outcome:",
+        "validation:",
+        "acceptance:",
+    ];
+    let first_marker_pos = structural_markers.iter().filter_map(|marker| lower.find(marker)).min();
+    if let Some(pos) = first_marker_pos {
+        let problem_text = goal_trimmed[..pos].trim().trim_end_matches('.');
+        if !problem_text.is_empty() {
+            decomposition.problem = Some(problem_text.to_string());
+        }
+    } else if decomposition.outcome.is_none() {
+        // No structural markers at all — use the first sentence as the problem
+        let first_sentence =
+            goal_trimmed.split_once('.').map(|(s, _)| s.trim()).unwrap_or(goal_trimmed);
+        if !first_sentence.is_empty() {
+            decomposition.problem = Some(first_sentence.to_string());
+        }
+    }
+
+    decomposition
+}
+
+/// Renders the `## Structured Goal Decomposition` section for the planning brief.
+///
+/// This section exists to satisfy Canon template expectations for authored body
+/// content. Canon's requirements mode generates artifacts (prd.md, tradeoffs.md,
+/// etc.) by reading structured `### Problem`, `### Desired Outcome`, etc.
+/// subsections. Without them, Canon emits "NOT CAPTURED" placeholder stubs.
+///
+/// The section is only included when `decompose_goal_text` extracts at least one
+/// substantive field. An empty decomposition produces no output (backward compat).
+fn render_goal_decomposition_section(goal_text: &str) -> Option<String> {
+    let decomposition = decompose_goal_text(goal_text);
+    if !decomposition.has_content() {
+        return None;
+    }
+
+    let mut section = String::from("\n## Structured Goal Decomposition\n");
+
+    if let Some(problem) = &decomposition.problem {
+        section.push_str("### Problem\n");
+        section.push_str(problem);
+        section.push_str("\n\n");
+    }
+
+    if let Some(outcome) = &decomposition.outcome {
+        section.push_str("### Desired Outcome\n");
+        section.push_str(outcome);
+        section.push_str("\n\n");
+    }
+
+    if !decomposition.constraints.is_empty() {
+        section.push_str("### Constraints\n");
+        for constraint in &decomposition.constraints {
+            section.push_str("- ");
+            section.push_str(constraint);
+            section.push('\n');
+        }
+        section.push('\n');
+    }
+
+    if !decomposition.entities.is_empty() {
+        section.push_str("### Domain Entities\n");
+        for entity in &decomposition.entities {
+            section.push_str("- ");
+            section.push_str(entity);
+            section.push('\n');
+        }
+        section.push('\n');
+    }
+
+    if !decomposition.operations.is_empty() {
+        section.push_str("### Operations In Scope\n");
+        for operation in &decomposition.operations {
+            section.push_str("- ");
+            section.push_str(operation);
+            section.push('\n');
+        }
+        section.push('\n');
+    }
+
+    if let Some(validation) = &decomposition.validation {
+        section.push_str("### Validation Criteria\n");
+        section.push_str(validation);
+        section.push('\n');
+    }
+
+    Some(section)
+}
+
+fn plain_goal_requires_planning_clarification(
+    goal: &str,
+    context_sources: &PlanningContextSources,
+) -> bool {
+    if !context_sources.authored_input_sources.is_empty()
+        || !context_sources.execution_profile_read_targets.is_empty()
+        || context_sources.latest_trace_ref.is_some()
+        || !context_sources.latest_changed_files.is_empty()
+        || context_sources.compacted_canon_memory.is_some()
+    {
+        return false;
+    }
+
+    let lower = goal.to_ascii_lowercase();
+    let broad_delivery = lower.contains("build ")
+        || lower.contains("deliver ")
+        || lower.contains("capability")
+        || lower.contains("microservice")
+        || lower.contains("microservizio")
+        || lower.contains("service")
+        || lower.contains("api");
+    let has_validation = lower.contains("cargo test")
+        || lower.contains("validation")
+        || lower.contains("acceptance")
+        || lower.contains("verify");
+
+    broad_delivery && !has_validation
+}
+
+fn plain_goal_planning_clarification_prompt() -> String {
+    "Answer these planning questions before Boundline can continue planning: What exact outcome should Boundline deliver? Which domain entities and relationships are in scope? Which API operations, endpoints, or RPC methods are in scope? What persistence and OAuth/security assumptions are binding? Which validation command or acceptance evidence should prove the slice?".to_string()
+}
+
+fn planning_unknown_markers(
+    goal_plan: &GoalPlan,
+    context_sources: &PlanningContextSources,
+) -> Vec<String> {
+    let lower = goal_plan.goal_text.to_ascii_lowercase();
+    let mut unknowns = Vec::new();
+    if !lower.contains("validation")
+        && !lower.contains("cargo test")
+        && !lower.contains("acceptance")
+        && goal_plan.verification_strategy.as_deref().unwrap_or("none") == "none"
+    {
+        unknowns.push("validation_target requires operator confirmation".to_string());
+    }
+    if !lower.contains("database")
+        && !lower.contains("postgres")
+        && !lower.contains("sqlite")
+        && !lower.contains("persist")
+    {
+        unknowns.push("persistence assumptions require operator confirmation".to_string());
+    }
+    if context_sources.authored_input_sources.is_empty() {
+        unknowns.push("authored source provenance is unavailable".to_string());
+    }
+
+    // Flag gaps detected by the structured goal decomposition so Canon can
+    // explicitly mark them as requiring operator input rather than guessing.
+    let decomposition = decompose_goal_text(&goal_plan.goal_text);
+    if decomposition.outcome.is_none() {
+        unknowns.push("desired outcome could not be extracted from goal text and requires operator confirmation".to_string());
+    }
+    if decomposition.operations.is_empty() && lower.contains("service") {
+        unknowns.push("API operations or endpoints in scope could not be identified and require operator specification".to_string());
+    }
+    if decomposition.entities.is_empty() && (lower.contains("user") || lower.contains("entity")) {
+        unknowns.push(
+            "domain entities and their attributes could not be parsed from goal text".to_string(),
+        );
+    }
+
+    if unknowns.is_empty() {
+        unknowns
+            .push("no explicit unknown markers were detected from the captured brief".to_string());
+    }
+    unknowns
+}
+
+fn planning_assumptions(goal_plan: &GoalPlan) -> Vec<String> {
+    let lower = goal_plan.goal_text.to_ascii_lowercase();
+    let mut assumptions = Vec::new();
+    if lower.contains("rust") {
+        assumptions.push("language/runtime: Rust".to_string());
+    }
+    if lower.contains("axum") {
+        assumptions.push("HTTP framework: Axum".to_string());
+    }
+    if lower.contains("grpc") {
+        assumptions.push("RPC surface: gRPC".to_string());
+    }
+    if lower.contains("oauth") {
+        assumptions.push("security: OAuth2 protected surface".to_string());
+    }
+
+    if assumptions.is_empty() {
+        assumptions.push("no concrete technical assumptions were captured".to_string());
+    }
+    assumptions
+}
+
+fn discovery_stage_council_request(
+    stage_key: &str,
+    goal: &str,
+    stage_brief_ref: &str,
+) -> StageCouncilRequest {
+    StageCouncilRequest {
+        stage_key: stage_key.to_string(),
+        goal: goal.to_string(),
+        producer_slot: RouteSlot::Planning.as_str().to_string(),
+        phase: "planning-discovery".to_string(),
+        target_refs: vec![stage_brief_ref.to_string()],
+        current_artifact_ref: Some(stage_brief_ref.to_string()),
+        constraints: vec![
+            "use independent reviewer routes when available".to_string(),
+            "do not promote discovery planning when council independence collapses".to_string(),
+        ],
+    }
+}
+
+fn discovery_stage_council_reviewers(routing: &EffectiveRouting) -> Vec<StageCouncilReviewerRoute> {
+    let configured = routing
+        .reviewer_roles
+        .iter()
+        .take(2)
+        .map(|(reviewer_id, reviewer_route)| StageCouncilReviewerRoute {
+            reviewer: ReviewerDefinition {
+                reviewer_id: reviewer_id.clone(),
+                role: reviewer_id.replace(['_', '-'], " "),
+                source: Some(model_route_label(&reviewer_route.route)),
+                weight: 1,
+            },
+            route: reviewer_route.route.clone(),
+        })
+        .collect::<Vec<_>>();
+    if configured.len() == 2 {
+        return configured;
+    }
+
+    let fallback_route = routing.review.route.clone();
+    vec![
+        StageCouncilReviewerRoute {
+            reviewer: ReviewerDefinition {
+                reviewer_id: configured
+                    .first()
+                    .map(|route| route.reviewer.reviewer_id.clone())
+                    .unwrap_or_else(|| "reviewer-a".to_string()),
+                role: configured
+                    .first()
+                    .map(|route| route.reviewer.role.clone())
+                    .unwrap_or_else(|| "discovery challenger a".to_string()),
+                source: configured
+                    .first()
+                    .and_then(|route| route.reviewer.source.clone())
+                    .or_else(|| Some(model_route_label(&fallback_route))),
+                weight: 1,
+            },
+            route: configured
+                .first()
+                .map(|route| route.route.clone())
+                .unwrap_or_else(|| fallback_route.clone()),
+        },
+        StageCouncilReviewerRoute {
+            reviewer: ReviewerDefinition {
+                reviewer_id: configured
+                    .get(1)
+                    .map(|route| route.reviewer.reviewer_id.clone())
+                    .unwrap_or_else(|| "reviewer-b".to_string()),
+                role: configured
+                    .get(1)
+                    .map(|route| route.reviewer.role.clone())
+                    .unwrap_or_else(|| "discovery challenger b".to_string()),
+                source: configured
+                    .get(1)
+                    .and_then(|route| route.reviewer.source.clone())
+                    .or_else(|| Some(model_route_label(&fallback_route))),
+                weight: 1,
+            },
+            route: configured.get(1).map(|route| route.route.clone()).unwrap_or(fallback_route),
+        },
+    ]
+}
+
+fn model_route_label(route: &ModelRoute) -> String {
+    format!("{}/{}", route.runtime.as_str(), route.model)
+}
+
+fn reviewer_disposition_from_provider(
+    disposition: ProviderReviewDisposition,
+) -> ReviewerDisposition {
+    match disposition {
+        ProviderReviewDisposition::Approve => ReviewerDisposition::Approve,
+        ProviderReviewDisposition::Concern => ReviewerDisposition::Concern,
+        ProviderReviewDisposition::Block => ReviewerDisposition::Block,
+    }
+}
+
+fn stage_council_disposition_from_provider(
+    disposition: ProviderReviewDisposition,
+) -> StageCouncilFindingDisposition {
+    match disposition {
+        ProviderReviewDisposition::Approve => StageCouncilFindingDisposition::Approve,
+        ProviderReviewDisposition::Concern => StageCouncilFindingDisposition::Concern,
+        ProviderReviewDisposition::Block => StageCouncilFindingDisposition::Block,
+    }
+}
+
+fn provider_review_disposition_text(disposition: ProviderReviewDisposition) -> &'static str {
+    match disposition {
+        ProviderReviewDisposition::Approve => "approve",
+        ProviderReviewDisposition::Concern => "concern",
+        ProviderReviewDisposition::Block => "block",
+    }
+}
+
+fn planning_stage_council_block_reason(stage_key: &str, outcome: &StageCouncilOutcome) -> String {
+    let summary = outcome
+        .reviewer_findings
+        .iter()
+        .find(|finding| finding.disposition == StageCouncilFindingDisposition::Block)
+        .map(|finding| finding.summary.as_str())
+        .unwrap_or(outcome.next_action.as_str());
+    format!("{stage_key} stage council blocked planning: {summary}")
+}
+
+fn stage_council_voting_session_state(
+    stage_key: &str,
+    outcome: &StageCouncilOutcome,
+) -> VotingSessionState {
+    VotingSessionState {
+        trigger: format!("stage_council:{stage_key}"),
+        reviewed_evidence_ref: Some(outcome.producer_output.evidence_ref.clone()),
+        result: stage_council_status_text(outcome.status).to_string(),
+        reviewer_findings: outcome
+            .reviewer_findings
+            .iter()
+            .map(|finding| {
+                format!(
+                    "{} [{}]: {}",
+                    finding.reviewer_id, finding.effective_route, finding.summary
+                )
+            })
+            .collect(),
+        adjudication_result: outcome
+            .adjudication
+            .as_ref()
+            .map(|adjudication| format!("{}: {}", adjudication.decision, adjudication.rationale)),
+        blocking: outcome.status == StageCouncilStatus::Blocked,
+        next_action: outcome.next_action.clone(),
+    }
+}
+
+fn stage_council_status_text(status: StageCouncilStatus) -> &'static str {
+    match status {
+        StageCouncilStatus::Proceed => "proceed",
+        StageCouncilStatus::Blocked => "blocked",
+        StageCouncilStatus::Degraded => "degraded",
+    }
+}
+
+fn render_stage_council_blocked_markdown(
+    request: &StageCouncilRequest,
+    findings: &[StageCouncilFinding],
+    accepted_findings: &[String],
+) -> String {
+    let mut markdown = String::new();
+    markdown.push_str("# Discovery Stage Council Blocked\n\n");
+    markdown.push_str(&format!("- stage: {}\n", request.stage_key));
+    markdown.push_str("- outcome: blocked\n");
+    if findings.is_empty() {
+        markdown.push_str("- findings: no provider-backed reviewer findings were recorded\n");
+    } else {
+        markdown.push_str("\n## Findings\n\n");
+        for finding in findings {
+            let accepted = if accepted_findings.contains(&finding.reviewer_id) {
+                "accepted"
+            } else {
+                "rejected"
+            };
+            markdown.push_str(&format!(
+                "- {} [{}] {}: {}\n",
+                finding.reviewer_id, finding.effective_route, accepted, finding.summary
+            ));
+        }
+    }
+    markdown.push_str(
+        "\nRepair the discovery inputs or reviewer routing, then rerun `boundline plan`.\n",
+    );
+    markdown
+}
+
+fn render_stage_council_blocked_note(reason: &str) -> String {
+    format!(
+        "# Discovery Stage Council Blocked\n\n- reason: {reason}\n\nRerun `boundline plan` after restoring independent provider-backed council execution.\n"
+    )
 }
 
 fn session_status_for_task_status(status: TaskStatus) -> SessionStatus {

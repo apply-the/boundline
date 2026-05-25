@@ -298,12 +298,60 @@ fn discover_canon_binary_in_paths(
         return Some((path, true));
     }
 
+    discover_path_canon_binary(path_dirs).map(|candidate| (candidate, false))
+}
+
+fn discover_path_canon_binary(path_dirs: &[PathBuf]) -> Option<PathBuf> {
     let binary_name = canon_binary_name();
-    path_dirs
+    let preferred_candidates = homebrew_opt_canon_candidates();
+    let path_candidates = path_dirs
         .iter()
         .map(|directory| directory.join(binary_name))
-        .find(|candidate| candidate.is_file())
-        .map(|candidate| (candidate, false))
+        .filter(|candidate| candidate.is_file())
+        .collect::<Vec<_>>();
+
+    let mut all_candidates = preferred_candidates.clone();
+    for candidate in &path_candidates {
+        push_unique_path(&mut all_candidates, candidate.clone());
+    }
+
+    choose_supported_canon_candidate(&all_candidates)
+        .or_else(|| path_candidates.into_iter().next())
+        .or_else(|| preferred_candidates.into_iter().next())
+}
+
+fn choose_supported_canon_candidate(candidates: &[PathBuf]) -> Option<PathBuf> {
+    candidates
+        .iter()
+        .find(|candidate| read_canon_version(candidate).as_deref() == Some(SUPPORTED_CANON_VERSION))
+        .cloned()
+}
+
+fn homebrew_opt_canon_candidates() -> Vec<PathBuf> {
+    if !matches!(official_distribution_channel(), Some(DistributionChannel::Homebrew)) {
+        return Vec::new();
+    }
+
+    let binary_name = canon_binary_name();
+    if let Some(prefix) = std::env::var_os("HOMEBREW_PREFIX").map(PathBuf::from) {
+        let candidate = prefix.join("opt").join("canon").join("bin").join(binary_name);
+        return candidate.is_file().then_some(candidate).into_iter().collect();
+    }
+
+    let mut candidates = Vec::new();
+    for prefix in [PathBuf::from("/opt/homebrew"), PathBuf::from("/usr/local")] {
+        push_unique_path(
+            &mut candidates,
+            prefix.join("opt").join("canon").join("bin").join(binary_name),
+        );
+    }
+    candidates.into_iter().filter(|candidate| candidate.is_file()).collect()
+}
+
+fn push_unique_path(paths: &mut Vec<PathBuf>, candidate: PathBuf) {
+    if !paths.iter().any(|existing| existing == &candidate) {
+        paths.push(candidate);
+    }
 }
 
 fn bundled_canon_path(executable_path: &Path) -> Option<PathBuf> {
@@ -367,22 +415,60 @@ fn repair_actions() -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::env;
+    use std::ffi::OsString;
     use std::fs;
     use std::path::{Path, PathBuf};
+    use std::sync::{Mutex, MutexGuard, OnceLock};
 
     use uuid::Uuid;
 
     use super::{
-        CompanionState, DistributionChannel, SUPPORTED_CANON_VERSION,
+        CanonInstallStatus, CompanionState, DistributionChannel, SUPPORTED_CANON_VERSION,
         evaluate_canon_install_with_path_dirs, extract_semver_token,
         supported_distribution_channels, verify_canon_surface,
     };
     use crate::domain::governance::{CanonCapabilitySnapshot, CanonMode};
 
+    #[cfg(all(unix, target_os = "macos"))]
+    static HOMEBREW_PREFIX_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
     fn temp_dir(prefix: &str) -> PathBuf {
         let directory = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
         fs::create_dir_all(&directory).unwrap();
         directory
+    }
+
+    #[cfg(all(unix, target_os = "macos"))]
+    struct HomebrewPrefixGuard<'a> {
+        previous: Option<OsString>,
+        _lock: MutexGuard<'a, ()>,
+    }
+
+    #[cfg(all(unix, target_os = "macos"))]
+    impl Drop for HomebrewPrefixGuard<'_> {
+        fn drop(&mut self) {
+            unsafe {
+                match &self.previous {
+                    Some(value) => env::set_var("HOMEBREW_PREFIX", value),
+                    None => env::remove_var("HOMEBREW_PREFIX"),
+                }
+            }
+        }
+    }
+
+    #[cfg(all(unix, target_os = "macos"))]
+    fn with_homebrew_prefix<T>(prefix: &Path, action: impl FnOnce() -> T) -> T {
+        let lock = HOMEBREW_PREFIX_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+        let restore = HomebrewPrefixGuard { previous: env::var_os("HOMEBREW_PREFIX"), _lock: lock };
+
+        unsafe {
+            env::set_var("HOMEBREW_PREFIX", prefix);
+        }
+
+        let result = action();
+        drop(restore);
+        result
     }
 
     #[cfg(unix)]
@@ -429,6 +515,25 @@ mod tests {
         permissions.set_mode(0o755);
         fs::set_permissions(&command_path, permissions).unwrap();
         command_path
+    }
+
+    #[cfg(unix)]
+    fn evaluate_canon_install_in_test_env(
+        executable_path: &Path,
+        path_dirs: &[PathBuf],
+    ) -> CanonInstallStatus {
+        #[cfg(target_os = "macos")]
+        {
+            let isolated_prefix = temp_dir("boundline-distribution-homebrew-disabled");
+            with_homebrew_prefix(&isolated_prefix, || {
+                evaluate_canon_install_with_path_dirs(executable_path, path_dirs)
+            })
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            evaluate_canon_install_with_path_dirs(executable_path, path_dirs)
+        }
     }
 
     #[cfg(unix)]
@@ -530,13 +635,13 @@ mod tests {
             write_fake_canon(&path_root, &format!("canon version {SUPPORTED_CANON_VERSION}"));
 
         let bundled_status =
-            evaluate_canon_install_with_path_dirs(&executable, std::slice::from_ref(&path_root));
+            evaluate_canon_install_in_test_env(&executable, std::slice::from_ref(&path_root));
         assert_eq!(bundled_status.state, CompanionState::Ready);
         assert_eq!(bundled_status.location.as_deref(), Some(bundled.as_path()));
         assert!(bundled_status.bundled_with_boundline);
 
         fs::remove_file(&bundled).unwrap();
-        let path_status = evaluate_canon_install_with_path_dirs(&executable, &[path_root]);
+        let path_status = evaluate_canon_install_in_test_env(&executable, &[path_root]);
         assert_eq!(path_status.state, CompanionState::AlreadySatisfied);
         assert_eq!(path_status.location.as_deref(), Some(path_binary.as_path()));
         assert!(!path_status.bundled_with_boundline);
@@ -554,7 +659,7 @@ mod tests {
         fs::write(&executable, "").unwrap();
 
         let mismatch_binary = write_fake_canon(&mismatch_root, "canon version 0.38.0");
-        let mismatch_status = evaluate_canon_install_with_path_dirs(&executable, &[mismatch_root]);
+        let mismatch_status = evaluate_canon_install_in_test_env(&executable, &[mismatch_root]);
         assert_eq!(mismatch_status.state, CompanionState::RepairNeeded);
         assert_eq!(mismatch_status.version.as_deref(), Some("0.38.0"));
         assert_eq!(mismatch_status.location.as_deref(), Some(mismatch_binary.as_path()));
@@ -566,11 +671,57 @@ mod tests {
         permissions.set_mode(0o755);
         fs::set_permissions(&blocked_binary, permissions).unwrap();
 
-        let blocked_status = evaluate_canon_install_with_path_dirs(&executable, &[blocked_root]);
+        let blocked_status = evaluate_canon_install_in_test_env(&executable, &[blocked_root]);
         assert_eq!(blocked_status.state, CompanionState::Blocked);
         assert_eq!(blocked_status.location.as_deref(), Some(blocked_binary.as_path()));
         assert!(blocked_status.message.contains("could not be determined"));
         assert!(blocked_status.suggested_actions[0].contains("--version"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn evaluate_canon_install_prefers_supported_path_candidate_over_stale_entry() {
+        let executable_root = temp_dir("boundline-distribution-executable-supported-path");
+        let stale_root = temp_dir("boundline-distribution-stale-path");
+        let supported_root = temp_dir("boundline-distribution-supported-path");
+        let executable = executable_root.join("boundline");
+        fs::write(&executable, "").unwrap();
+
+        let stale_binary = write_fake_canon(&stale_root, "canon version 0.45.0");
+        let supported_binary =
+            write_fake_canon(&supported_root, &format!("canon version {SUPPORTED_CANON_VERSION}"));
+
+        let status = evaluate_canon_install_in_test_env(&executable, &[stale_root, supported_root]);
+
+        assert_eq!(status.state, CompanionState::AlreadySatisfied);
+        assert_eq!(status.version.as_deref(), Some(SUPPORTED_CANON_VERSION));
+        assert_eq!(status.location.as_deref(), Some(supported_binary.as_path()));
+        assert_ne!(status.location.as_deref(), Some(stale_binary.as_path()));
+    }
+
+    #[cfg(all(unix, target_os = "macos"))]
+    #[test]
+    fn evaluate_canon_install_prefers_homebrew_opt_canon_when_path_is_shadowed() {
+        let executable_root = temp_dir("boundline-distribution-executable-homebrew-opt");
+        let stale_root = temp_dir("boundline-distribution-shadowed-path");
+        let homebrew_prefix = temp_dir("boundline-distribution-homebrew-prefix");
+        let executable = executable_root.join("boundline");
+        fs::write(&executable, "").unwrap();
+
+        let stale_binary = write_fake_canon(&stale_root, "canon version 0.45.0");
+        let opt_dir = homebrew_prefix.join("opt").join("canon").join("bin");
+        fs::create_dir_all(&opt_dir).unwrap();
+        let opt_binary =
+            write_fake_canon(&opt_dir, &format!("canon version {SUPPORTED_CANON_VERSION}"));
+
+        let status = with_homebrew_prefix(&homebrew_prefix, || {
+            evaluate_canon_install_with_path_dirs(&executable, &[stale_root])
+        });
+
+        assert_eq!(status.state, CompanionState::AlreadySatisfied);
+        assert_eq!(status.version.as_deref(), Some(SUPPORTED_CANON_VERSION));
+        assert_eq!(status.location.as_deref(), Some(opt_binary.as_path()));
+        assert_ne!(status.location.as_deref(), Some(stale_binary.as_path()));
     }
 
     #[cfg(unix)]
@@ -585,7 +736,7 @@ mod tests {
             &path_root,
             &format!("canon version {SUPPORTED_CANON_VERSION}"),
         );
-        let status = evaluate_canon_install_with_path_dirs(&executable, &[path_root]);
+        let status = evaluate_canon_install_in_test_env(&executable, &[path_root]);
 
         assert_eq!(status.state, CompanionState::RepairNeeded);
         assert_eq!(status.location.as_deref(), Some(binary.as_path()));

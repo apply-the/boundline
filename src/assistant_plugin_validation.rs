@@ -2,8 +2,7 @@ use serde_json::Value;
 use std::path::Path;
 
 pub const REQUIRED_COMMANDS: &[&str] = &[
-    "/boundline:start",
-    "/boundline:capture",
+    "/boundline:goal",
     "/boundline:plan",
     "/boundline:run",
     "/boundline:status",

@@ -140,6 +140,7 @@ fn summarize_member(workspace_ref: &str, include_trace: bool) -> ClusterMemberSt
             let state = if matches!(
                 record.latest_status,
                 SessionStatus::Failed
+                    | SessionStatus::Blocked
                     | SessionStatus::Exhausted
                     | SessionStatus::Aborted
                     | SessionStatus::Invalid
@@ -186,6 +187,7 @@ fn session_status_text(status: SessionStatus) -> &'static str {
         SessionStatus::Initialized => "initialized",
         SessionStatus::GoalCaptured => "goal_captured",
         SessionStatus::Planned => "planned",
+        SessionStatus::Blocked => "blocked",
         SessionStatus::Running => "running",
         SessionStatus::Succeeded => "succeeded",
         SessionStatus::Failed => "failed",

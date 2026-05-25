@@ -7,26 +7,8 @@ mod runtime_refoundation;
 #[path = "support/assistant_delight_support.rs"]
 mod assistant_delight_support;
 
-#[path = "support/dashboard_fixture.rs"]
-mod dashboard_fixture;
-
 #[path = "integration/sequential_task_run.rs"]
 mod sequential_task_run;
-
-#[path = "integration/dashboard_snapshot_flow.rs"]
-mod dashboard_snapshot_flow;
-
-#[path = "integration/dashboard_degraded_state_flow.rs"]
-mod dashboard_degraded_state_flow;
-
-#[path = "integration/dashboard_inspection_flow.rs"]
-mod dashboard_inspection_flow;
-
-#[path = "integration/dashboard_action_flow.rs"]
-mod dashboard_action_flow;
-
-#[path = "integration/dashboard_action_refusal_flow.rs"]
-mod dashboard_action_refusal_flow;
 
 #[path = "integration/retry_and_replan.rs"]
 mod retry_and_replan;

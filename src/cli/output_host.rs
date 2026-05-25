@@ -2,6 +2,7 @@ use std::io::{self, IsTerminal};
 
 use serde::Serialize;
 
+use crate::cli::orchestrate::OrchestrateEventEnvelope;
 use crate::cli::{CommandExitStatus, DeveloperCommand};
 use crate::domain::session::SessionStatusView;
 use crate::domain::trace::TraceSummaryView;
@@ -95,13 +96,31 @@ pub fn render_host_command_json(
     }
 }
 
+/// Renders one orchestrator event as a compact NDJSON frame.
+pub fn render_orchestrate_event_json(event: &OrchestrateEventEnvelope) -> String {
+    match serde_json::to_string(event) {
+        Ok(rendered) => rendered,
+        Err(error) => serde_json::json!({
+            "event_kind": "error",
+            "message": "failed to serialize orchestrate event",
+            "serialization_error": error.to_string(),
+        })
+        .to_string(),
+    }
+}
+
+/// Renders the full orchestrator event stream as newline-delimited JSON.
+pub fn render_orchestrate_stream_json(events: &[OrchestrateEventEnvelope]) -> String {
+    events.iter().map(render_orchestrate_event_json).collect::<Vec<_>>().join("\n")
+}
+
 /// Returns the stable CLI command name used in output and host envelopes.
 pub fn command_name(command: &DeveloperCommand) -> &'static str {
     match command {
         DeveloperCommand::Doctor { .. } => "doctor",
         DeveloperCommand::Checkpoint { .. } => "checkpoint",
-        DeveloperCommand::Start { .. } => "start",
-        DeveloperCommand::Capture { .. } => "capture",
+        DeveloperCommand::Orchestrate { .. } => "orchestrate",
+        DeveloperCommand::Goal { .. } => "goal",
         DeveloperCommand::Flow { .. } => "flow",
         DeveloperCommand::Plan { .. } => "plan",
         DeveloperCommand::Step { .. } => "step",
@@ -111,10 +130,11 @@ pub fn command_name(command: &DeveloperCommand) -> &'static str {
         DeveloperCommand::Status { .. } => "status",
         DeveloperCommand::Next { .. } => "next",
         DeveloperCommand::Continue { .. } => "continue",
-        DeveloperCommand::Dashboard { .. } => "dashboard",
+        DeveloperCommand::Session { .. } => "session",
         DeveloperCommand::Govern { .. } => "govern",
         DeveloperCommand::Assistant { .. } => "assistant",
         DeveloperCommand::Init { .. } => "init",
+        DeveloperCommand::Update { .. } => "update",
         DeveloperCommand::Config { .. } => "config",
         DeveloperCommand::Cluster { .. } => "cluster",
     }

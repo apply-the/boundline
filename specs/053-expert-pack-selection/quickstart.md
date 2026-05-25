@@ -13,7 +13,7 @@ Expected result:
 Run:
 
 ```bash
-boundline capture --goal "review the React auth changes in src/auth"
+boundline goal --goal "review the React auth changes in src/auth"
 ```
 
 Expected result:

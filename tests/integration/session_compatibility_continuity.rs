@@ -8,11 +8,8 @@ fn status_surfaces_native_snapshot_and_compatibility_follow_up_without_replacing
     let workspace =
         temp_runtime_refoundation_compat_workspace("session-compatibility-continuity-mixed-route");
 
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(&workspace, &["capture", "--goal", "fix the failing add test"])
-            .status
-            .code(),
+        run_boundline_in(&workspace, &["goal", "--goal", "fix the failing add test"]).status.code(),
         Some(0)
     );
     assert_eq!(run_boundline_in(&workspace, &["plan", "--flow", "bug-fix"]).status.code(), Some(0));

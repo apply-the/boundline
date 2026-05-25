@@ -18,7 +18,7 @@
 2. Capture a bounded repair goal:
 
    ```bash
-   cargo run --bin boundline -- capture --goal "Fix failing checkout tests"
+   cargo run --bin boundline -- goal --goal "Fix failing checkout tests"
    ```
 
 3. Select the bug-fix flow:
@@ -63,11 +63,11 @@ next_command: boundline inspect
 
 ## Scenario 2: Change flow with stage-aware next guidance
 
-1. Start and capture a change goal:
+1. Start and record a change goal:
 
    ```bash
    cargo run --bin boundline -- start
-   cargo run --bin boundline -- capture --goal "Add a confirmation email after checkout"
+   cargo run --bin boundline -- goal --goal "Add a confirmation email after checkout"
    ```
 
 2. Select and plan the change flow:
@@ -125,7 +125,7 @@ stage: implement -> verify
 ## Regression Scenario: Existing non-flow usage still works
 
 1. Start a new session.
-2. Capture a goal without selecting a flow.
+2. Record a goal without selecting a flow.
 3. Run `plan`, `step`, `status`, and `run` as before.
 
 Expected outcome:

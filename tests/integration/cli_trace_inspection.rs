@@ -80,10 +80,25 @@ fn inspect_command_surfaces_authored_input_summary_and_sources() {
 #[test]
 fn inspect_output_surfaces_canon_aware_explanation_lines() {
     let workspace = temp_fixture_workspace("boundline-cli-inspect-explanation");
+    fs::create_dir_all(workspace.join("docs")).unwrap();
+    fs::write(
+        workspace.join("docs/explanation-brief.md"),
+        concat!(
+            "# Explanation brief\n\n",
+            "Intended outcome: explain the current delivery state for the first fixture slice.\n\n",
+            "Domain entities: delivery state, validation evidence, and review evidence are the in-scope domain entities; delivery state depends on validation and review evidence.\n\n",
+            "Auth boundary: OAuth2 stops at the API gateway; Boundline service-level authorization begins when the runtime reads persisted trace and session evidence.\n\n",
+            "API operations: inspect the persisted trace and session-owned evidence for the run.\n\n",
+            "Validation target: inspect output surfaces explanation attribution, fallback disclosure, and next-best-action lines.\n",
+        ),
+    )
+    .unwrap();
     let run_output = run_boundline(&[
         "run",
         "--goal",
         "Explain the active delivery state",
+        "--brief",
+        "docs/explanation-brief.md",
         "--compatibility",
         "--workspace",
         workspace.to_string_lossy().as_ref(),

@@ -49,7 +49,7 @@ paths from the Canon contract
   session-native surface integration, (5) compatibility checking, (6) docs and
   polish. (Plan §Implementation Phases)
 - **Primary workflow**: PASS. The main operator path remains session-native
-  (`start -> capture -> plan -> run -> status -> next -> inspect`). Canon refs
+  (`goal -> plan -> run -> status -> next -> inspect`). Canon refs
   appear inside `status`, `next`, and `inspect` when available. No
   compatibility path is needed. (Spec §US2)
 - **Bounded execution**: PASS. Contract-version check is a single-step gate

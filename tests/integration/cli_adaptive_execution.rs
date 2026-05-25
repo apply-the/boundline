@@ -21,8 +21,13 @@ fn custom_run_executes_an_adaptive_profile_without_authored_attempts() {
     assert_eq!(output.status.code(), Some(0), "{text}");
     assert!(text.contains("code-adaptive-attempt-1"), "{text}");
     assert!(text.contains("verify-adaptive-attempt-1"), "{text}");
-    assert!(text.contains("changed_files: src/lib.rs"), "{text}");
-    assert!(text.contains("validation: passed"), "{text}");
+    assert!(
+        text.contains(
+            "execution_condition: terminal - goal satisfied after step verify-adaptive-attempt-1"
+        ),
+        "{text}"
+    );
+    assert!(text.contains("adaptive slice selected src/lib.rs via arithmetic_swap"), "{text}");
     assert!(text.contains("terminal_status: succeeded"), "{text}");
     assert!(trace_path.as_ref().is_some_and(|path| path.exists()), "{text}");
 }
@@ -41,9 +46,9 @@ fn custom_run_replans_an_adaptive_candidate_after_failed_validation() {
     let text = terminal_text(&output);
 
     assert_eq!(output.status.code(), Some(0), "{text}");
-    assert!(text.contains("replan after verify-adaptive-attempt-1"), "{text}");
-    assert!(text.contains("code-adaptive-attempt-2"), "{text}");
-    assert!(text.contains("validation: passed"), "{text}");
+    assert!(text.contains("verify-adaptive-attempt-1 (tool) failed"), "{text}");
+    assert!(text.contains("latest_step=verify-adaptive-attempt-2 (succeeded)"), "{text}");
+    assert!(text.contains("steps_remaining: 2"), "{text}");
     assert!(text.contains("terminal_status: succeeded"), "{text}");
 }
 
@@ -61,14 +66,9 @@ fn custom_run_uses_validation_guidance_to_shift_the_adaptive_target() {
     let text = terminal_text(&output);
 
     assert_eq!(output.status.code(), Some(0), "{text}");
-    assert!(text.contains("replan after verify-adaptive-attempt-1"), "{text}");
-    assert!(text.contains("changed_files: src/helper.rs"), "{text}");
-    assert!(text.contains("workspace_slice: src/helper.rs"), "{text}");
-    assert!(
-        text.contains("attempt_lineage: adaptive-attempt-2 replaced adaptive-attempt-1"),
-        "{text}"
-    );
-    assert!(text.contains("validation: passed"), "{text}");
+    assert!(text.contains("latest_step=verify-adaptive-attempt-2 (succeeded)"), "{text}");
+    assert!(text.contains("adaptive slice selected src/helper.rs via arithmetic_swap"), "{text}");
+    assert!(text.contains("steps_remaining: 2"), "{text}");
     assert!(text.contains("terminal_status: succeeded"), "{text}");
 }
 
@@ -87,8 +87,11 @@ fn custom_run_can_repair_an_ordering_boundary_with_a_broader_family() {
     let text = terminal_text(&output);
 
     assert_eq!(output.status.code(), Some(0), "{text}");
-    assert!(text.contains("candidate_family: ordering_boundary_flip"), "{text}");
-    assert!(text.contains("changed_files: src/lib.rs"), "{text}");
-    assert!(text.contains("validation: passed"), "{text}");
+    assert!(text.contains("ordering_boundary_flip"), "{text}");
+    assert!(text.contains("verify-adaptive-attempt-1"), "{text}");
+    assert!(
+        text.contains("adaptive slice selected src/lib.rs via ordering_boundary_flip"),
+        "{text}"
+    );
     assert!(text.contains("terminal_status: succeeded"), "{text}");
 }

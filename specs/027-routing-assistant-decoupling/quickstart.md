@@ -50,7 +50,7 @@ Expected behavior:
 
 ```bash
 cargo run --bin boundline -- start
-cargo run --bin boundline -- capture --goal "Summarize routing ownership while updating backend binding"
+cargo run --bin boundline -- goal --goal "Summarize routing ownership while updating backend binding"
 cargo run --bin boundline -- plan
 cargo run --bin boundline -- run
 ```

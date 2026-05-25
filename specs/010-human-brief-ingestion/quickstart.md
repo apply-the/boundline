@@ -12,7 +12,7 @@
 
 ```bash
 cargo run --bin boundline -- start
-cargo run --bin boundline -- capture \
+cargo run --bin boundline -- goal \
   --goal "Fix the flaky login retry test in the auth flow"
 cargo run --bin boundline -- flow bug-fix
 cargo run --bin boundline -- plan
@@ -21,7 +21,7 @@ cargo run --bin boundline -- status
 
 Expected outcome:
 
-- Boundline captures the direct text as the active authored brief without requiring `.boundline/execution.json`.
+- Boundline records the direct text as the active authored brief without requiring `.boundline/execution.json`.
 - `status` shows the bounded goal and recommends the next command.
 - No clarification is required when the request is already specific enough to plan.
 
@@ -29,7 +29,7 @@ Expected outcome:
 
 ```bash
 cargo run --bin boundline -- start
-cargo run --bin boundline -- capture \
+cargo run --bin boundline -- goal \
   --goal "Implement caching for search results using docs/architecture/search-cache.md and docs/bugs/cache-regression.md" \
   --brief docs/architecture/search-cache.md \
   --brief docs/bugs/cache-regression.md
@@ -48,7 +48,7 @@ Expected outcome:
 
 ```bash
 cargo run --bin boundline -- start
-cargo run --bin boundline -- capture \
+cargo run --bin boundline -- goal \
   --goal "Prepare the payments retry change for the next release" \
   --brief docs/payments/retry-brief.md \
   --governance canon \
@@ -71,7 +71,7 @@ Expected outcome:
 
 ```bash
 cargo run --bin boundline -- start
-cargo run --bin boundline -- capture \
+cargo run --bin boundline -- goal \
   --goal "Improve the platform docs and fix whatever tests are broken"
 cargo run --bin boundline -- plan
 ```

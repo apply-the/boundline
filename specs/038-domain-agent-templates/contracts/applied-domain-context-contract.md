@@ -21,7 +21,7 @@ bounded planning and execution.
 ## Explicit Boundaries
 
 - Domain selection must remain bounded by repository evidence, selected targets,
-  and the captured goal rather than open-ended persona switching.
+  and the recorded goal rather than open-ended persona switching.
 - The surface must not silently fall back to an unrelated domain family when no
   credible match exists.
 - Compatibility follow-up may reuse the same summary vocabulary, but it must not

@@ -16,30 +16,35 @@
 
 ## Shell-Enabled Walkthrough
 
-### 1. Start from chat
+### 1. Capture the goal
 
-Invoke `/boundline-start` in your assistant.
+Invoke `/boundline-goal` in your assistant.
 
 Expected outcome:
 
-- The assistant asks for the workspace only if it is missing.
+- The assistant asks only for the missing workspace or missing bounded goal details.
 - The assistant runs or recommends:
 
 ```bash
-cargo run --bin boundline -- doctor --workspace "$PWD"
+cargo run --bin boundline -- goal --workspace "$PWD" --goal "Summarize the current bounded developer flow" --json
 ```
 
-- The assistant summarizes whether the workspace is ready and what prerequisite, if any, must be fixed.
+- The assistant summarizes the recorded goal, any authored brief context, and the next planning action.
 
-### 2. Bound the goal
+### 2. Plan the session
 
 Invoke `/boundline-plan`.
 
 Expected outcome:
 
-- The assistant asks only for the missing goal details.
-- The assistant turns the goal into a bounded `boundline run` objective.
-- The assistant routes directly to `/boundline-run`.
+- The assistant asks only for the missing planning context.
+- The assistant runs or recommends:
+
+```bash
+cargo run --bin boundline -- plan --workspace "$PWD" --json
+```
+
+- The assistant summarizes the proposed bounded plan and routes to `/boundline-run` only after the CLI-reported planning state is ready.
 
 ### 3. Execute the workflow
 
@@ -50,7 +55,7 @@ Expected outcome:
 - The assistant runs or recommends:
 
 ```bash
-cargo run --bin boundline -- run --workspace "$PWD" --goal "Summarize the current bounded developer flow"
+cargo run --bin boundline -- run --workspace "$PWD" --json
 ```
 
 - The assistant summarizes the terminal status, recovery signals, and trace location.
@@ -68,7 +73,7 @@ cargo run --bin boundline -- inspect --workspace "$PWD"
 ```
 
 - `/boundline-step` recommends one explicit next command using the latest confirmed context or pasted inspection output.
-- `/boundline-status` summarizes the latest trace.
+- `/boundline-status` summarizes the latest session-native state.
 - `/boundline-next` uses that same evidence to recommend the most relevant follow-up command.
 
 ### 5. Inspect a specific trace
@@ -112,7 +117,8 @@ cargo run --bin boundline -- inspect --trace "$PWD/.boundline/traces/<task-id>.j
 
 Minimum fallback checkpoints:
 
-- `/boundline-start` must recover from a not-ready workspace.
+- `/boundline-goal` must recover from a missing or incomplete bounded goal.
+- `/boundline-plan` must stop cleanly on clarification or plan-confirmation boundaries.
 - `/boundline-run` must surface a trace location even for non-success outcomes.
 - `/boundline-status`, `/boundline-next`, and `/boundline-inspect` must continue from either a workspace or an explicit trace path.
 - `/boundline-inspect` must surface `inspection_target` for successful inspection and `corrected_command` for trace-read failures.
@@ -130,8 +136,8 @@ cargo test --all-targets
 ## Minimum Validation Scenarios
 
 1. Each supported assistant exposes the full seven-command pack.
-2. `/boundline-start` and `/boundline-run` work in both shell-enabled and chat-only modes.
-3. `/boundline-status` and `/boundline-next` can summarize the latest trace without requiring raw log inspection.
+2. `/boundline-goal`, `/boundline-plan`, and `/boundline-run` work in both shell-enabled and chat-only modes.
+3. `/boundline-status` and `/boundline-next` can summarize the latest session or trace evidence without requiring raw log inspection.
 4. `/boundline-inspect` can explain a specific run using only a trace path or workspace reference.
 5. `/boundline-step` can continue routing from either confirmed context or pasted inspection output.
 6. Trace-read failures expose a replacement inspect command instead of a raw error blob.

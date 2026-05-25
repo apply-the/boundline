@@ -35,8 +35,10 @@ or
 Wait for pasted output before continuing.
 
 ## Output Interpretation
+Provide a conversational, human-readable summary of the session state. Do NOT use raw JSON keys or snake_case field names (like `next_command`, `latest_status`, `authored_input_summary`, etc.) in your response. Translate all state into natural language.
+For the next step or follow-up commands, provide them as clickable buttons or action links (e.g., Markdown command links) instead of plain text recommendations.
 Summarize `assumptions_summary` first, then group each `assumption_group` by category. Preserve `source_attribution`, `fallback_disclosure`, `challenge_weakest_assumption`, and `next_command` verbatim when they appear. If Canon-governed input is missing or stale, say so plainly instead of promoting inferred agreement.
 
 ## Next-Step Routing
-Prefer the CLI-reported `next_command`. If inspect reports a session error, route to `/boundline-start`.
-Allowed follow-up commands: `/boundline-hidden-impact`, `/boundline-challenge`, `/boundline-explain-plan`, `/boundline-risk`, `/boundline-inspect`, `/boundline-status`, `/boundline-start`.
+Prefer the CLI-reported `next_command`. If inspect reports a session error, route to `/boundline-goal`.
+Allowed follow-up commands: `/boundline-hidden-impact`, `/boundline-challenge`, `/boundline-explain-plan`, `/boundline-risk`, `/boundline-inspect`, `/boundline-status`, `/boundline-goal`.

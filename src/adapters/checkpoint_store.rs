@@ -8,7 +8,9 @@ use crate::domain::checkpoint::{
     CheckpointAuthorityScope, CheckpointFileRecord, CheckpointFileState, CheckpointManifest,
     CheckpointRestoreMode, CheckpointRestoreOutcome, CheckpointRestoreRecord,
 };
-use crate::domain::session::SessionCommand;
+use crate::domain::session::{
+    SessionCommand, active_session_pointer_ref, session_checkpoints_root_ref,
+};
 use crate::domain::trace::current_timestamp_millis;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,27 +36,73 @@ pub struct CheckpointRestoreResult {
 #[derive(Debug, Clone)]
 pub struct FileCheckpointStore {
     root: PathBuf,
+    workspace_root: Option<PathBuf>,
+    prefer_active_session: bool,
 }
 
 impl FileCheckpointStore {
     pub fn new(root: impl Into<PathBuf>) -> Self {
-        Self { root: root.into() }
+        Self { root: root.into(), workspace_root: None, prefer_active_session: false }
     }
 
     pub fn for_workspace(workspace_ref: impl AsRef<Path>) -> Self {
-        Self::new(workspace_ref.as_ref().join(".boundline").join("checkpoints"))
+        let workspace_root = workspace_ref.as_ref().to_path_buf();
+        Self {
+            root: workspace_root.join(".boundline").join("checkpoints"),
+            workspace_root: Some(workspace_root),
+            prefer_active_session: true,
+        }
+    }
+
+    pub fn for_session(workspace_ref: impl AsRef<Path>, session_id: &str) -> Self {
+        let workspace_root = workspace_ref.as_ref().to_path_buf();
+        Self {
+            root: workspace_root.join(session_checkpoints_root_ref(session_id)),
+            workspace_root: Some(workspace_root),
+            prefer_active_session: false,
+        }
     }
 
     pub fn root(&self) -> &Path {
         &self.root
     }
 
+    pub fn effective_root(&self) -> Result<PathBuf, CheckpointStoreError> {
+        self.resolved_root()
+    }
+
+    fn resolved_root(&self) -> Result<PathBuf, CheckpointStoreError> {
+        if !self.prefer_active_session {
+            return Ok(self.root.clone());
+        }
+
+        let Some(workspace_root) = self.workspace_root.as_ref() else {
+            return Ok(self.root.clone());
+        };
+        let pointer_path = workspace_root.join(active_session_pointer_ref());
+        if !pointer_path.is_file() {
+            return Ok(self.root.clone());
+        }
+
+        let session_id = fs::read_to_string(&pointer_path).map_err(CheckpointStoreError::Read)?;
+        let session_id = session_id.trim();
+        if session_id.is_empty() {
+            return Err(CheckpointStoreError::InvalidActivePointer(format!(
+                "{} is empty",
+                pointer_path.display()
+            )));
+        }
+
+        Ok(workspace_root.join(session_checkpoints_root_ref(session_id)))
+    }
+
     pub fn persist(&self, manifest: &CheckpointManifest) -> Result<PathBuf, CheckpointStoreError> {
         manifest
             .validate()
             .map_err(|error| CheckpointStoreError::InvalidManifest(error.to_string()))?;
-        fs::create_dir_all(&self.root).map_err(CheckpointStoreError::CreateDirectory)?;
-        let path = self.manifest_path(&manifest.checkpoint_id);
+        let root = self.resolved_root()?;
+        fs::create_dir_all(&root).map_err(CheckpointStoreError::CreateDirectory)?;
+        let path = self.manifest_path(&root, &manifest.checkpoint_id);
         let contents =
             serde_json::to_vec_pretty(manifest).map_err(CheckpointStoreError::Serialize)?;
         fs::write(&path, contents).map_err(CheckpointStoreError::Write)?;
@@ -65,7 +113,8 @@ impl FileCheckpointStore {
         &self,
         checkpoint_id: &str,
     ) -> Result<Option<CheckpointManifest>, CheckpointStoreError> {
-        let path = self.manifest_path(checkpoint_id);
+        let root = self.resolved_root()?;
+        let path = self.manifest_path(&root, checkpoint_id);
         if !path.exists() {
             return Ok(None);
         }
@@ -79,12 +128,13 @@ impl FileCheckpointStore {
     }
 
     pub fn list(&self) -> Result<Vec<CheckpointManifest>, CheckpointStoreError> {
-        if !self.root.exists() {
+        let root = self.resolved_root()?;
+        if !root.exists() {
             return Ok(Vec::new());
         }
 
         let mut manifests = Vec::new();
-        for entry in fs::read_dir(&self.root).map_err(CheckpointStoreError::ReadDirectory)? {
+        for entry in fs::read_dir(&root).map_err(CheckpointStoreError::ReadDirectory)? {
             let entry = entry.map_err(CheckpointStoreError::ReadDirectory)?;
             let path = entry.path();
             if !path.is_file() || path.extension().and_then(|value| value.to_str()) != Some("json")
@@ -265,8 +315,8 @@ impl FileCheckpointStore {
         )
     }
 
-    fn manifest_path(&self, checkpoint_id: &str) -> PathBuf {
-        self.root.join(format!("{checkpoint_id}.json"))
+    fn manifest_path(&self, root: &Path, checkpoint_id: &str) -> PathBuf {
+        root.join(format!("{checkpoint_id}.json"))
     }
 
     fn collect_restore_conflicts(
@@ -335,6 +385,8 @@ pub enum CheckpointStoreError {
     Write(std::io::Error),
     #[error("failed to delete checkpoint-managed file: {0}")]
     Delete(std::io::Error),
+    #[error("invalid active session pointer: {0}")]
+    InvalidActivePointer(String),
     #[error("invalid checkpoint manifest: {0}")]
     InvalidManifest(String),
     #[error("checkpoint '{0}' was not found")]

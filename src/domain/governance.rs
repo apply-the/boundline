@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use clap::ValueEnum;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
 use crate::domain::flow::built_in_flow;
@@ -11,6 +11,7 @@ use crate::domain::reasoning::{
     ProfileActivationRecord, ReasoningAdmissionEffect, ReasoningConfidenceLevel,
     ReasoningProfileDefinition, ReasoningProfileId,
 };
+use crate::domain::stage_council::StageCouncilOutcome;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "snake_case")]
@@ -200,6 +201,14 @@ impl std::str::FromStr for CanonMode {
             other => Err(format!("unknown Canon mode `{other}`")),
         }
     }
+}
+
+pub fn deserialize_known_canon_modes<'de, D>(deserializer: D) -> Result<Vec<CanonMode>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let raw_modes = Vec::<String>::deserialize(deserializer)?;
+    Ok(raw_modes.into_iter().filter_map(|raw| raw.parse::<CanonMode>().ok()).collect())
 }
 
 /// The current project-scale Canon mode set supported through Boundline.
@@ -412,6 +421,7 @@ static GOVERNED_STAGE_CATALOG: [GovernedStageCatalogEntry; 16] = [
 ];
 
 const DELIVERY_REQUIREMENTS_MODES: [CanonMode; 1] = [CanonMode::Requirements];
+const DELIVERY_SYSTEM_SHAPING_MODES: [CanonMode; 1] = [CanonMode::SystemShaping];
 const DELIVERY_ARCHITECTURE_MODES: [CanonMode; 1] = [CanonMode::Architecture];
 const DELIVERY_BACKLOG_MODES: [CanonMode; 1] = [CanonMode::Backlog];
 const DELIVERY_IMPLEMENTATION_MODES: [CanonMode; 1] = [CanonMode::Implementation];
@@ -433,10 +443,16 @@ const BUG_FIX_VERIFY_MODES: [CanonMode; 4] = [
     CanonMode::PrReview,
 ];
 const NO_CANON_MODES: [CanonMode; 0] = [];
+const PLANNING_STAGE_KEY_DISCOVERY: &str = "plan:discovery";
+const PLANNING_STAGE_KEY_REQUIREMENTS: &str = "plan:requirements";
+const PLANNING_STAGE_KEY_SYSTEM_SHAPING: &str = "plan:system-shaping";
+const PLANNING_STAGE_KEY_ARCHITECTURE: &str = "plan:architecture";
+const PLANNING_STAGE_KEY_BACKLOG: &str = "plan:backlog";
 
 pub fn supported_canon_modes_for_stage(flow_name: &str, stage_id: &str) -> &'static [CanonMode] {
     match (flow_name, stage_id) {
         ("delivery", "requirements") => &DELIVERY_REQUIREMENTS_MODES,
+        ("delivery", "system-shaping") => &DELIVERY_SYSTEM_SHAPING_MODES,
         ("delivery", "architecture") => &DELIVERY_ARCHITECTURE_MODES,
         ("delivery", "backlog") => &DELIVERY_BACKLOG_MODES,
         ("delivery", "implementation") => &DELIVERY_IMPLEMENTATION_MODES,
@@ -448,6 +464,78 @@ pub fn supported_canon_modes_for_stage(flow_name: &str, stage_id: &str) -> &'sta
         ("bug-fix", "verify") => &BUG_FIX_VERIFY_MODES,
         _ => &NO_CANON_MODES,
     }
+}
+
+pub fn planned_canon_mode_sequence_for_flow(flow_name: &str) -> Vec<CanonMode> {
+    let Some(flow) = built_in_flow(flow_name) else {
+        return Vec::new();
+    };
+
+    let mut seen_modes = BTreeSet::new();
+    let mut sequence = Vec::new();
+    for stage in flow.stages {
+        for mode in supported_canon_modes_for_stage(flow.name, stage.id) {
+            if seen_modes.insert(*mode) {
+                sequence.push(*mode);
+            }
+        }
+    }
+
+    sequence
+}
+
+pub const fn is_planning_canon_mode(mode: CanonMode) -> bool {
+    matches!(
+        mode,
+        CanonMode::Discovery
+            | CanonMode::Requirements
+            | CanonMode::SystemShaping
+            | CanonMode::Architecture
+            | CanonMode::Backlog
+    )
+}
+
+pub fn planning_canon_mode_sequence(sequence: &[CanonMode]) -> Vec<CanonMode> {
+    sequence.iter().copied().filter(|mode| is_planning_canon_mode(*mode)).collect()
+}
+
+pub const fn planning_stage_key_for_mode(mode: CanonMode) -> Option<&'static str> {
+    match mode {
+        CanonMode::Discovery => Some(PLANNING_STAGE_KEY_DISCOVERY),
+        CanonMode::Requirements => Some(PLANNING_STAGE_KEY_REQUIREMENTS),
+        CanonMode::SystemShaping => Some(PLANNING_STAGE_KEY_SYSTEM_SHAPING),
+        CanonMode::Architecture => Some(PLANNING_STAGE_KEY_ARCHITECTURE),
+        CanonMode::Backlog => Some(PLANNING_STAGE_KEY_BACKLOG),
+        _ => None,
+    }
+}
+
+pub fn planning_canon_mode_for_stage_key(stage_key: &str) -> Option<CanonMode> {
+    match stage_key {
+        PLANNING_STAGE_KEY_DISCOVERY => Some(CanonMode::Discovery),
+        PLANNING_STAGE_KEY_REQUIREMENTS => Some(CanonMode::Requirements),
+        PLANNING_STAGE_KEY_SYSTEM_SHAPING => Some(CanonMode::SystemShaping),
+        PLANNING_STAGE_KEY_ARCHITECTURE => Some(CanonMode::Architecture),
+        PLANNING_STAGE_KEY_BACKLOG => Some(CanonMode::Backlog),
+        _ => None,
+    }
+}
+
+pub fn is_planning_stage_key(stage_key: &str) -> bool {
+    planning_canon_mode_for_stage_key(stage_key).is_some()
+}
+
+const PLANNING_GOVERNANCE_ROOT: &str = ".boundline/governance/planning";
+const PLANNING_STAGE_BRIEF_FILE_NAME: &str = "brief.md";
+
+pub fn planning_stage_brief_ref(stage_key: &str) -> Option<String> {
+    let mode = planning_canon_mode_for_stage_key(stage_key)?;
+    Some(format!(
+        "{}/{}/{}",
+        PLANNING_GOVERNANCE_ROOT,
+        mode.as_str(),
+        PLANNING_STAGE_BRIEF_FILE_NAME
+    ))
 }
 
 pub fn resolved_canon_mode(
@@ -720,6 +808,27 @@ pub enum GovernanceLifecycleState {
     Incomplete,
     Completed,
     Failed,
+}
+
+impl GovernanceLifecycleState {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::PendingSelection => "pending_selection",
+            Self::Running => "running",
+            Self::GovernedReady => "governed_ready",
+            Self::AwaitingApproval => "awaiting_approval",
+            Self::Blocked => "blocked",
+            Self::Incomplete => "incomplete",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+impl std::fmt::Display for GovernanceLifecycleState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1085,6 +1194,20 @@ impl CanonAuthorityZone {
         }
     }
 
+    pub fn from_legacy_or_canonical(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "green" | "low" => Some(Self::Green),
+            "yellow" | "medium" | "engineering" | "core" => Some(Self::Yellow),
+            "red" | "high" | "operations" => Some(Self::Red),
+            "restricted" => Some(Self::Restricted),
+            _ => None,
+        }
+    }
+
+    pub fn canonicalize_label(value: &str) -> Option<&'static str> {
+        Self::from_legacy_or_canonical(value).map(Self::as_str)
+    }
+
     /// Numeric floor used by `effective_authority_floor` to compute the max.
     const fn floor_rank(self) -> u8 {
         match self {
@@ -1165,6 +1288,24 @@ impl CanonIntendedPersona {
             Self::DomainSteward => "domain-steward",
         }
     }
+
+    pub fn from_legacy_or_canonical(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "product" | "product-strategist" => Some(Self::ProductStrategist),
+            "architecture" | "system" | "system-architect" => Some(Self::SystemArchitect),
+            "platform" | "developer" | "delivery" | "delivery-engineer" => {
+                Some(Self::DeliveryEngineer)
+            }
+            "verification" | "qa" | "verification-lead" => Some(Self::VerificationLead),
+            "operations" | "operations-governor" => Some(Self::OperationsGovernor),
+            "domain" | "domain-steward" => Some(Self::DomainSteward),
+            _ => None,
+        }
+    }
+
+    pub fn canonicalize_label(value: &str) -> Option<&'static str> {
+        Self::from_legacy_or_canonical(value).map(Self::as_str)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1186,6 +1327,19 @@ impl CanonRiskClass {
             Self::BoundedImpact => "bounded-impact",
             Self::SystemicImpact => "systemic-impact",
         }
+    }
+
+    pub fn from_legacy_or_canonical(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "low" | "low-impact" => Some(Self::LowImpact),
+            "medium" | "bounded-impact" => Some(Self::BoundedImpact),
+            "high" | "systemic-impact" => Some(Self::SystemicImpact),
+            _ => None,
+        }
+    }
+
+    pub fn canonicalize_label(value: &str) -> Option<&'static str> {
+        Self::from_legacy_or_canonical(value).map(Self::as_str)
     }
 }
 
@@ -1628,7 +1782,7 @@ pub struct CanonCapabilitySnapshot {
     pub supported_schema_versions: Vec<String>,
     #[serde(default)]
     pub operations: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_known_canon_modes")]
     pub supported_modes: Vec<CanonMode>,
     #[serde(default)]
     pub status_values: Vec<String>,
@@ -2076,6 +2230,8 @@ pub struct GovernedStageRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decision_ref: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stage_council: Option<StageCouncilOutcome>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blocked_reason: Option<String>,
 }
 
@@ -2110,6 +2266,8 @@ pub struct GovernedSessionLifecycle {
     pub accumulated_context: Vec<GovernedDocumentRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub terminal_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub planning_input_fingerprint: Option<String>,
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -2162,12 +2320,26 @@ mod tests {
         GovernanceStartupContext, GovernanceTransitionDirection, GovernedStageCategory,
         PacketReadiness, PacketReuseBindingReason, StageGovernancePolicy, StopSemantics,
         SystemContextBinding, governance_confidence_handoff, governed_stage_catalog,
-        resolve_governance_startup_posture, validate_canon_capabilities_for_mode,
+        planning_stage_brief_ref, resolve_governance_startup_posture,
+        validate_canon_capabilities_for_mode,
     };
     use crate::domain::reasoning::{
         ProfileActivationRecord, ReasoningAdmissionEffect, ReasoningConfidenceLevel,
         ReasoningProfileDefinition, ReasoningProfileId,
     };
+
+    #[test]
+    fn planning_stage_brief_ref_maps_stage_keys_to_workspace_relative_briefs() {
+        assert_eq!(
+            planning_stage_brief_ref("plan:discovery").as_deref(),
+            Some(".boundline/governance/planning/discovery/brief.md")
+        );
+        assert_eq!(
+            planning_stage_brief_ref("plan:architecture").as_deref(),
+            Some(".boundline/governance/planning/architecture/brief.md")
+        );
+        assert!(planning_stage_brief_ref("change:verify").is_none());
+    }
 
     #[test]
     fn canonical_modes_and_catalog_cover_project_scale_stage_set() {

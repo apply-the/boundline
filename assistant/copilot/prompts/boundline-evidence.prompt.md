@@ -35,8 +35,10 @@ or
 Wait for pasted output before continuing.
 
 ## Output Interpretation
+Provide a conversational, human-readable summary of the session state. Do NOT use raw JSON keys or snake_case field names (like `next_command`, `latest_status`, `authored_input_summary`, etc.) in your response. Translate all state into natural language.
+For the next step or follow-up commands, provide them as clickable buttons or action links (e.g., Markdown command links) instead of plain text recommendations.
 Summarize `authored_input_summary`, `authored_input_sources`, `authored_input_deduplicated_sources`, `context_summary`, `context_primary_inputs`, `context_provenance`, `decision_timeline`, `failure_evidence`, `adaptive_evidence`, `governance_timeline`, `governance_approval_provenance`, `review_timeline`, and `next_command`. Preserve Canon-grounded provenance, contract-line, packet, approval, readiness, security, audit, or promotion wording exactly when present. If Canon evidence is missing, stale, incompatible, or blocked, list that as a real evidence gap.
 
 ## Next-Step Routing
 Prefer the CLI-reported `next_command`; if more state is needed, route to `/boundline-inspect`.
-Allowed follow-up commands: `/boundline-why`, `/boundline-risk`, `/boundline-next-best`, `/boundline-inspect`, `/boundline-status`, `/boundline-start`.
+Allowed follow-up commands: `/boundline-why`, `/boundline-risk`, `/boundline-next-best`, `/boundline-inspect`, `/boundline-status`, `/boundline-goal`.

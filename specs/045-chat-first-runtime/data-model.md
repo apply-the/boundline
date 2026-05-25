@@ -36,7 +36,7 @@ envelope around the projections that already describe that state.
   states, and next recommended command.
 - Existing Source: `src/domain/session.rs`
 - Role in this slice:
-  - Becomes the canonical structured payload for `start`, `capture`, `flow`,
+  - Becomes the canonical structured payload for `start`, `goal`, `flow`,
     `plan`, `step`, `status`, and `next`.
   - Continues to back the human-readable `render_session_status` output.
 - Constraints:

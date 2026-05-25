@@ -35,8 +35,10 @@ or
 Wait for pasted output before continuing.
 
 ## Output Interpretation
+Provide a conversational, human-readable summary of the session state. Do NOT use raw JSON keys or snake_case field names (like `next_command`, `latest_status`, `authored_input_summary`, etc.) in your response. Translate all state into natural language.
+For the next step or follow-up commands, provide them as clickable buttons or action links (e.g., Markdown command links) instead of plain text recommendations.
 Summarize `hidden_impact_summary` first, then preserve any `hidden_impact_affected_domains`, `hidden_impact_affected_systems`, `hidden_impact_missing_tests`, `hidden_impact_missing_evidence`, `hidden_impact_required_reviewers`, `hidden_impact_fallback_disclosure`, `challenge_required_review`, and `next_command` lines verbatim. Keep governance boundaries visible instead of collapsing them into generic impact advice.
 
 ## Next-Step Routing
-Prefer the CLI-reported `next_command`. If inspect reports a session error, route to `/boundline-start`.
-Allowed follow-up commands: `/boundline-challenge`, `/boundline-explain-plan`, `/boundline-evidence`, `/boundline-inspect`, `/boundline-status`, `/boundline-start`.
+Prefer the CLI-reported `next_command`. If inspect reports a session error, route to `/boundline-goal`.
+Allowed follow-up commands: `/boundline-challenge`, `/boundline-explain-plan`, `/boundline-evidence`, `/boundline-inspect`, `/boundline-status`, `/boundline-goal`.

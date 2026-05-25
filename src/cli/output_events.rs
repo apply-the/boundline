@@ -8,7 +8,7 @@ fn diagnostic_follow_up_actions(report: &DiagnosticsReport) -> Vec<String> {
 
     match report.subject {
         crate::cli::diagnostics::DiagnosticsSubject::Workspace => vec![format!(
-            "- start a session: boundline start --workspace {}",
+            "- capture a goal: boundline goal --workspace {} --goal <goal>",
             report.workspace_ref.as_deref().unwrap_or("<workspace>")
         )],
         crate::cli::diagnostics::DiagnosticsSubject::Install => {

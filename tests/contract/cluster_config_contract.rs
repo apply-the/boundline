@@ -18,7 +18,7 @@ fn cluster_scope_show_accepts_primary_workspace() {
     .unwrap();
 
     match cli.command {
-        DeveloperCommand::Config { command } => match command {
+        Some(DeveloperCommand::Config { command }) => match command {
             ConfigSubcommand::Show { workspace, cluster, scope } => {
                 assert_eq!(workspace, None);
                 assert_eq!(cluster, Some(PathBuf::from("/tmp/primary")));
@@ -45,17 +45,18 @@ fn cluster_scope_set_accepts_cluster_slot_runtime_and_model() {
         "--runtime",
         "codex",
         "--model",
-        "gpt-5-codex",
+        "o4-mini",
     ])
     .unwrap();
 
     match cli.command {
-        DeveloperCommand::Config { command } => match command {
+        Some(DeveloperCommand::Config { command }) => match command {
             ConfigSubcommand::Set {
                 workspace,
                 cluster,
                 scope,
                 slot,
+                chat,
                 reviewer,
                 adjudicator,
                 runtime,
@@ -65,10 +66,11 @@ fn cluster_scope_set_accepts_cluster_slot_runtime_and_model() {
                 assert_eq!(cluster, Some(PathBuf::from("/tmp/primary")));
                 assert_eq!(scope, ConfigWriteScope::Cluster);
                 assert_eq!(slot, Some(RouteSlot::Planning));
+                assert!(!chat);
                 assert_eq!(reviewer, None);
                 assert!(!adjudicator);
                 assert_eq!(runtime, RuntimeKind::Codex);
-                assert_eq!(model, "gpt-5-codex");
+                assert_eq!(model, "o4-mini");
             }
             other => panic!("expected Set, got {other:?}"),
         },

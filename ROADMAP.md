@@ -9,19 +9,16 @@ for current direction, future feature sequencing, and product boundaries.
 
 ## Current Status: v0.64.0
 
-Boundline is currently shipping the `0.64.0` interactive delivery dashboard
-line while keeping the CLI and session-native runtime authoritative.
+Boundline currently ships a session-native CLI/runtime with assistant command
+packs, governed delivery, and trace-backed inspection surfaces. The CLI and
+persisted workspace state remain authoritative, and there is no separate
+terminal UI product line on the forward roadmap.
 
 ### Delivered in 0.64.0
 
-- a separate `boundline-dashboard` workspace component with local terminal UI
-  dependencies isolated from the normal CLI path
-- typed dashboard snapshots over existing session, trace, checkpoint, finding,
-  and governed-reference projections
-- first-screen state, timeline, actions, panels, diagnostics, and degraded
-  fallbacks that point back to normal Boundline commands
-- terminal-safe `boundline` wordmark branding without SVG, raster, or wide ANSI
-  banner dependencies
+- session-native orchestration remains the primary delivery surface
+- assistant command packs stay aligned with the CLI and trace-backed status model
+- governed delivery, inspection, and distribution workflows ship on the current workspace version
 
 ## Objective
 
@@ -65,8 +62,8 @@ The repo-local `roadmap/` folder carries the active forward-looking drafts:
 
 1. Boundline must deliver visible runtime trust before more platform abstraction
    work.
-2. The dashboard remains an operator shell over the existing CLI/runtime, not a
-   second product.
+2. Operator surfaces must remain thin shells over the existing CLI/runtime, not
+  second products or parallel orchestration engines.
 3. Large-codebase handling, provider permissions, and evals must precede
    stronger autonomy.
 4. Canon must prove value inside the real delivery loop, not beside it.

@@ -1,19 +1,25 @@
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
+use boundline::adapters::config_store::FileConfigStore;
+use boundline::adapters::env_layer::{OPENAI_API_KEY_ENV, OPENAI_BASE_URL_ENV};
 use boundline::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
 use boundline::cli::diagnostics::{diagnose_native_direct_run_workspace, diagnose_workspace};
 use boundline::cli::inspect::{TraceSummaryError, summarize_trace};
 use boundline::cli::run::{RunCommandError, execute_native_direct_run};
 use boundline::cli::session::{
-    SessionCommandError, execute_capture, execute_flow, execute_next, execute_plan, execute_start,
-    execute_status, execute_step, render_error,
+    SessionCommandError, execute_flow, execute_goal, execute_next, execute_plan, execute_status,
+    execute_step, render_error,
 };
 use boundline::cli::{
     Cli, CliValidationError, CommandExitStatus, CommandName, DeveloperCommand,
     DeveloperCommandSession,
 };
-use boundline::domain::brief::normalize_inputs;
+use boundline::domain::brief::{
+    GovernanceIntent, normalize_inputs, normalize_inputs_with_governance,
+};
+use boundline::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
 use boundline::domain::context_intelligence::{
     AdvancedContextProjection, AuthorityRank, CandidateSelectionState, HybridOutcome,
     ImpactAnalysisFinding, ImpactFindingKind, ImpactFindingSeverity, ImpactFindingStatus,
@@ -31,7 +37,10 @@ use boundline::domain::flow::{
     FlowStepMetadata, FlowValidationError, SessionFlowState, attach_stage_metadata, built_in_flow,
     supported_flow_names_csv,
 };
-use boundline::domain::governance::CanonSemanticProvenanceBoundary;
+use boundline::domain::governance::{
+    CanonModeSelectionPreference, CanonSemanticProvenanceBoundary, GovernanceLifecycleState,
+    GovernanceRuntimeKind, GovernedSessionLifecycle,
+};
 use boundline::domain::limits::{RunLimits, TerminalCondition};
 use boundline::domain::negotiation::NegotiationResolutionState;
 use boundline::domain::plan::{Plan, PlanError, PlanStatus};
@@ -39,6 +48,7 @@ use boundline::domain::session::{
     ActiveSessionRecord, SessionCommand, SessionStatus, SessionStatusView, SessionTransition,
     SessionValidationError,
 };
+use boundline::domain::stage_council::StageCouncilStatus;
 use boundline::domain::step::Step;
 use boundline::domain::task::{
     Task, TaskPersistenceError, TaskRequestError, TaskRunRequest, TaskStatus, TerminalReason,
@@ -47,6 +57,9 @@ use boundline::domain::task_context::TaskContextError;
 use boundline::domain::trace::{ExecutionTrace, TraceEventType};
 use boundline::fixture::{build_fixture_plan_for_goal, build_task_request};
 use boundline::orchestrator::session_runtime::{SessionRuntime, SessionRuntimeError};
+use boundline::{
+    CanonMode, CanonRuntimeConfig, GovernanceProfile, StageGovernancePolicy, SystemContextBinding,
+};
 use clap::Parser;
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -69,6 +82,35 @@ fn temp_workspace(prefix: &str) -> PathBuf {
     let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
     fs::create_dir_all(&workspace).unwrap();
     workspace
+}
+
+struct EnvVarGuard {
+    saved: Vec<(&'static str, Option<std::ffi::OsString>)>,
+}
+
+impl EnvVarGuard {
+    fn set(pairs: &[(&'static str, &'static str)]) -> Self {
+        let saved = pairs.iter().map(|(key, _)| (*key, std::env::var_os(key))).collect::<Vec<_>>();
+        unsafe {
+            for (key, value) in pairs {
+                std::env::set_var(key, value);
+            }
+        }
+        Self { saved }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        unsafe {
+            for (key, value) in &self.saved {
+                match value {
+                    Some(value) => std::env::set_var(key, value),
+                    None => std::env::remove_var(key),
+                }
+            }
+        }
+    }
 }
 
 fn build_request(workspace_ref: &str) -> TaskRunRequest {
@@ -129,6 +171,7 @@ fn build_status_view(record: &ActiveSessionRecord) -> SessionStatusView {
         clarification_headline: None,
         clarification_prompt: None,
         clarification_missing_fields: None,
+        clarification_questions: None,
         requested_governance_runtime: None,
         requested_governance_risk: None,
         requested_governance_zone: None,
@@ -288,6 +331,12 @@ fn build_goal_captured_session(workspace: &Path) -> ActiveSessionRecord {
     session
 }
 
+fn save_local_routing(workspace: &Path, routing: RoutingConfig) {
+    FileConfigStore::for_workspace(workspace)
+        .save_local(&ConfigFile { version: 1, routing, canon: None })
+        .unwrap();
+}
+
 fn write_execution_workspace(prefix: &str, attempts: Vec<Value>) -> PathBuf {
     let workspace = temp_workspace(prefix);
     fs::create_dir_all(workspace.join("src")).unwrap();
@@ -311,6 +360,50 @@ fn write_execution_workspace(prefix: &str, attempts: Vec<Value>) -> PathBuf {
     )
     .unwrap();
     workspace
+}
+
+fn write_governed_execution_workspace(
+    prefix: &str,
+    attempts: Vec<ExecutionAttemptDefinition>,
+    governance: GovernanceProfile,
+    limits: RunLimits,
+) -> PathBuf {
+    let workspace = temp_workspace(prefix);
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::create_dir_all(workspace.join("tests")).unwrap();
+    fs::create_dir_all(workspace.join(".boundline")).unwrap();
+    fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
+    fs::write(workspace.join("src/lib.rs"), RED_LIB_RS).unwrap();
+    fs::write(workspace.join("tests/red_to_green.rs"), FIXTURE_TEST_RS).unwrap();
+
+    let profile = WorkspaceExecutionProfile {
+        name: "coverage-execution".to_string(),
+        read_targets: vec!["src/lib.rs".to_string(), "tests/red_to_green.rs".to_string()],
+        validation_command: ExecutionCommand {
+            program: "cargo".to_string(),
+            args: vec!["test".to_string(), "--quiet".to_string()],
+        },
+        attempts,
+        adaptive: None,
+        limits,
+        governance: Some(governance),
+        review: None,
+        legacy_source: None,
+    };
+
+    fs::write(
+        workspace.join(".boundline/execution.json"),
+        serde_json::to_string_pretty(&profile).unwrap(),
+    )
+    .unwrap();
+    workspace
+}
+
+fn write_executable_script(path: &Path, body: &str) {
+    fs::write(path, body).unwrap();
+    let mut permissions = fs::metadata(path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(path, permissions).unwrap();
 }
 
 fn success_attempt() -> Value {
@@ -378,16 +471,18 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
     let trace = PathBuf::from("/tmp/boundline-cli/trace.json");
     let commands = vec![
         DeveloperCommand::Doctor { workspace: Some(workspace.clone()), install: false },
-        DeveloperCommand::Start { workspace: Some(workspace.clone()), cluster: None },
-        DeveloperCommand::Capture {
+        DeveloperCommand::Goal {
             workspace: Some(workspace.clone()),
             cluster: None,
-            goal: Some("capture goal".to_string()),
+            update: false,
+            new_session: false,
+            goal: Some("session goal".to_string()),
             brief: Vec::new(),
             governance: None,
             risk: None,
             zone: None,
             owner: None,
+            slug: None,
         },
         DeveloperCommand::Flow {
             name: "bug-fix".to_string(),
@@ -397,9 +492,10 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
         DeveloperCommand::Plan {
             workspace: Some(workspace.clone()),
             cluster: None,
+            input: None,
             flow: None,
             no_flow: false,
-            confirm: false,
+            no_canon: false,
         },
         DeveloperCommand::Step { workspace: Some(workspace.clone()), cluster: None },
         DeveloperCommand::Run {
@@ -419,9 +515,14 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
             trace: Some(trace.clone()),
             workspace: Some(workspace.clone()),
             cluster: None,
+            session: None,
         },
-        DeveloperCommand::Status { workspace: Some(workspace.clone()), cluster: None },
-        DeveloperCommand::Next { workspace: Some(workspace.clone()), cluster: None },
+        DeveloperCommand::Status {
+            workspace: Some(workspace.clone()),
+            cluster: None,
+            session: None,
+        },
+        DeveloperCommand::Next { workspace: Some(workspace.clone()), cluster: None, session: None },
     ];
 
     for command in &commands {
@@ -431,7 +532,7 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
 
     assert_eq!(CommandName::Doctor.to_string(), "doctor");
     let cli = Cli::try_parse_from(["boundline", "inspect", "--workspace", "."]).unwrap();
-    assert!(matches!(cli.command, DeveloperCommand::Inspect { .. }));
+    assert!(matches!(cli.command, Some(DeveloperCommand::Inspect { .. })));
 
     let invalid_doctor = DeveloperCommandSession {
         command_name: CommandName::Doctor,
@@ -450,19 +551,22 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
         CliValidationError::MissingWorkspaceRef(CommandName::Doctor)
     );
 
-    let invalid_capture = DeveloperCommandSession::from_command(&DeveloperCommand::Capture {
+    let invalid_goal = DeveloperCommandSession::from_command(&DeveloperCommand::Goal {
         workspace: Some(workspace.clone()),
         cluster: None,
+        update: false,
+        new_session: false,
         goal: Some("  ".to_string()),
         brief: Vec::new(),
         governance: None,
         risk: None,
         zone: None,
         owner: None,
+        slug: None,
     });
     assert_eq!(
-        invalid_capture.validate().unwrap_err(),
-        CliValidationError::MissingGoal(CommandName::Capture)
+        invalid_goal.validate().unwrap_err(),
+        CliValidationError::MissingGoal(CommandName::Goal)
     );
 
     let invalid_flow = DeveloperCommandSession::from_command(&DeveloperCommand::Flow {
@@ -529,12 +633,14 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
         trace: None,
         workspace: None,
         cluster: None,
+        session: None,
     });
     assert_eq!(invalid_inspect.validate().unwrap_err(), CliValidationError::MissingTraceSelection);
 
     let mut completed = DeveloperCommandSession::from_command(&DeveloperCommand::Status {
         workspace: Some(workspace),
         cluster: None,
+        session: None,
     });
     let exit_code = completed
         .complete(CommandExitStatus::NonSuccess, Some(trace.to_string_lossy().into_owned()));
@@ -768,7 +874,7 @@ fn native_direct_run_reuses_existing_initialized_session() {
 }
 
 #[test]
-fn execute_status_surfaces_why_and_risk_for_goal_captured_session() {
+fn execute_status_surfaces_blocked_goal_capture_routing_for_goal_captured_session() {
     let workspace = temp_workspace("boundline-status-goal-captured");
     let canonical_workspace = workspace.canonicalize().unwrap();
     FileSessionStore::for_workspace(&canonical_workspace)
@@ -779,14 +885,21 @@ fn execute_status_surfaces_why_and_risk_for_goal_captured_session() {
 
     assert_eq!(report.exit_status, CommandExitStatus::Succeeded);
     assert!(
-        report.terminal_output.contains("why_summary: Fix the failing add test"),
+        report.terminal_output.contains(
+            "routing: blocked (goal_capture) - goal captured but a goal plan is not ready yet"
+        ),
         "{}",
         report.terminal_output
     );
     assert!(
         report.terminal_output.contains(
-            "risk_summary: Canon confirmation is missing, so risk remains bounded by runtime-only evidence."
+            "execution_condition: blocked - goal captured but a goal plan is not ready yet"
         ),
+        "{}",
+        report.terminal_output
+    );
+    assert!(
+        report.terminal_output.contains("latest_status: goal_captured"),
         "{}",
         report.terminal_output
     );
@@ -1245,31 +1358,20 @@ fn inspect_summary_and_session_commands_cover_additional_error_paths() {
     ));
 
     let workspace = temp_workspace("boundline-cli-session-errors");
-    execute_start(Some(&workspace)).unwrap();
+    FileSessionStore::for_workspace(&workspace)
+        .persist(&build_started_session(&workspace))
+        .unwrap();
     assert!(matches!(
-        execute_plan(Some(&workspace), None, false, false).unwrap_err(),
+        execute_plan(Some(&workspace), None, false).unwrap_err(),
         SessionCommandError::MissingCapturedGoal
     ));
 
-    execute_capture(
-        Some(&workspace),
-        Some("Fix the failing add test"),
-        &[],
-        None,
-        None,
-        None,
-        None,
-    )
-    .unwrap();
+    execute_goal(Some(&workspace), Some("Fix the failing add test"), &[], None, None, None, None)
+        .unwrap();
     assert!(matches!(
         execute_step(Some(&workspace)).unwrap_err(),
         SessionCommandError::MissingPlannedTask
     ));
-    let confirm_without_proposal = execute_plan(Some(&workspace), None, false, true).unwrap_err();
-    assert!(matches!(confirm_without_proposal, SessionCommandError::MissingPlanProposal));
-    let rendered = render_error("plan", &confirm_without_proposal);
-    assert!(rendered.contains("run `boundline plan` first"), "{rendered}");
-    assert!(rendered.contains("next_command: boundline plan"), "{rendered}");
     assert!(matches!(
         execute_flow(Some(&workspace), "missing-flow").unwrap_err(),
         SessionCommandError::UnknownFlow { .. }
@@ -1288,7 +1390,7 @@ fn inspect_summary_and_session_commands_cover_additional_error_paths() {
     let error = execute_next(Some(&missing_session_workspace)).unwrap_err();
     assert!(matches!(error, SessionCommandError::MissingActiveSession));
     let rendered = render_error("next", &error);
-    assert!(rendered.contains("boundline start"), "{rendered}");
+    assert!(rendered.contains("boundline goal --goal <goal>"), "{rendered}");
 }
 
 #[test]
@@ -1357,6 +1459,119 @@ fn session_runtime_runs_successful_terminal_and_replanned_execution_profiles() {
     let replan_response = replan_runtime.run_to_terminal(&mut replan_session).unwrap();
     assert_eq!(replan_response.terminal_status, TaskStatus::Succeeded);
     assert_eq!(replan_session.latest_status, SessionStatus::Succeeded);
+}
+
+#[test]
+fn session_runtime_run_to_terminal_uses_default_canon_mode_for_required_investigate_stage() {
+    let command_workspace = temp_workspace("boundline-runtime-governed-mode-command");
+    let command_path = command_workspace.join("fake-canon");
+    let response_path = command_workspace.join("canon-response.json");
+    let document_ref = ".canon/runs/canon-run-investigate/discovery.md";
+    fs::write(
+        &response_path,
+        json!({
+            "status": "governed_ready",
+            "approval_state": "not_needed",
+            "message": "Canon completed the governed stage",
+            "run_ref": "canon-run-investigate",
+            "packet_ref": ".canon/runs/canon-run-investigate",
+            "expected_document_refs": [document_ref],
+            "document_refs": [document_ref],
+            "packet_readiness": "reusable",
+            "missing_sections": [],
+            "authority_governance": {
+                "contract_line": "authority-governance-v1",
+                "authority_zone": "green",
+                "change_class": "low-impact",
+                "intended_persona": "delivery-engineer",
+                "approval_state": "not_needed",
+                "packet_readiness": "reusable",
+                "risk": "low-impact"
+            },
+            "headline": "discovery packet ready",
+            "reason_code": "packet_ready"
+        })
+        .to_string(),
+    )
+    .unwrap();
+    write_executable_script(
+        &command_path,
+        &format!("#!/bin/sh\ncat >/dev/null\ncat '{}'\n", response_path.to_string_lossy()),
+    );
+
+    let workspace = write_governed_execution_workspace(
+        "boundline-runtime-governed-default-mode",
+        vec![ExecutionAttemptDefinition {
+            attempt_id: "fix-add".to_string(),
+            summary: String::new(),
+            failure_mode: ExecutionFailureMode::Terminal,
+            changes: vec![WorkspaceChange {
+                path: "src/lib.rs".to_string(),
+                find: "left - right".to_string(),
+                replace: "left + right".to_string(),
+            }],
+        }],
+        GovernanceProfile {
+            default_runtime: GovernanceRuntimeKind::Local,
+            canon: Some(CanonRuntimeConfig {
+                command: command_path.to_string_lossy().into_owned(),
+                default_owner: Some("platform".to_string()),
+                default_risk: Some("medium".to_string()),
+                default_zone: Some("engineering".to_string()),
+                default_system_context: Some(SystemContextBinding::Existing),
+            }),
+            stages: vec![StageGovernancePolicy {
+                flow_name: "bug-fix".to_string(),
+                stage_id: "investigate".to_string(),
+                enabled: true,
+                required: true,
+                autopilot: false,
+                require_adaptive_companion: false,
+                runtime: Some(GovernanceRuntimeKind::Canon),
+                canon_mode: None,
+                system_context: Some(SystemContextBinding::Existing),
+                risk: None,
+                zone: None,
+                owner: None,
+                reasoning_profile: None,
+            }],
+        },
+        RunLimits { max_steps: 1, ..RunLimits::default() },
+    );
+    let document_path = workspace.join(document_ref);
+    fs::create_dir_all(document_path.parent().unwrap()).unwrap();
+    fs::write(&document_path, "# Discovery\n\nCredible governed evidence.\n").unwrap();
+
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut session = build_goal_captured_session(&workspace);
+    runtime.select_flow(&mut session, "bug-fix").unwrap();
+    let request = build_task_request(
+        &workspace,
+        session.goal.clone().unwrap(),
+        session.session_id.clone(),
+        None,
+        None,
+    )
+    .unwrap();
+    let plan = build_fixture_plan_for_goal(
+        &workspace,
+        session.active_flow.as_ref(),
+        session.goal.as_deref().unwrap(),
+    )
+    .unwrap();
+    session.active_task =
+        Some(Task::new("task-runtime-governed-default-mode", &request, plan).unwrap());
+    session.latest_status = SessionStatus::Planned;
+
+    let response = runtime.run_to_terminal(&mut session).unwrap();
+    let governed_stage = response.final_context.latest_governance_stage().unwrap().unwrap();
+    let governed_packet = response.final_context.latest_governance_packet().unwrap().unwrap();
+
+    assert_eq!(response.terminal_status, TaskStatus::Exhausted);
+    assert_eq!(governed_stage.stage_key, "bug-fix:investigate");
+    assert_eq!(governed_stage.runtime, GovernanceRuntimeKind::Canon);
+    assert_eq!(governed_stage.lifecycle_state, GovernanceLifecycleState::GovernedReady);
+    assert_eq!(governed_packet.canon_mode, Some(CanonMode::Discovery));
 }
 
 #[test]
@@ -1519,6 +1734,110 @@ fn session_runtime_blocks_planning_when_authored_brief_needs_clarification() {
         SessionRuntimeError::ClarificationRequired { headline, prompt }
             if headline == expected_headline && prompt == expected_prompt
     ));
+    assert_eq!(session.latest_status, SessionStatus::GoalCaptured);
+    assert!(session.latest_trace_ref.is_none());
+}
+
+#[test]
+fn session_runtime_blocks_discovery_stage_council_when_reviewer_routes_collapse() {
+    let workspace = temp_workspace("boundline-runtime-discovery-stage-council-block");
+    fs::write(
+        workspace.join("brief.md"),
+        concat!(
+            "Goal: repair the onboarding regression before release.\n",
+            "Intended outcome: restore account creation and keep audit logs intact.\n",
+            "Domain model: onboarding requests create customer accounts and audit entries.\n",
+            "API operations: POST /customers should accept a valid onboarding payload.\n",
+            "Persistence choice: Postgres remains the source of truth.\n",
+            "Auth boundary: authenticated support operators trigger the workflow.\n",
+            "Role model semantics: support operators create accounts and auditors inspect history.\n",
+            "Validation target: cargo test onboarding_flow should pass.\n",
+        ),
+    )
+    .unwrap();
+    save_local_routing(
+        &workspace,
+        RoutingConfig {
+            review: Some(ModelRoute {
+                runtime: RuntimeKind::Codex,
+                model: "openai/gpt-5.4".to_string(),
+            }),
+            ..RoutingConfig::default()
+        },
+    );
+
+    let _env_guard = EnvVarGuard::set(&[
+        (OPENAI_BASE_URL_ENV, "http://127.0.0.1:9"),
+        (OPENAI_API_KEY_ENV, "token"),
+    ]);
+
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let authored_brief = normalize_inputs_with_governance(
+        &workspace,
+        Some("Repair the governed onboarding regression"),
+        &[PathBuf::from("brief.md")],
+        Some(GovernanceIntent {
+            requested: true,
+            runtime_preference: Some(GovernanceRuntimeKind::Canon),
+            risk: Some("medium".to_string()),
+            zone: Some("engineering".to_string()),
+            owner: Some("platform".to_string()),
+            explicit_mode: None,
+            explicit_no_canon: false,
+        }),
+    )
+    .unwrap();
+
+    let mut session = build_goal_captured_session(&workspace);
+    session.goal = Some(authored_brief.render_goal_text());
+    session.authored_brief = Some(authored_brief);
+    session.negotiation_packet = None;
+    session.governance_lifecycle = Some(GovernedSessionLifecycle {
+        governance_runtime: GovernanceRuntimeKind::Canon,
+        explicit_opt_out: false,
+        mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+        selected_mode: None,
+        selected_mode_sequence: Vec::new(),
+        latest_reasoning_profile: None,
+        current_stage_index: 0,
+        stage_records: Vec::new(),
+        accumulated_context: Vec::new(),
+        terminal_reason: None,
+        planning_input_fingerprint: None,
+    });
+
+    runtime.select_flow(&mut session, "bug-fix").unwrap();
+    runtime.plan_task(&mut session, None, false).unwrap();
+
+    let lifecycle = session
+        .governance_lifecycle
+        .as_ref()
+        .expect("discovery planning should keep governance lifecycle");
+    let record =
+        lifecycle.stage_records.first().expect("discovery planning should persist a stage record");
+    assert_eq!(record.stage_key, "plan:discovery");
+    assert_eq!(record.lifecycle_state, GovernanceLifecycleState::Blocked);
+    assert!(
+        record
+            .blocked_reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("stage council blocked planning"))
+    );
+
+    let council = record
+        .stage_council
+        .as_ref()
+        .expect("blocked discovery planning should persist the stage council outcome");
+    assert_eq!(council.status, StageCouncilStatus::Blocked);
+    assert!(!council.vote_resolution.independent_review);
+    assert!(council.reviewer_findings.is_empty());
+    assert!(workspace.join(&council.producer_output.evidence_ref).exists());
+    assert!(workspace.join(&council.revised_output.evidence_ref).exists());
+    assert_eq!(session.latest_status, SessionStatus::Blocked);
+    assert_eq!(
+        session.latest_voting.as_ref().map(|state| state.trigger.as_str()),
+        Some("stage_council:plan:discovery")
+    );
 }
 
 #[test]

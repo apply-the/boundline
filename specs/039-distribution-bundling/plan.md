@@ -37,7 +37,7 @@ all modified Rust files.
 
 - **PASS** Delivery identity: The slice improves bounded software delivery by making Boundline installable, updatable, and diagnosable without source builds, which directly reduces operator friction before the first session-native run. See Summary and Technical Context.
 - **PASS** Delivery-first scope: The plan prioritizes install verification, official channel metadata, release bundles, and the primary docs path ahead of polish-only copy edits. See Summary, Technical Context, and research.
-- **PASS** Primary workflow: The main operator path remains session-native `start -> capture -> plan -> run -> status -> next -> inspect`; explicit compatibility behavior stays documented but subordinate after installation. See Summary, spec, and quickstart.
+- **PASS** Primary workflow: The main operator path remains session-native `goal -> plan -> run -> status -> next -> inspect`; explicit compatibility behavior stays documented but subordinate after installation. See Summary, spec, and quickstart.
 - **PASS** Bounded execution: Install and release surfaces resolve into explicit ready, blocked, or repair-needed states rather than hidden background repair logic. Session execution limits remain unchanged. See Technical Context, research, and contracts.
 - **PASS** Stateful execution: The feature reuses existing workspace state surfaces and adds repo-managed release metadata plus explicit diagnostics output instead of hidden installer state. See Technical Context and data model.
 - **PASS** Mutable planning: The slice does not replace the planning model; it adds bounded release and install verification inputs while leaving native replanning behavior intact. See Summary and research.

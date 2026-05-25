@@ -10,7 +10,7 @@ cd /tmp/runtime-refoundation-workspace
 cargo init --lib runtime-refoundation-workspace
 
 cargo run --bin boundline -- start
-cargo run --bin boundline -- capture --goal "fix the failing add test"
+cargo run --bin boundline -- goal --goal "fix the failing add test"
 cargo run --bin boundline -- plan --flow bug-fix
 cargo run --bin boundline -- run
 cargo run --bin boundline -- inspect
@@ -26,7 +26,7 @@ cargo run --bin boundline -- inspect
 ```bash
 cd /tmp/runtime-refoundation-workspace
 cargo run --bin boundline -- start
-cargo run --bin boundline -- capture --goal "fix the failing auth test"
+cargo run --bin boundline -- goal --goal "fix the failing auth test"
 cargo run --bin boundline -- plan
 cargo run --bin boundline -- run
 ```
@@ -41,7 +41,7 @@ cargo run --bin boundline -- run
 ```bash
 cd /tmp/runtime-refoundation-workspace
 cargo run --bin boundline -- start
-cargo run --bin boundline -- capture --goal "repair the broken parser behavior"
+cargo run --bin boundline -- goal --goal "repair the broken parser behavior"
 cargo run --bin boundline -- plan --no-flow
 cargo run --bin boundline -- run
 cargo run --bin boundline -- status
@@ -86,7 +86,7 @@ cat > .canon/requirements.md <<'EOF'
 EOF
 
 cargo run --bin boundline -- start
-cargo run --bin boundline -- capture --goal "implement a bounded workspace summary"
+cargo run --bin boundline -- goal --goal "implement a bounded workspace summary"
 cargo run --bin boundline -- plan --no-flow
 ```
 

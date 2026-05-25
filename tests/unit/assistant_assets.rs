@@ -5,7 +5,7 @@ use std::path::Path;
 use serde_json::Value;
 
 const CORE_COMMANDS: &[&str] = &[
-    "boundline-start",
+    "boundline-goal",
     "boundline-plan",
     "boundline-step",
     "boundline-run",
@@ -15,7 +15,7 @@ const CORE_COMMANDS: &[&str] = &[
 ];
 
 const REQUIRED_COMMANDS: &[&str] = &[
-    "boundline-start",
+    "boundline-goal",
     "boundline-plan",
     "boundline-step",
     "boundline-run",
@@ -31,24 +31,9 @@ const REQUIRED_COMMANDS: &[&str] = &[
     "boundline-doctor",
     "boundline-config-show",
     "boundline-config-set-canon",
-    "boundline-capture",
+    "boundline-goal",
     "boundline-recover",
     "boundline-govern",
-    "boundline-requirements",
-    "boundline-discovery",
-    "boundline-system-shaping",
-    "boundline-architecture",
-    "boundline-backlog",
-    "boundline-change",
-    "boundline-implementation",
-    "boundline-refactor",
-    "boundline-review",
-    "boundline-verification",
-    "boundline-incident",
-    "boundline-security-assessment",
-    "boundline-system-assessment",
-    "boundline-migration",
-    "boundline-supply-chain-analysis",
     "boundline-why",
     "boundline-risk",
     "boundline-evidence",

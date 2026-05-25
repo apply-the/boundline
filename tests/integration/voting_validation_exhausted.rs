@@ -3,7 +3,6 @@ use crate::workspace_fixture::{run_boundline_in, temp_fixture_workspace, termina
 #[test]
 fn validation_exhaustion_triggers_blocking_voting_for_implementation() {
     let workspace = temp_fixture_workspace("boundline-voting-validation");
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
 
     let govern = run_boundline_in(
         &workspace,

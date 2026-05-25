@@ -52,18 +52,16 @@ traces alongside the same session model. `run`, `status`, `next`, and
 `inspect` project the same route, follow-through, and evidence story instead of
 making the operator infer state from logs.
 
-## Dashboard Boundary
+## Host Surface Boundary
 
-The interactive delivery dashboard is an operator shell over that same primary
-runtime. Shared snapshot and action contracts live in the core domain, state
-assembly lives in adapters, the normal `boundline dashboard` command remains a
-thin launcher and fallback surface, and terminal rendering plus input handling
-live in the separate `boundline-dashboard` workspace component.
+The CLI and generated assistant command packs are thin shells over the same
+primary runtime. `status`, `next`, and `inspect` expose runtime projections,
+while `start`, `goal`, `plan`, and `run` remain the state-changing commands.
 
-The dashboard may show session summaries, timelines, plan and evidence panels,
-findings, checkpoints, diagnostics, and read-only governed references, but it
-does not own delivery state. It reads `.boundline/session.json`, existing
-traces, and already exposed projections, and it points degraded or unavailable
+These surfaces may show session summaries, timelines, plan and evidence views,
+findings, checkpoints, diagnostics, and read-only governed references, but
+they do not own delivery state. They read `.boundline/session.json`, existing
+traces, and already exposed projections, and they point degraded or unavailable
 paths back to normal commands. It must not introduce independent init,
 configuration, governance, hidden background progression, or a separate
 workflow engine.

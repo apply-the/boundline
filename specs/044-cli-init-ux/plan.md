@@ -34,7 +34,7 @@ that remains plain-text safe for CI and redirected output.
 
 - **PASS** Delivery identity: This feature improves the first operator step that gates bounded delivery work; if init and doctor are opaque, users do not reach the execution path at all. See Summary and Technical Context.
 - **PASS** Delivery-first scope: The work stays on the execution entrypoint (`init`, `doctor`, route guidance, overwrite safety) rather than decorative branding or general CLI polish. See Summary and Constraints.
-- **PASS** Primary workflow: The main operator path remains session-native (`start -> capture -> plan -> run -> status -> next -> inspect`), while `.boundline/execution.json` stays the explicit compatibility/bootstrap path surfaced by `init`. See Summary and Constraints.
+- **PASS** Primary workflow: The main operator path remains session-native (`goal -> plan -> run -> status -> next -> inspect`), while `.boundline/execution.json` stays the explicit compatibility/bootstrap path surfaced by `init`. See Summary and Constraints.
 - **PASS** Bounded execution: Start conditions are an operator invoking `init` or `doctor`; terminal conditions are success, explicit preview, or actionable validation failure; retries stay bounded to explicit user reruns. See Technical Context and quickstart scenarios.
 - **PASS** Stateful execution: `init` reads workspace state plus requested/guided inputs, writes `.boundline` config and assistant setup state, and reports the resulting effective route/assistant summary. See Technical Context and data model.
 - **PASS** Mutable planning: This slice does not change orchestrator replanning semantics; it only clarifies how init chooses, seeds, and reports the initial route state that later planning reads. See Summary and research decisions.

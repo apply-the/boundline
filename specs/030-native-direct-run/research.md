@@ -16,7 +16,7 @@ runtime.
 
 **Alternatives Considered**:
 - Keep direct run compatibility-first and tell operators to use `start`,
-  `capture`, and `plan` manually: rejected because it preserves the split
+  `goal`, and `plan` manually: rejected because it preserves the split
   product story.
 - Remove direct `run --goal` entirely: rejected because the one-command entry
   remains valuable if it leads into the primary route.
@@ -55,7 +55,7 @@ product experience.
 
 ## R4: Protect meaningful active session state from silent overwrite
 
-**Decision**: If a workspace already has active captured, planned, or in-flight
+**Decision**: If a workspace already has active recorded, planned, or in-flight
 session state, direct `run --goal` must stop explicitly instead of silently
 replacing it.
 

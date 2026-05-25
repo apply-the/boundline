@@ -30,10 +30,7 @@ fn direct_goal_run_bootstraps_native_session_without_a_declarative_profile() {
 fn session_native_runtime_path_runs_without_a_declarative_profile() {
     let workspace = temp_runtime_refoundation_workspace("runtime-refoundation-flow");
 
-    let start = run_boundline_in(&workspace, &["start"]);
-    assert_eq!(start.status.code(), Some(0), "{}", terminal_text(&start));
-
-    let capture = run_boundline_in(&workspace, &["capture", "--goal", "fix the failing add test"]);
+    let capture = run_boundline_in(&workspace, &["goal", "--goal", "fix the failing add test"]);
     assert_eq!(capture.status.code(), Some(0), "{}", terminal_text(&capture));
 
     let plan = run_boundline_in(&workspace, &["plan", "--flow", "bug-fix"]);
@@ -56,18 +53,15 @@ fn session_native_runtime_path_runs_without_a_declarative_profile() {
     assert!(run_text.contains("execution_condition: terminal -"), "{run_text}");
     assert!(run_text.contains("decision "), "{run_text}");
     assert!(run_text.contains("terminal_status: succeeded"), "{run_text}");
-    assert!(run_text.contains("trace:"), "{run_text}");
+    assert!(run_text.contains("trace="), "{run_text}");
 }
 
 #[test]
 fn inspect_surfaces_route_goal_plan_and_decision_timeline_for_native_run() {
     let workspace = temp_runtime_refoundation_workspace("runtime-refoundation-inspect");
 
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(&workspace, &["capture", "--goal", "fix the failing add test"])
-            .status
-            .code(),
+        run_boundline_in(&workspace, &["goal", "--goal", "fix the failing add test"]).status.code(),
         Some(0)
     );
     assert_eq!(run_boundline_in(&workspace, &["plan", "--flow", "bug-fix"]).status.code(), Some(0));
@@ -80,30 +74,19 @@ fn inspect_surfaces_route_goal_plan_and_decision_timeline_for_native_run() {
     assert!(inspect_text.contains("inspection_target: session-trace-ref"), "{inspect_text}");
     assert!(inspect_text.contains("routing: native (goal_plan)"), "{inspect_text}");
     assert!(inspect_text.contains("execution_condition: terminal -"), "{inspect_text}");
-    assert!(inspect_text.contains("goal_plan_summary:"), "{inspect_text}");
-    assert!(inspect_text.contains("decision_timeline:"), "{inspect_text}");
-    assert!(inspect_text.contains("selector:"), "{inspect_text}");
-    assert!(
-        inspect_text
-            .contains("rationale: Repair bounded implementation for fix the failing add test")
-            || inspect_text.contains(
-                "rationale: Investigate bounded failure evidence for fix the failing add test"
-            ),
-        "{inspect_text}"
-    );
-    assert!(inspect_text.contains("expected_outcome:"), "{inspect_text}");
+    assert!(inspect_text.contains("summary: goal_plan_summary="), "{inspect_text}");
+    assert!(inspect_text.contains("why_summary:"), "{inspect_text}");
+    assert!(inspect_text.contains("risk_summary:"), "{inspect_text}");
     assert!(inspect_text.contains("terminal_reason:"), "{inspect_text}");
+    assert!(inspect_text.contains("next_command: /boundline-next"), "{inspect_text}");
 }
 
 #[test]
 fn status_after_native_run_surfaces_latest_persisted_decision_state() {
     let workspace = temp_runtime_refoundation_workspace("runtime-refoundation-status");
 
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(&workspace, &["capture", "--goal", "fix the failing add test"])
-            .status
-            .code(),
+        run_boundline_in(&workspace, &["goal", "--goal", "fix the failing add test"]).status.code(),
         Some(0)
     );
     assert_eq!(run_boundline_in(&workspace, &["plan", "--flow", "bug-fix"]).status.code(), Some(0));
@@ -127,14 +110,11 @@ fn status_after_native_run_surfaces_latest_persisted_decision_state() {
 }
 
 #[test]
-fn run_guidance_for_proposed_plan_includes_confirm_action() {
+fn run_succeeds_after_plan_without_explicit_confirmation() {
     let workspace = temp_runtime_refoundation_workspace("runtime-refoundation-proposed-guidance");
 
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(&workspace, &["capture", "--goal", "fix the failing add test"])
-            .status
-            .code(),
+        run_boundline_in(&workspace, &["goal", "--goal", "fix the failing add test"]).status.code(),
         Some(0)
     );
     assert_eq!(run_boundline_in(&workspace, &["plan"]).status.code(), Some(0));
@@ -142,9 +122,7 @@ fn run_guidance_for_proposed_plan_includes_confirm_action() {
     let run = run_boundline_in(&workspace, &["run"]);
     let run_text = terminal_text(&run);
 
-    assert_eq!(run.status.code(), Some(1), "{run_text}");
-    assert!(run_text.contains("must be confirmed before execution"), "{run_text}");
-    assert!(run_text.contains("boundline plan --confirm"), "{run_text}");
+    assert_eq!(run.status.code(), Some(0), "{run_text}");
 }
 
 #[test]
@@ -152,9 +130,8 @@ fn status_surfaces_confirmed_and_skipped_flow_states() {
     let confirmed_workspace =
         temp_runtime_refoundation_workspace("runtime-refoundation-confirmed-flow-state");
 
-    assert_eq!(run_boundline_in(&confirmed_workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(&confirmed_workspace, &["capture", "--goal", "fix the failing add test"])
+        run_boundline_in(&confirmed_workspace, &["goal", "--goal", "fix the failing add test"])
             .status
             .code(),
         Some(0)
@@ -172,11 +149,10 @@ fn status_surfaces_confirmed_and_skipped_flow_states() {
     let skipped_workspace =
         temp_runtime_refoundation_no_action_workspace("runtime-refoundation-skipped-flow-state");
 
-    assert_eq!(run_boundline_in(&skipped_workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
         run_boundline_in(
             &skipped_workspace,
-            &["capture", "--goal", "implement workspace summary output"]
+            &["goal", "--goal", "implement workspace summary output"]
         )
         .status
         .code(),

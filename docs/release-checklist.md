@@ -51,13 +51,9 @@ version tag. Two contract tests enforce alignment automatically:
 - **`docs/getting-started.md`** and **`docs/architecture.md`** — update any
   current Canon compatibility target named in the active product docs.
 
-- **Dashboard releases** — when `boundline-dashboard` changes, document:
-  - dedicated entrypoint usage, including `--workspace`, `--no-color`, and
-    `--snapshot-json`
-  - normal launcher behavior for `boundline dashboard`
-  - degraded fallback commands and dashboard-unavailable messages
-  - the terminal-safe `boundline` wordmark boundary, with no SVG, raster, or
-    wide ANSI banner dependency
+- **CLI and assistant surface updates** — when `status`, `inspect`, or the
+  generated assistant command packs change, document the active usage and any
+  revised fallback guidance in the README and assistant command docs.
 
 ### Assistant plugin surface
 

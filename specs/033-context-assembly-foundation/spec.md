@@ -20,7 +20,7 @@
 
 ### User Story 1 - Build A Bounded Context Pack Before Planning (Priority: P1)
 
-An operator can capture a goal and have Boundline derive a bounded context pack
+An operator can record a goal and have Boundline derive a bounded context pack
 before planning so the resulting tasks point to explicit workspace, authored,
 trace, and governed evidence instead of relying on ambient repository state.
 
@@ -36,7 +36,7 @@ for the planned tasks.
 **Acceptance Scenarios**:
 
 1. **Given** a workspace with authored brief input, recent traces, and source
-  files related to the goal, **When** the operator runs `capture` followed by
+  files related to the goal, **When** the operator runs `goal` followed by
   `plan`, **Then** Boundline creates one bounded context pack that records the
   relevant files, the evidence sources used to select them, and the summary
   that explains why those inputs matter to the planned work.
@@ -91,7 +91,7 @@ guidance and inspectable failure evidence.
 
 **Acceptance Scenarios**:
 
-1. **Given** a captured goal whose workspace has no credible relevant files,
+1. **Given** a recorded goal whose workspace has no credible relevant files,
   traces, authored evidence, or Canon artifacts for the bounded task,
   **When** planning runs, **Then** Boundline stops explicitly with a non-success
   explanation that the context pack is not credible enough for planning.

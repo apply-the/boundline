@@ -35,8 +35,10 @@ or
 Wait for pasted output before continuing.
 
 ## Output Interpretation
+Provide a conversational, human-readable summary of the session state. Do NOT use raw JSON keys or snake_case field names (like `next_command`, `latest_status`, `authored_input_summary`, etc.) in your response. Translate all state into natural language.
+For the next step or follow-up commands, provide them as clickable buttons or action links (e.g., Markdown command links) instead of plain text recommendations.
 Summarize the current `goal`, `routing_summary`, `goal_plan_summary`, `negotiation_goal_summary`, `decision_timeline`, `failure_evidence`, `terminal_reason`, `governance_next_action`, `reasoning_profile_id`, `reasoning_selection_reason`, `reasoning_contribution`, `reasoning_fallback_disclosure`, `follow_through_guidance`, `follow_through_evidence_source`, and `next_command` when present. Preserve `authored_input_summary`, `context_summary`, `context_credibility`, `context_provenance`, and any Canon-grounded governance or stale-context wording exactly. When Canon-governed input is absent, stale, incompatible, blocked, or downgraded to a reasoning fallback, say that plainly instead of implying agreement.
 
 ## Next-Step Routing
-Prefer the CLI-reported `next_command`. If inspect reports a session error, route to `/boundline-start`.
-Allowed follow-up commands: `/boundline-next-best`, `/boundline-risk`, `/boundline-evidence`, `/boundline-inspect`, `/boundline-status`, `/boundline-start`.
+Prefer the CLI-reported `next_command`. If inspect reports a session error, route to `/boundline-goal`.
+Allowed follow-up commands: `/boundline-next-best`, `/boundline-risk`, `/boundline-evidence`, `/boundline-inspect`, `/boundline-status`, `/boundline-goal`.

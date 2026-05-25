@@ -39,14 +39,14 @@
 
 ## Phase 3: User Story 1 - Infer A Bounded Plan From Workspace Evidence (Priority: P1) 🎯 MVP
 
-**Goal**: Make `start -> capture -> plan` infer a credible flow, target set, and verification strategy from workspace evidence instead of from keyword-first matching and a static task template.
+**Goal**: Make `goal -> plan` infer a credible flow, target set, and verification strategy from workspace evidence instead of from keyword-first matching and a static task template.
 
 **Independent Test**: Run representative native planning scenarios and verify the proposed flow and tasks are derived from files, symbols, tests, and acceptance cues rather than keyword matches alone.
 
 ### Tests for User Story 1
 
 - [x] T007 [P] [US1] Add contract coverage for evidence-driven proposal payloads in `/Users/rt/workspace/boundline/tests/contract/goal_plan_contract.rs`
-- [x] T008 [P] [US1] Add integration coverage for evidence-driven `start -> capture -> plan` behavior in `/Users/rt/workspace/boundline/tests/integration/session_native_flow.rs`
+- [x] T008 [P] [US1] Add integration coverage for evidence-driven `goal -> plan` behavior in `/Users/rt/workspace/boundline/tests/integration/session_native_flow.rs`
 - [x] T009 [P] [US1] Add unit coverage for evidence scoring, target selection, and verification-strategy inference in `/Users/rt/workspace/boundline/tests/unit/flow_inference.rs` and `/Users/rt/workspace/boundline/tests/unit/goal_planner.rs`
 
 ### Implementation for User Story 1

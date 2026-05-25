@@ -32,7 +32,7 @@
 
 **Goal**: Let host chats invoke the existing session-native lifecycle and inspection commands and consume a stable structured response.
 
-**Independent Test**: Run `start`, `capture`, `plan`, `status`, `next`, `run`, and `inspect` with structured output enabled and verify that the envelope contains the expected session or trace payload plus the original rendered text.
+**Independent Test**: Run `start`, `goal`, `plan`, `status`, `next`, `run`, and `inspect` with structured output enabled and verify that the envelope contains the expected session or trace payload plus the original rendered text.
 
 ### Tests for User Story 1
 
@@ -42,7 +42,7 @@
 
 ### Implementation for User Story 1
 
-- [ ] T009 [US1] Add structured-output flags and dispatch handling for `start`, `capture`, `flow`, `plan`, `step`, `run`, `status`, `next`, and `inspect` in src/cli.rs
+- [ ] T009 [US1] Add structured-output flags and dispatch handling for `start`, `goal`, `flow`, `plan`, `step`, `run`, `status`, `next`, and `inspect` in src/cli.rs
 - [ ] T010 [US1] Attach `SessionStatusView` payloads to the lifecycle commands in src/cli/session.rs
 - [ ] T011 [US1] Attach `TraceSummaryView` payloads to run and inspect commands in src/cli/run.rs and src/cli/inspect.rs
 

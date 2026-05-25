@@ -3,9 +3,7 @@ use std::fs;
 use boundline::FileConfigStore;
 use boundline::adapters::config_store::ConfigStoreError;
 use boundline::adapters::session_store::{FileSessionStore, SessionStore};
-use boundline::cli::session::{
-    execute_capture, execute_plan, execute_run, execute_start, execute_status,
-};
+use boundline::cli::session::{execute_goal, execute_plan, execute_run, execute_status};
 use boundline::domain::configuration::{
     CapabilityState, ConfigFile, ModelRoute, RoutingConfig, RuntimeCapabilityProfile, RuntimeKind,
 };
@@ -39,18 +37,9 @@ fn status_surfaces_guardian_degradation_when_verification_route_lacks_validation
     };
     save_local_config(&workspace, &config).unwrap();
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
-        Some(&workspace),
-        Some("fix the failing add test"),
-        &[],
-        None,
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+    execute_goal(Some(&workspace), Some("fix the failing add test"), &[], None, None, None, None)
+        .unwrap();
+    execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
     execute_run(Some(&workspace)).unwrap();
     let status_report = execute_status(Some(&workspace)).unwrap();
 
@@ -84,18 +73,9 @@ fn status_surfaces_semantic_skip_after_blocking_deterministic_findings() {
     )
     .unwrap();
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
-        Some(&workspace),
-        Some("fix the failing add test"),
-        &[],
-        None,
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+    execute_goal(Some(&workspace), Some("fix the failing add test"), &[], None, None, None, None)
+        .unwrap();
+    execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
     execute_run(Some(&workspace)).unwrap();
     let status_report = execute_status(Some(&workspace)).unwrap();
 

@@ -11,7 +11,7 @@ fn docs_split_quick_path_and_advanced_architecture_explicitly() {
 
     assert!(readme.contains("## Quick Path Brutale"));
     assert!(readme.contains("boundline doctor --install"));
-    assert!(readme.contains("planning=copilot:gpt-5.4"));
+    assert!(readme.contains("planning=copilot:gpt-4o"));
     assert!(readme.contains("docs/architecture.md"));
 
     assert!(getting_started.contains("## Quick Path Brutale"));

@@ -4,7 +4,9 @@ use std::process::{Command, Output};
 
 use boundline::FileTraceStore;
 use boundline::adapters::trace_store::TraceStore;
-use boundline::domain::session::ActiveSessionRecord;
+use boundline::domain::session::{
+    ActiveSessionRecord, active_session_pointer_ref, session_record_ref,
+};
 use boundline::domain::trace::TraceEventType;
 use serde_json::json;
 use uuid::Uuid;
@@ -86,13 +88,18 @@ fn terminal_text(output: &Output) -> String {
 }
 
 fn load_session_record(workspace: &std::path::Path) -> ActiveSessionRecord {
-    serde_json::from_slice(&fs::read(workspace.join(".boundline").join("session.json")).unwrap())
-        .unwrap()
+    let session_id = fs::read_to_string(workspace.join(active_session_pointer_ref())).unwrap();
+    serde_json::from_slice(
+        &fs::read(workspace.join(session_record_ref(session_id.trim()))).unwrap(),
+    )
+    .unwrap()
 }
 
 fn persist_session_record(workspace: &std::path::Path, record: &ActiveSessionRecord) {
+    fs::write(workspace.join(active_session_pointer_ref()), format!("{}\n", record.session_id))
+        .unwrap();
     fs::write(
-        workspace.join(".boundline").join("session.json"),
+        workspace.join(session_record_ref(&record.session_id)),
         serde_json::to_vec_pretty(record).unwrap(),
     )
     .unwrap();
@@ -101,9 +108,8 @@ fn persist_session_record(workspace: &std::path::Path, record: &ActiveSessionRec
 #[test]
 fn bug_fix_flow_run_reports_failed_decisions_and_trace_guidance() {
     let workspace = temp_workspace();
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(&workspace, &["capture", "--goal", "Fix the failing checkout flow"])
+        run_boundline_in(&workspace, &["goal", "--goal", "Fix the failing checkout flow"])
             .status
             .code(),
         Some(0)
@@ -137,9 +143,8 @@ fn bug_fix_flow_run_reports_failed_decisions_and_trace_guidance() {
 #[test]
 fn delivery_flow_preserves_stage_projection_when_native_delivery_change_is_unavailable() {
     let workspace = temp_workspace();
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(&workspace, &["capture", "--goal", "Deliver the checkout fix end to end"])
+        run_boundline_in(&workspace, &["goal", "--goal", "Deliver the checkout fix end to end"])
             .status
             .code(),
         Some(0)
@@ -157,7 +162,7 @@ fn delivery_flow_preserves_stage_projection_when_native_delivery_change_is_unava
     assert!(status_text.contains("latest_status: failed"), "{status_text}");
     assert!(status_text.contains("active_flow: delivery"), "{status_text}");
     assert!(status_text.contains("current_stage: requirements"), "{status_text}");
-    assert!(status_text.contains("stage_progress: 1/4"), "{status_text}");
+    assert!(status_text.contains("stage_progress: 1/5"), "{status_text}");
 
     let inspect_output = run_boundline_in(&workspace, &["inspect", "--workspace", "."]);
     let inspect_text = terminal_text(&inspect_output);
@@ -169,9 +174,8 @@ fn delivery_flow_preserves_stage_projection_when_native_delivery_change_is_unava
 #[test]
 fn bug_fix_recovery_decision_is_recorded_after_initial_fix_failure() {
     let workspace = temp_workspace_with_retries(1);
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(&workspace, &["capture", "--goal", "Fix the failing checkout flow"])
+        run_boundline_in(&workspace, &["goal", "--goal", "Fix the failing checkout flow"])
             .status
             .code(),
         Some(0)
@@ -222,9 +226,8 @@ fn bug_fix_recovery_decision_is_recorded_after_initial_fix_failure() {
 #[test]
 fn flow_cannot_be_replaced_once_a_plan_exists() {
     let workspace = temp_workspace();
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(&workspace, &["capture", "--goal", "Fix the failing checkout flow"])
+        run_boundline_in(&workspace, &["goal", "--goal", "Fix the failing checkout flow"])
             .status
             .code(),
         Some(0)
@@ -236,15 +239,14 @@ fn flow_cannot_be_replaced_once_a_plan_exists() {
     let text = terminal_text(&output);
     assert_eq!(output.status.code(), Some(1), "{text}");
     assert!(text.contains("cannot replace active flow `bug-fix` with `change`"), "{text}");
-    assert!(text.contains("next_command: boundline start"), "{text}");
+    assert!(text.contains("next_command: boundline goal"), "{text}");
 }
 
 #[test]
 fn invalid_flow_state_requires_a_new_session_before_stage_execution_resumes() {
     let workspace = temp_workspace();
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(&workspace, &["capture", "--goal", "Fix the failing checkout flow"])
+        run_boundline_in(&workspace, &["goal", "--goal", "Fix the failing checkout flow"])
             .status
             .code(),
         Some(0)
@@ -263,5 +265,5 @@ fn invalid_flow_state_requires_a_new_session_before_stage_execution_resumes() {
     assert_eq!(output.status.code(), Some(1), "{text}");
     assert!(text.contains("active session is invalid: session flow state is invalid"), "{text}");
     assert!(text.contains("invalid stage index"), "{text}");
-    assert!(text.contains("next_command: boundline start"), "{text}");
+    assert!(text.contains("next_command: boundline goal"), "{text}");
 }
