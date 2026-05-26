@@ -44,7 +44,7 @@ use crate::domain::governance::{
     CanonMode, CanonModeSelectionPreference, CanonPossibleActionSummary,
     CanonRecommendedActionSummary, CanonRiskClass, CompactedCanonMemory, CouncilProfile,
     GovernanceLifecycleState, GovernanceRuntimeKind, GovernedSessionLifecycle, GovernedStageRecord,
-    MemoryCredibilityState, PacketReadiness, SystemContextBinding,
+    MemoryCredibilityState, PacketReadiness, SystemContextBinding, execution_stage_key_for_mode,
     planned_canon_mode_sequence_for_flow, planning_canon_mode_for_stage_key,
     planning_canon_mode_sequence, planning_stage_brief_ref, planning_stage_key_for_mode,
     resolved_canon_mode,
@@ -176,6 +176,19 @@ const PLANNING_DEFAULT_TARGET: &str = "workspace";
 const PLANNING_UNSPECIFIED_FLOW: &str = "unspecified";
 const SYSTEM_CONTEXT_NEW_TEXT: &str = "new";
 const SYSTEM_CONTEXT_EXISTING_TEXT: &str = "existing";
+
+// Well-known upstream Canon artifact file names used to enrich downstream
+// planning briefs with substantive content from completed stages.
+const UPSTREAM_SYSTEM_SHAPE_FILE: &str = "01-system-shape.md";
+const UPSTREAM_DOMAIN_MODEL_FILE: &str = "02-domain-model.md";
+const UPSTREAM_CONSTRAINTS_FILE: &str = "02-constraints.md";
+const UPSTREAM_ARCHITECTURE_DECISIONS_FILE: &str = "02-architecture-decisions.md";
+const UPSTREAM_PRD_FILE: &str = "07-prd.md";
+const UPSTREAM_SCOPE_CUTS_FILE: &str = "05-scope-cuts.md";
+const UPSTREAM_EVIDENCE_MAX_CHARS: usize = 4000;
+const EXECUTION_GOVERNANCE_ROOT: &str = ".boundline/governance/execution";
+const EXECUTION_STAGE_BRIEF_FILE_NAME: &str = "brief.md";
+const EXECUTION_BRIEF_MAX_DECISIONS: usize = 8;
 
 /// Computes a stable fingerprint of the inputs that determine planning
 /// governance outcomes: the goal text and the authored brief content.
@@ -1264,8 +1277,12 @@ impl SessionRuntime {
     }
 
     fn planning_stage_already_ready(&self, session: &ActiveSessionRecord, stage_key: &str) -> bool {
-        self.latest_planning_stage_record(session, stage_key)
-            .is_some_and(|record| record.lifecycle_state == GovernanceLifecycleState::GovernedReady)
+        self.latest_planning_stage_record(session, stage_key).is_some_and(|record| {
+            matches!(
+                record.lifecycle_state,
+                GovernanceLifecycleState::GovernedReady | GovernanceLifecycleState::Completed
+            )
+        })
     }
 
     fn planning_stage_has_unresolved_gate(
@@ -1491,8 +1508,13 @@ impl SessionRuntime {
                 mode.as_str()
             ))
         })?;
-        let mut stage_brief_ref =
-            self.materialize_planning_stage_brief(stage_key, mode, goal_plan, context_sources)?;
+        let mut stage_brief_ref = self.materialize_planning_stage_brief(
+            stage_key,
+            mode,
+            goal_plan,
+            context_sources,
+            &self.planning_accumulated_context(session),
+        )?;
         let stage_council = if mode == CanonMode::Discovery {
             let council_request =
                 discovery_stage_council_request(stage_key, &goal_plan.goal_text, &stage_brief_ref);
@@ -1619,6 +1641,7 @@ impl SessionRuntime {
         mode: CanonMode,
         goal_plan: &GoalPlan,
         context_sources: &PlanningContextSources,
+        accumulated_context: &[crate::domain::governance::GovernedDocumentRef],
     ) -> Result<String, SessionRuntimeError> {
         let stage_brief_ref = planning_stage_brief_ref(stage_key).ok_or_else(|| {
             SessionRuntimeError::GoalPlan(format!(
@@ -1637,17 +1660,132 @@ impl SessionRuntime {
             ))
         })?;
 
-        fs::write(
-            &stage_brief_path,
-            render_planning_stage_brief(stage_key, mode, goal_plan, context_sources),
-        )
-        .map_err(|error| {
+        let mut brief_content =
+            render_planning_stage_brief(stage_key, mode, goal_plan, context_sources);
+
+        if let Some(upstream_section) =
+            self.render_upstream_evidence_for_mode(mode, accumulated_context)
+        {
+            brief_content.push_str(&upstream_section);
+        }
+
+        fs::write(&stage_brief_path, &brief_content).map_err(|error| {
             SessionRuntimeError::GoalPlan(format!(
                 "failed to write planning stage brief for {stage_key}: {error}"
             ))
         })?;
 
         Ok(stage_brief_ref)
+    }
+
+    /// Reads completed upstream Canon artifact files and renders a mode-specific
+    /// section that provides substantive content for downstream planning briefs.
+    ///
+    /// Returns `None` when no upstream content is available (the brief remains
+    /// identical to the previous behavior for backward compatibility).
+    fn render_upstream_evidence_for_mode(
+        &self,
+        mode: CanonMode,
+        accumulated_context: &[crate::domain::governance::GovernedDocumentRef],
+    ) -> Option<String> {
+        match mode {
+            CanonMode::Architecture => {
+                self.render_architecture_upstream_evidence(accumulated_context)
+            }
+            CanonMode::Backlog => self.render_backlog_upstream_evidence(accumulated_context),
+            _ => None,
+        }
+    }
+
+    fn render_architecture_upstream_evidence(
+        &self,
+        accumulated_context: &[crate::domain::governance::GovernedDocumentRef],
+    ) -> Option<String> {
+        let system_shaping_ref =
+            accumulated_context.iter().find(|doc| doc.canon_mode == CanonMode::SystemShaping);
+        let requirements_ref =
+            accumulated_context.iter().find(|doc| doc.canon_mode == CanonMode::Requirements);
+
+        let mut section = String::new();
+        let mut has_content = false;
+
+        if let Some(doc_ref) = system_shaping_ref {
+            let packet_dir = self.workspace_ref.join(&doc_ref.packet_ref);
+            if let Some(content) =
+                read_upstream_artifact_capped(&packet_dir, UPSTREAM_SYSTEM_SHAPE_FILE)
+            {
+                section.push_str("\n\n## Boundaries\n\n### System Context\n\n");
+                section.push_str(&content);
+                has_content = true;
+            }
+            if let Some(content) =
+                read_upstream_artifact_capped(&packet_dir, UPSTREAM_DOMAIN_MODEL_FILE)
+            {
+                section.push_str("\n\n### Domain Model\n\n");
+                section.push_str(&content);
+                has_content = true;
+            }
+        }
+
+        if let Some(doc_ref) = requirements_ref {
+            let packet_dir = self.workspace_ref.join(&doc_ref.packet_ref);
+            if let Some(content) =
+                read_upstream_artifact_capped(&packet_dir, UPSTREAM_CONSTRAINTS_FILE)
+            {
+                section.push_str("\n\n### Constraints\n\n");
+                section.push_str(&content);
+                has_content = true;
+            }
+        }
+
+        if has_content { Some(section) } else { None }
+    }
+
+    fn render_backlog_upstream_evidence(
+        &self,
+        accumulated_context: &[crate::domain::governance::GovernedDocumentRef],
+    ) -> Option<String> {
+        let architecture_ref =
+            accumulated_context.iter().find(|doc| doc.canon_mode == CanonMode::Architecture);
+        let requirements_ref =
+            accumulated_context.iter().find(|doc| doc.canon_mode == CanonMode::Requirements);
+
+        let mut section = String::new();
+        let mut has_content = false;
+
+        if let Some(doc_ref) = architecture_ref {
+            let packet_dir = self.workspace_ref.join(&doc_ref.packet_ref);
+            if let Some(content) =
+                read_upstream_artifact_capped(&packet_dir, UPSTREAM_ARCHITECTURE_DECISIONS_FILE)
+            {
+                section.push_str("\n\n## Planning Scope\n\n### Architecture Decisions\n\n");
+                section.push_str(&content);
+                has_content = true;
+            }
+        }
+
+        if let Some(doc_ref) = requirements_ref {
+            let packet_dir = self.workspace_ref.join(&doc_ref.packet_ref);
+            if let Some(content) = read_upstream_artifact_capped(&packet_dir, UPSTREAM_PRD_FILE) {
+                let heading = if has_content {
+                    "\n\n### Product Scope\n\n"
+                } else {
+                    "\n\n## Planning Scope\n\n### Product Scope\n\n"
+                };
+                section.push_str(heading);
+                section.push_str(&content);
+                has_content = true;
+            }
+            if let Some(content) =
+                read_upstream_artifact_capped(&packet_dir, UPSTREAM_SCOPE_CUTS_FILE)
+            {
+                section.push_str("\n\n### Scope Cuts\n\n");
+                section.push_str(&content);
+                has_content = true;
+            }
+        }
+
+        if has_content { Some(section) } else { None }
     }
 
     fn execute_discovery_stage_council(
@@ -2674,6 +2812,16 @@ impl SessionRuntime {
             &mut native_task_context,
             task_status_for_condition(reason.condition),
         );
+        if task_status_for_condition(reason.condition) == TaskStatus::Succeeded {
+            self.execute_post_implementation_governance(
+                session,
+                &runtime,
+                &mut goal_plan,
+                &decisions,
+                &mut native_task_context,
+                &mut trace,
+            )?;
+        }
         let native_review = if task_status_for_condition(reason.condition) == TaskStatus::Succeeded
         {
             let native_review = self.execute_native_review_sequence(
@@ -2962,6 +3110,291 @@ impl SessionRuntime {
             .rposition(|event| event.event_type == TraceEventType::TerminalRecorded)
             .unwrap_or(trace.events.len());
         trace.events.splice(insert_at..insert_at, events);
+    }
+
+    /// Invokes Canon governance with execution-time modes after the decision
+    /// loop produces implementation artifacts. Only activates when the session
+    /// has an active governance lifecycle backed by the Canon runtime and the
+    /// Canon CLI command is available.
+    fn execute_post_implementation_governance(
+        &self,
+        session: &mut ActiveSessionRecord,
+        runtime: &FixtureRuntime,
+        goal_plan: &mut GoalPlan,
+        decisions: &[Decision],
+        native_context: &mut TaskContext,
+        trace: &mut ExecutionTrace,
+    ) -> Result<(), SessionRuntimeError> {
+        let Some(lifecycle) = session.governance_lifecycle.as_ref() else {
+            return Ok(());
+        };
+        if lifecycle.governance_runtime != GovernanceRuntimeKind::Canon {
+            return Ok(());
+        }
+        let Some(governance) = runtime.profile.governance.as_ref() else {
+            return Ok(());
+        };
+        let Some(canon) = governance.canon.as_ref() else {
+            return Ok(());
+        };
+        if !runtime_command_available(&canon.command) {
+            return Ok(());
+        }
+        if canon_workspace_scope_mismatch_reason(&self.workspace_ref).is_some() {
+            return Ok(());
+        }
+
+        let goal = goal_plan.goal_text.clone();
+        let execution_modes: &[CanonMode] = &[CanonMode::Implementation, CanonMode::Verification];
+
+        for &mode in execution_modes {
+            let Some(stage_key) = execution_stage_key_for_mode(mode) else {
+                continue;
+            };
+            let stage_brief_ref = self.materialize_execution_stage_brief(
+                mode,
+                decisions,
+                goal_plan,
+                native_context,
+                &runtime.profile.read_targets,
+            )?;
+            let governance_attempt_id = Uuid::new_v4().to_string();
+            let previous_attempt_id = session.governance_lifecycle.as_ref().and_then(|lifecycle| {
+                lifecycle
+                    .stage_records
+                    .iter()
+                    .rev()
+                    .find(|record| record.stage_key == stage_key)
+                    .map(|record| record.governance_attempt_id.clone())
+            });
+            let input_documents = planning_governance_input_documents(
+                session.authored_brief.as_ref(),
+                &stage_brief_ref,
+                goal_plan.compacted_canon_memory.as_ref(),
+            );
+            let read_targets =
+                execution_governance_read_targets(native_context, &runtime.profile.read_targets);
+
+            let request = GovernanceRuntimeRequest {
+                request_kind: GovernanceRequestKind::Start,
+                governance_attempt_id: governance_attempt_id.clone(),
+                stage_key: stage_key.to_string(),
+                goal: goal.clone(),
+                workspace_ref: self.workspace_ref.to_string_lossy().to_string(),
+                autopilot: true,
+                mode: Some(mode),
+                system_context: canon.default_system_context,
+                risk: canon.default_risk.clone().map(|risk| {
+                    CanonRiskClass::canonicalize_label(&risk).map(str::to_string).unwrap_or(risk)
+                }),
+                zone: canon.default_zone.clone().map(|zone| {
+                    CanonAuthorityZone::canonicalize_label(&zone)
+                        .map(str::to_string)
+                        .unwrap_or(zone)
+                }),
+                owner: canon.default_owner.clone().map(|owner| {
+                    CanonIntendedPersona::canonicalize_label(&owner)
+                        .map(str::to_string)
+                        .unwrap_or(owner)
+                }),
+                run_ref: None,
+                packet_ref: None,
+                bounded_context: crate::adapters::governance_runtime::GovernanceBoundedContext {
+                    read_targets: read_targets.clone(),
+                    stage_brief_ref: Some(stage_brief_ref.clone()),
+                    reused_packets: Vec::new(),
+                },
+                input_documents,
+            };
+
+            trace.record_event(
+                TraceEventType::GovernanceStarted,
+                None,
+                goal_plan.proposal_revision,
+                json!({
+                    "stage_key": stage_key,
+                    "runtime": GovernanceRuntimeKind::Canon,
+                    "canon_mode": mode,
+                    "phase": "post-implementation",
+                    "stage_brief_ref": stage_brief_ref,
+                    "read_targets": read_targets,
+                }),
+            );
+
+            let response = match CanonCliRuntime::new(canon.command.clone())
+                .with_working_directory(&self.workspace_ref)
+                .execute(&request)
+            {
+                Ok(response) => response,
+                Err(error) => {
+                    trace.record_event(
+                        TraceEventType::GovernanceCompleted,
+                        None,
+                        goal_plan.proposal_revision,
+                        json!({
+                            "stage_key": stage_key,
+                            "canon_mode": mode,
+                            "status": "error",
+                            "message": error.to_string(),
+                        }),
+                    );
+                    break;
+                }
+            };
+
+            let blocked_reason = matches!(
+                response.status,
+                GovernanceLifecycleState::AwaitingApproval
+                    | GovernanceLifecycleState::Blocked
+                    | GovernanceLifecycleState::Failed
+            )
+            .then(|| response.message.clone());
+
+            let record = GovernedStageRecord {
+                stage_key: stage_key.to_string(),
+                runtime: GovernanceRuntimeKind::Canon,
+                lifecycle_state: response.status,
+                required: false,
+                autopilot_enabled: true,
+                approval_state: response.approval_state,
+                canon_run_ref: response.run_ref.clone(),
+                governance_attempt_id,
+                previous_governance_attempt_id: previous_attempt_id,
+                packet_ref: response.packet.as_ref().map(|packet| packet.packet_ref.clone()),
+                decision_ref: None,
+                stage_council: None,
+                blocked_reason: blocked_reason.clone(),
+            };
+
+            let compacted_canon_memory = compacted_canon_memory_from_response(
+                stage_key,
+                GovernanceRuntimeKind::Canon,
+                &response,
+            );
+            if let Some(memory) = compacted_canon_memory.clone() {
+                goal_plan.compacted_canon_memory = Some(memory);
+            }
+            let projection = governance_projection_snapshot(
+                native_context,
+                stage_key,
+                response.packet.as_ref(),
+                response.approval_state,
+            )
+            .map_err(|error| SessionRuntimeError::GovernancePatch(error.to_string()))?;
+            let patch = governance_state_patch(
+                &record,
+                response.packet.as_ref(),
+                None,
+                None,
+                compacted_canon_memory.as_ref(),
+                &projection,
+            )
+            .map_err(|error| SessionRuntimeError::GovernancePatch(error.to_string()))?;
+            native_context.apply_state_patch(&patch);
+
+            trace.record_event(
+                TraceEventType::GovernanceCompleted,
+                None,
+                goal_plan.proposal_revision,
+                json!({
+                    "stage_key": stage_key,
+                    "canon_mode": mode,
+                    "packet_ref": response.packet.as_ref().map(|packet| packet.packet_ref.clone()),
+                    "packet_readiness": response.packet.as_ref().map(|packet| packet.readiness),
+                    "document_refs": response.packet.as_ref().map(|packet| packet.document_refs.clone()).unwrap_or_default(),
+                    "headline": response.packet.as_ref().map(|packet| packet.headline.clone()).unwrap_or_else(|| response.message.clone()),
+                    "status": response.status,
+                    "approval_state": response.approval_state,
+                    "run_ref": response.run_ref,
+                    "latest_governance_runtime_state": projection.runtime_state,
+                    "latest_governance_rollout_profile": projection.rollout_profile,
+                    "latest_governance_reason": projection.reason,
+                    "latest_governance_contract_lines": projection.contract_lines,
+                    "latest_governance_approval_provenance": projection.approval_provenance,
+                }),
+            );
+
+            self.upsert_execution_stage_record(session, record);
+
+            if response.status == GovernanceLifecycleState::GovernedReady
+                && response.packet.is_some()
+            {
+                let doc_ref = governed_document_ref_from_response(stage_key, mode, &response);
+                append_governed_document_to_lifecycle(session, doc_ref);
+            }
+
+            if response.status != GovernanceLifecycleState::GovernedReady {
+                break;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn upsert_execution_stage_record(
+        &self,
+        session: &mut ActiveSessionRecord,
+        record: GovernedStageRecord,
+    ) {
+        let Some(lifecycle) = session.governance_lifecycle.as_mut() else {
+            return;
+        };
+
+        if let Some(existing_index) = lifecycle
+            .stage_records
+            .iter()
+            .position(|existing| existing.stage_key == record.stage_key)
+        {
+            lifecycle.stage_records[existing_index] = record;
+        } else {
+            lifecycle.stage_records.push(record);
+        }
+    }
+
+    fn materialize_execution_stage_brief(
+        &self,
+        mode: CanonMode,
+        decisions: &[Decision],
+        goal_plan: &GoalPlan,
+        native_context: &TaskContext,
+        fallback_targets: &[String],
+    ) -> Result<String, SessionRuntimeError> {
+        let stage_brief_ref = format!(
+            "{}/{}/{}",
+            EXECUTION_GOVERNANCE_ROOT,
+            mode.as_str(),
+            EXECUTION_STAGE_BRIEF_FILE_NAME
+        );
+        let stage_brief_path = self.workspace_ref.join(&stage_brief_ref);
+        let Some(parent) = stage_brief_path.parent() else {
+            return Err(SessionRuntimeError::ExecutionInvariant(format!(
+                "execution stage brief path has no parent for mode {}",
+                mode.as_str()
+            )));
+        };
+        fs::create_dir_all(parent).map_err(|error| {
+            SessionRuntimeError::GoalPlan(format!(
+                "failed to create execution stage brief directory for {}: {error}",
+                mode.as_str()
+            ))
+        })?;
+        fs::write(
+            &stage_brief_path,
+            render_execution_stage_brief(
+                mode,
+                goal_plan,
+                decisions,
+                native_context,
+                fallback_targets,
+            ),
+        )
+        .map_err(|error| {
+            SessionRuntimeError::GoalPlan(format!(
+                "failed to write execution stage brief for {}: {error}",
+                mode.as_str()
+            ))
+        })?;
+        Ok(stage_brief_ref)
     }
 
     fn execute_native_review_sequence(
@@ -5886,6 +6319,58 @@ fn parse_planning_system_context(raw: &str) -> Option<SystemContextBinding> {
     }
 }
 
+/// Reads a well-known artifact file from a Canon packet directory and returns
+/// its content capped at `UPSTREAM_EVIDENCE_MAX_CHARS`. Returns `None` when the
+/// file does not exist or is empty, ensuring graceful degradation when upstream
+/// stages produced fewer artifacts than expected.
+fn read_upstream_artifact_capped(packet_dir: &Path, file_name: &str) -> Option<String> {
+    let path = packet_dir.join(file_name);
+    let content = fs::read_to_string(&path).ok()?;
+    let trimmed = content.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.chars().count() <= UPSTREAM_EVIDENCE_MAX_CHARS {
+        return Some(trimmed.to_string());
+    }
+    Some(truncate_with_ellipsis_marker(trimmed, UPSTREAM_EVIDENCE_MAX_CHARS))
+}
+
+fn truncate_with_ellipsis_marker(text: &str, max_chars: usize) -> String {
+    let Some((end_index, _)) = text.char_indices().nth(max_chars) else {
+        return text.to_string();
+    };
+    let mut truncated = text[..end_index].to_string();
+    truncated.push_str("\n\n[truncated]");
+    truncated
+}
+
+fn execution_governance_read_targets(
+    native_context: &TaskContext,
+    fallback_targets: &[String],
+) -> Vec<String> {
+    let mut targets = BTreeSet::new();
+    for state_key in [LATEST_CHANGED_FILES_KEY, "changed_files"] {
+        if let Some(changed_files) = native_context.state.get(state_key).and_then(Value::as_array) {
+            for changed_file in changed_files.iter().filter_map(Value::as_str) {
+                if !changed_file.trim().is_empty() {
+                    targets.insert(changed_file.to_string());
+                }
+            }
+        }
+    }
+
+    if targets.is_empty() {
+        for target in fallback_targets {
+            if !target.trim().is_empty() {
+                targets.insert(target.clone());
+            }
+        }
+    }
+
+    targets.into_iter().collect()
+}
+
 fn missing_planning_governance_field(mode: CanonMode, field: &'static str) -> SessionRuntimeError {
     SessionRuntimeError::GoalPlan(format!(
         "planning governance for Canon mode {} requires field '{field}'",
@@ -6004,7 +6489,11 @@ fn render_planning_stage_brief(
     }
 
     brief.push_str("\n## Unknowns\n");
-    for unknown in planning_unknown_markers(goal_plan, context_sources) {
+    for unknown in planning_unknown_markers(
+        &goal_plan.goal_text,
+        goal_plan.verification_strategy.as_deref(),
+        !context_sources.authored_input_sources.is_empty(),
+    ) {
         brief.push_str("- ");
         brief.push_str(&unknown);
         brief.push('\n');
@@ -6044,6 +6533,99 @@ fn render_planning_stage_brief(
 
     brief.push_str("\n## Discovery Handoff\n");
     brief.push_str("- handoff: use known facts as bounded evidence, preserve unknowns as questions, and reject the packet if discovery cannot convert assumptions into actionable requirements.\n");
+
+    brief
+}
+
+fn render_execution_stage_brief(
+    mode: CanonMode,
+    goal_plan: &GoalPlan,
+    decisions: &[Decision],
+    native_context: &TaskContext,
+    fallback_targets: &[String],
+) -> String {
+    let changed_files = execution_governance_read_targets(native_context, fallback_targets);
+    let validation_status = native_context
+        .state
+        .get(LATEST_VALIDATION_STATUS_KEY)
+        .and_then(Value::as_str)
+        .unwrap_or("unknown");
+
+    let mut brief = format!(
+        concat!(
+            "# Execution Governance Brief\n\n",
+            "## Overview\n",
+            "- canon_mode: {mode}\n",
+            "- goal: {goal}\n",
+            "- plan_revision: {plan_revision}\n"
+        ),
+        mode = mode.as_str(),
+        goal = goal_plan.goal_text,
+        plan_revision = goal_plan.proposal_revision,
+    );
+
+    brief.push_str("\n## Changed Files\n");
+    if changed_files.is_empty() {
+        brief.push_str("- no bounded file targets were recorded\n");
+    } else {
+        for changed_file in &changed_files {
+            brief.push_str("- ");
+            brief.push_str(changed_file);
+            brief.push('\n');
+        }
+    }
+
+    brief.push_str("\n## Validation\n");
+    brief.push_str("- status: ");
+    brief.push_str(validation_status);
+    brief.push('\n');
+
+    if let Some(memory) = goal_plan.compacted_canon_memory.as_ref() {
+        brief.push_str("\n## Canon Memory\n");
+        brief.push_str("- summary: ");
+        brief.push_str(&memory.summary_text());
+        brief.push('\n');
+        brief.push_str("- credibility: ");
+        brief.push_str(memory.credibility.as_str());
+        brief.push('\n');
+    }
+
+    brief.push_str("\n## Decision Summary\n");
+    let mut rendered_any_decision = false;
+    for decision in decisions
+        .iter()
+        .filter(|decision| decision.status.is_terminal())
+        .take(EXECUTION_BRIEF_MAX_DECISIONS)
+    {
+        let decision_type = match decision.decision_type {
+            DecisionType::Analyze => "analyze",
+            DecisionType::Code => "code",
+            DecisionType::Test => "test",
+            DecisionType::Fix => "fix",
+            DecisionType::Replan => "replan",
+        };
+        let decision_status = match decision.status {
+            crate::domain::decision::DecisionStatus::Pending => "pending",
+            crate::domain::decision::DecisionStatus::Dispatched => "dispatched",
+            crate::domain::decision::DecisionStatus::Verified => "verified",
+            crate::domain::decision::DecisionStatus::Failed => "failed",
+            crate::domain::decision::DecisionStatus::Recovered => "recovered",
+        };
+        brief.push_str("- ");
+        brief.push_str(decision_type);
+        brief.push_str(": ");
+        brief.push_str(&decision.target);
+        brief.push_str(" (status: ");
+        brief.push_str(decision_status);
+        brief.push_str(") -> ");
+        brief.push_str(&decision.expected_outcome);
+        brief.push('\n');
+        rendered_any_decision = true;
+    }
+
+    if !rendered_any_decision {
+        brief.push_str("- no terminal decisions were recorded\n");
+    }
 
     brief
 }
@@ -6430,16 +7012,17 @@ fn plain_goal_planning_clarification_prompt() -> String {
     "Answer these planning questions before Boundline can continue planning: What exact outcome should Boundline deliver? Which domain entities and relationships are in scope? Which API operations, endpoints, or RPC methods are in scope? What persistence and OAuth/security assumptions are binding? Which validation command or acceptance evidence should prove the slice?".to_string()
 }
 
-fn planning_unknown_markers(
-    goal_plan: &GoalPlan,
-    context_sources: &PlanningContextSources,
+pub fn planning_unknown_markers(
+    goal_text: &str,
+    verification_strategy: Option<&str>,
+    has_authored_inputs: bool,
 ) -> Vec<String> {
-    let lower = goal_plan.goal_text.to_ascii_lowercase();
+    let lower = goal_text.to_ascii_lowercase();
     let mut unknowns = Vec::new();
     if !lower.contains("validation")
         && !lower.contains("cargo test")
         && !lower.contains("acceptance")
-        && goal_plan.verification_strategy.as_deref().unwrap_or("none") == "none"
+        && verification_strategy.unwrap_or("none") == "none"
     {
         unknowns.push("validation_target requires operator confirmation".to_string());
     }
@@ -6450,13 +7033,13 @@ fn planning_unknown_markers(
     {
         unknowns.push("persistence assumptions require operator confirmation".to_string());
     }
-    if context_sources.authored_input_sources.is_empty() {
+    if !has_authored_inputs {
         unknowns.push("authored source provenance is unavailable".to_string());
     }
 
     // Flag gaps detected by the structured goal decomposition so Canon can
     // explicitly mark them as requiring operator input rather than guessing.
-    let decomposition = decompose_goal_text(&goal_plan.goal_text);
+    let decomposition = decompose_goal_text(goal_text);
     if decomposition.outcome.is_none() {
         unknowns.push("desired outcome could not be extracted from goal text and requires operator confirmation".to_string());
     }

@@ -947,6 +947,17 @@ mod tests {
         workspace
     }
 
+    fn temp_distinct_canon_paths() -> (PathBuf, PathBuf) {
+        let root = std::env::temp_dir().join(format!("boundline-canon-shadow-{}", Uuid::new_v4()));
+        let selected_canon_path = root.join("selected/bin/canon");
+        let named_canon_path = root.join("named/bin/canon");
+        fs::create_dir_all(selected_canon_path.parent().unwrap()).unwrap();
+        fs::create_dir_all(named_canon_path.parent().unwrap()).unwrap();
+        fs::write(&selected_canon_path, "selected canon\n").unwrap();
+        fs::write(&named_canon_path, "named canon\n").unwrap();
+        (selected_canon_path, named_canon_path)
+    }
+
     fn write_project_memory_surface(workspace: &Path) {
         let project_dir = workspace.join("docs/project");
         fs::create_dir_all(&project_dir).unwrap();
@@ -1265,39 +1276,47 @@ mod tests {
 
     #[test]
     fn provider_readiness_context_reports_named_canon_shadowing_note() {
+        let (selected_canon_path, named_canon_path) = temp_distinct_canon_paths();
+        let selected_canon_display = selected_canon_path.display().to_string();
+        let named_canon_display = named_canon_path.display().to_string();
         let (status, message, actions) = provider_readiness_context_from_status_with_named_path(
             Path::new("/tmp/workspace"),
             Some(CanonInstallStatus {
                 state: CompanionState::AlreadySatisfied,
                 version: Some(SUPPORTED_CANON_VERSION.to_string()),
-                location: Some(PathBuf::from("/opt/homebrew/opt/canon/bin/canon")),
+                location: Some(selected_canon_path),
                 bundled_with_boundline: false,
                 message: "Canon is ready".to_string(),
                 suggested_actions: Vec::new(),
                 surface_verification: None,
             }),
-            Some(Path::new("/opt/homebrew/bin/canon")),
+            Some(named_canon_path.as_path()),
         );
 
         assert_eq!(status, DiagnosticsStatus::Passed);
         assert!(message.contains("provider readiness is confirmed"));
-        assert!(message.contains("named `canon` resolves to /opt/homebrew/bin/canon"));
-        assert!(message.contains("/opt/homebrew/opt/canon/bin/canon"));
+        assert!(message.contains(&format!("named `canon` resolves to {named_canon_display}")));
+        assert!(message.contains(&selected_canon_display));
         assert!(actions.is_empty());
     }
 
     #[test]
     fn canon_command_resolution_check_surfaces_shadowed_named_command() {
+        let (selected_canon_path, named_canon_path) = temp_distinct_canon_paths();
+        let selected_canon_display = selected_canon_path.display().to_string();
+        let named_canon_display = named_canon_path.display().to_string();
         let check = canon_command_resolution_check(
-            Some(Path::new("/opt/homebrew/opt/canon/bin/canon")),
-            Some(Path::new("/opt/homebrew/bin/canon")),
+            Some(selected_canon_path.as_path()),
+            Some(named_canon_path.as_path()),
         )
         .unwrap();
 
         assert_eq!(check.name, CANON_COMMAND_RESOLUTION_CHECK_NAME);
         assert_eq!(check.status, DiagnosticsStatus::Advisory);
-        assert!(check.message.contains("named `canon` resolves to /opt/homebrew/bin/canon"));
-        assert!(check.message.contains("/opt/homebrew/opt/canon/bin/canon"));
+        assert!(
+            check.message.contains(&format!("named `canon` resolves to {named_canon_display}"))
+        );
+        assert!(check.message.contains(&selected_canon_display));
     }
 
     #[test]

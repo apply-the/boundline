@@ -12,7 +12,12 @@ Human-readable Boundline answers should stay compact by default across the CLI a
 
 **IMPORTANT FORMATTING RULES:**
 1. You MUST translate all state information into natural, conversational language. DO NOT use raw JSON keys, snake_case strings, or bulleted lists of machine fields (e.g., do not output `next_command: boundline plan` or `latest_status: goal_captured`). Integrate the information naturally into your reply.
-2. For follow-up actions (like the next command), DO NOT output plain text like "Prossimo step consigliato: `/boundline-plan`". Instead, provide a clickable Markdown command link or button (e.g., `[Run /boundline-plan](command:copilot.chat.execute?%5B%22%2Fboundline-plan%22%5D)` or whichever format your host uses for clickable chat actions).
+2. For follow-up actions (like the next command), DO NOT output plain text like "Prossimo step consigliato: `/boundline:plan`". Instead, provide a clickable Markdown action for the active host.
+3. Follow host-specific action rendering rules for `assistant_resume_command` or `assistant_next_command`:
+   - Copilot prompt surfaces: use `command:copilot.chat.execute` links, for example `[▶ Run /boundline-plan](command:copilot.chat.execute?%5B%22%2Fboundline-plan%22%5D)`.
+   - Codex, Claude, and Antigravity package surfaces: render host-native slash command actions using `/boundline:*` command ids (for example `/boundline:plan`), and do not emit Copilot-specific URIs.
+   - Cursor copy-ready surfaces: render deterministic fallback actions as slash command text or CLI follow-up guidance; do not claim verified clickable URI parity.
+4. When both an assistant-safe route (`assistant_resume_command` or `assistant_next_command`) and a raw CLI/backend continuation (`resume_command` or `next_command`) are available, show only the assistant-safe route to the user. Keep the raw CLI command for hidden shell execution only. Do not present equivalent continuations such as `/boundline-run`, `boundline run`, and `boundline orchestrate --assistant-host ...` as parallel user-facing alternatives unless the user explicitly asks for backend details.
 
 The runtime also persists the latest compact operator briefs under `.boundline/briefs/goal.md`, `.boundline/briefs/plan.md`, and `.boundline/briefs/run.md`. Treat those files as runtime-owned latest summaries for the active session. They complement, but do not replace, stage-specific governed artifacts such as `.boundline/governance/planning/<stage>/brief.md` and Canon packet documents.
 

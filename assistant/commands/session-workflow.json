@@ -35,6 +35,33 @@
     "copilot": "repo-local-full",
     "antigravity": "repo-local-full"
   },
+  "hostActionRendering": {
+    "copilot": {
+      "actionStyle": "copilot-command-uri",
+      "commandIdStyle": "/boundline-*",
+      "notes": "Use command:copilot.chat.execute links for assistant-safe routes."
+    },
+    "codex": {
+      "actionStyle": "host-native-slash-command",
+      "commandIdStyle": "/boundline:*",
+      "notes": "Render host-native slash command actions."
+    },
+    "claude": {
+      "actionStyle": "host-native-slash-command",
+      "commandIdStyle": "/boundline:*",
+      "notes": "Render host-native slash command actions."
+    },
+    "antigravity": {
+      "actionStyle": "host-native-slash-command",
+      "commandIdStyle": "/boundline:*",
+      "notes": "Render host-native slash command actions; preserve workflow-first guidance when relevant."
+    },
+    "cursor": {
+      "actionStyle": "copy-ready-fallback",
+      "commandIdStyle": "/boundline:*",
+      "notes": "Cursor remains copy-ready-assets; do not claim verified clickable URI parity."
+    }
+  },
   "defaultPalette": [
     "/boundline:goal",
     "/boundline:plan",

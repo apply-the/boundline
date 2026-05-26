@@ -333,6 +333,69 @@ fn write_fake_canon_command(workspace: &Path) -> PathBuf {
     command_path
 }
 
+#[cfg(unix)]
+fn write_fake_execution_canon_command(workspace: &Path) -> (PathBuf, PathBuf) {
+    let requests_path = workspace.join("fake-canon-requests.ndjson");
+    let implementation_packet_dir = workspace.join(".canon/execution/implementation");
+    let verification_packet_dir = workspace.join(".canon/execution/verification");
+    fs::create_dir_all(&implementation_packet_dir).unwrap();
+    fs::create_dir_all(&verification_packet_dir).unwrap();
+    fs::write(implementation_packet_dir.join("brief.md"), "implementation packet\n").unwrap();
+    fs::write(verification_packet_dir.join("brief.md"), "verification packet\n").unwrap();
+
+    let implementation_response_path = workspace.join("fake-canon-implementation-response.json");
+    fs::write(
+        &implementation_response_path,
+        json!({
+            "status": "governed_ready",
+            "approval_state": "not_needed",
+            "run_ref": "canon-run-implementation",
+            "packet_ref": ".canon/execution/implementation",
+            "expected_document_refs": [".canon/execution/implementation/brief.md"],
+            "document_refs": [".canon/execution/implementation/brief.md"],
+            "packet_readiness": "reusable",
+            "headline": "implementation governance ready",
+            "message": "implementation governance completed"
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let verification_response_path = workspace.join("fake-canon-verification-response.json");
+    fs::write(
+        &verification_response_path,
+        json!({
+            "status": "governed_ready",
+            "approval_state": "not_needed",
+            "run_ref": "canon-run-verification",
+            "packet_ref": ".canon/execution/verification",
+            "expected_document_refs": [".canon/execution/verification/brief.md"],
+            "document_refs": [".canon/execution/verification/brief.md"],
+            "packet_readiness": "reusable",
+            "headline": "verification governance ready",
+            "message": "verification governance completed"
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let command_path = workspace.join("fake-execution-canon");
+    fs::write(
+        &command_path,
+        format!(
+            "#!/bin/sh\nrequest=$(cat)\nprintf '%s\\n' \"$request\" >> '{}'\nif printf '%s' \"$request\" | grep -q '\"mode\":\"verification\"'; then\n  cat '{}'\nelse\n  cat '{}'\nfi\n",
+            requests_path.to_string_lossy(),
+            verification_response_path.to_string_lossy(),
+            implementation_response_path.to_string_lossy(),
+        ),
+    )
+    .unwrap();
+    let mut permissions = fs::metadata(&command_path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&command_path, permissions).unwrap();
+    (command_path, requests_path)
+}
+
 fn manual_runtime() -> FixtureRuntime {
     FixtureRuntime {
         profile: WorkspaceExecutionProfile {
@@ -2660,6 +2723,153 @@ fn plan_task_executes_canon_planning_requests_and_persists_stage_records() {
 
 #[cfg(unix)]
 #[test]
+fn plan_task_skips_canon_for_completed_planning_stages() {
+    let workspace = temp_workspace("boundline-runtime-plan-canon-completed-skip");
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::create_dir_all(workspace.join("tests")).unwrap();
+    fs::write(
+        workspace.join("src/lib.rs"),
+        "pub fn add(left: i32, right: i32) -> i32 { left + right }\n",
+    )
+    .unwrap();
+    fs::write(
+        workspace.join("brief.md"),
+        "Deliver the feature through requirements, architecture, backlog, and implementation for src/lib.rs.\n",
+    )
+    .unwrap();
+
+    let canon_command = write_fake_canon_command(&workspace);
+    fs::write(
+        workspace.join(".boundline/execution.json"),
+        serde_json::to_string_pretty(&WorkspaceExecutionProfile {
+            name: "session-runtime-profile".to_string(),
+            read_targets: vec!["src/lib.rs".to_string()],
+            validation_command: ExecutionCommand {
+                program: "cargo".to_string(),
+                args: vec!["test".to_string(), "--quiet".to_string()],
+            },
+            attempts: vec![ExecutionAttemptDefinition {
+                attempt_id: "plan-execution".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left + right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+            adaptive: None,
+            limits: RunLimits::default(),
+            governance: Some(GovernanceProfile {
+                default_runtime: GovernanceRuntimeKind::Canon,
+                canon: Some(CanonRuntimeConfig {
+                    command: canon_command.to_string_lossy().into_owned(),
+                    default_owner: Some("platform".to_string()),
+                    default_risk: Some("medium".to_string()),
+                    default_zone: Some("engineering".to_string()),
+                    default_system_context: Some(SystemContextBinding::Existing),
+                }),
+                stages: Vec::new(),
+            }),
+            review: None,
+            legacy_source: None,
+        })
+        .unwrap(),
+    )
+    .unwrap();
+
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut session = ActiveSessionRecord {
+        session_id: "session-runtime-completed".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: None,
+        authored_brief: Some(
+            normalize_inputs_with_governance(
+                &workspace,
+                Some("Deliver a governed feature"),
+                &[PathBuf::from("brief.md")],
+                Some(GovernanceIntent {
+                    requested: true,
+                    runtime_preference: Some(GovernanceRuntimeKind::Canon),
+                    risk: Some("medium".to_string()),
+                    zone: Some("engineering".to_string()),
+                    owner: Some("platform".to_string()),
+                    explicit_mode: None,
+                    explicit_no_canon: false,
+                }),
+            )
+            .unwrap(),
+        ),
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: None,
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Initialized,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 10,
+        governance_lifecycle: Some(GovernedSessionLifecycle {
+            governance_runtime: GovernanceRuntimeKind::Canon,
+            explicit_opt_out: false,
+            mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+            selected_mode: None,
+            selected_mode_sequence: Vec::new(),
+            latest_reasoning_profile: None,
+            current_stage_index: 0,
+            stage_records: Vec::new(),
+            accumulated_context: Vec::new(),
+            terminal_reason: None,
+            planning_input_fingerprint: None,
+        }),
+        project_scale: None,
+        delight_feedback: None,
+        latest_voting: None,
+    };
+
+    runtime.capture_goal(&mut session, "Deliver a governed feature").unwrap();
+    runtime.select_flow(&mut session, "delivery").unwrap();
+    runtime.plan_task(&mut session, None, false).unwrap();
+
+    // All 4 stages should be GovernedReady after the first plan_task call.
+    let lifecycle = session.governance_lifecycle.as_ref().unwrap();
+    assert_eq!(lifecycle.stage_records.len(), 4);
+    assert!(
+        lifecycle
+            .stage_records
+            .iter()
+            .all(|record| record.lifecycle_state == GovernanceLifecycleState::GovernedReady)
+    );
+
+    // Simulate complete_planning_stage: mark first two stages as Completed.
+    let lifecycle = session.governance_lifecycle.as_mut().unwrap();
+    lifecycle.stage_records[0].lifecycle_state = GovernanceLifecycleState::Completed;
+    lifecycle.stage_records[1].lifecycle_state = GovernanceLifecycleState::Completed;
+
+    // Re-plan: the fix ensures Completed stages are skipped, not re-executed.
+    runtime.plan_task(&mut session, None, false).unwrap();
+
+    let lifecycle = session.governance_lifecycle.as_ref().unwrap();
+    assert_eq!(lifecycle.stage_records.len(), 4);
+    assert_eq!(
+        lifecycle.stage_records[0].lifecycle_state,
+        GovernanceLifecycleState::Completed,
+        "first completed stage should remain Completed, not re-executed"
+    );
+    assert_eq!(
+        lifecycle.stage_records[1].lifecycle_state,
+        GovernanceLifecycleState::Completed,
+        "second completed stage should remain Completed, not re-executed"
+    );
+    assert_eq!(lifecycle.stage_records[2].lifecycle_state, GovernanceLifecycleState::GovernedReady);
+    assert_eq!(lifecycle.stage_records[3].lifecycle_state, GovernanceLifecycleState::GovernedReady);
+}
+
+#[cfg(unix)]
+#[test]
 fn plan_task_adopts_workspace_canon_governance_without_explicit_session_selection() {
     let workspace = temp_workspace("boundline-runtime-plan-canon-autoadopt");
     fs::create_dir_all(workspace.join("src")).unwrap();
@@ -3839,6 +4049,146 @@ fn run_to_terminal_executes_provider_adjudication_for_flow_selected_goal_plans()
             Ok(())
         },
     )
+}
+
+#[cfg(unix)]
+#[test]
+fn run_to_terminal_executes_post_implementation_canon_governance()
+-> Result<(), Box<dyn std::error::Error>> {
+    let workspace = temp_workspace("boundline-runtime-execution-canon");
+    fs::create_dir_all(workspace.join("src"))?;
+    fs::write(
+        workspace.join("src/lib.rs"),
+        "fn compute(left: i32, right: i32) -> i32 {\n    left - right\n}\n",
+    )?;
+
+    let (canon_command, requests_path) = write_fake_execution_canon_command(&workspace);
+    let execution_profile = WorkspaceExecutionProfile {
+        name: "session-runtime-canon-execution-profile".to_string(),
+        read_targets: vec!["src/lib.rs".to_string()],
+        validation_command: ExecutionCommand { program: "true".to_string(), args: Vec::new() },
+        attempts: vec![ExecutionAttemptDefinition {
+            attempt_id: "fix-add".to_string(),
+            summary: "repair arithmetic".to_string(),
+            failure_mode: ExecutionFailureMode::Terminal,
+            changes: vec![WorkspaceChange {
+                path: "src/lib.rs".to_string(),
+                find: "left - right".to_string(),
+                replace: "left + right".to_string(),
+            }],
+        }],
+        adaptive: None,
+        limits: RunLimits::default(),
+        governance: Some(GovernanceProfile {
+            default_runtime: GovernanceRuntimeKind::Canon,
+            canon: Some(CanonRuntimeConfig {
+                command: canon_command.to_string_lossy().into_owned(),
+                default_owner: Some("platform".to_string()),
+                default_risk: Some("medium".to_string()),
+                default_zone: Some("engineering".to_string()),
+                default_system_context: Some(SystemContextBinding::Existing),
+            }),
+            stages: Vec::new(),
+        }),
+        review: None,
+        legacy_source: None,
+    };
+    fs::write(
+        workspace.join(".boundline/execution.json"),
+        serde_json::to_string_pretty(&execution_profile)?,
+    )?;
+
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut goal_plan = GoalPlan::new(
+        "Drive a governed session runtime branch",
+        vec![PlannedTask {
+            task_id: "planned-task-1".to_string(),
+            description: "Repair arithmetic".to_string(),
+            target: "src/lib.rs".to_string(),
+            expected_outcome: Some("implementation switches subtraction to addition".to_string()),
+            decision_type_hint: Some(DecisionType::Code),
+        }],
+    )?;
+    goal_plan.confirm()?;
+
+    let mut session = ActiveSessionRecord {
+        session_id: "session-runtime".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: Some("Drive a governed session runtime branch".to_string()),
+        authored_brief: None,
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: Some(goal_plan),
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: Some(FlowPolicy::from_builtin("bug-fix")?),
+        latest_status: SessionStatus::Planned,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 10,
+        governance_lifecycle: Some(GovernedSessionLifecycle {
+            governance_runtime: GovernanceRuntimeKind::Canon,
+            explicit_opt_out: false,
+            mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+            selected_mode: None,
+            selected_mode_sequence: Vec::new(),
+            latest_reasoning_profile: None,
+            current_stage_index: 0,
+            stage_records: Vec::new(),
+            accumulated_context: Vec::new(),
+            terminal_reason: None,
+            planning_input_fingerprint: None,
+        }),
+        project_scale: None,
+        delight_feedback: None,
+        latest_voting: None,
+    };
+
+    let response = runtime.run_to_terminal(&mut session)?;
+
+    assert_eq!(response.terminal_status, TaskStatus::Succeeded);
+    assert!(!session.decisions.is_empty());
+
+    let requests = fs::read_to_string(&requests_path)?;
+    assert!(requests.contains("\"stage_key\":\"run:implementation\""), "{requests}");
+    assert!(requests.contains("\"stage_key\":\"run:verification\""), "{requests}");
+    assert!(
+        requests.contains(".boundline/governance/execution/implementation/brief.md"),
+        "{requests}"
+    );
+    assert!(
+        requests.contains(".boundline/governance/execution/verification/brief.md"),
+        "{requests}"
+    );
+
+    assert!(workspace.join(".boundline/governance/execution/implementation/brief.md").exists());
+    assert!(workspace.join(".boundline/governance/execution/verification/brief.md").exists());
+
+    let lifecycle = session.governance_lifecycle.as_ref().unwrap();
+    assert!(lifecycle.stage_records.iter().any(|record| {
+        record.stage_key == "run:implementation"
+            && record.runtime == GovernanceRuntimeKind::Canon
+            && record.lifecycle_state == GovernanceLifecycleState::GovernedReady
+    }));
+    assert!(lifecycle.stage_records.iter().any(|record| {
+        record.stage_key == "run:verification"
+            && record.runtime == GovernanceRuntimeKind::Canon
+            && record.lifecycle_state == GovernanceLifecycleState::GovernedReady
+    }));
+    assert!(lifecycle.accumulated_context.iter().any(|document| {
+        document.stage_key == "run:implementation"
+            && document.canon_mode == CanonMode::Implementation
+    }));
+    assert!(lifecycle.accumulated_context.iter().any(|document| {
+        document.stage_key == "run:verification" && document.canon_mode == CanonMode::Verification
+    }));
+    assert!(
+        session.goal_plan.as_ref().and_then(|plan| plan.compacted_canon_memory.as_ref()).is_some()
+    );
+
+    Ok(())
 }
 
 #[test]

@@ -46,15 +46,18 @@ Reply as a compact operator brief by default: preserve the ordered NDJSON event 
 
 **Critical rule — inline question required:** When the stream contains a `phase_request` with a non-null `question` field, you MUST ask that exact question as your direct reply. Do NOT render an action link or button in place of the question — asking the question inline IS the next action. Only AFTER the user answers should you construct the next shell run substituting the answer into `resume_command`'s `--answer "<answer>"` placeholder.
 
-## Next-Step Routing
+## Next-Step Routing (MANDATORY FORMAT)
 Surface exactly two action links: one **primary** (advance) and one **secondary** (refine/inspect, shown only when the condition is met).
 
-**Primary** (always shown): `/boundline-plan` — advance to planning.
-**Secondary** (shown only when a `phase_request.question` is active or clarification is still pending): `/boundline-goal` — refine the goal.
+**Primary** (always shown): render as a clickable link:
+[▶ Run /boundline-plan](command:copilot.chat.execute?%5B%22%2Fboundline-plan%22%5D)
+
+**Secondary** (shown only when a `phase_request.question` is active or clarification is still pending): render as:
+[▶ Run /boundline-goal](command:copilot.chat.execute?%5B%22%2Fboundline-goal%22%5D)
 
 If the secondary condition is not met, show only the primary button.
 Before the action links, include one brief natural-language sentence summarizing why these actions are offered.
-Prefer an emitted `phase_request.assistant_resume_command` when present — it overrides the primary.
+Prefer an emitted `phase_request.assistant_resume_command` when present — it overrides the primary. Render it using the same clickable format: `[▶ Run /command-name](command:copilot.chat.execute?%5B%22%2Fcommand-name%22%5D)`.
 
 Allowed follow-up commands: `/boundline-plan`, `/boundline-goal`.
 

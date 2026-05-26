@@ -1310,6 +1310,67 @@ fn blocking_outcome_text(findings: &[GuardianFinding]) -> Option<String> {
     }
 }
 
+/// Maximum number of guidance documents to load content from per phase to
+/// keep provider system prompts bounded.
+const MAX_GUIDANCE_CONTENT_ENTRIES: usize = 4;
+
+/// Maximum character length for a single guidance document loaded into the
+/// system prompt. Longer documents are truncated at this boundary.
+const MAX_GUIDANCE_CONTENT_CHARS: usize = 3000;
+
+/// Loads the text content of a resolved guidance capability from its
+/// `content_ref` path. Resolves relative paths against the bundled assistant
+/// root first, falling back to the workspace root. Returns `None` when the
+/// file is missing, unreadable, or empty.
+pub fn load_guidance_content(
+    workspace_ref: &Path,
+    capability: &GuidanceCapability,
+) -> Option<String> {
+    let assistant_root = bundled_assistant_root();
+    let candidate_paths =
+        [assistant_root.join(&capability.content_ref), workspace_ref.join(&capability.content_ref)];
+
+    for path in &candidate_paths {
+        if let Ok(content) = fs::read_to_string(path) {
+            let trimmed = content.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if trimmed.chars().count() <= MAX_GUIDANCE_CONTENT_CHARS {
+                return Some(trimmed.to_string());
+            }
+            return Some(truncate_guidance_content(trimmed));
+        }
+    }
+    None
+}
+
+fn truncate_guidance_content(content: &str) -> String {
+    let Some((end_index, _)) = content.char_indices().nth(MAX_GUIDANCE_CONTENT_CHARS) else {
+        return content.to_string();
+    };
+    let mut truncated = content[..end_index].to_string();
+    truncated.push_str("\n\n[truncated]");
+    truncated
+}
+
+/// Resolves and loads guidance content for a lifecycle phase, returning up to
+/// `MAX_GUIDANCE_CONTENT_ENTRIES` documents suitable for injection into a
+/// provider system prompt.
+pub fn load_guidance_for_phase(
+    workspace_ref: &Path,
+    phase: CapabilityPhase,
+    evidence: &GuidanceRuntimeEvidence,
+) -> Vec<String> {
+    let resolution = resolve_capabilities_for_phase(workspace_ref, phase, evidence);
+    resolution
+        .guidance
+        .iter()
+        .take(MAX_GUIDANCE_CONTENT_ENTRIES)
+        .filter_map(|capability| load_guidance_content(workspace_ref, capability))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -1329,16 +1390,16 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        GuardianEvaluation, SemanticRouteAvailability, blocking_outcome_text,
-        compare_authority_precedence, discover_optional_canon_guidance,
+        GuardianEvaluation, MAX_GUIDANCE_CONTENT_CHARS, SemanticRouteAvailability,
+        blocking_outcome_text, compare_authority_precedence, discover_optional_canon_guidance,
         discover_workspace_guardians, discover_workspace_guidance, display_relative_path,
         evaluate_deterministic_guardian, evaluate_semantic_guardian, guardian_changed_files,
         guardian_findings_summary, guardian_kind_requires_route, guidance_relevance_score,
-        has_blocking_findings, markdown_title, normalize_finding_suffix, normalized_identifier,
-        order_guardians_for_execution, planning_runtime_evidence, resolve_capabilities_for_phase,
-        resolve_guidance_candidates, route_slot_for_phase, semantic_route_availability,
-        should_short_circuit_semantic_guards, skipped_source_line, title_from_identifier,
-        validation_evidence_guardian,
+        has_blocking_findings, load_guidance_content, markdown_title, normalize_finding_suffix,
+        normalized_identifier, order_guardians_for_execution, planning_runtime_evidence,
+        resolve_capabilities_for_phase, resolve_guidance_candidates, route_slot_for_phase,
+        semantic_route_availability, should_short_circuit_semantic_guards, skipped_source_line,
+        title_from_identifier, validation_evidence_guardian,
     };
 
     fn guardian(
@@ -2139,5 +2200,33 @@ mod tests {
             blocking_outcome_text(&[blocker]).as_deref(),
             Some("blocking deterministic findings stop redundant semantic guardians")
         );
+    }
+
+    #[test]
+    fn load_guidance_content_truncates_utf8_without_panicking() {
+        let workspace = temp_workspace("guidance-runtime-utf8-truncation");
+        let content_ref = "guidance/utf8.md";
+        fs::create_dir_all(workspace.join("guidance")).unwrap();
+        fs::write(workspace.join(content_ref), "🙂".repeat(MAX_GUIDANCE_CONTENT_CHARS + 5))
+            .unwrap();
+
+        let capability = GuidanceCapability {
+            capability_id: "utf8-guidance".to_string(),
+            title: "UTF-8 Guidance".to_string(),
+            applies_to: vec![CapabilityPhase::Implementation],
+            roles: Vec::new(),
+            content_ref: content_ref.to_string(),
+            priority: GuidancePriority::Medium,
+            authority_source: GuidanceAuthoritySource::WorkspaceOverride,
+            source_ref: content_ref.to_string(),
+            pack_id: None,
+            catalog_pillar: None,
+            catalog_strength: None,
+            catalog_authority_source: None,
+        };
+
+        let loaded = load_guidance_content(&workspace, &capability).unwrap_or_default();
+        assert!(loaded.starts_with('🙂'), "{loaded}");
+        assert!(loaded.ends_with("[truncated]"), "{loaded}");
     }
 }

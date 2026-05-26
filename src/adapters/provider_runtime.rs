@@ -99,6 +99,10 @@ pub struct ProviderAnalysisRequest {
     pub goal: String,
     pub phase: String,
     pub files: Vec<ProviderWorkspaceFile>,
+    #[doc(hidden)]
+    pub guidance_context: Vec<String>,
+    #[doc(hidden)]
+    pub persona: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -107,6 +111,10 @@ pub struct ProviderChangeRequest {
     pub phase: String,
     pub allowed_paths: Vec<String>,
     pub files: Vec<ProviderWorkspaceFile>,
+    #[doc(hidden)]
+    pub guidance_context: Vec<String>,
+    #[doc(hidden)]
+    pub persona: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -313,7 +321,12 @@ pub fn analyze_workspace(
     request: &ProviderAnalysisRequest,
 ) -> Result<ProviderAnalysisResponse, ProviderRuntimeError> {
     let prompt = build_analysis_prompt(request)?;
-    dispatch_structured_prompt(route, analysis_system_prompt(), &prompt)
+    let system_prompt = compose_enriched_system_prompt(
+        analysis_system_prompt(),
+        &request.guidance_context,
+        request.persona.as_deref(),
+    );
+    dispatch_structured_prompt(route, &system_prompt, &prompt)
 }
 
 pub fn propose_workspace_changes(
@@ -321,7 +334,12 @@ pub fn propose_workspace_changes(
     request: &ProviderChangeRequest,
 ) -> Result<ProviderChangeResponse, ProviderRuntimeError> {
     let prompt = build_change_prompt(request)?;
-    let response = dispatch_structured_prompt(route, change_system_prompt(), &prompt)?;
+    let system_prompt = compose_enriched_system_prompt(
+        change_system_prompt(),
+        &request.guidance_context,
+        request.persona.as_deref(),
+    );
+    let response = dispatch_structured_prompt(route, &system_prompt, &prompt)?;
     validate_change_response(request, &response)?;
     Ok(response)
 }
@@ -368,6 +386,72 @@ fn analysis_system_prompt() -> &'static str {
 
 fn change_system_prompt() -> &'static str {
     "You are Boundline's implementation runtime. Reply with JSON only. Produce safe bounded find/replace edits against the supplied files. Use only allowed paths, keep every find string exact, and never invent missing code context."
+}
+
+/// Returns a persona-specific framing prefix that focuses the agent on the
+/// quality attributes most relevant to the intended role.
+pub fn persona_system_prompt_prefix(persona: &str) -> &'static str {
+    match persona {
+        "delivery-engineer" => {
+            "You are acting as a delivery engineer. Focus on working, testable code that meets acceptance criteria. Prefer simplicity over cleverness. Every change must compile and pass existing tests."
+        }
+        "system-architect" => {
+            "You are acting as a system architect. Focus on boundary contracts, integration surfaces, and structural correctness. Ensure domain separation, dependency direction, and extensibility."
+        }
+        "verification-lead" => {
+            "You are acting as a verification lead. Focus on edge cases, error paths, and comprehensive test coverage. Validate every assumption with explicit assertions."
+        }
+        "product-strategist" => {
+            "You are acting as a product strategist. Focus on user-facing behavior and acceptance criteria alignment. Ensure deliverables match the stated outcome."
+        }
+        "operations-governor" => {
+            "You are acting as an operations governor. Focus on operational safety, observability hooks, graceful degradation, and rollback capability."
+        }
+        "domain-steward" => {
+            "You are acting as a domain steward. Focus on ubiquitous language, aggregate boundaries, and domain model integrity. Ensure naming and structure match the domain model."
+        }
+        _ => "",
+    }
+}
+
+/// Composes an enriched system prompt by appending resolved guidance content
+/// and an optional persona prefix to the base implementation prompt.
+///
+/// When both `guidance_content` and `persona` are empty/absent, returns the
+/// base prompt unchanged for backward compatibility.
+pub fn compose_enriched_system_prompt(
+    base: &str,
+    guidance_content: &[String],
+    persona: Option<&str>,
+) -> String {
+    if guidance_content.is_empty() && persona.is_none_or(|p| p.is_empty()) {
+        return base.to_string();
+    }
+
+    let mut composed = String::with_capacity(base.len() + 2048);
+
+    if let Some(persona_label) = persona {
+        let prefix = persona_system_prompt_prefix(persona_label);
+        if !prefix.is_empty() {
+            composed.push_str(prefix);
+            composed.push_str("\n\n");
+        }
+    }
+
+    composed.push_str(base);
+
+    if !guidance_content.is_empty() {
+        composed.push_str("\n\n## Implementation Guidance\n\nApply the following project conventions and language guidance when producing changes:\n");
+        for (index, content) in guidance_content.iter().enumerate() {
+            composed.push_str("\n---\n");
+            composed.push_str(&format!("### Guidance {}", index + 1));
+            composed.push('\n');
+            composed.push_str(content);
+            composed.push('\n');
+        }
+    }
+
+    composed
 }
 
 fn review_system_prompt() -> &'static str {
@@ -840,7 +924,8 @@ mod tests {
         ProviderNamespace, ProviderReviewDisposition, ProviderReviewRequest,
         ProviderReviewResponse, ProviderRevisionRequest, ProviderRuntimeError,
         ProviderWorkspaceFile, ResolvedProviderRoute, anthropic_messages_endpoint, chat_completion,
-        execute_openai_compatible_chat_with_exchange, first_json_object, parse_structured_response,
+        compose_enriched_system_prompt, execute_openai_compatible_chat_with_exchange,
+        first_json_object, parse_structured_response, persona_system_prompt_prefix,
         resolve_provider_route, review_workspace, revise_artifact,
         route_uses_explicit_provider_namespace,
     };
@@ -1671,5 +1756,28 @@ mod tests {
 
         let no_hint = super::copilot::token_exchange_error_hint("ghp_example", 500);
         assert!(no_hint.is_none());
+    }
+
+    #[test]
+    fn persona_system_prompt_prefix_covers_known_personas() {
+        assert!(persona_system_prompt_prefix("delivery-engineer").contains("delivery engineer"));
+        assert!(persona_system_prompt_prefix("system-architect").contains("system architect"));
+        assert!(persona_system_prompt_prefix("verification-lead").contains("verification lead"));
+        assert_eq!(persona_system_prompt_prefix("unknown"), "");
+    }
+
+    #[test]
+    fn compose_enriched_system_prompt_combines_persona_and_guidance() {
+        let prompt = compose_enriched_system_prompt(
+            "Base prompt.",
+            &["# Rust\nUse Result-based errors.".to_string()],
+            Some("delivery-engineer"),
+        );
+
+        assert!(prompt.starts_with("You are acting as a delivery engineer."), "{prompt}");
+        assert!(prompt.contains("Base prompt."), "{prompt}");
+        assert!(prompt.contains("## Implementation Guidance"), "{prompt}");
+        assert!(prompt.contains("### Guidance 1"), "{prompt}");
+        assert!(prompt.contains("Use Result-based errors."), "{prompt}");
     }
 }

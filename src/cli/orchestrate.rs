@@ -17,7 +17,7 @@ use crate::domain::governance::{
 use crate::domain::session::ActiveSessionRecord;
 use crate::domain::session::{SessionStatus, SessionStatusView, task_state_compacted_canon_memory};
 use crate::domain::trace::{TraceSummaryView, current_timestamp_millis};
-use crate::orchestrator::session_runtime::decompose_goal_text;
+use crate::orchestrator::session_runtime::{decompose_goal_text, planning_unknown_markers};
 
 const EVENT_KIND_SESSION_OPENED: &str = "session_opened";
 const EVENT_KIND_SESSION_UPDATED: &str = "session_updated";
@@ -219,6 +219,10 @@ fn planning_stage_question_options(
                         "proceed: fill discovery gaps using available project context and goal text",
                     ),
                     opt(
+                        "fill from best practices",
+                        "proceed: fill discovery gaps using industry best practices and established conventions for the detected technology stack",
+                    ),
+                    opt(
                         "narrow scope",
                         "I want to narrow the scope: I will specify which entities and operations to include",
                     ),
@@ -246,6 +250,10 @@ fn planning_stage_question_options(
                     opt(
                         "fill domain model",
                         "proceed: generate the domain model and system boundaries from available context",
+                    ),
+                    opt(
+                        "fill from best practices",
+                        "proceed: generate the domain model and system boundaries using industry best practices and established conventions for the detected technology stack",
                     ),
                     opt(
                         "provide domain docs",
@@ -277,6 +285,10 @@ fn planning_stage_question_options(
             opt(
                 "fill using context",
                 "proceed: fill placeholder sections using available project context",
+            ),
+            opt(
+                "fill from best practices",
+                "proceed: fill placeholder sections using industry best practices and established conventions for the detected technology stack",
             ),
             opt(
                 "provide reference path",
@@ -1923,11 +1935,33 @@ fn push_planning_stage_phase_request(
             .and_then(|m| m.artifact_refs.first().or(m.packet_ref.as_ref()))
             .cloned()
             .unwrap_or_else(|| format!("the {stage_label} planning brief"));
-        Some(format!(
+        let markers = record.goal_plan.as_ref().map_or_else(Vec::new, |gp| {
+            let has_authored =
+                view.authored_input_sources.as_ref().is_some_and(|sources| !sources.is_empty());
+            planning_unknown_markers(
+                &gp.goal_text,
+                gp.verification_strategy.as_deref(),
+                has_authored,
+            )
+        });
+        let mut text = String::new();
+        if !markers.is_empty()
+            && !markers.first().is_some_and(|m| m.starts_with("no explicit unknown"))
+        {
+            text.push_str(
+                "The following context gaps were detected in your goal and produced placeholder sections in the packet:\n",
+            );
+            for (i, marker) in markers.iter().enumerate() {
+                text.push_str(&format!("{}. {}\n", i + 1, marker));
+            }
+            text.push('\n');
+        }
+        text.push_str(&format!(
             "Author the placeholder sections in {artifact_hint} using the goal brief and project context. \
              If the user provides a file or folder path, use its content as primary source material. \
              Once the sections are filled, resume orchestration."
-        ))
+        ));
+        Some(text)
     } else {
         canon_memory.as_ref().map_or_else(
             || Some(format!(

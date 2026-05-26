@@ -449,6 +449,10 @@ const PLANNING_STAGE_KEY_SYSTEM_SHAPING: &str = "plan:system-shaping";
 const PLANNING_STAGE_KEY_ARCHITECTURE: &str = "plan:architecture";
 const PLANNING_STAGE_KEY_BACKLOG: &str = "plan:backlog";
 
+pub const EXECUTION_STAGE_KEY_IMPLEMENTATION: &str = "run:implementation";
+pub const EXECUTION_STAGE_KEY_VERIFICATION: &str = "run:verification";
+pub const EXECUTION_STAGE_KEY_REVIEW: &str = "run:review";
+
 pub fn supported_canon_modes_for_stage(flow_name: &str, stage_id: &str) -> &'static [CanonMode] {
     match (flow_name, stage_id) {
         ("delivery", "requirements") => &DELIVERY_REQUIREMENTS_MODES,
@@ -523,6 +527,31 @@ pub fn planning_canon_mode_for_stage_key(stage_key: &str) -> Option<CanonMode> {
 
 pub fn is_planning_stage_key(stage_key: &str) -> bool {
     planning_canon_mode_for_stage_key(stage_key).is_some()
+}
+
+/// Returns `true` for Canon modes used during execution (as opposed to planning).
+pub const fn is_execution_canon_mode(mode: CanonMode) -> bool {
+    matches!(
+        mode,
+        CanonMode::Implementation
+            | CanonMode::Verification
+            | CanonMode::Review
+            | CanonMode::PrReview
+            | CanonMode::Change
+            | CanonMode::Refactor
+    )
+}
+
+/// Maps an execution-time Canon mode to its canonical stage key.
+pub const fn execution_stage_key_for_mode(mode: CanonMode) -> Option<&'static str> {
+    match mode {
+        CanonMode::Implementation | CanonMode::Refactor | CanonMode::Change => {
+            Some(EXECUTION_STAGE_KEY_IMPLEMENTATION)
+        }
+        CanonMode::Verification => Some(EXECUTION_STAGE_KEY_VERIFICATION),
+        CanonMode::Review | CanonMode::PrReview => Some(EXECUTION_STAGE_KEY_REVIEW),
+        _ => None,
+    }
 }
 
 const PLANNING_GOVERNANCE_ROOT: &str = ".boundline/governance/planning";
@@ -2319,9 +2348,9 @@ mod tests {
         GovernanceRolloutProfile, GovernanceRuntimeKind, GovernanceRuntimeState,
         GovernanceStartupContext, GovernanceTransitionDirection, GovernedStageCategory,
         PacketReadiness, PacketReuseBindingReason, StageGovernancePolicy, StopSemantics,
-        SystemContextBinding, governance_confidence_handoff, governed_stage_catalog,
-        planning_stage_brief_ref, resolve_governance_startup_posture,
-        validate_canon_capabilities_for_mode,
+        SystemContextBinding, execution_stage_key_for_mode, governance_confidence_handoff,
+        governed_stage_catalog, is_execution_canon_mode, planning_stage_brief_ref,
+        resolve_governance_startup_posture, validate_canon_capabilities_for_mode,
     };
     use crate::domain::reasoning::{
         ProfileActivationRecord, ReasoningAdmissionEffect, ReasoningConfidenceLevel,
@@ -2339,6 +2368,27 @@ mod tests {
             Some(".boundline/governance/planning/architecture/brief.md")
         );
         assert!(planning_stage_brief_ref("change:verify").is_none());
+    }
+
+    #[test]
+    fn execution_stage_key_for_mode_maps_execution_modes() {
+        assert_eq!(
+            execution_stage_key_for_mode(CanonMode::Implementation),
+            Some("run:implementation")
+        );
+        assert_eq!(execution_stage_key_for_mode(CanonMode::Refactor), Some("run:implementation"));
+        assert_eq!(execution_stage_key_for_mode(CanonMode::Verification), Some("run:verification"));
+        assert_eq!(execution_stage_key_for_mode(CanonMode::Review), Some("run:review"));
+        assert_eq!(execution_stage_key_for_mode(CanonMode::Architecture), None);
+    }
+
+    #[test]
+    fn is_execution_canon_mode_distinguishes_planning_from_execution() {
+        assert!(is_execution_canon_mode(CanonMode::Implementation));
+        assert!(is_execution_canon_mode(CanonMode::Verification));
+        assert!(is_execution_canon_mode(CanonMode::PrReview));
+        assert!(!is_execution_canon_mode(CanonMode::Requirements));
+        assert!(!is_execution_canon_mode(CanonMode::Architecture));
     }
 
     #[test]

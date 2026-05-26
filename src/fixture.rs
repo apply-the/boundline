@@ -33,6 +33,8 @@ use crate::domain::flow::{
     FLOW_METADATA_KEY, FlowStepMetadata, SessionFlowState, attach_stage_metadata, built_in_flow,
 };
 use crate::domain::goal_plan::GoalPlan;
+use crate::domain::governance::CanonIntendedPersona;
+use crate::domain::guidance::CapabilityPhase;
 use crate::domain::limits::RunLimits;
 use crate::domain::negotiation::NegotiatedDeliveryPacket;
 use crate::domain::plan::Plan;
@@ -56,7 +58,9 @@ use crate::domain::task::TaskRunRequest;
 use crate::domain::task_context::{
     LATEST_CLARIFICATION_KEY, LATEST_DERIVED_TASK_DRAFT_KEY, TASK_GOAL_KEY,
 };
+use crate::orchestrator::goal_planner::collect_workspace_signals;
 use crate::orchestrator::governance::{bounded_reused_packets, select_packet_reuse_binding};
+use crate::orchestrator::guidance_runtime::{GuidanceRuntimeEvidence, load_guidance_for_phase};
 use crate::orchestrator::planner::{CallbackPlanner, Planner, PlanningError, StaticPlanner};
 use crate::registry::agent_registry::{AgentRegistry, RegistryError as AgentRegistryError};
 use crate::registry::tool_registry::{RegistryError as ToolRegistryError, ToolRegistry};
@@ -2692,12 +2696,17 @@ fn analyze_workspace_with_provider(
         }
     };
     let provider_files = provider_workspace_files(&sources);
+    let guidance_context =
+        resolve_phase_guidance(workspace, CapabilityPhase::Planning, goal, &request, &sources);
+    let persona = resolve_effective_persona(workspace, &request);
     let analysis = provider_runtime::analyze_workspace(
         route,
         &ProviderAnalysisRequest {
             goal: goal.to_string(),
             phase: provider_phase_label(&request),
             files: provider_files,
+            guidance_context,
+            persona,
         },
     );
 
@@ -2875,6 +2884,15 @@ fn apply_workspace_with_provider(
         }
     };
 
+    let guidance_context = resolve_phase_guidance(
+        workspace,
+        CapabilityPhase::Implementation,
+        goal,
+        &request,
+        &sources,
+    );
+    let persona = resolve_effective_persona(workspace, &request);
+
     let change_response = provider_runtime::propose_workspace_changes(
         route,
         &ProviderChangeRequest {
@@ -2882,6 +2900,8 @@ fn apply_workspace_with_provider(
             phase: provider_phase_label(&request),
             allowed_paths: allowed_paths.clone(),
             files: provider_workspace_files(&sources),
+            guidance_context,
+            persona,
         },
     );
 
@@ -3162,6 +3182,68 @@ fn provider_phase_label(request: &StepExecutionRequest) -> String {
         .filter(|value| !value.is_empty())
         .unwrap_or(request.step_id.as_str())
         .to_string()
+}
+
+fn resolve_phase_guidance(
+    workspace: &Path,
+    phase: CapabilityPhase,
+    goal: &str,
+    request: &StepExecutionRequest,
+    sources: &[WorkspaceTargetSource],
+) -> Vec<String> {
+    let signals = collect_workspace_signals(workspace);
+    let evidence = GuidanceRuntimeEvidence {
+        goal_text: goal.to_string(),
+        language: signals.language.clone(),
+        selected_targets: sources.iter().map(|source| source.path.clone()).collect(),
+        primary_inputs: provider_primary_input_refs(request),
+        has_tests: signals.has_tests,
+    };
+    load_guidance_for_phase(workspace, phase, &evidence)
+}
+
+fn provider_primary_input_refs(request: &StepExecutionRequest) -> Vec<String> {
+    request
+        .input
+        .get("authored_brief")
+        .cloned()
+        .and_then(|value| serde_json::from_value::<AuthoredBriefBundle>(value).ok())
+        .map(|bundle| {
+            bundle
+                .sources
+                .into_iter()
+                .map(|source| {
+                    let display_label = source.display_label();
+                    source.workspace_path.unwrap_or(display_label)
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+/// Resolves the effective persona label from workspace configuration.
+/// Prefers the latest governance packet's intended persona, then workspace or
+/// global config, and finally the default delivery-engineer persona.
+fn resolve_effective_persona(workspace: &Path, request: &StepExecutionRequest) -> Option<String> {
+    if let Ok(Some(packet)) = request.task_snapshot.latest_governance_packet()
+        && let Some(authority) = packet.authority_governance.as_ref()
+    {
+        return Some(authority.intended_persona.as_str().to_string());
+    }
+
+    let config = FileConfigStore::for_workspace(workspace).load_local().ok().flatten();
+    let global = FileConfigStore::load_global().ok().flatten();
+    let canon_prefs = config
+        .as_ref()
+        .and_then(|config| config.canon.as_ref())
+        .or_else(|| global.as_ref().and_then(|config| config.canon.as_ref()));
+    if let Some(owner) = canon_prefs.and_then(|prefs| prefs.default_owner.as_deref())
+        && let Some(persona) = CanonIntendedPersona::canonicalize_label(owner)
+    {
+        return Some(persona.to_string());
+    }
+
+    Some(CanonIntendedPersona::DeliveryEngineer.as_str().to_string())
 }
 
 fn provider_route_label(route: &ModelRoute) -> String {
@@ -4404,25 +4486,26 @@ mod tests {
         AdaptiveCandidateContext, ExecutionAttemptDefinition, ExecutionCommand,
         ExecutionFailureMode, FilePatch, FixtureRuntimeError, GeneratedAdaptiveCandidate,
         RankedAdaptiveCandidate, ReasoningProfileFixtureScenario, WorkspaceChange,
-        WorkspaceExecutionProfile, WorkspaceFixture, adaptive_failure_evidence,
-        adaptive_no_candidate_reason, adaptive_replan_blocker, adaptive_selection_headline,
-        adaptive_selection_reason, adaptive_transition_kind, analyze_workspace_fixture,
-        apply_fixture_patches, apply_workspace_fixture, boolean_flip_candidates,
-        build_adaptive_attempt_steps, build_adaptive_candidates, build_adaptive_initial_plan,
-        build_attempt_steps, build_fixture_plan, build_fixture_plan_for_flow,
-        build_fixture_runtime, build_fixture_runtime_for_goal_plan,
+        WorkspaceExecutionProfile, WorkspaceFixture, WorkspaceTargetSource,
+        adaptive_failure_evidence, adaptive_no_candidate_reason, adaptive_replan_blocker,
+        adaptive_selection_headline, adaptive_selection_reason, adaptive_transition_kind,
+        analyze_workspace_fixture, apply_fixture_patches, apply_workspace_fixture,
+        boolean_flip_candidates, build_adaptive_attempt_steps, build_adaptive_candidates,
+        build_adaptive_initial_plan, build_attempt_steps, build_fixture_plan,
+        build_fixture_plan_for_flow, build_fixture_runtime, build_fixture_runtime_for_goal_plan,
         build_rejected_candidate_summaries, build_review_steps_for_attempt, build_task_request,
         build_vertical_slice_plan, comparison_flip_candidates, execution_manifest_path,
         first_stable_line, fixture_minimum_independence, fixture_next_minor_exclusive,
         fixture_reasoning_budget, guidance_paths_from_text, infer_goal_plan_change,
         load_workspace_execution_profile, local_reasoning_posture_fixture,
         numeric_literal_flip_candidates, ordering_boundary_flip_candidates,
-        provider_review_routes_for_profile, reasoning_profile_fixture, resolve_review_vote,
-        resolve_supported_fixture_flow, result_status_flip_candidates, review_workspace_fixture,
-        run_fixture_command, score_adaptive_candidate, synthesize_goal_plan_execution_profile,
-        verify_workspace_fixture,
+        provider_review_routes_for_profile, reasoning_profile_fixture, resolve_effective_persona,
+        resolve_phase_guidance, resolve_review_vote, resolve_supported_fixture_flow,
+        result_status_flip_candidates, review_workspace_fixture, run_fixture_command,
+        score_adaptive_candidate, synthesize_goal_plan_execution_profile, verify_workspace_fixture,
     };
     use crate::adapters::config_store::FileConfigStore;
+    use crate::domain::brief::normalize_inputs;
     use crate::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
     use crate::domain::execution::{
         AdaptiveChangeKind, AdaptiveExecutionProfile, AttemptTransitionKind, PathScore,
@@ -4432,9 +4515,11 @@ mod tests {
     use crate::domain::flow::{SessionFlowState, attach_stage_metadata, built_in_flow};
     use crate::domain::goal_plan::{GoalPlan, PlannedTask};
     use crate::domain::governance::{
-        ApprovalState, CanonMode, GovernanceLifecycleState, GovernanceRuntimeKind,
-        GovernedStagePacket, GovernedStageRecord, PacketReadiness,
+        ApprovalState, CanonAuthorityGovernanceV1Envelope, CanonAuthorityZone, CanonChangeClass,
+        CanonIntendedPersona, CanonMode, CanonRiskClass, GovernanceLifecycleState,
+        GovernanceRuntimeKind, GovernedStagePacket, GovernedStageRecord, PacketReadiness,
     };
+    use crate::domain::guidance::CapabilityPhase;
     use crate::domain::limits::RunLimits;
     use crate::domain::reasoning::{
         ReasoningAdmissionEffect, ReasoningConfidenceLevel, ReasoningProfileId,
@@ -6338,5 +6423,175 @@ mod tests {
         ));
 
         fs::remove_dir_all(&workspace).unwrap();
+    }
+
+    #[test]
+    fn resolve_effective_persona_prefers_latest_governance_packet() {
+        let workspace = temp_workspace();
+        FileConfigStore::for_workspace(&workspace)
+            .save_local(&ConfigFile {
+                version: 1,
+                routing: RoutingConfig::default(),
+                canon: Some(crate::domain::configuration::CanonPreferences {
+                    mode_selection:
+                        crate::domain::governance::CanonModeSelectionPreference::AutoConfirm,
+                    default_owner: Some("platform".to_string()),
+                    default_risk: None,
+                    default_zone: None,
+                    default_system_context: None,
+                }),
+            })
+            .unwrap();
+
+        let mut task_snapshot = TaskContext::new(
+            "session-runtime",
+            workspace.to_string_lossy(),
+            RunLimits::default(),
+            Map::new(),
+        );
+        task_snapshot
+            .set_latest_governance_packet(&GovernedStagePacket {
+                packet_ref: ".canon/runs/canon-run-1".to_string(),
+                runtime: GovernanceRuntimeKind::Canon,
+                canon_mode: Some(CanonMode::Implementation),
+                expected_document_refs: vec![
+                    ".canon/runs/canon-run-1/implementation.md".to_string(),
+                ],
+                document_refs: vec![".canon/runs/canon-run-1/implementation.md".to_string()],
+                readiness: PacketReadiness::Reusable,
+                missing_sections: Vec::new(),
+                headline: "implementation packet ready".to_string(),
+                reason_code: None,
+                authority_governance: Some(CanonAuthorityGovernanceV1Envelope {
+                    contract_line: "authority-governance-v1".to_string(),
+                    authority_zone: CanonAuthorityZone::Green,
+                    change_class: CanonChangeClass::LowImpact,
+                    intended_persona: CanonIntendedPersona::SystemArchitect,
+                    approval_state: ApprovalState::NotNeeded,
+                    packet_readiness: PacketReadiness::Reusable,
+                    risk: CanonRiskClass::LowImpact,
+                    persona_anti_behaviors: Vec::new(),
+                    primary_artifact: None,
+                    artifact_order: Vec::new(),
+                    promotion_refs: Vec::new(),
+                    stage_role_hints: Vec::new(),
+                }),
+                adaptive_governance: None,
+                semantic_descriptor: None,
+            })
+            .unwrap();
+
+        let request = StepExecutionRequest {
+            step_id: "implement".to_string(),
+            step_kind: StepKind::Agent,
+            target_name: "coder".to_string(),
+            input: json!({}),
+            task_snapshot,
+            attempt_number: 1,
+        };
+
+        assert_eq!(
+            resolve_effective_persona(&workspace, &request).as_deref(),
+            Some("system-architect")
+        );
+    }
+
+    #[test]
+    fn resolve_effective_persona_defaults_to_delivery_engineer_for_invalid_owner() {
+        let workspace = temp_workspace();
+        FileConfigStore::for_workspace(&workspace)
+            .save_local(&ConfigFile {
+                version: 1,
+                routing: RoutingConfig::default(),
+                canon: Some(crate::domain::configuration::CanonPreferences {
+                    mode_selection:
+                        crate::domain::governance::CanonModeSelectionPreference::AutoConfirm,
+                    default_owner: Some("not-a-real-persona".to_string()),
+                    default_risk: None,
+                    default_zone: None,
+                    default_system_context: None,
+                }),
+            })
+            .unwrap();
+
+        let request = StepExecutionRequest {
+            step_id: "implement".to_string(),
+            step_kind: StepKind::Agent,
+            target_name: "coder".to_string(),
+            input: json!({}),
+            task_snapshot: TaskContext::new(
+                "session-runtime",
+                workspace.to_string_lossy(),
+                RunLimits::default(),
+                Map::new(),
+            ),
+            attempt_number: 1,
+        };
+
+        assert_eq!(
+            resolve_effective_persona(&workspace, &request).as_deref(),
+            Some("delivery-engineer")
+        );
+    }
+
+    #[test]
+    fn resolve_phase_guidance_uses_goal_targets_and_authored_inputs() {
+        let workspace = temp_workspace();
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::create_dir_all(workspace.join("tests")).unwrap();
+        fs::write(
+            workspace.join("Cargo.toml"),
+            "[package]\nname = \"fixture-guidance\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        )
+        .unwrap();
+        fs::write(
+            workspace.join("src/lib.rs"),
+            "pub fn add(left: i32, right: i32) -> i32 { left + right }\n",
+        )
+        .unwrap();
+        fs::write(
+            workspace.join("brief.md"),
+            "Fix the failing Rust tests for src/lib.rs and preserve zero-panic handling.\n",
+        )
+        .unwrap();
+
+        let authored_brief = normalize_inputs(
+            &workspace,
+            Some("Fix the failing Rust tests for src/lib.rs"),
+            &[PathBuf::from("brief.md")],
+        )
+        .unwrap();
+        let request = StepExecutionRequest {
+            step_id: "implement".to_string(),
+            step_kind: StepKind::Agent,
+            target_name: "coder".to_string(),
+            input: json!({
+                "authored_brief": authored_brief,
+            }),
+            task_snapshot: TaskContext::new(
+                "session-runtime",
+                workspace.to_string_lossy(),
+                RunLimits::default(),
+                Map::new(),
+            ),
+            attempt_number: 1,
+        };
+        let sources = vec![WorkspaceTargetSource {
+            path: "src/lib.rs".to_string(),
+            contents: "pub fn add(left: i32, right: i32) -> i32 { left + right }".to_string(),
+        }];
+
+        let guidance = resolve_phase_guidance(
+            &workspace,
+            CapabilityPhase::Implementation,
+            "Fix the failing Rust tests for src/lib.rs",
+            &request,
+            &sources,
+        );
+
+        assert!(
+            guidance.iter().any(|entry| entry.contains("Rust") || entry.contains("cargo test")),
+            "{guidance:?}"
+        );
     }
 }
