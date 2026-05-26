@@ -173,7 +173,7 @@ pub fn execute_inspect(
         return Ok(workflow_report);
     }
 
-    let inspect_report = inspect::execute_inspect(None, Some(&workspace), None)
+    let inspect_report = inspect::execute_inspect(None, Some(&workspace), None, false)
         .map_err(WorkflowCommandError::Inspect)?;
 
     Ok(WorkflowCommandReport {

@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
+use crate::domain::audit::SessionAuditProjection;
 use crate::domain::cluster::ClusterDeliveryStory;
 use crate::domain::context_intelligence::AdvancedContextProjection;
 use crate::domain::guidance::GuidanceGuardianProjection;
@@ -322,6 +323,8 @@ pub struct TraceSummaryView {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub review_timeline: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_audit: Option<SessionAuditProjection>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delight_feedback: Option<DelightFeedbackSignal>,
     pub terminal_status: TaskStatus,
     pub terminal_reason: TerminalReason,
@@ -382,6 +385,7 @@ impl Default for TraceSummaryView {
             inspect_council: None,
             inspect_timeline: None,
             review_timeline: Vec::new(),
+            session_audit: None,
             delight_feedback: None,
             terminal_status: TaskStatus::Planned,
             terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "", None),

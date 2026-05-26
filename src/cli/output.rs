@@ -187,7 +187,9 @@ pub use support::{
     next_command_after_inspect, next_command_after_run, render_guidance_projection_brief_lines,
     render_guidance_projection_lines, render_inspect_failure, render_session_error,
 };
-pub use trace_summary::{render_trace_summary, render_trace_summary_brief};
+pub use trace_summary::{
+    render_trace_audit_summary, render_trace_summary, render_trace_summary_brief,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ExplanationProjection {
@@ -309,8 +311,8 @@ mod tests {
     };
     use super::{
         command_name, render_guidance_projection_brief_lines, render_host_command_json,
-        render_run_trace, render_session_status, render_session_status_brief, render_trace_summary,
-        render_trace_summary_brief,
+        render_run_trace, render_session_status, render_session_status_brief,
+        render_trace_audit_summary, render_trace_summary, render_trace_summary_brief,
     };
     use crate::cli::CommandExitStatus;
     use crate::cli::assistant_assets::{AssistantHost, AssistantInstallScope};
@@ -320,6 +322,12 @@ mod tests {
     use crate::cli::{
         AssistantSubcommand, CheckpointSubcommand, ClusterSubcommand, ConfigSubcommand,
         DeveloperCommand,
+    };
+    use crate::domain::audit::{
+        SessionAuditActor, SessionAuditActorKind, SessionAuditAlgorithm, SessionAuditEntry,
+        SessionAuditEntryKind, SessionAuditIdentity, SessionAuditOutcome,
+        SessionAuditOutcomeStatus, SessionAuditPhase, SessionAuditProjection, SessionAuditSource,
+        SessionAuditSourceKind,
     };
     use crate::domain::configuration::InitConfigScope;
     use crate::domain::context_intelligence::{
@@ -657,6 +665,7 @@ mod tests {
                     workspace: None,
                     cluster: None,
                     session: None,
+                    audit: false,
                 },
                 "inspect",
             ),
@@ -872,6 +881,7 @@ mod tests {
             inspect_council: None,
             inspect_timeline: None,
             review_timeline: Vec::new(),
+            session_audit: None,
             delight_feedback: None,
             terminal_status: TaskStatus::Failed,
             terminal_reason: TerminalReason::new(
@@ -1144,6 +1154,215 @@ mod tests {
         );
         assert!(!text.contains("context_provenance:"), "{text}");
         assert!(!text.contains("decision_timeline:"), "{text}");
+    }
+
+    #[test]
+    fn render_trace_summary_includes_explicit_audit_mapping_lines() {
+        let audit_projection = SessionAuditProjection::from_entries(
+            "session-audit-1",
+            vec![SessionAuditEntry::new_with_timestamp(
+                "session-audit-1",
+                1,
+                1_717_000_000_000,
+                SessionAuditEntryKind::TraceEventProjected,
+                "decision verified: collected validation evidence",
+                SessionAuditIdentity::default(),
+                SessionAuditActor {
+                    kind: SessionAuditActorKind::Agent,
+                    id: "boundline-decision-loop".to_string(),
+                    display_name: Some("Boundline Decision Loop".to_string()),
+                    role: None,
+                    runtime_kind: Some("copilot".to_string()),
+                    provider: Some("copilot".to_string()),
+                    route_slot: Some("implementation".to_string()),
+                    model_name: Some("gpt-5.4".to_string()),
+                    participant_routes: Vec::new(),
+                    mixed_routes: false,
+                },
+                SessionAuditAlgorithm::new(
+                    SessionAuditPhase::Run,
+                    "decision_loop",
+                    "run_with_options_and_context",
+                ),
+                SessionAuditOutcome::new(
+                    SessionAuditOutcomeStatus::Succeeded,
+                    "validation collected",
+                ),
+                SessionAuditSource {
+                    kind: SessionAuditSourceKind::TraceEvent,
+                    trace_ref: Some("/tmp/.boundline/traces/task.json".to_string()),
+                    trace_event_id: Some("event-1".to_string()),
+                    trace_event_type: Some("decision_verified".to_string()),
+                    step_id: Some("verify".to_string()),
+                    plan_revision: Some(1),
+                },
+                json!({"summary": "collected validation evidence"}),
+            )],
+        );
+        let summary = TraceSummaryView {
+            trace_ref: "/tmp/workspace/.boundline/traces/task.json".to_string(),
+            goal: "Validate the implementation path".to_string(),
+            session_audit: Some(audit_projection),
+            terminal_status: TaskStatus::Succeeded,
+            terminal_reason: TerminalReason::new(
+                TerminalCondition::GoalSatisfied,
+                "all checks passed",
+                None,
+            ),
+            ..TraceSummaryView::default()
+        };
+
+        let text = render_trace_summary(&summary, "latest-workspace-trace", "boundline next");
+
+        assert!(text.contains("audit_entry_count: 1"), "{text}");
+        assert!(
+            text.contains(
+                "audit_latest: event=decision_verified algorithm=run::decision_loop::run_with_options_and_context actor=agent:boundline-decision-loop outcome=succeeded"
+            ),
+            "{text}"
+        );
+        assert!(
+            text.contains(
+                "event=decision_verified algorithm=run::decision_loop::run_with_options_and_context actor=agent:boundline-decision-loop outcome=succeeded message=decision verified: collected validation evidence"
+            ),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn render_trace_summary_surfaces_multi_route_audit_actor_projection() {
+        let audit_projection = SessionAuditProjection::from_entries(
+            "session-audit-2",
+            vec![SessionAuditEntry::new_with_timestamp(
+                "session-audit-2",
+                1,
+                1_717_000_000_000,
+                SessionAuditEntryKind::TraceEventProjected,
+                "review vote resolved: council accepted with mixed routes",
+                SessionAuditIdentity::default(),
+                SessionAuditActor {
+                    kind: SessionAuditActorKind::Reviewer,
+                    id: "review-council".to_string(),
+                    display_name: Some("Review Council".to_string()),
+                    role: Some("multi-reviewer".to_string()),
+                    runtime_kind: Some("copilot".to_string()),
+                    provider: Some("copilot".to_string()),
+                    route_slot: Some("review".to_string()),
+                    model_name: Some("gpt-5.4".to_string()),
+                    participant_routes: vec![
+                        "review:copilot:gpt-5.4".to_string(),
+                        "adjudication:copilot:gpt-5.4".to_string(),
+                    ],
+                    mixed_routes: true,
+                },
+                SessionAuditAlgorithm::new(
+                    SessionAuditPhase::Review,
+                    "review_council",
+                    "resolve_vote",
+                ),
+                SessionAuditOutcome::new(SessionAuditOutcomeStatus::Completed, "review accepted"),
+                SessionAuditSource {
+                    kind: SessionAuditSourceKind::TraceEvent,
+                    trace_ref: Some("/tmp/.boundline/traces/task.json".to_string()),
+                    trace_event_id: Some("event-2".to_string()),
+                    trace_event_type: Some("review_vote_resolved".to_string()),
+                    step_id: Some("review".to_string()),
+                    plan_revision: Some(1),
+                },
+                json!({"summary": "council accepted with mixed routes"}),
+            )],
+        );
+        let summary = TraceSummaryView {
+            trace_ref: "/tmp/workspace/.boundline/traces/task.json".to_string(),
+            goal: "Validate review attribution".to_string(),
+            session_audit: Some(audit_projection),
+            terminal_status: TaskStatus::Succeeded,
+            terminal_reason: TerminalReason::new(
+                TerminalCondition::GoalSatisfied,
+                "review passed",
+                None,
+            ),
+            ..TraceSummaryView::default()
+        };
+
+        let text = render_trace_summary(&summary, "latest-workspace-trace", "boundline next");
+
+        assert!(
+            text.contains(
+                "participant_routes=review:copilot:gpt-5.4, adjudication:copilot:gpt-5.4"
+            ),
+            "{text}"
+        );
+        assert!(text.contains("mixed_routes=true"), "{text}");
+    }
+
+    #[test]
+    fn render_trace_audit_summary_focuses_on_audit_projection() {
+        let audit_projection = SessionAuditProjection::from_entries(
+            "session-audit-3",
+            vec![SessionAuditEntry::new_with_timestamp(
+                "session-audit-3",
+                1,
+                1_717_000_000_000,
+                SessionAuditEntryKind::TraceEventProjected,
+                "review vote resolved: council accepted with mixed routes",
+                SessionAuditIdentity::default(),
+                SessionAuditActor {
+                    kind: SessionAuditActorKind::Reviewer,
+                    id: "review-council".to_string(),
+                    display_name: Some("Review Council".to_string()),
+                    role: Some("multi-reviewer".to_string()),
+                    runtime_kind: Some("copilot".to_string()),
+                    provider: Some("copilot".to_string()),
+                    route_slot: Some("review".to_string()),
+                    model_name: Some("gpt-5.4".to_string()),
+                    participant_routes: vec![
+                        "review:copilot:gpt-5.4".to_string(),
+                        "adjudication:copilot:gpt-5.4".to_string(),
+                    ],
+                    mixed_routes: true,
+                },
+                SessionAuditAlgorithm::new(
+                    SessionAuditPhase::Review,
+                    "review_council",
+                    "resolve_vote",
+                ),
+                SessionAuditOutcome::new(SessionAuditOutcomeStatus::Completed, "review accepted"),
+                SessionAuditSource {
+                    kind: SessionAuditSourceKind::TraceEvent,
+                    trace_ref: Some("/tmp/.boundline/traces/task.json".to_string()),
+                    trace_event_id: Some("event-3".to_string()),
+                    trace_event_type: Some("review_vote_resolved".to_string()),
+                    step_id: Some("review".to_string()),
+                    plan_revision: Some(1),
+                },
+                json!({"summary": "council accepted with mixed routes"}),
+            )],
+        );
+        let summary = TraceSummaryView {
+            trace_ref: "/tmp/workspace/.boundline/traces/task.json".to_string(),
+            goal: "Inspect audit only".to_string(),
+            session_audit: Some(audit_projection),
+            terminal_status: TaskStatus::Succeeded,
+            terminal_reason: TerminalReason::new(
+                TerminalCondition::GoalSatisfied,
+                "audit loaded",
+                None,
+            ),
+            ..TraceSummaryView::default()
+        };
+
+        let text = render_trace_audit_summary(&summary, "latest-workspace-trace", "boundline next");
+
+        assert!(text.contains("audit_session_ref: session-audit-3"), "{text}");
+        assert!(text.contains("audit_outcomes: completed (1)"), "{text}");
+        assert!(
+            text.contains(
+                "participant_routes=review:copilot:gpt-5.4, adjudication:copilot:gpt-5.4"
+            ),
+            "{text}"
+        );
+        assert!(!text.contains("route_owner:"), "{text}");
     }
 
     #[test]
@@ -1893,6 +2112,7 @@ mod tests {
                     .to_string(),
                 "review_outcome: accepted".to_string(),
             ],
+            session_audit: None,
             delight_feedback: None,
             terminal_status: TaskStatus::Succeeded,
             terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None),

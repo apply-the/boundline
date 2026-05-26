@@ -1,5 +1,7 @@
 #[path = "../../../src/adapters/agent.rs"]
 pub mod agent;
+#[path = "../../../src/adapters/audit_store.rs"]
+pub mod audit_store;
 #[path = "../../../src/adapters/checkpoint_store.rs"]
 pub mod checkpoint_store;
 #[path = "../../../src/adapters/cluster_store.rs"]

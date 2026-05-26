@@ -3212,7 +3212,8 @@ fn red_to_green_addition() {
             next.terminal_output
         );
 
-        let inspect = crate::cli::inspect::execute_inspect(None, Some(&workspace), None).unwrap();
+        let inspect =
+            crate::cli::inspect::execute_inspect(None, Some(&workspace), None, false).unwrap();
         assert!(
             inspect
                 .terminal_output
@@ -3988,7 +3989,8 @@ fn red_to_green_addition() {
             status.terminal_output
         );
 
-        let inspect = crate::cli::inspect::execute_inspect(None, Some(&workspace), None).unwrap();
+        let inspect =
+            crate::cli::inspect::execute_inspect(None, Some(&workspace), None, false).unwrap();
         assert!(
             inspect.terminal_output.contains("review_trigger: pr_ready"),
             "{}",

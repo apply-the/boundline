@@ -266,6 +266,8 @@ pub enum DeveloperCommand {
         cluster: Option<PathBuf>,
         #[arg(long)]
         session: Option<String>,
+        #[arg(long)]
+        audit: bool,
     },
     Status {
         #[arg(long)]
@@ -1646,12 +1648,13 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
         DeveloperCommand::Run { .. } => dispatch_run_command(command),
         DeveloperCommand::Workflow { command } => dispatch_workflow_command(command),
         DeveloperCommand::Checkpoint { command } => dispatch_checkpoint_command(command),
-        DeveloperCommand::Inspect { trace, workspace, cluster, session } => {
+        DeveloperCommand::Inspect { trace, workspace, cluster, session, audit } => {
             dispatch_inspect_command(
                 trace.as_deref(),
                 workspace.as_deref(),
                 cluster.as_deref(),
                 session.as_deref(),
+                *audit,
             )
         }
         DeveloperCommand::Session { command } => dispatch_session_history_command(command),
@@ -1804,6 +1807,7 @@ fn dispatch_orchestrate_command(command: &DeveloperCommand) -> DispatchOutcome {
                     event_id: uuid::Uuid::new_v4().to_string(),
                     timestamp_ms: crate::domain::trace::current_timestamp_millis(),
                     event_kind: "terminal".to_string(),
+                    audit: None,
                     actor_kind: None,
                     actor_name: None,
                     runtime_kind: None,
@@ -1969,6 +1973,7 @@ fn dispatch_inspect_command(
     workspace: Option<&Path>,
     cluster: Option<&Path>,
     session_id: Option<&str>,
+    audit: bool,
 ) -> DispatchOutcome {
     let default_workspace = if trace.is_none() && workspace.is_none() && cluster.is_none() {
         std::env::current_dir().ok()
@@ -1976,7 +1981,7 @@ fn dispatch_inspect_command(
         None
     };
     let workspace_ref = workspace.or(cluster).or(default_workspace.as_deref());
-    match inspect::execute_inspect(trace, workspace_ref, session_id) {
+    match inspect::execute_inspect(trace, workspace_ref, session_id, audit) {
         Ok(report) => DispatchOutcome::from_inspect_report(report),
         Err(error) => DispatchOutcome::text(
             match error {
@@ -3101,6 +3106,7 @@ fn red_to_green_addition() {
             workspace: Some(workspace),
             cluster: None,
             session: None,
+            audit: false,
         });
         assert_eq!(inspect.exit_status, CommandExitStatus::TraceReadFailure);
         assert!(inspect.output.contains("inspect: trace read failure"), "{}", inspect.output);
@@ -3191,9 +3197,20 @@ fn red_to_green_addition() {
             workspace: Some(session_workspace.clone()),
             cluster: None,
             session: None,
+            audit: false,
         });
         assert_eq!(inspect.exit_status, CommandExitStatus::Succeeded);
         assert!(inspect.output.contains("inspection_target:"), "{}", inspect.output);
+
+        let audit_inspect = dispatch(&DeveloperCommand::Inspect {
+            trace: None,
+            workspace: Some(session_workspace.clone()),
+            cluster: None,
+            session: None,
+            audit: true,
+        });
+        assert_eq!(audit_inspect.exit_status, CommandExitStatus::Succeeded);
+        assert!(audit_inspect.output.contains("audit_timeline:"), "{}", audit_inspect.output);
 
         let invalid_workspace = temp_workspace("boundline-cli-dispatch-invalid");
         let invalid = dispatch(&DeveloperCommand::Run {
@@ -3297,6 +3314,7 @@ fn red_to_green_addition() {
             workspace: None,
             cluster: None,
             session: None,
+            audit: false,
         });
         assert_eq!(inspect.exit_status, CommandExitStatus::Succeeded);
         assert!(inspect.output.contains("inspection_target:"), "{}", inspect.output);
@@ -3579,6 +3597,7 @@ fn red_to_green_addition() {
                     workspace: Some(workspace.clone()),
                     cluster: None,
                     session: None,
+                    audit: false,
                 },
                 CommandName::Inspect,
             ),

@@ -6,10 +6,14 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 use thiserror::Error;
 
+use crate::adapters::audit_store::{
+    FileSessionAuditStore, SessionAuditStore, SessionAuditStoreError,
+};
 use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
 use crate::adapters::trace_store::{FileTraceStore, TraceStore, TraceStoreError};
 use crate::cli::CommandExitStatus;
 use crate::cli::output;
+use crate::domain::audit::SessionAuditProjection;
 use crate::domain::cluster::ClusterDeliveryStory;
 use crate::domain::context_intelligence::AdvancedContextProjection;
 use crate::domain::goal_plan::GoalPlanFlowState;
@@ -63,6 +67,19 @@ fn persisted_session_brief_ref(workspace: &Path, brief_ref: &str) -> Option<Stri
     workspace.join(brief_ref).is_file().then(|| brief_ref.to_string())
 }
 
+fn load_session_audit_projection(
+    workspace: &Path,
+    session_id: &str,
+) -> Result<Option<SessionAuditProjection>, TraceSummaryError> {
+    let store = FileSessionAuditStore::for_session(workspace, session_id);
+    let entries = store.load_all().map_err(TraceSummaryError::SessionAuditStore)?;
+    if entries.is_empty() {
+        return Ok(None);
+    }
+
+    Ok(Some(SessionAuditProjection::from_entries(session_id.to_string(), entries)))
+}
+
 /// Result returned by `inspect` after loading a trace, summarizing it, and
 /// rendering the terminal-facing output.
 #[derive(Debug, Clone, PartialEq)]
@@ -98,6 +115,7 @@ pub fn execute_inspect(
     trace: Option<&Path>,
     workspace: Option<&Path>,
     session_id: Option<&str>,
+    audit_only: bool,
 ) -> Result<InspectCommandReport, InspectCommandError> {
     let (inspection_target, trace_ref, trace) = load_trace(trace, workspace, session_id)?;
     let summary = summarize_trace(&trace_ref, &trace)?;
@@ -109,11 +127,19 @@ pub fn execute_inspect(
 
     Ok(InspectCommandReport {
         exit_status,
-        terminal_output: output::render_trace_summary(
-            &summary,
-            inspection_target.as_str(),
-            output::next_command_after_inspect(summary.terminal_status),
-        ),
+        terminal_output: if audit_only {
+            output::render_trace_audit_summary(
+                &summary,
+                inspection_target.as_str(),
+                output::next_command_after_inspect(summary.terminal_status),
+            )
+        } else {
+            output::render_trace_summary(
+                &summary,
+                inspection_target.as_str(),
+                output::next_command_after_inspect(summary.terminal_status),
+            )
+        },
         inspection_target: Some(inspection_target.as_str().to_string()),
         trace_location: Some(trace_ref.to_string_lossy().into_owned()),
         trace_summary: Some(summary),
@@ -626,6 +652,11 @@ pub fn summarize_trace(
     let run_brief_ref = workspace_root.as_ref().and_then(|workspace| {
         persisted_session_brief_ref(workspace, &session_run_brief_ref(&trace.session_id))
     });
+    let session_audit = workspace_root
+        .as_ref()
+        .map(|workspace| load_session_audit_projection(workspace, &trace.session_id))
+        .transpose()?
+        .flatten();
 
     Ok(TraceSummaryView {
         trace_ref: trace_ref.as_ref().to_string_lossy().into_owned(),
@@ -678,6 +709,7 @@ pub fn summarize_trace(
         inspect_council,
         inspect_timeline,
         review_timeline,
+        session_audit,
         delight_feedback,
         terminal_status,
         terminal_reason,
@@ -1811,6 +1843,8 @@ pub enum TraceSummaryError {
     MissingTerminalStatus,
     #[error("trace is missing a terminal reason")]
     MissingTerminalReason,
+    #[error("failed to read session audit log: {0}")]
+    SessionAuditStore(SessionAuditStoreError),
     #[error("trace event {0:?} is missing a step id")]
     MissingStepId(TraceEventType),
     #[error("trace step '{0}' is missing its step kind payload")]

@@ -1,4 +1,4 @@
-# Specification Quality Checklist: Session and Assistant Fine-Tuning
+# Specification Quality Checklist: Session, Assistant, and Audit Fine-Tuning
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning  
 **Created**: 2026-05-25  
@@ -31,4 +31,4 @@
 
 ## Notes
 
-- This checklist is completed as a retrospective quality pass for an already-implemented fine-tuning slice.
+- This checklist is completed as a retrospective quality pass for an already-implemented fine-tuning slice, including the session audit attribution and inspect-audit follow-through.

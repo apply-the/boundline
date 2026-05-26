@@ -1,17 +1,17 @@
-# Implementation Plan: Session and Assistant Fine-Tuning
+# Implementation Plan: Session, Assistant, and Audit Fine-Tuning
 
 **Branch**: `064-session-assistant-fine-tuning` | **Date**: 2026-05-25 | **Spec**: [spec.md](./spec.md)
 **Input**: Feature specification from `/specs/064-session-assistant-fine-tuning/spec.md`
 
 ## Summary
 
-This slice consolidates production-ready fine-tuning across three operator-facing surfaces: readable session references, streamlined local install refresh, and consistent two-button assistant routing in Copilot prompt commands. The implementation keeps existing runtime authority and safety boundaries intact while improving day-to-day usability and recoverability.
+This slice consolidates production-ready fine-tuning across five operator-facing surfaces: readable session references, streamlined local install refresh, consistent two-button assistant routing in Copilot prompt commands, session audit attribution clarity, and a dedicated audit-focused inspect surface. The implementation keeps existing runtime authority and safety boundaries intact while improving day-to-day usability, explainability, and recoverability.
 
 ## Technical Context
 
 **Language/Version**: Rust 1.95.0, edition 2024, plus repository-managed shell and Markdown prompt assets  
 **Primary Dependencies**: Existing workspace dependencies only (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`)  
-**Storage**: Workspace-local `.boundline/session.json` and `.boundline/sessions/`, plus repository-managed prompt assets under `assistant/copilot/prompts/`  
+**Storage**: Workspace-local `.boundline/session.json`, session-local storage under `.boundline/sessions/<session>/`, including `.boundline/sessions/<session>/audit/events.jsonl` and `.boundline/sessions/<session>/audit/cursor.json`, plus repository-managed prompt assets under `assistant/`  
 **Testing**: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and representative `cargo test` coverage for touched behavior  
 **Target Platform**: macOS maintainer workflow plus standard Linux CI behavior for Rust and prompt asset checks  
 **Project Type**: Rust workspace CLI with assistant command-pack assets
@@ -42,9 +42,16 @@ specs/064-session-assistant-fine-tuning/
 src/domain/session.rs
 src/cli/session.rs
 src/cli/govern.rs
+src/domain/audit.rs
+src/adapters/audit_store.rs
+src/orchestrator/session_runtime.rs
+src/cli/orchestrate.rs
+src/cli/inspect.rs
+src/cli/output_trace_summary.rs
 src/cli.rs
 scripts/install-local.sh
 assistant/copilot/prompts/
+assistant/*/commands/
 ```
 
 ## Phase Plan
@@ -71,6 +78,18 @@ assistant/copilot/prompts/
 - Keep tests and assertions aligned with adjusted runtime semantics.
 - Run formatting, linting, and representative tests.
 - Confirm prompt text coherence and no contradictory next-step guidance.
+
+### Phase 5: Session Audit Attribution Refinement
+
+- Extend audit actors to preserve mixed reviewer routes and participant route lists.
+- Keep inspect-ready audit projections human-readable without losing structured attribution.
+- Reuse the same audit vocabulary across runtime, inspect, and assistant-facing projections.
+
+### Phase 6: Audit-First Assistant and Inspect Surfaces
+
+- Expose explicit audit projections on orchestrate NDJSON events for assistant hosts.
+- Add `inspect --audit` as a dedicated audit-focused operator surface.
+- Update inspect command-pack guidance to prefer `--audit` when the user explicitly asks for audit lineage.
 
 ## Complexity Tracking
 

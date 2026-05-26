@@ -9,6 +9,9 @@ use crate::adapters::session_store::{FileSessionStore, SessionStore};
 use crate::cli::CommandExitStatus;
 use crate::cli::assistant_assets::AssistantHost;
 use crate::cli::session::{self, SessionCommandError};
+use crate::domain::audit::{
+    SessionAuditActor, SessionAuditAlgorithm, SessionAuditOutcome, SessionAuditSourceKind,
+};
 use crate::domain::governance::{
     ApprovalState, CanonMode, CompactedCanonMemory, GovernanceLifecycleState,
     GovernanceRuntimeKind, MemoryCredibilityState, planning_canon_mode_for_stage_key,
@@ -62,8 +65,9 @@ const GOAL_CLARIFICATION_ANSWER_REQUIRES_ACTIVE_PHASE_REQUEST: &str =
 const GOAL_CLARIFICATION_ANSWER_REQUIRES_NON_EMPTY_TEXT: &str =
     "goal clarification answer must not be empty";
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 struct OrchestrateEventMetadata {
+    audit: Option<OrchestrateEventAuditProjection>,
     actor_kind: Option<String>,
     actor_name: Option<String>,
     runtime_kind: Option<String>,
@@ -374,10 +378,33 @@ pub struct OrchestratePhaseRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct OrchestrateEventAuditProjection {
+    pub event: String,
+    pub actor: SessionAuditActor,
+    pub algorithm: SessionAuditAlgorithm,
+    pub outcome: SessionAuditOutcome,
+    pub message: String,
+}
+
+impl OrchestrateEventAuditProjection {
+    fn from_entry(entry: &crate::domain::audit::SessionAuditEntry) -> Self {
+        Self {
+            event: entry.event_label(),
+            actor: entry.actor.clone(),
+            algorithm: entry.algorithm.clone(),
+            outcome: entry.outcome.clone(),
+            message: entry.message.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OrchestrateEventEnvelope {
     pub event_id: String,
     pub timestamp_ms: u64,
     pub event_kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audit: Option<OrchestrateEventAuditProjection>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actor_kind: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1844,6 +1871,20 @@ fn push_phase_request(
             phase_request_id(&view.session_id, phase_kind, stage_key, Some(question))
         })
     });
+    let OrchestrateEventMetadata {
+        audit,
+        actor_kind,
+        actor_name,
+        runtime_kind,
+        provider,
+        route_slot,
+        model_name,
+        decision_family,
+        review_step,
+        vote_summary,
+        adjudication_summary,
+        governance_mode,
+    } = metadata;
     let phase_request =
         phase_request_kind.zip(question).map(|(kind, question)| OrchestratePhaseRequest {
             request_id: resolved_request_id.clone().unwrap_or_default(),
@@ -1858,17 +1899,18 @@ fn push_phase_request(
         event_id: format!("orchestrate-event-{}", *event_counter),
         timestamp_ms: current_timestamp_millis(),
         event_kind: EVENT_KIND_PHASE_REQUEST.to_string(),
-        actor_kind: metadata.actor_kind,
-        actor_name: metadata.actor_name,
-        runtime_kind: metadata.runtime_kind,
-        provider: metadata.provider,
-        route_slot: metadata.route_slot,
-        model_name: metadata.model_name,
-        decision_family: metadata.decision_family,
-        review_step: metadata.review_step,
-        vote_summary: metadata.vote_summary,
-        adjudication_summary: metadata.adjudication_summary,
-        governance_mode: metadata.governance_mode,
+        audit,
+        actor_kind,
+        actor_name,
+        runtime_kind,
+        provider,
+        route_slot,
+        model_name,
+        decision_family,
+        review_step,
+        vote_summary,
+        adjudication_summary,
+        governance_mode,
         session_ref: Some(view.session_id.clone()),
         phase_kind: Some(phase_kind.to_string()),
         stage_key: Some(stage_key.to_string()),
@@ -2241,22 +2283,37 @@ fn push_event(
         trace_summary.as_ref(),
         phase_kind.as_deref(),
     );
+    let OrchestrateEventMetadata {
+        audit,
+        actor_kind,
+        actor_name,
+        runtime_kind,
+        provider,
+        route_slot,
+        model_name,
+        decision_family,
+        review_step,
+        vote_summary,
+        adjudication_summary,
+        governance_mode,
+    } = metadata;
 
     events.push(OrchestrateEventEnvelope {
         event_id: format!("orchestrate-event-{}", *event_counter),
         timestamp_ms: current_timestamp_millis(),
         event_kind: event_kind.to_string(),
-        actor_kind: metadata.actor_kind,
-        actor_name: metadata.actor_name,
-        runtime_kind: metadata.runtime_kind,
-        provider: metadata.provider,
-        route_slot: metadata.route_slot,
-        model_name: metadata.model_name,
-        decision_family: metadata.decision_family,
-        review_step: metadata.review_step,
-        vote_summary: metadata.vote_summary,
-        adjudication_summary: metadata.adjudication_summary,
-        governance_mode: metadata.governance_mode,
+        audit,
+        actor_kind,
+        actor_name,
+        runtime_kind,
+        provider,
+        route_slot,
+        model_name,
+        decision_family,
+        review_step,
+        vote_summary,
+        adjudication_summary,
+        governance_mode,
         session_ref: session_status.map(|view| view.session_id.clone()),
         phase_kind,
         stage_key,
@@ -2278,26 +2335,37 @@ fn event_metadata(
     trace_summary: Option<&TraceSummaryView>,
     phase_kind: Option<&str>,
 ) -> OrchestrateEventMetadata {
-    let route_slot = infer_event_route_slot(phase_kind, session_status).map(str::to_string);
+    let inferred_route_slot =
+        infer_event_route_slot(phase_kind, session_status).map(str::to_string);
+    let audit_entry =
+        trace_summary.and_then(|summary| latest_audit_entry_for_phase(summary, phase_kind));
+    let audit = audit_entry.map(OrchestrateEventAuditProjection::from_entry);
+    let audit_actor = audit_entry.map(|entry| &entry.actor);
+    let route_slot = audit_actor.and_then(|actor| actor.route_slot.clone()).or(inferred_route_slot);
     let routed_selection = route_slot.as_deref().and_then(|slot| {
         trace_summary.and_then(|summary| routing_projection_selection(summary, slot))
     });
 
-    let runtime_kind = routed_selection
-        .as_ref()
-        .map(|selection| selection.runtime_kind.clone())
+    let runtime_kind = audit_actor
+        .and_then(|actor| actor.runtime_kind.clone())
+        .or_else(|| routed_selection.as_ref().map(|selection| selection.runtime_kind.clone()))
         .or_else(|| session_status.and_then(|view| view.latest_governance_runtime.clone()));
-    let provider = route_slot
-        .as_deref()
-        .and_then(|slot| {
-            trace_summary.and_then(|summary| routing_projection_provider(summary, slot))
+    let provider = audit_actor
+        .and_then(|actor| actor.provider.clone())
+        .or_else(|| {
+            route_slot.as_deref().and_then(|slot| {
+                trace_summary.and_then(|summary| routing_projection_provider(summary, slot))
+            })
         })
         .or_else(|| runtime_kind.clone());
-    let model_name = routed_selection.map(|selection| selection.model_name);
+    let model_name = audit_actor
+        .and_then(|actor| actor.model_name.clone())
+        .or_else(|| routed_selection.map(|selection| selection.model_name));
 
     OrchestrateEventMetadata {
-        actor_kind: None,
-        actor_name: None,
+        audit,
+        actor_kind: audit_actor.map(|actor| actor.kind.as_str().to_string()),
+        actor_name: audit_actor.map(|actor| actor.display_name_or_id()),
         runtime_kind,
         provider,
         route_slot,
@@ -2316,6 +2384,42 @@ fn event_metadata(
             view.latest_voting_adjudication.clone().or_else(|| view.latest_review_outcome.clone())
         }),
         governance_mode: session_status.and_then(|view| view.latest_governance_mode.clone()),
+    }
+}
+
+fn latest_audit_entry_for_phase<'a>(
+    trace_summary: &'a TraceSummaryView,
+    phase_kind: Option<&str>,
+) -> Option<&'a crate::domain::audit::SessionAuditEntry> {
+    let audit = trace_summary.session_audit.as_ref()?;
+
+    audit
+        .entries
+        .iter()
+        .rev()
+        .find(|entry| {
+            entry.source.kind == SessionAuditSourceKind::TraceEvent
+                && audit_entry_matches_phase(entry, phase_kind)
+        })
+        .or_else(|| {
+            audit.entries.iter().rev().find(|entry| audit_entry_matches_phase(entry, phase_kind))
+        })
+}
+
+fn audit_entry_matches_phase(
+    entry: &crate::domain::audit::SessionAuditEntry,
+    phase_kind: Option<&str>,
+) -> bool {
+    let phase = entry.algorithm.phase.as_str();
+    match phase_kind {
+        Some(PHASE_KIND_GOAL) => matches!(phase, "goal" | "session"),
+        Some(PHASE_KIND_PLANNING) => {
+            matches!(phase, "plan" | "governance" | "review" | "reasoning" | "session")
+        }
+        Some(PHASE_KIND_EXECUTION) => {
+            matches!(phase, "run" | "governance" | "review" | "reasoning" | "recovery" | "session")
+        }
+        _ => true,
     }
 }
 
@@ -2377,4 +2481,84 @@ fn parse_routing_projection_entry(entry: &str) -> Option<(String, String, String
 fn parse_slot_binding_entry(entry: &str) -> Option<(String, String)> {
     let (slot, binding) = entry.split_once(ROUTING_PROJECTION_SLOT_SEPARATOR)?;
     Some((slot.to_string(), binding.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::{PHASE_KIND_EXECUTION, event_metadata};
+    use crate::domain::audit::{
+        SessionAuditActor, SessionAuditActorKind, SessionAuditAlgorithm, SessionAuditEntry,
+        SessionAuditEntryKind, SessionAuditIdentity, SessionAuditOutcome,
+        SessionAuditOutcomeStatus, SessionAuditPhase, SessionAuditProjection, SessionAuditSource,
+        SessionAuditSourceKind,
+    };
+    use crate::domain::trace::TraceSummaryView;
+
+    #[test]
+    fn event_metadata_prefers_latest_matching_audit_actor() {
+        let summary = TraceSummaryView {
+            session_audit: Some(SessionAuditProjection::from_entries(
+                "session-orchestrate-1",
+                vec![SessionAuditEntry::new_with_timestamp(
+                    "session-orchestrate-1",
+                    1,
+                    1_717_000_000_000,
+                    SessionAuditEntryKind::TraceEventProjected,
+                    "decision dispatched: running implementation step",
+                    SessionAuditIdentity::default(),
+                    SessionAuditActor {
+                        kind: SessionAuditActorKind::Agent,
+                        id: "boundline-decision-loop".to_string(),
+                        display_name: Some("Boundline Decision Loop".to_string()),
+                        role: None,
+                        runtime_kind: Some("copilot".to_string()),
+                        provider: Some("copilot".to_string()),
+                        route_slot: Some("implementation".to_string()),
+                        model_name: Some("gpt-5.4".to_string()),
+                        participant_routes: Vec::new(),
+                        mixed_routes: false,
+                    },
+                    SessionAuditAlgorithm::new(
+                        SessionAuditPhase::Run,
+                        "decision_loop",
+                        "run_with_options_and_context",
+                    ),
+                    SessionAuditOutcome::new(
+                        SessionAuditOutcomeStatus::Recorded,
+                        "implementation running",
+                    ),
+                    SessionAuditSource {
+                        kind: SessionAuditSourceKind::TraceEvent,
+                        trace_ref: Some("/tmp/.boundline/traces/task.json".to_string()),
+                        trace_event_id: Some("event-1".to_string()),
+                        trace_event_type: Some("decision_dispatched".to_string()),
+                        step_id: Some("implement".to_string()),
+                        plan_revision: Some(1),
+                    },
+                    json!({"summary": "implementation running"}),
+                )],
+            )),
+            ..TraceSummaryView::default()
+        };
+
+        let metadata = event_metadata(None, Some(&summary), Some(PHASE_KIND_EXECUTION));
+
+        let audit = metadata.audit.as_ref().expect("expected audit metadata");
+
+        assert_eq!(metadata.actor_kind.as_deref(), Some("agent"));
+        assert_eq!(metadata.actor_name.as_deref(), Some("Boundline Decision Loop"));
+        assert_eq!(metadata.runtime_kind.as_deref(), Some("copilot"));
+        assert_eq!(metadata.provider.as_deref(), Some("copilot"));
+        assert_eq!(metadata.route_slot.as_deref(), Some("implementation"));
+        assert_eq!(metadata.model_name.as_deref(), Some("gpt-5.4"));
+        assert_eq!(audit.event, "decision_dispatched");
+        assert_eq!(
+            audit.algorithm.rollup_key(),
+            "run::decision_loop::run_with_options_and_context"
+        );
+        assert_eq!(audit.outcome.status.as_str(), "recorded");
+        assert_eq!(audit.actor.rollup_key(), "agent:boundline-decision-loop");
+    }
 }

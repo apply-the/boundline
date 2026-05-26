@@ -16,6 +16,7 @@ use crate::domain::follow_through::FollowThroughProjection;
 
 const TRACE_BRIEF_CHAR_LIMIT: usize = 120;
 const TRACE_BRIEF_ITEM_LIMIT: usize = 3;
+const TRACE_AUDIT_TIMELINE_LIMIT: usize = 10;
 
 pub fn render_trace_summary_brief(
     summary: &TraceSummaryView,
@@ -77,6 +78,10 @@ pub fn render_trace_summary_brief(
 
     if let Some(review_line) = trace_review_brief_line(summary) {
         lines.push(review_line);
+    }
+
+    if let Some(audit_line) = trace_audit_brief_line(summary) {
+        lines.push(audit_line);
     }
 
     if let Some(governance_line) = trace_governance_brief_line(summary) {
@@ -309,6 +314,130 @@ fn trace_governance_brief_line(summary: &TraceSummaryView) -> Option<String> {
     }
 }
 
+fn trace_audit_brief_line(summary: &TraceSummaryView) -> Option<String> {
+    let audit = summary.session_audit.as_ref()?;
+    if audit.entry_count == 0 {
+        return None;
+    }
+
+    let latest = audit.entries.last()?;
+    let actor_attribution = audit_actor_attribution_fields(&latest.actor);
+    Some(format!(
+        "audit: count={}; event={}; algorithm={}; actor={}{}; outcome={}",
+        audit.entry_count,
+        latest.event_label(),
+        preview_trace_brief_text(&latest.algorithm.rollup_key()),
+        latest.actor.rollup_key(),
+        actor_attribution,
+        latest.outcome.status.as_str(),
+    ))
+}
+
+fn audit_actor_attribution_fields(actor: &crate::domain::audit::SessionAuditActor) -> String {
+    let mut parts = Vec::new();
+    if !actor.participant_routes.is_empty() {
+        parts.push(format!("participant_routes={}", actor.participant_routes.join(", ")));
+    }
+    if actor.mixed_routes {
+        parts.push("mixed_routes=true".to_string());
+    }
+
+    if parts.is_empty() { String::new() } else { format!("; {}", parts.join("; ")) }
+}
+
+fn push_session_audit_lines(
+    lines: &mut Vec<String>,
+    session_audit: &crate::domain::audit::SessionAuditProjection,
+    timeline_limit: Option<usize>,
+) {
+    lines.push(format!("audit_entry_count: {}", session_audit.entry_count));
+    lines.push(format!("audit_session_ref: {}", session_audit.session_id));
+    if !session_audit.actor_rollups.is_empty() {
+        lines.push(format!(
+            "audit_actors: {}",
+            preview_trace_brief_items(
+                &session_audit
+                    .actor_rollups
+                    .iter()
+                    .map(|rollup| format!("{} ({})", rollup.key, rollup.count))
+                    .collect::<Vec<_>>()
+            )
+        ));
+    }
+    if !session_audit.algorithm_rollups.is_empty() {
+        lines.push(format!(
+            "audit_algorithms: {}",
+            preview_trace_brief_items(
+                &session_audit
+                    .algorithm_rollups
+                    .iter()
+                    .map(|rollup| format!("{} ({})", rollup.key, rollup.count))
+                    .collect::<Vec<_>>()
+            )
+        ));
+    }
+    if !session_audit.outcome_rollups.is_empty() {
+        lines.push(format!(
+            "audit_outcomes: {}",
+            preview_trace_brief_items(
+                &session_audit
+                    .outcome_rollups
+                    .iter()
+                    .map(|rollup| format!("{} ({})", rollup.key, rollup.count))
+                    .collect::<Vec<_>>()
+            )
+        ));
+    }
+    if let Some(latest) = session_audit.entries.last() {
+        let actor_attribution = audit_actor_attribution_fields(&latest.actor);
+        lines.push(format!(
+            "audit_latest: event={} algorithm={} actor={}{} outcome={} message={}",
+            latest.event_label(),
+            latest.algorithm.rollup_key(),
+            latest.actor.rollup_key(),
+            actor_attribution,
+            latest.outcome.status.as_str(),
+            latest.message
+        ));
+    }
+    lines.push("audit_timeline:".to_string());
+
+    match timeline_limit {
+        Some(limit) => {
+            let visible_entries =
+                session_audit.entries.iter().rev().take(limit).collect::<Vec<_>>();
+            for entry in visible_entries.into_iter().rev() {
+                let actor_attribution = audit_actor_attribution_fields(&entry.actor);
+                lines.push(format!(
+                    "{} event={} algorithm={} actor={}{} outcome={} message={}",
+                    entry.timestamp,
+                    entry.event_label(),
+                    entry.algorithm.rollup_key(),
+                    entry.actor.rollup_key(),
+                    actor_attribution,
+                    entry.outcome.status.as_str(),
+                    entry.message,
+                ));
+            }
+        }
+        None => {
+            for entry in &session_audit.entries {
+                let actor_attribution = audit_actor_attribution_fields(&entry.actor);
+                lines.push(format!(
+                    "{} event={} algorithm={} actor={}{} outcome={} message={}",
+                    entry.timestamp,
+                    entry.event_label(),
+                    entry.algorithm.rollup_key(),
+                    entry.actor.rollup_key(),
+                    actor_attribution,
+                    entry.outcome.status.as_str(),
+                    entry.message,
+                ));
+            }
+        }
+    }
+}
+
 fn trace_reasoning_brief_line(summary: &TraceSummaryView) -> Option<String> {
     let reasoning_profile = summary.reasoning_profile.as_ref()?;
     let mut parts = vec![
@@ -469,6 +598,12 @@ pub fn render_trace_summary(
         lines.extend(summary.decision_timeline.iter().cloned());
     }
 
+    if let Some(session_audit) = &summary.session_audit
+        && session_audit.entry_count > 0
+    {
+        push_session_audit_lines(&mut lines, session_audit, Some(TRACE_AUDIT_TIMELINE_LIMIT));
+    }
+
     if !summary.failure_evidence.is_empty() {
         lines.push("failure_evidence:".to_string());
         lines.extend(summary.failure_evidence.iter().cloned());
@@ -601,6 +736,34 @@ pub fn render_trace_summary(
     if let Some(duration) = summary.duration {
         lines.push(format!("duration_ms: {duration}"));
     }
+
+    lines.join("\n")
+}
+
+pub fn render_trace_audit_summary(
+    summary: &TraceSummaryView,
+    inspection_target: &str,
+    next_command: &str,
+) -> String {
+    let mut lines = vec![
+        format!("inspection_target: {inspection_target}"),
+        format!("trace: {}", summary.trace_ref),
+        format!("goal: {}", summary.goal),
+    ];
+
+    match &summary.session_audit {
+        Some(session_audit) if session_audit.entry_count > 0 => {
+            push_session_audit_lines(&mut lines, session_audit, None);
+        }
+        _ => {
+            lines.push("audit_entry_count: 0".to_string());
+            lines.push("audit: no session audit entries found".to_string());
+        }
+    }
+
+    lines.push(format!("latest_status: {}", task_status_text(summary.terminal_status)));
+    lines.push(format!("terminal_reason: {}", summary.terminal_reason.message));
+    lines.push(format!("next_command: {next_command}"));
 
     lines.join("\n")
 }

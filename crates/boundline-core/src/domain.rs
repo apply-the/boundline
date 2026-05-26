@@ -1,3 +1,5 @@
+#[path = "../../../src/domain/audit.rs"]
+pub mod audit;
 #[path = "../../../src/domain/brief.rs"]
 pub mod brief;
 #[path = "../../../src/domain/checkpoint.rs"]

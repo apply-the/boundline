@@ -2,10 +2,15 @@
 //! checkpoints, and persisted trace updates.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::env;
 use std::fs;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
+use crate::adapters::audit_store::{
+    FileSessionAuditStore, SessionAuditStore, SessionAuditStoreError,
+};
 use crate::adapters::checkpoint_store::{CheckpointStoreError, FileCheckpointStore};
 use crate::adapters::governance_runtime::{
     CanonCliRuntime, GovernanceRequestKind, GovernanceRuntime, GovernanceRuntimeRequest,
@@ -24,6 +29,11 @@ use crate::adapters::cluster_store::FileClusterStore;
 use crate::adapters::config_store::FileConfigStore;
 use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
 use crate::adapters::trace_store::{FileTraceStore, TraceStore, TraceStoreError};
+use crate::domain::audit::{
+    SessionAuditActor, SessionAuditActorKind, SessionAuditAlgorithm, SessionAuditEntry,
+    SessionAuditEntryKind, SessionAuditIdentity, SessionAuditOutcome, SessionAuditOutcomeStatus,
+    SessionAuditPhase, SessionAuditSource, SessionAuditSourceKind,
+};
 use crate::domain::cluster::{
     ClusterDeliveryStory, ClusterRouteOwner, ClusterSessionProjection, ClusteredExecutionCondition,
     ClusteredExecutionKind, WorkspaceParticipationKind, WorkspaceParticipationRecord,
@@ -546,12 +556,195 @@ impl SessionRuntime {
         &self,
         session: &ActiveSessionRecord,
     ) -> Result<PathBuf, SessionRuntimeError> {
-        self.session_store.persist(session).map_err(SessionRuntimeError::SessionStore)
+        let previous = self
+            .session_store
+            .load_session(&session.session_id)
+            .map_err(SessionRuntimeError::SessionStore)?;
+        let path =
+            self.session_store.persist(session).map_err(SessionRuntimeError::SessionStore)?;
+        self.sync_session_audit_lifecycle(previous.as_ref(), session)?;
+        Ok(path)
     }
 
     /// Clears the active workspace session.
     pub fn clear_session(&self) -> Result<(), SessionRuntimeError> {
         self.session_store.clear().map_err(SessionRuntimeError::SessionStore)
+    }
+
+    fn sync_session_audit_lifecycle(
+        &self,
+        previous: Option<&ActiveSessionRecord>,
+        session: &ActiveSessionRecord,
+    ) -> Result<(), SessionRuntimeError> {
+        let audit_store =
+            FileSessionAuditStore::for_session(&self.workspace_ref, &session.session_id);
+        let mut cursor =
+            audit_store.load_cursor().map_err(SessionRuntimeError::SessionAuditStore)?;
+        let session_identity = self.resolve_session_audit_identity();
+        let system_actor = SessionAuditActor::system("boundline");
+        let mut cursor_dirty = false;
+
+        if !cursor.session_start_recorded {
+            let entry = SessionAuditEntry::new_with_timestamp(
+                session.session_id.clone(),
+                cursor.next_sequence(),
+                session.created_at,
+                SessionAuditEntryKind::SessionStart,
+                "session started",
+                session_identity.clone(),
+                system_actor.clone(),
+                SessionAuditAlgorithm::new(
+                    SessionAuditPhase::Session,
+                    "session_runtime",
+                    "persist_session",
+                ),
+                SessionAuditOutcome::new(SessionAuditOutcomeStatus::Started, "session opened"),
+                SessionAuditSource::session_lifecycle(),
+                json!({
+                    "workspace_ref": session.workspace_ref,
+                    "goal": session.goal,
+                    "latest_status": session_status_text(session.latest_status),
+                }),
+            );
+            audit_store.append(&entry).map_err(SessionRuntimeError::SessionAuditStore)?;
+            cursor.session_start_recorded = true;
+            cursor_dirty = true;
+        }
+
+        let previous_status =
+            previous.map(|record| session_status_text(record.latest_status).to_string());
+        let current_status = session_status_text(session.latest_status).to_string();
+        if cursor.latest_session_status.as_deref() != Some(current_status.as_str())
+            || previous_status.as_deref() != Some(current_status.as_str())
+        {
+            let entry = SessionAuditEntry::new_with_timestamp(
+                session.session_id.clone(),
+                cursor.next_sequence(),
+                session.updated_at,
+                SessionAuditEntryKind::SessionStatusChanged,
+                format!("session status changed to {current_status}"),
+                session_identity.clone(),
+                system_actor.clone(),
+                SessionAuditAlgorithm::new(
+                    SessionAuditPhase::Session,
+                    "session_runtime",
+                    "persist_session",
+                ),
+                session_audit_outcome_for_status(session.latest_status),
+                SessionAuditSource::session_lifecycle(),
+                json!({
+                    "previous_status": previous_status,
+                    "current_status": current_status,
+                    "terminal_reason": session.latest_terminal_reason,
+                    "latest_trace_ref": session.latest_trace_ref,
+                }),
+            );
+            audit_store.append(&entry).map_err(SessionRuntimeError::SessionAuditStore)?;
+            cursor.latest_session_status = Some(current_status);
+            cursor_dirty = true;
+        }
+
+        if session.latest_status.is_terminal() && !cursor.session_end_recorded {
+            let terminal_message = session
+                .latest_terminal_reason
+                .as_ref()
+                .map(|reason| reason.message.trim().to_string())
+                .filter(|message| !message.is_empty())
+                .unwrap_or_else(|| {
+                    format!(
+                        "session ended with status {}",
+                        session_status_text(session.latest_status)
+                    )
+                });
+            let entry = SessionAuditEntry::new_with_timestamp(
+                session.session_id.clone(),
+                cursor.next_sequence(),
+                session.updated_at,
+                SessionAuditEntryKind::SessionEnd,
+                terminal_message.clone(),
+                session_identity,
+                system_actor,
+                SessionAuditAlgorithm::new(
+                    SessionAuditPhase::Session,
+                    "session_runtime",
+                    "persist_session",
+                ),
+                session_audit_outcome_for_status(session.latest_status),
+                SessionAuditSource::session_lifecycle(),
+                json!({
+                    "latest_status": session_status_text(session.latest_status),
+                    "terminal_reason": session.latest_terminal_reason,
+                    "latest_trace_ref": session.latest_trace_ref,
+                    "goal": session.goal,
+                }),
+            );
+            audit_store.append(&entry).map_err(SessionRuntimeError::SessionAuditStore)?;
+            cursor.session_end_recorded = true;
+            cursor_dirty = true;
+        }
+
+        if cursor_dirty {
+            audit_store.persist_cursor(&cursor).map_err(SessionRuntimeError::SessionAuditStore)?;
+        }
+
+        Ok(())
+    }
+
+    fn resolve_session_audit_identity(&self) -> SessionAuditIdentity {
+        SessionAuditIdentity {
+            current_user: current_user_name(),
+            git_user_name: git_config_value(&self.workspace_ref, "user.name"),
+            git_user_email: git_config_value(&self.workspace_ref, "user.email"),
+        }
+    }
+
+    fn project_trace_events_to_session_audit(
+        &self,
+        session_id: &str,
+        trace_ref: &str,
+        trace: &ExecutionTrace,
+    ) -> Result<(), SessionRuntimeError> {
+        let audit_store = FileSessionAuditStore::for_session(&self.workspace_ref, session_id);
+        let mut cursor =
+            audit_store.load_cursor().map_err(SessionRuntimeError::SessionAuditStore)?;
+        let session_identity = self.resolve_session_audit_identity();
+        let mut cursor_dirty = false;
+
+        for event in &trace.events {
+            if cursor.already_projected(&trace.task_id, &event.event_id) {
+                continue;
+            }
+
+            let entry = SessionAuditEntry::new_with_timestamp(
+                session_id.to_string(),
+                cursor.next_sequence(),
+                event.recorded_at,
+                SessionAuditEntryKind::TraceEventProjected,
+                trace_event_audit_message(event),
+                session_identity.clone(),
+                trace_event_audit_actor(event),
+                trace_event_audit_algorithm(event.event_type),
+                trace_event_audit_outcome(event),
+                SessionAuditSource {
+                    kind: SessionAuditSourceKind::TraceEvent,
+                    trace_ref: Some(trace_ref.to_string()),
+                    trace_event_id: Some(event.event_id.clone()),
+                    trace_event_type: Some(trace_event_type_text(event.event_type)),
+                    step_id: event.step_id.clone(),
+                    plan_revision: Some(event.plan_revision),
+                },
+                event.payload.clone(),
+            );
+            audit_store.append(&entry).map_err(SessionRuntimeError::SessionAuditStore)?;
+            cursor.mark_projected(trace.task_id.clone(), event.event_id.clone());
+            cursor_dirty = true;
+        }
+
+        if cursor_dirty {
+            audit_store.persist_cursor(&cursor).map_err(SessionRuntimeError::SessionAuditStore)?;
+        }
+
+        Ok(())
     }
 
     /// Returns the latest persisted trace for the workspace, if available.
@@ -5210,7 +5403,13 @@ impl SessionRuntime {
         );
 
         if let Some(decision) = &decision {
-            self.record_governance_decision_event(trace, step, task.plan.revision, decision);
+            self.record_governance_decision_event(
+                trace,
+                step,
+                task.plan.revision,
+                selected_runtime,
+                decision,
+            );
         }
 
         if requested_runtime == GovernanceRuntimeKind::Canon
@@ -5336,7 +5535,13 @@ impl SessionRuntime {
                     response.packet.as_ref().map(|packet| packet.readiness),
                 );
                 if let Some(record) = &decision {
-                    self.record_governance_decision_event(trace, step, task.plan.revision, record);
+                    self.record_governance_decision_event(
+                        trace,
+                        step,
+                        task.plan.revision,
+                        GovernanceRuntimeKind::Canon,
+                        record,
+                    );
                 }
                 decision
             };
@@ -5408,7 +5613,13 @@ impl SessionRuntime {
                 response.packet.as_ref().map(|packet| packet.readiness),
             );
             if let Some(record) = &decision {
-                self.record_governance_decision_event(trace, step, task.plan.revision, record);
+                self.record_governance_decision_event(
+                    trace,
+                    step,
+                    task.plan.revision,
+                    GovernanceRuntimeKind::Local,
+                    record,
+                );
             }
             decision
         };
@@ -5435,6 +5646,7 @@ impl SessionRuntime {
         trace: &mut ExecutionTrace,
         step: &Step,
         plan_revision: usize,
+        runtime_kind: GovernanceRuntimeKind,
         decision: &crate::domain::governance::AutopilotDecisionRecord,
     ) {
         trace.record_event(
@@ -5443,6 +5655,7 @@ impl SessionRuntime {
             plan_revision,
             json!({
                 "stage_key": decision.stage_key,
+                "runtime": runtime_kind,
                 "candidate_actions": decision.candidate_actions,
                 "candidate_modes": decision.candidate_modes,
                 "selected_action": decision.selected_action,
@@ -6150,6 +6363,7 @@ impl SessionRuntime {
         let trace_location = path.to_string_lossy().into_owned();
         trace.set_trace_location(trace_location.clone());
         trace_store.persist(trace).map_err(SessionRuntimeError::TraceStore)?;
+        self.project_trace_events_to_session_audit(session_id, &trace_location, trace)?;
         Ok(trace_location)
     }
 }
@@ -6243,6 +6457,524 @@ fn nearest_git_root(start: &Path) -> Option<PathBuf> {
     }
 }
 
+fn current_user_name() -> Option<String> {
+    env::var("USER")
+        .ok()
+        .or_else(|| env::var("USERNAME").ok())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn git_config_value(workspace: &Path, key: &str) -> Option<String> {
+    let output =
+        Command::new("git").current_dir(workspace).args(["config", "--get", key]).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    String::from_utf8(output.stdout)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn session_status_text(status: SessionStatus) -> &'static str {
+    match status {
+        SessionStatus::Initialized => "initialized",
+        SessionStatus::GoalCaptured => "goal_captured",
+        SessionStatus::Planned => "planned",
+        SessionStatus::Blocked => "blocked",
+        SessionStatus::Running => "running",
+        SessionStatus::Succeeded => "succeeded",
+        SessionStatus::Failed => "failed",
+        SessionStatus::Exhausted => "exhausted",
+        SessionStatus::Aborted => "aborted",
+        SessionStatus::Invalid => "invalid",
+    }
+}
+
+fn session_audit_outcome_for_status(status: SessionStatus) -> SessionAuditOutcome {
+    match status {
+        SessionStatus::Initialized => {
+            SessionAuditOutcome::new(SessionAuditOutcomeStatus::Recorded, "session initialized")
+        }
+        SessionStatus::GoalCaptured => SessionAuditOutcome::new(
+            SessionAuditOutcomeStatus::Recorded,
+            "goal captured for active session",
+        ),
+        SessionStatus::Planned => {
+            SessionAuditOutcome::new(SessionAuditOutcomeStatus::Completed, "session planned")
+        }
+        SessionStatus::Blocked => {
+            let mut outcome =
+                SessionAuditOutcome::new(SessionAuditOutcomeStatus::Blocked, "session blocked");
+            outcome.blocking = true;
+            outcome
+        }
+        SessionStatus::Running => {
+            SessionAuditOutcome::new(SessionAuditOutcomeStatus::Started, "session running")
+        }
+        SessionStatus::Succeeded => {
+            SessionAuditOutcome::new(SessionAuditOutcomeStatus::Succeeded, "session succeeded")
+        }
+        SessionStatus::Failed => {
+            SessionAuditOutcome::new(SessionAuditOutcomeStatus::Failed, "session failed")
+        }
+        SessionStatus::Exhausted => SessionAuditOutcome::new(
+            SessionAuditOutcomeStatus::Failed,
+            "session exhausted its execution budget",
+        ),
+        SessionStatus::Aborted => {
+            SessionAuditOutcome::new(SessionAuditOutcomeStatus::Failed, "session aborted")
+        }
+        SessionStatus::Invalid => {
+            SessionAuditOutcome::new(SessionAuditOutcomeStatus::Failed, "session invalid")
+        }
+    }
+}
+
+fn trace_event_audit_algorithm(event_type: TraceEventType) -> SessionAuditAlgorithm {
+    match event_type {
+        TraceEventType::GoalPlanCreated => SessionAuditAlgorithm::new(
+            SessionAuditPhase::Plan,
+            "goal_planner",
+            "build_goal_plan_with_sources",
+        ),
+        TraceEventType::FlowInferred => {
+            SessionAuditAlgorithm::new(SessionAuditPhase::Plan, "session_runtime", "plan_goal_plan")
+        }
+        TraceEventType::ProjectScalePathProposed
+        | TraceEventType::ProjectScaleStageTransitioned => SessionAuditAlgorithm::new(
+            SessionAuditPhase::Goal,
+            "workflow",
+            "propose_project_scale_path",
+        ),
+        TraceEventType::DecisionCreated
+        | TraceEventType::DecisionDispatched
+        | TraceEventType::DecisionVerified
+        | TraceEventType::DecisionFailed
+        | TraceEventType::DecisionRecovered => SessionAuditAlgorithm::new(
+            SessionAuditPhase::Run,
+            "decision_loop",
+            "run_with_options_and_context",
+        ),
+        TraceEventType::ReviewVoteResolved | TraceEventType::VotingDecisionRecorded => {
+            SessionAuditAlgorithm::new(
+                SessionAuditPhase::Review,
+                "review_vote",
+                "VoteRuleDefinition::resolve",
+            )
+        }
+        TraceEventType::ReviewStarted
+        | TraceEventType::ReviewerStarted
+        | TraceEventType::ReviewerCompleted
+        | TraceEventType::ReviewTriggerIgnored
+        | TraceEventType::ReviewAdjudicated
+        | TraceEventType::ReviewTerminalRecorded => SessionAuditAlgorithm::new(
+            SessionAuditPhase::Review,
+            "review_trace",
+            "record_review_step_completed",
+        ),
+        TraceEventType::ReasoningProfileActivated
+        | TraceEventType::ReasoningParticipantStarted
+        | TraceEventType::ReasoningParticipantCompleted
+        | TraceEventType::ReasoningDisagreementRecorded
+        | TraceEventType::ReasoningDebateRoundCompleted
+        | TraceEventType::ReasoningReflexionRevisionCompleted
+        | TraceEventType::ReasoningAdjudicationRecorded
+        | TraceEventType::ReasoningConfidenceRecorded
+        | TraceEventType::ReasoningProfileBlocked
+        | TraceEventType::ReasoningProfileInterrupted
+        | TraceEventType::ReasoningProfileEscalated => SessionAuditAlgorithm::new(
+            SessionAuditPhase::Reasoning,
+            "reasoning_profile",
+            "record_reasoning_profile_events",
+        ),
+        TraceEventType::GovernanceDecisionRecorded => SessionAuditAlgorithm::new(
+            SessionAuditPhase::Governance,
+            "governance",
+            "build_autopilot_decision",
+        ),
+        TraceEventType::GovernanceSelected
+        | TraceEventType::GovernanceStarted
+        | TraceEventType::GovernanceAwaitingApproval
+        | TraceEventType::GovernanceCompleted
+        | TraceEventType::GovernanceBlocked
+        | TraceEventType::GovernancePacketRejected => SessionAuditAlgorithm::new(
+            SessionAuditPhase::Governance,
+            "governance",
+            "execute_governance_for_step",
+        ),
+        TraceEventType::RetryScheduled
+        | TraceEventType::StageRetryScheduled
+        | TraceEventType::Replanned
+        | TraceEventType::StageReplanned
+        | TraceEventType::StageFailed => {
+            SessionAuditAlgorithm::new(SessionAuditPhase::Recovery, "recovery", "decide_recovery")
+        }
+        TraceEventType::CheckpointCreated => SessionAuditAlgorithm::new(
+            SessionAuditPhase::Run,
+            "checkpoint",
+            "prepare_checkpoint_for_mutation",
+        ),
+        TraceEventType::TerminalRecorded => {
+            SessionAuditAlgorithm::new(SessionAuditPhase::Run, "session_runtime", "finalize_task")
+        }
+        TraceEventType::TaskStarted
+        | TraceEventType::FlowSelected
+        | TraceEventType::StageTransitioned
+        | TraceEventType::StepStarted
+        | TraceEventType::StepCompleted => {
+            SessionAuditAlgorithm::new(SessionAuditPhase::Run, "session_runtime", "advance_task")
+        }
+    }
+}
+
+fn trace_event_audit_outcome(event: &TraceEvent) -> SessionAuditOutcome {
+    match event.event_type {
+        TraceEventType::TaskStarted
+        | TraceEventType::FlowSelected
+        | TraceEventType::GoalPlanCreated
+        | TraceEventType::FlowInferred
+        | TraceEventType::ProjectScalePathProposed
+        | TraceEventType::StageTransitioned
+        | TraceEventType::GovernanceStarted
+        | TraceEventType::GovernanceSelected
+        | TraceEventType::GovernanceDecisionRecorded
+        | TraceEventType::ReviewStarted
+        | TraceEventType::ReviewTriggerIgnored
+        | TraceEventType::ReviewerStarted
+        | TraceEventType::StepStarted
+        | TraceEventType::DecisionCreated
+        | TraceEventType::ReasoningProfileActivated
+        | TraceEventType::ReasoningParticipantStarted => {
+            SessionAuditOutcome::new(SessionAuditOutcomeStatus::Started, "activity started")
+        }
+        TraceEventType::DecisionDispatched
+        | TraceEventType::CheckpointCreated
+        | TraceEventType::VotingDecisionRecorded => {
+            SessionAuditOutcome::new(SessionAuditOutcomeStatus::Recorded, "activity recorded")
+        }
+        TraceEventType::DecisionVerified | TraceEventType::GovernanceCompleted => {
+            SessionAuditOutcome::new(SessionAuditOutcomeStatus::Succeeded, "activity succeeded")
+        }
+        TraceEventType::StepCompleted
+        | TraceEventType::ReviewerCompleted
+        | TraceEventType::ReviewVoteResolved
+        | TraceEventType::ReviewAdjudicated
+        | TraceEventType::ReviewTerminalRecorded
+        | TraceEventType::DecisionRecovered
+        | TraceEventType::ReasoningParticipantCompleted
+        | TraceEventType::ReasoningDisagreementRecorded
+        | TraceEventType::ReasoningDebateRoundCompleted
+        | TraceEventType::ReasoningReflexionRevisionCompleted
+        | TraceEventType::ReasoningAdjudicationRecorded
+        | TraceEventType::ReasoningConfidenceRecorded
+        | TraceEventType::ProjectScaleStageTransitioned
+        | TraceEventType::TerminalRecorded => {
+            SessionAuditOutcome::new(SessionAuditOutcomeStatus::Completed, "activity completed")
+        }
+        TraceEventType::GovernanceAwaitingApproval
+        | TraceEventType::ReasoningProfileInterrupted => {
+            SessionAuditOutcome::new(SessionAuditOutcomeStatus::Awaiting, "awaiting follow-up")
+        }
+        TraceEventType::GovernanceBlocked
+        | TraceEventType::GovernancePacketRejected
+        | TraceEventType::ReasoningProfileBlocked => {
+            let mut outcome = SessionAuditOutcome::new(
+                SessionAuditOutcomeStatus::Blocked,
+                trace_event_summary(event),
+            );
+            outcome.blocking = true;
+            outcome
+        }
+        TraceEventType::DecisionFailed | TraceEventType::ReasoningProfileEscalated => {
+            SessionAuditOutcome::new(SessionAuditOutcomeStatus::Failed, trace_event_summary(event))
+        }
+        TraceEventType::RetryScheduled | TraceEventType::StageRetryScheduled => {
+            SessionAuditOutcome::new(SessionAuditOutcomeStatus::Retried, trace_event_summary(event))
+        }
+        TraceEventType::Replanned | TraceEventType::StageReplanned => SessionAuditOutcome::new(
+            SessionAuditOutcomeStatus::Replanned,
+            trace_event_summary(event),
+        ),
+        TraceEventType::StageFailed => {
+            SessionAuditOutcome::new(SessionAuditOutcomeStatus::Failed, trace_event_summary(event))
+        }
+    }
+}
+
+fn trace_event_audit_message(event: &TraceEvent) -> String {
+    let event_label = trace_event_type_text(event.event_type).replace('_', " ");
+    let summary = trace_event_summary(event);
+    if summary == event_label { event_label } else { format!("{event_label}: {summary}") }
+}
+
+fn trace_event_summary(event: &TraceEvent) -> String {
+    payload_string(event.payload.get("summary"))
+        .or_else(|| payload_string(event.payload.get("reason")))
+        .or_else(|| payload_string(event.payload.get("message")))
+        .or_else(|| payload_string(event.payload.get("headline")))
+        .or_else(|| {
+            payload_string(event.payload.get("target")).map(|target| format!("target {target}"))
+        })
+        .or_else(|| {
+            payload_string(event.payload.get("stage_key"))
+                .map(|stage_key| format!("stage {stage_key}"))
+        })
+        .or_else(|| {
+            payload_string(event.payload.get("reviewer_id"))
+                .map(|reviewer_id| format!("reviewer {reviewer_id}"))
+        })
+        .or_else(|| {
+            payload_string(event.payload.get("participant_id"))
+                .map(|participant_id| format!("participant {participant_id}"))
+        })
+        .unwrap_or_else(|| trace_event_type_text(event.event_type).replace('_', " "))
+}
+
+fn trace_event_audit_actor(event: &TraceEvent) -> SessionAuditActor {
+    match event.event_type {
+        TraceEventType::ReviewerStarted | TraceEventType::ReviewerCompleted => {
+            reviewer_audit_actor(&event.payload)
+        }
+        TraceEventType::ReviewAdjudicated => reviewer_audit_actor(&event.payload),
+        TraceEventType::ReviewVoteResolved => review_council_audit_actor(&event.payload),
+        TraceEventType::ReasoningParticipantStarted
+        | TraceEventType::ReasoningParticipantCompleted => {
+            reasoning_participant_audit_actor(&event.payload)
+        }
+        TraceEventType::GovernanceSelected
+        | TraceEventType::GovernanceStarted
+        | TraceEventType::GovernanceDecisionRecorded
+        | TraceEventType::GovernanceAwaitingApproval
+        | TraceEventType::GovernanceCompleted
+        | TraceEventType::GovernanceBlocked
+        | TraceEventType::GovernancePacketRejected => governance_audit_actor(&event.payload),
+        TraceEventType::DecisionCreated
+        | TraceEventType::DecisionDispatched
+        | TraceEventType::DecisionVerified
+        | TraceEventType::DecisionFailed
+        | TraceEventType::DecisionRecovered => SessionAuditActor {
+            kind: SessionAuditActorKind::Agent,
+            id: "boundline-decision-loop".to_string(),
+            display_name: Some("Boundline Decision Loop".to_string()),
+            role: None,
+            runtime_kind: None,
+            provider: None,
+            route_slot: None,
+            model_name: None,
+            participant_routes: Vec::new(),
+            mixed_routes: false,
+        },
+        TraceEventType::ReviewStarted
+        | TraceEventType::ReviewTriggerIgnored
+        | TraceEventType::ReviewTerminalRecorded
+        | TraceEventType::VotingDecisionRecorded => SessionAuditActor {
+            kind: SessionAuditActorKind::Reviewer,
+            id: "review-council".to_string(),
+            display_name: Some("Review Council".to_string()),
+            role: None,
+            runtime_kind: None,
+            provider: None,
+            route_slot: None,
+            model_name: None,
+            participant_routes: Vec::new(),
+            mixed_routes: false,
+        },
+        _ => SessionAuditActor::system("boundline"),
+    }
+}
+
+fn reviewer_audit_actor(payload: &Value) -> SessionAuditActor {
+    let reviewer_id = payload_string(payload.get("reviewer_id"))
+        .unwrap_or_else(|| "unknown-reviewer".to_string());
+    let reviewer_role = payload_string(payload.get("reviewer_role"));
+    let reviewer_source = payload_string(payload.get("reviewer_source"));
+    let mut actor = SessionAuditActor {
+        kind: SessionAuditActorKind::Reviewer,
+        id: reviewer_id.clone(),
+        display_name: Some(reviewer_id),
+        role: reviewer_role,
+        runtime_kind: None,
+        provider: None,
+        route_slot: None,
+        model_name: None,
+        participant_routes: Vec::new(),
+        mixed_routes: false,
+    };
+    if let Some(source) = reviewer_source.as_deref() {
+        apply_route_text_to_actor(&mut actor, source);
+    }
+    actor
+}
+
+fn review_council_audit_actor(payload: &Value) -> SessionAuditActor {
+    let mut actor = SessionAuditActor {
+        kind: SessionAuditActorKind::Reviewer,
+        id: "review-council".to_string(),
+        display_name: Some("Review Council".to_string()),
+        role: None,
+        runtime_kind: None,
+        provider: None,
+        route_slot: Some("review".to_string()),
+        model_name: None,
+        participant_routes: Vec::new(),
+        mixed_routes: false,
+    };
+
+    let participants = payload
+        .get("vote_resolution")
+        .and_then(|value| value.get("participants"))
+        .cloned()
+        .and_then(|value| serde_json::from_value::<Vec<ReviewerParticipation>>(value).ok())
+        .unwrap_or_default();
+
+    let completed_routes = participants
+        .iter()
+        .filter(|participant| participant.status == ReviewerParticipationStatus::Completed)
+        .filter_map(|participant| participant.effective_route.as_deref())
+        .map(str::trim)
+        .filter(|route| !route.is_empty())
+        .map(str::to_string)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+
+    actor.participant_routes = completed_routes.clone();
+    actor.mixed_routes = completed_routes.len() > 1;
+
+    if let Some(route) = completed_routes.first() {
+        apply_route_text_to_actor(&mut actor, route);
+    }
+
+    if actor.mixed_routes {
+        actor.role = Some("multi-reviewer".to_string());
+    }
+
+    actor
+}
+
+fn reasoning_participant_audit_actor(payload: &Value) -> SessionAuditActor {
+    let participant_id = payload_string(payload.get("participant_id"))
+        .unwrap_or_else(|| "unknown-participant".to_string());
+    let role = payload_string(payload.get("role"));
+    let mut actor = SessionAuditActor {
+        kind: SessionAuditActorKind::ReasoningParticipant,
+        id: participant_id.clone(),
+        display_name: Some(participant_id.clone()),
+        role,
+        runtime_kind: None,
+        provider: None,
+        route_slot: None,
+        model_name: None,
+        participant_routes: Vec::new(),
+        mixed_routes: false,
+    };
+
+    if let Some(record) = payload
+        .get("reasoning_profile_record")
+        .cloned()
+        .and_then(|value| serde_json::from_value::<ProfileActivationRecord>(value).ok())
+        && let Some(participant) = record
+            .participants
+            .iter()
+            .find(|participant| participant.participant_id == participant_id)
+    {
+        actor.provider = participant.provider_family.clone();
+        apply_route_text_to_actor(&mut actor, &participant.effective_route);
+    }
+
+    actor
+}
+
+fn governance_audit_actor(payload: &Value) -> SessionAuditActor {
+    let runtime = payload_string(payload.get("runtime"))
+        .or_else(|| payload_string(payload.get("selected_runtime")))
+        .unwrap_or_else(|| "governance".to_string());
+    let route_slot = payload_string(payload.get("stage_key"))
+        .as_deref()
+        .and_then(governance_route_slot_for_stage_key)
+        .map(str::to_string);
+    SessionAuditActor {
+        kind: SessionAuditActorKind::GovernanceRuntime,
+        id: runtime.clone(),
+        display_name: Some(runtime.clone()),
+        role: payload_string(payload.get("stage_key")),
+        runtime_kind: Some(runtime),
+        provider: payload_string(payload.get("runtime"))
+            .or_else(|| payload_string(payload.get("selected_runtime"))),
+        route_slot,
+        model_name: None,
+        participant_routes: Vec::new(),
+        mixed_routes: false,
+    }
+}
+
+fn governance_route_slot_for_stage_key(stage_key: &str) -> Option<&'static str> {
+    let stage_key = stage_key.trim();
+    if stage_key.is_empty() {
+        return None;
+    }
+
+    if stage_key.starts_with("plan:") {
+        return Some("planning");
+    }
+
+    Some("implementation")
+}
+
+fn apply_route_text_to_actor(actor: &mut SessionAuditActor, route_text: &str) {
+    if let Some((route_slot, runtime, model)) = parse_three_segment_route(route_text) {
+        actor.route_slot = Some(route_slot);
+        actor.runtime_kind = Some(runtime.clone());
+        actor.provider.get_or_insert(runtime);
+        actor.model_name = Some(model);
+        return;
+    }
+
+    if let Some((runtime, model)) = route_text.split_once('/') {
+        let runtime = runtime.trim();
+        let model = model.trim();
+        if !runtime.is_empty() {
+            actor.runtime_kind = Some(runtime.to_string());
+            actor.provider.get_or_insert(runtime.to_string());
+        }
+        if !model.is_empty() {
+            actor.model_name = Some(model.to_string());
+        }
+    }
+}
+
+fn parse_three_segment_route(route_text: &str) -> Option<(String, String, String)> {
+    let mut parts = route_text.splitn(3, ':');
+    let route_slot = parts.next()?.trim();
+    let runtime = parts.next()?.trim();
+    let model = parts.next()?.trim();
+    if route_slot.is_empty() || runtime.is_empty() || model.is_empty() {
+        return None;
+    }
+    Some((route_slot.to_string(), runtime.to_string(), model.to_string()))
+}
+
+fn payload_string(value: Option<&Value>) -> Option<String> {
+    let value = value?;
+    match value {
+        Value::Null => None,
+        Value::String(text) => Some(text.clone()),
+        Value::Bool(boolean) => Some(boolean.to_string()),
+        Value::Number(number) => Some(number.to_string()),
+        _ => serde_json::to_string(value).ok(),
+    }
+}
+
+fn trace_event_type_text(event_type: TraceEventType) -> String {
+    serde_json::to_value(event_type)
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_string))
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
 /// Errors surfaced while orchestrating session-native planning, execution,
 /// governance, checkpoints, and persisted trace/session updates.
 #[derive(Debug, Error)]
@@ -6251,6 +6983,8 @@ pub enum SessionRuntimeError {
     SessionStore(#[from] SessionStoreError),
     #[error("trace store operation failed: {0}")]
     TraceStore(#[from] TraceStoreError),
+    #[error("session audit store operation failed: {0}")]
+    SessionAuditStore(#[from] SessionAuditStoreError),
     #[error("checkpoint store operation failed: {0}")]
     CheckpointStore(#[from] CheckpointStoreError),
     #[error("active session has no captured goal")]

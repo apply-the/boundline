@@ -118,6 +118,7 @@ mod tests {
                 event_id: "orchestrate-event-1".to_string(),
                 timestamp_ms: 1,
                 event_kind: "phase_request".to_string(),
+                audit: None,
                 actor_kind: None,
                 actor_name: None,
                 runtime_kind: None,

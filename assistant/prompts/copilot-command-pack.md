@@ -20,6 +20,9 @@ If a Copilot surface cannot run shell commands directly, fall back to copyable C
 
 Canonical guidance: run or request one CLI command at a time, preserve the runtime output, and do not infer success from chat history. Canon governance is conditional and must not appear as the normal delivery path when governance is not configured.
 
+When `orchestrate --json-stream` emits an `audit` object on an event, treat it as the authoritative actor-attribution projection for that event. Prefer `audit.event`, `audit.algorithm`, `audit.actor`, `audit.outcome`, and `audit.message` over the older flat fields (`actor_kind`, `runtime_kind`, `provider`, `route_slot`, `model_name`) when explaining what happened. If `audit.actor.participant_routes` or `audit.actor.mixed_routes` is present, preserve that distinction explicitly instead of collapsing it to a single reviewer route.
+When the user explicitly asks for the full audit log, actor lineage, or voting timeline from `inspect`, prefer `boundline inspect --audit --json` over the default inspect view.
+
 Interactive contract: when runtime output reports clarification questions,
 missing clarification fields, phase requests, approval waits, or other blocked
 gates, Copilot should switch to interactive follow-up instead of printing a

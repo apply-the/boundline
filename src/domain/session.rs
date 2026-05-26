@@ -45,9 +45,12 @@ const SESSION_REF_DAILY_SEQ_WIDTH: usize = 3;
 const SESSION_BRIEFS_DIRECTORY_NAME: &str = "briefs";
 const SESSION_TRACES_DIRECTORY_NAME: &str = "traces";
 const SESSION_CHECKPOINTS_DIRECTORY_NAME: &str = "checkpoints";
+const SESSION_AUDIT_DIRECTORY_NAME: &str = "audit";
 const SESSION_GOAL_BRIEF_FILE_NAME: &str = "goal.md";
 const SESSION_PLAN_BRIEF_FILE_NAME: &str = "plan.md";
 const SESSION_RUN_BRIEF_FILE_NAME: &str = "run.md";
+const SESSION_AUDIT_EVENTS_FILE_NAME: &str = "events.jsonl";
+const SESSION_AUDIT_CURSOR_FILE_NAME: &str = "cursor.json";
 
 pub fn legacy_session_record_ref() -> String {
     format!("{BOUNDLINE_STATE_ROOT}/{LEGACY_SESSION_RECORD_FILE_NAME}")
@@ -83,6 +86,18 @@ pub fn session_traces_root_ref(session_ref: &str) -> String {
 
 pub fn session_checkpoints_root_ref(session_ref: &str) -> String {
     format!("{}/{SESSION_CHECKPOINTS_DIRECTORY_NAME}", session_root_ref(session_ref))
+}
+
+pub fn session_audit_root_ref(session_ref: &str) -> String {
+    format!("{}/{SESSION_AUDIT_DIRECTORY_NAME}", session_root_ref(session_ref))
+}
+
+pub fn session_audit_events_ref(session_ref: &str) -> String {
+    format!("{}/{SESSION_AUDIT_EVENTS_FILE_NAME}", session_audit_root_ref(session_ref))
+}
+
+pub fn session_audit_cursor_ref(session_ref: &str) -> String {
+    format!("{}/{SESSION_AUDIT_CURSOR_FILE_NAME}", session_audit_root_ref(session_ref))
 }
 
 /// Converts a Unix-epoch millisecond timestamp to a `YYYYMMDD` date string
