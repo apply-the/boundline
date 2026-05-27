@@ -128,6 +128,9 @@ impl TempGitWorkspace {
     }
 
     pub fn with_initializer(prefix: &str, initializer: impl FnOnce(&Path)) -> Self {
+        unsafe {
+            std::env::set_var("BOUNDLINE_TEST_DISABLE_RETRIES", "1");
+        }
         let root = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
         fs::create_dir_all(&root).unwrap();
         initializer(&root);

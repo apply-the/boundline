@@ -95,7 +95,7 @@ fn session_action_assets_document_host_native_buttons() {
         ))
         .expect("copilot command asset should be readable");
         assert!(
-            copilot.contains("command:copilot.chat.execute"),
+            copilot.contains("command:github.copilot.chat.execute"),
             "copilot asset for {command} must render clickable command URI actions"
         );
 
@@ -112,7 +112,7 @@ fn session_action_assets_document_host_native_buttons() {
                 "{assistant} asset for {command} must document host-native /boundline:* actions"
             );
             assert!(
-                !asset.contains("command:copilot.chat.execute"),
+                !asset.contains("command:github.copilot.chat.execute"),
                 "{assistant} asset for {command} must not emit Copilot-specific command URIs"
             );
         }

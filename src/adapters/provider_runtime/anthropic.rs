@@ -77,13 +77,12 @@ pub(super) fn execute_chat(
             .collect(),
     };
 
-    let response = client
+    let request_builder = client
         .post(&endpoint)
         .header("x-api-key", api_key)
         .header(ANTHROPIC_VERSION_HEADER, ANTHROPIC_VERSION_VALUE)
-        .json(&body)
-        .send()
-        .map_err(|error| ProviderRuntimeError::Network(error.to_string()))?;
+        .json(&body);
+    let response = super::execute_with_retry(request_builder, "anthropic", &route.model_id)?;
     let status = response.status().as_u16();
     if status >= 400 {
         let body = response.text().unwrap_or_default();

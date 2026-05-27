@@ -291,13 +291,98 @@ impl ProviderRuntimeError {
     pub fn is_retryable(&self) -> bool {
         match self {
             Self::Network(_) | Self::BadResponse(_) => true,
-            Self::Api { status, .. } => *status >= 500,
+            Self::Api { status, .. } => {
+                matches!(status, 408 | 429 | 500 | 502 | 503 | 504 | 529)
+            }
             Self::MissingApiKey { .. }
             | Self::CredentialExchange { .. }
             | Self::MissingModel { .. }
             | Self::UnsupportedNamespace { .. }
             | Self::PromptRender(_)
             | Self::InvalidChangeSet(_) => false,
+        }
+    }
+}
+
+pub(crate) fn execute_with_retry(
+    request_builder: reqwest::blocking::RequestBuilder,
+    provider_name: &str,
+    model_name: &str,
+) -> Result<reqwest::blocking::Response, ProviderRuntimeError> {
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    let max_attempts = if std::env::var("BOUNDLINE_TEST_DISABLE_RETRIES").is_ok() { 1 } else { 10 };
+    let mut attempt = 1;
+    let initial_delay_ms = 300;
+    let max_delay_ms = 5000;
+    let mut current_delay_ms = initial_delay_ms;
+
+    loop {
+        let request = request_builder.try_clone().ok_or_else(|| {
+            ProviderRuntimeError::Network("request cannot be cloned for retry".to_string())
+        })?;
+
+        match request.send() {
+            Ok(response) => {
+                let status = response.status();
+                if status.is_success() {
+                    return Ok(response);
+                }
+
+                let status_u16 = status.as_u16();
+                let is_retryable_status =
+                    matches!(status_u16, 408 | 429 | 500 | 502 | 503 | 504 | 529);
+
+                if !is_retryable_status || attempt >= max_attempts {
+                    return Ok(response);
+                }
+
+                // Poor man's jitter to avoid adding the rand crate
+                let now =
+                    SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_micros()
+                        as u64;
+                let jitter = now % (current_delay_ms as u64 / 2).max(1);
+                let delay = std::cmp::min(current_delay_ms as u64 + jitter, max_delay_ms as u64);
+
+                tracing::warn!(
+                    provider = provider_name,
+                    model = model_name,
+                    attempt = attempt,
+                    max_attempts = max_attempts,
+                    delay_ms = delay,
+                    reason = status_u16,
+                    "retrying provider request due to transient HTTP error",
+                );
+
+                std::thread::sleep(Duration::from_millis(delay));
+                current_delay_ms = std::cmp::min(current_delay_ms * 2, max_delay_ms);
+                attempt += 1;
+            }
+            Err(e) => {
+                if attempt >= max_attempts {
+                    return Err(ProviderRuntimeError::Network(e.to_string()));
+                }
+
+                let now =
+                    SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_micros()
+                        as u64;
+                let jitter = now % (current_delay_ms as u64 / 2).max(1);
+                let delay = std::cmp::min(current_delay_ms as u64 + jitter, max_delay_ms as u64);
+
+                tracing::warn!(
+                    provider = provider_name,
+                    model = model_name,
+                    attempt = attempt,
+                    max_attempts = max_attempts,
+                    delay_ms = delay,
+                    reason = %e,
+                    "retrying provider request due to network error",
+                );
+
+                std::thread::sleep(Duration::from_millis(delay));
+                current_delay_ms = std::cmp::min(current_delay_ms * 2, max_delay_ms);
+                attempt += 1;
+            }
         }
     }
 }

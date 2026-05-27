@@ -98,12 +98,8 @@ pub(super) fn execute_chat(
         },
     };
 
-    let response = client
-        .post(&endpoint)
-        .query(&[("key", api_key)])
-        .json(&body)
-        .send()
-        .map_err(|error| ProviderRuntimeError::Network(error.to_string()))?;
+    let request_builder = client.post(&endpoint).query(&[("key", api_key)]).json(&body);
+    let response = super::execute_with_retry(request_builder, "gemini", &route.model_id)?;
     let status = response.status().as_u16();
     if status >= 400 {
         let body = response.text().unwrap_or_default();

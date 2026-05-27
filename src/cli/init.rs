@@ -4073,7 +4073,7 @@ fn remove_boundline_auto_approve_entries(auto: &mut Map<String, Value>) {
     for key in [
         "boundline",
         "canon",
-        "/^boundline (doctor|status|next|inspect)\\b/",
+        "/^boundline (doctor|status|next|inspect|orchestrate)\\b/",
         "/^boundline goal\\b/",
         "/^boundline plan\\b/",
         "/^boundline run\\b/",
@@ -4081,8 +4081,8 @@ fn remove_boundline_auto_approve_entries(auto: &mut Map<String, Value>) {
         "/^boundline workflow (list|status|inspect)\\b/",
         "/^boundline update\\b(?!.*\\s--(apply|force|adopt|prune)\\b)/",
         "/^boundline (init|run|step|orchestrate|workflow (run|resume)|config (set|unset|bind-context|unbind-context)|cluster init)\\b/",
+        "/^boundline (init|run|step|workflow (run|resume)|config (set|unset|bind-context|unbind-context)|cluster init)\\b/",
         "/^boundline init\\b/",
-        "/^boundline orchestrate\\b/",
         "/^boundline workflow (run|resume)\\b/",
         "/^boundline config (set|unset|bind-context|unbind-context)\\b/",
         "/^boundline cluster init\\b/",
@@ -4095,7 +4095,7 @@ fn apply_read_only_auto_approve_entries(auto: &mut Map<String, Value>) {
     auto.insert("boundline".to_string(), Value::Bool(false));
     auto.insert("canon".to_string(), Value::Bool(false));
     for pattern in [
-        "/^boundline (doctor|status|next|inspect)\\b/",
+        "/^boundline (doctor|status|next|inspect|orchestrate)\\b/",
         "/^boundline config show\\b/",
         "/^boundline workflow (list|status|inspect)\\b/",
         "/^boundline update\\b(?!.*\\s--(apply|force|adopt|prune)\\b)/",
@@ -4103,7 +4103,7 @@ fn apply_read_only_auto_approve_entries(auto: &mut Map<String, Value>) {
         auto.insert(pattern.to_string(), auto_approve_rule(true));
     }
     auto.insert(
-        "/^boundline (init|run|step|orchestrate|workflow (run|resume)|config (set|unset|bind-context|unbind-context)|cluster init)\\b/".to_string(),
+        "/^boundline (init|run|step|workflow (run|resume)|config (set|unset|bind-context|unbind-context)|cluster init)\\b/".to_string(),
         auto_approve_rule(false),
     );
 }
@@ -4112,7 +4112,7 @@ fn apply_session_safe_auto_approve_entries(auto: &mut Map<String, Value>) {
     auto.insert("boundline".to_string(), Value::Bool(false));
     auto.insert("canon".to_string(), Value::Bool(false));
     for pattern in [
-        "/^boundline (doctor|status|next|inspect)\\b/",
+        "/^boundline (doctor|status|next|inspect|orchestrate)\\b/",
         "/^boundline goal\\b/",
         "/^boundline plan\\b/",
         "/^boundline run\\b/",
@@ -4124,7 +4124,6 @@ fn apply_session_safe_auto_approve_entries(auto: &mut Map<String, Value>) {
     }
     for pattern in [
         "/^boundline init\\b/",
-        "/^boundline orchestrate\\b/",
         "/^boundline workflow (run|resume)\\b/",
         "/^boundline config (set|unset|bind-context|unbind-context)\\b/",
         "/^boundline cluster init\\b/",

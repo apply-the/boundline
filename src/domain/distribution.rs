@@ -415,10 +415,14 @@ fn repair_actions() -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use std::env;
-    use std::ffi::OsString;
     use std::fs;
     use std::path::{Path, PathBuf};
+
+    #[cfg(all(unix, target_os = "macos"))]
+    use std::env;
+    #[cfg(all(unix, target_os = "macos"))]
+    use std::ffi::OsString;
+    #[cfg(all(unix, target_os = "macos"))]
     use std::sync::{Mutex, MutexGuard, OnceLock};
 
     use uuid::Uuid;

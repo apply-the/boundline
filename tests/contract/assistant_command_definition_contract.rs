@@ -267,7 +267,7 @@ fn session_step_action_routing_uses_host_native_buttons_and_runtime_precedence()
             &copilot_path,
             &copilot,
             &[
-                "command:copilot.chat.execute",
+                "command:github.copilot.chat.execute",
                 "assistant_resume_command",
                 "assistant_next_command",
                 "next_command",
@@ -288,7 +288,7 @@ fn session_step_action_routing_uses_host_native_buttons_and_runtime_precedence()
                     "next_command",
                 ],
             );
-            assert_forbidden_snippets(&path, &content, &["command:copilot.chat.execute"]);
+            assert_forbidden_snippets(&path, &content, &["command:github.copilot.chat.execute"]);
         }
     }
 }

@@ -180,7 +180,7 @@ fn exchange_session_token(
         token: Option<String>,
     }
 
-    let response = client
+    let request_builder = client
         .get(exchange_url)
         .header("Authorization", format!("Bearer {github_token}"))
         .header("Accept", JSON_ACCEPT_HEADER_VALUE)
@@ -189,8 +189,9 @@ fn exchange_session_token(
         .header(COPILOT_EDITOR_PLUGIN_VERSION_HEADER, COPILOT_EDITOR_PLUGIN_VERSION_VALUE)
         .header(COPILOT_INTEGRATION_ID_HEADER, COPILOT_INTEGRATION_ID_VALUE)
         .header(COPILOT_GITHUB_API_VERSION_HEADER, COPILOT_GITHUB_API_VERSION_VALUE)
-        .header("User-Agent", COPILOT_USER_AGENT)
-        .send()
+        .header("User-Agent", COPILOT_USER_AGENT);
+
+    let response = super::execute_with_retry(request_builder, "copilot", "token_exchange")
         .map_err(|error| ProviderRuntimeError::CredentialExchange {
             namespace: ProviderNamespace::Copilot.as_str(),
             message: format!("GitHub Copilot token exchange request failed: {error}"),

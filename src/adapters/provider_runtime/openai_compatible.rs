@@ -67,8 +67,7 @@ pub(super) fn execute_chat(
         request = request.header(*name, *value);
     }
 
-    let response =
-        request.send().map_err(|error| ProviderRuntimeError::Network(error.to_string()))?;
+    let response = super::execute_with_retry(request, "openai_compatible", &route.model_id)?;
     let status = response.status().as_u16();
     if status >= 400 {
         let body = response.text().unwrap_or_default();
