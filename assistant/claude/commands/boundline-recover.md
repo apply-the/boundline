@@ -13,12 +13,12 @@ Recover from a Boundline session that is blocked, clarification-required, failed
 - `workspace_ref`
 
 ## Shell-Enabled Path
-Run `cargo run --bin boundline -- status --workspace <workspace> --json` exactly once. If the output reports a `latest_checkpoint_restore_command`, `corrected_command`, or `next_command`, use that command as the recovery path. If status is insufficient, run `cargo run --bin boundline -- inspect --workspace <workspace> --json` exactly once and preserve its guidance.
+Run `boundline status --workspace <workspace> --json` exactly once. If the output reports a `latest_checkpoint_restore_command`, `corrected_command`, or `next_command`, use that command as the recovery path. If status is insufficient, run `boundline inspect --workspace <workspace> --json` exactly once and preserve its guidance.
 
 ## Chat-Only Path
 If shell execution is unavailable, provide this exact copyable command:
 
-`cargo run --bin boundline -- status --workspace <workspace> --json`
+`boundline status --workspace <workspace> --json`
 
 Wait for pasted output before recommending recovery.
 

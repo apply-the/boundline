@@ -21,6 +21,7 @@ const KEY_DEFAULT_REVIEW_TRIGGER: &str = "default_review_trigger";
 const KEY_FINDING: &str = "finding";
 const KEY_LATEST_REVIEW_OUTCOME: &str = "latest_review_outcome";
 const KEY_LATEST_REVIEW_COUNCIL_PROFILE: &str = "latest_review_council_profile";
+const KEY_LATEST_REVIEW_COUNCIL_RESOLUTION: &str = "latest_review_council_resolution";
 const KEY_LATEST_REVIEW_INDEPENDENCE_STATE: &str = "latest_review_independence_state";
 const KEY_LATEST_REVIEW_SELECTION_SUMMARY: &str = "latest_review_selection_summary";
 const KEY_LATEST_REVIEW_STOP_SEMANTICS: &str = "latest_review_stop_semantics";
@@ -95,6 +96,36 @@ struct ReviewVoteResolvedPayload {
     vote_resolution: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     review_outcome: Option<Value>,
+}
+
+#[derive(Debug, Serialize)]
+struct ReviewCouncilAssemblyPayload {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    review_trigger: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    council_resolution: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    council_profile: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    independence_state: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    selection_summary: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    vote_resolution: Option<Value>,
+}
+
+#[derive(Debug, Serialize)]
+struct ReviewStopSemanticsPayload {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    review_trigger: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    council_profile: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    selection_summary: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stop_semantics: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    vote_resolution: Option<Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -556,15 +587,59 @@ pub(crate) fn record_review_step_completed(
             record_review_terminal_if_present(trace, step_id, result, state_after, plan_revision);
         }
         Some(REVIEW_VOTE_PHASE) => {
+            let review_trigger =
+                review_trigger_from_output_or_state(result, state_after, step_input);
+            let vote_resolution = state_after.get(KEY_LATEST_REVIEW_VOTE_RESOLUTION).cloned();
+
+            if state_after.get(KEY_LATEST_REVIEW_COUNCIL_PROFILE).is_some()
+                || state_after.get(KEY_LATEST_REVIEW_INDEPENDENCE_STATE).is_some()
+                || state_after.get(KEY_LATEST_REVIEW_SELECTION_SUMMARY).is_some()
+            {
+                trace.record_event(
+                    TraceEventType::ReviewCouncilAssembled,
+                    Some(step_id.to_string()),
+                    plan_revision,
+                    serialize_payload(&ReviewCouncilAssemblyPayload {
+                        review_trigger: review_trigger.clone(),
+                        council_resolution: state_after
+                            .get(KEY_LATEST_REVIEW_COUNCIL_RESOLUTION)
+                            .cloned(),
+                        council_profile: state_after
+                            .get(KEY_LATEST_REVIEW_COUNCIL_PROFILE)
+                            .cloned(),
+                        independence_state: state_after
+                            .get(KEY_LATEST_REVIEW_INDEPENDENCE_STATE)
+                            .cloned(),
+                        selection_summary: state_after
+                            .get(KEY_LATEST_REVIEW_SELECTION_SUMMARY)
+                            .cloned(),
+                        vote_resolution: vote_resolution.clone(),
+                    }),
+                );
+            }
+
+            if state_after.get(KEY_LATEST_REVIEW_STOP_SEMANTICS).is_some() {
+                trace.record_event(
+                    TraceEventType::ReviewStopSemanticsRecorded,
+                    Some(step_id.to_string()),
+                    plan_revision,
+                    serialize_payload(&ReviewStopSemanticsPayload {
+                        review_trigger: review_trigger.clone(),
+                        council_profile: state_after
+                            .get(KEY_LATEST_REVIEW_COUNCIL_PROFILE)
+                            .cloned(),
+                        selection_summary: state_after
+                            .get(KEY_LATEST_REVIEW_SELECTION_SUMMARY)
+                            .cloned(),
+                        stop_semantics: state_after.get(KEY_LATEST_REVIEW_STOP_SEMANTICS).cloned(),
+                        vote_resolution,
+                    }),
+                );
+            }
+
             if let Some(output) = result.output.as_ref() {
                 let payload = ReviewVoteResolvedPayload {
-                    review_trigger: output
-                        .get(KEY_REVIEW_TRIGGER)
-                        .and_then(Value::as_str)
-                        .or_else(|| {
-                            state_after.get(KEY_LATEST_REVIEW_TRIGGER).and_then(Value::as_str)
-                        })
-                        .map(str::to_string),
+                    review_trigger,
                     summary: output
                         .get(KEY_SUMMARY)
                         .or_else(|| state_after.get(KEY_LATEST_REVIEW_VOTE))
@@ -835,18 +910,20 @@ mod tests {
         assert_eq!(trace.events[0].event_type, TraceEventType::ReviewStarted);
         assert_eq!(trace.events[1].event_type, TraceEventType::ReviewerStarted);
         assert_eq!(trace.events[2].event_type, TraceEventType::ReviewerCompleted);
-        assert_eq!(trace.events[3].event_type, TraceEventType::ReviewVoteResolved);
-        assert_eq!(trace.events[4].event_type, TraceEventType::ReviewTerminalRecorded);
+        assert_eq!(trace.events[3].event_type, TraceEventType::ReviewCouncilAssembled);
+        assert_eq!(trace.events[4].event_type, TraceEventType::ReviewStopSemanticsRecorded);
+        assert_eq!(trace.events[5].event_type, TraceEventType::ReviewVoteResolved);
+        assert_eq!(trace.events[6].event_type, TraceEventType::ReviewTerminalRecorded);
         assert_eq!(
             trace.events[3].payload.get("council_profile").and_then(|value| value.as_str()),
             Some("yellow_pair")
         );
         assert_eq!(
-            trace.events[3].payload.get("stop_semantics").and_then(|value| value.as_str()),
+            trace.events[4].payload.get("stop_semantics").and_then(|value| value.as_str()),
             Some("council_required")
         );
         assert_eq!(
-            trace.events[4].payload.get("independence_state").and_then(|value| value.as_str()),
+            trace.events[5].payload.get("independence_state").and_then(|value| value.as_str()),
             Some("passed")
         );
     }

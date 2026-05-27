@@ -321,7 +321,7 @@ fn blocked_native_run_surfaces_delegation_across_status_and_inspect() {
         status.terminal_output
     );
 
-    let inspect = execute_inspect(None, Some(&ws), None).unwrap();
+    let inspect = execute_inspect(None, Some(&ws), None, false).unwrap();
     assert!(
         inspect.terminal_output.contains("delegation_mode: handoff_required"),
         "{}",
@@ -604,7 +604,7 @@ fn session_native_cli_surfaces_context_projection_on_status_run_and_inspect() {
     let run = execute_run(Some(&ws)).unwrap();
     assert!(run.terminal_output.contains("context_summary:"), "{}", run.terminal_output);
 
-    let inspect = execute_inspect(None, Some(&ws), None).unwrap();
+    let inspect = execute_inspect(None, Some(&ws), None, false).unwrap();
     assert!(inspect.terminal_output.contains("context_summary:"), "{}", inspect.terminal_output);
     assert!(
         inspect.terminal_output.contains("context_credibility: credible"),

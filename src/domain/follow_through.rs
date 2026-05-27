@@ -1,6 +1,12 @@
 use serde::{Deserialize, Serialize};
 
-use crate::domain::session::{CompatibilityFollowUpView, ContinuityAuthority, SessionStatusView};
+use crate::domain::session::{
+    ActiveSessionRecord, CompatibilityFollowUpView, ContinuityAuthority, SessionStatusView,
+    decision_status_text, delegation_next_command, delegation_status_view,
+    governance_next_action_for_record, task_state_canon_memory_context_credibility,
+    task_state_canon_memory_context_summary, task_state_canon_memory_staleness_reason,
+    task_state_string,
+};
 use crate::domain::trace::TraceSummaryView;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -164,6 +170,123 @@ impl FollowThroughProjection {
         Self::default()
     }
 
+    pub fn from_session_record(record: &ActiveSessionRecord) -> Self {
+        if let Some(delegation) = delegation_status_view(record) {
+            let packet_ref = delegation.packet_id.as_deref().unwrap_or("unknown-packet");
+            let stop_reason = match delegation.target_owner.as_deref() {
+                Some(target_owner) => {
+                    format!("{}; target_owner={target_owner}", delegation.evidence_summary)
+                }
+                None => delegation.evidence_summary.clone(),
+            };
+
+            return Self {
+                guidance: Some(match delegation.packet_state {
+                    Some(packet_state) => {
+                        format!("{} [{}]", delegation.headline, packet_state.as_str())
+                    }
+                    None => delegation.headline.clone(),
+                }),
+                evidence_source: Some(format!("session:delegation_packet:{packet_ref}")),
+                next_action: delegation_next_command(record),
+                stop_reason: Some(stop_reason),
+            };
+        }
+
+        let task = record.active_task.as_ref();
+        let context_summary = record
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| goal_plan.context_summary())
+            .or_else(|| task.and_then(task_state_canon_memory_context_summary));
+        let context_credibility = record
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| goal_plan.context_credibility())
+            .or_else(|| task.and_then(task_state_canon_memory_context_credibility));
+        let context_staleness_reason = record
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| goal_plan.context_pack.as_ref())
+            .and_then(|context_pack| context_pack.staleness_reason.clone())
+            .or_else(|| task.and_then(task_state_canon_memory_staleness_reason));
+
+        if context_credibility.as_deref().is_some_and(|credibility| credibility != "credible") {
+            return Self {
+                guidance: Some(context_summary.unwrap_or_else(|| {
+                    "bounded planning context is not credible enough to continue".to_string()
+                })),
+                evidence_source: Some("session:context_pack".to_string()),
+                next_action: Some("boundline goal --goal <narrower goal>".to_string()),
+                stop_reason: context_staleness_reason.or(context_credibility),
+            };
+        }
+
+        if let Some(governance_next_action) = governance_next_action_for_record(record) {
+            return Self {
+                guidance: Some(format!(
+                    "governance state is currently controlling the bounded follow-up: {governance_next_action}"
+                )),
+                evidence_source: Some("session:governance".to_string()),
+                next_action: Some(governance_next_action),
+                stop_reason: None,
+            };
+        }
+
+        if let Some(latest_exhaustion_reason) =
+            task.and_then(|task| task_state_string(task, "latest_exhaustion_reason"))
+        {
+            return Self {
+                guidance: Some(
+                    "no further bounded action is currently credible until the exhausted path is inspected"
+                        .to_string(),
+                ),
+                evidence_source: Some("session:exhaustion".to_string()),
+                next_action: None,
+                stop_reason: Some(latest_exhaustion_reason),
+            };
+        }
+
+        if let Some(latest_selection_headline) =
+            task.and_then(|task| task_state_string(task, "latest_selection_headline"))
+        {
+            return Self {
+                guidance: Some(latest_selection_headline),
+                evidence_source: Some("session:recovery".to_string()),
+                next_action: None,
+                stop_reason: None,
+            };
+        }
+
+        if let Some(latest_selection_reason) =
+            task.and_then(|task| task_state_string(task, "latest_selection_reason"))
+        {
+            return Self {
+                guidance: Some(format!(
+                    "recovery evidence currently favors this follow-up: {latest_selection_reason}"
+                )),
+                evidence_source: Some("session:recovery".to_string()),
+                next_action: None,
+                stop_reason: None,
+            };
+        }
+
+        if let Some(latest_decision) = record.decisions.last() {
+            return Self {
+                guidance: Some(format!(
+                    "latest decision {} for {} is guiding the bounded follow-up",
+                    decision_status_text(latest_decision.status),
+                    latest_decision.target
+                )),
+                evidence_source: Some("session:decision".to_string()),
+                next_action: None,
+                stop_reason: None,
+            };
+        }
+
+        Self::default()
+    }
+
     pub fn from_trace_summary(summary: &TraceSummaryView, next_command: Option<&str>) -> Self {
         if let Some(delegation) = &summary.delegation {
             let packet_ref = delegation.packet_id.as_deref().unwrap_or("unknown-packet");
@@ -266,14 +389,49 @@ impl FollowThroughProjection {
 #[cfg(test)]
 mod tests {
     use super::FollowThroughProjection;
+    use crate::domain::decision::{Decision, DecisionStatus, DecisionType};
     use crate::domain::limits::TerminalCondition;
     use crate::domain::session::{
-        CompatibilityFollowUpMode, CompatibilityFollowUpView, ContinuityAuthority,
-        DelegationContinuityMode, DelegationPacketState, DelegationStatusView, SessionStatus,
-        SessionStatusView,
+        ActiveSessionRecord, CompatibilityFollowUpMode, CompatibilityFollowUpView,
+        ContinuityAuthority, DelegationContinuityMode, DelegationPacketState, DelegationStatusView,
+        SessionStatus, SessionStatusView,
     };
     use crate::domain::task::{TaskStatus, TerminalReason};
     use crate::domain::trace::TraceSummaryView;
+
+    fn record_with_decision() -> ActiveSessionRecord {
+        let mut decision = Decision::new(
+            DecisionType::Fix,
+            "src/lib.rs",
+            "repair the failing path",
+            "tests pass",
+            Vec::new(),
+        );
+        decision.status = DecisionStatus::Failed;
+
+        ActiveSessionRecord {
+            session_id: "session-follow-through".to_string(),
+            workspace_ref: "/tmp/workspace".to_string(),
+            goal: Some("Fix the failing add test".to_string()),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: vec![decision],
+            active_flow_policy: None,
+            latest_status: SessionStatus::Running,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 1,
+            updated_at: 1,
+            governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
+            delight_feedback: None,
+        }
+    }
 
     #[test]
     fn derives_recovery_guidance_from_session_view() {
@@ -673,5 +831,20 @@ mod tests {
             )
         );
         assert_eq!(projection.evidence_source, Some("trace:compatibility_follow_up".to_string()));
+    }
+
+    #[test]
+    fn follow_through_projection_builds_from_session_record_decisions() {
+        let projection = FollowThroughProjection::from_session_record(&record_with_decision());
+
+        assert_eq!(projection.evidence_source, Some("session:decision".to_string()));
+        assert_eq!(
+            projection.guidance,
+            Some(
+                "latest decision failed for src/lib.rs is guiding the bounded follow-up"
+                    .to_string()
+            )
+        );
+        assert_eq!(projection.next_action, None);
     }
 }

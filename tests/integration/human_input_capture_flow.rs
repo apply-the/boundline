@@ -335,7 +335,19 @@ fn orchestrate_goal_clarification_accepts_request_id_and_answer() {
     );
     assert_eq!(
         first_request["phase_request"]["expected_answer"]["type"].as_str(),
-        Some("free_text")
+        Some("suggested_choice")
+    );
+    let option_labels = first_request["phase_request"]["expected_answer"]["options"]
+        .as_array()
+        .expect("suggested_choice should include selectable options")
+        .iter()
+        .filter_map(|option| option["label"].as_str())
+        .collect::<Vec<_>>();
+    assert!(
+        option_labels.contains(&"PostgreSQL")
+            && option_labels.contains(&"SQLite")
+            && option_labels.contains(&"in-memory"),
+        "expected persistence-store suggested options, got {option_labels:?}"
     );
     let first_request_id = first_request["phase_request"]["request_id"]
         .as_str()

@@ -145,13 +145,16 @@ Boundline's real CLI/runtime instead of making chat history authoritative.
 
 Think of the chat surface in three layers:
 
-- global bootstrap commands for install, readiness, and scaffolding such as `/boundline:init` and `/boundline:doctor`
+- global readiness commands such as `/boundline:doctor`; one-time bootstrap stays on the raw CLI via `boundline init`
 - repo-local runtime commands for session state and trace-backed execution such as `/boundline:goal`, `/boundline:plan`, `/boundline:run`, `/boundline:status`, `/boundline:next`, `/boundline:inspect`, and `/boundline:recover`
-- guided delivery-intent commands for workflows, governed modes, or named delivery phases when the operator wants a bounded intent surface instead of raw runtime subcommands
+- optional bounded helpers such as governed shorthands or repo-defined named workflows when the operator explicitly wants a wrapper over the direct runtime subcommands
 
 Exact host-specific install locations, validation steps, and package
 boundaries are in
 [docs/guides/assistant-plugin-packages.md](docs/guides/assistant-plugin-packages.md).
+For the full workspace bootstrap and refresh flow, including IDE setup and
+`boundline update`, see
+[docs/guides/init-and-update.md](docs/guides/init-and-update.md).
 
 Those repo-local assistant surfaces are separate from Boundline's internal
 slot routing. You can route planning to Codex, implementation to Copilot,
@@ -217,6 +220,11 @@ When domain families or repository cues are credible, init also applies
 merge-only hygiene defaults such as `.gitignore` and `.dockerignore` entries
 without removing existing local lines, including legacy ESLint ignores and
 bounded Kubernetes-related exclusions when the repository cues justify them.
+
+After that one-time bootstrap, use `boundline update` to preview or apply the
+latest Boundline-managed scaffold changes for config, assistant assets, docs,
+or hygiene. `boundline update` is preview-only by default; rerun with
+`--apply` when you explicitly want to write the managed updates.
 
 Most users only need the commands above.
 
@@ -314,9 +322,10 @@ Advanced execution-profile workflows are documented outside this README.
 | `boundline status` | See the current state and suggested follow-up |
 | `boundline next` | Ask Boundline for the next action |
 | `boundline inspect` | Read the latest trace in more detail |
-| `boundline init` | Scaffold optional `.boundline` files, opt-in assistant pack defaults, bounded hygiene setup, and optional create-only repo-local reference docs |
+| `boundline init` | Bootstrap optional `.boundline` files, opt-in assistant pack defaults, bounded hygiene setup, and optional create-only repo-local reference docs |
+| `boundline update` | Preview or apply the latest Boundline-managed scaffold refresh for config, assistant assets, docs, or hygiene |
 | `boundline config` | Inspect or change routing and domain defaults |
-| `boundline workflow ...` | Run a named workflow defined by the repo |
+| `boundline workflow ...` | Optionally run a repo-defined named workflow wrapper over the same session-native runtime |
 | `boundline cluster ...` | Set up or inspect a multi-repo cluster |
 
 ## Files Boundline Uses
@@ -350,6 +359,13 @@ explicitly during guided init or pass them on the command line:
 boundline init --assistant claude --assistant codex --assistant copilot --export-docs
 ```
 
+Refresh an already initialized project to the latest managed assistant/config
+surfaces:
+
+```bash
+boundline update --target assistant --apply
+```
+
 Run from a Markdown brief:
 
 ```bash
@@ -359,7 +375,7 @@ boundline plan --confirm
 boundline run
 ```
 
-Run a named workflow when the repo defines one:
+Only use a named workflow when the repo ships one and you explicitly want that wrapper:
 
 ```bash
 boundline workflow list

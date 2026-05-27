@@ -232,4 +232,42 @@ mod tests {
         assert!(loaded.already_projected("trace-1", "event-1"));
         Ok(())
     }
+
+    #[test]
+    fn new_constructor_exposes_configured_paths() -> Result<(), String> {
+        let workspace = temp_workspace()?;
+        let events_path = workspace.join("session/audit_events.ndjson");
+        let cursor_path = workspace.join("session/audit_cursor.json");
+
+        let store = FileSessionAuditStore::new(events_path.clone(), cursor_path.clone());
+        assert_eq!(store.events_path(), events_path.as_path());
+        assert_eq!(store.cursor_path(), cursor_path.as_path());
+        Ok(())
+    }
+
+    #[test]
+    fn load_all_skips_blank_lines_in_ndjson() -> Result<(), String> {
+        use std::io::Write;
+
+        let workspace = temp_workspace()?;
+        let store = FileSessionAuditStore::for_session(&workspace, "session-blank-lines");
+
+        store.append(&sample_entry(1)).map_err(|error| error.to_string())?;
+
+        // Inject a blank line to exercise the `continue` branch in load_all.
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(store.events_path())
+            .map_err(|error| error.to_string())?;
+        writeln!(file).map_err(|error| error.to_string())?;
+        drop(file);
+
+        store.append(&sample_entry(2)).map_err(|error| error.to_string())?;
+
+        let entries = store.load_all().map_err(|error| error.to_string())?;
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].sequence, 1);
+        assert_eq!(entries[1].sequence, 2);
+        Ok(())
+    }
 }

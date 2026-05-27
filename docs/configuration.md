@@ -67,6 +67,8 @@ ranking, explicit adaptive exhaustion, or negotiation-state overrides.
 - `boundline init` bootstraps an optional compatibility workspace profile and local config under `.boundline/`, and when Canon is selected it also writes the executable `governance.canon` runtime scaffold into `.boundline/execution.json`
 - `boundline init --export-docs` can also mirror stable repo-local Canon and selected assistant reference docs under `docs/boundline/`; that export is create-only by default, `--refresh` enables in-place updates, `--diff` previews changes without writing, and `--to <path>` switches the export root
 - `boundline init` can also infer or accept active domain families and seed scoped domain-template defaults plus optional external context bindings
+- `boundline init --ide <ide>` can scaffold IDE setup metadata; VS Code receives managed terminal auto-approval settings, while Cursor, Antigravity, and JetBrains receive managed guidance until stable project-scoped approval schemas exist
+- `boundline update --target ide` refreshes previously tracked IDE setup from the scaffold manifest
 - direct `boundline run --goal` is native-first; add `--compatibility` only when the manifest-backed route is intentional
 - default `boundline plan` now creates one evidence-driven proposal and session-native `boundline run` applies approval when execution should continue; planning lifecycle state is session-owned rather than config-owned
 - bounded `bug-fix` and `change` completion now requires both material change evidence and passed validation on the native and governed session path
@@ -119,6 +121,9 @@ target another repository or a primary cluster workspace.
 	explicit delegation boundary instead of silently falling back
 
 ## Config locations
+
+For a procedural view of init, IDE setup, docs export, and update refreshes,
+see [guides/init-and-update.md](guides/init-and-update.md).
 
 - Workspace-local: `<workspace>/.boundline/config.toml`
 - Cluster-scoped: `<primary-workspace>/.boundline/cluster.toml`

@@ -24,6 +24,7 @@ pub enum SessionAuditEntryKind {
     SessionStart,
     SessionEnd,
     SessionStatusChanged,
+    FollowThroughProjected,
     TraceEventProjected,
 }
 
@@ -80,8 +81,6 @@ pub enum SessionAuditSourceKind {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct SessionAuditIdentity {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub current_user: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub git_user_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -346,6 +345,7 @@ impl SessionAuditEntryKind {
             Self::SessionStart => "session_start",
             Self::SessionEnd => "session_end",
             Self::SessionStatusChanged => "session_status_changed",
+            Self::FollowThroughProjected => "follow_through_projected",
             Self::TraceEventProjected => "trace_event_projected",
         }
     }

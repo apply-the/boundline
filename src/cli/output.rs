@@ -708,6 +708,8 @@ mod tests {
                     non_interactive: false,
                     template: None,
                     assistant: Vec::new(),
+                    ide: Vec::new(),
+                    auto_approve: None,
                     domain: Vec::new(),
                     domain_standard: Vec::new(),
                     context_binding: Vec::new(),
@@ -2933,5 +2935,24 @@ mod tests {
         assert!(
             running_run.contains("execution_condition: running - bounded execution is in progress")
         );
+
+        let planned_run = render_run_execution_condition(&TaskRunResponse {
+            task_id: "task-planned".to_string(),
+            terminal_status: TaskStatus::Planned,
+            terminal_reason: TerminalReason::new(
+                TerminalCondition::GoalSatisfied,
+                "task is planned and ready",
+                None,
+            ),
+            final_context: TaskContext::new(
+                "session-planned",
+                "/tmp/workspace",
+                RunLimits::default(),
+                serde_json::Map::new(),
+            ),
+            plan_revision: 0,
+            trace_location: "/tmp/workspace/.boundline/traces/task-planned.json".to_string(),
+        });
+        assert!(planned_run.contains("execution_condition: waiting"));
     }
 }

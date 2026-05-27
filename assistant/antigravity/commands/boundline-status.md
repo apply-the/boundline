@@ -15,13 +15,13 @@ Compatibility follow-up means the user previously chose `boundline run --compati
 - `workspace_ref`
 
 ## Shell-Enabled Path
-Run `cargo run --bin boundline -- status --workspace <workspace> --json` exactly once.
+Run `boundline status --workspace <workspace> --json` exactly once.
 If the user asks for a richer state view than `status`, route to `/boundline-inspect` instead of switching to the removed terminal UI surface.
 
 ## Chat-Only Path
 If shell execution is unavailable, provide this exact copyable command:
 
-`cargo run --bin boundline -- status --workspace <workspace> --json`
+`boundline status --workspace <workspace> --json`
 
 Then wait for pasted output.
 

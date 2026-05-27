@@ -21,20 +21,21 @@ Keep validation, governance, and recovery posture explicit instead of implied.
 - Preserve any confirmed `latest_trace_ref` from prior turns when status references it
 
 ## Shell-Enabled Path
-If `workspace_ref` is known, run `cargo run --bin boundline -- status --workspace <workspace> --json`.
-If the assistant is already anchored in the workspace, run `cargo run --bin boundline -- status --json` exactly once.
-If a trace needs deeper follow-up after status, use `cargo run --bin boundline -- inspect --trace <trace> --json`.
+If `workspace_ref` is known, run `boundline status --workspace <workspace> --json`.
+If the assistant is already anchored in the workspace, run `boundline status --json` exactly once.
+If a trace needs deeper follow-up after status, use `boundline inspect --trace <trace> --json`.
 
 ## Chat-Only Path
 Ask only for the missing `workspace_ref`, then provide one exact copyable command:
 
-`cargo run --bin boundline -- status --workspace <workspace> --json`
+`boundline status --workspace <workspace> --json`
 
 Wait for pasted output before continuing.
 
 ## Output Interpretation
 Provide a conversational, human-readable summary of the session state. Do NOT use raw JSON keys or snake_case field names (like `next_command`, `latest_status`, `authored_input_summary`, etc.) in your response. Translate all state into natural language.
-For the next step or follow-up commands, provide them as clickable buttons or action links (e.g., Markdown command links) instead of plain text recommendations.
+When suggesting the next step, you MUST output a VS Code Copilot command link to render a clickable button. Use EXACTLY this syntax format:
+`[Run /boundline-plan](command:github.copilot.chat.execute?%5B%22%2Fboundline-plan%22%5D)` (replace /boundline-plan with the actual command). Do not use plain text or unicode arrows.
 Summarize `explain_plan_summary`, `explain_plan_validation`, `explain_plan_governance`, `explain_plan_recovery`, `why_summary`, `risk_summary`, `reasoning_profile_id`, `reasoning_selection_reason`, `reasoning_contribution`, `reasoning_fallback_disclosure`, `time_to_first_useful_answer_ms`, `time_to_first_useful_answer_command`, `explanation_attribution_rate`, `next_action_acceptance_rate`, `latest_next_action_outcome`, and `next_command`. Preserve any Canon or blocked-state wording exactly and keep the recovery posture visible instead of turning it into generic advice.
 
 ## Next-Step Routing

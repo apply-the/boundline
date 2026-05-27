@@ -11,7 +11,7 @@ Use Canon governance through Boundline's governed stage surface.
 Ask the user for the workspace. Ask for a desired mode only if they already want to choose one explicitly. If no mode was supplied, use the CLI choice-rendering path instead of inventing a per-mode alias.
 
 ```bash
-cargo run --bin boundline -- govern --workspace <workspace> --json
+boundline govern --workspace <workspace> --json
 ```
 
 Append `--mode <mode>` only when the user already named one.

@@ -33,7 +33,7 @@ fn clustered_delivery_run_mutates_both_member_workspaces_under_one_session_owner
 
     let run = execute_run_with_target(None, Some(&primary)).unwrap();
     let status = execute_status_with_target(None, Some(&primary), None).unwrap();
-    let inspect = execute_inspect(None, Some(&primary), None).unwrap();
+    let inspect = execute_inspect(None, Some(&primary), None, false).unwrap();
 
     assert!(run.terminal_output.contains("terminal_status: succeeded"), "{}", run.terminal_output);
     assert!(status.terminal_output.contains("cluster_id: cluster-1"), "{}", status.terminal_output);

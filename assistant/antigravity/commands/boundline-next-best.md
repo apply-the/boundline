@@ -15,14 +15,14 @@ Prefer the CLI-reported next command over assistant-authored guesswork.
 - Preserve any confirmed `latest_trace_ref` when it already anchors the current session discussion
 
 ## Shell-Enabled Path
-If `workspace_ref` is known, run `cargo run --bin boundline -- status --workspace <workspace> --json` exactly once.
-If the assistant is already anchored in the workspace, run `cargo run --bin boundline -- status --json` exactly once.
+If `workspace_ref` is known, run `boundline status --workspace <workspace> --json` exactly once.
+If the assistant is already anchored in the workspace, run `boundline status --json` exactly once.
 If status reports inspect-only continuity, route to `/boundline-inspect` instead of inventing a new action.
 
 ## Chat-Only Path
 Ask only for the missing `workspace_ref`, then provide this exact copyable command:
 
-`cargo run --bin boundline -- status --workspace <workspace> --json`
+`boundline status --workspace <workspace> --json`
 
 Wait for pasted output before continuing.
 

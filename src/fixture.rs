@@ -6367,6 +6367,16 @@ mod tests {
             fixture_next_minor_exclusive("1.2"),
             Err(FixtureRuntimeError::InvalidReasoningFixtureVersion { .. })
         ));
+        // Missing major (empty string) hits the major parse error branch.
+        assert!(matches!(
+            fixture_next_minor_exclusive(""),
+            Err(FixtureRuntimeError::InvalidReasoningFixtureVersion { .. })
+        ));
+        // Non-numeric minor hits the minor parse error branch.
+        assert!(matches!(
+            fixture_next_minor_exclusive("1.abc.2"),
+            Err(FixtureRuntimeError::InvalidReasoningFixtureVersion { .. })
+        ));
 
         let independent_floor =
             fixture_minimum_independence(ReasoningProfileId::IndependentPairReview);
@@ -6421,6 +6431,24 @@ mod tests {
             resolve_supported_fixture_flow("unknown-flow", "fixture planning"),
             Err(FixtureRuntimeError::UnsupportedFixtureFlow { .. })
         ));
+
+        // A task whose target file does not exist forces infer_goal_plan_change
+        // through the Cargo.toml branch (lines 899-912).
+        let cargo_toml_plan = GoalPlan::new(
+            "Derive from Cargo.toml",
+            vec![PlannedTask {
+                task_id: "planned-task-cargo".to_string(),
+                description: "Nonexistent target falls through to Cargo.toml".to_string(),
+                target: "nonexistent.rs".to_string(),
+                expected_outcome: None,
+                decision_type_hint: None,
+            }],
+        )
+        .unwrap();
+        let (cargo_path, cargo_find, _cargo_replace) =
+            infer_goal_plan_change(&workspace, &cargo_toml_plan).unwrap();
+        assert_eq!(cargo_path, "Cargo.toml");
+        assert!(cargo_find.starts_with("__boundline_goal_plan_change_required__:"));
 
         fs::remove_dir_all(&workspace).unwrap();
     }

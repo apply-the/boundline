@@ -457,6 +457,8 @@ pub fn summarize_trace(
             TraceEventType::ReviewStarted
             | TraceEventType::ReviewTriggerIgnored
             | TraceEventType::ReviewerCompleted
+            | TraceEventType::ReviewCouncilAssembled
+            | TraceEventType::ReviewStopSemanticsRecorded
             | TraceEventType::ReviewVoteResolved
             | TraceEventType::ReviewAdjudicated
             | TraceEventType::ReviewTerminalRecorded => {
@@ -1499,11 +1501,9 @@ fn inspection_target_for(trace: Option<&Path>, workspace: Option<&Path>) -> Trac
 fn corrected_command(inspection_target: TraceResolutionTarget) -> &'static str {
     match inspection_target {
         TraceResolutionTarget::ExplicitTrace | TraceResolutionTarget::SessionTraceRef => {
-            "cargo run --bin boundline -- inspect --trace <trace>"
+            "boundline inspect --trace <trace>"
         }
-        TraceResolutionTarget::LatestWorkspaceTrace => {
-            "cargo run --bin boundline -- inspect --workspace <workspace>"
-        }
+        TraceResolutionTarget::LatestWorkspaceTrace => "boundline inspect --workspace <workspace>",
     }
 }
 
@@ -1518,6 +1518,20 @@ fn review_timeline_line(event_type: TraceEventType, payload: &serde_json::Value)
             .and_then(|value| value.as_str())
             .map(|trigger| format!("review_trigger_ignored: {trigger}")),
         TraceEventType::ReviewerCompleted => reviewer_line(payload),
+        TraceEventType::ReviewCouncilAssembled => payload
+            .get("selection_summary")
+            .and_then(|value| value.as_str())
+            .map(|summary| format!("review_council: {summary}"))
+            .or_else(|| {
+                payload
+                    .get("council_profile")
+                    .and_then(|value| value.as_str())
+                    .map(|profile| format!("review_council: {profile}"))
+            }),
+        TraceEventType::ReviewStopSemanticsRecorded => payload
+            .get("stop_semantics")
+            .and_then(|value| value.as_str())
+            .map(|stop_semantics| format!("review_stop_semantics: {stop_semantics}")),
         TraceEventType::ReviewVoteResolved => payload
             .get(KEY_SUMMARY)
             .and_then(|value| value.as_str())
@@ -2488,7 +2502,7 @@ mod tests {
         );
         assert_eq!(
             corrected_command(TraceResolutionTarget::SessionTraceRef),
-            "cargo run --bin boundline -- inspect --trace <trace>"
+            "boundline inspect --trace <trace>"
         );
         assert_eq!(success_headline(&json!({}), 2), "succeeded after 2 attempt(s)");
         assert_eq!(failure_headline(&json!({}), 1), "failed after 1 attempt(s)");

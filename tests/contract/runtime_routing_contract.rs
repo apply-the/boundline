@@ -253,7 +253,7 @@ fn compatibility_inspect_uses_persisted_routing_snapshot_after_config_changes() 
     };
     FileConfigStore::for_workspace(&workspace).save_local(&after).unwrap();
 
-    let inspect = execute_inspect(Some(Path::new(&trace_ref)), None, None).unwrap();
+    let inspect = execute_inspect(Some(Path::new(&trace_ref)), None, None, false).unwrap();
 
     assert!(
         inspect
@@ -306,7 +306,7 @@ fn native_inspect_uses_persisted_routing_snapshot_after_config_changes() {
     };
     FileConfigStore::for_workspace(&workspace).save_local(&after).unwrap();
 
-    let inspect = execute_inspect(Some(Path::new(&trace_ref)), None, None).unwrap();
+    let inspect = execute_inspect(Some(Path::new(&trace_ref)), None, None, false).unwrap();
 
     assert!(
         inspect

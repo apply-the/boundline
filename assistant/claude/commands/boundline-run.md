@@ -16,7 +16,7 @@ Resume the active Boundline session through the selected runtime route until it 
 ## Shell-Enabled Path
 If the workspace is known, prefer the session-native backend mapping exactly once:
 
-`cargo run --bin boundline -- orchestrate --workspace <workspace> --until terminal --json-stream`
+`boundline orchestrate --workspace <workspace> --until terminal --json-stream`
 
 If the active session has no captured goal or planned task, route to `/boundline-plan` or `/boundline-goal` instead of inventing a new run command. If the user explicitly asks for direct manifest-backed compatibility behavior without relying on active session state, route them to the direct compatibility workflow in the shared guidance instead of reinterpreting `/boundline-run`.
 
@@ -26,7 +26,7 @@ Treat `/boundline-run` as the Boundline-first continuation surface. Canon-defaul
 ## Chat-Only Path
 If shell execution is unavailable, ask only for missing workspace context and then provide this exact copyable command:
 
-`cargo run --bin boundline -- orchestrate --workspace <workspace> --until terminal --json-stream`
+`boundline orchestrate --workspace <workspace> --until terminal --json-stream`
 
 Wait for the user to paste the output before continuing.
 
@@ -39,5 +39,6 @@ Reply as a compact operator brief by default: preserve the ordered NDJSON event 
 If run output reports clarification or any gate boundary (approval wait, blocked state, recovery requirement, or `phase_request`), move to interactive follow-up. Ask the user for the required decision or missing input, then use the CLI-reported raw command path only for shell execution.
 
 ## Next-Step Routing
-Prefer an emitted `resume_command` when a `phase_request` is present; otherwise prefer the CLI-reported `next_command`; when inspection is needed, route to `/boundline:inspect`.
+Surface host-native action links using `/boundline:*` command ids.
+Prefer `assistant_resume_command` when a `phase_request` is present; otherwise prefer `assistant_next_command`; otherwise follow the CLI-reported `next_command`. Default to `/boundline:inspect` after a run completes; route to `/boundline:run` only when delegation is pending or the step is incomplete and re-run is appropriate.
 Allowed follow-up commands: `/boundline:inspect`, `/boundline:status`, `/boundline:continue`, `/boundline:run`, `/boundline:plan`, `/boundline:goal`.

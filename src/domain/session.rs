@@ -2887,7 +2887,7 @@ pub fn task_state_governance_next_action(task: &Task) -> Option<String> {
     governance_next_action_for_state(governance_state.as_deref())
 }
 
-fn governance_next_action_for_record(record: &ActiveSessionRecord) -> Option<String> {
+pub(crate) fn governance_next_action_for_record(record: &ActiveSessionRecord) -> Option<String> {
     record.active_task.as_ref().and_then(task_state_governance_next_action).or_else(|| {
         governance_confidence_handoff_for_record(record).and_then(|handoff| handoff.next_action)
     })

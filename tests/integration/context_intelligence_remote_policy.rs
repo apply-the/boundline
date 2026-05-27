@@ -34,7 +34,7 @@ fn disabled_policy_surfaces_insufficient_state_without_remote_fallback() {
     let plan = execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
     let status = execute_status(Some(&workspace)).unwrap();
     execute_run(Some(&workspace)).unwrap();
-    let inspect = execute_inspect(None, Some(&workspace), None).unwrap();
+    let inspect = execute_inspect(None, Some(&workspace), None, false).unwrap();
 
     for output in [plan.terminal_output.as_str(), status.terminal_output.as_str()] {
         assert!(output.contains("retrieval_mode: disabled"), "{output}");

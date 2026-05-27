@@ -56,7 +56,7 @@ Every supported package exposes or documents these namespaced commands:
 | Chat Command | Runtime Surface | Notes |
 |--------------|-----------------|-------|
 | `/boundline:goal` | `boundline orchestrate --goal ... --until phase-request --json-stream` | Opens or refines the active session goal through runtime-owned clarification gates; resume with the emitted `request_id` and `--answer` when a goal question is active. |
-| `/boundline:plan` | `boundline plan --json` | Produces or reports a bounded plan proposal for an already captured session goal; when new goal or brief input is arriving, prefer the orchestrator path instead of assuming an explicit confirm step. |
+| `/boundline:plan` | `boundline plan --json` | Produces or reports a bounded plan proposal for an already captured session goal; when the goal is missing or changing, route to `/boundline:goal` instead of treating `/boundline:plan` as a goal-capture surface. |
 | `/boundline:run` | `boundline run --json` | Runs the next bounded action through the real runtime. |
 | `/boundline:status` | `boundline status --json` | Reports current state and `next_command`. |
 | `/boundline:continue` | `boundline continue --json` | Continues only from `.boundline/session.json`; reports init/goal guidance when no session exists. |

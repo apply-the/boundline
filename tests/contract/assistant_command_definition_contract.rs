@@ -16,61 +16,65 @@ fn test_goal_and_plan_definition_sections_and_backend_mappings() {
         (
             asset_path("assistant/claude/commands/boundline-goal.md"),
             &[
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --brief <path> [--brief <path> ...] --until phase-request --json-stream",
+                "boundline orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
+                "boundline orchestrate --workspace <workspace> --brief <path> [--brief <path> ...] --until phase-request --json-stream",
                 "phase_request",
                 "request_id",
                 "/boundline-goal",
                 "## Host Capabilities",
                 "Boundline needs one answer before it can continue",
+                "suggested_choice",
             ][..],
-            &["cargo run --bin boundline -- start --workspace <workspace>"][..],
+            &["boundline start --workspace <workspace>"][..],
         ),
         (
             asset_path("assistant/codex/commands/boundline-goal.md"),
             &[
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --brief <path> [--brief <path> ...] --until phase-request --json-stream",
+                "boundline orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
+                "boundline orchestrate --workspace <workspace> --brief <path> [--brief <path> ...] --until phase-request --json-stream",
                 "phase_request",
                 "request_id",
                 "/boundline-goal",
                 "## Host Capabilities",
                 "Boundline needs one answer before it can continue",
+                "suggested_choice",
             ][..],
-            &["cargo run --bin boundline -- start --workspace <workspace>"][..],
+            &["boundline start --workspace <workspace>"][..],
         ),
         (
             asset_path("assistant/antigravity/commands/boundline-goal.md"),
             &[
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --brief <path> [--brief <path> ...] --until phase-request --json-stream",
+                "boundline orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
+                "boundline orchestrate --workspace <workspace> --brief <path> [--brief <path> ...] --until phase-request --json-stream",
                 "phase_request",
                 "request_id",
                 "/boundline-goal",
                 "## Host Capabilities",
                 "Boundline needs one answer before it can continue",
                 "optional",
+                "suggested_choice",
             ][..],
-            &["cargo run --bin boundline -- start --workspace <workspace>"][..],
+            &["boundline start --workspace <workspace>"][..],
         ),
         (
             asset_path("assistant/copilot/prompts/boundline-goal.prompt.md"),
             &[
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --goal \"<goal>\" --slug <derived-slug> --assistant-host copilot --until phase-request --json-stream",
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --brief <path> [--brief <path> ...] --slug <derived-slug> --assistant-host copilot --until phase-request --json-stream",
+                "boundline orchestrate --workspace <workspace> --goal \"<goal>\" --slug <derived-slug> --assistant-host copilot --until phase-request --json-stream",
+                "boundline orchestrate --workspace <workspace> --brief <path> [--brief <path> ...] --slug <derived-slug> --assistant-host copilot --until phase-request --json-stream",
                 "phase_request",
                 "request_id",
                 "/boundline-goal",
                 "Agent Mode Override",
+                "suggested_choice",
             ][..],
-            &["cargo run --bin boundline -- start --workspace <workspace>"][..],
+            &["boundline start --workspace <workspace>"][..],
         ),
         (
             asset_path("assistant/claude/commands/boundline-plan.md"),
             &[
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --goal \"<goal>\" --brief <path> [--brief <path> ...] --until phase-request --json-stream",
-                "cargo run --bin boundline -- plan --workspace <workspace> --input <path> --json",
+                "boundline orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
+                "boundline orchestrate --workspace <workspace> --goal \"<goal>\" --brief <path> [--brief <path> ...] --until phase-request --json-stream",
+                "boundline plan --workspace <workspace> --input <path> --json",
                 "phase_request",
                 "request_id",
                 "authored_input_summary",
@@ -81,9 +85,9 @@ fn test_goal_and_plan_definition_sections_and_backend_mappings() {
         (
             asset_path("assistant/codex/commands/boundline-plan.md"),
             &[
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --goal \"<goal>\" --brief <path> [--brief <path> ...] --until phase-request --json-stream",
-                "cargo run --bin boundline -- plan --workspace <workspace> --input <path> --json",
+                "boundline orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
+                "boundline orchestrate --workspace <workspace> --goal \"<goal>\" --brief <path> [--brief <path> ...] --until phase-request --json-stream",
+                "boundline plan --workspace <workspace> --input <path> --json",
                 "phase_request",
                 "request_id",
                 "authored_input_summary",
@@ -94,14 +98,14 @@ fn test_goal_and_plan_definition_sections_and_backend_mappings() {
         (
             asset_path("assistant/copilot/prompts/boundline-plan.prompt.md"),
             &[
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
-                "cargo run --bin boundline -- plan --workspace <workspace> --input <path> --json",
+                "boundline orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
+                "boundline plan --workspace <workspace> --input <path> --json",
                 "authored_input_summary",
                 "/boundline-step",
             ][..],
             &[
                 "No direct CLI invocation is required",
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --brief <path> [--brief <path> ...] --until phase-request --json-stream",
+                "boundline orchestrate --workspace <workspace> --brief <path> [--brief <path> ...] --until phase-request --json-stream",
             ][..],
         ),
     ];
@@ -119,69 +123,57 @@ fn test_step_run_status_and_next_definition_sections_and_backend_mappings() {
     let assets = [
         (
             asset_path("assistant/claude/commands/boundline-step.md"),
-            &[
-                "cargo run --bin boundline -- step --workspace <workspace>",
-                "latest_trace_ref",
-                "next_command",
-            ][..],
+            &["boundline step --workspace <workspace>", "latest_trace_ref", "next_command"][..],
             &["No direct CLI invocation is required by default"][..],
         ),
         (
             asset_path("assistant/codex/commands/boundline-step.md"),
-            &[
-                "cargo run --bin boundline -- step --workspace <workspace>",
-                "latest_trace_ref",
-                "next_command",
-            ][..],
+            &["boundline step --workspace <workspace>", "latest_trace_ref", "next_command"][..],
             &["No direct CLI invocation is required by default"][..],
         ),
         (
             asset_path("assistant/copilot/prompts/boundline-step.prompt.md"),
-            &[
-                "cargo run --bin boundline -- step --workspace <workspace>",
-                "latest_trace_ref",
-                "next_command",
-            ][..],
+            &["boundline step --workspace <workspace>", "latest_trace_ref", "next_command"][..],
             &["No direct CLI invocation is required by default"][..],
         ),
         (
             asset_path("assistant/claude/commands/boundline-run.md"),
             &[
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --until terminal --json-stream",
+                "boundline orchestrate --workspace <workspace> --until terminal --json-stream",
                 "phase_request",
                 "resume_command",
                 "next_command",
                 "governance wait-or-block guidance",
                 "/boundline-inspect",
             ][..],
-            &["cargo run --bin boundline -- run --workspace <workspace> --goal \"<goal>\""][..],
+            &["boundline run --workspace <workspace> --goal \"<goal>\""][..],
         ),
         (
             asset_path("assistant/codex/commands/boundline-run.md"),
             &[
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --until terminal --json-stream",
+                "boundline orchestrate --workspace <workspace> --until terminal --json-stream",
                 "phase_request",
                 "resume_command",
                 "next_command",
                 "governance wait-or-block guidance",
                 "/boundline-inspect",
             ][..],
-            &["cargo run --bin boundline -- run --workspace <workspace> --goal \"<goal>\""][..],
+            &["boundline run --workspace <workspace> --goal \"<goal>\""][..],
         ),
         (
             asset_path("assistant/copilot/prompts/boundline-run.prompt.md"),
             &[
-                "cargo run --bin boundline -- run --workspace <workspace>",
+                "boundline run --workspace <workspace>",
                 "next_command",
                 "governance wait-or-block guidance",
                 "/boundline-inspect",
             ][..],
-            &["cargo run --bin boundline -- run --workspace <workspace> --goal \"<goal>\""][..],
+            &["boundline run --workspace <workspace> --goal \"<goal>\""][..],
         ),
         (
             asset_path("assistant/claude/commands/boundline-status.md"),
             &[
-                "cargo run --bin boundline -- status --workspace <workspace>",
+                "boundline status --workspace <workspace>",
                 "latest_trace_ref",
                 "authored_input_summary",
                 "authored_input_sources",
@@ -191,12 +183,12 @@ fn test_step_run_status_and_next_definition_sections_and_backend_mappings() {
                 "follow_through_evidence_source",
                 "next_command",
             ][..],
-            &["cargo run --bin boundline -- inspect --workspace <workspace>"][..],
+            &["boundline inspect --workspace <workspace>"][..],
         ),
         (
             asset_path("assistant/codex/commands/boundline-status.md"),
             &[
-                "cargo run --bin boundline -- status --workspace <workspace>",
+                "boundline status --workspace <workspace>",
                 "latest_trace_ref",
                 "authored_input_summary",
                 "authored_input_sources",
@@ -206,12 +198,12 @@ fn test_step_run_status_and_next_definition_sections_and_backend_mappings() {
                 "follow_through_evidence_source",
                 "next_command",
             ][..],
-            &["cargo run --bin boundline -- inspect --workspace <workspace>"][..],
+            &["boundline inspect --workspace <workspace>"][..],
         ),
         (
             asset_path("assistant/copilot/prompts/boundline-status.prompt.md"),
             &[
-                "cargo run --bin boundline -- status --workspace <workspace>",
+                "boundline status --workspace <workspace>",
                 "latest_trace_ref",
                 "authored_input_summary",
                 "authored_input_sources",
@@ -221,37 +213,37 @@ fn test_step_run_status_and_next_definition_sections_and_backend_mappings() {
                 "follow_through_evidence_source",
                 "next_command",
             ][..],
-            &["cargo run --bin boundline -- inspect --workspace <workspace>"][..],
+            &["boundline inspect --workspace <workspace>"][..],
         ),
         (
             asset_path("assistant/claude/commands/boundline-next.md"),
             &[
-                "cargo run --bin boundline -- next --workspace <workspace>",
+                "boundline next --workspace <workspace>",
                 "latest_trace_ref",
                 "follow_through_guidance",
                 "next_command",
             ][..],
-            &["cargo run --bin boundline -- inspect --workspace <workspace>"][..],
+            &["boundline inspect --workspace <workspace>"][..],
         ),
         (
             asset_path("assistant/codex/commands/boundline-next.md"),
             &[
-                "cargo run --bin boundline -- next --workspace <workspace>",
+                "boundline next --workspace <workspace>",
                 "latest_trace_ref",
                 "follow_through_guidance",
                 "next_command",
             ][..],
-            &["cargo run --bin boundline -- inspect --workspace <workspace>"][..],
+            &["boundline inspect --workspace <workspace>"][..],
         ),
         (
             asset_path("assistant/copilot/prompts/boundline-next.prompt.md"),
             &[
-                "cargo run --bin boundline -- next --workspace <workspace>",
+                "boundline next --workspace <workspace>",
                 "latest_trace_ref",
                 "follow_through_guidance",
                 "next_command",
             ][..],
-            &["cargo run --bin boundline -- inspect --workspace <workspace>"][..],
+            &["boundline inspect --workspace <workspace>"][..],
         ),
     ];
 
@@ -264,13 +256,51 @@ fn test_step_run_status_and_next_definition_sections_and_backend_mappings() {
 }
 
 #[test]
+fn session_step_action_routing_uses_host_native_buttons_and_runtime_precedence() {
+    let target_commands = ["goal", "plan", "step", "next", "run"];
+
+    for command in target_commands {
+        let copilot_path =
+            asset_path(&format!("assistant/copilot/prompts/boundline-{command}.prompt.md"));
+        let copilot = read_asset(&copilot_path);
+        assert_required_snippets(
+            &copilot_path,
+            &copilot,
+            &[
+                "command:copilot.chat.execute",
+                "assistant_resume_command",
+                "assistant_next_command",
+                "next_command",
+            ],
+        );
+
+        for host in ["claude", "codex", "antigravity"] {
+            let path = asset_path(&format!("assistant/{host}/commands/boundline-{command}.md"));
+            let content = read_asset(&path);
+            assert_required_snippets(
+                &path,
+                &content,
+                &[
+                    "host-native",
+                    "/boundline:*",
+                    "assistant_resume_command",
+                    "assistant_next_command",
+                    "next_command",
+                ],
+            );
+            assert_forbidden_snippets(&path, &content, &["command:copilot.chat.execute"]);
+        }
+    }
+}
+
+#[test]
 fn test_inspect_definition_sections_and_trace_read_failure_expectations() {
     let assets = [
         (
             asset_path("assistant/claude/commands/boundline-inspect.md"),
             &[
-                "cargo run --bin boundline -- inspect --trace <trace>",
-                "cargo run --bin boundline -- inspect --workspace <workspace>",
+                "boundline inspect --trace <trace>",
+                "boundline inspect --workspace <workspace>",
                 "latest_trace_ref",
                 "authored_input_summary",
                 "authored_input_sources",
@@ -286,8 +316,8 @@ fn test_inspect_definition_sections_and_trace_read_failure_expectations() {
         (
             asset_path("assistant/codex/commands/boundline-inspect.md"),
             &[
-                "cargo run --bin boundline -- inspect --trace <trace>",
-                "cargo run --bin boundline -- inspect --workspace <workspace>",
+                "boundline inspect --trace <trace>",
+                "boundline inspect --workspace <workspace>",
                 "latest_trace_ref",
                 "authored_input_summary",
                 "authored_input_sources",
@@ -303,8 +333,8 @@ fn test_inspect_definition_sections_and_trace_read_failure_expectations() {
         (
             asset_path("assistant/copilot/prompts/boundline-inspect.prompt.md"),
             &[
-                "cargo run --bin boundline -- inspect --trace <trace>",
-                "cargo run --bin boundline -- inspect --workspace <workspace>",
+                "boundline inspect --trace <trace>",
+                "boundline inspect --workspace <workspace>",
                 "latest_trace_ref",
                 "authored_input_summary",
                 "authored_input_sources",
@@ -314,150 +344,6 @@ fn test_inspect_definition_sections_and_trace_read_failure_expectations() {
                 "follow_through_evidence_source",
                 "corrected_command",
                 "/boundline-goal",
-                "next_command",
-            ][..],
-        ),
-    ];
-
-    for (path, snippets) in assets {
-        let content = read_asset(&path);
-        assert_required_sections(&path, &content);
-        assert_required_snippets(&path, &content, snippets);
-    }
-}
-
-#[test]
-fn test_workflow_definition_sections_and_backend_mappings() {
-    let assets = [
-        (
-            asset_path("assistant/claude/commands/boundline-workflow-list.md"),
-            &[
-                "cargo run --bin boundline -- workflow list --workspace <workspace>",
-                "workflow registry status",
-                "/boundline-workflow-run",
-            ][..],
-        ),
-        (
-            asset_path("assistant/codex/commands/boundline-workflow-list.md"),
-            &[
-                "cargo run --bin boundline -- workflow list --workspace <workspace>",
-                "workflow registry status",
-                "/boundline-workflow-run",
-            ][..],
-        ),
-        (
-            asset_path("assistant/copilot/prompts/boundline-workflow-list.prompt.md"),
-            &[
-                "cargo run --bin boundline -- workflow list --workspace <workspace>",
-                "workflow registry status",
-                "/boundline-workflow-run",
-            ][..],
-        ),
-        (
-            asset_path("assistant/claude/commands/boundline-workflow-run.md"),
-            &[
-                "cargo run --bin boundline -- workflow run <name> --workspace <workspace>",
-                "workflow_phase",
-                "route_config_projection",
-                "next_command",
-            ][..],
-        ),
-        (
-            asset_path("assistant/codex/commands/boundline-workflow-run.md"),
-            &[
-                "cargo run --bin boundline -- workflow run <name> --workspace <workspace>",
-                "workflow_phase",
-                "route_config_projection",
-                "next_command",
-            ][..],
-        ),
-        (
-            asset_path("assistant/copilot/prompts/boundline-workflow-run.prompt.md"),
-            &[
-                "cargo run --bin boundline -- workflow run <name> --workspace <workspace>",
-                "workflow_phase",
-                "route_config_projection",
-                "next_command",
-            ][..],
-        ),
-        (
-            asset_path("assistant/claude/commands/boundline-workflow-status.md"),
-            &[
-                "cargo run --bin boundline -- workflow status --workspace <workspace>",
-                "workflow_phase",
-                "route_config_projection",
-                "next_command",
-            ][..],
-        ),
-        (
-            asset_path("assistant/codex/commands/boundline-workflow-status.md"),
-            &[
-                "cargo run --bin boundline -- workflow status --workspace <workspace>",
-                "workflow_phase",
-                "route_config_projection",
-                "next_command",
-            ][..],
-        ),
-        (
-            asset_path("assistant/copilot/prompts/boundline-workflow-status.prompt.md"),
-            &[
-                "cargo run --bin boundline -- workflow status --workspace <workspace>",
-                "workflow_phase",
-                "route_config_projection",
-                "next_command",
-            ][..],
-        ),
-        (
-            asset_path("assistant/claude/commands/boundline-workflow-resume.md"),
-            &[
-                "cargo run --bin boundline -- workflow resume --workspace <workspace>",
-                "workflow_phase",
-                "route_config_projection",
-                "next_command",
-            ][..],
-        ),
-        (
-            asset_path("assistant/codex/commands/boundline-workflow-resume.md"),
-            &[
-                "cargo run --bin boundline -- workflow resume --workspace <workspace>",
-                "workflow_phase",
-                "route_config_projection",
-                "next_command",
-            ][..],
-        ),
-        (
-            asset_path("assistant/copilot/prompts/boundline-workflow-resume.prompt.md"),
-            &[
-                "cargo run --bin boundline -- workflow resume --workspace <workspace>",
-                "workflow_phase",
-                "route_config_projection",
-                "next_command",
-            ][..],
-        ),
-        (
-            asset_path("assistant/claude/commands/boundline-workflow-inspect.md"),
-            &[
-                "cargo run --bin boundline -- workflow inspect --workspace <workspace>",
-                "workflow_phase",
-                "route_config_projection",
-                "next_command",
-            ][..],
-        ),
-        (
-            asset_path("assistant/codex/commands/boundline-workflow-inspect.md"),
-            &[
-                "cargo run --bin boundline -- workflow inspect --workspace <workspace>",
-                "workflow_phase",
-                "route_config_projection",
-                "next_command",
-            ][..],
-        ),
-        (
-            asset_path("assistant/copilot/prompts/boundline-workflow-inspect.prompt.md"),
-            &[
-                "cargo run --bin boundline -- workflow inspect --workspace <workspace>",
-                "workflow_phase",
-                "route_config_projection",
                 "next_command",
             ][..],
         ),
@@ -527,7 +413,7 @@ fn cognitive_follow_up_definition_sections_and_backend_mappings_exist() {
         (
             asset_path("assistant/claude/commands/boundline-assumptions.md"),
             &[
-                "cargo run --bin boundline -- inspect --workspace <workspace>",
+                "boundline inspect --workspace <workspace>",
                 "assumptions_summary",
                 "assumption_group",
                 "fallback_disclosure",
@@ -537,7 +423,7 @@ fn cognitive_follow_up_definition_sections_and_backend_mappings_exist() {
         (
             asset_path("assistant/codex/commands/boundline-assumptions.md"),
             &[
-                "cargo run --bin boundline -- inspect --workspace <workspace>",
+                "boundline inspect --workspace <workspace>",
                 "assumptions_summary",
                 "assumption_group",
                 "fallback_disclosure",
@@ -547,7 +433,7 @@ fn cognitive_follow_up_definition_sections_and_backend_mappings_exist() {
         (
             asset_path("assistant/copilot/prompts/boundline-assumptions.prompt.md"),
             &[
-                "cargo run --bin boundline -- inspect --workspace <workspace>",
+                "boundline inspect --workspace <workspace>",
                 "assumptions_summary",
                 "assumption_group",
                 "fallback_disclosure",
@@ -557,7 +443,7 @@ fn cognitive_follow_up_definition_sections_and_backend_mappings_exist() {
         (
             asset_path("assistant/claude/commands/boundline-hidden-impact.md"),
             &[
-                "cargo run --bin boundline -- inspect --workspace <workspace>",
+                "boundline inspect --workspace <workspace>",
                 "hidden_impact_summary",
                 "hidden_impact_fallback_disclosure",
                 "challenge_required_review",
@@ -567,7 +453,7 @@ fn cognitive_follow_up_definition_sections_and_backend_mappings_exist() {
         (
             asset_path("assistant/codex/commands/boundline-hidden-impact.md"),
             &[
-                "cargo run --bin boundline -- inspect --workspace <workspace>",
+                "boundline inspect --workspace <workspace>",
                 "hidden_impact_summary",
                 "hidden_impact_fallback_disclosure",
                 "challenge_required_review",
@@ -577,7 +463,7 @@ fn cognitive_follow_up_definition_sections_and_backend_mappings_exist() {
         (
             asset_path("assistant/copilot/prompts/boundline-hidden-impact.prompt.md"),
             &[
-                "cargo run --bin boundline -- inspect --workspace <workspace>",
+                "boundline inspect --workspace <workspace>",
                 "hidden_impact_summary",
                 "hidden_impact_fallback_disclosure",
                 "challenge_required_review",
@@ -587,7 +473,7 @@ fn cognitive_follow_up_definition_sections_and_backend_mappings_exist() {
         (
             asset_path("assistant/claude/commands/boundline-challenge.md"),
             &[
-                "cargo run --bin boundline -- inspect --workspace <workspace>",
+                "boundline inspect --workspace <workspace>",
                 "challenge_strongest_objection",
                 "challenge_required_review",
                 "challenge_council_required",
@@ -597,7 +483,7 @@ fn cognitive_follow_up_definition_sections_and_backend_mappings_exist() {
         (
             asset_path("assistant/codex/commands/boundline-challenge.md"),
             &[
-                "cargo run --bin boundline -- inspect --workspace <workspace>",
+                "boundline inspect --workspace <workspace>",
                 "challenge_strongest_objection",
                 "challenge_required_review",
                 "challenge_council_required",
@@ -607,7 +493,7 @@ fn cognitive_follow_up_definition_sections_and_backend_mappings_exist() {
         (
             asset_path("assistant/copilot/prompts/boundline-challenge.prompt.md"),
             &[
-                "cargo run --bin boundline -- inspect --workspace <workspace>",
+                "boundline inspect --workspace <workspace>",
                 "challenge_strongest_objection",
                 "challenge_required_review",
                 "challenge_council_required",
@@ -617,7 +503,7 @@ fn cognitive_follow_up_definition_sections_and_backend_mappings_exist() {
         (
             asset_path("assistant/claude/commands/boundline-explain-plan.md"),
             &[
-                "cargo run --bin boundline -- status --workspace <workspace>",
+                "boundline status --workspace <workspace>",
                 "explain_plan_summary",
                 "explain_plan_validation",
                 "explain_plan_governance",
@@ -627,7 +513,7 @@ fn cognitive_follow_up_definition_sections_and_backend_mappings_exist() {
         (
             asset_path("assistant/codex/commands/boundline-explain-plan.md"),
             &[
-                "cargo run --bin boundline -- status --workspace <workspace>",
+                "boundline status --workspace <workspace>",
                 "explain_plan_summary",
                 "explain_plan_validation",
                 "explain_plan_governance",
@@ -637,7 +523,7 @@ fn cognitive_follow_up_definition_sections_and_backend_mappings_exist() {
         (
             asset_path("assistant/copilot/prompts/boundline-explain-plan.prompt.md"),
             &[
-                "cargo run --bin boundline -- status --workspace <workspace>",
+                "boundline status --workspace <workspace>",
                 "explain_plan_summary",
                 "explain_plan_validation",
                 "explain_plan_governance",

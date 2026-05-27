@@ -17,14 +17,14 @@ Keep validation, governance, and recovery posture explicit instead of implied.
 - Preserve any confirmed `latest_trace_ref` from prior turns when status references it
 
 ## Shell-Enabled Path
-If `workspace_ref` is known, run `cargo run --bin boundline -- status --workspace <workspace> --json`.
-If the assistant is already anchored in the workspace, run `cargo run --bin boundline -- status --json` exactly once.
-If a trace needs deeper follow-up after status, use `cargo run --bin boundline -- inspect --trace <trace> --json`.
+If `workspace_ref` is known, run `boundline status --workspace <workspace> --json`.
+If the assistant is already anchored in the workspace, run `boundline status --json` exactly once.
+If a trace needs deeper follow-up after status, use `boundline inspect --trace <trace> --json`.
 
 ## Chat-Only Path
 Ask only for the missing `workspace_ref`, then provide one exact copyable command:
 
-`cargo run --bin boundline -- status --workspace <workspace> --json`
+`boundline status --workspace <workspace> --json`
 
 Wait for pasted output before continuing.
 

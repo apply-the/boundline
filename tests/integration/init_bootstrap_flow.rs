@@ -1,6 +1,8 @@
 use std::fs;
 use std::path::Path;
 
+use serde_json::Value;
+
 use crate::workspace_fixture::{
     TempGitWorkspace, run_boundline_in, run_boundline_in_with_env, temp_git_workspace,
     terminal_text,
@@ -38,6 +40,11 @@ fn run_init_in_with_env(
     command.push("--non-interactive");
     command.extend_from_slice(&args[1..]);
     run_boundline_in_with_env(workspace, &command, env)
+}
+
+fn run_update_in(workspace: &Path, args: &[&str]) -> std::process::Output {
+    assert_eq!(args.first(), Some(&"update"));
+    run_boundline_in(workspace, args)
 }
 
 #[test]
@@ -97,6 +104,219 @@ fn init_scaffolds_execution_and_config_files() {
     assert!(config.contains("copilot"));
     assert!(config.contains("domain_templates"));
     assert!(config.contains("systems"));
+}
+
+#[test]
+fn init_vscode_read_only_auto_approve_merges_existing_settings() {
+    let workspace = empty_workspace("boundline-init-vscode-auto-approve-read-only");
+    fs::create_dir_all(workspace.join(".vscode")).unwrap();
+    fs::write(
+        workspace.join(".vscode/settings.json"),
+        "{\n  \"editor.tabSize\": 2,\n  \"chat.tools.terminal.autoApprove\": {\"npm\": false}\n}\n",
+    )
+    .unwrap();
+
+    let init = run_init_in(
+        &workspace,
+        &[
+            "init",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--ide",
+            "vscode",
+            "--auto-approve",
+            "read-only",
+        ],
+    );
+    let init_text = terminal_text(&init);
+
+    assert_eq!(init.status.code(), Some(0), "{init_text}");
+    assert!(init_text.contains("ide_setup:"), "{init_text}");
+    assert!(init_text.contains("vscode: managed-settings"), "{init_text}");
+
+    let settings: Value =
+        serde_json::from_str(&fs::read_to_string(workspace.join(".vscode/settings.json")).unwrap())
+            .unwrap();
+    assert_eq!(settings["editor.tabSize"], 2);
+    let auto = settings["chat.tools.terminal.autoApprove"].as_object().unwrap();
+    assert_eq!(auto.get("npm").unwrap(), false);
+    assert_eq!(auto.get("boundline").unwrap(), false);
+    assert_eq!(auto.get("canon").unwrap(), false);
+    assert!(auto.contains_key("/^boundline (doctor|status|next|inspect)\\b/"));
+    assert!(auto.contains_key("/^boundline update\\b(?!.*\\s--(apply|force|adopt|prune)\\b)/"));
+    assert!(auto.contains_key(
+        "/^boundline (init|run|step|orchestrate|workflow (run|resume)|config (set|unset|bind-context|unbind-context)|cluster init)\\b/"
+    ));
+
+    let manifest = fs::read_to_string(workspace.join(".boundline/scaffold-manifest.json")).unwrap();
+    assert!(manifest.contains("\"target\": \"ide\""), "{manifest}");
+    assert!(manifest.contains("\"ide_setup\""), "{manifest}");
+}
+
+#[test]
+fn init_vscode_trusted_auto_approve_writes_broad_commands() {
+    let workspace = empty_workspace("boundline-init-vscode-auto-approve-trusted");
+
+    let init = run_init_in(
+        &workspace,
+        &[
+            "init",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--ide",
+            "vscode",
+            "--auto-approve",
+            "trusted",
+        ],
+    );
+    let init_text = terminal_text(&init);
+
+    assert_eq!(init.status.code(), Some(0), "{init_text}");
+    let settings: Value =
+        serde_json::from_str(&fs::read_to_string(workspace.join(".vscode/settings.json")).unwrap())
+            .unwrap();
+    let auto = settings["chat.tools.terminal.autoApprove"].as_object().unwrap();
+    assert_eq!(auto.get("boundline").unwrap(), true);
+    assert_eq!(auto.get("canon").unwrap(), true);
+}
+
+#[test]
+fn init_vscode_session_safe_auto_approve_allows_session_commands() {
+    let workspace = empty_workspace("boundline-init-vscode-auto-approve-session-safe");
+
+    let init = run_init_in(
+        &workspace,
+        &[
+            "init",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--ide",
+            "vscode",
+            "--auto-approve",
+            "session-safe",
+        ],
+    );
+    let init_text = terminal_text(&init);
+
+    assert_eq!(init.status.code(), Some(0), "{init_text}");
+    let settings: Value =
+        serde_json::from_str(&fs::read_to_string(workspace.join(".vscode/settings.json")).unwrap())
+            .unwrap();
+    let auto = settings["chat.tools.terminal.autoApprove"].as_object().unwrap();
+    assert_eq!(auto.get("boundline").unwrap(), false);
+    assert_eq!(auto.get("canon").unwrap(), false);
+    assert!(auto.contains_key("/^boundline goal\\b/"));
+    assert!(auto.contains_key("/^boundline plan\\b/"));
+    assert!(auto.contains_key("/^boundline run\\b/"));
+    assert!(auto.contains_key("/^boundline init\\b/"));
+    assert!(auto.contains_key("/^boundline orchestrate\\b/"));
+    assert!(auto.contains_key("/^boundline workflow (run|resume)\\b/"));
+    assert!(auto.contains_key("/^boundline config (set|unset|bind-context|unbind-context)\\b/"));
+    assert!(auto.contains_key("/^boundline cluster init\\b/"));
+}
+
+#[test]
+fn init_non_vscode_ides_generate_guidance_without_fake_settings() {
+    let workspace = empty_workspace("boundline-init-ide-guidance");
+
+    let init = run_init_in(
+        &workspace,
+        &[
+            "init",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--ide",
+            "cursor",
+            "--ide",
+            "antigravity",
+            "--ide",
+            "jetbrains",
+        ],
+    );
+    let init_text = terminal_text(&init);
+
+    assert_eq!(init.status.code(), Some(0), "{init_text}");
+    assert!(init_text.contains("cursor: manual-guidance"), "{init_text}");
+    assert!(init_text.contains("antigravity: manual-guidance"), "{init_text}");
+    assert!(init_text.contains("jetbrains: manual-guidance"), "{init_text}");
+    assert!(workspace.join(".cursor/rules/boundline.md").is_file());
+    assert!(workspace.join(".boundline/ide/antigravity.md").is_file());
+    assert!(workspace.join(".boundline/ide/jetbrains.md").is_file());
+    assert!(!workspace.join(".vscode/settings.json").exists());
+}
+
+#[test]
+fn init_invalid_vscode_settings_blocks_with_actionable_message() {
+    let workspace = empty_workspace("boundline-init-invalid-vscode-settings");
+    fs::create_dir_all(workspace.join(".vscode")).unwrap();
+    fs::write(workspace.join(".vscode/settings.json"), "{ invalid json").unwrap();
+
+    let init = run_init_in(
+        &workspace,
+        &[
+            "init",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--ide",
+            "vscode",
+            "--auto-approve",
+            "read-only",
+        ],
+    );
+    let init_text = terminal_text(&init);
+
+    assert_ne!(init.status.code(), Some(0), "{init_text}");
+    assert!(init_text.contains("init error:"), "{init_text}");
+    assert!(init_text.contains(".vscode/settings.json"), "{init_text}");
+    assert!(init_text.contains("fix the JSON syntax"), "{init_text}");
+}
+
+#[test]
+fn update_ide_target_refreshes_prior_ide_setup() {
+    let workspace = empty_workspace("boundline-update-ide-target");
+    let init = run_init_in(
+        &workspace,
+        &[
+            "init",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--ide",
+            "vscode",
+            "--auto-approve",
+            "read-only",
+        ],
+    );
+    let init_text = terminal_text(&init);
+    assert_eq!(init.status.code(), Some(0), "{init_text}");
+    fs::write(workspace.join(".vscode/settings.json"), "{}\n").unwrap();
+
+    let preview = run_update_in(
+        &workspace,
+        &["update", "--workspace", workspace.to_string_lossy().as_ref(), "--target", "ide"],
+    );
+    let preview_text = terminal_text(&preview);
+    assert_eq!(preview.status.code(), Some(0), "{preview_text}");
+    assert!(preview_text.contains("targets: ide"), "{preview_text}");
+    assert!(preview_text.contains("[merge] .vscode/settings.json"), "{preview_text}");
+
+    let apply = run_update_in(
+        &workspace,
+        &[
+            "update",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--target",
+            "ide",
+            "--apply",
+            "--force",
+        ],
+    );
+    let apply_text = terminal_text(&apply);
+    assert_eq!(apply.status.code(), Some(0), "{apply_text}");
+
+    let settings = fs::read_to_string(workspace.join(".vscode/settings.json")).unwrap();
+    assert!(settings.contains("chat.tools.terminal.autoApprove"), "{settings}");
+    assert!(settings.contains("boundline"), "{settings}");
 }
 
 #[test]

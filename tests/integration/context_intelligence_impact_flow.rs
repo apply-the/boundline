@@ -41,7 +41,7 @@ fn status_and_inspect_surface_missing_test_impact_findings() {
     execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
     let status = execute_status(Some(&workspace)).unwrap();
     execute_run(Some(&workspace)).unwrap();
-    let inspect = execute_inspect(None, Some(&workspace), None).unwrap();
+    let inspect = execute_inspect(None, Some(&workspace), None, false).unwrap();
 
     let status_output = status.terminal_output.as_str();
     assert!(status_output.contains("impact_finding_count: 1"), "{status_output}");

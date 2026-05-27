@@ -206,8 +206,8 @@ supported stacks.
 ## Optional Bootstrap
 
 Use `init` only when you want Boundline to scaffold local compatibility/bootstrap
-files, assistant setup, route defaults, or domain-template hygiene before the
-first session:
+files, assistant setup, IDE guidance/settings, route defaults, or
+domain-template hygiene before the first session:
 
 ```bash
 boundline init --assistant codex
@@ -246,6 +246,10 @@ also performs merge-only hygiene updates. A Git workspace receives universal
 `.gitignore` entries plus relevant technology patterns, and Docker, Prettier,
 ESLint, Terraform, and Helm ignore files are touched only when matching cues are
 present. Existing custom lines are preserved.
+
+For the complete init/update procedure, including `--ide vscode|cursor|antigravity|jetbrains`,
+VS Code auto-approval profiles, docs export, and `boundline update --target ide`,
+see [guides/init-and-update.md](guides/init-and-update.md).
 
 ## Optional Routing Setup
 

@@ -11,12 +11,12 @@ Use optional Canon governance through Boundline's governed stage surface.
 - Goal, brief, base/head, or other authored input when the selected mode needs it
 
 ## Shell-Enabled Path
-Run `cargo run --bin boundline -- govern --workspace <workspace> --mode <mode> --json` when the user supplied a mode. If the user did not supply a mode, run `cargo run --bin boundline -- govern --workspace <workspace> --json` and present the CLI mode choices. Do not promote per-mode `/boundline:<mode>` aliases as the primary UX.
+Run `boundline govern --workspace <workspace> --mode <mode> --json` when the user supplied a mode. If the user did not supply a mode, run `boundline govern --workspace <workspace> --json` and present the CLI mode choices. Do not promote per-mode `/boundline:<mode>` aliases as the primary UX.
 
 ## Chat-Only Path
 If shell execution is unavailable, provide the exact copyable command that matches the available input:
 
-`cargo run --bin boundline -- govern --workspace <workspace> --json`
+`boundline govern --workspace <workspace> --json`
 
 Add `--mode <mode>` only when the user already named one.
 

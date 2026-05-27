@@ -528,7 +528,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        active_session_has_meaningful_state, compatibility_terminal_output,
+        RunCommandError, active_session_has_meaningful_state, compatibility_terminal_output,
         native_direct_run_flow_for_mode, native_direct_run_requires_clarification,
         resolve_canon_default_governance,
     };
@@ -537,6 +537,7 @@ mod tests {
     use crate::domain::negotiation::{NegotiatedDeliveryPacket, NegotiationResolutionState};
     use crate::domain::session::{ActiveSessionRecord, SessionStatus};
     use crate::domain::task::{ClarificationReasonKind, ClarificationRecord, ClarificationStatus};
+    use crate::fixture::FixtureRuntimeError;
 
     fn temp_workspace(prefix: &str) -> Result<PathBuf, String> {
         let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
@@ -670,5 +671,22 @@ mod tests {
         assert!(implicit_local.mode_selection_preference.is_none());
 
         fs::remove_dir_all(&workspace).unwrap();
+    }
+
+    #[test]
+    fn run_command_error_message_covers_fixture_runtime_and_wildcard_branches() {
+        let no_synthesize_error =
+            RunCommandError::FixtureRuntime(FixtureRuntimeError::NoSynthesizeableGoalPlanTarget {
+                goal: "implement bounded checkout".to_string(),
+                workspace: PathBuf::from("/tmp/workspace"),
+            });
+        let msg = no_synthesize_error.message();
+        assert!(msg.contains("bounded context required"), "{msg}");
+        assert!(msg.contains("implement bounded checkout"), "{msg}");
+
+        let canon_error =
+            RunCommandError::CanonSurfaceNotReady { repair_actions: "run doctor".to_string() };
+        let msg = canon_error.message();
+        assert!(msg.contains("Canon governance"), "{msg}");
     }
 }

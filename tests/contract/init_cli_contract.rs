@@ -2,7 +2,9 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use boundline::cli::{Cli, DeveloperCommand};
-use boundline::domain::configuration::{AssistantHostKind, InitConfigScope, InitTemplate};
+use boundline::domain::configuration::{
+    AssistantHostKind, IdeKind, InitConfigScope, InitTemplate, TerminalAutoApproveProfile,
+};
 use boundline::domain::domain_templates::DomainFamily;
 use clap::{CommandFactory, Parser};
 
@@ -39,6 +41,8 @@ fn init_accepts_template_and_assistant_hosts() {
             risk,
             zone,
             owner,
+            ide,
+            auto_approve,
             export_docs,
             refresh,
             diff,
@@ -59,6 +63,8 @@ fn init_accepts_template_and_assistant_hosts() {
             assert_eq!(risk, None);
             assert_eq!(zone, None);
             assert_eq!(owner, None);
+            assert!(ide.is_empty());
+            assert_eq!(auto_approve, None);
             assert!(!export_docs);
             assert!(!refresh);
             assert!(!diff);
@@ -139,6 +145,8 @@ fn init_accepts_domain_templates_standards_and_bindings() {
             risk,
             zone,
             owner,
+            ide,
+            auto_approve,
             export_docs,
             refresh,
             diff,
@@ -162,6 +170,8 @@ fn init_accepts_domain_templates_standards_and_bindings() {
             assert_eq!(risk, None);
             assert_eq!(zone, None);
             assert_eq!(owner, None);
+            assert!(ide.is_empty());
+            assert_eq!(auto_approve, None);
             assert!(!export_docs);
             assert!(!refresh);
             assert!(!diff);
@@ -192,6 +202,8 @@ fn init_accepts_workspace_without_template() {
             risk,
             zone,
             owner,
+            ide,
+            auto_approve,
             export_docs,
             refresh,
             diff,
@@ -212,6 +224,8 @@ fn init_accepts_workspace_without_template() {
             assert_eq!(risk, None);
             assert_eq!(zone, None);
             assert_eq!(owner, None);
+            assert!(ide.is_empty());
+            assert_eq!(auto_approve, None);
             assert!(!export_docs);
             assert!(!refresh);
             assert!(!diff);
@@ -262,6 +276,89 @@ fn init_accepts_docs_export_refresh_diff_and_custom_root() {
             assert!(!refresh);
             assert!(diff);
             assert_eq!(to, None);
+        }
+        other => panic!("expected Init, got {other:?}"),
+    }
+}
+
+#[test]
+fn init_accepts_multi_ide_auto_approve_flags() {
+    let cli = Cli::try_parse_from([
+        "boundline",
+        "init",
+        "--workspace",
+        "/tmp/ws",
+        "--assistant",
+        "copilot",
+        "--ide",
+        "vscode",
+        "--ide",
+        "cursor",
+        "--ide",
+        "antigravity",
+        "--ide",
+        "jetbrains",
+        "--auto-approve",
+        "read-only",
+    ])
+    .unwrap();
+
+    match cli.command {
+        Some(DeveloperCommand::Init { ide, auto_approve, .. }) => {
+            assert_eq!(
+                ide,
+                vec![IdeKind::VsCode, IdeKind::Cursor, IdeKind::Antigravity, IdeKind::JetBrains]
+            );
+            assert_eq!(auto_approve, Some(TerminalAutoApproveProfile::ReadOnly));
+        }
+        other => panic!("expected Init, got {other:?}"),
+    }
+}
+
+#[test]
+fn update_accepts_ide_target_and_auto_approve_flags() {
+    let cli = Cli::try_parse_from([
+        "boundline",
+        "update",
+        "--workspace",
+        "/tmp/ws",
+        "--target",
+        "ide",
+        "--ide",
+        "vscode",
+        "--auto-approve",
+        "trusted",
+    ])
+    .unwrap();
+
+    match cli.command {
+        Some(DeveloperCommand::Update { target, ide, auto_approve, .. }) => {
+            assert_eq!(target, vec![boundline::cli::init::UpdateTarget::Ide]);
+            assert_eq!(ide, vec![IdeKind::VsCode]);
+            assert_eq!(auto_approve, Some(TerminalAutoApproveProfile::Trusted));
+        }
+        other => panic!("expected Update, got {other:?}"),
+    }
+}
+
+#[test]
+fn init_accepts_session_safe_auto_approve_profile() {
+    let cli = Cli::try_parse_from([
+        "boundline",
+        "init",
+        "--workspace",
+        "/tmp/ws",
+        "--ide",
+        "vscode",
+        "--auto-approve",
+        "session-safe",
+    ])
+    .unwrap();
+
+    match cli.command {
+        Some(DeveloperCommand::Init { ide, auto_approve, .. }) => {
+            assert_eq!(ide, vec![IdeKind::VsCode]);
+            assert_eq!(auto_approve, Some(TerminalAutoApproveProfile::SessionSafe));
         }
         other => panic!("expected Init, got {other:?}"),
     }

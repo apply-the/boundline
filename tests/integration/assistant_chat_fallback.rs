@@ -41,8 +41,8 @@ fn chat_fallback_assets_offer_repo_root_copyable_commands_for_session_native_flo
         (
             "assistant/claude/commands/boundline-goal.md",
             &[
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --brief <path> [--brief <path> ...] --until phase-request --json-stream",
+                "boundline orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
+                "boundline orchestrate --workspace <workspace> --brief <path> [--brief <path> ...] --until phase-request --json-stream",
                 "phase_request",
                 "## Host Capabilities",
                 "Boundline needs one answer before it can continue",
@@ -51,8 +51,8 @@ fn chat_fallback_assets_offer_repo_root_copyable_commands_for_session_native_flo
         (
             "assistant/codex/commands/boundline-goal.md",
             &[
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --brief <path> [--brief <path> ...] --until phase-request --json-stream",
+                "boundline orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
+                "boundline orchestrate --workspace <workspace> --brief <path> [--brief <path> ...] --until phase-request --json-stream",
                 "phase_request",
                 "## Host Capabilities",
                 "Boundline needs one answer before it can continue",
@@ -61,8 +61,8 @@ fn chat_fallback_assets_offer_repo_root_copyable_commands_for_session_native_flo
         (
             "assistant/antigravity/commands/boundline-goal.md",
             &[
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --brief <path> [--brief <path> ...] --until phase-request --json-stream",
+                "boundline orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
+                "boundline orchestrate --workspace <workspace> --brief <path> [--brief <path> ...] --until phase-request --json-stream",
                 "phase_request",
                 "## Host Capabilities",
                 "Boundline needs one answer before it can continue",
@@ -71,8 +71,8 @@ fn chat_fallback_assets_offer_repo_root_copyable_commands_for_session_native_flo
         (
             "assistant/copilot/prompts/boundline-goal.prompt.md",
             &[
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --goal \"<goal>\" --slug <derived-slug> --assistant-host copilot --until phase-request --json-stream",
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --brief <path> [--brief <path> ...] --slug <derived-slug> --assistant-host copilot --until phase-request --json-stream",
+                "boundline orchestrate --workspace <workspace> --goal \"<goal>\" --slug <derived-slug> --assistant-host copilot --until phase-request --json-stream",
+                "boundline orchestrate --workspace <workspace> --brief <path> [--brief <path> ...] --slug <derived-slug> --assistant-host copilot --until phase-request --json-stream",
                 "phase_request",
                 "Agent Mode Override",
             ][..],
@@ -80,81 +80,79 @@ fn chat_fallback_assets_offer_repo_root_copyable_commands_for_session_native_flo
         (
             "assistant/claude/commands/boundline-plan.md",
             &[
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
-                "cargo run --bin boundline -- plan --workspace <workspace> --input <path> --json",
+                "boundline orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
+                "boundline plan --workspace <workspace> --input <path> --json",
                 "phase_request",
             ][..],
         ),
         (
             "assistant/codex/commands/boundline-plan.md",
             &[
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
-                "cargo run --bin boundline -- plan --workspace <workspace> --input <path> --json",
+                "boundline orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
+                "boundline plan --workspace <workspace> --input <path> --json",
                 "phase_request",
             ][..],
         ),
         (
             "assistant/copilot/prompts/boundline-plan.prompt.md",
             &[
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
-                "cargo run --bin boundline -- plan --workspace <workspace> --input <path> --json",
+                "boundline orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
+                "boundline plan --workspace <workspace> --input <path> --json",
             ][..],
         ),
         (
             "assistant/claude/commands/boundline-step.md",
-            &["cargo run --bin boundline -- step --workspace <workspace>"][..],
+            &["boundline step --workspace <workspace>"][..],
         ),
         (
             "assistant/codex/commands/boundline-step.md",
-            &["cargo run --bin boundline -- step --workspace <workspace>"][..],
+            &["boundline step --workspace <workspace>"][..],
         ),
         (
             "assistant/copilot/prompts/boundline-step.prompt.md",
-            &["cargo run --bin boundline -- step --workspace <workspace>"][..],
+            &["boundline step --workspace <workspace>"][..],
         ),
         (
             "assistant/claude/commands/boundline-run.md",
             &[
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --until terminal --json-stream",
+                "boundline orchestrate --workspace <workspace> --until terminal --json-stream",
                 "phase_request",
             ][..],
         ),
         (
             "assistant/codex/commands/boundline-run.md",
             &[
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --until terminal --json-stream",
+                "boundline orchestrate --workspace <workspace> --until terminal --json-stream",
                 "phase_request",
             ][..],
         ),
         (
             "assistant/copilot/prompts/boundline-run.prompt.md",
-            &[
-                "cargo run --bin boundline -- orchestrate --workspace <workspace> --until terminal --json-stream",
-            ][..],
+            &["boundline orchestrate --workspace <workspace> --until terminal --json-stream"][..],
         ),
         (
             "assistant/claude/commands/boundline-status.md",
-            &["cargo run --bin boundline -- status --workspace <workspace>"][..],
+            &["boundline status --workspace <workspace>"][..],
         ),
         (
             "assistant/codex/commands/boundline-status.md",
-            &["cargo run --bin boundline -- status --workspace <workspace>"][..],
+            &["boundline status --workspace <workspace>"][..],
         ),
         (
             "assistant/copilot/prompts/boundline-status.prompt.md",
-            &["cargo run --bin boundline -- status --workspace <workspace>"][..],
+            &["boundline status --workspace <workspace>"][..],
         ),
         (
             "assistant/claude/commands/boundline-next.md",
-            &["cargo run --bin boundline -- next --workspace <workspace>"][..],
+            &["boundline next --workspace <workspace>"][..],
         ),
         (
             "assistant/codex/commands/boundline-next.md",
-            &["cargo run --bin boundline -- next --workspace <workspace>"][..],
+            &["boundline next --workspace <workspace>"][..],
         ),
         (
             "assistant/copilot/prompts/boundline-next.prompt.md",
-            &["cargo run --bin boundline -- next --workspace <workspace>"][..],
+            &["boundline next --workspace <workspace>"][..],
         ),
     ];
 
@@ -170,17 +168,11 @@ fn chat_fallback_assets_offer_repo_root_copyable_commands_for_session_native_flo
 #[test]
 fn chat_fallback_assets_offer_repo_root_copyable_commands_for_us3() {
     let assets = [
-        (
-            "assistant/claude/commands/boundline-inspect.md",
-            "cargo run --bin boundline -- inspect --trace <trace>",
-        ),
-        (
-            "assistant/codex/commands/boundline-inspect.md",
-            "cargo run --bin boundline -- inspect --trace <trace>",
-        ),
+        ("assistant/claude/commands/boundline-inspect.md", "boundline inspect --trace <trace>"),
+        ("assistant/codex/commands/boundline-inspect.md", "boundline inspect --trace <trace>"),
         (
             "assistant/copilot/prompts/boundline-inspect.prompt.md",
-            "cargo run --bin boundline -- inspect --trace <trace>",
+            "boundline inspect --trace <trace>",
         ),
     ];
 
@@ -188,7 +180,7 @@ fn chat_fallback_assets_offer_repo_root_copyable_commands_for_us3() {
         let content = read_asset(path);
         assert!(content.contains(command), "{path} missing fallback command {command}");
         assert!(
-            content.contains("cargo run --bin boundline -- inspect --workspace <workspace>"),
+            content.contains("boundline inspect --workspace <workspace>"),
             "{path} should include workspace-based inspect fallback"
         );
         assert!(
@@ -252,7 +244,7 @@ fn chat_fallback_inspect_trace_read_failures_preserve_correction_cues() {
     );
     assert!(inspect_text.contains("next_command: /boundline-inspect"), "{inspect_text}");
     assert!(
-        inspect_text.contains("corrected_command: cargo run --bin boundline -- inspect --trace"),
+        inspect_text.contains("corrected_command: boundline inspect --trace"),
         "{inspect_text}"
     );
 }

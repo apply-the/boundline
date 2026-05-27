@@ -516,6 +516,7 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
             workspace: Some(workspace.clone()),
             cluster: None,
             session: None,
+            audit: false,
         },
         DeveloperCommand::Status {
             workspace: Some(workspace.clone()),
@@ -634,6 +635,7 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
         workspace: None,
         cluster: None,
         session: None,
+        audit: false,
     });
     assert_eq!(invalid_inspect.validate().unwrap_err(), CliValidationError::MissingTraceSelection);
 

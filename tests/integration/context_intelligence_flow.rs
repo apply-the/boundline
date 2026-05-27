@@ -20,7 +20,7 @@ fn plan_status_and_inspect_surface_selected_local_evidence() {
     let plan = execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
     let status = execute_status(Some(&workspace)).unwrap();
     execute_run(Some(&workspace)).unwrap();
-    let inspect = execute_inspect(None, Some(&workspace), None).unwrap();
+    let inspect = execute_inspect(None, Some(&workspace), None, false).unwrap();
 
     for output in [plan.terminal_output.as_str(), status.terminal_output.as_str()] {
         assert!(output.contains("retrieval_mode: local"), "{output}");
@@ -44,7 +44,7 @@ fn plan_status_and_inspect_surface_cognitive_lenses_when_advanced_context_is_ava
     let plan = execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
     let status = execute_status(Some(&workspace)).unwrap();
     execute_run(Some(&workspace)).unwrap();
-    let inspect = execute_inspect(None, Some(&workspace), None).unwrap();
+    let inspect = execute_inspect(None, Some(&workspace), None, false).unwrap();
 
     for output in [
         plan.terminal_output.as_str(),

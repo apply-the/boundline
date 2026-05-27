@@ -34,7 +34,7 @@ fn clustered_delivery_run_names_the_blocking_workspace_when_a_member_cannot_cont
 
     let run = execute_run_with_target(None, Some(&primary)).unwrap();
     let status = execute_status_with_target(None, Some(&primary), None).unwrap();
-    let inspect = execute_inspect(None, Some(&primary), None).unwrap();
+    let inspect = execute_inspect(None, Some(&primary), None, false).unwrap();
 
     assert!(run.terminal_output.contains("cluster_blocking_workspace:"), "{}", run.terminal_output);
     assert!(

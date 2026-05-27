@@ -1,10 +1,9 @@
 # Boundline Global Commands For Codex
 
-User-scoped package for bootstrapping Boundline before a repository has
-repo-local command files.
+User-scoped package for readiness and status before a repository has repo-local
+command files. Bootstrap itself remains a raw CLI step.
 
 Commands:
-- `/boundline:init`
 - `/boundline:doctor`
 - `/boundline:help`
 - `/boundline:status`
@@ -20,6 +19,7 @@ after initialization.
 
 Fallback CLI:
 - `boundline init --assistant codex`
+- `boundline update --workspace <workspace> --target assistant --apply`
 - `boundline doctor`
 - `boundline doctor --workspace <workspace>`
 - `boundline status`

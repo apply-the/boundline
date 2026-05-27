@@ -148,4 +148,65 @@ mod tests {
             "proceeding stage council requires independent review"
         );
     }
+
+    fn valid_outcome() -> StageCouncilOutcome {
+        StageCouncilOutcome {
+            producer_output: StageCouncilArtifact {
+                route_slot: "planning".to_string(),
+                evidence_ref: ".boundline/council/producer.md".to_string(),
+                summary: None,
+            },
+            reviewer_findings: Vec::new(),
+            vote_resolution: StageCouncilVoteResolution {
+                strategy: "majority".to_string(),
+                accepted_findings: Vec::new(),
+                rejected_findings: Vec::new(),
+                independent_review: true,
+            },
+            adjudication: None,
+            revised_output: StageCouncilArtifact {
+                route_slot: "planning".to_string(),
+                evidence_ref: ".boundline/council/revised.md".to_string(),
+                summary: None,
+            },
+            status: StageCouncilStatus::Proceed,
+            next_action: "continue".to_string(),
+        }
+    }
+
+    #[test]
+    fn context_projection_emits_all_status_fields() {
+        let outcome = valid_outcome();
+        assert!(outcome.validate().is_ok());
+
+        let projection = outcome.context_projection();
+        assert_eq!(projection["latest_stage_council_next_action"], "continue");
+        assert_eq!(
+            projection["latest_stage_council_producer_ref"],
+            ".boundline/council/producer.md"
+        );
+        assert_eq!(projection["latest_stage_council_reviser_ref"], ".boundline/council/revised.md");
+        assert!(projection["latest_stage_council_independent_review"].as_bool().unwrap());
+    }
+
+    #[test]
+    fn validate_rejects_missing_next_action_and_evidence_refs() {
+        let mut outcome = valid_outcome();
+        outcome.next_action = "   ".to_string();
+        assert_eq!(outcome.validate().unwrap_err(), "stage council outcome requires next_action");
+
+        let mut outcome = valid_outcome();
+        outcome.producer_output.evidence_ref = String::new();
+        assert_eq!(
+            outcome.validate().unwrap_err(),
+            "stage council producer output requires evidence_ref"
+        );
+
+        let mut outcome = valid_outcome();
+        outcome.revised_output.evidence_ref = String::new();
+        assert_eq!(
+            outcome.validate().unwrap_err(),
+            "stage council revised output requires evidence_ref"
+        );
+    }
 }

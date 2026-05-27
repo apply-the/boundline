@@ -56,6 +56,8 @@ pub enum TraceEventType {
     ReviewTriggerIgnored,
     ReviewerStarted,
     ReviewerCompleted,
+    ReviewCouncilAssembled,
+    ReviewStopSemanticsRecorded,
     ReviewVoteResolved,
     ReviewAdjudicated,
     ReviewTerminalRecorded,

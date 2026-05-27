@@ -105,6 +105,7 @@ mod tests {
         OrchestrateCommandReport, OrchestrateEventEnvelope, OrchestratePhaseRequest,
         OrchestratePhaseRequestExpectedAnswer,
     };
+    use crate::domain::session::SessionStatusView;
 
     #[test]
     fn render_human_orchestrate_report_prefers_structured_phase_request_question() {
@@ -171,5 +172,98 @@ mod tests {
             "{rendered}"
         );
         assert!(!rendered.contains("Guidance:"), "{rendered}");
+    }
+
+    fn empty_envelope(event_kind: &str) -> OrchestrateEventEnvelope {
+        OrchestrateEventEnvelope {
+            event_id: "test-event".to_string(),
+            timestamp_ms: 1,
+            event_kind: event_kind.to_string(),
+            audit: None,
+            actor_kind: None,
+            actor_name: None,
+            runtime_kind: None,
+            provider: None,
+            route_slot: None,
+            model_name: None,
+            decision_family: None,
+            review_step: None,
+            vote_summary: None,
+            adjudication_summary: None,
+            governance_mode: None,
+            session_ref: None,
+            phase_kind: None,
+            stage_key: None,
+            message: String::new(),
+            artifact: None,
+            phase_request: None,
+            instruction: None,
+            resume_command: None,
+            assistant_resume_command: None,
+            next_command: None,
+            assistant_next_command: None,
+            session_status: None,
+            trace_summary: None,
+        }
+    }
+
+    #[test]
+    fn render_orchestrate_report_covers_missing_phase_kind_and_no_phase_request() {
+        let mut event = empty_envelope("phase_request");
+        event.phase_kind = None;
+        event.phase_request = None;
+        event.message = "phase event without structured request".to_string();
+        event.instruction = Some("follow the guidance doc".to_string());
+
+        let report = OrchestrateCommandReport {
+            exit_status: CommandExitStatus::Succeeded,
+            terminal_output: String::new(),
+            trace_location: None,
+            session_status: None,
+            trace_summary: None,
+            events: vec![event],
+        };
+
+        let rendered = render_human_orchestrate_report(&report);
+        assert!(rendered.contains("Phase Requested\n"), "{rendered}");
+        assert!(rendered.contains("Reason: phase event without structured request"), "{rendered}");
+        assert!(rendered.contains("Guidance: follow the guidance doc"), "{rendered}");
+    }
+
+    #[test]
+    fn render_orchestrate_report_covers_governance_blocked_reason_and_non_clarification_guidance() {
+        let mut event = empty_envelope("phase_request");
+        event.phase_kind = Some("implementation".to_string());
+        event.phase_request = Some(OrchestratePhaseRequest {
+            request_id: "req-impl-1".to_string(),
+            kind: "feedback".to_string(),
+            phase: "implementation".to_string(),
+            reason: "implementation guidance needed".to_string(),
+            question: "Which module to update?".to_string(),
+            expected_answer: Some(OrchestratePhaseRequestExpectedAnswer {
+                answer_type: "free_text".to_string(),
+                options: Vec::new(),
+            }),
+        });
+        event.instruction = Some("update the bounded context first".to_string());
+
+        let status = SessionStatusView {
+            session_id: "session-blocked".to_string(),
+            latest_governance_blocked_reason: Some("awaiting canon approval".to_string()),
+            ..Default::default()
+        };
+
+        let report = OrchestrateCommandReport {
+            exit_status: CommandExitStatus::NonSuccess,
+            terminal_output: String::new(),
+            trace_location: None,
+            session_status: Some(status),
+            trace_summary: None,
+            events: vec![event],
+        };
+
+        let rendered = render_human_orchestrate_report(&report);
+        assert!(rendered.contains("Guidance: update the bounded context first"), "{rendered}");
+        assert!(rendered.contains("Blocked: awaiting canon approval"), "{rendered}");
     }
 }

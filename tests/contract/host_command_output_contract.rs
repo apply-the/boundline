@@ -417,6 +417,10 @@ fn orchestrate_can_advance_ndjson_planning_stage_phase_requests_one_stage_at_a_t
     let first_request_id =
         phase_requests[0]["phase_request"]["request_id"].as_str().unwrap_or_default();
     assert!(!first_request_id.is_empty(), "{orchestrate_text}");
+    assert_eq!(
+        phase_requests[0]["phase_request"]["expected_answer"]["type"], "confirmation",
+        "{orchestrate_text}"
+    );
     assert!(
         phase_requests[0]["resume_command"].as_str().unwrap_or_default().contains(first_request_id),
         "{orchestrate_text}"

@@ -53,6 +53,64 @@ pub enum AssistantHostKind {
     Antigravity,
 }
 
+/// IDE setup surfaces that `boundline init --ide` can scaffold.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
+#[value(rename_all = "kebab-case")]
+pub enum IdeKind {
+    #[serde(rename = "vscode")]
+    #[value(name = "vscode")]
+    VsCode,
+    Cursor,
+    Antigravity,
+    #[serde(rename = "jetbrains")]
+    #[value(name = "jetbrains")]
+    JetBrains,
+}
+
+impl IdeKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::VsCode => "vscode",
+            Self::Cursor => "cursor",
+            Self::Antigravity => "antigravity",
+            Self::JetBrains => "jetbrains",
+        }
+    }
+}
+
+impl fmt::Display for IdeKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Terminal command auto-approval profile for IDEs that expose a stable schema.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
+#[value(rename_all = "kebab-case")]
+pub enum TerminalAutoApproveProfile {
+    ReadOnly,
+    SessionSafe,
+    Trusted,
+}
+
+impl TerminalAutoApproveProfile {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ReadOnly => "read-only",
+            Self::SessionSafe => "session-safe",
+            Self::Trusted => "trusted",
+        }
+    }
+}
+
+impl fmt::Display for TerminalAutoApproveProfile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 impl AssistantHostKind {
     pub const fn as_str(self) -> &'static str {
         match self {

@@ -18,7 +18,8 @@ use boundline::cli::output::{
     CommandExitCode, command_name, next_command_after_inspect, next_command_after_run,
     render_cluster_init, render_cluster_inspect, render_cluster_status, render_diagnostics,
     render_goal_plan_flow_state, render_inspect_failure, render_route_outcome, render_run_trace,
-    render_session_status, render_trace_summary, validation_error_message,
+    render_session_status, render_session_status_brief, render_trace_summary,
+    validation_error_message,
 };
 use boundline::cli::session::{
     SessionCommandError, execute_next, execute_status, render_error as render_session_error,
@@ -50,9 +51,15 @@ use boundline::domain::context_intelligence::{
 use boundline::domain::goal_plan::{GoalPlanFlowMode, GoalPlanFlowState};
 use boundline::domain::governance::GovernanceRuntimeKind;
 use boundline::domain::limits::{RunLimits, TerminalCondition};
+use boundline::domain::reasoning::{
+    ProfileActivationRecord, ReasoningActivationStatus, ReasoningActivationTrigger,
+    ReasoningBudget, ReasoningOutcome, ReasoningOutcomeKind, ReasoningProfileId,
+};
 use boundline::domain::routing_decision::RoutingDecisionProjection;
 use boundline::domain::session::{
-    RoutingMode, RoutingOutcome, RoutingSource, SessionStatus, SessionStatusView,
+    CompatibilityFollowUpMode, CompatibilityFollowUpView, ContinuityAuthority,
+    DelegationContinuityMode, DelegationStatusView, RoutingMode, RoutingOutcome, RoutingSource,
+    SessionStatus, SessionStatusView,
 };
 use boundline::domain::step::{StepKind, StepStatus};
 use boundline::domain::task::{TaskRunResponse, TaskStatus, TerminalReason};
@@ -266,17 +273,14 @@ fn inspect_failure_renderer_exposes_correction_cues() {
         Some("/tmp/missing-trace.json"),
         None,
         "failed to read the requested trace",
-        "cargo run --bin boundline -- inspect --trace <trace>",
+        "boundline inspect --trace <trace>",
     );
 
     assert!(rendered.contains("inspect: trace read failure"));
     assert!(rendered.contains("inspection_target: explicit-trace"));
     assert!(rendered.contains("trace: /tmp/missing-trace.json"));
     assert!(rendered.contains("next_command: /boundline-inspect"));
-    assert!(
-        rendered
-            .contains("corrected_command: cargo run --bin boundline -- inspect --trace <trace>")
-    );
+    assert!(rendered.contains("corrected_command: boundline inspect --trace <trace>"));
 }
 
 #[test]
@@ -504,16 +508,14 @@ fn inspect_failure_renderer_includes_workspace_ref_when_provided() {
         None,
         Some("/tmp/my-workspace"),
         "failed to read the requested trace",
-        "cargo run --bin boundline -- inspect --workspace <workspace>",
+        "boundline inspect --workspace <workspace>",
     );
 
     assert!(rendered.contains("inspect: trace read failure"));
     assert!(rendered.contains("inspection_target: latest-workspace-trace"));
     assert!(rendered.contains("workspace_ref: /tmp/my-workspace"));
     assert!(rendered.contains("next_command: /boundline-inspect"));
-    assert!(rendered.contains(
-        "corrected_command: cargo run --bin boundline -- inspect --workspace <workspace>"
-    ));
+    assert!(rendered.contains("corrected_command: boundline inspect --workspace <workspace>"));
 }
 
 #[test]
@@ -523,7 +525,7 @@ fn render_error_with_missing_trace_reference_uses_explicit_trace_correction() {
     assert!(rendered.contains("inspect: trace read failure"));
     assert!(rendered.contains("terminal_reason: inspect requires --trace or --workspace"));
     assert!(rendered.contains("next_command: /boundline-inspect"));
-    assert!(rendered.contains("corrected_command: cargo run --bin boundline -- inspect --trace"));
+    assert!(rendered.contains("corrected_command: boundline inspect --trace"));
 }
 
 #[test]
@@ -540,9 +542,7 @@ fn render_error_with_workspace_path_uses_workspace_correction_cues() {
     assert!(rendered.contains("terminal_reason: failed to read the requested trace"));
     assert!(rendered.contains("workspace_ref: /tmp/my-workspace"));
     assert!(rendered.contains("next_command: /boundline-inspect"));
-    assert!(rendered.contains(
-        "corrected_command: cargo run --bin boundline -- inspect --workspace <workspace>"
-    ));
+    assert!(rendered.contains("corrected_command: boundline inspect --workspace <workspace>"));
 }
 
 #[test]
@@ -805,7 +805,7 @@ fn execute_inspect_explicit_trace_covers_inspection_target_and_next_command() {
     let store = FileTraceStore::new(&dir);
     let trace_path = store.persist(&trace).unwrap();
 
-    let report = execute_inspect(Some(&trace_path), None, None).unwrap();
+    let report = execute_inspect(Some(&trace_path), None, None, false).unwrap();
     let output = &report.terminal_output;
 
     assert!(output.contains("inspection_target: explicit-trace"), "{output}");
@@ -823,7 +823,7 @@ fn execute_inspect_workspace_covers_latest_workspace_trace_target() {
     let store = FileTraceStore::for_workspace(&workspace);
     store.persist(&trace).unwrap();
 
-    let report = execute_inspect(None, Some(&workspace), None).unwrap();
+    let report = execute_inspect(None, Some(&workspace), None, false).unwrap();
     let output = &report.terminal_output;
 
     assert!(output.contains("inspection_target: latest-workspace-trace"), "{output}");
@@ -859,7 +859,7 @@ fn execute_inspect_surfaces_goal_plan_negotiation_projection() {
     let store = FileTraceStore::new(&dir);
     let trace_path = store.persist(&trace).unwrap();
 
-    let report = execute_inspect(Some(&trace_path), None, None).unwrap();
+    let report = execute_inspect(Some(&trace_path), None, None, false).unwrap();
     let output = &report.terminal_output;
 
     assert!(
@@ -907,7 +907,7 @@ fn execute_inspect_surfaces_context_projection() {
     let store = FileTraceStore::new(&dir);
     let trace_path = store.persist(&trace).unwrap();
 
-    let report = execute_inspect(Some(&trace_path), None, None).unwrap();
+    let report = execute_inspect(Some(&trace_path), None, None, false).unwrap();
     let output = &report.terminal_output;
 
     assert!(output.contains("context_summary: bounded context from 1 primary input(s)"));
@@ -946,7 +946,7 @@ fn execute_inspect_surfaces_task_started_negotiation_projection() {
     let store = FileTraceStore::new(&dir);
     let trace_path = store.persist(&trace).unwrap();
 
-    let report = execute_inspect(Some(&trace_path), None, None).unwrap();
+    let report = execute_inspect(Some(&trace_path), None, None, false).unwrap();
     let output = &report.terminal_output;
 
     assert!(
@@ -1416,7 +1416,7 @@ fn resolve_trace_path_prefers_session_trace_ref_when_available() {
 
 #[test]
 fn execute_inspect_with_no_args_returns_missing_trace_reference_error() {
-    let result = execute_inspect(None, None, None);
+    let result = execute_inspect(None, None, None, false);
     assert!(matches!(result, Err(InspectCommandError::MissingTraceReference)), "{result:?}");
 }
 
@@ -1426,7 +1426,7 @@ fn execute_inspect_with_empty_workspace_returns_missing_latest_trace_error() {
     let workspace = std::env::temp_dir().join(format!("boundline-unit-empty-{}", Uuid::new_v4()));
     fs::create_dir_all(&workspace).unwrap();
 
-    let result = execute_inspect(None, Some(&workspace), None);
+    let result = execute_inspect(None, Some(&workspace), None, false);
     assert!(matches!(result, Err(InspectCommandError::MissingLatestTrace)), "{result:?}");
 }
 
@@ -1788,6 +1788,7 @@ fn command_names_render_for_all_four_subcommands() {
             workspace: None,
             cluster: None,
             session: None,
+            audit: false,
         }),
         "inspect"
     );
@@ -2855,6 +2856,8 @@ fn command_names_render_for_all_remaining_subcommands() {
                 risk: None,
                 zone: None,
                 owner: None,
+                ide: Vec::new(),
+                auto_approve: None,
                 export_docs: false,
                 refresh: false,
                 diff: false,
@@ -2972,4 +2975,700 @@ fn sample_cluster_delivery_story() -> ClusterDeliveryStory {
         },
         updated_at: 42,
     }
+}
+
+fn make_impact_finding(
+    id: &str,
+    kind: ImpactFindingKind,
+    status: ImpactFindingStatus,
+    severity: ImpactFindingSeverity,
+) -> ImpactAnalysisFinding {
+    ImpactAnalysisFinding {
+        finding_id: id.to_string(),
+        finding_kind: kind,
+        subject_ref: format!("src/{id}.rs"),
+        status,
+        severity,
+        recommended_follow_up: format!("address {id}"),
+        supporting_relationship_ids: Vec::new(),
+    }
+}
+
+fn make_delegation_view(mode: DelegationContinuityMode, headline: &str) -> DelegationStatusView {
+    DelegationStatusView {
+        mode,
+        packet_id: None,
+        packet_kind: None,
+        packet_state: None,
+        target_owner: None,
+        headline: headline.to_string(),
+        evidence_summary: "test evidence".to_string(),
+    }
+}
+
+fn blocked_reasoning_profile(
+    disagreement: Option<&str>,
+    next_action: Option<&str>,
+) -> ProfileActivationRecord {
+    ProfileActivationRecord {
+        activation_id: "test-activation".to_string(),
+        stage_key: "test:stage".to_string(),
+        profile_id: ReasoningProfileId::BoundedReflexion,
+        trigger: ReasoningActivationTrigger::CanonRequiredChallenge,
+        activation_reason: "test block reason".to_string(),
+        status: ReasoningActivationStatus::Blocked,
+        participants: Vec::new(),
+        budget: ReasoningBudget {
+            max_participants: 1,
+            max_branches: 1,
+            max_debate_rounds: 0,
+            max_reflexion_revisions: 0,
+            max_calls: 2,
+            max_tokens: 1024,
+            max_adjudication_steps: 0,
+        },
+        posture: None,
+        independence: None,
+        outcome: Some(ReasoningOutcome {
+            outcome_kind: ReasoningOutcomeKind::Disagreed,
+            headline: "test outcome".to_string(),
+            disagreement_summary: disagreement.map(str::to_string),
+            next_action: next_action.map(str::to_string),
+            iterations: Vec::new(),
+        }),
+        confidence: None,
+    }
+}
+
+// ── output_explanation.rs coverage ───────────────────────────────────────────
+
+#[test]
+fn explanation_trace_summary_staleness_risk_hits_stale_context_branch() {
+    let summary = TraceSummaryView {
+        context_staleness_reason: Some("workspace root changed".to_string()),
+        failure_evidence: Vec::new(),
+        reasoning_profile: None,
+        ..TraceSummaryView::default()
+    };
+    let text = render_trace_summary(&summary, "run", "/workspace");
+    assert!(
+        text.contains("risk_summary: stale context reduces confidence: workspace root changed"),
+        "{text}"
+    );
+}
+
+#[test]
+fn explanation_trace_summary_no_failure_risk_hits_no_explicit_failure_branch() {
+    // governance_timeline makes canon_sources non-empty; default terminal_reason has empty message
+    let summary = TraceSummaryView {
+        governance_timeline: vec!["approval-granted".to_string()],
+        ..TraceSummaryView::default()
+    };
+    let text = render_trace_summary(&summary, "run", "/workspace");
+    assert!(text.contains("risk_summary: No explicit runtime failure"), "{text}");
+}
+
+#[test]
+fn explanation_session_status_staleness_risk_branch() {
+    let view = SessionStatusView {
+        context_staleness_reason: Some("index out of date".to_string()),
+        ..SessionStatusView::default()
+    };
+    let text = render_session_status(&view);
+    assert!(
+        text.contains("risk_summary: stale context reduces confidence: index out of date"),
+        "{text}"
+    );
+}
+
+#[test]
+fn explanation_session_status_clarification_fallback_with_canon_present() {
+    // canon_sources non-empty via latest_governance_packet_ref; clarification fields non-empty
+    let view = SessionStatusView {
+        clarification_missing_fields: Some(vec!["goal".to_string(), "scope".to_string()]),
+        latest_governance_packet_ref: Some("packet-001".to_string()),
+        context_staleness_reason: None,
+        ..SessionStatusView::default()
+    };
+    let text = render_session_status(&view);
+    assert!(
+        text.contains("fallback_disclosure: Clarification is still required for: goal, scope"),
+        "{text}"
+    );
+}
+
+#[test]
+fn explanation_trace_reasoning_disagreement_summary_risk_path() {
+    let summary = TraceSummaryView {
+        reasoning_profile: Some(blocked_reasoning_profile(
+            Some("participants could not converge"),
+            None,
+        )),
+        failure_evidence: Vec::new(),
+        ..TraceSummaryView::default()
+    };
+    let text = render_trace_summary(&summary, "run", "/workspace");
+    assert!(text.contains("participants could not converge"), "{text}");
+}
+
+#[test]
+fn explanation_relationship_kinds_cover_affects_system_domain_suggests_reviewer_supports_risk() {
+    let advanced = AdvancedContextProjection {
+        selected_evidence: vec![
+            RetrievedEvidenceCandidate {
+                candidate_id: "c-canon".to_string(),
+                source_kind: RetrievalSourceKind::CanonArtifact,
+                source_ref: "canon/spec.md".to_string(),
+                authority_rank: AuthorityRank::Structured,
+                match_origin: RetrievalMatchOrigin::Fts,
+                selection_state: CandidateSelectionState::Selected,
+                selection_reason: "canon source".to_string(),
+                provenance_summary: "canon artifact selected".to_string(),
+                compatibility_state: RetrievalCompatibilityState::Compatible,
+                staleness_state: RetrievalStalenessState::Fresh,
+                lexical_score: None,
+                semantic_score: None,
+                canon_semantic_contract_line: None,
+                canon_semantic_provenance_ref: None,
+            },
+            RetrievedEvidenceCandidate {
+                candidate_id: "c-review".to_string(),
+                source_kind: RetrievalSourceKind::ReviewFinding,
+                source_ref: "review/finding.md".to_string(),
+                authority_rank: AuthorityRank::Structured,
+                match_origin: RetrievalMatchOrigin::Fts,
+                selection_state: CandidateSelectionState::Selected,
+                selection_reason: "review finding".to_string(),
+                provenance_summary: "review finding selected".to_string(),
+                compatibility_state: RetrievalCompatibilityState::Compatible,
+                staleness_state: RetrievalStalenessState::Fresh,
+                lexical_score: None,
+                semantic_score: None,
+                canon_semantic_contract_line: None,
+                canon_semantic_provenance_ref: None,
+            },
+            RetrievedEvidenceCandidate {
+                candidate_id: "c-verify".to_string(),
+                source_kind: RetrievalSourceKind::VerificationEvidence,
+                source_ref: "verify/evidence.md".to_string(),
+                authority_rank: AuthorityRank::Structured,
+                match_origin: RetrievalMatchOrigin::Fts,
+                selection_state: CandidateSelectionState::Selected,
+                selection_reason: "verification evidence".to_string(),
+                provenance_summary: "verification evidence selected".to_string(),
+                compatibility_state: RetrievalCompatibilityState::Compatible,
+                staleness_state: RetrievalStalenessState::Fresh,
+                lexical_score: None,
+                semantic_score: None,
+                canon_semantic_contract_line: None,
+                canon_semantic_provenance_ref: None,
+            },
+        ],
+        relationships: vec![
+            RelationshipProjection {
+                relationship_id: "r-affects-system".to_string(),
+                subject_ref: "src/system_core.rs".to_string(),
+                relationship_kind: RelationshipKind::AffectsSystem,
+                credibility_state: RelationshipCredibilityState::Tentative,
+                explanation: "affects core system".to_string(),
+                supporting_candidate_ids: vec!["c-canon".to_string()],
+            },
+            RelationshipProjection {
+                relationship_id: "r-affects-domain".to_string(),
+                subject_ref: "src/domain_model.rs".to_string(),
+                relationship_kind: RelationshipKind::AffectsDomain,
+                credibility_state: RelationshipCredibilityState::Insufficient,
+                explanation: "affects domain invariants".to_string(),
+                supporting_candidate_ids: vec!["c-review".to_string()],
+            },
+            RelationshipProjection {
+                relationship_id: "r-suggests-reviewer".to_string(),
+                subject_ref: "reviewer@team.example".to_string(),
+                relationship_kind: RelationshipKind::SuggestsReviewer,
+                credibility_state: RelationshipCredibilityState::Credible,
+                explanation: "suggests a reviewer".to_string(),
+                supporting_candidate_ids: vec!["c-verify".to_string()],
+            },
+            RelationshipProjection {
+                relationship_id: "r-supports-risk".to_string(),
+                subject_ref: "src/risk_path.rs".to_string(),
+                relationship_kind: RelationshipKind::SupportsRisk,
+                credibility_state: RelationshipCredibilityState::Tentative,
+                explanation: "supports identified risk".to_string(),
+                supporting_candidate_ids: vec![],
+            },
+        ],
+        impact_findings: Vec::new(),
+        ..sample_advanced_context()
+    };
+    let summary =
+        TraceSummaryView { advanced_context: Some(advanced), ..TraceSummaryView::default() };
+    let text = render_trace_summary(&summary, "run", "/workspace");
+    // AffectsSystem → architecture category
+    assert!(text.contains("assumption_group: architecture"), "{text}");
+    // AffectsDomain → domain category
+    assert!(text.contains("assumption_group: domain"), "{text}");
+    // SuggestsReviewer → governance category
+    assert!(text.contains("assumption_group: governance"), "{text}");
+    // SupportsRisk → implementation category
+    assert!(text.contains("assumption_group: implementation"), "{text}");
+    // CanonArtifact source → Canon
+    assert!(text.contains("Canon"), "{text}");
+    // Tentative credibility → medium risk
+    assert!(text.contains("medium"), "{text}");
+    // Insufficient credibility → high risk
+    assert!(text.contains("high"), "{text}");
+}
+
+fn single_impact_trace(
+    kind: ImpactFindingKind,
+    status: ImpactFindingStatus,
+    severity: ImpactFindingSeverity,
+) -> String {
+    let finding = make_impact_finding("target", kind, status, severity);
+    let advanced = AdvancedContextProjection {
+        impact_findings: vec![finding],
+        relationships: Vec::new(),
+        selected_evidence: Vec::new(),
+        rejected_candidates: Vec::new(),
+        ..sample_advanced_context()
+    };
+    let summary =
+        TraceSummaryView { advanced_context: Some(advanced), ..TraceSummaryView::default() };
+    render_trace_summary(&summary, "run", "/workspace")
+}
+
+#[test]
+fn explanation_impact_finding_affected_system_covers_group_and_challenge_branches() {
+    let text = single_impact_trace(
+        ImpactFindingKind::AffectedSystem,
+        ImpactFindingStatus::Acknowledged,
+        ImpactFindingSeverity::Low,
+    );
+    assert!(text.contains("hidden_impact_affected_systems"), "{text}");
+    assert!(text.contains("system impact extends beyond the current slice"), "{text}");
+    assert!(text.contains("cross-system impact can escape"), "{text}");
+    assert!(text.contains("acknowledged"), "{text}");
+    assert!(text.contains("low"), "{text}");
+}
+
+#[test]
+fn explanation_impact_finding_affected_domain_covers_group_and_challenge_branches() {
+    let text = single_impact_trace(
+        ImpactFindingKind::AffectedDomain,
+        ImpactFindingStatus::Resolved,
+        ImpactFindingSeverity::High,
+    );
+    assert!(text.contains("hidden_impact_affected_domains"), "{text}");
+    assert!(text.contains("domain impact extends beyond the current slice"), "{text}");
+    assert!(text.contains("domain invariants can drift"), "{text}");
+    assert!(text.contains("resolved"), "{text}");
+    assert!(text.contains("high"), "{text}");
+}
+
+#[test]
+fn explanation_impact_finding_contract_exposure_covers_group_and_challenge_branches() {
+    let text = single_impact_trace(
+        ImpactFindingKind::ContractExposure,
+        ImpactFindingStatus::Invalidated,
+        ImpactFindingSeverity::Low,
+    );
+    assert!(text.contains("hidden_impact_contract_exposures"), "{text}");
+    assert!(text.contains("contract exposure still needs review"), "{text}");
+    assert!(text.contains("downstream consumers can break"), "{text}");
+    assert!(text.contains("invalidated"), "{text}");
+}
+
+#[test]
+fn explanation_impact_finding_reviewer_gap_covers_group_and_challenge_branches() {
+    let text = single_impact_trace(
+        ImpactFindingKind::ReviewerGap,
+        ImpactFindingStatus::Open,
+        ImpactFindingSeverity::High,
+    );
+    assert!(text.contains("hidden_impact_required_reviewers"), "{text}");
+    assert!(text.contains("required reviewer coverage is still missing"), "{text}");
+    assert!(text.contains("review can miss critical dissent"), "{text}");
+}
+
+#[test]
+fn explanation_impact_finding_evidence_gap_covers_group_and_challenge_branches() {
+    let text = single_impact_trace(
+        ImpactFindingKind::EvidenceGap,
+        ImpactFindingStatus::Open,
+        ImpactFindingSeverity::Medium,
+    );
+    assert!(text.contains("hidden_impact_missing_evidence"), "{text}");
+    assert!(text.contains("required evidence is still missing"), "{text}");
+    assert!(text.contains("the plan can proceed without required evidence"), "{text}");
+}
+
+// ── output_routing.rs coverage ────────────────────────────────────────────────
+
+#[test]
+fn routing_goal_captured_status_maps_to_blocked() {
+    let view = SessionStatusView {
+        latest_status: SessionStatus::GoalCaptured,
+        execution_path: None,
+        ..SessionStatusView::default()
+    };
+    let text = render_session_status(&view);
+    assert!(text.contains("execution_condition: blocked"), "{text}");
+    assert!(text.contains("goal captured"), "{text}");
+}
+
+#[test]
+fn routing_delegation_resolved_mode_maps_to_waiting() {
+    let view = SessionStatusView {
+        delegation: Some(make_delegation_view(
+            DelegationContinuityMode::Resolved,
+            "handoff resolved",
+        )),
+        ..SessionStatusView::default()
+    };
+    let text = render_session_status(&view);
+    assert!(text.contains("execution_condition: waiting - handoff resolved"), "{text}");
+}
+
+#[test]
+fn routing_delegation_exhausted_and_none_modes_in_session() {
+    let exhausted = SessionStatusView {
+        delegation: Some(make_delegation_view(
+            DelegationContinuityMode::Exhausted,
+            "delegation exhausted",
+        )),
+        ..SessionStatusView::default()
+    };
+    let exhausted_text = render_session_status(&exhausted);
+    assert!(exhausted_text.contains("execution_condition: inspect_only"), "{exhausted_text}");
+
+    let none_mode = SessionStatusView {
+        delegation: Some(make_delegation_view(DelegationContinuityMode::None, "delegation none")),
+        ..SessionStatusView::default()
+    };
+    let none_text = render_session_status(&none_mode);
+    assert!(none_text.contains("execution_condition: waiting - delegation none"), "{none_text}");
+}
+
+#[test]
+fn routing_trace_delegation_resolved_inspect_only_and_none_modes() {
+    let resolved = TraceSummaryView {
+        delegation: Some(make_delegation_view(
+            DelegationContinuityMode::Resolved,
+            "trace resolved",
+        )),
+        ..TraceSummaryView::default()
+    };
+    let r_text = render_trace_summary(&resolved, "run", "/workspace");
+    assert!(r_text.contains("execution_condition: waiting - trace resolved"), "{r_text}");
+
+    let inspect = TraceSummaryView {
+        delegation: Some(make_delegation_view(
+            DelegationContinuityMode::InspectOnly,
+            "inspect only",
+        )),
+        ..TraceSummaryView::default()
+    };
+    let i_text = render_trace_summary(&inspect, "run", "/workspace");
+    assert!(i_text.contains("execution_condition: inspect_only"), "{i_text}");
+
+    let none_mode = TraceSummaryView {
+        delegation: Some(make_delegation_view(DelegationContinuityMode::None, "delegation none")),
+        ..TraceSummaryView::default()
+    };
+    let n_text = render_trace_summary(&none_mode, "run", "/workspace");
+    assert!(n_text.contains("execution_condition: waiting - delegation none"), "{n_text}");
+}
+
+#[test]
+fn routing_workflow_clarify_phase_with_pending_clarification_maps_to_waiting() {
+    let view = SessionStatusView {
+        workflow_phase: Some("clarify".to_string()),
+        clarification_missing_fields: Some(vec!["goal".to_string()]),
+        ..SessionStatusView::default()
+    };
+    let text = render_session_status(&view);
+    assert!(text.contains("execution_condition: waiting"), "{text}");
+    assert!(text.contains("clarification is still required"), "{text}");
+}
+
+#[test]
+fn routing_workflow_review_phase_terminal_and_waiting_branches() {
+    let terminal = SessionStatusView {
+        workflow_phase: Some("review".to_string()),
+        latest_status: SessionStatus::Failed,
+        ..SessionStatusView::default()
+    };
+    let t_text = render_session_status(&terminal);
+    assert!(t_text.contains("execution_condition: terminal"), "{t_text}");
+    assert!(t_text.contains("non-success result"), "{t_text}");
+
+    let waiting = SessionStatusView {
+        workflow_phase: Some("review".to_string()),
+        latest_status: SessionStatus::Running,
+        latest_review_trigger: Some("review-trigger-001".to_string()),
+        latest_review_outcome: None,
+        ..SessionStatusView::default()
+    };
+    let w_text = render_session_status(&waiting);
+    assert!(w_text.contains("execution_condition: waiting"), "{w_text}");
+    assert!(w_text.contains("review outcome is still pending"), "{w_text}");
+}
+
+#[test]
+fn routing_session_planned_with_current_step_id_uses_task_ready_message() {
+    let view = SessionStatusView {
+        latest_status: SessionStatus::Planned,
+        current_step_id: Some("step-007".to_string()),
+        ..SessionStatusView::default()
+    };
+    let text = render_session_status(&view);
+    assert!(text.contains("a bounded task is ready for the next execution step"), "{text}");
+}
+
+#[test]
+fn routing_session_failed_with_exhaustion_reason_uses_the_reason() {
+    let view = SessionStatusView {
+        latest_status: SessionStatus::Failed,
+        latest_exhaustion_reason: Some("retry limit reached after 3 attempts".to_string()),
+        ..SessionStatusView::default()
+    };
+    let text = render_session_status(&view);
+    assert!(text.contains("retry limit reached after 3 attempts"), "{text}");
+}
+
+#[test]
+fn routing_running_condition_failed_decision_and_review_trigger_branches() {
+    let failed_decision = SessionStatusView {
+        latest_status: SessionStatus::Running,
+        latest_decision_status: Some("failed".to_string()),
+        ..SessionStatusView::default()
+    };
+    let f_text = render_session_status(&failed_decision);
+    assert!(f_text.contains("decision failed and recovery is in progress"), "{f_text}");
+
+    let review_trigger = SessionStatusView {
+        latest_status: SessionStatus::Running,
+        latest_decision_status: None,
+        latest_review_trigger: Some("context-drift".to_string()),
+        ..SessionStatusView::default()
+    };
+    let r_text = render_session_status(&review_trigger);
+    assert!(r_text.contains("review is in progress"), "{r_text}");
+}
+
+#[test]
+fn routing_reasoning_block_with_disagreement_summary_and_no_next_action() {
+    let profile = blocked_reasoning_profile(Some("team could not agree on the approach"), None);
+    let summary =
+        TraceSummaryView { reasoning_profile: Some(profile), ..TraceSummaryView::default() };
+    let text = render_trace_summary(&summary, "run", "/workspace");
+    assert!(text.contains("team could not agree on the approach"), "{text}");
+    assert!(text.contains("execution_condition: blocked"), "{text}");
+}
+
+// ── output_host.rs command_name coverage ──────────────────────────────────────
+
+#[test]
+fn command_name_govern_and_config_variants_return_correct_names() {
+    let govern = DeveloperCommand::Govern {
+        workspace: None,
+        mode: None,
+        goal: None,
+        brief: Vec::new(),
+        base: None,
+        head: None,
+        risk: None,
+        structural_impact: false,
+        public_contract_change: false,
+        validation_exhausted: false,
+        pr_ready: false,
+        preserved_behavior_evidence: false,
+    };
+    assert_eq!(command_name(&govern), "govern");
+
+    let config = DeveloperCommand::Config {
+        command: ConfigSubcommand::Show { workspace: None, cluster: None, scope: None },
+    };
+    assert_eq!(command_name(&config), "config");
+}
+
+// ── output_session_status.rs render_session_status_brief coverage ─────────────
+
+#[test]
+fn render_session_status_brief_covers_continuity_governance_and_review_fields() {
+    let view = SessionStatusView {
+        session_id: "brief-gov-test".to_string(),
+        workspace_ref: "/tmp/ws".to_string(),
+        latest_status: SessionStatus::Running,
+        explanation: "test explanation".to_string(),
+        continuity_authority: Some(ContinuityAuthority::NativeSession),
+        execution_path: Some("native_goal_plan".to_string()),
+        plan_revision: Some(3),
+        current_step_index: Some(1),
+        current_step_id: Some("step-abc".to_string()),
+        latest_changed_files: Some(vec!["src/main.rs".to_string(), "src/lib.rs".to_string()]),
+        latest_review_trigger: Some("pre_merge".to_string()),
+        latest_review_outcome: Some("approved".to_string()),
+        latest_review_headline: Some("changes look good".to_string()),
+        latest_review_vote: Some("approved".to_string()),
+        latest_governance_run_ref: Some("gov-run-001".to_string()),
+        latest_governance_state: Some("reviewing".to_string()),
+        latest_governance_runtime_state: Some("active".to_string()),
+        latest_governance_rollout_profile: Some("incremental".to_string()),
+        latest_governance_reason: Some("blocked by review".to_string()),
+        latest_governance_contract_lines: Some(vec!["contract-alpha".to_string()]),
+        latest_governance_approval_provenance: Some("council approved".to_string()),
+        latest_governance_blocked_reason: Some("pending review".to_string()),
+        latest_governance_packet_ref: Some("packet-001".to_string()),
+        latest_governance_packet_source_stage: Some("plan:discovery".to_string()),
+        latest_governance_packet_binding_reason: Some("bound to discovery".to_string()),
+        latest_governance_approval: Some("approved".to_string()),
+        latest_governance_decision: Some("proceed".to_string()),
+        governance_lifecycle_runtime: Some("synod-runtime".to_string()),
+        governance_lifecycle_mode_selection: Some("auto".to_string()),
+        governance_lifecycle_selected_mode: Some("review".to_string()),
+        governance_lifecycle_selected_mode_sequence: Some(vec![
+            "plan".to_string(),
+            "review".to_string(),
+        ]),
+        latest_governance_candidates: Some(vec!["council-alpha".to_string()]),
+        goal_plan_state: Some("active".to_string()),
+        goal_plan_revision: Some(2),
+        latest_checkpoint_id: Some("ckpt-001".to_string()),
+        latest_checkpoint_scope: Some("workspace".to_string()),
+        clarification_missing_fields: Some(vec!["goal".to_string()]),
+        clarification_questions: Some(vec!["What is the scope?".to_string()]),
+        authored_input_sources: Some(vec!["attached: spec.md".to_string()]),
+        authored_input_deduplicated_sources: Some(vec!["spec.md".to_string()]),
+        latest_validation_status: Some("passed".to_string()),
+        latest_reasoning_profile: Some(ProfileActivationRecord {
+            activation_id: "test-activation-brief".to_string(),
+            stage_key: "test:stage".to_string(),
+            profile_id: ReasoningProfileId::BoundedReflexion,
+            trigger: ReasoningActivationTrigger::CanonRequiredChallenge,
+            activation_reason: "test reason".to_string(),
+            status: ReasoningActivationStatus::Active,
+            participants: Vec::new(),
+            budget: ReasoningBudget {
+                max_participants: 1,
+                max_branches: 1,
+                max_debate_rounds: 0,
+                max_reflexion_revisions: 0,
+                max_calls: 2,
+                max_tokens: 1024,
+                max_adjudication_steps: 0,
+            },
+            posture: None,
+            independence: None,
+            outcome: Some(ReasoningOutcome {
+                outcome_kind: ReasoningOutcomeKind::Converged,
+                headline: "reasoning complete".to_string(),
+                next_action: Some("verify the contract".to_string()),
+                iterations: vec![],
+                disagreement_summary: None,
+            }),
+            confidence: None,
+        }),
+        ..SessionStatusView::default()
+    };
+
+    let text = render_session_status_brief(&view);
+
+    assert!(text.contains("continuity_authority: native_session"), "{text}");
+    assert!(text.contains("execution_path: native_goal_plan"), "{text}");
+    assert!(text.contains("latest_changed_files: src/main.rs"), "{text}");
+    assert!(text.contains("latest_governance_run_ref: gov-run-001"), "{text}");
+    assert!(text.contains("latest_governance_candidates: council-alpha"), "{text}");
+    assert!(text.contains("governance_lifecycle_selected_mode_sequence: plan, review"), "{text}");
+    assert!(text.contains("review: latest_review_trigger=pre_merge"), "{text}");
+    assert!(text.contains("summary: goal_plan_state=active r2"), "{text}");
+    assert!(text.contains("latest_checkpoint_id=ckpt-001 (workspace)"), "{text}");
+    assert!(text.contains("clarification_missing_fields: goal"), "{text}");
+    assert!(text.contains("authored_input_sources: attached: spec.md"), "{text}");
+    assert!(text.contains("latest_reasoning_next_action=verify the contract"), "{text}");
+}
+
+#[test]
+fn render_session_status_brief_covers_compatibility_follow_up_and_cluster_delivery_story() {
+    let view = SessionStatusView {
+        session_id: "brief-compat-test".to_string(),
+        workspace_ref: "/tmp/ws".to_string(),
+        latest_status: SessionStatus::Running,
+        explanation: "resumed from compatibility trace".to_string(),
+        compatibility_follow_up: Some(CompatibilityFollowUpView {
+            follow_up_mode: CompatibilityFollowUpMode::Resumable,
+            trace_ref: "trace-abc-123".to_string(),
+            routing_summary: "resumed from native trace".to_string(),
+            execution_condition: "execution can resume".to_string(),
+            terminal_status: TaskStatus::Succeeded,
+            terminal_reason: "reached terminal state".to_string(),
+            next_command: "boundline run".to_string(),
+        }),
+        cluster_delivery_story: Some(ClusterDeliveryStory {
+            cluster_id: "cluster-001".to_string(),
+            primary_workspace_ref: "/tmp/primary".to_string(),
+            authoritative_workspace_ref: "/tmp/primary".to_string(),
+            route_owner: ClusterRouteOwner::Native,
+            member_workspace_refs: vec!["/tmp/member1".to_string()],
+            participating_workspaces: vec![],
+            started_from_command: "boundline run".to_string(),
+            execution_condition: ClusteredExecutionCondition {
+                kind: ClusteredExecutionKind::Success,
+                active_workspace_ref: None,
+                blocking_workspace_ref: None,
+                summary: "all members succeeded".to_string(),
+                recovery_allowed: false,
+            },
+            updated_at: 1_748_000_000,
+        }),
+        ..SessionStatusView::default()
+    };
+
+    let text = render_session_status_brief(&view);
+
+    assert!(text.contains("compatibility_follow_up: resumable"), "{text}");
+    assert!(text.contains("cluster_id: cluster-001"), "{text}");
+}
+
+#[test]
+fn render_session_status_brief_covers_reasoning_blocking_condition_and_none_goal_plan_revision() {
+    let view = SessionStatusView {
+        session_id: "brief-blocking-test".to_string(),
+        workspace_ref: "/tmp/ws".to_string(),
+        latest_status: SessionStatus::Blocked,
+        explanation: "blocked on reasoning profile".to_string(),
+        goal_plan_state: Some("proposed".to_string()),
+        // goal_plan_revision left as None → hits the None arm in session_summary_brief_line
+        latest_reasoning_profile: Some(ProfileActivationRecord {
+            activation_id: "test-activation-block".to_string(),
+            stage_key: "test:stage".to_string(),
+            profile_id: ReasoningProfileId::BoundedReflexion,
+            trigger: ReasoningActivationTrigger::CanonRequiredChallenge,
+            activation_reason: "blocked by canon challenge".to_string(),
+            status: ReasoningActivationStatus::Blocked,
+            participants: Vec::new(),
+            budget: ReasoningBudget {
+                max_participants: 1,
+                max_branches: 1,
+                max_debate_rounds: 0,
+                max_reflexion_revisions: 0,
+                max_calls: 2,
+                max_tokens: 1024,
+                max_adjudication_steps: 0,
+            },
+            posture: None,
+            independence: None,
+            outcome: None, // None → hits else-if blocking branch in session_reasoning_brief_line
+            confidence: None,
+        }),
+        ..SessionStatusView::default()
+    };
+
+    let text = render_session_status_brief(&view);
+
+    assert!(text.contains("summary: goal_plan_state=proposed"), "{text}");
+    assert!(!text.contains("goal_plan_state=proposed r"), "{text}");
+    assert!(text.contains("reasoning:"), "{text}");
+    assert!(text.contains("latest_reasoning_profile_id=bounded_reflexion"), "{text}");
 }

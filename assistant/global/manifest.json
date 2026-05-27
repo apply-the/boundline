@@ -35,6 +35,6 @@
     "codex": "Repository-managed command assets expose the shared Boundline session workflow and delight follow-through surfaces directly.",
     "cursor": "Cursor remains in copy-ready-assets support mode: bootstrap assets are copy-ready, local installation details stay environment-specific, and the CLI remains authoritative.",
     "copilot": "Repository-managed prompt assets expose the Boundline delight surface directly even though global bootstrap installation remains a manual fallback.",
-    "antigravity": "Antigravity now ships a repo-local command pack after `boundline init --assistant antigravity`, while user-global bootstrap installation remains an explicit manual fallback."
+    "antigravity": "Antigravity now bootstraps a repo-local command pack through `boundline init --assistant antigravity` and refreshes it through `boundline update --workspace <workspace> --target assistant --apply`, while user-global bootstrap installation remains an explicit manual fallback."
   }
 }

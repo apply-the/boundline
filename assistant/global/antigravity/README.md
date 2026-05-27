@@ -5,12 +5,13 @@ Support mode: `manual-fallback`.
 Antigravity support is fallback guidance. Boundline does not claim native
 user-scoped global command installation for this host.
 
-After workspace init, use `boundline init --assistant antigravity` to scaffold
-the repo-local Antigravity package surface. This global bootstrap note only
-covers pre-init fallback guidance.
+Bootstrap remains a raw CLI step: run `boundline init --workspace <workspace>
+--assistant antigravity` once, then use `boundline update --workspace
+<workspace> --target assistant --apply` to refresh the repo-local Antigravity package surface.
+
+This global bootstrap note only covers pre-init fallback guidance.
 
 Commands to expose manually where supported:
-- `/boundline:init`
 - `/boundline:doctor`
 - `/boundline:help`
 - `/boundline:status`
@@ -31,6 +32,7 @@ explain-plan, and follow-up routing.
 Fallback CLI:
 - `boundline assistant install --host antigravity --scope user`
 - `boundline init --workspace <workspace> --assistant antigravity`
+- `boundline update --workspace <workspace> --target assistant --apply`
 - `boundline doctor --install`
 - `boundline doctor --workspace <workspace>`
 - `boundline status --workspace <workspace>`

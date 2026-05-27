@@ -270,18 +270,13 @@ static CLAUDE_ASSETS: &[AssistantAsset] = &[
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-config-show.md"),
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-doctor.md"),
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-govern.md"),
-    asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-init.md"),
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-inspect.md"),
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-next.md"),
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-plan.md"),
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-run.md"),
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-status.md"),
     asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-step.md"),
-    asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-workflow-inspect.md"),
-    asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-workflow-list.md"),
-    asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-workflow-resume.md"),
-    asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-workflow-run.md"),
-    asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-workflow-status.md"),
+    asset!(AssistantSurface::Claude, "assistant/claude/commands/boundline-update.md"),
 ];
 
 static CLAUDE_PACKAGE_ASSETS: &[AssistantAsset] = &[
@@ -295,18 +290,13 @@ static CODEX_ASSETS: &[AssistantAsset] = &[
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-config-show.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-doctor.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-govern.md"),
-    asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-init.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-inspect.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-next.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-plan.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-run.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-status.md"),
     asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-step.md"),
-    asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-workflow-inspect.md"),
-    asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-workflow-list.md"),
-    asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-workflow-resume.md"),
-    asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-workflow-run.md"),
-    asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-workflow-status.md"),
+    asset!(AssistantSurface::Codex, "assistant/codex/commands/boundline-update.md"),
 ];
 
 static CODEX_PACKAGE_ASSETS: &[AssistantAsset] =
@@ -321,30 +311,13 @@ static COPILOT_ASSETS: &[AssistantAsset] = &[
     asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-config-show.prompt.md"),
     asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-doctor.prompt.md"),
     asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-govern.prompt.md"),
-    asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-init.prompt.md"),
     asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-inspect.prompt.md"),
     asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-next.prompt.md"),
     asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-plan.prompt.md"),
     asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-run.prompt.md"),
     asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-status.prompt.md"),
     asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-step.prompt.md"),
-    asset!(
-        AssistantSurface::Copilot,
-        "assistant/copilot/prompts/boundline-workflow-inspect.prompt.md"
-    ),
-    asset!(
-        AssistantSurface::Copilot,
-        "assistant/copilot/prompts/boundline-workflow-list.prompt.md"
-    ),
-    asset!(
-        AssistantSurface::Copilot,
-        "assistant/copilot/prompts/boundline-workflow-resume.prompt.md"
-    ),
-    asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-workflow-run.prompt.md"),
-    asset!(
-        AssistantSurface::Copilot,
-        "assistant/copilot/prompts/boundline-workflow-status.prompt.md"
-    ),
+    asset!(AssistantSurface::Copilot, "assistant/copilot/prompts/boundline-update.prompt.md"),
 ];
 
 static COPILOT_SHARED_ASSETS: &[AssistantAsset] =
@@ -372,7 +345,6 @@ static ANTIGRAVITY_ASSETS: &[AssistantAsset] = &[
         "assistant/antigravity/commands/boundline-doctor-context.md"
     ),
     asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-govern.md"),
-    asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-init.md"),
     asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-inspect.md"),
     asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-next.md"),
     asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-next-best.md"),
@@ -381,6 +353,7 @@ static ANTIGRAVITY_ASSETS: &[AssistantAsset] = &[
     asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-run.md"),
     asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-status.md"),
     asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-step.md"),
+    asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-update.md"),
     asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-why.md"),
     asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-risk.md"),
     asset!(AssistantSurface::Antigravity, "assistant/antigravity/commands/boundline-evidence.md"),
@@ -396,26 +369,6 @@ static ANTIGRAVITY_ASSETS: &[AssistantAsset] = &[
     asset!(
         AssistantSurface::Antigravity,
         "assistant/antigravity/commands/boundline-explain-plan.md"
-    ),
-    asset!(
-        AssistantSurface::Antigravity,
-        "assistant/antigravity/commands/boundline-workflow-inspect.md"
-    ),
-    asset!(
-        AssistantSurface::Antigravity,
-        "assistant/antigravity/commands/boundline-workflow-list.md"
-    ),
-    asset!(
-        AssistantSurface::Antigravity,
-        "assistant/antigravity/commands/boundline-workflow-resume.md"
-    ),
-    asset!(
-        AssistantSurface::Antigravity,
-        "assistant/antigravity/commands/boundline-workflow-run.md"
-    ),
-    asset!(
-        AssistantSurface::Antigravity,
-        "assistant/antigravity/commands/boundline-workflow-status.md"
     ),
 ];
 

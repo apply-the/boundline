@@ -19,30 +19,30 @@ If the resolved workspace trace reports compatibility ownership, keep that expli
 ## Shell-Enabled Path
 If the user wants the audit trail specifically, run the matching `inspect` command with `--audit`:
 
-`cargo run --bin boundline -- inspect --trace <trace> --audit --json`
+`boundline inspect --trace <trace> --audit --json`
 
 or
 
-`cargo run --bin boundline -- inspect --workspace <workspace> --audit --json`
+`boundline inspect --workspace <workspace> --audit --json`
 
-Otherwise, if `trace_ref` is known, run `cargo run --bin boundline -- inspect --trace <trace> --json`. Otherwise, if `workspace_ref` is known, run `cargo run --bin boundline -- inspect --workspace <workspace> --json`. If the assistant is already anchored in the target workspace and neither field is missing, run `cargo run --bin boundline -- inspect --json` exactly once. Workspace-based inspect may reuse the active session's `latest_trace_ref` before falling back to the latest workspace trace.
+Otherwise, if `trace_ref` is known, run `boundline inspect --trace <trace> --json`. Otherwise, if `workspace_ref` is known, run `boundline inspect --workspace <workspace> --json`. If the assistant is already anchored in the target workspace and neither field is missing, run `boundline inspect --json` exactly once. Workspace-based inspect may reuse the active session's `latest_trace_ref` before falling back to the latest workspace trace.
 
 ## Chat-Only Path
 Ask only for the missing `trace_ref` or `workspace_ref`, then provide one exact copyable command:
 
-`cargo run --bin boundline -- inspect --trace <trace> --json`
+`boundline inspect --trace <trace> --json`
 
 or, for audit-specific inspection,
 
-`cargo run --bin boundline -- inspect --trace <trace> --audit --json`
+`boundline inspect --trace <trace> --audit --json`
 
 or
 
-`cargo run --bin boundline -- inspect --workspace <workspace> --json`
+`boundline inspect --workspace <workspace> --json`
 
 or
 
-`cargo run --bin boundline -- inspect --workspace <workspace> --audit --json`
+`boundline inspect --workspace <workspace> --audit --json`
 
 Wait for pasted output before continuing. If workspace-based inspect reports a session error, route to `/boundline-goal`. If trace reading fails, ask for a corrected trace reference or workspace and provide the replacement inspect command.
 

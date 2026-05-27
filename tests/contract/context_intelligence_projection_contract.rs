@@ -39,7 +39,7 @@ fn advanced_context_projection_contract_surfaces_local_projection_lines() {
     let plan = execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
     let status = execute_status(Some(&workspace)).unwrap();
     execute_run(Some(&workspace)).unwrap();
-    let inspect = execute_inspect(None, Some(&workspace), None).unwrap();
+    let inspect = execute_inspect(None, Some(&workspace), None, false).unwrap();
 
     for output in [plan.terminal_output.as_str(), status.terminal_output.as_str()] {
         assert!(output.contains("retrieval_mode: local"), "{output}");
@@ -69,7 +69,7 @@ fn advanced_context_projection_contract_surfaces_disabled_policy_reason() {
     let plan = execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
     let status = execute_status(Some(&workspace)).unwrap();
     execute_run(Some(&workspace)).unwrap();
-    let inspect = execute_inspect(None, Some(&workspace), None).unwrap();
+    let inspect = execute_inspect(None, Some(&workspace), None, false).unwrap();
 
     for output in [plan.terminal_output.as_str(), status.terminal_output.as_str()] {
         assert!(output.contains("retrieval_mode: disabled"), "{output}");

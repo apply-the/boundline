@@ -14,7 +14,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use clap::ValueEnum;
 use dialoguer::{Confirm, Input, MultiSelect, Select, theme::ColorfulTheme};
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{Map, Value, json};
 use thiserror::Error;
 
 use super::assistant_assets::{
@@ -29,9 +29,9 @@ use crate::adapters::env_layer::{
 };
 use crate::cli::CommandExitStatus;
 use crate::domain::configuration::{
-    AssistantHostKind, CanonPreferences, ConfigFile, InitConfigScope, InitTemplate, ModelRoute,
-    RouteSlot, RoutingOverrides, RuntimeKind, built_in_default_route, resolve_effective_routing,
-    seeded_routes_for_assistants,
+    AssistantHostKind, CanonPreferences, ConfigFile, IdeKind, InitConfigScope, InitTemplate,
+    ModelRoute, RouteSlot, RoutingOverrides, RuntimeKind, TerminalAutoApproveProfile,
+    built_in_default_route, resolve_effective_routing, seeded_routes_for_assistants,
 };
 use crate::domain::distribution::CanonInstallStatus;
 #[cfg(not(test))]
@@ -43,8 +43,8 @@ use crate::domain::domain_templates::{
 use crate::domain::governance::CanonModeSelectionPreference;
 use crate::domain::governance::CanonRiskClass;
 use crate::domain::scaffold_manifest::{
-    SCAFFOLD_MANIFEST_FILE_NAME, ScaffoldManifest, ScaffoldManifestEntry, ScaffoldOwnershipMode,
-    ScaffoldTarget,
+    IdeSetupSelection, SCAFFOLD_MANIFEST_FILE_NAME, ScaffoldManifest, ScaffoldManifestEntry,
+    ScaffoldOwnershipMode, ScaffoldTarget,
 };
 use crate::domain::workspace_hygiene::{merge_hygiene_content, plan_hygiene_defaults};
 
@@ -177,6 +177,7 @@ pub enum UpdateTarget {
     Assistant,
     Docs,
     Hygiene,
+    Ide,
 }
 
 impl UpdateTarget {
@@ -187,6 +188,7 @@ impl UpdateTarget {
             Self::Assistant => "assistant",
             Self::Docs => "docs",
             Self::Hygiene => "hygiene",
+            Self::Ide => "ide",
         }
     }
 }
@@ -602,6 +604,8 @@ pub struct InitRequest<'a> {
     pub risk: Option<&'a str>,
     pub zone: Option<&'a str>,
     pub owner: Option<&'a str>,
+    pub ide: &'a [IdeKind],
+    pub auto_approve: Option<TerminalAutoApproveProfile>,
     pub export_docs: bool,
     pub docs_refresh: bool,
     pub docs_diff: bool,
@@ -613,6 +617,8 @@ pub struct InitRequest<'a> {
 pub struct UpdateRequest<'a> {
     pub workspace: &'a Path,
     pub targets: &'a [UpdateTarget],
+    pub ide: &'a [IdeKind],
+    pub auto_approve: Option<TerminalAutoApproveProfile>,
     pub template: Option<InitTemplate>,
     pub diff: bool,
     pub apply: bool,
@@ -695,6 +701,12 @@ fn configured_assistant_hosts(config: &ConfigFile) -> Vec<AssistantHostKind> {
 struct PlannedHygieneEntry {
     action: HygieneInitAction,
     final_content: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PlannedIdeEntry {
+    action: IdeInitAction,
+    artifact: RenderedManagedArtifact,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -844,6 +856,7 @@ pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, I
     let mut docs_assets = Vec::new();
     let mut docs_plan = Vec::new();
     let mut hygiene_plan = Vec::new();
+    let mut ide_plan = Vec::new();
     let mut manifest_path = None;
     let mut manifest_contents = None;
     let mut manifest_status = None;
@@ -855,6 +868,8 @@ pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, I
         let current_local_config_path = store.local_config_path();
         let current_local_env_template_path = provider_workspace_env_template_path(workspace);
         let existing_manifest = load_scaffold_manifest(workspace)?;
+        let ide_setup =
+            resolve_ide_setup(request.ide, request.auto_approve, existing_manifest.as_ref());
         let existing_local = store.load_local()?;
         let mut local = existing_local.clone().unwrap_or_default();
         apply_init_preferences(
@@ -915,6 +930,7 @@ pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, I
         assistant_assets = assets_for_assistants(&resolved.effective_assistants);
         assistant_actions_preview = summarize_assistant_assets(workspace, &assistant_assets)?;
         hygiene_plan = plan_workspace_hygiene_defaults(workspace, &active_domains)?;
+        ide_plan = plan_ide_setup(workspace, &ide_setup)?;
 
         if request.export_docs {
             docs_assets = match request.docs_output_dir {
@@ -958,7 +974,9 @@ pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, I
                 &assistant_assets,
                 &docs_assets,
                 &hygiene_plan,
+                &ide_plan,
             ),
+            &ide_setup,
         );
         let current_manifest_contents =
             serialize_scaffold_manifest(&current_manifest, &current_manifest_path)?;
@@ -1040,6 +1058,14 @@ pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, I
         }
         if !docs_plan.is_empty() {
             planned.extend(plan_docs_setup(&docs_plan));
+        }
+        if !ide_plan.is_empty() {
+            planned.extend(ide_plan.iter().map(|entry| {
+                format!(
+                    "- scaffold {} IDE {} ({})",
+                    entry.action.ide, entry.action.setup_kind, entry.action.path
+                )
+            }));
         }
         if let Some(workspace) = workspace
             && workspace_canon_selected
@@ -1154,6 +1180,7 @@ pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, I
     let mut hygiene_actions = Vec::new();
     let mut assistant_actions = Vec::new();
     let mut docs_actions = Vec::new();
+    let mut ide_actions = Vec::new();
     let mut canon_workspace_bootstrap = None;
 
     if let Some(workspace) = workspace
@@ -1241,6 +1268,10 @@ pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, I
         docs_actions =
             run_init_activity("exporting repo-local docs", resolved.interactive_terminal, || {
                 apply_docs_plan(workspace, &docs_plan)
+            })?;
+        ide_actions =
+            run_init_activity("scaffolding IDE setup", resolved.interactive_terminal, || {
+                apply_ide_setup(workspace, &ide_plan)
             })?;
 
         if let (Some(path), Some(contents)) = (manifest_path.as_ref(), manifest_contents.as_ref()) {
@@ -1380,6 +1411,18 @@ pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, I
             }
         }
 
+        if ide_actions.is_empty() {
+            lines.push("ide_setup: none".to_string());
+        } else {
+            lines.push("ide_setup:".to_string());
+            lines.extend(ide_actions.iter().map(|action| {
+                format!(
+                    "- {}: {} {} path={}",
+                    action.ide, action.setup_kind, action.status, action.path
+                )
+            }));
+        }
+
         if let Some(local) = local_config.as_ref() {
             if local.routing.domain_templates.is_empty() {
                 lines.push("domain_templates: none".to_string());
@@ -1463,9 +1506,16 @@ pub fn execute_update(request: UpdateRequest<'_>) -> Result<UpdateCommandReport,
         &existing_local,
         existing_manifest.as_ref(),
         request.targets,
+        request.ide,
+        request.auto_approve,
         effective_template,
         request.template,
     )?;
+    let ide_setup = if selected_targets.contains(&UpdateTarget::Ide) {
+        resolve_ide_setup(request.ide, request.auto_approve, existing_manifest.as_ref())
+    } else {
+        existing_manifest.as_ref().map(|manifest| manifest.ide_setup.clone()).unwrap_or_default()
+    };
 
     let mut desired_config = existing_local.clone();
     let assistants = configured_assistant_hosts(&desired_config);
@@ -1524,6 +1574,11 @@ pub fn execute_update(request: UpdateRequest<'_>) -> Result<UpdateCommandReport,
     } else {
         Vec::new()
     };
+    let ide_plan = if selected_targets.contains(&UpdateTarget::Ide) {
+        plan_ide_setup(&workspace, &ide_setup)?
+    } else {
+        Vec::new()
+    };
     let manifest_template = effective_template
         .or(existing_manifest.as_ref().and_then(|manifest| manifest.workspace_template));
     let desired_artifacts = collect_workspace_scaffold_artifacts(
@@ -1542,12 +1597,14 @@ pub fn execute_update(request: UpdateRequest<'_>) -> Result<UpdateCommandReport,
         &assistant_assets,
         &docs_assets,
         &hygiene_plan,
+        &ide_plan,
     );
     let plan = build_update_plan(
         &workspace,
         existing_manifest.as_ref(),
         &desired_artifacts,
         manifest_template,
+        &ide_setup,
         &selected_targets,
         request.adopt,
         request.prune,
@@ -1639,11 +1696,14 @@ pub fn execute_update(request: UpdateRequest<'_>) -> Result<UpdateCommandReport,
     ))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn resolve_update_targets(
     workspace: &Path,
     config: &ConfigFile,
     existing_manifest: Option<&ScaffoldManifest>,
     requested: &[UpdateTarget],
+    requested_ide: &[IdeKind],
+    auto_approve: Option<TerminalAutoApproveProfile>,
     effective_template: Option<InitTemplate>,
     explicit_template: Option<InitTemplate>,
 ) -> Result<BTreeSet<UpdateTarget>, InitCommandError> {
@@ -1655,10 +1715,21 @@ fn resolve_update_targets(
         {
             defaults.insert(UpdateTarget::Docs);
         }
+        if existing_manifest_has_target(existing_manifest, ScaffoldTarget::Ide) {
+            defaults.insert(UpdateTarget::Ide);
+        }
         defaults
     } else {
         requested.iter().copied().collect::<BTreeSet<_>>()
     };
+
+    if !requested_ide.is_empty() || auto_approve.is_some() {
+        if requested.is_empty() {
+            targets.insert(UpdateTarget::Ide);
+        } else if !targets.contains(&UpdateTarget::Ide) {
+            return Err(InitCommandError::UpdateIdeOptionsRequireIdeTarget);
+        }
+    }
 
     if explicit_template.is_some() {
         if requested.is_empty() {
@@ -2122,19 +2193,22 @@ fn build_workspace_scaffold_manifest(
     existing_manifest: Option<&ScaffoldManifest>,
     workspace_template: Option<InitTemplate>,
     artifacts: &[RenderedManagedArtifact],
+    ide_setup: &[IdeSetupSelection],
 ) -> ScaffoldManifest {
     let entries = artifacts.iter().filter_map(rendered_artifact_manifest_entry).collect::<Vec<_>>();
-    scaffold_manifest_from_entries(existing_manifest, workspace_template, entries)
+    scaffold_manifest_from_entries(existing_manifest, workspace_template, entries, ide_setup)
 }
 
 fn scaffold_manifest_from_entries(
     existing_manifest: Option<&ScaffoldManifest>,
     workspace_template: Option<InitTemplate>,
     entries: Vec<ScaffoldManifestEntry>,
+    ide_setup: &[IdeSetupSelection],
 ) -> ScaffoldManifest {
     let now = current_timestamp_millis();
     let mut manifest =
         ScaffoldManifest::new(BOUNDLINE_VERSION, workspace_template, now, now, entries);
+    manifest.ide_setup = ide_setup.to_vec();
 
     if let Some(existing_manifest) = existing_manifest {
         manifest.created_at_ms = existing_manifest.created_at_ms;
@@ -2154,6 +2228,7 @@ fn rendered_artifact_manifest_entry(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn collect_workspace_scaffold_artifacts(
     workspace: &Path,
     config_artifact: Option<(&Path, &str)>,
@@ -2162,6 +2237,7 @@ fn collect_workspace_scaffold_artifacts(
     assistant_assets: &[AssistantAsset],
     docs_assets: &[DocsExportAsset],
     hygiene_plan: &[PlannedHygieneEntry],
+    ide_plan: &[PlannedIdeEntry],
 ) -> Vec<RenderedManagedArtifact> {
     let mut artifacts = Vec::new();
 
@@ -2222,6 +2298,7 @@ fn collect_workspace_scaffold_artifacts(
             contents: entry.final_content.clone(),
         },
     ));
+    artifacts.extend(ide_plan.iter().map(|entry| entry.artifact.clone()));
 
     artifacts
 }
@@ -2245,6 +2322,7 @@ fn update_target_for_scaffold_target(target: ScaffoldTarget) -> UpdateTarget {
         ScaffoldTarget::Assistant => UpdateTarget::Assistant,
         ScaffoldTarget::Docs => UpdateTarget::Docs,
         ScaffoldTarget::Hygiene => UpdateTarget::Hygiene,
+        ScaffoldTarget::Ide => UpdateTarget::Ide,
     }
 }
 
@@ -2258,11 +2336,13 @@ fn read_optional_file_contents(path: &Path) -> Result<Option<String>, InitComman
         .map_err(|source| InitCommandError::ReadFile { path: path.to_path_buf(), source })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_update_plan(
     workspace: &Path,
     existing_manifest: Option<&ScaffoldManifest>,
     desired_artifacts: &[RenderedManagedArtifact],
     workspace_template: Option<InitTemplate>,
+    ide_setup: &[IdeSetupSelection],
     selected_targets: &BTreeSet<UpdateTarget>,
     adopt: bool,
     prune: bool,
@@ -2460,6 +2540,7 @@ fn build_update_plan(
         existing_manifest,
         workspace_template,
         next_manifest_entries.into_values().collect(),
+        ide_setup,
     );
 
     entries.sort_by(|left, right| left.path.cmp(&right.path));
@@ -2513,6 +2594,12 @@ fn validate_init_scope_options(request: &InitRequest<'_>) -> Result<(), InitComm
     }
     if request.docs_output_dir.is_some() {
         invalid_arguments.push("--to");
+    }
+    if !request.ide.is_empty() {
+        invalid_arguments.push("--ide");
+    }
+    if request.auto_approve.is_some() {
+        invalid_arguments.push("--auto-approve");
     }
 
     if invalid_arguments.is_empty() {
@@ -3413,6 +3500,14 @@ struct HygieneInitAction {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+struct IdeInitAction {
+    ide: IdeKind,
+    setup_kind: &'static str,
+    status: &'static str,
+    path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct AssistantInitAction {
     surface: AssistantSurface,
     status: &'static str,
@@ -3841,6 +3936,237 @@ fn validate_docs_export_options(request: &InitRequest<'_>) -> Result<(), InitCom
         ));
     }
     Ok(())
+}
+
+fn resolve_ide_setup(
+    requested_ide: &[IdeKind],
+    auto_approve: Option<TerminalAutoApproveProfile>,
+    existing_manifest: Option<&ScaffoldManifest>,
+) -> Vec<IdeSetupSelection> {
+    let mut selected = BTreeMap::<IdeKind, Option<TerminalAutoApproveProfile>>::new();
+
+    if requested_ide.is_empty() {
+        if let Some(existing_manifest) = existing_manifest {
+            for setup in &existing_manifest.ide_setup {
+                selected.insert(setup.ide, setup.auto_approve);
+            }
+        }
+    } else {
+        for ide in requested_ide {
+            let profile = if *ide == IdeKind::VsCode {
+                Some(auto_approve.unwrap_or(TerminalAutoApproveProfile::ReadOnly))
+            } else {
+                None
+            };
+            selected.insert(*ide, profile);
+        }
+    }
+
+    selected
+        .into_iter()
+        .map(|(ide, auto_approve)| IdeSetupSelection { ide, auto_approve })
+        .collect()
+}
+
+fn plan_ide_setup(
+    workspace: &Path,
+    selections: &[IdeSetupSelection],
+) -> Result<Vec<PlannedIdeEntry>, InitCommandError> {
+    let mut entries = Vec::new();
+    for selection in selections {
+        let (path, setup_kind, contents) = match selection.ide {
+            IdeKind::VsCode => (
+                PathBuf::from(".vscode/settings.json"),
+                "managed-settings",
+                render_vscode_settings(
+                    workspace,
+                    selection.auto_approve.unwrap_or(TerminalAutoApproveProfile::ReadOnly),
+                )?,
+            ),
+            IdeKind::Cursor => (
+                PathBuf::from(".cursor/rules/boundline.md"),
+                "manual-guidance",
+                render_cursor_ide_guidance(),
+            ),
+            IdeKind::Antigravity => (
+                PathBuf::from(".boundline/ide/antigravity.md"),
+                "manual-guidance",
+                render_antigravity_ide_guidance(),
+            ),
+            IdeKind::JetBrains => (
+                PathBuf::from(".boundline/ide/jetbrains.md"),
+                "manual-guidance",
+                render_jetbrains_ide_guidance(),
+            ),
+        };
+        let target = workspace.join(&path);
+        let status = scaffold_file_status(&target, &contents)?.label();
+        let path_text =
+            workspace_relative_path(&path).unwrap_or_else(|| path.display().to_string());
+        entries.push(PlannedIdeEntry {
+            action: IdeInitAction { ide: selection.ide, setup_kind, status, path: path_text },
+            artifact: RenderedManagedArtifact {
+                path,
+                target: ScaffoldTarget::Ide,
+                ownership: ScaffoldOwnershipMode::Merge,
+                contents,
+            },
+        });
+    }
+    Ok(entries)
+}
+
+fn render_vscode_settings(
+    workspace: &Path,
+    profile: TerminalAutoApproveProfile,
+) -> Result<String, InitCommandError> {
+    let settings_path = workspace.join(".vscode/settings.json");
+    let mut root = if settings_path.is_file() {
+        let contents = fs::read_to_string(&settings_path)
+            .map_err(|source| InitCommandError::ReadFile { path: settings_path.clone(), source })?;
+        serde_json::from_str::<Value>(&contents).map_err(|source| {
+            InitCommandError::InvalidIdeSettings {
+                path: settings_path.clone(),
+                detail: format!(
+                    "fix the JSON syntax before Boundline can merge IDE settings: {source}"
+                ),
+            }
+        })?
+    } else {
+        Value::Object(Map::new())
+    };
+
+    let root_object = root.as_object_mut().ok_or_else(|| InitCommandError::InvalidIdeSettings {
+        path: settings_path.clone(),
+        detail: "fix the JSON syntax: the top-level VS Code settings value must be an object"
+            .to_string(),
+    })?;
+    let auto_value = root_object
+        .entry("chat.tools.terminal.autoApprove".to_string())
+        .or_insert_with(|| Value::Object(Map::new()));
+    if !auto_value.is_object() {
+        *auto_value = Value::Object(Map::new());
+    }
+    let auto = auto_value.as_object_mut().expect("auto approve value was forced to object");
+    remove_boundline_auto_approve_entries(auto);
+    match profile {
+        TerminalAutoApproveProfile::ReadOnly => apply_read_only_auto_approve_entries(auto),
+        TerminalAutoApproveProfile::SessionSafe => apply_session_safe_auto_approve_entries(auto),
+        TerminalAutoApproveProfile::Trusted => {
+            auto.insert("boundline".to_string(), Value::Bool(true));
+            auto.insert("canon".to_string(), Value::Bool(true));
+        }
+    }
+
+    serde_json::to_string_pretty(&root)
+        .map(|mut rendered| {
+            rendered.push('\n');
+            rendered
+        })
+        .map_err(|source| InitCommandError::InvalidIdeSettings {
+            path: settings_path,
+            detail: format!("failed to render VS Code settings: {source}"),
+        })
+}
+
+fn remove_boundline_auto_approve_entries(auto: &mut Map<String, Value>) {
+    for key in [
+        "boundline",
+        "canon",
+        "/^boundline (doctor|status|next|inspect)\\b/",
+        "/^boundline goal\\b/",
+        "/^boundline plan\\b/",
+        "/^boundline run\\b/",
+        "/^boundline config show\\b/",
+        "/^boundline workflow (list|status|inspect)\\b/",
+        "/^boundline update\\b(?!.*\\s--(apply|force|adopt|prune)\\b)/",
+        "/^boundline (init|run|step|orchestrate|workflow (run|resume)|config (set|unset|bind-context|unbind-context)|cluster init)\\b/",
+        "/^boundline init\\b/",
+        "/^boundline orchestrate\\b/",
+        "/^boundline workflow (run|resume)\\b/",
+        "/^boundline config (set|unset|bind-context|unbind-context)\\b/",
+        "/^boundline cluster init\\b/",
+    ] {
+        auto.remove(key);
+    }
+}
+
+fn apply_read_only_auto_approve_entries(auto: &mut Map<String, Value>) {
+    auto.insert("boundline".to_string(), Value::Bool(false));
+    auto.insert("canon".to_string(), Value::Bool(false));
+    for pattern in [
+        "/^boundline (doctor|status|next|inspect)\\b/",
+        "/^boundline config show\\b/",
+        "/^boundline workflow (list|status|inspect)\\b/",
+        "/^boundline update\\b(?!.*\\s--(apply|force|adopt|prune)\\b)/",
+    ] {
+        auto.insert(pattern.to_string(), auto_approve_rule(true));
+    }
+    auto.insert(
+        "/^boundline (init|run|step|orchestrate|workflow (run|resume)|config (set|unset|bind-context|unbind-context)|cluster init)\\b/".to_string(),
+        auto_approve_rule(false),
+    );
+}
+
+fn apply_session_safe_auto_approve_entries(auto: &mut Map<String, Value>) {
+    auto.insert("boundline".to_string(), Value::Bool(false));
+    auto.insert("canon".to_string(), Value::Bool(false));
+    for pattern in [
+        "/^boundline (doctor|status|next|inspect)\\b/",
+        "/^boundline goal\\b/",
+        "/^boundline plan\\b/",
+        "/^boundline run\\b/",
+        "/^boundline config show\\b/",
+        "/^boundline workflow (list|status|inspect)\\b/",
+        "/^boundline update\\b(?!.*\\s--(apply|force|adopt|prune)\\b)/",
+    ] {
+        auto.insert(pattern.to_string(), auto_approve_rule(true));
+    }
+    for pattern in [
+        "/^boundline init\\b/",
+        "/^boundline orchestrate\\b/",
+        "/^boundline workflow (run|resume)\\b/",
+        "/^boundline config (set|unset|bind-context|unbind-context)\\b/",
+        "/^boundline cluster init\\b/",
+    ] {
+        auto.insert(pattern.to_string(), auto_approve_rule(false));
+    }
+}
+
+fn auto_approve_rule(approve: bool) -> Value {
+    json!({
+        "approve": approve,
+        "matchCommandLine": true
+    })
+}
+
+fn render_cursor_ide_guidance() -> String {
+    "# Boundline Cursor Guidance\n\nCursor support is managed as guidance because Boundline does not currently claim a stable Cursor terminal auto-approval settings schema. Use `boundline init --assistant codex` or another supported assistant pack for repo-local commands, keep the CLI output authoritative, and configure any Cursor auto-run policy manually in Cursor.\n"
+        .to_string()
+}
+
+fn render_antigravity_ide_guidance() -> String {
+    "# Boundline Antigravity Guidance\n\nAntigravity support is repo-local and CLI-first. Start with `boundline init --assistant antigravity`, refresh with `boundline update --workspace <workspace> --target assistant --apply`, and configure Antigravity terminal execution policy manually when your local installation supports it.\n"
+        .to_string()
+}
+
+fn render_jetbrains_ide_guidance() -> String {
+    "# Boundline JetBrains Guidance\n\nJetBrains support is documentation-only in this Boundline release. Use the installed `boundline` CLI from the JetBrains terminal and avoid generated terminal auto-approval settings until JetBrains exposes a stable project-scoped schema for AI terminal command approval.\n"
+        .to_string()
+}
+
+fn summarize_ide_setup(ide_plan: &[PlannedIdeEntry]) -> Vec<IdeInitAction> {
+    ide_plan.iter().map(|entry| entry.action.clone()).collect()
+}
+
+fn apply_ide_setup(
+    workspace: &Path,
+    ide_plan: &[PlannedIdeEntry],
+) -> Result<Vec<IdeInitAction>, InitCommandError> {
+    for entry in ide_plan {
+        write_scaffold_file(&workspace.join(&entry.artifact.path), &entry.artifact.contents)?;
+    }
+    Ok(summarize_ide_setup(ide_plan))
 }
 
 fn plan_workspace_hygiene_defaults(
@@ -4717,6 +5043,8 @@ pub enum InitCommandError {
     PromptInteraction(String),
     #[error("invalid docs export argument: {0}")]
     InvalidDocsExportArgument(String),
+    #[error("invalid IDE settings at {path}: {detail}")]
+    InvalidIdeSettings { path: PathBuf, detail: String },
     #[error("invalid init scope argument: {0}")]
     InvalidScopeArgument(String),
     #[error("invalid domain argument: {0}")]
@@ -4733,6 +5061,10 @@ pub enum InitCommandError {
         "`--template` can only be used together with `--target execution` or no explicit targets"
     )]
     UpdateTemplateRequiresExecutionTarget,
+    #[error(
+        "`--ide` and `--auto-approve` can only be used together with `--target ide` or no explicit targets"
+    )]
+    UpdateIdeOptionsRequireIdeTarget,
     #[error("failed to serialize scaffold manifest at {path}: {source}")]
     SerializeScaffoldManifest { path: PathBuf, source: serde_json::Error },
 }
@@ -4803,6 +5135,8 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            ide: &[],
+            auto_approve: None,
             export_docs: false,
             docs_refresh: false,
             docs_diff: false,
@@ -5046,6 +5380,8 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            ide: &[],
+            auto_approve: None,
             export_docs: false,
             docs_refresh: false,
             docs_diff: false,
@@ -5087,6 +5423,8 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            ide: &[],
+            auto_approve: None,
             export_docs: false,
             docs_refresh: false,
             docs_diff: false,
@@ -5122,6 +5460,8 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            ide: &[],
+            auto_approve: None,
             export_docs: false,
             docs_refresh: false,
             docs_diff: false,
@@ -5159,6 +5499,8 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            ide: &[],
+            auto_approve: None,
             export_docs: false,
             docs_refresh: false,
             docs_diff: false,
@@ -5230,6 +5572,8 @@ mod tests {
                 risk: None,
                 zone: None,
                 owner: None,
+                ide: &[],
+                auto_approve: None,
                 export_docs: false,
                 docs_refresh: false,
                 docs_diff: false,
@@ -5279,6 +5623,8 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            ide: &[],
+            auto_approve: None,
             export_docs: false,
             docs_refresh: false,
             docs_diff: false,
@@ -5372,6 +5718,8 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            ide: &[],
+            auto_approve: None,
             export_docs: false,
             docs_refresh: false,
             docs_diff: false,
@@ -5559,6 +5907,8 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            ide: &[],
+            auto_approve: None,
             export_docs: false,
             docs_refresh: false,
             docs_diff: false,
@@ -5646,6 +5996,8 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            ide: &[],
+            auto_approve: None,
             export_docs: false,
             docs_refresh: false,
             docs_diff: false,
@@ -5689,6 +6041,8 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            ide: &[],
+            auto_approve: None,
             export_docs: false,
             docs_refresh: false,
             docs_diff: false,
@@ -6267,6 +6621,8 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            ide: &[],
+            auto_approve: None,
             export_docs: false,
             docs_refresh: false,
             docs_diff: false,
@@ -6314,6 +6670,8 @@ mod tests {
                 risk: None,
                 zone: None,
                 owner: None,
+                ide: &[],
+                auto_approve: None,
                 export_docs: false,
                 docs_refresh: false,
                 docs_diff: false,
@@ -6361,6 +6719,8 @@ mod tests {
                 risk: None,
                 zone: None,
                 owner: None,
+                ide: &[],
+                auto_approve: None,
                 export_docs: false,
                 docs_refresh: false,
                 docs_diff: false,
@@ -6498,6 +6858,8 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            ide: &[],
+            auto_approve: None,
             export_docs: false,
             docs_refresh: false,
             docs_diff: false,
@@ -6637,6 +6999,8 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            ide: &[],
+            auto_approve: None,
             export_docs: false,
             docs_refresh: false,
             docs_diff: false,
@@ -6695,6 +7059,8 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            ide: &[],
+            auto_approve: None,
             export_docs: false,
             docs_refresh: false,
             docs_diff: false,
@@ -6745,6 +7111,8 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            ide: &[],
+            auto_approve: None,
             export_docs: false,
             docs_refresh: false,
             docs_diff: false,
@@ -6784,6 +7152,8 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            ide: &[],
+            auto_approve: None,
             export_docs: false,
             docs_refresh: false,
             docs_diff: false,
@@ -6883,6 +7253,8 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            ide: &[],
+            auto_approve: None,
             export_docs: false,
             docs_refresh: false,
             docs_diff: false,
@@ -6927,6 +7299,8 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            ide: &[],
+            auto_approve: None,
             export_docs: false,
             docs_refresh: false,
             docs_diff: false,
@@ -6955,6 +7329,8 @@ mod tests {
         let report = execute_update(UpdateRequest {
             workspace: &workspace,
             targets: &[],
+            ide: &[],
+            auto_approve: None,
             template: None,
             diff: false,
             apply: false,
@@ -6991,6 +7367,8 @@ mod tests {
         let report = execute_update(UpdateRequest {
             workspace: &workspace,
             targets: &[],
+            ide: &[],
+            auto_approve: None,
             template: None,
             diff: false,
             apply: true,
@@ -7021,6 +7399,8 @@ mod tests {
         let error = execute_update(UpdateRequest {
             workspace: &workspace,
             targets: &[UpdateTarget::Execution],
+            ide: &[],
+            auto_approve: None,
             template: None,
             diff: false,
             apply: false,
@@ -7055,6 +7435,8 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            ide: &[],
+            auto_approve: None,
             export_docs: false,
             docs_refresh: false,
             docs_diff: false,
@@ -7085,6 +7467,8 @@ mod tests {
         let preview = execute_update(UpdateRequest {
             workspace: &workspace,
             targets: &[],
+            ide: &[],
+            auto_approve: None,
             template: None,
             diff: false,
             apply: false,
@@ -7103,6 +7487,8 @@ mod tests {
         let report = execute_update(UpdateRequest {
             workspace: &workspace,
             targets: &[],
+            ide: &[],
+            auto_approve: None,
             template: None,
             diff: false,
             apply: true,
@@ -7137,6 +7523,8 @@ mod tests {
             risk: None,
             zone: None,
             owner: None,
+            ide: &[],
+            auto_approve: None,
             export_docs: false,
             docs_refresh: false,
             docs_diff: false,
@@ -7150,6 +7538,8 @@ mod tests {
         let report = execute_update(UpdateRequest {
             workspace: &workspace,
             targets: &[UpdateTarget::Execution],
+            ide: &[],
+            auto_approve: None,
             template: None,
             diff: false,
             apply: true,
@@ -7182,6 +7572,8 @@ mod tests {
         let report = execute_update(UpdateRequest {
             workspace: &workspace,
             targets: &[UpdateTarget::Execution],
+            ide: &[],
+            auto_approve: None,
             template: Some(InitTemplate::Change),
             diff: false,
             apply: true,
@@ -7214,6 +7606,8 @@ mod tests {
         let preview = execute_update(UpdateRequest {
             workspace: &workspace,
             targets: &[UpdateTarget::Config],
+            ide: &[],
+            auto_approve: None,
             template: None,
             diff: true,
             apply: false,
@@ -7232,6 +7626,8 @@ mod tests {
         let blocked = execute_update(UpdateRequest {
             workspace: &workspace,
             targets: &[UpdateTarget::Config],
+            ide: &[],
+            auto_approve: None,
             template: None,
             diff: false,
             apply: true,
@@ -7261,6 +7657,8 @@ mod tests {
         let report = execute_update(UpdateRequest {
             workspace: &workspace,
             targets: &[UpdateTarget::Config],
+            ide: &[],
+            auto_approve: None,
             template: None,
             diff: false,
             apply: true,
@@ -7297,6 +7695,8 @@ mod tests {
         let status = execute_update(UpdateRequest {
             workspace: &workspace,
             targets: &[UpdateTarget::Assistant],
+            ide: &[],
+            auto_approve: None,
             template: None,
             diff: false,
             apply: false,
@@ -7320,6 +7720,8 @@ mod tests {
         let report = execute_update(UpdateRequest {
             workspace: &workspace,
             targets: &[UpdateTarget::Assistant],
+            ide: &[],
+            auto_approve: None,
             template: None,
             diff: false,
             apply: true,

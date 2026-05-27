@@ -28,7 +28,7 @@ fn clustered_success_surfaces_name_authority_and_participation() {
 
     let run = execute_run_with_target(None, Some(&primary)).unwrap();
     let status = execute_status_with_target(None, Some(&primary), None).unwrap();
-    let inspect = execute_inspect(None, Some(&primary), None).unwrap();
+    let inspect = execute_inspect(None, Some(&primary), None, false).unwrap();
 
     for output in [&run.terminal_output, &status.terminal_output, &inspect.terminal_output] {
         assert!(output.contains("cluster_id: cluster-1"), "{output}");
@@ -60,7 +60,7 @@ fn clustered_failure_surfaces_name_the_blocking_workspace() {
 
     let run = execute_run_with_target(None, Some(&primary)).unwrap();
     let status = execute_status_with_target(None, Some(&primary), None).unwrap();
-    let inspect = execute_inspect(None, Some(&primary), None).unwrap();
+    let inspect = execute_inspect(None, Some(&primary), None, false).unwrap();
 
     for output in [&run.terminal_output, &status.terminal_output, &inspect.terminal_output] {
         assert!(output.contains("cluster_blocking_workspace:"), "{output}");

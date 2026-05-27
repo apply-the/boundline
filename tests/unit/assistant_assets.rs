@@ -22,12 +22,7 @@ const REQUIRED_COMMANDS: &[&str] = &[
     "boundline-status",
     "boundline-next",
     "boundline-inspect",
-    "boundline-workflow-list",
-    "boundline-workflow-run",
-    "boundline-workflow-status",
-    "boundline-workflow-resume",
-    "boundline-workflow-inspect",
-    "boundline-init",
+    "boundline-update",
     "boundline-doctor",
     "boundline-config-show",
     "boundline-config-set-canon",
@@ -65,7 +60,7 @@ fn test_asset_filenames_and_surfaces() {
         REQUIRED_COMMANDS.iter().map(|command| (*command).to_string()).collect();
     assert_eq!(
         claude_commands, expected,
-        "assistant command surface should expose the full workflow-aware command pack"
+        "assistant command surface should expose the full session-native command pack"
     );
 }
 
@@ -128,6 +123,20 @@ fn test_cross_pack_assets_keep_expected_formatting_and_shared_guidance() {
 }
 
 #[test]
+fn assistant_assets_use_installed_cli_commands() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let assistant_root = manifest_dir.join("assistant");
+    let mut offenders = Vec::new();
+    collect_cargo_run_references(&assistant_root, &assistant_root, &mut offenders);
+
+    assert!(
+        offenders.is_empty(),
+        "assistant assets should use the installed `boundline` CLI, not repo-local Cargo commands: {}",
+        offenders.join(", ")
+    );
+}
+
+#[test]
 fn test_documented_flows_match_the_assistant_asset_surface() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let assistant_readme = read_text(&manifest_dir.join("assistant/README.md"));
@@ -148,15 +157,28 @@ fn test_documented_flows_match_the_assistant_asset_surface() {
     assert!(quickstart.contains("inspection_target"), "{quickstart}");
     assert!(quickstart.contains("corrected_command"), "{quickstart}");
     assert!(
-        quickstart.contains(
-            "cargo run --bin boundline -- inspect --trace \"$PWD/.boundline/traces/<task-id>.json\""
-        ),
+        quickstart.contains("boundline inspect --trace \"$PWD/.boundline/traces/<task-id>.json\""),
         "{quickstart}"
     );
-    assert!(
-        quickstart.contains("cargo run --bin boundline -- inspect --workspace \"$PWD\""),
-        "{quickstart}"
-    );
+    assert!(quickstart.contains("boundline inspect --workspace \"$PWD\""), "{quickstart}");
+}
+
+fn collect_cargo_run_references(root: &Path, base: &Path, offenders: &mut Vec<String>) {
+    for entry in fs::read_dir(root).unwrap_or_else(|error| {
+        panic!("failed to read assistant asset root {}: {error}", root.display())
+    }) {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            collect_cargo_run_references(&path, base, offenders);
+            continue;
+        }
+
+        let content = read_text(&path);
+        if content.contains("cargo run --bin boundline --") {
+            let relative = path.strip_prefix(base).unwrap_or(&path).display().to_string();
+            offenders.push(relative);
+        }
+    }
 }
 
 #[test]

@@ -4,6 +4,8 @@ const US1_COMMANDS: &[&str] = &["boundline-goal", "boundline-plan"];
 const US2_COMMANDS: &[&str] =
     &["boundline-step", "boundline-run", "boundline-status", "boundline-next"];
 const US3_COMMANDS: &[&str] = &["boundline-inspect"];
+const ACTION_BUTTON_COMMANDS: &[&str] =
+    &["boundline-goal", "boundline-plan", "boundline-step", "boundline-next", "boundline-run"];
 const DELIGHT_MVP_COMMANDS: &[&str] =
     &["boundline-why", "boundline-risk", "boundline-evidence", "boundline-next-best"];
 const DELIGHT_FOLLOW_UP_COMMANDS: &[&str] = &[
@@ -74,11 +76,47 @@ fn run_inspect_and_recover_assets_document_the_compact_operator_brief_contract()
 }
 
 #[test]
-fn init_assets_document_the_compact_operator_brief_contract() {
-    assert_command_assets_contain(&["boundline-init"], "compact operator brief");
-    assert_command_assets_contain(&["boundline-init"], "latest_status");
-    assert_command_assets_contain(&["boundline-init"], "next_command");
-    assert_command_assets_contain(&["boundline-init"], "--verbose");
+fn update_assets_document_the_workspace_upgrade_contract() {
+    assert_command_assets_contain(&["boundline-update"], "update_status");
+    assert_command_assets_contain(&["boundline-update"], "next_steps");
+    assert_command_assets_contain(&["boundline-update"], "--apply");
+    assert_command_assets_contain(&["boundline-update"], "--target assistant");
+}
+
+#[test]
+fn session_action_assets_document_host_native_buttons() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+
+    for command in ACTION_BUTTON_COMMANDS {
+        let copilot = std::fs::read_to_string(asset_path(
+            &manifest_dir.join("assistant/copilot/prompts"),
+            command,
+            ".prompt.md",
+        ))
+        .expect("copilot command asset should be readable");
+        assert!(
+            copilot.contains("command:copilot.chat.execute"),
+            "copilot asset for {command} must render clickable command URI actions"
+        );
+
+        for (assistant, root) in [
+            ("claude", manifest_dir.join("assistant/claude/commands")),
+            ("codex", manifest_dir.join("assistant/codex/commands")),
+            ("antigravity", manifest_dir.join("assistant/antigravity/commands")),
+        ] {
+            let asset = std::fs::read_to_string(asset_path(&root, command, ".md")).unwrap_or_else(
+                |error| panic!("failed to read {assistant} asset for {command}: {error}"),
+            );
+            assert!(
+                asset.contains("host-native") && asset.contains("/boundline:*"),
+                "{assistant} asset for {command} must document host-native /boundline:* actions"
+            );
+            assert!(
+                !asset.contains("command:copilot.chat.execute"),
+                "{assistant} asset for {command} must not emit Copilot-specific command URIs"
+            );
+        }
+    }
 }
 
 #[test]

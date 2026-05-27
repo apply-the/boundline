@@ -90,7 +90,7 @@ fn status_and_inspect_surface_semantic_explanation_lines() {
     execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
     let status = execute_status(Some(&workspace)).unwrap();
     execute_run(Some(&workspace)).unwrap();
-    let inspect = execute_inspect(None, Some(&workspace), None).unwrap();
+    let inspect = execute_inspect(None, Some(&workspace), None, false).unwrap();
 
     for output in [status.terminal_output.as_str(), inspect.terminal_output.as_str()] {
         assert!(output.contains("semantic_policy_state: local"), "{output}");

@@ -908,6 +908,10 @@ pub fn execute_plan_with_target_input(
     let runtime = SessionRuntime::for_workspace(&workspace);
     let mut record = load_active_session(&workspace)?;
 
+    if record.goal.as_deref().map(str::trim).unwrap_or_default().is_empty() {
+        return Err(SessionCommandError::MissingCapturedGoal);
+    }
+
     if let Some(input) = input {
         let governance_intent =
             record.authored_brief.as_ref().and_then(|bundle| bundle.governance_intent.clone());
@@ -925,16 +929,7 @@ pub fn execute_plan_with_target_input(
             governance_intent,
         )
         .map_err(SessionCommandError::BriefIngestion)?;
-        let effective_goal = bundle.render_goal_text();
-
-        record.authored_brief = Some(bundle.clone());
-        runtime.capture_goal(&mut record, &effective_goal).map_err(map_runtime_error)?;
-        record.negotiation_packet = Some(NegotiatedDeliveryPacket::from_authored_brief(
-            &record.session_id,
-            &record.workspace_ref,
-            &effective_goal,
-            &bundle,
-        ));
+        runtime.refresh_planning_input(&mut record, bundle).map_err(map_runtime_error)?;
     }
 
     if no_canon {
@@ -954,10 +949,6 @@ pub fn execute_plan_with_target_input(
             intent.explicit_no_canon = true;
             bundle.governance_intent = Some(intent);
         }
-    }
-
-    if record.goal.as_deref().map(str::trim).unwrap_or_default().is_empty() {
-        return Err(SessionCommandError::MissingCapturedGoal);
     }
 
     let plan_result = runtime.plan_task(&mut record, requested_flow, no_flow);
@@ -3745,8 +3736,9 @@ fn red_to_green_addition() {
     }
 
     #[test]
-    fn execute_plan_with_target_input_refreshes_authored_brief() {
+    fn execute_plan_with_target_input_preserves_existing_goal() {
         let workspace = write_execution_workspace("boundline-cli-session-plan-input");
+        let canonical_workspace = workspace.canonicalize().unwrap();
         let plan_input = workspace.join("plan-input.md");
 
         fs::write(
@@ -3769,6 +3761,7 @@ fn red_to_green_addition() {
         .unwrap();
 
         let view = report.session_status.expect("plan should return session status");
+        let record = load_active_session(&canonical_workspace).unwrap();
         assert_eq!(
             view.authored_input_sources,
             Some(vec![
@@ -3780,16 +3773,38 @@ fn red_to_green_addition() {
             view.authored_input_summary.as_deref(),
             Some("direct_text + 1 markdown source(s)")
         );
-        assert!(
-            view.goal.as_deref().unwrap_or_default().contains("placeholder goal"),
-            "{}",
-            report.terminal_output
+        assert_eq!(view.goal.as_deref(), Some("placeholder goal"), "{}", report.terminal_output);
+        assert_eq!(record.goal.as_deref(), Some("placeholder goal"));
+        assert_eq!(
+            record.authored_brief.as_ref().and_then(|bundle| bundle.primary_goal_text.as_deref()),
+            Some("placeholder goal")
         );
-        assert!(
-            view.goal.as_deref().unwrap_or_default().contains("Rust service brief"),
-            "{}",
-            report.terminal_output
-        );
+    }
+
+    #[test]
+    fn execute_plan_with_target_input_requires_captured_goal() {
+        let workspace = write_execution_workspace("boundline-cli-session-plan-input-missing-goal");
+        let plan_input = workspace.join("plan-input.md");
+
+        persist_initialized_session_with_goal_hint(&workspace, None, None).unwrap();
+
+        fs::write(
+            &plan_input,
+            "# Rust service brief\n\nImplement a rust microservice for user management.\n",
+        )
+        .unwrap();
+
+        let error = execute_plan_with_target_input(
+            Some(&workspace),
+            None,
+            None,
+            false,
+            false,
+            Some(plan_input.as_path()),
+        )
+        .unwrap_err();
+
+        assert!(matches!(error, SessionCommandError::MissingCapturedGoal));
     }
 
     #[test]

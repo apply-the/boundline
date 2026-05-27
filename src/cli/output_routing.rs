@@ -233,6 +233,8 @@ pub(crate) fn run_trace_route_owner(trace: &ExecutionTrace) -> &'static str {
             TraceEventType::ReviewStarted
             | TraceEventType::ReviewTriggerIgnored
             | TraceEventType::ReviewerCompleted
+            | TraceEventType::ReviewCouncilAssembled
+            | TraceEventType::ReviewStopSemanticsRecorded
             | TraceEventType::ReviewVoteResolved
             | TraceEventType::ReviewAdjudicated
             | TraceEventType::ReviewTerminalRecorded => saw_review_signal = true,

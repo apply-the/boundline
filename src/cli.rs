@@ -10,8 +10,8 @@ use clap::{CommandFactory, Parser, Subcommand};
 use crate::adapters::env_layer;
 use crate::domain::configuration::{
     AssistantHostKind, CapabilityState, ConfigShowScope, ConfigWriteScope, EffortFallbackPolicy,
-    EffortLevel, InitConfigScope, InitTemplate, RouteSlot, RuntimeKind,
-    SemanticAccelerationPolicyState,
+    EffortLevel, IdeKind, InitConfigScope, InitTemplate, RouteSlot, RuntimeKind,
+    SemanticAccelerationPolicyState, TerminalAutoApproveProfile,
 };
 use crate::domain::domain_templates::{DomainFamily, ExternalContextKind};
 use crate::domain::governance::{CanonMode, CanonModeSelectionPreference, GovernanceRuntimeKind};
@@ -374,6 +374,12 @@ pub enum DeveloperCommand {
         /// Default Canon governance owner.
         #[arg(long)]
         owner: Option<String>,
+        /// IDE setup surfaces to scaffold. Supported values: vscode, cursor, antigravity, jetbrains.
+        #[arg(long = "ide")]
+        ide: Vec<IdeKind>,
+        /// Terminal auto-approval profile for IDEs with a stable settings schema.
+        #[arg(long = "auto-approve", requires = "ide")]
+        auto_approve: Option<TerminalAutoApproveProfile>,
         /// Export stable repo-local Canon and assistant reference docs under docs/boundline/.
         #[arg(long = "export-docs")]
         export_docs: bool,
@@ -401,6 +407,12 @@ pub enum DeveloperCommand {
         /// Restrict the update to one or more managed scaffold surfaces.
         #[arg(long = "target", value_enum)]
         target: Vec<init::UpdateTarget>,
+        /// IDE setup surfaces to refresh. If omitted, update reuses IDE setup recorded in the scaffold manifest.
+        #[arg(long = "ide")]
+        ide: Vec<IdeKind>,
+        /// Terminal auto-approval profile for IDEs with a stable settings schema.
+        #[arg(long = "auto-approve")]
+        auto_approve: Option<TerminalAutoApproveProfile>,
         /// Template to use when refreshing `.boundline/execution.json`.
         #[arg(long)]
         template: Option<InitTemplate>,
@@ -2164,6 +2176,8 @@ fn dispatch_init_command(command: &DeveloperCommand) -> DispatchOutcome {
         risk,
         zone,
         owner,
+        ide,
+        auto_approve,
         export_docs,
         refresh,
         diff,
@@ -2192,6 +2206,8 @@ fn dispatch_init_command(command: &DeveloperCommand) -> DispatchOutcome {
             risk: risk.as_deref(),
             zone: zone.as_deref(),
             owner: owner.as_deref(),
+            ide,
+            auto_approve: *auto_approve,
             export_docs: *export_docs,
             docs_refresh: *refresh,
             docs_diff: *diff,
@@ -2206,6 +2222,8 @@ fn dispatch_update_command(command: &DeveloperCommand) -> DispatchOutcome {
     let DeveloperCommand::Update {
         workspace,
         target,
+        ide,
+        auto_approve,
         template,
         diff,
         apply,
@@ -2222,6 +2240,8 @@ fn dispatch_update_command(command: &DeveloperCommand) -> DispatchOutcome {
         init::execute_update(init::UpdateRequest {
             workspace,
             targets: target,
+            ide,
+            auto_approve: *auto_approve,
             template: *template,
             diff: *diff,
             apply: *apply,
@@ -3633,6 +3653,8 @@ fn red_to_green_addition() {
                     non_interactive: false,
                     template: None,
                     assistant: Vec::new(),
+                    ide: Vec::new(),
+                    auto_approve: None,
                     route: Vec::new(),
                     domain: Vec::new(),
                     domain_standard: Vec::new(),
@@ -3654,6 +3676,8 @@ fn red_to_green_addition() {
                 DeveloperCommand::Update {
                     workspace: workspace.clone(),
                     target: Vec::new(),
+                    ide: Vec::new(),
+                    auto_approve: None,
                     template: None,
                     diff: false,
                     apply: false,
@@ -3854,6 +3878,8 @@ fn red_to_green_addition() {
             non_interactive: false,
             template: None,
             assistant: Vec::new(),
+            ide: Vec::new(),
+            auto_approve: None,
             route: Vec::new(),
             domain: Vec::new(),
             domain_standard: Vec::new(),
@@ -3875,6 +3901,8 @@ fn red_to_green_addition() {
         let update = dispatch(&DeveloperCommand::Update {
             workspace: missing.clone(),
             target: Vec::new(),
+            ide: Vec::new(),
+            auto_approve: None,
             template: None,
             diff: false,
             apply: false,
@@ -3894,6 +3922,8 @@ fn red_to_green_addition() {
             non_interactive: true,
             template: Some(InitTemplate::Change),
             assistant: vec![crate::domain::configuration::AssistantHostKind::Copilot],
+            ide: Vec::new(),
+            auto_approve: None,
             route: Vec::new(),
             domain: Vec::new(),
             domain_standard: Vec::new(),
@@ -3917,6 +3947,8 @@ fn red_to_green_addition() {
         let update_ok = dispatch(&DeveloperCommand::Update {
             workspace: init_success_workspace,
             target: Vec::new(),
+            ide: Vec::new(),
+            auto_approve: None,
             template: None,
             diff: false,
             apply: false,
@@ -4557,7 +4589,9 @@ fn red_to_green_addition() {
             ),
             "{stream}"
         );
-        assert!(stream.contains("\"type\":\"free_text\""), "{stream}");
+        assert!(stream.contains("\"type\":\"suggested_choice\""), "{stream}");
+        assert!(stream.contains("\"label\":\"fill using context\""), "{stream}");
+        assert!(stream.contains("\"label\":\"provide reference path\""), "{stream}");
         assert!(!stream.contains("\"stage_key\":\"plan:architecture\""), "{stream}");
         assert!(
             stream.contains("--planning-stage-complete plan:requirements --until phase-request"),
@@ -4920,7 +4954,9 @@ fn red_to_green_addition() {
             ),
             "{stream}"
         );
-        assert!(stream.contains("\"type\":\"free_text\""), "{stream}");
+        assert!(stream.contains("\"type\":\"suggested_choice\""), "{stream}");
+        assert!(stream.contains("\"label\":\"PostgreSQL\""), "{stream}");
+        assert!(stream.contains("\"label\":\"in-memory\""), "{stream}");
         assert!(stream.contains("--answer \\\"<answer>\\\""), "{stream}");
     }
 

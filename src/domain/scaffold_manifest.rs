@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::domain::configuration::InitTemplate;
+use crate::domain::configuration::{IdeKind, InitTemplate, TerminalAutoApproveProfile};
 
 pub const SCAFFOLD_MANIFEST_FILE_NAME: &str = "scaffold-manifest.json";
 pub const SCAFFOLD_MANIFEST_VERSION: u32 = 1;
@@ -17,6 +17,7 @@ pub enum ScaffoldTarget {
     Assistant,
     Docs,
     Hygiene,
+    Ide,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -61,6 +62,15 @@ pub struct ScaffoldManifest {
     pub updated_at_ms: u64,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub entries: Vec<ScaffoldManifestEntry>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ide_setup: Vec<IdeSetupSelection>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IdeSetupSelection {
+    pub ide: IdeKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_approve: Option<TerminalAutoApproveProfile>,
 }
 
 impl ScaffoldManifest {
@@ -82,6 +92,7 @@ impl ScaffoldManifest {
             created_at_ms,
             updated_at_ms,
             entries,
+            ide_setup: Vec::new(),
         }
     }
 
@@ -91,6 +102,7 @@ impl ScaffoldManifest {
             && self.boundline_version == other.boundline_version
             && self.workspace_template == other.workspace_template
             && self.entries == other.entries
+            && self.ide_setup == other.ide_setup
     }
 }
 

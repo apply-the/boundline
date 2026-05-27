@@ -26,7 +26,7 @@ Expected outcome:
 - The assistant runs or recommends:
 
 ```bash
-cargo run --bin boundline -- goal --workspace "$PWD" --goal "Summarize the current bounded developer flow" --json
+boundline goal --workspace "$PWD" --goal "Summarize the current bounded developer flow" --json
 ```
 
 - The assistant summarizes the recorded goal, any authored brief context, and the next planning action.
@@ -41,7 +41,7 @@ Expected outcome:
 - The assistant runs or recommends:
 
 ```bash
-cargo run --bin boundline -- plan --workspace "$PWD" --json
+boundline plan --workspace "$PWD" --json
 ```
 
 - The assistant summarizes the proposed bounded plan and routes to `/boundline-run` only after the CLI-reported planning state is ready.
@@ -55,7 +55,7 @@ Expected outcome:
 - The assistant runs or recommends:
 
 ```bash
-cargo run --bin boundline -- run --workspace "$PWD" --json
+boundline run --workspace "$PWD" --json
 ```
 
 - The assistant summarizes the terminal status, recovery signals, and trace location.
@@ -69,7 +69,7 @@ Expected outcome:
 - The assistant runs or recommends:
 
 ```bash
-cargo run --bin boundline -- inspect --workspace "$PWD"
+boundline inspect --workspace "$PWD"
 ```
 
 - `/boundline-step` recommends one explicit next command using the latest confirmed context or pasted inspection output.
@@ -85,7 +85,7 @@ Expected outcome:
 - The assistant runs or recommends:
 
 ```bash
-cargo run --bin boundline -- inspect --trace "$PWD/.boundline/traces/<task-id>.json"
+boundline inspect --trace "$PWD/.boundline/traces/<task-id>.json"
 ```
 
 - The assistant summarizes final status, recovery events, and next action guidance.
@@ -100,18 +100,18 @@ Expected outcome:
 - The assistant runs or recommends:
 
 ```bash
-cargo run --bin boundline -- inspect --trace "$PWD/.boundline/traces/<task-id>.json"
+boundline inspect --trace "$PWD/.boundline/traces/<task-id>.json"
 ```
 
 - The assistant surfaces `terminal_reason: failed to read the requested trace`.
 - The assistant surfaces `next_command: /boundline-inspect`.
-- The assistant surfaces `corrected_command: cargo run --bin boundline -- inspect --trace <trace>` so the user can retry with a corrected reference.
+- The assistant surfaces `corrected_command: boundline inspect --trace <trace>` so the user can retry with a corrected reference.
 
 ## Chat-Only Walkthrough
 
 1. Invoke the same assistant command.
 2. Let the assistant ask only for missing inputs.
-3. Copy the provided `cargo run --bin boundline -- ...` command into your terminal.
+3. Copy the provided `boundline ...` command into your terminal.
 4. Paste the command output back into the chat.
 5. Follow the assistant's summary and next-step recommendation.
 

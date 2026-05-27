@@ -2,7 +2,6 @@
 //! checkpoints, and persisted trace updates.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::env;
 use std::fs;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
@@ -34,6 +33,7 @@ use crate::domain::audit::{
     SessionAuditEntryKind, SessionAuditIdentity, SessionAuditOutcome, SessionAuditOutcomeStatus,
     SessionAuditPhase, SessionAuditSource, SessionAuditSourceKind,
 };
+use crate::domain::brief::AuthoredBriefBundle;
 use crate::domain::cluster::{
     ClusterDeliveryStory, ClusterRouteOwner, ClusterSessionProjection, ClusteredExecutionCondition,
     ClusteredExecutionKind, WorkspaceParticipationKind, WorkspaceParticipationRecord,
@@ -48,6 +48,7 @@ use crate::domain::decision::{Decision, DecisionType};
 use crate::domain::distribution::SUPPORTED_CANON_VERSION;
 use crate::domain::flow::{FlowStepMetadata, built_in_flow, supported_flow_names_csv};
 use crate::domain::flow_policy::FlowPolicy;
+use crate::domain::follow_through::FollowThroughProjection;
 use crate::domain::goal_plan::GoalPlan;
 use crate::domain::governance::{
     ApprovalState, CanonAuthorityZone, CanonEvidenceInspectSummary, CanonIntendedPersona,
@@ -640,7 +641,52 @@ impl SessionRuntime {
                 }),
             );
             audit_store.append(&entry).map_err(SessionRuntimeError::SessionAuditStore)?;
-            cursor.latest_session_status = Some(current_status);
+            cursor.latest_session_status = Some(current_status.clone());
+            cursor_dirty = true;
+        }
+
+        let previous_follow_through =
+            previous.map(FollowThroughProjection::from_session_record).unwrap_or_default();
+        let current_follow_through = FollowThroughProjection::from_session_record(session);
+        if previous_follow_through != current_follow_through
+            && (!previous_follow_through.is_empty() || !current_follow_through.is_empty())
+        {
+            let message = if current_follow_through.is_empty() {
+                "follow-through projection cleared".to_string()
+            } else {
+                current_follow_through
+                    .guidance
+                    .clone()
+                    .map(|guidance| format!("follow-through projection updated: {guidance}"))
+                    .unwrap_or_else(|| "follow-through projection updated".to_string())
+            };
+            let outcome_message = if current_follow_through.is_empty() {
+                "projection cleared"
+            } else {
+                "projection refreshed"
+            };
+            let entry = SessionAuditEntry::new_with_timestamp(
+                session.session_id.clone(),
+                cursor.next_sequence(),
+                session.updated_at,
+                SessionAuditEntryKind::FollowThroughProjected,
+                message,
+                session_identity.clone(),
+                system_actor.clone(),
+                SessionAuditAlgorithm::new(
+                    SessionAuditPhase::Inspect,
+                    "follow_through",
+                    "from_session_record",
+                ),
+                SessionAuditOutcome::new(SessionAuditOutcomeStatus::Projected, outcome_message),
+                SessionAuditSource::session_lifecycle(),
+                json!({
+                    "previous_follow_through": previous_follow_through,
+                    "current_follow_through": current_follow_through,
+                    "latest_status": current_status,
+                }),
+            );
+            audit_store.append(&entry).map_err(SessionRuntimeError::SessionAuditStore)?;
             cursor_dirty = true;
         }
 
@@ -692,7 +738,6 @@ impl SessionRuntime {
 
     fn resolve_session_audit_identity(&self) -> SessionAuditIdentity {
         SessionAuditIdentity {
-            current_user: current_user_name(),
             git_user_name: git_config_value(&self.workspace_ref, "user.name"),
             git_user_email: git_config_value(&self.workspace_ref, "user.email"),
         }
@@ -781,6 +826,32 @@ impl SessionRuntime {
                     bundle,
                 )
             },
+        ));
+        session.active_task = None;
+        session.goal_plan = None;
+        session.decisions.clear();
+        self.ensure_workspace_governance_lifecycle(session);
+        session.latest_status = SessionStatus::GoalCaptured;
+        session.latest_terminal_reason = None;
+        session.latest_trace_ref = None;
+        session.updated_at = current_timestamp_millis();
+
+        Ok(())
+    }
+
+    pub fn refresh_planning_input(
+        &self,
+        session: &mut ActiveSessionRecord,
+        bundle: AuthoredBriefBundle,
+    ) -> Result<(), SessionRuntimeError> {
+        let goal = session.goal.clone().ok_or(SessionRuntimeError::MissingGoal)?;
+
+        session.authored_brief = Some(bundle.clone());
+        session.negotiation_packet = Some(NegotiatedDeliveryPacket::from_authored_brief(
+            &session.session_id,
+            &session.workspace_ref,
+            &goal,
+            &bundle,
         ));
         session.active_task = None;
         session.goal_plan = None;
@@ -6457,14 +6528,6 @@ fn nearest_git_root(start: &Path) -> Option<PathBuf> {
     }
 }
 
-fn current_user_name() -> Option<String> {
-    env::var("USER")
-        .ok()
-        .or_else(|| env::var("USERNAME").ok())
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-}
-
 fn git_config_value(workspace: &Path, key: &str) -> Option<String> {
     let output =
         Command::new("git").current_dir(workspace).args(["config", "--get", key]).output().ok()?;
@@ -6558,6 +6621,16 @@ fn trace_event_audit_algorithm(event_type: TraceEventType) -> SessionAuditAlgori
             "decision_loop",
             "run_with_options_and_context",
         ),
+        TraceEventType::ReviewCouncilAssembled => SessionAuditAlgorithm::new(
+            SessionAuditPhase::Review,
+            "review_council",
+            "resolve_council_assembly",
+        ),
+        TraceEventType::ReviewStopSemanticsRecorded => SessionAuditAlgorithm::new(
+            SessionAuditPhase::Review,
+            "review_governance",
+            "active_review_stop_semantics",
+        ),
         TraceEventType::ReviewVoteResolved | TraceEventType::VotingDecisionRecorded => {
             SessionAuditAlgorithm::new(
                 SessionAuditPhase::Review,
@@ -6644,6 +6717,7 @@ fn trace_event_audit_outcome(event: &TraceEvent) -> SessionAuditOutcome {
         | TraceEventType::ReviewStarted
         | TraceEventType::ReviewTriggerIgnored
         | TraceEventType::ReviewerStarted
+        | TraceEventType::ReviewStopSemanticsRecorded
         | TraceEventType::StepStarted
         | TraceEventType::DecisionCreated
         | TraceEventType::ReasoningProfileActivated
@@ -6660,6 +6734,7 @@ fn trace_event_audit_outcome(event: &TraceEvent) -> SessionAuditOutcome {
         }
         TraceEventType::StepCompleted
         | TraceEventType::ReviewerCompleted
+        | TraceEventType::ReviewCouncilAssembled
         | TraceEventType::ReviewVoteResolved
         | TraceEventType::ReviewAdjudicated
         | TraceEventType::ReviewTerminalRecorded
@@ -6715,6 +6790,11 @@ fn trace_event_summary(event: &TraceEvent) -> String {
         .or_else(|| payload_string(event.payload.get("reason")))
         .or_else(|| payload_string(event.payload.get("message")))
         .or_else(|| payload_string(event.payload.get("headline")))
+        .or_else(|| payload_string(event.payload.get("selection_summary")))
+        .or_else(|| {
+            payload_string(event.payload.get("stop_semantics"))
+                .map(|stop_semantics| format!("stop semantics {stop_semantics}"))
+        })
         .or_else(|| {
             payload_string(event.payload.get("target")).map(|target| format!("target {target}"))
         })
@@ -6739,7 +6819,9 @@ fn trace_event_audit_actor(event: &TraceEvent) -> SessionAuditActor {
             reviewer_audit_actor(&event.payload)
         }
         TraceEventType::ReviewAdjudicated => reviewer_audit_actor(&event.payload),
-        TraceEventType::ReviewVoteResolved => review_council_audit_actor(&event.payload),
+        TraceEventType::ReviewCouncilAssembled
+        | TraceEventType::ReviewStopSemanticsRecorded
+        | TraceEventType::ReviewVoteResolved => review_council_audit_actor(&event.payload),
         TraceEventType::ReasoningParticipantStarted
         | TraceEventType::ReasoningParticipantCompleted => {
             reasoning_participant_audit_actor(&event.payload)

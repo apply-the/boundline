@@ -177,7 +177,7 @@ fn shell_enabled_inspect_trace_read_failures_include_correction_cues() {
     );
     assert!(inspect_text.contains("next_command: /boundline-inspect"), "{inspect_text}");
     assert!(
-        inspect_text.contains("corrected_command: cargo run --bin boundline -- inspect --trace"),
+        inspect_text.contains("corrected_command: boundline inspect --trace"),
         "{inspect_text}"
     );
 }

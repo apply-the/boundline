@@ -37,6 +37,7 @@ const PHASE_REQUEST_KIND_REVIEW: &str = "review";
 const PHASE_REQUEST_EXPECTED_ANSWER_CONFIRMATION: &str = "confirmation";
 const PHASE_REQUEST_EXPECTED_ANSWER_FREE_TEXT: &str = "free_text";
 const PHASE_REQUEST_EXPECTED_ANSWER_SINGLE_CHOICE: &str = "single_choice";
+const PHASE_REQUEST_EXPECTED_ANSWER_SUGGESTED_CHOICE: &str = "suggested_choice";
 const PHASE_REQUEST_ID_PREFIX: &str = "req";
 const PHASE_REQUEST_QUESTION_FRAGMENT_MAX_CHARS: usize = 24;
 const PHASE_KIND_GOAL: &str = "goal_capture";
@@ -169,6 +170,10 @@ impl OrchestratePhaseRequestExpectedAnswer {
         Self { answer_type: PHASE_REQUEST_EXPECTED_ANSWER_SINGLE_CHOICE.to_string(), options }
     }
 
+    fn suggested_choice(options: Vec<PhaseRequestOption>) -> Self {
+        Self { answer_type: PHASE_REQUEST_EXPECTED_ANSWER_SUGGESTED_CHOICE.to_string(), options }
+    }
+
     fn confirmation() -> Self {
         Self {
             answer_type: PHASE_REQUEST_EXPECTED_ANSWER_CONFIRMATION.to_string(),
@@ -176,24 +181,28 @@ impl OrchestratePhaseRequestExpectedAnswer {
         }
     }
 
+    fn suggested_choice_or_free_text(options: Vec<PhaseRequestOption>) -> Self {
+        if options.is_empty() { Self::free_text() } else { Self::suggested_choice(options) }
+    }
+
     /// Builds the appropriate expected-answer type for a clarification question,
     /// using predefined options when the question matches a well-known pattern.
-    /// The answer type remains `free_text` so the host renders suggestions
-    /// while still accepting a custom typed answer.
+    /// `suggested_choice` asks hosts to render selectable suggestions while
+    /// still accepting a custom typed answer through the same resume path.
     fn for_clarification_question(question: &str) -> Self {
         let options = clarification_question_options(question);
-        Self { answer_type: PHASE_REQUEST_EXPECTED_ANSWER_FREE_TEXT.to_string(), options }
+        Self::suggested_choice_or_free_text(options)
     }
 
     /// Builds the expected-answer for a planning stage question when the Canon
-    /// packet is incomplete. Always `free_text` so the user can provide a
-    /// file/folder path or custom instruction alongside the suggested options.
+    /// packet is incomplete. `suggested_choice` keeps the suggested actions
+    /// visible while allowing a custom file/folder path or instruction.
     fn for_planning_stage_question(
         canon_memory: Option<&CompactedCanonMemory>,
         stage_key: &str,
     ) -> Self {
         let options = planning_stage_question_options(canon_memory, stage_key);
-        Self { answer_type: PHASE_REQUEST_EXPECTED_ANSWER_FREE_TEXT.to_string(), options }
+        Self::suggested_choice_or_free_text(options)
     }
 }
 
@@ -2083,8 +2092,8 @@ fn assistant_command_for_cli(
         Some("/boundline-inspect".to_string())
     } else if cli_command.starts_with("boundline govern") {
         Some("/boundline-govern".to_string())
-    } else if cli_command.starts_with("boundline init") {
-        Some("/boundline-init".to_string())
+    } else if cli_command.starts_with("boundline update") {
+        Some("/boundline-update".to_string())
     } else {
         None
     }
