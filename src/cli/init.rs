@@ -3086,8 +3086,22 @@ fn canon_reviewer_route_readiness(
         };
     }
 
-    let safety_route = &safety.expect("checked above").route;
-    let maintainability_route = &maintainability.expect("checked above").route;
+    let Some(safety) = safety else {
+        return CanonReviewerRouteReadiness {
+            ready: false,
+            detail: "safety reviewer route unexpectedly missing".to_string(),
+            repair_actions: vec![CANON_REVIEWER_ROUTE_REPAIR_ACTION.to_string()],
+        };
+    };
+    let Some(maintainability) = maintainability else {
+        return CanonReviewerRouteReadiness {
+            ready: false,
+            detail: "maintainability reviewer route unexpectedly missing".to_string(),
+            repair_actions: vec![CANON_REVIEWER_ROUTE_REPAIR_ACTION.to_string()],
+        };
+    };
+    let safety_route = &safety.route;
+    let maintainability_route = &maintainability.route;
     if safety_route == maintainability_route {
         return CanonReviewerRouteReadiness {
             ready: false,
@@ -4047,7 +4061,11 @@ fn render_vscode_settings(
     if !auto_value.is_object() {
         *auto_value = Value::Object(Map::new());
     }
-    let auto = auto_value.as_object_mut().expect("auto approve value was forced to object");
+    let auto = auto_value.as_object_mut().ok_or_else(|| InitCommandError::InvalidIdeSettings {
+        path: settings_path.clone(),
+        detail: "terminal auto-approve value could not be converted to object after forced reset"
+            .to_string(),
+    })?;
     remove_boundline_auto_approve_entries(auto);
     match profile {
         TerminalAutoApproveProfile::ReadOnly => apply_read_only_auto_approve_entries(auto),

@@ -1849,7 +1849,7 @@ fn dispatch_orchestrate_command(command: &DeveloperCommand) -> DispatchOutcome {
                     exit_status: CommandExitStatus::NonSuccess,
                     output: String::new(),
                     host_output: None,
-                    stream_output: Some(serde_json::to_string(&envelope).unwrap() + "\n"),
+                    stream_output: serde_json::to_string(&envelope).ok().map(|s| s + "\n"),
                     compact_output: None,
                     prefer_compact_output_in_verbose: false,
                     inspection_target: None,
