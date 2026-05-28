@@ -85,6 +85,13 @@ Use `boundline status --workspace <workspace>` for a compact operator view and
 `boundline inspect --workspace <workspace>` for the detailed runtime
 projection.
 
+Use `boundline probe --workspace <workspace>` when you need a read-only
+readiness snapshot before `goal`, `plan`, or assistant-host orchestration.
+Probe reports workspace initialization, provider readiness, active session
+state, and the next recommended CLI step without mutating any session files.
+With `--json`, it emits the standard host envelope and includes the rendered
+probe report inside `rendered_output`.
+
 After `boundline init --assistant <host>`, the generated assistant command
 packs can surface that same session-native state in chat. The CLI and host
 chat surfaces read and write the same `.boundline/session.json` and trace
@@ -142,6 +149,11 @@ when you want ad hoc prompt use instead of repo-local discovery.
 The chat commands are namespaced as `/boundline:*`: goal, plan, run,
 status, continue, inspect, recover, and conditional govern. They guide the assistant into
 Boundline's real CLI/runtime instead of making chat history authoritative.
+
+`boundline probe` is a helper for those chat surfaces, not a repo-local
+`/boundline:*` command. If probe reports that the workspace still needs
+bootstrap, stay on `boundline init --assistant <host>` or the global bootstrap
+surface instead of inventing a repo-local handoff.
 
 Think of the chat surface in three layers:
 

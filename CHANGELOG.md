@@ -21,6 +21,9 @@ Highlights:
 
 - Retired the unshipped terminal UI planning artifacts and removed the related
   product-line references from the active roadmap.
+- Added the read-only `boundline probe` preflight surface, plus bootstrap-safe
+  assistant guidance and contract coverage so goal and plan hosts can detect
+  init versus doctor versus session-ready states before orchestration.
 
 ## [0.64.0] - 2026-05-20
 

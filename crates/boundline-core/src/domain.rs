@@ -40,6 +40,8 @@ pub mod limits;
 pub mod negotiation;
 #[path = "../../../src/domain/plan.rs"]
 pub mod plan;
+#[path = "../../../src/domain/probe.rs"]
+pub mod probe;
 #[path = "../../../src/domain/project_index.rs"]
 pub mod project_index;
 #[path = "../../../src/domain/project_memory.rs"]

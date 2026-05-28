@@ -19,6 +19,7 @@ pub mod guidance_catalog;
 pub mod limits;
 pub mod negotiation;
 pub mod plan;
+pub mod probe;
 pub mod project_index;
 pub mod project_memory;
 pub mod review;

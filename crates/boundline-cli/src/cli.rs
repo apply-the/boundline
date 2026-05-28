@@ -20,6 +20,8 @@ pub mod models_auth;
 pub mod orchestrate;
 #[path = "../../../src/cli/output.rs"]
 pub mod output;
+#[path = "../../../src/cli/probe.rs"]
+pub mod probe;
 #[path = "../../../src/cli/run.rs"]
 pub mod run;
 #[path = "../../../src/cli/session.rs"]

@@ -19,7 +19,7 @@ use crate::domain::trace::current_timestamp_millis;
 
 use super::{
     assistant_assets, checkpoint, cluster, config, diagnostics, govern, init, inspect, models_auth,
-    orchestrate, output, run, session, workflow, workspace as cli_workspace,
+    orchestrate, output, probe, run, session, workflow, workspace as cli_workspace,
 };
 
 /// Top-level CLI parser for the Boundline executable.
@@ -60,6 +60,7 @@ pub enum CommandName {
     Goal,
     Flow,
     Plan,
+    Probe,
     Step,
     Status,
     Next,
@@ -86,6 +87,7 @@ impl CommandName {
             Self::Goal => "goal",
             Self::Flow => "flow",
             Self::Plan => "plan",
+            Self::Probe => "probe",
             Self::Step => "step",
             Self::Status => "status",
             Self::Next => "next",
@@ -174,6 +176,11 @@ pub enum DeveloperCommand {
         no_flow: bool,
         #[arg(long = "no-canon")]
         no_canon: bool,
+    },
+    /// Lightweight preflight check for assistant hosts.
+    Probe {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
     },
     Step {
         #[arg(long)]
@@ -778,6 +785,7 @@ impl DeveloperCommand {
             Self::Goal { .. } => CommandName::Goal,
             Self::Flow { .. } => CommandName::Flow,
             Self::Plan { .. } => CommandName::Plan,
+            Self::Probe { .. } => CommandName::Probe,
             Self::Step { .. } => CommandName::Step,
             Self::Run { .. } => CommandName::Run,
             Self::Workflow { .. } => CommandName::Workflow,
@@ -927,6 +935,18 @@ impl DeveloperCommandSession {
                     .as_ref()
                     .or(cluster.as_ref())
                     .map(|path| path.to_string_lossy().into_owned()),
+                requires_workspace_ref: false,
+                install_check: false,
+                goal: None,
+                trace_ref: None,
+                started_at: current_timestamp_millis(),
+                completed_at: None,
+                exit_status: None,
+                trace_location: None,
+            },
+            DeveloperCommand::Probe { workspace } => Self {
+                command_name: CommandName::Probe,
+                workspace_ref: workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
                 requires_workspace_ref: false,
                 install_check: false,
                 goal: None,
@@ -1246,7 +1266,8 @@ impl DeveloperCommandSession {
             | CommandName::Assistant
             | CommandName::Config
             | CommandName::Cluster
-            | CommandName::Models => {}
+            | CommandName::Models
+            | CommandName::Probe => {}
         }
 
         if matches!(self.command_name, CommandName::Goal | CommandName::Orchestrate)
@@ -1610,6 +1631,7 @@ fn command_environment_workspace(command: &DeveloperCommand) -> Option<PathBuf> 
         DeveloperCommand::Goal { workspace, .. }
         | DeveloperCommand::Flow { workspace, .. }
         | DeveloperCommand::Plan { workspace, .. }
+        | DeveloperCommand::Probe { workspace }
         | DeveloperCommand::Step { workspace, .. }
         | DeveloperCommand::Orchestrate { workspace, .. }
         | DeveloperCommand::Run { workspace, .. }
@@ -1732,6 +1754,7 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
         DeveloperCommand::Update { .. } => dispatch_update_command(command),
         DeveloperCommand::Config { command } => dispatch_config_command(command),
         DeveloperCommand::Cluster { command } => dispatch_cluster_command(command),
+        DeveloperCommand::Probe { workspace } => dispatch_probe_command(workspace.as_deref()),
         DeveloperCommand::Models { command } => dispatch_models_command(command),
     }
 }
@@ -2523,6 +2546,28 @@ fn dispatch_internal_command_mismatch(command_name: CommandName) -> DispatchOutc
         format!("internal dispatch mismatch for {}", command_name.as_str()),
         None,
     )
+}
+
+fn dispatch_probe_command(workspace: Option<&Path>) -> DispatchOutcome {
+    let workspace = match workspace
+        .map(|p| p.to_path_buf())
+        .or_else(|| cli_workspace::resolve_workspace(None).ok())
+    {
+        Some(ws) => ws,
+        None => {
+            return DispatchOutcome::text(
+                CommandExitStatus::InvalidInvocation,
+                output::validation_error_message(&CliValidationError::MissingWorkspaceRef(
+                    CommandName::Probe,
+                )),
+                None,
+            );
+        }
+    };
+
+    let report = probe::execute_probe(&workspace);
+    let json = serde_json::to_string_pretty(&report).unwrap_or_default();
+    DispatchOutcome::text(CommandExitStatus::Succeeded, json, None)
 }
 
 fn dispatch_models_command(command: &ModelsSubcommand) -> DispatchOutcome {

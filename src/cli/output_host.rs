@@ -123,6 +123,7 @@ pub fn command_name(command: &DeveloperCommand) -> &'static str {
         DeveloperCommand::Goal { .. } => "goal",
         DeveloperCommand::Flow { .. } => "flow",
         DeveloperCommand::Plan { .. } => "plan",
+        DeveloperCommand::Probe { .. } => "probe",
         DeveloperCommand::Step { .. } => "step",
         DeveloperCommand::Run { .. } => "run",
         DeveloperCommand::Workflow { .. } => "workflow",
