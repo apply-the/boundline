@@ -4,6 +4,8 @@ const US1_COMMANDS: &[&str] = &["boundline-goal", "boundline-plan"];
 const US2_COMMANDS: &[&str] =
     &["boundline-step", "boundline-run", "boundline-status", "boundline-next"];
 const US3_COMMANDS: &[&str] = &["boundline-inspect"];
+const READINESS_SENSITIVE_COMMANDS: &[&str] =
+    &["boundline-goal", "boundline-plan", "boundline-status", "boundline-recover"];
 const ACTION_BUTTON_COMMANDS: &[&str] =
     &["boundline-goal", "boundline-plan", "boundline-step", "boundline-next", "boundline-run"];
 const DELIGHT_MVP_COMMANDS: &[&str] =
@@ -84,6 +86,16 @@ fn update_assets_document_the_workspace_upgrade_contract() {
 }
 
 #[test]
+fn readiness_sensitive_assets_document_probe_preflight_contract() {
+    assert_command_assets_contain(
+        READINESS_SENSITIVE_COMMANDS,
+        "boundline probe --workspace <workspace> --json",
+    );
+    assert_command_assets_contain(READINESS_SENSITIVE_COMMANDS, "boundline init");
+    assert_command_assets_contain(READINESS_SENSITIVE_COMMANDS, "assistant handoff");
+}
+
+#[test]
 fn session_action_assets_document_host_native_buttons() {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
 
@@ -136,6 +148,22 @@ fn test_host_support_modes_are_documented_in_shared_guidance() {
         "Cursor is `copy-ready-assets`",
         "Antigravity is `repo-local-full`",
         "all hosts must treat CLI output plus\n`.boundline/session.json` as authoritative",
+    ] {
+        assert!(readme.contains(snippet), "assistant/README.md missing {snippet}");
+    }
+}
+
+#[test]
+fn probe_bootstrap_behavior_is_documented_in_shared_guidance() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let readme = std::fs::read_to_string(manifest_dir.join("assistant/README.md"))
+        .expect("assistant README should be readable");
+
+    for snippet in [
+        "boundline probe --workspace <workspace> --json",
+        "not a dedicated repo-local assistant command",
+        "boundline init --assistant <host>",
+        "repo-local handoff",
     ] {
         assert!(readme.contains(snippet), "assistant/README.md missing {snippet}");
     }

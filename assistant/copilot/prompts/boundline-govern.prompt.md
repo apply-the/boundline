@@ -1,5 +1,12 @@
 ---
 description: "Use optional Canon governance through Boundline"
+handoffs:
+  - label: Plan Workflow
+    agent: boundline-plan
+    prompt: Plan the active session goal
+  - label: Run Workflow
+    agent: boundline-run
+    prompt: Execute the planned workflow
 ---
 
 # Command: /boundline-govern

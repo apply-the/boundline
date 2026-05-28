@@ -22,6 +22,7 @@ $ARGUMENTS
 Consider the user input before proceeding. Treat it as planning guidance only when it refines how to plan the already captured goal; if it changes the goal, route back to `/boundline:goal`.
 
 ## Pre-Execution Checks
+- When workspace or session readiness is uncertain, run `boundline probe --workspace <workspace> --json` for a fast preflight snapshot. If the probe recommends `boundline init` and omits an assistant handoff, stop and surface the host bootstrap CLI path instead of inventing a repo-local handoff. If it points to doctor, redirect before planning.
 - Confirm the workspace is known and an active session already has a captured goal.
 - Check status/orchestrate output for `goal_quality_state` and do not plan from chat-only assumptions while goal quality is blocked.
 - Do not read `.specify/extensions.yml` or run Speckit-style hooks for this command; Boundline uses runtime `phase_request`, `assistant_resume_command`, and `assistant_next_command` handoffs.

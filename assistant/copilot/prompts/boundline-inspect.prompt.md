@@ -1,5 +1,12 @@
 ---
 description: "Inspect a Boundline trace and summarize outcome and recovery signals"
+handoffs:
+  - label: Recover Session
+    agent: boundline-recover
+    prompt: Recover the blocked session
+  - label: Run Workflow
+    agent: boundline-run
+    prompt: Execute the planned workflow
 ---
 
 # Command: /boundline-inspect
@@ -52,20 +59,10 @@ Wait for pasted output before continuing. If workspace-based inspect reports a s
 
 ## Output Interpretation
 Provide a conversational, human-readable summary of the session state. Do NOT use raw JSON keys or snake_case field names (like `next_command`, `latest_status`, `authored_input_summary`, etc.) in your response. Translate all state into natural language.
-When suggesting the next step, you MUST output a VS Code Copilot command link to render a clickable button. Use EXACTLY this syntax format:
-`[Run /boundline-plan](command:github.copilot.chat.execute?%5B%22%2Fboundline-plan%22%5D)` (replace /boundline-plan with the actual command). Do not use plain text or unicode arrows.
 Reply as a compact operator brief by default: preserve `inspection_target` when present, `goal`, `authored_input_summary` or `authored_input_sources`, `routing` or `route_owner`, `execution_condition`, a concise inspection summary, key artifacts such as `trace` and checkpoint refs, governance blockers or `governance_next_action`, `latest_status`, and the CLI-reported `next_command`. Only surface raw `route_config_projection`, `context_provenance`, decision timelines, failure evidence dumps, or other deep trace detail when the user explicitly asks for deeper detail or wants the CLI `--verbose` view. Preserve `latest_trace_ref`, `authored_input_deduplicated_sources`, `governance_next_action`, `follow_through_guidance`, `follow_through_evidence_source`, `changed_files`, `validation`, and `corrected_command` exactly when present. Preserve `corrected_command` on failures, and keep delegated continuity, domain-template gaps, and Canon-governed credibility or stale-memory wording as real stop conditions.
 When inspect reports `planning_analysis_state`, `planning_analysis_findings`, or `planning_analysis_coverage`, preserve them exactly. Treat `planning_analysis_state: blocked` as a real execution stop and route back to `/boundline-plan` instead of `/boundline-run`.
 When `--audit` is used, treat the audit projection as the primary payload: preserve `audit_entry_count`, `audit_session_ref`, `audit_latest`, and the ordered `audit_timeline`. If any entry includes `participant_routes` or `mixed_routes`, keep that multi-route attribution explicit.
 
 ## Next-Step Routing
-Surface exactly two action links: one **primary** (advance) and one **secondary** (refine/inspect, shown only when the condition is met).
-
-**Primary** (always shown): the CLI-reported `next_command` (typically `/boundline-step` or `/boundline-run`).
-**Secondary** (shown only when the session needs reset or no active session exists): `/boundline-goal` — start a new goal.
-
-If the secondary condition is not met, show only the primary button.
-Before the action links, include one brief natural-language sentence summarizing why these actions are offered.
-Prefer an emitted `phase_request.assistant_resume_command` when present — it overrides the primary.
-
+If workspace-based inspect reports a session error, route to `/boundline-goal`. Otherwise prefer the CLI-reported `next_command`.
 Allowed follow-up commands: `/boundline-next`, `/boundline-run`, `/boundline-step`, `/boundline-status`, `/boundline-goal`.

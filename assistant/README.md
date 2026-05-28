@@ -317,9 +317,15 @@ After bootstrap, `/boundline-update` maps to `boundline update`, `/boundline-doc
 `boundline config set-canon --mode-selection <manual|auto-confirm|auto>`,
 `/boundline-goal` maps to `boundline orchestrate --goal ... --brief ... --until phase-request --json-stream` for assistant-host interactive capture, while direct `boundline goal --goal ... --brief ...` remains the raw non-interactive primitive,
 `/boundline-recover` maps to `boundline status --json` followed by the
-CLI-reported recovery command, and `/boundline-govern` maps to
+CLI-reported recovery command, `/boundline-govern` maps to
 `boundline govern --workspace <workspace> --json`, optionally with
-`--mode <mode>` only when the user explicitly supplied one.
+`--mode <mode>` only when the user explicitly supplied one, and
+`boundline probe --workspace <workspace> --json` is a lightweight preflight
+helper, not a dedicated repo-local assistant command. It reports workspace
+readiness, provider health, active session state, and a `recommended_next`
+action without mutating state. When probe recommends `boundline init`,
+assistants should surface `boundline init --assistant <host>` or the host's
+global bootstrap surface instead of inventing a repo-local handoff.
 Assistants should collect missing chat answers first, then run or provide the
 same CLI commands without asking operators to edit manifests manually.
 

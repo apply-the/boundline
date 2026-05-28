@@ -1,5 +1,13 @@
 ---
 description: "Recommend the next bounded Boundline action"
+handoffs:
+  - label: Run Workflow
+    agent: boundline-run
+    prompt: Execute the planned workflow
+    send: true
+  - label: Step Forward
+    agent: boundline-step
+    prompt: Advance by one step
 ---
 
 # Command: /boundline-next
@@ -31,24 +39,10 @@ Wait for pasted output and then recommend exactly one next command.
 
 ## Output Interpretation
 Provide a conversational, human-readable summary of the session state. Do NOT use raw JSON keys or snake_case field names (like `next_command`, `latest_status`, `authored_input_summary`, etc.) in your response. Translate all state into natural language.
-When suggesting the next step, you MUST output a VS Code Copilot command link to render a clickable button. Use EXACTLY this syntax format:
-`[Run /boundline-plan](command:github.copilot.chat.execute?%5B%22%2Fboundline-plan%22%5D)` (replace /boundline-plan with the actual command). Do not use plain text or unicode arrows.
 Summarize `routing`, `route_owner`, `route_config_projection`, `execution_condition`, `continuity_authority`, `compatibility_follow_up`, `compatibility_trace_ref`, `latest_status`, `latest_selection_headline`, `latest_selection_reason`, `latest_checkpoint_id`, `latest_checkpoint_scope`, `latest_checkpoint_restore_command`, `context_summary`, `context_credibility`, `context_primary_inputs`, `context_provenance`, `context_staleness_reason`, `delegation_mode`, `delegation_packet_id`, `delegation_packet_kind`, `delegation_packet_state`, `delegation_target_owner`, `delegation_headline`, `delegation_evidence_summary`, `explanation`, `follow_through_guidance`, `follow_through_evidence_source`, `follow_through_next_action`, `follow_through_stop_reason`, `governance_next_action`, and the CLI-reported `next_command`. Preserve `latest_trace_ref` when present so `/boundline-inspect` can reuse it, and keep any `effective_routing`, `assistant_bindings`, `runtime_capabilities`, or `slot_effort_policies` values surfaced inside `route_config_projection`. When the context fields include domain-template selection, winning standards source, or external-input status, preserve that wording exactly and treat missing or stale required domain inputs as a real stop condition. When the context or governance fields are Canon-grounded, preserve governed artifact refs, credibility, and stale-memory wording exactly and treat non-credible governed memory as a real stop condition. When checkpoint fields appear, preserve them exactly and prefer the reported restore command over generic restart advice.
 
 ## Next-Step Routing
-Surface exactly two action links: one **primary** (advance) and one **secondary** (refine/inspect, shown only when the condition is met).
-
-**Primary** (always shown): render the CLI-reported `next_command` as the matching clickable `command:github.copilot.chat.execute` link. For common continuations, use:
-[▶ Run /boundline-step](command:github.copilot.chat.execute?%5B%22%2Fboundline-step%22%5D)
-[▶ Run /boundline-inspect](command:github.copilot.chat.execute?%5B%22%2Fboundline-inspect%22%5D)
-[▶ Run /boundline-plan](command:github.copilot.chat.execute?%5B%22%2Fboundline-plan%22%5D)
-
-**Secondary** (shown only when context needs review before acting, or `continuity_authority: compatibility_trace` is present): render this clickable link:
-[▶ Run /boundline-status](command:github.copilot.chat.execute?%5B%22%2Fboundline-status%22%5D)
-
-If the secondary condition is not met, show only the primary button.
-Before the action links, include one brief natural-language sentence summarizing why these actions are offered.
-Prefer an emitted `phase_request.assistant_resume_command` when present; otherwise prefer `assistant_next_command`; otherwise follow the CLI-reported `next_command`. Render whichever assistant-safe route wins using `command:github.copilot.chat.execute`.
-Route to `/boundline-goal` only when the CLI reports no active session and no compatibility follow-up.
-
-Allowed follow-up commands: `/boundline-step`, `/boundline-inspect`, `/boundline-status`, `/boundline-plan`, `/boundline-goal`.
+Prefer `assistant_resume_command` when present; otherwise prefer `assistant_next_command`; otherwise render the CLI-reported `next_command` as the primary follow-up.
+Render assistant-safe follow-up actions as Copilot command links or the defined handoff buttons instead of plain text shell guidance when a host route is available. For example, use `[Run /boundline-run](command:github.copilot.chat.execute?%5B%22%2Fboundline-run%22%5D)` when execution is the recommended continuation.
+Route to `/boundline-inspect` when the runtime points to inspect, and show `/boundline-status` only when the current context needs review before acting or `continuity_authority: compatibility_trace` is present. Route to `/boundline-goal` only when the CLI reports no active session and no compatibility follow-up.
+Allowed follow-up commands: `/boundline-run`, `/boundline-step`, `/boundline-inspect`, `/boundline-status`, `/boundline-plan`, `/boundline-goal`.

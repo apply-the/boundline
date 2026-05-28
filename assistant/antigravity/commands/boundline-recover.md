@@ -12,6 +12,9 @@ Recover from a Boundline session that is blocked, clarification-required, failed
 ## Required Context
 - `workspace_ref`
 
+## Pre-Execution Checks
+When workspace readiness or recovery eligibility is uncertain, run `boundline probe --workspace <workspace> --json` for a fast preflight snapshot. If the probe recommends `boundline init` and omits an assistant handoff, stop and surface the host bootstrap CLI path instead of inventing a repo-local handoff. If the probe recommends doctor, redirect to `/boundline-doctor`. If the probe reports no active session, route to `/boundline-goal` instead of treating recovery as available.
+
 ## Shell-Enabled Path
 Run `boundline status --workspace <workspace> --json` exactly once. If the output reports a `latest_checkpoint_restore_command`, `corrected_command`, or `next_command`, use that command as the recovery path. If status is insufficient, run `boundline inspect --workspace <workspace> --json` exactly once and preserve its guidance.
 

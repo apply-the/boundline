@@ -1,5 +1,13 @@
 ---
 description: "Plan a Boundline workflow"
+handoffs:
+  - label: Run Workflow
+    agent: boundline-run
+    prompt: Execute the planned workflow
+    send: true
+  - label: Inspect State
+    agent: boundline-inspect
+    prompt: Inspect the current trace and governance state
 ---
 
 # Command: /boundline-plan
@@ -26,6 +34,7 @@ $ARGUMENTS
 Consider the user input before proceeding. Treat it as planning guidance only when it refines how to plan the already captured goal; if it changes the goal, route back to `/boundline-goal`.
 
 ## Pre-Execution Checks
+- When workspace or session readiness is uncertain, run `boundline probe --workspace <workspace> --json` for a fast preflight snapshot. If the probe recommends `boundline init` and omits an assistant handoff, stop and surface the host bootstrap CLI path instead of inventing a repo-local handoff. If it points to doctor, redirect before planning.
 - Confirm the workspace is known and an active session already has a captured goal.
 - Check status/orchestrate output for `goal_quality_state` and do not plan from chat-only assumptions while goal quality is blocked.
 - Do not read `.specify/extensions.yml` or run Speckit-style hooks for this command; Boundline uses runtime `phase_request`, `assistant_resume_command`, and `assistant_next_command` handoffs.
@@ -108,8 +117,6 @@ Tell the user to run them one at a time and paste the outputs before continuing.
 
 ## Output Interpretation
 Provide a conversational, human-readable summary of the session state. Do NOT use raw JSON keys or snake_case field names (like `next_command`, `latest_status`, `authored_input_summary`, etc.) in your response. Translate all state into natural language.
-When suggesting the next step, you MUST output a VS Code Copilot command link to render a clickable button. Use EXACTLY this syntax format:
-`[Run /boundline-plan](command:github.copilot.chat.execute?%5B%22%2Fboundline-plan%22%5D)` (replace /boundline-plan with the actual command). Do not use plain text or unicode arrows.
 Reply as a compact operator brief by default: preserve the ordered NDJSON event sequence, stop on `phase_request`, and surface `goal`, `authored_input_summary` or `authored_input_sources`, `execution_condition`, planning summary, key artifacts, `latest_status`, and exactly one emitted assistant-safe route: prefer `assistant_resume_command` when present, otherwise `assistant_next_command`. Keep the raw `resume_command` only as the hidden shell continuation when needed, and preserve the latest `next_command` only when no assistant-safe route is present. When the selected assistant-safe route is `/boundline-run`, present only that route to the user and keep any equivalent `boundline run` or `boundline orchestrate --assistant-host ...` mapping out of the visible next-step text unless the user explicitly asks for shell or backend details. When the planning handoff is stage-specific, treat the emitted `phase_request` as the next single planning stage to complete and preserve the exact raw `resume_command`, including any `--planning-stage-complete <stage_key>` marker, for shell execution only. Only surface raw `context_provenance`, `route_config_projection`, or guidance source dumps when the user explicitly asks for deeper detail.
 When an event carries `audit`, use it as the primary attribution block for the planning summary: prefer `audit.event`, `audit.algorithm`, `audit.actor`, `audit.outcome`, and `audit.message` over legacy flat actor fields. Preserve `audit.actor.participant_routes` and `audit.actor.mixed_routes` exactly when planning governance or review used multiple reviewer routes.
 
@@ -143,13 +150,8 @@ If `expected_answer.type` is `suggested_choice`, present `expected_answer.option
 
 When the `phase_request` has `kind: "review"` and `expected_answer.type: "confirmation"`, the packet is already substantively authored; present the confirmation gate to the user and wait for their decision.
 
-## Next-Step Routing (MANDATORY FORMAT)
-Surface exactly one action link matching the actual required next step.
-
-Do NOT always propose `/boundline-run`. If the session is blocked (e.g., by governance, non-credible context, or missing input), propose the command that resolves the block as reported by the CLI (e.g., `/boundline-inspect`, `/boundline-plan`, or `/boundline-goal`).
-Only propose `/boundline-run` or `/boundline-step` if the CLI output explicitly permits execution to advance.
-
-Before the action link, include one brief natural-language sentence summarizing why this action is offered.
-Prefer an emitted `phase_request.assistant_resume_command` when present; otherwise prefer `assistant_next_command`; otherwise follow the CLI-reported `next_command`. Render whichever assistant-safe route wins using the format: `[▶ Run /command-name](command:github.copilot.chat.execute?%5B%22%2Fcommand-name%22%5D)`.
-
-Allowed follow-up commands: `/boundline-step`, `/boundline-run`, `/boundline-plan`, `/boundline-goal`, `/boundline-inspect`.
+## Next-Step Routing
+Prefer an emitted `assistant_resume_command` when a `phase_request` is present; otherwise prefer `assistant_next_command`; otherwise follow the CLI-reported `next_command`.
+Render assistant-safe follow-up actions as clickable Copilot command links or the defined handoff buttons, for example `[Run /boundline-run](command:github.copilot.chat.execute?%5B%22%2Fboundline-run%22%5D)`.
+Route to `/boundline-plan` only when planning is blocked, context is non-credible, or brief authoring is still required.
+Allowed follow-up commands: `/boundline-step`, `/boundline-run`, `/boundline-plan`, `/boundline-goal`.

@@ -14,6 +14,9 @@ Compatibility follow-up means the user previously chose `boundline run --compati
 ## Required Context
 - `workspace_ref`
 
+## Pre-Execution Checks
+When workspace or session readiness is uncertain, run `boundline probe --workspace <workspace> --json` for a fast preflight snapshot. If the probe recommends `boundline init` and omits an assistant handoff, stop and surface the host bootstrap CLI path instead of inventing a repo-local handoff. If the probe recommends doctor, redirect to `/boundline-doctor` before relying on `status` to infer session state.
+
 ## Shell-Enabled Path
 Run `boundline status --workspace <workspace> --json` exactly once.
 If the user asks for a richer state view than `status`, route to `/boundline-inspect` instead of switching to the removed terminal UI surface.

@@ -327,6 +327,7 @@ fn test_step_run_status_and_next_definition_sections_and_backend_mappings() {
         (
             asset_path("assistant/claude/commands/boundline-status.md"),
             &[
+                "boundline probe --workspace <workspace> --json",
                 "boundline status --workspace <workspace>",
                 "latest_trace_ref",
                 "authored_input_summary",
@@ -342,6 +343,23 @@ fn test_step_run_status_and_next_definition_sections_and_backend_mappings() {
         (
             asset_path("assistant/codex/commands/boundline-status.md"),
             &[
+                "boundline probe --workspace <workspace> --json",
+                "boundline status --workspace <workspace>",
+                "latest_trace_ref",
+                "authored_input_summary",
+                "authored_input_sources",
+                "authored_input_deduplicated_sources",
+                "governance_next_action",
+                "follow_through_guidance",
+                "follow_through_evidence_source",
+                "next_command",
+            ][..],
+            &["boundline inspect --workspace <workspace>"][..],
+        ),
+        (
+            asset_path("assistant/antigravity/commands/boundline-status.md"),
+            &[
+                "boundline probe --workspace <workspace> --json",
                 "boundline status --workspace <workspace>",
                 "latest_trace_ref",
                 "authored_input_summary",
@@ -357,6 +375,7 @@ fn test_step_run_status_and_next_definition_sections_and_backend_mappings() {
         (
             asset_path("assistant/copilot/prompts/boundline-status.prompt.md"),
             &[
+                "boundline probe --workspace <workspace> --json",
                 "boundline status --workspace <workspace>",
                 "latest_trace_ref",
                 "authored_input_summary",
@@ -406,6 +425,146 @@ fn test_step_run_status_and_next_definition_sections_and_backend_mappings() {
         assert_required_sections(&path, &content);
         assert_required_snippets(&path, &content, required);
         assert_forbidden_snippets(&path, &content, forbidden);
+    }
+}
+
+#[test]
+fn status_definition_sections_and_probe_preflight_mappings() {
+    let assets = [
+        (
+            asset_path("assistant/claude/commands/boundline-status.md"),
+            &[
+                "boundline probe --workspace <workspace> --json",
+                "boundline init",
+                "/boundline-doctor",
+                "boundline status --workspace <workspace>",
+                "latest_trace_ref",
+                "authored_input_summary",
+                "authored_input_sources",
+                "authored_input_deduplicated_sources",
+                "governance_next_action",
+                "follow_through_guidance",
+                "follow_through_evidence_source",
+                "next_command",
+            ][..],
+        ),
+        (
+            asset_path("assistant/codex/commands/boundline-status.md"),
+            &[
+                "boundline probe --workspace <workspace> --json",
+                "boundline init",
+                "/boundline-doctor",
+                "boundline status --workspace <workspace>",
+                "latest_trace_ref",
+                "authored_input_summary",
+                "authored_input_sources",
+                "authored_input_deduplicated_sources",
+                "governance_next_action",
+                "follow_through_guidance",
+                "follow_through_evidence_source",
+                "next_command",
+            ][..],
+        ),
+        (
+            asset_path("assistant/antigravity/commands/boundline-status.md"),
+            &[
+                "boundline probe --workspace <workspace> --json",
+                "boundline init",
+                "/boundline-doctor",
+                "boundline status --workspace <workspace>",
+                "latest_trace_ref",
+                "authored_input_summary",
+                "authored_input_sources",
+                "authored_input_deduplicated_sources",
+                "governance_next_action",
+                "follow_through_guidance",
+                "follow_through_evidence_source",
+                "next_command",
+            ][..],
+        ),
+        (
+            asset_path("assistant/copilot/prompts/boundline-status.prompt.md"),
+            &[
+                "boundline probe --workspace <workspace> --json",
+                "boundline init",
+                "/boundline-doctor",
+                "boundline status --workspace <workspace>",
+                "latest_trace_ref",
+                "authored_input_summary",
+                "authored_input_sources",
+                "authored_input_deduplicated_sources",
+                "governance_next_action",
+                "follow_through_guidance",
+                "follow_through_evidence_source",
+                "next_command",
+            ][..],
+        ),
+    ];
+
+    for (path, required) in assets {
+        let content = read_asset(&path);
+        assert_required_sections(&path, &content);
+        assert_required_snippets(&path, &content, required);
+    }
+}
+
+#[test]
+fn recover_definition_sections_and_backend_mappings() {
+    let assets = [
+        (
+            asset_path("assistant/claude/commands/boundline-recover.md"),
+            &[
+                "boundline probe --workspace <workspace> --json",
+                "boundline status --workspace <workspace> --json",
+                "latest_checkpoint_restore_command",
+                "corrected_command",
+                "next_command",
+                "/boundline-inspect",
+                "/boundline-goal",
+            ][..],
+        ),
+        (
+            asset_path("assistant/codex/commands/boundline-recover.md"),
+            &[
+                "boundline probe --workspace <workspace> --json",
+                "boundline status --workspace <workspace> --json",
+                "latest_checkpoint_restore_command",
+                "corrected_command",
+                "next_command",
+                "/boundline-inspect",
+                "/boundline-goal",
+            ][..],
+        ),
+        (
+            asset_path("assistant/antigravity/commands/boundline-recover.md"),
+            &[
+                "boundline probe --workspace <workspace> --json",
+                "boundline status --workspace <workspace> --json",
+                "latest_checkpoint_restore_command",
+                "corrected_command",
+                "next_command",
+                "/boundline-inspect",
+                "/boundline-goal",
+            ][..],
+        ),
+        (
+            asset_path("assistant/copilot/prompts/boundline-recover.prompt.md"),
+            &[
+                "boundline probe --workspace <workspace> --json",
+                "boundline status --workspace <workspace> --json",
+                "latest_checkpoint_restore_command",
+                "corrected_command",
+                "next_command",
+                "/boundline-inspect",
+                "/boundline-goal",
+            ][..],
+        ),
+    ];
+
+    for (path, required) in assets {
+        let content = read_asset(&path);
+        assert_required_sections(&path, &content);
+        assert_required_snippets(&path, &content, required);
     }
 }
 

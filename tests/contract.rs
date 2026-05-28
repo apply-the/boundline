@@ -76,6 +76,9 @@ mod session_command_contract;
 #[path = "contract/host_command_output_contract.rs"]
 mod host_command_output_contract;
 
+#[path = "contract/probe_command_contract.rs"]
+mod probe_command_contract;
+
 #[path = "contract/planning_gate_pipeline_contract.rs"]
 mod planning_gate_pipeline_contract;
 

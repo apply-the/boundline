@@ -1,5 +1,12 @@
 ---
 description: "Preview or apply Boundline-managed workspace upgrades"
+handoffs:
+  - label: Check Status
+    agent: boundline-status
+    prompt: Show current session status
+  - label: Run Workflow
+    agent: boundline-run
+    prompt: Execute the planned workflow
 ---
 
 # Command: /boundline-update
@@ -33,7 +40,3 @@ Wait for pasted output before continuing.
 
 ## Output Interpretation
 Provide a conversational, human-readable summary of the update result. Do NOT dump raw CLI sections back verbatim when a concise summary is enough. Reply as a compact operator brief by default: preserve whether the run is preview-only or status-only, the reported `update_status` when present, `targets`, `manifest`, `tracked_artifacts`, summary totals, and the CLI-reported `next_steps`. Only expand `adoptions`, `updates`, `orphaned_artifacts`, `conflicts`, or detailed file-by-file changes when the user explicitly asks for more detail or the CLI reports a blocked repair path. Preserve `--apply`, `--force --apply`, `--adopt --force --apply`, and `--prune --apply` guidance exactly when the CLI emits them.
-
-## Next-Step Routing
-Prefer the CLI-reported `next_steps` or follow-up command. If update reports install or workspace health issues, route to the reported doctor or status path instead of inventing a new repair flow.
-Allowed follow-up commands: `/boundline-update`, `/boundline-doctor`, `/boundline-config-show`, `/boundline-status`.

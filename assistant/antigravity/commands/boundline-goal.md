@@ -17,7 +17,9 @@ Capture or refine the active session goal through the orchestrator so runtime-ow
 Use the text after `/boundline-goal` as the goal source when present. If the user supplies only brief paths, treat the referenced Markdown as the goal source. Do not ask the user to repeat non-empty input.
 
 ## Pre-Execution Checks
-Confirm only that the workspace is known and that at least one goal source is available. Do not read `.specify/extensions.yml` or run generic pre/post hooks; Boundline uses runtime `phase_request`, `assistant_resume_command`, and `assistant_next_command` for handoff.
+When workspace readiness is uncertain, run `boundline probe --workspace <workspace> --json` for a fast preflight snapshot. The probe reports workspace initialization, provider health, active session state, and a `recommended_next` action. If the probe recommends `boundline init` and omits an assistant handoff, treat that as bootstrap-only and surface the CLI init path for the current host instead of inventing a repo-local command. If the probe recommends doctor, redirect to `/boundline-doctor`.
+
+Otherwise confirm only that the workspace is known and that at least one goal source is available. Do not read `.specify/extensions.yml` or run generic pre/post hooks; Boundline uses runtime `phase_request`, `assistant_resume_command`, and `assistant_next_command` for handoff.
 
 ## Execution Flow
 1. Run `boundline orchestrate` once with the known workspace and goal or brief sources.

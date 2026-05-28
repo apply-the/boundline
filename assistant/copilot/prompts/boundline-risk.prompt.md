@@ -36,8 +36,6 @@ Wait for pasted output before continuing.
 
 ## Output Interpretation
 Provide a conversational, human-readable summary of the session state. Do NOT use raw JSON keys or snake_case field names (like `next_command`, `latest_status`, `authored_input_summary`, etc.) in your response. Translate all state into natural language.
-When suggesting the next step, you MUST output a VS Code Copilot command link to render a clickable button. Use EXACTLY this syntax format:
-`[Run /boundline-plan](command:github.copilot.chat.execute?%5B%22%2Fboundline-plan%22%5D)` (replace /boundline-plan with the actual command). Do not use plain text or unicode arrows.
 Summarize `execution_condition`, `failure_evidence`, `adaptive_evidence`, `review_timeline`, `terminal_status`, `terminal_reason`, `governance_next_action`, `follow_through_guidance`, and `next_command`. Preserve `context_summary`, `context_credibility`, `context_staleness_reason`, and any Canon-governed packet, approval, readiness, security, audit, or promotion wording exactly. When evidence is partial, stale, or missing, state the risk confidence as bounded rather than certain.
 
 ## Next-Step Routing

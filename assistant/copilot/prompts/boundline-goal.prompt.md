@@ -1,5 +1,13 @@
 ---
 description: "Define or refine the active Boundline session goal"
+handoffs:
+  - label: Plan Workflow
+    agent: boundline-plan
+    prompt: Plan the active session goal
+    send: true
+  - label: Check Status
+    agent: boundline-status
+    prompt: Show current session status
 ---
 
 # Command: /boundline-goal
@@ -21,7 +29,9 @@ Capture or refine the active session goal through the orchestrator so runtime-ow
 Use the text after `/boundline-goal` as the goal source when present. If the user supplies only brief paths, treat the referenced Markdown as the goal source. Do not ask the user to repeat non-empty input.
 
 ## Pre-Execution Checks
-Confirm only that the workspace is known and that at least one goal source is available. Do not read `.specify/extensions.yml` or run generic pre/post hooks; Boundline uses runtime `phase_request`, `assistant_resume_command`, and `assistant_next_command` for handoff.
+When workspace readiness is uncertain, run `boundline probe --workspace <workspace> --json` for a fast preflight snapshot. The probe reports workspace initialization, provider health, active session state, and a `recommended_next` action. If the probe recommends `boundline init` and omits an assistant handoff, treat that as bootstrap-only and surface the CLI init path for the current host instead of inventing a repo-local command. If the probe recommends doctor, redirect to `/boundline-doctor`.
+
+Otherwise confirm only that the workspace is known and that at least one goal source is available. Do not read `.specify/extensions.yml` or run generic pre/post hooks; Boundline uses runtime `phase_request`, `assistant_resume_command`, and `assistant_next_command` for handoff.
 
 ## Execution Flow
 1. Derive a concise 2-4 word kebab-case slug from the goal when opening a new session.
@@ -73,27 +83,10 @@ Wait for pasted output before continuing.
 
 ## Output Interpretation
 Provide a conversational, human-readable summary of the session state. Do NOT use raw JSON keys or snake_case field names (like `next_command`, `latest_status`, `authored_input_summary`, etc.) in your response. Translate all state into natural language.
-When suggesting the next step, you MUST output a VS Code Copilot command link to render a clickable button. Use EXACTLY this syntax format:
-`[Run /boundline-plan](command:github.copilot.chat.execute?%5B%22%2Fboundline-plan%22%5D)` (replace /boundline-plan with the actual command). Do not use plain text or unicode arrows.
 Reply as a compact operator brief by default: preserve the ordered NDJSON event sequence, stop on a structured goal `phase_request`, and surface the recorded goal or `authored_input_summary`, `authored_input_sources`, the latest status, and exactly one valid follow-up route. When the stream emits a structured goal `phase_request`, explain `phase_request.reason` in one concise line, ask exactly `phase_request.question`, preserve `phase_request.request_id`, `phase_request.expected_answer`, any `assistant_resume_command`, and the raw `resume_command` including any `--answer "<answer>"` placeholder for shell continuation only. Treat legacy clarification fields (`clarification_prompt`, `clarification_missing_fields`, or `clarification_questions`) as compatibility fallback only when no structured `phase_request` is present.
 When an NDJSON event also carries `audit`, use that projection as the authoritative explanation of who acted and what happened: preserve `audit.event`, `audit.algorithm`, `audit.actor.display_name` or `audit.actor.id`, `audit.outcome.status`, and `audit.message`. If `audit.actor.participant_routes` or `audit.actor.mixed_routes` is present, keep that multi-route attribution explicit instead of flattening it to one route.
 
 **Critical rule — inline question required:** When the stream contains a `phase_request` with a non-null `question` field, you MUST ask that exact question as your direct reply. Do NOT render an action link or button in place of the question — asking the question inline IS the next action. Only AFTER the user answers should you construct the next shell run substituting the answer into `resume_command`'s `--answer "<answer>"` placeholder.
-
-## Next-Step Routing (MANDATORY FORMAT)
-Surface exactly two action links: one **primary** (advance) and one **secondary** (refine/inspect, shown only when the condition is met).
-
-**Primary** (always shown): render as a clickable link:
-[▶ Run /boundline-plan](command:github.copilot.chat.execute?%5B%22%2Fboundline-plan%22%5D)
-
-**Secondary** (shown only when a `phase_request.question` is active or clarification is still pending): render as:
-[▶ Run /boundline-goal](command:github.copilot.chat.execute?%5B%22%2Fboundline-goal%22%5D)
-
-If the secondary condition is not met, show only the primary button.
-Before the action links, include one brief natural-language sentence summarizing why these actions are offered.
-Prefer an emitted `phase_request.assistant_resume_command` when present; otherwise prefer `assistant_next_command`; otherwise follow the CLI-reported `next_command`. Render whichever assistant-safe route wins using the same clickable format: `[▶ Run /command-name](command:github.copilot.chat.execute?%5B%22%2Fcommand-name%22%5D)`.
-
-Allowed follow-up commands: `/boundline-plan`, `/boundline-goal`.
 
 ## Agent Mode Override
 This prompt runs as a VS Code Copilot chat participant. In Agent Mode, where tool calls are available, an interactive rendering override applies to `phase_request` events.
@@ -110,3 +103,9 @@ When tools are available and the stream contains a `phase_request`:
 4. After the user answers, substitute the answer into `resume_command`'s `--answer "<user_answer>"` placeholder and run or surface the resulting command.
 
 When tools are unavailable, fall back to the inline question rule in `## Output Interpretation`.
+
+## Next-Step Routing
+If the CLI emits a structured goal `phase_request` or reports legacy clarification fields, route only to `/boundline-goal`.
+Otherwise prefer `assistant_resume_command` when present; otherwise prefer `assistant_next_command`; otherwise follow the CLI-reported `next_command`, which is typically `/boundline-plan`.
+Render assistant-safe follow-up actions as clickable Copilot command links or the defined handoff buttons, for example `[Run /boundline-plan](command:github.copilot.chat.execute?%5B%22%2Fboundline-plan%22%5D)`.
+Allowed follow-up commands: `/boundline-plan`, `/boundline-goal`.
