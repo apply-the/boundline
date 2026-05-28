@@ -34,6 +34,7 @@ fn governed_planning_workspace(prefix: &str) -> PathBuf {
             "Authentication boundary: GitHub OAuth2 stops at token validation; service authorization begins in Boundline route selection.\n",
             "In-scope API operations: goal, plan, and orchestrate for the first slice.\n",
             "Domain entities in scope: session, plan brief, run brief, and planning stage brief.\n",
+            "Success criteria: governed planning emits one reusable stage handoff at a time with resume metadata.\n",
             "Validation target: cargo test -p boundline-cli --lib orchestrate -- --test-threads=1.\n",
         ),
     )
@@ -110,6 +111,23 @@ fn write_pending_planning_canon_command(workspace: &Path) -> PathBuf {
     permissions.set_mode(0o755);
     fs::set_permissions(&command_path, permissions).unwrap();
     command_path
+}
+
+fn write_reusable_backlog_packet(workspace: &Path) {
+    let backlog_dir = workspace.join(".boundline/governance/planning/backlog");
+    fs::create_dir_all(&backlog_dir).unwrap();
+    fs::write(
+        backlog_dir.join("backlog.md"),
+        concat!(
+            "# Backlog\n\n",
+            "MVP: hand off one governed backlog packet into terminal execution.\n",
+            "Dependencies: T001 -> T002 -> T003.\n\n",
+            "- [ ] T001 Record host planning-stage completion in the governed lifecycle.\n",
+            "- [ ] T002 Promote reusable backlog artifacts for execution gating.\n",
+            "- [ ] T003 Resume execution after the backlog handoff is complete.\n",
+        ),
+    )
+    .unwrap();
 }
 
 #[test]
@@ -273,6 +291,8 @@ fn orchestrate_staged_planning_resume_can_handoff_backlog_into_terminal_executio
         }),
         "{third_text}"
     );
+
+    write_reusable_backlog_packet(&workspace);
 
     let fourth = run_boundline_in(
         &workspace,

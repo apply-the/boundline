@@ -18,8 +18,8 @@ use crate::domain::governance::{CanonMode, CanonModeSelectionPreference, Governa
 use crate::domain::trace::current_timestamp_millis;
 
 use super::{
-    assistant_assets, checkpoint, cluster, config, diagnostics, govern, init, inspect, orchestrate,
-    output, run, session, workflow, workspace as cli_workspace,
+    assistant_assets, checkpoint, cluster, config, diagnostics, govern, init, inspect, models_auth,
+    orchestrate, output, run, session, workflow, workspace as cli_workspace,
 };
 
 /// Top-level CLI parser for the Boundline executable.
@@ -71,6 +71,7 @@ pub enum CommandName {
     Assistant,
     Config,
     Cluster,
+    Models,
 }
 
 impl CommandName {
@@ -96,6 +97,7 @@ impl CommandName {
             Self::Assistant => "assistant",
             Self::Config => "config",
             Self::Cluster => "cluster",
+            Self::Models => "models",
         }
     }
 }
@@ -443,6 +445,10 @@ pub enum DeveloperCommand {
         #[command(subcommand)]
         command: ClusterSubcommand,
     },
+    Models {
+        #[command(subcommand)]
+        command: ModelsSubcommand,
+    },
 }
 
 /// Workflow-specific subcommands.
@@ -734,6 +740,34 @@ pub enum ConfigSubcommand {
     },
 }
 
+/// Model provider authentication and status subcommands.
+#[derive(Debug, Subcommand)]
+pub enum ModelsSubcommand {
+    Auth {
+        #[command(subcommand)]
+        command: ModelsAuthSubcommand,
+    },
+}
+
+/// Authentication management for model providers.
+#[derive(Debug, Subcommand)]
+pub enum ModelsAuthSubcommand {
+    /// Authenticate with a model provider using device-flow OAuth.
+    Login {
+        /// Provider identifier (e.g. github-copilot).
+        #[arg(long, default_value = "github-copilot")]
+        provider: String,
+    },
+    /// Show authentication status for configured providers.
+    Status,
+    /// Remove stored authentication for a provider.
+    Remove {
+        /// Provider identifier to remove (e.g. github-copilot).
+        #[arg(long)]
+        provider: String,
+    },
+}
+
 impl DeveloperCommand {
     /// Returns the stable name for the selected top-level command.
     pub const fn name(&self) -> CommandName {
@@ -758,6 +792,7 @@ impl DeveloperCommand {
             Self::Update { .. } => CommandName::Update,
             Self::Config { .. } => CommandName::Config,
             Self::Cluster { .. } => CommandName::Cluster,
+            Self::Models { .. } => CommandName::Models,
         }
     }
 }
@@ -1154,6 +1189,18 @@ impl DeveloperCommandSession {
                 exit_status: None,
                 trace_location: None,
             },
+            DeveloperCommand::Models { .. } => Self {
+                command_name: CommandName::Models,
+                workspace_ref: None,
+                requires_workspace_ref: false,
+                install_check: false,
+                goal: None,
+                trace_ref: None,
+                started_at: current_timestamp_millis(),
+                completed_at: None,
+                exit_status: None,
+                trace_location: None,
+            },
         }
     }
 
@@ -1198,7 +1245,8 @@ impl DeveloperCommandSession {
             | CommandName::Update
             | CommandName::Assistant
             | CommandName::Config
-            | CommandName::Cluster => {}
+            | CommandName::Cluster
+            | CommandName::Models => {}
         }
 
         if matches!(self.command_name, CommandName::Goal | CommandName::Orchestrate)
@@ -1612,6 +1660,7 @@ fn command_environment_workspace(command: &DeveloperCommand) -> Option<PathBuf> 
             }
         },
         DeveloperCommand::Assistant { .. } => None,
+        DeveloperCommand::Models { .. } => None,
     }
 }
 
@@ -1683,6 +1732,7 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
         DeveloperCommand::Update { .. } => dispatch_update_command(command),
         DeveloperCommand::Config { command } => dispatch_config_command(command),
         DeveloperCommand::Cluster { command } => dispatch_cluster_command(command),
+        DeveloperCommand::Models { command } => dispatch_models_command(command),
     }
 }
 
@@ -2473,6 +2523,19 @@ fn dispatch_internal_command_mismatch(command_name: CommandName) -> DispatchOutc
         format!("internal dispatch mismatch for {}", command_name.as_str()),
         None,
     )
+}
+
+fn dispatch_models_command(command: &ModelsSubcommand) -> DispatchOutcome {
+    let result = match command {
+        ModelsSubcommand::Auth { command: auth_command } => match auth_command {
+            ModelsAuthSubcommand::Login { provider } => models_auth::execute_login(provider),
+            ModelsAuthSubcommand::Status => models_auth::execute_status(),
+            ModelsAuthSubcommand::Remove { provider } => models_auth::execute_remove(provider),
+        },
+    };
+    dispatch_prefixed_result(CommandName::Models, result, |report| {
+        DispatchOutcome::text(report.exit_status, report.terminal_output, None)
+    })
 }
 
 #[cfg(test)]
@@ -4550,6 +4613,7 @@ fn red_to_green_addition() {
                 "Authentication boundary: GitHub OAuth2 stops at token validation; service authorization begins in Boundline route selection.\n",
                 "In-scope API operations: start, goal, plan, and orchestrate for the first slice.\n",
                 "Domain entities in scope: session, plan brief, run brief, and planning stage brief.\n",
+                "Success criteria: the first governed slice can progress through the next planning stage with reusable planning artifacts.\n",
                 "Validation target: cargo test -p boundline-cli --lib orchestrate -- --test-threads=1.\n",
             ),
         )
@@ -4612,6 +4676,7 @@ fn red_to_green_addition() {
                 "Authentication boundary: GitHub OAuth2 stops at token validation; service authorization begins in Boundline route selection.\n",
                 "In-scope API operations: start, goal, plan, and orchestrate for the first slice.\n",
                 "Domain entities in scope: session, plan brief, run brief, and planning stage brief.\n",
+                "Success criteria: the first governed slice can progress through the next planning stage with reusable planning artifacts.\n",
                 "Validation target: cargo test -p boundline-cli --lib orchestrate -- --test-threads=1.\n",
             ),
         )
@@ -4689,6 +4754,7 @@ fn red_to_green_addition() {
                 "Authentication boundary: GitHub OAuth2 stops at token validation; service authorization begins in Boundline route selection.\n",
                 "In-scope API operations: start, goal, plan, and orchestrate for the first slice.\n",
                 "Domain entities in scope: session, plan brief, run brief, and planning stage brief.\n",
+                "Success criteria: the first governed slice can progress through the next planning stage with reusable planning artifacts.\n",
                 "Validation target: cargo test -p boundline-cli --lib orchestrate -- --test-threads=1.\n",
             ),
         )
@@ -4761,6 +4827,7 @@ fn red_to_green_addition() {
                 "Authentication boundary: GitHub OAuth2 stops at token validation; service authorization begins in Boundline route selection.\n",
                 "In-scope API operations: goal, plan, and orchestrate for the first slice.\n",
                 "Domain entities in scope: session, plan brief, run brief, and planning stage brief.\n",
+                "Success criteria: the first governed slice can progress through the next planning stage with reusable planning artifacts.\n",
                 "Validation target: cargo test -p boundline-cli --lib orchestrate -- --test-threads=1.\n",
             ),
         )
@@ -4888,6 +4955,7 @@ fn red_to_green_addition() {
                 "Authentication boundary: GitHub OAuth2 stops at token validation; service authorization begins in Boundline route selection.\n",
                 "In-scope API operations: goal, plan, and orchestrate for the first slice.\n",
                 "Domain entities in scope: session, plan brief, run brief, and planning stage brief.\n",
+                "Success criteria: the first governed slice can progress through the next planning stage with reusable planning artifacts.\n",
                 "Validation target: cargo test -p boundline-cli --lib orchestrate -- --test-threads=1.\n",
             ),
         )
@@ -4950,13 +5018,13 @@ fn red_to_green_addition() {
         assert!(stream.contains("\"kind\":\"clarification\""), "{stream}");
         assert!(
             stream.contains(
-                "\"question\":\"Which persistence store is authoritative for the first slice?\""
+                "\"question\":\"Which API operations, endpoints, or RPC methods are in scope first?\""
             ),
             "{stream}"
         );
         assert!(stream.contains("\"type\":\"suggested_choice\""), "{stream}");
-        assert!(stream.contains("\"label\":\"PostgreSQL\""), "{stream}");
-        assert!(stream.contains("\"label\":\"in-memory\""), "{stream}");
+        assert!(stream.contains("\"label\":\"REST CRUD\""), "{stream}");
+        assert!(stream.contains("\"label\":\"gRPC\""), "{stream}");
         assert!(stream.contains("--answer \\\"<answer>\\\""), "{stream}");
     }
 
@@ -4995,7 +5063,7 @@ fn red_to_green_addition() {
         assert!(!request_id.is_empty(), "{first_stream}");
         assert!(
             first_stream.contains(
-                "\"question\":\"Which persistence store is authoritative for the first slice?\""
+                "\"question\":\"Which API operations, endpoints, or RPC methods are in scope first?\""
             ),
             "{first_stream}"
         );
@@ -5013,7 +5081,7 @@ fn red_to_green_addition() {
             intent: OrchestrateIntent::ContinueUntilPhaseRequest,
             planning_stage_complete: None,
             request_id: Some(request_id),
-            answer: Some("Postgres".to_string()),
+            answer: Some("REST CRUD endpoints over HTTP".to_string()),
             assistant_host: None,
             json_stream: true,
             no_canon: false,
@@ -5029,7 +5097,7 @@ fn red_to_green_addition() {
         assert!(second_stream.contains("\"phase_kind\":\"goal_capture\""), "{second_stream}");
         assert!(
             second_stream.contains(
-                "\"question\":\"Where does OAuth2 or authentication stop and service-level authorization begin?\""
+                "\"question\":\"What measurable success criteria should prove the goal is complete?\""
             ),
             "{second_stream}"
         );

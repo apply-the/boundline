@@ -119,6 +119,160 @@ fn test_goal_and_plan_definition_sections_and_backend_mappings() {
 }
 
 #[test]
+fn goal_quality_contract_sections_are_present_in_assistant_assets() {
+    let goal_assets = [
+        asset_path("assistant/claude/commands/boundline-goal.md"),
+        asset_path("assistant/codex/commands/boundline-goal.md"),
+        asset_path("assistant/antigravity/commands/boundline-goal.md"),
+        asset_path("assistant/copilot/prompts/boundline-goal.prompt.md"),
+    ];
+    let goal_required = [
+        "## User Input",
+        "## Pre-Execution Checks",
+        "## Execution Flow",
+        "## Goal Quality Validation",
+        "## Quick Guidelines",
+        "## Reasonable Defaults",
+        "## Success Criteria Guidelines",
+        "## Done When",
+        "goal_quality_state",
+        "goal_quality_findings",
+        "goal_quality_assumptions",
+        "Do not read `.specify/extensions.yml`",
+        "scope > security/privacy > user experience > technical details",
+        "Maximum 3",
+    ];
+
+    for path in goal_assets {
+        let content = read_asset(&path);
+        assert_required_snippets(&path, &content, &goal_required);
+    }
+
+    let plan_assets = [
+        asset_path("assistant/claude/commands/boundline-plan.md"),
+        asset_path("assistant/codex/commands/boundline-plan.md"),
+        asset_path("assistant/antigravity/commands/boundline-plan.md"),
+        asset_path("assistant/copilot/prompts/boundline-plan.prompt.md"),
+    ];
+
+    for path in plan_assets {
+        let content = read_asset(&path);
+        assert_required_snippets(
+            &path,
+            &content,
+            &[
+                "Do not proceed from chat-only assumptions when goal quality or plan quality is blocked",
+                "goal_quality_state",
+            ],
+        );
+    }
+
+    let template_path = asset_path("assistant/prompts/goal-template.md");
+    let template = read_asset(&template_path);
+    assert_required_snippets(
+        &template_path,
+        &template,
+        &[
+            "## Success Criteria",
+            "## Acceptance Scenarios",
+            "## Edge Cases",
+            "## Reasonable Defaults",
+            "## Goal Quality Checklist",
+            "## Done When",
+        ],
+    );
+}
+
+#[test]
+fn plan_quality_contract_sections_are_present_in_assistant_assets() {
+    let plan_assets = [
+        asset_path("assistant/claude/commands/boundline-plan.md"),
+        asset_path("assistant/codex/commands/boundline-plan.md"),
+        asset_path("assistant/antigravity/commands/boundline-plan.md"),
+        asset_path("assistant/copilot/prompts/boundline-plan.prompt.md"),
+    ];
+    let required = [
+        "## User Input",
+        "## Pre-Execution Checks",
+        "## Execution Flow",
+        "## Plan Quality Validation",
+        "## Gate Handling",
+        "## Planning Analysis Gate",
+        "## Reasonable Defaults",
+        "## Quick Guidelines",
+        "## Success Criteria Guidelines",
+        "## Done When",
+        "plan_quality_state",
+        "plan_quality_findings",
+        "plan_quality_assumptions",
+        "Do not proceed from chat-only assumptions when goal quality or plan quality is blocked",
+        "phase_request",
+    ];
+
+    for path in plan_assets {
+        let content = read_asset(&path);
+        assert_required_snippets(&path, &content, &required);
+    }
+}
+
+#[test]
+fn planning_analysis_contract_sections_are_present_in_assistant_assets() {
+    let assets = [
+        asset_path("assistant/claude/commands/boundline-plan.md"),
+        asset_path("assistant/codex/commands/boundline-plan.md"),
+        asset_path("assistant/antigravity/commands/boundline-plan.md"),
+        asset_path("assistant/copilot/prompts/boundline-plan.prompt.md"),
+        asset_path("assistant/claude/commands/boundline-run.md"),
+        asset_path("assistant/codex/commands/boundline-run.md"),
+        asset_path("assistant/antigravity/commands/boundline-run.md"),
+        asset_path("assistant/copilot/prompts/boundline-run.prompt.md"),
+        asset_path("assistant/claude/commands/boundline-status.md"),
+        asset_path("assistant/codex/commands/boundline-status.md"),
+        asset_path("assistant/antigravity/commands/boundline-status.md"),
+        asset_path("assistant/copilot/prompts/boundline-status.prompt.md"),
+        asset_path("assistant/claude/commands/boundline-inspect.md"),
+        asset_path("assistant/codex/commands/boundline-inspect.md"),
+        asset_path("assistant/antigravity/commands/boundline-inspect.md"),
+        asset_path("assistant/copilot/prompts/boundline-inspect.prompt.md"),
+    ];
+    let required =
+        ["planning_analysis_state", "planning_analysis_findings", "planning_analysis_coverage"];
+
+    for path in assets {
+        let content = read_asset(&path);
+        assert_required_snippets(&path, &content, &required);
+    }
+}
+
+#[test]
+fn backlog_quality_contract_sections_are_present_in_assistant_assets() {
+    let plan_and_run_assets = [
+        asset_path("assistant/claude/commands/boundline-plan.md"),
+        asset_path("assistant/codex/commands/boundline-plan.md"),
+        asset_path("assistant/antigravity/commands/boundline-plan.md"),
+        asset_path("assistant/copilot/prompts/boundline-plan.prompt.md"),
+        asset_path("assistant/claude/commands/boundline-run.md"),
+        asset_path("assistant/codex/commands/boundline-run.md"),
+        asset_path("assistant/antigravity/commands/boundline-run.md"),
+        asset_path("assistant/copilot/prompts/boundline-run.prompt.md"),
+    ];
+    let required = [
+        "backlog_quality_state",
+        "backlog_quality_findings",
+        "backlog_task_count",
+        "backlog_mvp_scope",
+        "backlog_unmapped_items",
+        "do not route to",
+        "Canon backlog is governed source material",
+    ];
+
+    for path in plan_and_run_assets {
+        let content = read_asset(&path);
+        assert_required_snippets(&path, &content, &required);
+    }
+}
+
+#[test]
 fn test_step_run_status_and_next_definition_sections_and_backend_mappings() {
     let assets = [
         (

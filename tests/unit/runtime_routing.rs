@@ -1,7 +1,8 @@
 use serde_json::json;
 
 use boundline::domain::brief::{
-    AuthoredBriefBundle, AuthoredBriefResolutionState, InputSourceKind, InputSourceReference,
+    AuthoredBriefBundle, AuthoredBriefResolutionState, GoalQualityAssessment, InputSourceKind,
+    InputSourceReference,
 };
 use boundline::domain::flow_policy::FlowPolicy;
 use boundline::domain::goal_plan::{GoalPlan, GoalPlanFlowMode, InferredFlow, PlannedTask};
@@ -389,6 +390,7 @@ fn plan_task_blocks_on_negotiation_and_authored_brief_clarifications() {
         deduplicated_sources: Vec::new(),
         governance_intent: None,
         resolution_state: AuthoredBriefResolutionState::ClarificationRequired,
+        goal_quality: GoalQualityAssessment::default(),
         clarification: Some(ClarificationRecord {
             clarification_id: "clar-1".to_string(),
             reason_kind: ClarificationReasonKind::UnboundedRequest,

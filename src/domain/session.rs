@@ -14,7 +14,7 @@ use crate::domain::context_intelligence::AdvancedContextProjection;
 use crate::domain::decision::{Decision, DecisionStatus};
 use crate::domain::flow::SessionFlowState;
 use crate::domain::flow_policy::FlowPolicy;
-use crate::domain::goal_plan::GoalPlan;
+use crate::domain::goal_plan::{GoalPlan, PlanningAnalysisCoverage, PlanningAnalysisFinding};
 use crate::domain::governance::{
     AutopilotDecisionRecord, CompactedCanonMemory, GovernanceConfidenceHandoff,
     GovernedSessionLifecycle, GovernedStagePacket, GovernedStageRecord, PacketReuseBinding,
@@ -1107,6 +1107,34 @@ pub struct SessionStatusView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authored_input_deduplicated_sources: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal_quality_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal_quality_findings: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal_quality_assumptions: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_quality_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_quality_findings: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_quality_assumptions: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backlog_quality_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backlog_quality_findings: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backlog_task_count: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backlog_mvp_scope: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backlog_unmapped_items: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub planning_analysis_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub planning_analysis_findings: Option<Vec<PlanningAnalysisFinding>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub planning_analysis_coverage: Option<PlanningAnalysisCoverage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_summary: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_credibility: Option<String>,
@@ -1314,6 +1342,20 @@ impl Default for SessionStatusView {
             authored_input_summary: None,
             authored_input_sources: None,
             authored_input_deduplicated_sources: None,
+            goal_quality_state: None,
+            goal_quality_findings: None,
+            goal_quality_assumptions: None,
+            plan_quality_state: None,
+            plan_quality_findings: None,
+            plan_quality_assumptions: None,
+            backlog_quality_state: None,
+            backlog_quality_findings: None,
+            backlog_task_count: None,
+            backlog_mvp_scope: None,
+            backlog_unmapped_items: None,
+            planning_analysis_state: None,
+            planning_analysis_findings: None,
+            planning_analysis_coverage: None,
             context_summary: None,
             context_credibility: None,
             context_primary_inputs: None,
@@ -3234,6 +3276,7 @@ mod tests {
             delight_feedback: record.delight_feedback.clone(),
             next_command: Some("boundline step".to_string()),
             explanation: "view is consistent".to_string(),
+            ..SessionStatusView::default()
         }
     }
 

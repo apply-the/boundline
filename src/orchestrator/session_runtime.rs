@@ -49,13 +49,17 @@ use crate::domain::distribution::SUPPORTED_CANON_VERSION;
 use crate::domain::flow::{FlowStepMetadata, built_in_flow, supported_flow_names_csv};
 use crate::domain::flow_policy::FlowPolicy;
 use crate::domain::follow_through::FollowThroughProjection;
-use crate::domain::goal_plan::GoalPlan;
+use crate::domain::goal_plan::{
+    ContextPackCredibility, GoalPlan, PlanQualityAssessment, PlanQualityState,
+    PlanningAnalysisProjection, PlanningAnalysisState,
+};
 use crate::domain::governance::{
-    ApprovalState, CanonAuthorityZone, CanonEvidenceInspectSummary, CanonIntendedPersona,
-    CanonMode, CanonModeSelectionPreference, CanonPossibleActionSummary,
-    CanonRecommendedActionSummary, CanonRiskClass, CompactedCanonMemory, CouncilProfile,
-    GovernanceLifecycleState, GovernanceRuntimeKind, GovernedSessionLifecycle, GovernedStageRecord,
-    MemoryCredibilityState, PacketReadiness, SystemContextBinding, execution_stage_key_for_mode,
+    ApprovalState, BacklogQualityAssessment, BacklogQualityState, CanonAuthorityZone,
+    CanonEvidenceInspectSummary, CanonIntendedPersona, CanonMode, CanonModeSelectionPreference,
+    CanonPossibleActionSummary, CanonRecommendedActionSummary, CanonRiskClass,
+    CompactedCanonMemory, CouncilProfile, GovernanceLifecycleState, GovernanceRuntimeKind,
+    GovernedSessionLifecycle, GovernedStageRecord, MemoryCredibilityState, PacketReadiness,
+    SystemContextBinding, backlog_quality_snapshot_for_lifecycle, execution_stage_key_for_mode,
     planned_canon_mode_sequence_for_flow, planning_canon_mode_for_stage_key,
     planning_canon_mode_sequence, planning_stage_brief_ref, planning_stage_key_for_mode,
     resolved_canon_mode,
@@ -133,6 +137,14 @@ use crate::orchestrator::review_trace::{
     record_reasoning_profile_events, record_review_step_completed, record_review_step_started,
 };
 use crate::orchestrator::terminal::{build_terminal_reason, task_status_for_condition};
+
+const PLAN_QUALITY_BLOCKED_HEADLINE: &str = "bounded context required before planning";
+const PLAN_QUALITY_BLOCKED_DEFAULT_PROMPT: &str =
+    "refresh the bounded planning context before planning can continue";
+const PLAN_QUALITY_CLARIFICATION_HEADLINE: &str = "planning clarification required";
+const PLAN_QUALITY_CLARIFICATION_PROMPT_PREFIX: &str = "planning is missing the following inputs: ";
+const PLAN_QUALITY_CLARIFICATION_DEFAULT_PROMPT: &str =
+    "capture the missing planning inputs before planning can continue";
 
 #[path = "session_runtime_checkpoint.rs"]
 mod checkpoint;
@@ -948,6 +960,7 @@ impl SessionRuntime {
         if session.goal_plan.is_none() {
             return Err(SessionRuntimeError::MissingGoalPlan);
         }
+        self.attempt_auto_clear_provider_block(session);
         if let Some(stage_record) = self.unresolved_planning_governance_record(session) {
             return Err(SessionRuntimeError::PlanningGovernanceUnresolved {
                 stage_key: stage_record.stage_key.clone(),
@@ -1221,6 +1234,23 @@ impl SessionRuntime {
         if no_flow {
             goal_plan.mark_flow_skipped();
         }
+        let plan_quality = goal_plan.plan_quality_assessment();
+        if !matches!(plan_quality.state, PlanQualityState::Ready) {
+            let (headline, prompt) = Self::plan_quality_gate_details(&goal_plan, &plan_quality);
+
+            session.active_flow = native_flow_state.clone();
+            session.active_task = None;
+            session.goal_plan = Some(goal_plan);
+            session.project_scale = project_scale_state_for_goal(&goal, "repair_context");
+            session.decisions.clear();
+            session.active_flow_policy = preserved_flow_policy.clone();
+            session.latest_status = SessionStatus::Blocked;
+            session.latest_terminal_reason = None;
+            session.latest_trace_ref = None;
+            session.updated_at = current_timestamp_millis();
+
+            return Err(SessionRuntimeError::ClarificationRequired { headline, prompt });
+        }
         if requested_flow.is_some() || session.active_flow.is_some() || no_flow {
             goal_plan
                 .confirm()
@@ -1243,6 +1273,15 @@ impl SessionRuntime {
             lifecycle.planning_input_fingerprint = Some(planning_fingerprint);
         }
         let planning_blocked = self.unresolved_planning_governance_record(session).is_some();
+        goal_plan.planning_analysis = if planning_blocked {
+            None
+        } else {
+            self.planning_analysis_projection(session, &goal_plan)
+        };
+        let planning_analysis_blocked = goal_plan
+            .planning_analysis
+            .as_ref()
+            .is_some_and(|projection| matches!(projection.state, PlanningAnalysisState::Blocked));
 
         session.active_flow = native_flow_state;
         session.active_task = None;
@@ -1250,13 +1289,99 @@ impl SessionRuntime {
         session.project_scale = project_scale_state;
         session.decisions.clear();
         session.active_flow_policy = preserved_flow_policy;
-        session.latest_status =
-            if planning_blocked { SessionStatus::Blocked } else { SessionStatus::Planned };
+        session.latest_status = if planning_blocked || planning_analysis_blocked {
+            SessionStatus::Blocked
+        } else {
+            SessionStatus::Planned
+        };
         session.latest_terminal_reason = None;
         session.latest_trace_ref = None;
         session.updated_at = current_timestamp_millis();
 
         Ok(())
+    }
+
+    fn plan_quality_gate_details(
+        goal_plan: &GoalPlan,
+        assessment: &PlanQualityAssessment,
+    ) -> (String, String) {
+        if matches!(assessment.state, PlanQualityState::Blocked) {
+            if let Some(context_pack) = goal_plan.context_pack.as_ref() {
+                match context_pack.credibility {
+                    ContextPackCredibility::Insufficient => {
+                        return (
+                            PLAN_QUALITY_BLOCKED_HEADLINE.to_string(),
+                            context_pack.summary.clone(),
+                        );
+                    }
+                    ContextPackCredibility::Stale => {
+                        return (
+                            PLAN_QUALITY_BLOCKED_HEADLINE.to_string(),
+                            context_pack
+                                .staleness_reason
+                                .clone()
+                                .unwrap_or_else(|| context_pack.summary.clone()),
+                        );
+                    }
+                    ContextPackCredibility::Credible => {}
+                }
+            }
+
+            return (
+                PLAN_QUALITY_BLOCKED_HEADLINE.to_string(),
+                PLAN_QUALITY_BLOCKED_DEFAULT_PROMPT.to_string(),
+            );
+        }
+
+        if assessment.findings.is_empty() {
+            return (
+                PLAN_QUALITY_CLARIFICATION_HEADLINE.to_string(),
+                PLAN_QUALITY_CLARIFICATION_DEFAULT_PROMPT.to_string(),
+            );
+        }
+
+        (
+            PLAN_QUALITY_CLARIFICATION_HEADLINE.to_string(),
+            format!("{PLAN_QUALITY_CLARIFICATION_PROMPT_PREFIX}{}", assessment.findings.join(", ")),
+        )
+    }
+
+    fn planning_analysis_projection(
+        &self,
+        session: &ActiveSessionRecord,
+        goal_plan: &GoalPlan,
+    ) -> Option<PlanningAnalysisProjection> {
+        let backlog_snapshot = session.governance_lifecycle.as_ref().and_then(|lifecycle| {
+            backlog_quality_snapshot_for_lifecycle(lifecycle, &self.workspace_ref)
+        });
+
+        if let Some(snapshot) = backlog_snapshot {
+            if !matches!(snapshot.assessment.state, BacklogQualityState::Ready) {
+                return None;
+            }
+
+            return Some(
+                goal_plan
+                    .planning_analysis_projection(&snapshot.assessment, &snapshot.document_bodies),
+            );
+        }
+
+        Some(
+            goal_plan.planning_analysis_projection(
+                &Self::default_planning_analysis_backlog_quality(),
+                &[],
+            ),
+        )
+    }
+
+    fn default_planning_analysis_backlog_quality() -> BacklogQualityAssessment {
+        BacklogQualityAssessment {
+            state: BacklogQualityState::Ready,
+            findings: Vec::new(),
+            task_count: None,
+            mvp_scope: None,
+            unmapped_items: Vec::new(),
+        }
     }
 
     fn ensure_workspace_governance_lifecycle(&self, session: &mut ActiveSessionRecord) {
@@ -2950,6 +3075,7 @@ impl SessionRuntime {
         let Some(mut goal_plan) = session.goal_plan.clone() else {
             return Err(SessionRuntimeError::MissingGoalPlan);
         };
+        self.attempt_auto_clear_provider_block(session);
         if let Some(stage_record) = self.unresolved_planning_governance_record(session) {
             return Err(SessionRuntimeError::PlanningGovernanceUnresolved {
                 stage_key: stage_record.stage_key.clone(),
@@ -6117,6 +6243,56 @@ impl SessionRuntime {
         session.latest_trace_ref = Some(trace_location);
 
         Ok(trace)
+    }
+
+    /// Attempts to clear a provider-related governance block if the planning route
+    /// is now available. Returns `true` if a block was cleared and planning should
+    /// be re-attempted.
+    fn attempt_auto_clear_provider_block(&self, session: &mut ActiveSessionRecord) -> bool {
+        let dominated_by_provider = |reason: &str| -> bool {
+            let lowered = reason.to_ascii_lowercase();
+            lowered.contains("provider")
+                || lowered.contains("reviewer")
+                || lowered.contains("token")
+                || lowered.contains("credential")
+                || lowered.contains("request failed")
+                || lowered.contains("unavailable")
+        };
+
+        let blocked_stage_key = {
+            let Some(lifecycle) = session.governance_lifecycle.as_ref() else {
+                return false;
+            };
+            lifecycle
+                .stage_records
+                .iter()
+                .rev()
+                .find(|record| {
+                    planning_canon_mode_for_stage_key(&record.stage_key).is_some()
+                        && matches!(
+                            record.lifecycle_state,
+                            GovernanceLifecycleState::Blocked | GovernanceLifecycleState::Failed
+                        )
+                        && record.blocked_reason.as_deref().is_some_and(dominated_by_provider)
+                })
+                .map(|record| record.stage_key.clone())
+        };
+
+        let Some(stage_key) = blocked_stage_key else {
+            return false;
+        };
+
+        let routing = self.planning_council_effective_routing();
+        if !route_is_available(&routing.planning.route) {
+            return false;
+        }
+
+        let Some(lifecycle) = session.governance_lifecycle.as_mut() else {
+            return false;
+        };
+        lifecycle.stage_records.retain(|record| record.stage_key != stage_key);
+        lifecycle.terminal_reason = None;
+        true
     }
 
     fn unresolved_planning_governance_record<'a>(

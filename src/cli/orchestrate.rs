@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use uuid::Uuid;
 
 use crate::adapters::session_store::{FileSessionStore, SessionStore};
 use crate::cli::CommandExitStatus;
@@ -14,8 +15,10 @@ use crate::domain::audit::{
 };
 use crate::domain::governance::{
     ApprovalState, CanonMode, CompactedCanonMemory, GovernanceLifecycleState,
-    GovernanceRuntimeKind, MemoryCredibilityState, planning_canon_mode_for_stage_key,
-    planning_canon_mode_sequence, planning_stage_brief_ref, planning_stage_key_for_mode,
+    GovernanceRuntimeKind, GovernedDocumentRef, GovernedSessionLifecycle, GovernedStageRecord,
+    MemoryCredibilityState, PacketReadiness, classify_packet_readiness,
+    planning_canon_mode_for_stage_key, planning_canon_mode_sequence, planning_stage_brief_ref,
+    planning_stage_key_for_mode,
 };
 use crate::domain::session::ActiveSessionRecord;
 use crate::domain::session::{SessionStatus, SessionStatusView, task_state_compacted_canon_memory};
@@ -1731,11 +1734,117 @@ fn complete_planning_stage(
         stage_record.blocked_reason = None;
     }
 
+    if let Some(mode) = planning_canon_mode_for_stage_key(completed_stage_key) {
+        record_host_planning_stage_completion(workspace, lifecycle, completed_stage_key, mode);
+    }
+
     lifecycle.current_stage_index = current_index + 1;
     lifecycle.terminal_reason = None;
     record.updated_at = current_timestamp_millis();
     store.persist(&record).map_err(SessionCommandError::from)?;
     Ok(record)
+}
+
+fn record_host_planning_stage_completion(
+    workspace: &Path,
+    lifecycle: &mut GovernedSessionLifecycle,
+    stage_key: &str,
+    mode: CanonMode,
+) {
+    let packet_ref = host_planning_packet_ref(mode);
+
+    upsert_host_planning_stage_record(lifecycle, stage_key, &packet_ref);
+
+    if let Some(document_ref) =
+        classify_host_planning_document(workspace, stage_key, mode, &packet_ref)
+    {
+        upsert_host_planning_document(lifecycle, document_ref);
+    }
+}
+
+fn host_planning_packet_ref(mode: CanonMode) -> String {
+    format!(".boundline/governance/planning/{}", mode.as_str())
+}
+
+fn upsert_host_planning_stage_record(
+    lifecycle: &mut GovernedSessionLifecycle,
+    stage_key: &str,
+    packet_ref: &str,
+) {
+    if let Some(stage_record) =
+        lifecycle.stage_records.iter_mut().find(|record| record.stage_key == stage_key)
+    {
+        stage_record.lifecycle_state = GovernanceLifecycleState::Completed;
+        stage_record.approval_state = ApprovalState::NotNeeded;
+        stage_record.blocked_reason = None;
+        if stage_record.packet_ref.is_none() {
+            stage_record.packet_ref = Some(packet_ref.to_string());
+        }
+        return;
+    }
+
+    let previous_governance_attempt_id =
+        lifecycle.stage_records.last().map(|record| record.governance_attempt_id.clone());
+    lifecycle.stage_records.push(GovernedStageRecord {
+        stage_key: stage_key.to_string(),
+        runtime: lifecycle.governance_runtime,
+        lifecycle_state: GovernanceLifecycleState::Completed,
+        required: true,
+        autopilot_enabled: false,
+        approval_state: ApprovalState::NotNeeded,
+        canon_run_ref: None,
+        governance_attempt_id: format!("host-planning-{}", Uuid::new_v4()),
+        previous_governance_attempt_id,
+        packet_ref: Some(packet_ref.to_string()),
+        decision_ref: None,
+        stage_council: None,
+        blocked_reason: None,
+    });
+}
+
+fn classify_host_planning_document(
+    workspace: &Path,
+    stage_key: &str,
+    mode: CanonMode,
+    packet_ref: &str,
+) -> Option<GovernedDocumentRef> {
+    let expected_document_refs = mode.expected_document_refs(packet_ref);
+    let document_refs = expected_document_refs
+        .iter()
+        .filter(|document_ref| workspace.join(document_ref.as_str()).is_file())
+        .cloned()
+        .collect::<Vec<_>>();
+    let document_path = document_refs.first().cloned()?;
+    let readiness = classify_packet_readiness(
+        workspace,
+        &expected_document_refs,
+        &document_refs,
+        &[],
+        PacketReadiness::Incomplete,
+    );
+
+    Some(GovernedDocumentRef {
+        stage_key: stage_key.to_string(),
+        canon_mode: mode,
+        packet_ref: packet_ref.to_string(),
+        document_path: Some(document_path),
+        readiness,
+    })
+}
+
+fn upsert_host_planning_document(
+    lifecycle: &mut GovernedSessionLifecycle,
+    document_ref: GovernedDocumentRef,
+) {
+    if let Some(existing) = lifecycle.accumulated_context.iter_mut().find(|existing| {
+        existing.stage_key == document_ref.stage_key
+            && existing.canon_mode == document_ref.canon_mode
+    }) {
+        *existing = document_ref;
+        return;
+    }
+
+    lifecycle.accumulated_context.push(document_ref);
 }
 
 fn push_status_update_events(

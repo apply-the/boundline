@@ -270,6 +270,7 @@ fn planning_ready_brief(
             "Authentication boundary: OAuth2 token validation stops at the edge; service authorization begins in Boundline route selection.\n",
             "In-scope API operations: {api_operations}.\n",
             "Domain entities in scope: {domain_entities}.\n",
+            "Success criteria: {intended_outcome}.\n",
             "Validation target: {validation_target}.\n"
         ),
         goal_summary = goal_summary,

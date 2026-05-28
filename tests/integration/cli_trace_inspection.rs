@@ -87,8 +87,10 @@ fn inspect_output_surfaces_canon_aware_explanation_lines() {
             "# Explanation brief\n\n",
             "Intended outcome: explain the current delivery state for the first fixture slice.\n\n",
             "Domain entities: delivery state, validation evidence, and review evidence are the in-scope domain entities; delivery state depends on validation and review evidence.\n\n",
+            "Authoritative persistence store: workspace-local .boundline/session.json and persisted trace files under .boundline/traces/.\n\n",
             "Auth boundary: OAuth2 stops at the API gateway; Boundline service-level authorization begins when the runtime reads persisted trace and session evidence.\n\n",
             "API operations: inspect the persisted trace and session-owned evidence for the run.\n\n",
+            "Success criteria: inspect reports source attribution, fallback disclosure, and next-best-action lines for the first fixture slice.\n\n",
             "Validation target: inspect output surfaces explanation attribution, fallback disclosure, and next-best-action lines.\n",
         ),
     )

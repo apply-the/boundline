@@ -610,6 +610,7 @@ mod tests {
             deduplicated_sources: Vec::new(),
             governance_intent: None,
             resolution_state: AuthoredBriefResolutionState::ClarificationRequired,
+            goal_quality: Default::default(),
             clarification: Some(ClarificationRecord {
                 clarification_id: "clarification-1".to_string(),
                 reason_kind: ClarificationReasonKind::MissingContext,

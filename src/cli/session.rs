@@ -22,10 +22,11 @@ use crate::cli::output;
 use crate::cli::workspace as cli_workspace;
 use crate::domain::cluster::{ClusterDeliveryStory, ClusterSessionProjection};
 use crate::domain::decision::ActionSelector;
+use crate::domain::goal_plan::PlanQualityState;
 use crate::domain::governance::{
-    CanonModeSelectionPreference, GovernanceLifecycleState, GovernanceRuntimeKind,
-    GovernedSessionLifecycle, governance_confidence_handoff, is_planning_stage_key,
-    planning_canon_mode_for_stage_key,
+    BacklogQualityAssessment, CanonModeSelectionPreference, GovernanceLifecycleState,
+    GovernanceRuntimeKind, GovernedSessionLifecycle, backlog_quality_snapshot_for_lifecycle,
+    governance_confidence_handoff, is_planning_stage_key, planning_canon_mode_for_stage_key,
 };
 use crate::domain::guidance::GuidanceGuardianProjection;
 use crate::domain::negotiation::NegotiatedDeliveryPacket;
@@ -87,6 +88,12 @@ const GIT_BRANCH_ACTIVATION_RETRY_DELAY_MILLIS: u64 = 50;
 const DIRECT_RUN_BOUNDED_CONTEXT_HEADLINE: &str = "bounded context required before planning";
 const DIRECT_RUN_BOUNDED_CONTEXT_REPAIR: &str =
     "provide a credible brief or concrete workspace target before retrying direct run";
+const RUN_PLAN_QUALITY_NOT_READY_EXPLANATION: &str =
+    "run returned without resuming because the current goal plan is not ready for execution";
+const RUN_BACKLOG_QUALITY_NOT_READY_EXPLANATION: &str =
+    "run returned without resuming because the governed backlog packet is not ready for execution";
+const RUN_PLANNING_ANALYSIS_BLOCKED_EXPLANATION: &str =
+    "run returned without resuming because planning analysis found a blocking execution gap";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SessionBriefArtifactKind {
@@ -1070,6 +1077,15 @@ pub fn execute_run_with_target(
         return Ok(report_with_session_status(exit_status_for_session(record.latest_status), view));
     }
 
+    if let Some(explanation) = run_pause_explanation(&record, &workspace) {
+        record.latest_status = SessionStatus::Blocked;
+        record.latest_terminal_reason = None;
+        record.updated_at = current_timestamp_millis();
+        runtime.persist_session(&record).map_err(map_runtime_error)?;
+        let view = build_status_view(&record, suggested_next_command(&record), explanation);
+        return Ok(report_with_session_status(exit_status_for_session(record.latest_status), view));
+    }
+
     let mut response = runtime.run_to_terminal(&mut record).map_err(map_runtime_error)?;
     runtime.persist_session(&record).map_err(map_runtime_error)?;
 
@@ -1599,6 +1615,7 @@ pub(crate) fn build_status_view_with_follow_up(
         persisted_session_brief_ref(workspace_path, &session_plan_brief_ref(&record.session_id));
     let run_brief_ref =
         persisted_session_brief_ref(workspace_path, &session_run_brief_ref(&record.session_id));
+    let backlog_quality = backlog_quality_for_record(record, workspace_path);
 
     SessionStatusView {
         session_id: record.session_id.clone(),
@@ -1628,6 +1645,55 @@ pub(crate) fn build_status_view_with_follow_up(
             let labels = bundle.deduplicated_source_labels();
             (!labels.is_empty()).then_some(labels)
         }),
+        goal_quality_state: record
+            .authored_brief
+            .as_ref()
+            .and_then(AuthoredBriefBundle::goal_quality_state),
+        goal_quality_findings: record
+            .authored_brief
+            .as_ref()
+            .and_then(AuthoredBriefBundle::goal_quality_findings),
+        goal_quality_assumptions: record
+            .authored_brief
+            .as_ref()
+            .and_then(AuthoredBriefBundle::goal_quality_assumptions),
+        plan_quality_state: record
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| goal_plan.plan_quality_state()),
+        plan_quality_findings: record
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| goal_plan.plan_quality_findings()),
+        plan_quality_assumptions: record
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| goal_plan.plan_quality_assumptions()),
+        backlog_quality_state: backlog_quality
+            .as_ref()
+            .map(|assessment| assessment.state.as_str().to_string()),
+        backlog_quality_findings: backlog_quality.as_ref().and_then(|assessment| {
+            (!assessment.findings.is_empty()).then_some(assessment.findings.clone())
+        }),
+        backlog_task_count: backlog_quality.as_ref().and_then(|assessment| assessment.task_count),
+        backlog_mvp_scope: backlog_quality
+            .as_ref()
+            .and_then(|assessment| assessment.mvp_scope.clone()),
+        backlog_unmapped_items: backlog_quality.as_ref().and_then(|assessment| {
+            (!assessment.unmapped_items.is_empty()).then_some(assessment.unmapped_items.clone())
+        }),
+        planning_analysis_state: record
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| goal_plan.planning_analysis_state()),
+        planning_analysis_findings: record
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| goal_plan.planning_analysis_findings()),
+        planning_analysis_coverage: record
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| goal_plan.planning_analysis_coverage()),
         context_summary: record
             .goal_plan
             .as_ref()
@@ -2035,6 +2101,42 @@ pub(crate) fn build_status_view_with_follow_up(
         next_command,
         explanation: explanation.into(),
     }
+}
+
+fn backlog_quality_for_record(
+    record: &ActiveSessionRecord,
+    workspace_path: &Path,
+) -> Option<BacklogQualityAssessment> {
+    let lifecycle = record.governance_lifecycle.as_ref()?;
+    backlog_quality_snapshot_for_lifecycle(lifecycle, workspace_path)
+        .map(|snapshot| snapshot.assessment)
+}
+
+fn run_pause_explanation(
+    record: &ActiveSessionRecord,
+    workspace_path: &Path,
+) -> Option<&'static str> {
+    if record
+        .goal_plan
+        .as_ref()
+        .map(|goal_plan| goal_plan.plan_quality_assessment().state)
+        .is_some_and(|state| !matches!(state, PlanQualityState::Ready))
+    {
+        return Some(RUN_PLAN_QUALITY_NOT_READY_EXPLANATION);
+    }
+
+    if let Some(backlog_quality) = backlog_quality_for_record(record, workspace_path)
+        && !matches!(backlog_quality.state, crate::domain::governance::BacklogQualityState::Ready)
+    {
+        return Some(RUN_BACKLOG_QUALITY_NOT_READY_EXPLANATION);
+    }
+
+    record.goal_plan.as_ref().and_then(|goal_plan| goal_plan.planning_analysis.as_ref()).and_then(
+        |projection| {
+            matches!(projection.state, crate::domain::goal_plan::PlanningAnalysisState::Blocked)
+                .then_some(RUN_PLANNING_ANALYSIS_BLOCKED_EXPLANATION)
+        },
+    )
 }
 
 fn latest_workspace_compatibility_follow_up(
@@ -3743,7 +3845,7 @@ fn red_to_green_addition() {
 
         fs::write(
             &plan_input,
-            "# Rust service brief\n\nImplement a rust microservice for user management.\n\n- API surface: create and read users over HTTP.\n- Persistence/security: SQLite with OAuth2 bearer checks.\n- Validation target: cargo test.\n",
+            "# Rust service brief\n\nImplement a rust microservice for user management.\n\n- Scope boundary: the first slice only supports create and read user flows.\n- API surface: create and read users over HTTP.\n- Persistence choice: SQLite is authoritative for the first slice.\n- Authentication boundary: OAuth2 bearer validation stops at the edge; service authorization begins in the application service layer.\n- Success criteria: operators can create and read users over HTTP in the first slice.\n- Validation target: cargo test.\n",
         )
         .unwrap();
 
@@ -4062,7 +4164,9 @@ fn red_to_green_addition() {
                 decision_type_hint: None,
             }],
         )
-        .unwrap();
+        .unwrap()
+        .with_planning_rationale("governed planning evidence is assembled for the next stage")
+        .with_verification_strategy("rerun plan or status after Canon approval resolves");
 
         let draft_record = ActiveSessionRecord {
             session_id: "session-plan-governance-confirm".to_string(),
@@ -4420,6 +4524,8 @@ fn red_to_green_addition() {
             }],
         )
         .unwrap()
+        .with_planning_rationale("workspace evidence isolates the failing arithmetic path")
+        .with_verification_strategy("rerun the focused add regression after editing")
         .with_context_pack(ContextPack {
             pack_id: "cp-1".to_string(),
             summary: "bounded context from src/lib.rs".to_string(),
@@ -4473,7 +4579,9 @@ fn red_to_green_addition() {
                 decision_type_hint: None,
             }],
         )
-        .unwrap();
+        .unwrap()
+        .with_planning_rationale("the failing arithmetic task is narrowed to src/lib.rs")
+        .with_verification_strategy("rerun the focused add regression after the change");
         pending_flow_plan.flow = Some(InferredFlow {
             flow_name: "bug-fix".to_string(),
             confidence_reason: "goal contains fix".to_string(),
@@ -4505,6 +4613,7 @@ fn red_to_green_addition() {
             deduplicated_sources: Vec::new(),
             governance_intent: None,
             resolution_state: crate::domain::brief::AuthoredBriefResolutionState::Ready,
+            goal_quality: Default::default(),
             clarification: None,
             derived_task_draft: None,
             captured_at: 1,
@@ -4592,6 +4701,7 @@ fn red_to_green_addition() {
             governance_intent: None,
             resolution_state:
                 crate::domain::brief::AuthoredBriefResolutionState::ClarificationRequired,
+            goal_quality: Default::default(),
             clarification: Some(crate::domain::task::ClarificationRecord {
                 clarification_id: "clarification-1".to_string(),
                 reason_kind: crate::domain::task::ClarificationReasonKind::MissingContext,
@@ -4730,7 +4840,9 @@ fn red_to_green_addition() {
                 decision_type_hint: None,
             }],
         )
-        .unwrap();
+        .unwrap()
+        .with_planning_rationale("the governed review packet is scoped to the active source target")
+        .with_verification_strategy("rerun status after the governed review approval resolves");
 
         let record = ActiveSessionRecord {
             session_id: "session-continue-projection".to_string(),
@@ -4873,7 +4985,9 @@ fn red_to_green_addition() {
                 decision_type_hint: None,
             }],
         )
-        .unwrap();
+        .unwrap()
+        .with_planning_rationale("governed planning evidence is assembled for the next stage")
+        .with_verification_strategy("rerun plan or status after Canon approval resolves");
 
         let record = ActiveSessionRecord {
             session_id: "session-plan-governance".to_string(),

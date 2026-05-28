@@ -33,6 +33,7 @@ fn governed_planning_workspace(prefix: &str) -> PathBuf {
             "Authentication boundary: GitHub OAuth2 stops at token validation; service authorization begins in Boundline route selection.\n",
             "In-scope API operations: goal, plan, and orchestrate for the first slice.\n",
             "Domain entities in scope: session, plan brief, run brief, and planning stage brief.\n",
+            "Success criteria: governed planning emits one stage request at a time with resume metadata.\n",
             "Validation target: cargo test -p boundline-cli --lib orchestrate -- --test-threads=1.\n",
         ),
     )
@@ -148,6 +149,9 @@ fn session_lifecycle_commands_can_emit_structured_host_output() {
     let plan_json: Value = stdout_json(&plan);
     assert_eq!(plan_json["command_name"], "plan", "{plan_text}");
     assert_eq!(plan_json["session_status"]["latest_status"], "planned", "{plan_text}");
+    assert_eq!(plan_json["session_status"]["plan_quality_state"], "ready", "{plan_text}");
+    assert!(plan_json["session_status"]["planning_analysis_state"].is_string(), "{plan_text}");
+    assert!(plan_json["session_status"]["planning_analysis_coverage"].is_object(), "{plan_text}");
 
     let status = run_boundline_in(&workspace, &["status", "--json"]);
     let status_text = terminal_text(&status);
@@ -155,6 +159,12 @@ fn session_lifecycle_commands_can_emit_structured_host_output() {
     let status_json: Value = stdout_json(&status);
     assert_eq!(status_json["command_name"], "status", "{status_text}");
     assert!(status_json["session_status"]["next_command"].is_string(), "{status_text}");
+    assert_eq!(status_json["session_status"]["plan_quality_state"], "ready", "{status_text}");
+    assert!(status_json["session_status"]["planning_analysis_state"].is_string(), "{status_text}");
+    assert!(
+        status_json["session_status"]["planning_analysis_coverage"].is_object(),
+        "{status_text}"
+    );
 
     let next = run_boundline_in(&workspace, &["next", "--json"]);
     let next_text = terminal_text(&next);
@@ -226,7 +236,19 @@ fn goal_captured_status_output_surfaces_clarification_guidance() {
 
     let status_json: Value = stdout_json(&status);
     assert_eq!(status_json["session_status"]["latest_status"], "goal_captured", "{status_text}");
+    assert_eq!(
+        status_json["session_status"]["goal_quality_state"], "clarification_required",
+        "{status_text}"
+    );
+    assert!(
+        status_json["session_status"]["goal_quality_findings"]
+            .as_array()
+            .is_some_and(|findings| !findings.is_empty()),
+        "{status_text}"
+    );
     let rendered = status_json["rendered_output"].as_str().unwrap_or_default();
+    assert!(rendered.contains("goal_quality_state: clarification_required"), "{status_text}");
+    assert!(rendered.contains("goal_quality_findings:"), "{status_text}");
     assert!(rendered.contains("clarification_headline:"), "{status_text}");
     assert!(rendered.contains("clarification_questions:"), "{status_text}");
     assert!(
@@ -246,6 +268,7 @@ fn inspect_output_surfaces_runtime_source_attribution() {
             "Authentication boundary: GitHub OAuth2 stops at token validation; service authorization begins in Boundline route selection.\n",
             "In-scope API operations: goal, plan, run, status, and inspect for the first slice.\n",
             "Domain entities in scope: session, plan brief, run brief, and trace summary.\n",
+            "Success criteria: inspect output shows runtime source attribution and actionable fallback disclosure.\n",
             "Validation target: cargo test --test contract host_command_output_contract -- --test-threads=1.\n",
         ),
     )
@@ -536,6 +559,19 @@ fn orchestrate_can_advance_ndjson_planning_stage_phase_requests_one_stage_at_a_t
         resume_architecture_phase_requests[0]["stage_key"], "plan:backlog",
         "{resume_architecture_text}"
     );
+    assert_eq!(
+        resume_architecture_phase_requests[0]["session_status"]["backlog_quality_state"],
+        "clarification_required",
+        "{resume_architecture_text}"
+    );
+    assert!(
+        resume_architecture_phase_requests[0]["session_status"]["backlog_quality_findings"]
+            .as_array()
+            .is_some_and(|findings| findings
+                .iter()
+                .any(|finding| finding == "backlog_packet_pending")),
+        "{resume_architecture_text}"
+    );
     assert!(
         resume_architecture_phase_requests[0]["resume_command"]
             .as_str()
@@ -571,9 +607,16 @@ fn orchestrate_can_advance_ndjson_planning_stage_phase_requests_one_stage_at_a_t
     assert_eq!(third_stage_record["approval_state"], "not_needed", "{third_session}");
     assert_eq!(third_stage_record["canon_run_ref"], "canon-run-plan", "{third_session}");
     assert_eq!(third_stage_record["packet_ref"], ".canon/planning-packet", "{third_session}");
+    let architecture_stage_record = planning_stage_record(&third_session, "plan:architecture");
+    assert_eq!(architecture_stage_record["lifecycle_state"], "completed", "{third_session}");
+    assert_eq!(architecture_stage_record["approval_state"], "not_needed", "{third_session}");
+    assert_eq!(
+        architecture_stage_record["packet_ref"], ".boundline/governance/planning/architecture",
+        "{third_session}"
+    );
     assert_eq!(
         third_session["governance_lifecycle"]["stage_records"].as_array().map(Vec::len),
-        Some(1),
+        Some(2),
         "{third_session}"
     );
 }

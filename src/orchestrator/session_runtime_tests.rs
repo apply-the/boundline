@@ -33,6 +33,9 @@ use crate::domain::configuration::{
     RoutingConfig, RuntimeCapabilityProfile, RuntimeKind, SlotEffortPolicy,
 };
 use crate::domain::decision::{Decision, DecisionType, EvidenceRef};
+use crate::domain::domain_templates::{
+    DomainFamily, DomainTemplateSettings, ExternalContextBinding, ExternalContextKind,
+};
 use crate::domain::execution::{
     ExecutionAttemptDefinition, ExecutionCommand, ExecutionFailureMode, WorkspaceChange,
     WorkspaceExecutionProfile,
@@ -2375,6 +2378,82 @@ fn broad_goal_planning_persists_project_scale_state_when_context_is_insufficient
     assert_eq!(project_scale.next_action, "repair_context");
     assert_eq!(project_scale.active_stage_text().as_deref(), Some("discovery"));
     assert!(project_scale.path.stage_names().contains("pr-review"));
+}
+
+#[test]
+fn plan_task_blocks_when_plan_quality_detects_stale_context() {
+    let workspace = temp_workspace("boundline-runtime-plan-quality-stale-context");
+    fs::write(workspace.join("package.json"), r#"{"dependencies":{"react":"18.0.0"}}"#).unwrap();
+    fs::create_dir_all(workspace.join("src/components")).unwrap();
+    fs::create_dir_all(workspace.join("design")).unwrap();
+    fs::write(workspace.join("design/reference.md"), "button guidance\n").unwrap();
+    thread::sleep(Duration::from_millis(20));
+    fs::write(
+        workspace.join("src/components/App.tsx"),
+        "export function App() { return <button>Save</button>; }\n",
+    )
+    .unwrap();
+
+    save_local_routing(
+        &workspace,
+        RoutingConfig {
+            domain_templates: BTreeMap::from([(
+                DomainFamily::React,
+                DomainTemplateSettings {
+                    enabled: Some(true),
+                    standards: Some("workspace react standards".to_string()),
+                    external_context_bindings: vec![ExternalContextBinding {
+                        kind: ExternalContextKind::DesignReference,
+                        reference: "design/reference.md".to_string(),
+                        required: true,
+                        notes: None,
+                    }],
+                },
+            )]),
+            ..RoutingConfig::default()
+        },
+    );
+
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut session = ActiveSessionRecord {
+        session_id: "session-runtime-stale-context".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: None,
+        authored_brief: None,
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: None,
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Initialized,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 10,
+        governance_lifecycle: None,
+        project_scale: None,
+        delight_feedback: None,
+        latest_voting: None,
+    };
+
+    runtime
+        .capture_goal(
+            &mut session,
+            "Refresh src/components/App.tsx against the latest design guidance",
+        )
+        .unwrap();
+
+    let error = runtime.plan_task(&mut session, None, false).unwrap_err();
+    let rendered_error = error.to_string();
+
+    assert!(rendered_error.contains("required external context is stale"), "{rendered_error}");
+    assert_eq!(session.latest_status, SessionStatus::Blocked);
+    let goal_plan =
+        session.goal_plan.as_ref().expect("blocked planning should persist the goal plan");
+    assert_eq!(goal_plan.plan_quality_state().as_deref(), Some("blocked"));
+    assert_eq!(goal_plan.plan_quality_findings().unwrap(), vec!["context_pack_stale".to_string()]);
 }
 
 #[test]

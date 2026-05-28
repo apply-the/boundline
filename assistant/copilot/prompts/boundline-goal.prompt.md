@@ -17,6 +17,38 @@ Capture or refine the active session goal through the orchestrator so runtime-ow
 - `workspace_ref`
 - At least one goal source: bounded goal text and/or workspace-relative Markdown brief path(s)
 
+## User Input
+Use the text after `/boundline-goal` as the goal source when present. If the user supplies only brief paths, treat the referenced Markdown as the goal source. Do not ask the user to repeat non-empty input.
+
+## Pre-Execution Checks
+Confirm only that the workspace is known and that at least one goal source is available. Do not read `.specify/extensions.yml` or run generic pre/post hooks; Boundline uses runtime `phase_request`, `assistant_resume_command`, and `assistant_next_command` for handoff.
+
+## Execution Flow
+1. Derive a concise 2-4 word kebab-case slug from the goal when opening a new session.
+2. Run `boundline orchestrate` once with the known workspace and goal or brief sources.
+3. Stop on the first structured `phase_request`.
+4. If no `phase_request` is emitted, summarize the captured goal, quality state, and next assistant-safe route.
+
+## Goal Quality Validation
+Boundline runtime owns validation. Surface `goal_quality_state`, `goal_quality_findings`, and `goal_quality_assumptions` when present, translating them into plain language. A blocked quality state means planning must wait for the emitted question.
+
+The quality rubric checks for a bounded outcome and scope boundary, actors/actions/data or affected artifact, intended outcome, validation target, measurable success criteria, assumptions/defaults, and security/privacy/auth clarification only when materially relevant. Clarifications are prioritized as scope > security/privacy > user experience > technical details. Maximum 3 quality clarification questions may be reported by the runtime, but host interaction still asks exactly one `phase_request.question` at a time.
+
+## Quick Guidelines
+Focus on what the user needs and why. Avoid implementation details unless the user supplied them as constraints or validation evidence. Think like a tester: vague requirements should become testable outcomes or a runtime clarification.
+
+## Reasonable Defaults
+Do not ask about low-impact omissions. Accept and surface runtime assumptions such as no new auth/privacy boundary, no new persistence boundary, and scope limited to the stated goal and supplied briefs when those are reasonable.
+
+## Success Criteria Guidelines
+Prefer measurable, user- or business-facing outcomes. Good examples: "users complete checkout in under 3 minutes", "95% of searches return results in under 1 second", or "task completion improves by 40%". Avoid framework, database, cache, or internal implementation metrics unless the user provided them as validation evidence.
+
+## Done When
+- The goal source has been passed to `boundline orchestrate`.
+- Any `phase_request.question` has been asked exactly as emitted.
+- `goal_quality_state`, `goal_quality_findings`, and `goal_quality_assumptions` are surfaced when present.
+- The next route is taken from `assistant_resume_command`, `assistant_next_command`, or the CLI-reported route.
+
 ## Shell-Enabled Path
 If the workspace and at least one goal source are known, prefer the orchestrator command exactly once.
 

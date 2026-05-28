@@ -177,3 +177,92 @@ fn flags_unbounded_requests_for_clarification_before_planning() {
         Some(clarification.clarification_id.as_str())
     );
 }
+
+#[test]
+fn delivery_goal_without_validation_or_success_criteria_requires_quality_clarification() {
+    let workspace = temp_workspace("boundline-h-input-goal-quality");
+
+    let bundle = normalize_inputs(
+        &workspace,
+        Some(
+            "Implement the first slice of a user management API with users, create, list, and \
+             update operations, PostgreSQL persistence, and no new authentication boundary.",
+        ),
+        &[],
+    )
+    .unwrap();
+
+    assert_eq!(bundle.resolution_state, AuthoredBriefResolutionState::ClarificationRequired);
+    assert_eq!(bundle.goal_quality_state().as_deref(), Some("clarification_required"));
+    let findings = bundle.goal_quality_findings().expect("quality findings");
+    assert!(findings.contains(&"success_criteria".to_string()), "{findings:?}");
+    assert!(findings.contains(&"validation_target".to_string()), "{findings:?}");
+
+    let clarification = bundle.clarification.as_ref().expect("quality clarification");
+    assert_eq!(clarification.reason_kind, ClarificationReasonKind::MissingContext);
+    assert!(clarification.questions.len() <= 3, "{:?}", clarification.questions);
+    assert!(
+        clarification
+            .questions
+            .iter()
+            .any(|question| question.contains("measurable success criteria")),
+        "{:?}",
+        clarification.questions
+    );
+    assert!(
+        clarification
+            .questions
+            .iter()
+            .any(|question| question.contains("validation command or acceptance evidence")),
+        "{:?}",
+        clarification.questions
+    );
+}
+
+#[test]
+fn quality_clarification_limits_questions_to_three_by_priority() {
+    let workspace = temp_workspace("boundline-h-input-goal-quality-priority");
+
+    let bundle =
+        normalize_inputs(&workspace, Some("Build a user management API with OAuth2 roles"), &[])
+            .unwrap();
+
+    let clarification = bundle.clarification.as_ref().expect("quality clarification");
+    assert_eq!(clarification.reason_kind, ClarificationReasonKind::MissingContext);
+    assert!(clarification.questions.len() <= 3, "{:?}", clarification.questions);
+    assert_eq!(
+        clarification.questions.first().map(String::as_str),
+        Some("Which bounded outcome and scope boundary should this first slice cover?")
+    );
+    assert!(
+        clarification.missing_fields.iter().position(|field| field == "scope_boundary")
+            < clarification.missing_fields.iter().position(|field| field == "auth_boundary"),
+        "{:?}",
+        clarification.missing_fields
+    );
+}
+
+#[test]
+fn low_impact_omissions_are_recorded_as_goal_quality_assumptions() {
+    let workspace = temp_workspace("boundline-h-input-goal-quality-assumptions");
+
+    let bundle = normalize_inputs(
+        &workspace,
+        Some(
+            "Fix payment timeout bug in checkout retry handling. Validation target: checkout \
+             timeout regression test passes. Success criteria: customers complete retryable \
+             checkout flows without timeout failures.",
+        ),
+        &[],
+    )
+    .unwrap();
+
+    assert_eq!(bundle.resolution_state, AuthoredBriefResolutionState::Ready);
+    assert_eq!(bundle.goal_quality_state().as_deref(), Some("ready"));
+    assert!(bundle.clarification.is_none(), "{:?}", bundle.clarification);
+    let assumptions = bundle.goal_quality_assumptions().expect("quality assumptions");
+    assert!(
+        assumptions.iter().any(|assumption| assumption.contains("No new authentication")),
+        "{assumptions:?}"
+    );
+}

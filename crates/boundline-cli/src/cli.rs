@@ -14,6 +14,8 @@ pub mod govern;
 pub mod init;
 #[path = "../../../src/cli/inspect.rs"]
 pub mod inspect;
+#[path = "../../../src/cli/models_auth.rs"]
+pub mod models_auth;
 #[path = "../../../src/cli/orchestrate.rs"]
 pub mod orchestrate;
 #[path = "../../../src/cli/output.rs"]

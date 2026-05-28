@@ -398,6 +398,74 @@ fn session_clarification_brief_lines(view: &SessionStatusView) -> Vec<String> {
     {
         lines.push(format!("clarification_questions: {}", preview_session_brief_items(questions)));
     }
+    if let Some(state) = &view.goal_quality_state {
+        lines.push(format!("goal_quality_state: {state}"));
+    }
+    if let Some(findings) = &view.goal_quality_findings
+        && !findings.is_empty()
+    {
+        lines.push(format!("goal_quality_findings: {}", preview_session_brief_items(findings)));
+    }
+    if let Some(assumptions) = &view.goal_quality_assumptions
+        && !assumptions.is_empty()
+    {
+        lines.push(format!(
+            "goal_quality_assumptions: {}",
+            preview_session_brief_items(assumptions)
+        ));
+    }
+    if let Some(state) = &view.plan_quality_state {
+        lines.push(format!("plan_quality_state: {state}"));
+    }
+    if let Some(findings) = &view.plan_quality_findings
+        && !findings.is_empty()
+    {
+        lines.push(format!("plan_quality_findings: {}", preview_session_brief_items(findings)));
+    }
+    if let Some(assumptions) = &view.plan_quality_assumptions
+        && !assumptions.is_empty()
+    {
+        lines.push(format!(
+            "plan_quality_assumptions: {}",
+            preview_session_brief_items(assumptions)
+        ));
+    }
+    if let Some(state) = &view.backlog_quality_state {
+        lines.push(format!("backlog_quality_state: {state}"));
+    }
+    if let Some(findings) = &view.backlog_quality_findings
+        && !findings.is_empty()
+    {
+        lines.push(format!("backlog_quality_findings: {}", preview_session_brief_items(findings)));
+    }
+    if let Some(task_count) = view.backlog_task_count {
+        lines.push(format!("backlog_task_count: {task_count}"));
+    }
+    if let Some(scope) = &view.backlog_mvp_scope {
+        lines.push(format!("backlog_mvp_scope: {}", preview_session_brief_text(scope)));
+    }
+    if let Some(unmapped) = &view.backlog_unmapped_items
+        && !unmapped.is_empty()
+    {
+        lines.push(format!("backlog_unmapped_items: {}", preview_session_brief_items(unmapped)));
+    }
+    if let Some(state) = &view.planning_analysis_state {
+        lines.push(format!("planning_analysis_state: {state}"));
+    }
+    if let Some(findings) = &view.planning_analysis_findings
+        && !findings.is_empty()
+    {
+        lines.push(format!(
+            "planning_analysis_findings: {}",
+            preview_planning_analysis_findings(findings)
+        ));
+    }
+    if let Some(coverage) = &view.planning_analysis_coverage {
+        lines.push(format!(
+            "planning_analysis_coverage: {}",
+            planning_analysis_coverage_text(coverage)
+        ));
+    }
 
     lines
 }
@@ -496,6 +564,42 @@ fn preview_session_brief_items(items: &[String]) -> String {
     }
 }
 
+fn preview_planning_analysis_findings(
+    findings: &[crate::domain::goal_plan::PlanningAnalysisFinding],
+) -> String {
+    let items = findings
+        .iter()
+        .map(|finding| {
+            format!(
+                "{}:{}:{}",
+                finding.severity.as_str(),
+                finding.source.as_str(),
+                preview_session_brief_text(&finding.message)
+            )
+        })
+        .collect::<Vec<_>>();
+    preview_session_brief_items(&items)
+}
+
+fn planning_analysis_coverage_text(
+    coverage: &crate::domain::goal_plan::PlanningAnalysisCoverage,
+) -> String {
+    let mut parts = vec![format!(
+        "success_criteria={}/{}",
+        coverage.success_criteria_covered, coverage.success_criteria_total
+    )];
+    if let Some(backlog_task_count) = coverage.backlog_task_count {
+        parts.push(format!("backlog_tasks={backlog_task_count}"));
+    }
+    if let Some(mapped_plan_task_count) = coverage.mapped_plan_task_count {
+        parts.push(format!(
+            "mapped_plan_tasks={mapped_plan_task_count}/{}",
+            coverage.success_criteria_total
+        ));
+    }
+    parts.join(", ")
+}
+
 /// Renders the persisted session view as the operator-facing status surface.
 pub fn render_session_status(view: &SessionStatusView) -> String {
     let mut lines = vec![
@@ -579,6 +683,82 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
         lines.push(format!(
             "authored_input_deduplicated_sources: {}",
             authored_input_deduplicated_sources.join(", ")
+        ));
+    }
+
+    if let Some(goal_quality_state) = &view.goal_quality_state {
+        lines.push(format!("goal_quality_state: {goal_quality_state}"));
+    }
+
+    if let Some(goal_quality_findings) = &view.goal_quality_findings
+        && !goal_quality_findings.is_empty()
+    {
+        lines.push(format!("goal_quality_findings: {}", goal_quality_findings.join(", ")));
+    }
+
+    if let Some(goal_quality_assumptions) = &view.goal_quality_assumptions
+        && !goal_quality_assumptions.is_empty()
+    {
+        lines.push(format!("goal_quality_assumptions: {}", goal_quality_assumptions.join(", ")));
+    }
+
+    if let Some(plan_quality_state) = &view.plan_quality_state {
+        lines.push(format!("plan_quality_state: {plan_quality_state}"));
+    }
+
+    if let Some(plan_quality_findings) = &view.plan_quality_findings
+        && !plan_quality_findings.is_empty()
+    {
+        lines.push(format!("plan_quality_findings: {}", plan_quality_findings.join(", ")));
+    }
+
+    if let Some(plan_quality_assumptions) = &view.plan_quality_assumptions
+        && !plan_quality_assumptions.is_empty()
+    {
+        lines.push(format!("plan_quality_assumptions: {}", plan_quality_assumptions.join(", ")));
+    }
+
+    if let Some(backlog_quality_state) = &view.backlog_quality_state {
+        lines.push(format!("backlog_quality_state: {backlog_quality_state}"));
+    }
+
+    if let Some(backlog_quality_findings) = &view.backlog_quality_findings
+        && !backlog_quality_findings.is_empty()
+    {
+        lines.push(format!("backlog_quality_findings: {}", backlog_quality_findings.join(", ")));
+    }
+
+    if let Some(backlog_task_count) = view.backlog_task_count {
+        lines.push(format!("backlog_task_count: {backlog_task_count}"));
+    }
+
+    if let Some(backlog_mvp_scope) = &view.backlog_mvp_scope {
+        lines.push(format!("backlog_mvp_scope: {backlog_mvp_scope}"));
+    }
+
+    if let Some(backlog_unmapped_items) = &view.backlog_unmapped_items
+        && !backlog_unmapped_items.is_empty()
+    {
+        lines.push(format!("backlog_unmapped_items: {}", backlog_unmapped_items.join(", ")));
+    }
+
+    if let Some(planning_analysis_state) = &view.planning_analysis_state {
+        lines.push(format!("planning_analysis_state: {planning_analysis_state}"));
+    }
+
+    if let Some(planning_analysis_findings) = &view.planning_analysis_findings
+        && !planning_analysis_findings.is_empty()
+    {
+        lines.push(format!(
+            "planning_analysis_findings: {}",
+            preview_planning_analysis_findings(planning_analysis_findings)
+        ));
+    }
+
+    if let Some(planning_analysis_coverage) = &view.planning_analysis_coverage {
+        lines.push(format!(
+            "planning_analysis_coverage: {}",
+            planning_analysis_coverage_text(planning_analysis_coverage)
         ));
     }
 

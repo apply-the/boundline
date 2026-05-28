@@ -238,6 +238,7 @@ fn orchestrate_brief_only_reuses_existing_goal_as_planning_input() {
             "- API surface: create and read users over HTTP.\n",
             "- Authoritative persistence store: SQLite for the first slice.\n",
             "- Authentication boundary: OAuth2 token validation stops at the edge; service authorization begins in the application layer.\n",
+            "- Success criteria: operators can create and read users over HTTP in the first slice.\n",
             "- Validation target: cargo test.\n",
         ),
     )
@@ -245,7 +246,13 @@ fn orchestrate_brief_only_reuses_existing_goal_as_planning_input() {
 
     let goal = run_boundline_in(
         &workspace,
-        &["goal", "--goal", "Build a bounded user management microservice"],
+        &[
+            "goal",
+            "--goal",
+            "Build a bounded user management microservice. API operations: create and read users. \
+             Persistence choice: SQLite. Success criteria: operators can create users. Validation \
+             target: cargo test.",
+        ],
     );
     assert_eq!(goal.status.code(), Some(0), "{}", terminal_text(&goal));
 
@@ -286,7 +293,11 @@ fn orchestrate_brief_only_reuses_existing_goal_as_planning_input() {
     let authored_brief = &session_json["authored_brief"];
     assert_eq!(
         authored_brief["primary_goal_text"].as_str(),
-        Some("Build a bounded user management microservice")
+        Some(
+            "Build a bounded user management microservice. API operations: create and read users. \
+             Persistence choice: SQLite. Success criteria: operators can create users. Validation \
+             target: cargo test."
+        )
     );
     let source_labels = authored_brief["sources"]
         .as_array()
@@ -313,7 +324,9 @@ fn orchestrate_goal_clarification_accepts_request_id_and_answer() {
         &[
             "orchestrate",
             "--goal",
-            "Build a bounded user management microservice",
+            "Build a bounded user management microservice. API operations: create and list users. \
+             Success criteria: operators can create users successfully. Validation target: cargo \
+             test user_management_flow.",
             "--assistant-host",
             "copilot",
             "--intent",
@@ -378,17 +391,11 @@ fn orchestrate_goal_clarification_accepts_request_id_and_answer() {
             && frame["message"] == "applied the clarification answer to the active goal"),
         "expected a session_updated event after answering the goal clarification: {second_text}"
     );
-    let second_request = second_frames
-        .iter()
-        .find(|frame| frame["event_kind"] == "phase_request" && frame["stage_key"] == "goal")
-        .expect("expected the next goal clarification phase_request");
-    assert_ne!(
-        second_request["phase_request"]["request_id"].as_str(),
-        Some(first_request_id.as_str())
-    );
-    assert_eq!(
-        second_request["phase_request"]["question"].as_str(),
-        Some("Where does OAuth2 or authentication stop and service-level authorization begin?")
+    assert!(
+        !second_frames
+            .iter()
+            .any(|frame| frame["event_kind"] == "phase_request" && frame["stage_key"] == "goal"),
+        "answering the only quality clarification should clear the goal gate: {second_text}"
     );
 
     let session_json: Value = serde_json::from_str(
@@ -397,7 +404,11 @@ fn orchestrate_goal_clarification_accepts_request_id_and_answer() {
     .unwrap();
     assert_eq!(
         session_json["authored_brief"]["primary_goal_text"].as_str(),
-        Some("Build a bounded user management microservice\n\nClarification answer: Postgres")
+        Some(
+            "Build a bounded user management microservice. API operations: create and list users. \
+             Success criteria: operators can create users successfully. Validation target: cargo \
+             test user_management_flow.\n\nClarification answer: Postgres"
+        )
     );
 }
 

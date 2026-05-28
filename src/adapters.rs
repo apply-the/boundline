@@ -1,9 +1,11 @@
 pub mod audit_store;
 pub mod agent;
+pub mod auth_profile_store;
 pub mod checkpoint_store;
 pub mod cluster_store;
 pub mod config_store;
 pub mod env_layer;
+pub mod github_device_flow;
 pub mod governance_runtime;
 pub mod provider_runtime;
 pub mod session_store;

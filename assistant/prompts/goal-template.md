@@ -10,6 +10,16 @@ Use this template before `/boundline:goal` when the goal is still broad or when 
 
 - What should be true when this is done?
 
+## Success Criteria
+
+- Which measurable user or business outcomes prove the goal is complete?
+- What threshold, count, rate, or observable condition makes the outcome verifiable?
+
+## Acceptance Scenarios
+
+- What primary user/operator flow must work?
+- What secondary flow or regression must stay working?
+
 ## Problem Domain
 
 - What workflow, product area, or operator problem does this affect?
@@ -38,6 +48,10 @@ Use this template before `/boundline:goal` when the goal is still broad or when 
 
 - Which focused check proves the change is acceptable?
 
+## Edge Cases
+
+- Which boundary cases, errors, or conflicting inputs must be handled?
+
 ## Constraints
 
 - What must stay bounded or unchanged?
@@ -49,6 +63,26 @@ Use this template before `/boundline:goal` when the goal is still broad or when 
 ## Assumptions
 
 - Which assumptions are acceptable for now and should be called out?
+
+## Reasonable Defaults
+
+- Which low-impact details can Boundline infer without stopping for clarification?
+- If not relevant, state that no new auth/privacy or persistence boundary is assumed.
+
+## Goal Quality Checklist
+
+- [ ] Bounded outcome and scope boundary are clear.
+- [ ] Actors/actions/data or affected artifact are identified.
+- [ ] Intended outcome is testable.
+- [ ] Success criteria are measurable and technology-agnostic unless explicit validation evidence is required.
+- [ ] Validation target or acceptance evidence is named.
+- [ ] Security, privacy, auth, and role semantics are clarified only when materially relevant.
+- [ ] Assumptions/defaults are documented.
+
+## Done When
+
+- Boundline can capture the goal without more than 3 prioritized clarification questions.
+- Planning can proceed from runtime-confirmed goal quality rather than chat-only assumptions.
 
 ## Brief Files
 

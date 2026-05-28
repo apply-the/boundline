@@ -7,11 +7,12 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::adapters::env_layer::{
-    ANTHROPIC_API_KEY_ENV, ANTHROPIC_BASE_URL_ENV, COPILOT_API_KEY_ENV, COPILOT_GITHUB_TOKEN_ENV,
-    DEEPSEEK_API_KEY_ENV, DEEPSEEK_BASE_URL_ENV, GEMINI_API_KEY_ENV, GH_TOKEN_ENV,
-    GITHUB_MODELS_BASE_URL_ENV, GITHUB_MODELS_ORG_ENV, GITHUB_MODELS_TOKEN_ENV, GITHUB_TOKEN_ENV,
-    GROK_API_KEY_ENV, GROK_BASE_URL_ENV, GROQ_API_KEY_ENV, GROQ_BASE_URL_ENV, OLLAMA_BASE_URL_ENV,
-    OPENAI_API_KEY_ENV, OPENAI_BASE_URL_ENV,
+    ANTHROPIC_API_KEY_ENV, ANTHROPIC_BASE_URL_ENV, COPILOT_API_KEY_ENV, COPILOT_API_URL_ENV,
+    COPILOT_GITHUB_TOKEN_ENV, DEEPSEEK_API_KEY_ENV, DEEPSEEK_BASE_URL_ENV, GEMINI_API_KEY_ENV,
+    GH_TOKEN_ENV, GITHUB_COPILOT_API_TOKEN_ENV, GITHUB_MODELS_BASE_URL_ENV, GITHUB_MODELS_ORG_ENV,
+    GITHUB_MODELS_TOKEN_ENV, GITHUB_TOKEN_ENV, GROK_API_KEY_ENV, GROK_BASE_URL_ENV,
+    GROQ_API_KEY_ENV, GROQ_BASE_URL_ENV, OLLAMA_BASE_URL_ENV, OPENAI_API_KEY_ENV,
+    OPENAI_BASE_URL_ENV,
 };
 use crate::domain::configuration::{ModelRoute, RuntimeKind};
 
@@ -84,7 +85,8 @@ const ANTHROPIC_TEXT_BLOCK_KIND: &str = "text";
 const ANTHROPIC_USER_ROLE: &str = "user";
 const ANTHROPIC_ASSISTANT_ROLE: &str = "assistant";
 const MODEL_NAMESPACE_SEPARATOR: char = '/';
-const COPILOT_TOKEN_ENV_HINT: &str = "COPILOT_GITHUB_TOKEN, GH_TOKEN, or GITHUB_TOKEN";
+const COPILOT_TOKEN_ENV_HINT: &str =
+    "GITHUB_COPILOT_API_TOKEN, COPILOT_GITHUB_TOKEN, GH_TOKEN, GITHUB_TOKEN, or COPILOT_API_KEY";
 const GITHUB_MODELS_TOKEN_ENV_HINT: &str =
     "GITHUB_MODELS_TOKEN, GITHUB_TOKEN, COPILOT_GITHUB_TOKEN, or GH_TOKEN";
 
@@ -996,17 +998,18 @@ mod tests {
 
     use super::{
         ANTHROPIC_API_KEY_ENV, ANTHROPIC_BASE_URL_ENV, COPILOT_ACCEPT_ENCODING_HEADER,
-        COPILOT_ACCEPT_ENCODING_VALUE, COPILOT_API_KEY_ENV, COPILOT_EDITOR_PLUGIN_VERSION_HEADER,
-        COPILOT_EDITOR_PLUGIN_VERSION_VALUE, COPILOT_EDITOR_VERSION_HEADER,
-        COPILOT_EDITOR_VERSION_VALUE, COPILOT_GITHUB_API_VERSION_HEADER,
-        COPILOT_GITHUB_API_VERSION_VALUE, COPILOT_GITHUB_TOKEN_ENV, COPILOT_INTEGRATION_ID_VALUE,
-        COPILOT_TOKEN_ENV_HINT, COPILOT_USER_AGENT, DEEPSEEK_API_KEY_ENV, DEEPSEEK_BASE_URL_ENV,
+        COPILOT_ACCEPT_ENCODING_VALUE, COPILOT_API_KEY_ENV, COPILOT_API_URL_ENV,
+        COPILOT_EDITOR_PLUGIN_VERSION_HEADER, COPILOT_EDITOR_PLUGIN_VERSION_VALUE,
+        COPILOT_EDITOR_VERSION_HEADER, COPILOT_EDITOR_VERSION_VALUE,
+        COPILOT_GITHUB_API_VERSION_HEADER, COPILOT_GITHUB_API_VERSION_VALUE,
+        COPILOT_GITHUB_TOKEN_ENV, COPILOT_INTEGRATION_ID_VALUE, COPILOT_TOKEN_ENV_HINT,
+        COPILOT_USER_AGENT, DEEPSEEK_API_KEY_ENV, DEEPSEEK_BASE_URL_ENV,
         DEFAULT_ANTHROPIC_BASE_URL, DEFAULT_COPILOT_BASE_URL, DEFAULT_DEEPSEEK_BASE_URL,
         GH_TOKEN_ENV, GITHUB_API_ACCEPT_HEADER_VALUE, GITHUB_API_VERSION_HEADER,
-        GITHUB_API_VERSION_VALUE, GITHUB_MODELS_BASE_URL_ENV, GITHUB_MODELS_ORG_ENV,
-        GITHUB_MODELS_TOKEN_ENV, GITHUB_TOKEN_ENV, OPENAI_API_KEY_ENV, OPENAI_BASE_URL_ENV,
-        PROVIDER_TIMEOUT_SECS, ProviderAnalysisResponse, ProviderChatMessage, ProviderChatRole,
-        ProviderNamespace, ProviderReviewDisposition, ProviderReviewRequest,
+        GITHUB_API_VERSION_VALUE, GITHUB_COPILOT_API_TOKEN_ENV, GITHUB_MODELS_BASE_URL_ENV,
+        GITHUB_MODELS_ORG_ENV, GITHUB_MODELS_TOKEN_ENV, GITHUB_TOKEN_ENV, OPENAI_API_KEY_ENV,
+        OPENAI_BASE_URL_ENV, PROVIDER_TIMEOUT_SECS, ProviderAnalysisResponse, ProviderChatMessage,
+        ProviderChatRole, ProviderNamespace, ProviderReviewDisposition, ProviderReviewRequest,
         ProviderReviewResponse, ProviderRevisionRequest, ProviderRuntimeError,
         ProviderWorkspaceFile, ResolvedProviderRoute, anthropic_messages_endpoint, chat_completion,
         compose_enriched_system_prompt, execute_openai_compatible_chat_with_exchange,
@@ -1109,6 +1112,62 @@ mod tests {
                 let _ = sender.send(request_text);
                 let response = format!(
                     "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                    response_body.len(),
+                    response_body
+                );
+                let _ = stream.write_all(response.as_bytes());
+                let _ = stream.flush();
+            }
+        });
+
+        Ok((format!("http://{address}"), receiver, handle))
+    }
+
+    fn spawn_path_response_server(
+        responses: Vec<(&'static str, String)>,
+    ) -> Result<(String, mpsc::Receiver<String>, thread::JoinHandle<()>), String> {
+        let listener = TcpListener::bind("127.0.0.1:0").map_err(|error| error.to_string())?;
+        let address = listener.local_addr().map_err(|error| error.to_string())?;
+        let (sender, receiver) = mpsc::channel();
+        let handle = thread::spawn(move || {
+            for _ in 0..responses.len() {
+                let Ok((mut stream, _)) = listener.accept() else {
+                    return;
+                };
+                let mut buffer = Vec::new();
+                let mut chunk = [0_u8; 4096];
+                loop {
+                    match stream.read(&mut chunk) {
+                        Ok(0) => break,
+                        Ok(read) => {
+                            buffer.extend_from_slice(&chunk[..read]);
+                            if request_complete(&buffer) {
+                                break;
+                            }
+                        }
+                        Err(_) => return,
+                    }
+                }
+
+                let request_text = String::from_utf8_lossy(&buffer).to_string();
+                let _ = sender.send(request_text.clone());
+                let path = request_text
+                    .lines()
+                    .next()
+                    .and_then(|line| line.split_whitespace().nth(1))
+                    .unwrap_or("/");
+                let response_body = responses
+                    .iter()
+                    .find(|(candidate, _)| *candidate == path)
+                    .map(|(_, body)| body.clone())
+                    .unwrap_or_else(|| "{\"message\":\"not found\"}".to_string());
+                let status = if responses.iter().any(|(candidate, _)| *candidate == path) {
+                    "200 OK"
+                } else {
+                    "404 Not Found"
+                };
+                let response = format!(
+                    "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
                     response_body.len(),
                     response_body
                 );
@@ -1227,6 +1286,33 @@ mod tests {
     }
 
     #[test]
+    fn resolve_provider_route_prefers_direct_copilot_api_token_and_url() {
+        with_env_test(
+            &[
+                GITHUB_COPILOT_API_TOKEN_ENV,
+                COPILOT_API_URL_ENV,
+                COPILOT_GITHUB_TOKEN_ENV,
+                GH_TOKEN_ENV,
+                GITHUB_TOKEN_ENV,
+                COPILOT_API_KEY_ENV,
+            ],
+            || {
+                unsafe {
+                    env::set_var(GITHUB_COPILOT_API_TOKEN_ENV, "direct-copilot-token");
+                    env::set_var(COPILOT_API_URL_ENV, "https://copilot.example.test");
+                    env::set_var(COPILOT_GITHUB_TOKEN_ENV, "github-bootstrap-token");
+                }
+                let route =
+                    ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-5.4".to_string() };
+                let resolved =
+                    resolve_provider_route(&route).expect("copilot route should resolve");
+                assert_eq!(resolved.api_key.as_deref(), Some("direct-copilot-token"));
+                assert_eq!(resolved.base_url, "https://copilot.example.test".to_string());
+            },
+        );
+    }
+
+    #[test]
     fn resolve_provider_route_does_not_fallback_to_openai_for_copilot_runtime() {
         with_env_test(
             &[
@@ -1243,11 +1329,21 @@ mod tests {
                 let route =
                     ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-5.4".to_string() };
                 let resolved = resolve_provider_route(&route);
-                assert!(matches!(
-                    resolved,
-                    Err(ProviderRuntimeError::MissingApiKey { namespace, env_key })
-                        if namespace == "copilot" && env_key == COPILOT_TOKEN_ENV_HINT
-                ));
+                // When a stored auth profile exists, Copilot credentials resolve
+                // successfully from the profile; confirm the OpenAI token is never
+                // used. When no profile exists, credentials should be missing.
+                match resolved {
+                    Ok(r) => assert_ne!(
+                        r.api_key.as_deref(),
+                        Some("openai-token"),
+                        "Copilot route must not use OpenAI credentials"
+                    ),
+                    Err(ref e) => assert!(matches!(
+                        e,
+                        ProviderRuntimeError::MissingApiKey { namespace, env_key }
+                            if *namespace == "copilot" && *env_key == COPILOT_TOKEN_ENV_HINT
+                    )),
+                }
             },
         );
     }
@@ -1656,7 +1752,7 @@ mod tests {
             namespace: ProviderNamespace::Copilot,
             model_id: "gpt-5.4".to_string(),
             base_url: chat_base_url,
-            api_key: Some("github_pat_test_token".to_string()),
+            api_key: Some("gho_test_token".to_string()),
         };
 
         let response = execute_openai_compatible_chat_with_exchange(
@@ -1675,7 +1771,7 @@ mod tests {
         let exchange_request_lower = exchange_request.to_ascii_lowercase();
         assert!(exchange_request.contains("GET /copilot_internal/v2/token"), "{exchange_request}");
         assert!(
-            exchange_request_lower.contains("authorization: bearer github_pat_test_token"),
+            exchange_request_lower.contains("authorization: bearer gho_test_token"),
             "{exchange_request}"
         );
         assert!(
@@ -1737,6 +1833,131 @@ mod tests {
         );
 
         assert!(exchange_handle.join().is_ok());
+        assert!(chat_handle.join().is_ok());
+    }
+
+    #[test]
+    fn chat_completion_uses_direct_copilot_api_token_without_bootstrap() {
+        with_env_test(
+            &[
+                GITHUB_COPILOT_API_TOKEN_ENV,
+                COPILOT_API_URL_ENV,
+                COPILOT_GITHUB_TOKEN_ENV,
+                GH_TOKEN_ENV,
+                GITHUB_TOKEN_ENV,
+                COPILOT_API_KEY_ENV,
+            ],
+            || {
+                let response_body = json!({
+                    "choices": [
+                        {
+                            "message": {
+                                "content": "ready"
+                            }
+                        }
+                    ]
+                })
+                .to_string();
+                let server =
+                    spawn_single_response_server(response_body).expect("server should start");
+                let (base_url, receiver, handle) = server;
+
+                unsafe {
+                    env::set_var(GITHUB_COPILOT_API_TOKEN_ENV, "direct-copilot-token");
+                    env::set_var(COPILOT_API_URL_ENV, base_url.clone());
+                }
+
+                let response = chat_completion(
+                    &ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-5.4".to_string() },
+                    &[ProviderChatMessage {
+                        role: ProviderChatRole::User,
+                        content: "hello".to_string(),
+                    }],
+                    Some(64),
+                );
+                assert!(response.is_ok());
+                assert_eq!(response.unwrap_or_default(), "ready".to_string());
+
+                let request_text = receiver.recv().expect("chat request should be captured");
+                let request_text_lower = request_text.to_ascii_lowercase();
+                assert!(request_text.contains("POST /chat/completions"), "{request_text}");
+                assert!(
+                    request_text_lower.contains("authorization: bearer direct-copilot-token"),
+                    "{request_text}"
+                );
+                assert!(handle.join().is_ok());
+            },
+        );
+    }
+
+    #[test]
+    fn chat_completion_bootstraps_copilot_runtime_from_user_endpoint_before_chat_request() {
+        let chat_response_body = json!({
+            "choices": [
+                {
+                    "message": {
+                        "content": "ready"
+                    }
+                }
+            ]
+        })
+        .to_string();
+        let chat_server = spawn_single_response_server(chat_response_body).expect("chat server");
+        let (chat_base_url, chat_receiver, chat_handle) = chat_server;
+
+        let user_response_body = json!({
+            "login": "sdk-e2e-user",
+            "copilot_plan": "individual_pro",
+            "endpoints": {
+                "api": chat_base_url,
+                "telemetry": "https://localhost:1/telemetry"
+            }
+        })
+        .to_string();
+        let user_server =
+            spawn_path_response_server(vec![("/copilot_internal/user", user_response_body)])
+                .expect("user bootstrap server");
+        let (user_base_url, user_receiver, user_handle) = user_server;
+
+        let client = Client::builder()
+            .timeout(Duration::from_secs(PROVIDER_TIMEOUT_SECS))
+            .build()
+            .unwrap_or_else(|_| Client::new());
+        let route = ResolvedProviderRoute {
+            namespace: ProviderNamespace::Copilot,
+            model_id: "gpt-5.4".to_string(),
+            base_url: DEFAULT_COPILOT_BASE_URL.to_string(),
+            api_key: Some("gho_test_token".to_string()),
+        };
+
+        let response = super::copilot::execute_chat_with_exchange_and_bootstrap(
+            &client,
+            &route,
+            &[ProviderChatMessage { role: ProviderChatRole::User, content: "hello".to_string() }],
+            Some(64),
+            "http://127.0.0.1:9/copilot_internal/v2/token",
+            &format!("{user_base_url}/copilot_internal/user"),
+        );
+        assert!(response.is_ok());
+        assert_eq!(response.unwrap_or_default(), "ready".to_string());
+
+        let user_request = user_receiver.recv().expect("user bootstrap request should be captured");
+        let user_request_lower = user_request.to_ascii_lowercase();
+        assert!(user_request.contains("GET /copilot_internal/user"), "{user_request}");
+        assert!(
+            user_request_lower.contains("authorization: bearer gho_test_token"),
+            "{user_request}"
+        );
+
+        let chat_request = chat_receiver.recv().expect("chat request should be captured");
+        let chat_request_lower = chat_request.to_ascii_lowercase();
+        assert!(chat_request.contains("POST /chat/completions"), "{chat_request}");
+        assert!(
+            chat_request_lower.contains("authorization: bearer gho_test_token"),
+            "{chat_request}"
+        );
+
+        assert!(user_handle.join().is_ok());
         assert!(chat_handle.join().is_ok());
     }
 
@@ -1829,14 +2050,14 @@ mod tests {
     }
 
     #[test]
-    fn copilot_exchange_404_guides_personal_access_tokens_to_oauth() {
-        let hint = super::copilot::token_exchange_error_hint("ghp_example", 404);
+    fn copilot_exchange_403_hints_direct_or_bootstrap_paths_for_personal_tokens() {
+        let hint = super::copilot::token_exchange_error_hint("ghp_example", 403);
         assert!(hint.is_some());
         let hint = hint.unwrap_or_default();
         assert!(hint.contains("personal access token"), "{hint}");
-        assert!(hint.contains("OAuth user token"), "{hint}");
+        assert!(hint.contains("GITHUB_COPILOT_API_TOKEN"), "{hint}");
 
-        let oauth_hint = super::copilot::token_exchange_error_hint("gho_example", 404);
+        let oauth_hint = super::copilot::token_exchange_error_hint("gho_example", 403);
         assert!(oauth_hint.is_some());
 
         let no_hint = super::copilot::token_exchange_error_hint("ghp_example", 500);

@@ -22,6 +22,8 @@ pub const GEMINI_API_KEY_ENV: &str = "GEMINI_API_KEY";
 pub const GITHUB_MODELS_TOKEN_ENV: &str = "GITHUB_MODELS_TOKEN";
 pub const GITHUB_MODELS_BASE_URL_ENV: &str = "GITHUB_MODELS_BASE_URL";
 pub const GITHUB_MODELS_ORG_ENV: &str = "GITHUB_MODELS_ORG";
+pub const GITHUB_COPILOT_API_TOKEN_ENV: &str = "GITHUB_COPILOT_API_TOKEN";
+pub const COPILOT_API_URL_ENV: &str = "COPILOT_API_URL";
 pub const COPILOT_GITHUB_TOKEN_ENV: &str = "COPILOT_GITHUB_TOKEN";
 pub const GH_TOKEN_ENV: &str = "GH_TOKEN";
 pub const GITHUB_TOKEN_ENV: &str = "GITHUB_TOKEN";
@@ -34,6 +36,7 @@ const DEFAULT_GROK_BASE_URL: &str = "https://api.x.ai/v1";
 const DEFAULT_GROQ_BASE_URL: &str = "https://api.groq.com/openai/v1";
 const DEFAULT_OLLAMA_BASE_URL: &str = "http://127.0.0.1:11434/v1";
 const DEFAULT_ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com";
+const DEFAULT_COPILOT_BASE_URL: &str = "https://api.individual.githubcopilot.com";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProviderEnvTemplateScope {
@@ -209,13 +212,12 @@ pub fn render_provider_env_template(scope: ProviderEnvTemplateScope) -> String {
         format!("{GITHUB_MODELS_ORG_ENV}="),
         "# Boundline also honors GITHUB_TOKEN for GitHub Models requests.".to_string(),
         String::new(),
-        "# Copilot official runtime (GitHub token auth)".to_string(),
-        "# Boundline uses the official GitHub Copilot endpoint internally."
+        "# Copilot official runtime".to_string(),
+        "# Preferred direct API token path when your environment already has a Copilot API token."
             .to_string(),
-        "# GitHub user/OAuth token used only for Copilot token exchange."
-            .to_string(),
-        "# Boundline exchanges it for a short-lived Copilot API token before chat requests."
-            .to_string(),
+        format!("{GITHUB_COPILOT_API_TOKEN_ENV}="),
+        format!("{COPILOT_API_URL_ENV}={DEFAULT_COPILOT_BASE_URL}"),
+        "# Fallback GitHub token path for Copilot bootstrap.".to_string(),
         format!("{COPILOT_GITHUB_TOKEN_ENV}="),
         "# Boundline also honors GH_TOKEN and GITHUB_TOKEN if they are already present."
             .to_string(),
@@ -243,7 +245,7 @@ fn provider_process_keys_present() -> Vec<String> {
         .collect()
 }
 
-fn provider_key_catalog() -> [&'static str; 19] {
+fn provider_key_catalog() -> [&'static str; 21] {
     [
         OPENAI_API_KEY_ENV,
         OPENAI_BASE_URL_ENV,
@@ -260,6 +262,8 @@ fn provider_key_catalog() -> [&'static str; 19] {
         GITHUB_MODELS_TOKEN_ENV,
         GITHUB_MODELS_BASE_URL_ENV,
         GITHUB_MODELS_ORG_ENV,
+        GITHUB_COPILOT_API_TOKEN_ENV,
+        COPILOT_API_URL_ENV,
         COPILOT_GITHUB_TOKEN_ENV,
         GH_TOKEN_ENV,
         GITHUB_TOKEN_ENV,
@@ -279,8 +283,9 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        ANTHROPIC_API_KEY_ENV, ANTHROPIC_BASE_URL_ENV, COPILOT_GITHUB_TOKEN_ENV, EnvLayerError,
-        GEMINI_API_KEY_ENV, GITHUB_MODELS_ORG_ENV, GITHUB_MODELS_TOKEN_ENV, OPENAI_API_KEY_ENV,
+        ANTHROPIC_API_KEY_ENV, ANTHROPIC_BASE_URL_ENV, COPILOT_API_URL_ENV,
+        COPILOT_GITHUB_TOKEN_ENV, EnvLayerError, GEMINI_API_KEY_ENV, GITHUB_COPILOT_API_TOKEN_ENV,
+        GITHUB_MODELS_ORG_ENV, GITHUB_MODELS_TOKEN_ENV, OPENAI_API_KEY_ENV,
         ProviderEnvTemplateScope, load_provider_environment, provider_environment_status,
         render_provider_env_template,
     };
@@ -437,6 +442,8 @@ mod tests {
         assert!(global.contains(GEMINI_API_KEY_ENV));
         assert!(global.contains(GITHUB_MODELS_TOKEN_ENV));
         assert!(global.contains(GITHUB_MODELS_ORG_ENV));
+        assert!(global.contains(GITHUB_COPILOT_API_TOKEN_ENV));
+        assert!(global.contains(COPILOT_API_URL_ENV));
         assert!(global.contains(COPILOT_GITHUB_TOKEN_ENV));
         assert!(!global.contains("COPILOT_BASE_URL"));
         assert!(global.contains("https://api.deepseek.com"));

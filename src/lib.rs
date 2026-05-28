@@ -61,10 +61,10 @@ pub use domain::governance::{
     GovernanceRuntimeState, GovernanceStartupContext, GovernanceTransitionDirection,
     GovernedStageCatalogEntry, GovernedStageCategory, GovernedStagePacket, GovernedStageRecord,
     PacketReadiness, PacketReuseBinding, SEMANTIC_ARTIFACT_DESCRIPTOR_V1_CONTRACT_LINE,
-    StageGovernancePolicy, StopSemantics, SystemContextBinding, autopilot_action_text,
-    candidate_canon_modes, classify_packet_readiness, governed_stage_catalog,
-    resolve_governance_startup_posture, resolved_canon_mode, supported_canon_modes_for_stage,
-    validate_canon_capabilities_for_mode,
+    StageGovernancePolicy, StopSemantics, SystemContextBinding, assess_backlog_quality,
+    autopilot_action_text, candidate_canon_modes, classify_packet_readiness,
+    governed_stage_catalog, resolve_governance_startup_posture, resolved_canon_mode,
+    supported_canon_modes_for_stage, validate_canon_capabilities_for_mode,
 };
 pub use domain::guidance::{
     CapabilityPhase, CapabilityResolutionRecord, FindingConfidence, GuardianCapability,

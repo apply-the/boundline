@@ -23,6 +23,12 @@ If the active session has no captured goal, authored brief, or planned task, rou
 ## Governed Continuation
 Treat `/boundline-run` as the Boundline-first continuation surface. Canon-default governed shorthand may still appear as `boundline run --mode <mode>` when the operator explicitly requests a Canon-default governed mode, but do not rewrite it into `/boundline-run <mode>` or any per-mode `/boundline-<mode>` alias. If the CLI emits governance selection, approval wait, or missing governed input, preserve `governance_runtime`, `mode_selection_preference`, `selected_mode`, `approval_state`, and `next_action` exactly, then follow the emitted `resume_command`, `next_command`, or route to `/boundline-govern`.
 
+## Backlog Quality Gate
+Canon backlog is governed source material, while Boundline validates execution readiness. Preserve `backlog_quality_state`, `backlog_quality_findings`, `backlog_task_count`, `backlog_mvp_scope`, and `backlog_unmapped_items` when they appear in status or run output. If `backlog_quality_state` is `blocked` or `clarification_required`, do not route to `/boundline:run`; route to `/boundline:plan` or the emitted planning `phase_request` continuation instead.
+
+## Planning Analysis Gate
+Planning analysis is the final Boundline planning gate before execution. Preserve `planning_analysis_state`, `planning_analysis_findings`, and `planning_analysis_coverage` when they appear in status or run output. If `planning_analysis_state` is `blocked`, do not route to `/boundline:run`; route to `/boundline:plan` or the emitted planning continuation instead.
+
 ## Chat-Only Path
 If shell execution is unavailable, ask only for missing workspace context and then provide this exact copyable command:
 

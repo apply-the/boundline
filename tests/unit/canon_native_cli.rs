@@ -179,7 +179,8 @@ use boundline::orchestrator::governance::{bounded_governance_context, governance
 #[test]
 fn governance_input_documents_maps_briefs_with_correct_kinds() {
     use boundline::domain::brief::{
-        AuthoredBriefBundle, AuthoredBriefResolutionState, InputSourceKind, InputSourceReference,
+        AuthoredBriefBundle, AuthoredBriefResolutionState, GoalQualityAssessment, InputSourceKind,
+        InputSourceReference,
     };
     use serde_json::json;
 
@@ -207,6 +208,7 @@ fn governance_input_documents_maps_briefs_with_correct_kinds() {
         deduplicated_sources: Vec::new(),
         governance_intent: None,
         resolution_state: AuthoredBriefResolutionState::Ready,
+        goal_quality: GoalQualityAssessment::default(),
         clarification: None,
         derived_task_draft: None,
         captured_at: 1000,
@@ -226,7 +228,8 @@ fn governance_input_documents_maps_briefs_with_correct_kinds() {
 #[test]
 fn governance_input_documents_includes_clarification_answers() {
     use boundline::domain::brief::{
-        AuthoredBriefBundle, AuthoredBriefResolutionState, InputSourceKind, InputSourceReference,
+        AuthoredBriefBundle, AuthoredBriefResolutionState, GoalQualityAssessment, InputSourceKind,
+        InputSourceReference,
     };
     use serde_json::json;
 
@@ -255,6 +258,7 @@ fn governance_input_documents_includes_clarification_answers() {
         deduplicated_sources: Vec::new(),
         governance_intent: None,
         resolution_state: AuthoredBriefResolutionState::Ready,
+        goal_quality: GoalQualityAssessment::default(),
         clarification: Some(clarification),
         derived_task_draft: None,
         captured_at: 2000,

@@ -549,6 +549,7 @@ mod tests {
             delight_feedback: None,
             next_command: Some("boundline step".to_string()),
             explanation: "current active session state for the workspace".to_string(),
+            ..SessionStatusView::default()
         });
 
         assert_eq!(

@@ -137,6 +137,7 @@ pub fn command_name(command: &DeveloperCommand) -> &'static str {
         DeveloperCommand::Update { .. } => "update",
         DeveloperCommand::Config { .. } => "config",
         DeveloperCommand::Cluster { .. } => "cluster",
+        DeveloperCommand::Models { .. } => "models",
     }
 }
 

@@ -1,5 +1,7 @@
 #[path = "../../../src/domain/audit.rs"]
 pub mod audit;
+#[path = "../../../src/domain/auth_profile.rs"]
+pub mod auth_profile;
 #[path = "../../../src/domain/brief.rs"]
 pub mod brief;
 #[path = "../../../src/domain/checkpoint.rs"]

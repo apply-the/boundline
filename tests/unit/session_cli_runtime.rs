@@ -9,8 +9,8 @@ use boundline::cli::diagnostics::{diagnose_native_direct_run_workspace, diagnose
 use boundline::cli::inspect::{TraceSummaryError, summarize_trace};
 use boundline::cli::run::{RunCommandError, execute_native_direct_run};
 use boundline::cli::session::{
-    SessionCommandError, execute_flow, execute_goal, execute_next, execute_plan, execute_status,
-    execute_step, render_error,
+    SessionCommandError, execute_flow, execute_goal, execute_next, execute_plan, execute_run,
+    execute_status, execute_step, render_error,
 };
 use boundline::cli::{
     Cli, CliValidationError, CommandExitStatus, CommandName, DeveloperCommand,
@@ -36,6 +36,11 @@ use boundline::domain::execution::{
 use boundline::domain::flow::{
     FlowStepMetadata, FlowValidationError, SessionFlowState, attach_stage_metadata, built_in_flow,
     supported_flow_names_csv,
+};
+use boundline::domain::goal_plan::{
+    GoalPlan, PlannedTask, PlanningAnalysisCoverage, PlanningAnalysisFinding,
+    PlanningAnalysisProjection, PlanningAnalysisSeverity, PlanningAnalysisSource,
+    PlanningAnalysisState,
 };
 use boundline::domain::governance::{
     CanonModeSelectionPreference, CanonSemanticProvenanceBoundary, GovernanceLifecycleState,
@@ -153,6 +158,21 @@ fn build_planned_record(workspace_ref: &str) -> ActiveSessionRecord {
         latest_voting: None,
         delight_feedback: None,
     }
+}
+
+fn build_ready_goal_plan() -> Result<GoalPlan, Box<dyn std::error::Error>> {
+    Ok(GoalPlan::new(
+        "Deliver a bounded change",
+        vec![PlannedTask {
+            task_id: "T001".to_string(),
+            description: "Update the bounded implementation".to_string(),
+            target: "src/lib.rs".to_string(),
+            expected_outcome: Some("bounded change delivered".to_string()),
+            decision_type_hint: None,
+        }],
+    )?
+    .with_planning_rationale("workspace evidence supports this bounded change")
+    .with_verification_strategy("run the focused regression checks after editing"))
 }
 
 fn build_status_view(record: &ActiveSessionRecord) -> SessionStatusView {
@@ -1396,6 +1416,155 @@ fn inspect_summary_and_session_commands_cover_additional_error_paths() {
 }
 
 #[test]
+fn execute_run_blocks_when_plan_quality_requires_clarification()
+-> Result<(), Box<dyn std::error::Error>> {
+    let workspace = temp_workspace("boundline-cli-run-plan-quality-block");
+    let mut record = build_planned_record(workspace.to_string_lossy().as_ref());
+    record.goal_plan = Some(build_ready_goal_plan()?.with_verification_strategy(" "));
+    FileSessionStore::for_workspace(&workspace).persist(&record)?;
+
+    let report = execute_run(Some(&workspace))?;
+    assert_eq!(report.exit_status, CommandExitStatus::NonSuccess);
+
+    let Some(session_status) = report.session_status.as_ref() else {
+        return Err(std::io::Error::other("run report missing session status").into());
+    };
+
+    assert_eq!(session_status.latest_status, SessionStatus::Blocked);
+    assert_eq!(session_status.plan_quality_state.as_deref(), Some("clarification_required"));
+    assert!(report.terminal_output.contains("current goal plan is not ready for execution"));
+
+    Ok(())
+}
+
+#[test]
+fn execute_run_blocks_when_backlog_quality_is_not_ready() -> Result<(), Box<dyn std::error::Error>>
+{
+    let workspace = temp_workspace("boundline-cli-run-backlog-quality-block");
+    let mut record = build_planned_record(workspace.to_string_lossy().as_ref());
+    record.goal_plan = Some(build_ready_goal_plan()?);
+    record.governance_lifecycle = Some(GovernedSessionLifecycle {
+        governance_runtime: GovernanceRuntimeKind::Canon,
+        explicit_opt_out: false,
+        mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+        selected_mode: None,
+        selected_mode_sequence: vec![
+            CanonMode::Discovery,
+            CanonMode::Architecture,
+            CanonMode::Backlog,
+        ],
+        latest_reasoning_profile: None,
+        current_stage_index: 2,
+        stage_records: Vec::new(),
+        accumulated_context: Vec::new(),
+        terminal_reason: None,
+        planning_input_fingerprint: None,
+    });
+    FileSessionStore::for_workspace(&workspace).persist(&record)?;
+
+    let report = execute_run(Some(&workspace))?;
+    assert_eq!(report.exit_status, CommandExitStatus::NonSuccess);
+
+    let Some(session_status) = report.session_status.as_ref() else {
+        return Err(std::io::Error::other("run report missing session status").into());
+    };
+
+    assert_eq!(session_status.latest_status, SessionStatus::Blocked);
+    assert_eq!(session_status.backlog_quality_state.as_deref(), Some("clarification_required"));
+    assert_eq!(
+        session_status.backlog_quality_findings.as_ref(),
+        Some(&vec!["backlog_packet_pending".to_string(), "missing_backlog_document".to_string(),])
+    );
+    assert!(report.terminal_output.contains("governed backlog packet is not ready for execution"));
+
+    Ok(())
+}
+
+#[test]
+fn execute_run_blocks_when_planning_analysis_is_blocked() -> Result<(), Box<dyn std::error::Error>>
+{
+    let workspace = temp_workspace("boundline-cli-run-planning-analysis-block");
+    let mut record = build_planned_record(workspace.to_string_lossy().as_ref());
+    let mut goal_plan = build_ready_goal_plan()?;
+    goal_plan.planning_analysis = Some(PlanningAnalysisProjection {
+        state: PlanningAnalysisState::Blocked,
+        findings: vec![PlanningAnalysisFinding {
+            severity: PlanningAnalysisSeverity::Critical,
+            source: PlanningAnalysisSource::Backlog,
+            message: "backlog does not map any goal-plan task ids".to_string(),
+        }],
+        coverage: Some(PlanningAnalysisCoverage {
+            success_criteria_total: 1,
+            success_criteria_covered: 1,
+            backlog_task_count: Some(1),
+            mapped_plan_task_count: Some(0),
+        }),
+    });
+    record.goal_plan = Some(goal_plan);
+    FileSessionStore::for_workspace(&workspace).persist(&record)?;
+
+    let report = execute_run(Some(&workspace))?;
+    assert_eq!(report.exit_status, CommandExitStatus::NonSuccess);
+
+    let Some(session_status) = report.session_status.as_ref() else {
+        return Err(std::io::Error::other("run report missing session status").into());
+    };
+
+    assert_eq!(session_status.latest_status, SessionStatus::Blocked);
+    assert_eq!(session_status.planning_analysis_state.as_deref(), Some("blocked"));
+    assert!(report.terminal_output.contains("planning analysis found a blocking execution gap"));
+
+    Ok(())
+}
+
+#[test]
+fn execute_run_prefers_backlog_quality_before_planning_analysis()
+-> Result<(), Box<dyn std::error::Error>> {
+    let workspace = temp_workspace("boundline-cli-run-backlog-before-analysis");
+    let mut record = build_planned_record(workspace.to_string_lossy().as_ref());
+    let mut goal_plan = build_ready_goal_plan()?;
+    goal_plan.planning_analysis = Some(PlanningAnalysisProjection {
+        state: PlanningAnalysisState::Blocked,
+        findings: vec![PlanningAnalysisFinding {
+            severity: PlanningAnalysisSeverity::Critical,
+            source: PlanningAnalysisSource::Backlog,
+            message: "backlog does not map any goal-plan task ids".to_string(),
+        }],
+        coverage: Some(PlanningAnalysisCoverage {
+            success_criteria_total: 1,
+            success_criteria_covered: 1,
+            backlog_task_count: Some(1),
+            mapped_plan_task_count: Some(0),
+        }),
+    });
+    record.goal_plan = Some(goal_plan);
+    record.governance_lifecycle = Some(GovernedSessionLifecycle {
+        governance_runtime: GovernanceRuntimeKind::Canon,
+        explicit_opt_out: false,
+        mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+        selected_mode: None,
+        selected_mode_sequence: vec![
+            CanonMode::Discovery,
+            CanonMode::Architecture,
+            CanonMode::Backlog,
+        ],
+        latest_reasoning_profile: None,
+        current_stage_index: 2,
+        stage_records: Vec::new(),
+        accumulated_context: Vec::new(),
+        terminal_reason: None,
+        planning_input_fingerprint: None,
+    });
+    FileSessionStore::for_workspace(&workspace).persist(&record)?;
+
+    let report = execute_run(Some(&workspace))?;
+    assert_eq!(report.exit_status, CommandExitStatus::NonSuccess);
+    assert!(report.terminal_output.contains("governed backlog packet is not ready for execution"));
+
+    Ok(())
+}
+
+#[test]
 fn session_runtime_public_methods_cover_goal_flow_and_trace_management() {
     let workspace = temp_workspace("boundline-session-runtime-public");
     let runtime = SessionRuntime::for_workspace(&workspace);
@@ -1747,12 +1916,14 @@ fn session_runtime_blocks_discovery_stage_council_when_reviewer_routes_collapse(
         workspace.join("brief.md"),
         concat!(
             "Goal: repair the onboarding regression before release.\n",
+            "Scope boundary: first slice repairs account creation only.\n",
             "Intended outcome: restore account creation and keep audit logs intact.\n",
             "Domain model: onboarding requests create customer accounts and audit entries.\n",
             "API operations: POST /customers should accept a valid onboarding payload.\n",
             "Persistence choice: Postgres remains the source of truth.\n",
             "Auth boundary: authenticated support operators trigger the workflow.\n",
             "Role model semantics: support operators create accounts and auditors inspect history.\n",
+            "Success criteria: support operators can create customer accounts while audit history remains intact.\n",
             "Validation target: cargo test onboarding_flow should pass.\n",
         ),
     )
@@ -1776,7 +1947,7 @@ fn session_runtime_blocks_discovery_stage_council_when_reviewer_routes_collapse(
     let runtime = SessionRuntime::for_workspace(&workspace);
     let authored_brief = normalize_inputs_with_governance(
         &workspace,
-        Some("Repair the governed onboarding regression"),
+        Some("Repair the bounded governed onboarding regression"),
         &[PathBuf::from("brief.md")],
         Some(GovernanceIntent {
             requested: true,
@@ -1858,5 +2029,6 @@ fn session_runtime_confirms_goal_plan_for_selected_flow_when_context_is_sufficie
     assert_eq!(session.latest_status, SessionStatus::Planned);
     assert_eq!(session.active_flow.as_ref().map(|flow| flow.flow_name.as_str()), Some("bug-fix"));
     assert!(session.active_task.is_none());
-    assert!(session.goal_plan.is_some());
+    let goal_plan = session.goal_plan.as_ref().expect("goal plan should be persisted");
+    assert!(goal_plan.planning_analysis_state().is_some());
 }

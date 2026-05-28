@@ -2,6 +2,8 @@
 pub mod agent;
 #[path = "../../../src/adapters/audit_store.rs"]
 pub mod audit_store;
+#[path = "../../../src/adapters/auth_profile_store.rs"]
+pub mod auth_profile_store;
 #[path = "../../../src/adapters/checkpoint_store.rs"]
 pub mod checkpoint_store;
 #[path = "../../../src/adapters/cluster_store.rs"]
@@ -10,6 +12,8 @@ pub mod cluster_store;
 pub mod config_store;
 #[path = "../../../src/adapters/env_layer.rs"]
 pub mod env_layer;
+#[path = "../../../src/adapters/github_device_flow.rs"]
+pub mod github_device_flow;
 #[path = "../../../src/adapters/governance_runtime.rs"]
 pub mod governance_runtime;
 #[path = "../../../src/adapters/provider_runtime.rs"]

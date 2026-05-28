@@ -48,7 +48,10 @@ use boundline::domain::context_intelligence::{
     RetrievalStalenessState, RetrievalState, RetrievedEvidenceCandidate, SemanticCapabilityState,
     SemanticPolicyState,
 };
-use boundline::domain::goal_plan::{GoalPlanFlowMode, GoalPlanFlowState};
+use boundline::domain::goal_plan::{
+    GoalPlanFlowMode, GoalPlanFlowState, PlanningAnalysisCoverage, PlanningAnalysisFinding,
+    PlanningAnalysisSeverity, PlanningAnalysisSource,
+};
 use boundline::domain::governance::GovernanceRuntimeKind;
 use boundline::domain::limits::{RunLimits, TerminalCondition};
 use boundline::domain::reasoning::{
@@ -1255,6 +1258,90 @@ fn render_session_status_surfaces_context_projection() {
     assert!(rendered.contains(
         "impact_finding: tests/context_router.rs [missing_test] add or refresh the focused regression test"
     ));
+}
+
+#[test]
+fn render_session_status_surfaces_plan_quality_projection() {
+    let rendered = render_session_status(&SessionStatusView {
+        plan_quality_state: Some("clarification_required".to_string()),
+        plan_quality_findings: Some(vec![
+            "planning_rationale".to_string(),
+            "verification_strategy".to_string(),
+        ]),
+        plan_quality_assumptions: Some(vec![
+            "no explicit route override is required for this plan".to_string(),
+        ]),
+        ..SessionStatusView::default()
+    });
+
+    assert!(rendered.contains("plan_quality_state: clarification_required"), "{rendered}");
+    assert!(
+        rendered.contains("plan_quality_findings: planning_rationale, verification_strategy"),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains(
+            "plan_quality_assumptions: no explicit route override is required for this plan"
+        ),
+        "{rendered}"
+    );
+}
+
+#[test]
+fn render_session_status_surfaces_backlog_quality_projection() {
+    let rendered = render_session_status(&SessionStatusView {
+        backlog_quality_state: Some("clarification_required".to_string()),
+        backlog_quality_findings: Some(vec![
+            "missing_dependency_order".to_string(),
+            "missing_mvp_scope".to_string(),
+        ]),
+        backlog_task_count: Some(2),
+        backlog_mvp_scope: Some("US1 session status projection".to_string()),
+        backlog_unmapped_items: Some(vec!["post-launch adoption metric".to_string()]),
+        ..SessionStatusView::default()
+    });
+
+    assert!(rendered.contains("backlog_quality_state: clarification_required"), "{rendered}");
+    assert!(
+        rendered.contains("backlog_quality_findings: missing_dependency_order, missing_mvp_scope"),
+        "{rendered}"
+    );
+    assert!(rendered.contains("backlog_task_count: 2"), "{rendered}");
+    assert!(rendered.contains("backlog_mvp_scope: US1 session status projection"), "{rendered}");
+    assert!(rendered.contains("backlog_unmapped_items: post-launch adoption metric"), "{rendered}");
+}
+
+#[test]
+fn render_session_status_surfaces_planning_analysis_projection() {
+    let rendered = render_session_status(&SessionStatusView {
+        planning_analysis_state: Some("blocked".to_string()),
+        planning_analysis_findings: Some(vec![PlanningAnalysisFinding {
+            severity: PlanningAnalysisSeverity::Critical,
+            source: PlanningAnalysisSource::Backlog,
+            message: "backlog does not map any goal-plan task ids".to_string(),
+        }]),
+        planning_analysis_coverage: Some(PlanningAnalysisCoverage {
+            success_criteria_total: 2,
+            success_criteria_covered: 2,
+            backlog_task_count: Some(2),
+            mapped_plan_task_count: Some(0),
+        }),
+        ..SessionStatusView::default()
+    });
+
+    assert!(rendered.contains("planning_analysis_state: blocked"), "{rendered}");
+    assert!(
+        rendered.contains(
+            "planning_analysis_findings: critical:backlog:backlog does not map any goal-plan task ids"
+        ),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains(
+            "planning_analysis_coverage: success_criteria=2/2, backlog_tasks=2, mapped_plan_tasks=0/2"
+        ),
+        "{rendered}"
+    );
 }
 
 #[test]

@@ -2,8 +2,9 @@ use boundline::domain::decision::{DecisionType, EvidenceRef};
 use boundline::domain::goal_plan::{
     ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan, GoalPlanError,
     GoalPlanFlowMode, GoalPlanFlowState, GoalPlanStatus, InferredFlow, PlannedTask,
-    WorkspaceSignals,
+    PlanningAnalysisSeverity, PlanningAnalysisSource, PlanningAnalysisState, WorkspaceSignals,
 };
+use boundline::domain::governance::{BacklogQualityAssessment, BacklogQualityState};
 
 fn sample_task(id: &str) -> PlannedTask {
     PlannedTask {
@@ -173,6 +174,159 @@ fn planning_rationale_and_verification_strategy_helpers_set_fields() {
         Some("run targeted arithmetic tests for src/lib.rs")
     );
     assert_eq!(plan.next_revision(), 2);
+}
+
+#[test]
+fn plan_quality_reports_missing_rationale_and_verification_strategy() {
+    let plan = GoalPlan::new("Goal", vec![sample_task("t1")]).unwrap();
+
+    assert_eq!(plan.plan_quality_state().as_deref(), Some("clarification_required"));
+    assert_eq!(
+        plan.plan_quality_findings().unwrap(),
+        vec!["planning_rationale".to_string(), "verification_strategy".to_string()]
+    );
+    assert_eq!(
+        plan.plan_quality_assumptions().unwrap(),
+        vec!["no explicit route override is required for this plan".to_string()]
+    );
+}
+
+#[test]
+fn plan_quality_is_ready_when_rationale_and_verification_strategy_are_present() {
+    let plan = GoalPlan::new("Goal", vec![sample_task("t1")])
+        .unwrap()
+        .with_planning_rationale("target selected from the captured goal and workspace evidence")
+        .with_verification_strategy("run the relevant focused test command after implementation");
+
+    assert_eq!(plan.plan_quality_state().as_deref(), Some("ready"));
+    assert!(plan.plan_quality_findings().is_none());
+    assert_eq!(
+        plan.plan_quality_assumptions().unwrap(),
+        vec!["no explicit route override is required for this plan".to_string()]
+    );
+}
+
+#[test]
+fn plan_quality_blocks_when_context_pack_is_insufficient() {
+    let plan = GoalPlan::new("Goal", vec![sample_task("t1")])
+        .unwrap()
+        .with_context_pack(ContextPack {
+            pack_id: "cp-blocked".to_string(),
+            summary: "insufficient context".to_string(),
+            credibility: ContextPackCredibility::Insufficient,
+            inputs: vec![ContextInput {
+                kind: ContextInputKind::RecentTrace,
+                reference: ".boundline/traces/old.json".to_string(),
+                rationale: "only stale historical context is available".to_string(),
+                source: "latest_trace".to_string(),
+                primary: false,
+            }],
+            selected_targets: Vec::new(),
+            advanced_context: None,
+            staleness_reason: None,
+        })
+        .with_planning_rationale("selected the only known target from partial evidence")
+        .with_verification_strategy("operator must confirm the verification command");
+
+    assert_eq!(plan.plan_quality_state().as_deref(), Some("blocked"));
+    assert_eq!(
+        plan.plan_quality_findings().unwrap(),
+        vec!["context_pack_insufficient".to_string()]
+    );
+}
+
+#[test]
+fn plan_quality_blocks_when_context_pack_is_stale() {
+    let plan = GoalPlan::new("Goal", vec![sample_task("t1")])
+        .unwrap()
+        .with_context_pack(ContextPack {
+            pack_id: "cp-stale".to_string(),
+            summary: "stale context".to_string(),
+            credibility: ContextPackCredibility::Stale,
+            inputs: vec![ContextInput {
+                kind: ContextInputKind::RecentTrace,
+                reference: ".boundline/traces/old.json".to_string(),
+                rationale: "was the last authoritative trace".to_string(),
+                source: "latest_trace".to_string(),
+                primary: false,
+            }],
+            selected_targets: Vec::new(),
+            advanced_context: None,
+            staleness_reason: Some(
+                "workspace state may have drifted since the last trace".to_string(),
+            ),
+        })
+        .with_planning_rationale("selected the last known target family from stale evidence")
+        .with_verification_strategy("refresh the context before selecting the validation command");
+
+    assert_eq!(plan.plan_quality_state().as_deref(), Some("blocked"));
+    assert_eq!(plan.plan_quality_findings().unwrap(), vec!["context_pack_stale".to_string()]);
+}
+
+#[test]
+fn planning_analysis_blocks_when_backlog_does_not_map_goal_plan_tasks() {
+    let plan = GoalPlan::new("Goal", vec![sample_task("T001"), sample_task("T002")])
+        .unwrap()
+        .with_planning_rationale("workspace evidence narrowed the goal to two bounded tasks")
+        .with_verification_strategy("run focused verification after implementation");
+    let projection = plan.planning_analysis_projection(
+        &BacklogQualityAssessment {
+            state: BacklogQualityState::Ready,
+            findings: Vec::new(),
+            task_count: Some(1),
+            mvp_scope: Some("MVP".to_string()),
+            unmapped_items: vec!["acceptance target".to_string()],
+        },
+        &["- [ ] T900 unrelated backlog item".to_string()],
+    );
+
+    assert_eq!(projection.state, PlanningAnalysisState::Blocked);
+    assert_eq!(
+        projection.coverage.as_ref().map(|coverage| coverage.mapped_plan_task_count),
+        Some(Some(0))
+    );
+    assert!(projection.findings.iter().any(|finding| {
+        finding.severity == PlanningAnalysisSeverity::Critical
+            && finding.source == PlanningAnalysisSource::Backlog
+            && finding.message.contains("unmapped success criteria")
+    }));
+}
+
+#[test]
+fn planning_analysis_reports_missing_expected_outcomes_without_blocking() {
+    let plan = GoalPlan::new(
+        "Goal",
+        vec![
+            sample_task("T001"),
+            PlannedTask {
+                task_id: "T002".to_string(),
+                description: "Implement T002".to_string(),
+                target: "src/T002.rs".to_string(),
+                expected_outcome: None,
+                decision_type_hint: Some(DecisionType::Code),
+            },
+        ],
+    )
+    .unwrap()
+    .with_planning_rationale("workspace evidence narrowed the goal to two bounded tasks")
+    .with_verification_strategy("run focused verification after implementation");
+    let projection = plan.planning_analysis_projection(
+        &BacklogQualityAssessment {
+            state: BacklogQualityState::Ready,
+            findings: Vec::new(),
+            task_count: None,
+            mvp_scope: None,
+            unmapped_items: Vec::new(),
+        },
+        &[],
+    );
+
+    assert_eq!(projection.state, PlanningAnalysisState::Findings);
+    assert!(projection.findings.iter().any(|finding| {
+        finding.severity == PlanningAnalysisSeverity::Medium
+            && finding.source == PlanningAnalysisSource::Plan
+            && finding.message.contains("missing measurable expected outcomes")
+    }));
 }
 
 #[test]

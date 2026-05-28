@@ -15,6 +15,57 @@ Plan the active session into a bounded proposal from an already captured goal.
 
 `/boundline-plan` must not capture or refine the goal. If the user is introducing a new goal, changing the current goal, or supplying brief files that should become goal evidence, route to `/boundline-goal` instead.
 
+Do not proceed from chat-only assumptions when goal quality or plan quality is blocked. If status or orchestrate reports `goal_quality_state: clarification_required`, preserve `goal_quality_findings` and route through the emitted goal `phase_request` or `/boundline-goal` instead of inventing planning inputs. If planning reports `plan_quality_state: clarification_required`, preserve `plan_quality_findings` and `plan_quality_assumptions`, then follow the emitted `phase_request` or assistant-safe route before moving to execution.
+
+## User Input
+
+```text
+$ARGUMENTS
+```
+
+Consider the user input before proceeding. Treat it as planning guidance only when it refines how to plan the already captured goal; if it changes the goal, route back to `/boundline-goal`.
+
+## Pre-Execution Checks
+- Confirm the workspace is known and an active session already has a captured goal.
+- Check status/orchestrate output for `goal_quality_state` and do not plan from chat-only assumptions while goal quality is blocked.
+- Do not read `.specify/extensions.yml` or run Speckit-style hooks for this command; Boundline uses runtime `phase_request`, `assistant_resume_command`, and `assistant_next_command` handoffs.
+
+## Execution Flow
+1. Run the planning command once with the active workspace and any explicit planning input path.
+2. Parse the structured output and preserve the ordered event sequence.
+3. Surface `planning_rationale`, `verification_strategy`, `plan_quality_state`, `plan_quality_findings`, and `plan_quality_assumptions` when present.
+4. Stop on `phase_request` or a blocked/non-credible planning state; do not advance to run/step until the runtime reports that planning can continue.
+
+## Plan Quality Validation
+Planning is ready only when the runtime provides a bounded plan with a rationale for selected targets and a verification strategy. Treat missing rationale, missing verification strategy, non-credible context, or unresolved stage authoring as a real gate. Do not fill those gaps from chat-only guesses unless the runtime explicitly asks for authored content through `phase_request`.
+
+## Backlog Quality Gate
+Canon backlog is governed source material, while Boundline validates execution readiness. Preserve `backlog_quality_state`, `backlog_quality_findings`, `backlog_task_count`, `backlog_mvp_scope`, and `backlog_unmapped_items` whenever planning reports them. If `backlog_quality_state` is `blocked` or `clarification_required`, do not route to `/boundline-run`; present the emitted `phase_request` or planning-stage resume command as the only next route.
+
+## Planning Analysis Gate
+Planning analysis is a Boundline-owned read-only projection over the ready plan and backlog. Preserve `planning_analysis_state`, `planning_analysis_findings`, and `planning_analysis_coverage` whenever planning reports them. If `planning_analysis_state` is `blocked`, do not route to `/boundline-run`; present `/boundline-plan` or the emitted planning continuation as the only next route.
+
+## Gate Handling
+When a planning gate appears, ask the emitted question or present the emitted suggested choices, wait for the user's answer, and resume with the raw `resume_command` or assistant-safe route. Preserve `request_id`, `stage_key`, `expected_answer.type`, `artifact.artifact_ref`, and the exact raw continuation for shell execution.
+
+## Reasonable Defaults
+- Preserve runtime-reported planning gates verbatim instead of inventing missing coverage or hidden mappings.
+- Treat `planning_analysis_findings` as read-only execution evidence; do not rewrite the plan or backlog in chat unless the runtime asks for new planning input.
+- When `planning_analysis_state` is `findings`, summarize the gaps before offering the next route.
+
+## Quick Guidelines
+- Focus on WHY the plan is safe to execute and how it will be validated.
+- Keep implementation details tied to the runtime plan; do not invent hidden architecture.
+- Treat context credibility and stale Canon memory as blocking until the runtime clears them.
+
+## Success Criteria Guidelines
+Summarize success criteria as verifiable outcomes. Prefer user/business outcomes and explicit validation commands already supplied by the runtime or user. Avoid replacing missing criteria with vague terms like fast, robust, or scalable.
+
+## Done When
+- Planning output has been summarized with plan state, rationale, verification strategy, and plan quality.
+- Any `phase_request` has been asked or routed without advancing prematurely.
+- Exactly one valid next route is offered from the runtime-reported assistant-safe command.
+
 ## Required Context
 - `workspace_ref`
 - Active session with a captured goal

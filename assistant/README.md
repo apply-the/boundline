@@ -91,6 +91,22 @@ approval-required states, blocked states, or checkpoint restore boundaries):
 Do not continue silently past clarification-required or approval-required
 states, and do not treat a list of questions as sufficient completion.
 
+## Goal Quality Contract
+
+Goal intake is runtime-owned. Assistant chat may help explain a goal, but it
+must not override `goal_quality_state`, `goal_quality_findings`, or
+`goal_quality_assumptions` emitted by Boundline. If
+`goal_quality_state` is `clarification_required`, stop at the emitted
+`phase_request` and route through `/boundline:goal` or the host-specific goal
+command instead of planning from chat-only assumptions.
+
+Boundline prioritizes quality clarification as scope > security/privacy > user
+experience > technical details and reports a Maximum 3-question backlog while
+still asking one `phase_request.question` at a time. Treat reasonable defaults
+as accepted assumptions when the runtime reports them, especially no new
+auth/privacy boundary, no new persistence boundary, and scope limited to the
+stated goal and supplied brief files.
+
 Shell-enabled assistant flows should preserve advanced-context projection
 fields exactly when they appear on `plan`, `status`, and `inspect`:
 `retrieval_mode`, `retrieval_state`, `retrieval_index_state`, selected

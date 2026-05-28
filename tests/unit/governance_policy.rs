@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use boundline::domain::brief::AuthoredBriefResolutionState;
+use boundline::domain::brief::{AuthoredBriefResolutionState, GoalQualityAssessment};
 use boundline::domain::flow::FlowStepMetadata;
 use boundline::domain::governance::{
     CanonCapabilitySnapshot, CanonModeSummary, CanonResultActionSummary, CompactedCanonMemory,
@@ -29,11 +29,11 @@ use boundline::{
     GovernanceRuntimeState, GovernanceStartupContext, GovernanceTransitionDirection,
     GovernedStagePacket, GovernedStageRecord, InputSourceKind, InputSourceReference,
     PacketReadiness, PacketReuseBinding, SUPPORTED_CANON_VERSION, StageGovernancePolicy,
-    StopSemantics, SystemContextBinding, autopilot_action_text, bounded_reused_packets,
-    build_autopilot_decision, classify_packet_readiness, escalation_target_stage_key,
-    governance_stage_key, governance_state_patch, narrowed_bounded_context,
-    resolve_governance_startup_posture, select_packet_reuse_binding, selected_stage_policy,
-    supported_canon_modes_for_stage,
+    StopSemantics, SystemContextBinding, assess_backlog_quality, autopilot_action_text,
+    bounded_reused_packets, build_autopilot_decision, classify_packet_readiness,
+    escalation_target_stage_key, governance_stage_key, governance_state_patch,
+    narrowed_bounded_context, resolve_governance_startup_posture, select_packet_reuse_binding,
+    selected_stage_policy, supported_canon_modes_for_stage,
 };
 use serde_json::json;
 
@@ -183,6 +183,7 @@ fn sample_authored_bundle(governance_intent: Option<GovernanceIntent>) -> Author
         deduplicated_sources: Vec::new(),
         governance_intent,
         resolution_state: AuthoredBriefResolutionState::Ready,
+        goal_quality: GoalQualityAssessment::default(),
         clarification: None,
         derived_task_draft: None,
         captured_at: 1,
@@ -450,6 +451,66 @@ fn packet_readiness_defaults_to_incomplete_without_expected_documents() {
     );
 
     assert_eq!(readiness, PacketReadiness::Incomplete);
+}
+
+#[test]
+fn backlog_quality_blocks_reusable_packet_without_stable_task_ids() {
+    let assessment = assess_backlog_quality(
+        Some(PacketReadiness::Reusable),
+        &[".canon/runs/backlog/backlog.md".to_string()],
+        &[],
+        &["# Backlog\n\n- Implement the session store in src/session.rs".to_string()],
+    );
+
+    assert_eq!(assessment.state.as_str(), "blocked");
+    assert_eq!(assessment.findings, vec!["missing_stable_task_ids".to_string()]);
+    assert_eq!(assessment.task_count, None);
+}
+
+#[test]
+fn backlog_quality_requires_dependency_order_and_mvp_scope() {
+    let assessment = assess_backlog_quality(
+        Some(PacketReadiness::Reusable),
+        &[".canon/runs/backlog/backlog.md".to_string()],
+        &[],
+        &[concat!(
+            "# Backlog\n\n",
+            "- [ ] T001 [US1] Implement session model in src/domain/session.rs\n",
+            "- [ ] T002 [US1] Render status in src/cli/output.rs\n"
+        )
+        .to_string()],
+    );
+
+    assert_eq!(assessment.state.as_str(), "clarification_required");
+    assert_eq!(
+        assessment.findings,
+        vec!["missing_dependency_order".to_string(), "missing_mvp_scope".to_string()]
+    );
+    assert_eq!(assessment.task_count, Some(2));
+}
+
+#[test]
+fn backlog_quality_accepts_valid_backlog_document() {
+    let assessment = assess_backlog_quality(
+        Some(PacketReadiness::Reusable),
+        &[".canon/runs/backlog/backlog.md".to_string()],
+        &[],
+        &[concat!(
+            "# Backlog\n\n",
+            "MVP: US1 session status projection\n\n",
+            "Dependencies: T001 before T002\n\n",
+            "- [ ] T001 [US1] Implement session model in src/domain/session.rs\n",
+            "- [ ] T002 [US1] Render status in src/cli/output.rs\n",
+            "Unmapped: post-launch adoption metric\n"
+        )
+        .to_string()],
+    );
+
+    assert_eq!(assessment.state.as_str(), "ready");
+    assert_eq!(assessment.findings, Vec::<String>::new());
+    assert_eq!(assessment.task_count, Some(2));
+    assert_eq!(assessment.mvp_scope.as_deref(), Some("US1 session status projection"));
+    assert_eq!(assessment.unmapped_items, vec!["post-launch adoption metric".to_string()]);
 }
 
 #[test]

@@ -7,7 +7,9 @@ use uuid::Uuid;
 use crate::domain::cluster::{ClusterDeliveryStory, ClusterSessionProjection};
 use crate::domain::context_intelligence::AdvancedContextProjection;
 use crate::domain::decision::{DecisionType, EvidenceRef};
-use crate::domain::governance::CompactedCanonMemory;
+use crate::domain::governance::{
+    BacklogQualityAssessment, BacklogQualityState, CompactedCanonMemory,
+};
 use crate::domain::guidance::GuidanceGuardianProjection;
 use crate::domain::session::{
     ContinuityAuthority, DelegationContinuityMode, DelegationContinuityState, DelegationPacket,
@@ -419,6 +421,143 @@ impl GoalPlanFlowState {
     }
 }
 
+/// Planning quality state projected for host outputs and status surfaces.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanQualityState {
+    Ready,
+    ClarificationRequired,
+    Blocked,
+}
+
+const PLAN_QUALITY_FINDING_PLANNING_RATIONALE: &str = "planning_rationale";
+const PLAN_QUALITY_FINDING_VERIFICATION_STRATEGY: &str = "verification_strategy";
+const PLAN_QUALITY_FINDING_CONTEXT_PACK_INSUFFICIENT: &str = "context_pack_insufficient";
+const PLAN_QUALITY_FINDING_CONTEXT_PACK_STALE: &str = "context_pack_stale";
+const PLAN_QUALITY_ASSUMPTION_DEFAULT_ROUTE_OVERRIDE: &str =
+    "no explicit route override is required for this plan";
+const PLANNING_ANALYSIS_MESSAGE_UNMAPPED_ITEMS: &str = "backlog reports unmapped success criteria";
+const PLANNING_ANALYSIS_MESSAGE_NO_BACKLOG_MAPPING: &str =
+    "backlog does not map any goal-plan task ids";
+const PLANNING_ANALYSIS_MESSAGE_MISSING_BACKLOG_MAPPING: &str =
+    "backlog does not map goal-plan task ids";
+const PLANNING_ANALYSIS_MESSAGE_MISSING_EXPECTED_OUTCOMES: &str =
+    "planned tasks are missing measurable expected outcomes";
+
+impl PlanQualityState {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Ready => "ready",
+            Self::ClarificationRequired => "clarification_required",
+            Self::Blocked => "blocked",
+        }
+    }
+}
+
+/// Additive quality projection for the generated plan.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlanQualityAssessment {
+    pub state: PlanQualityState,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub findings: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub assumptions: Vec<String>,
+}
+
+impl Default for PlanQualityAssessment {
+    fn default() -> Self {
+        Self { state: PlanQualityState::Ready, findings: Vec::new(), assumptions: Vec::new() }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanningAnalysisState {
+    Clean,
+    Findings,
+    Blocked,
+}
+
+impl PlanningAnalysisState {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Clean => "clean",
+            Self::Findings => "findings",
+            Self::Blocked => "blocked",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanningAnalysisSeverity {
+    Critical,
+    High,
+    Medium,
+    Low,
+}
+
+impl PlanningAnalysisSeverity {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Critical => "critical",
+            Self::High => "high",
+            Self::Medium => "medium",
+            Self::Low => "low",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanningAnalysisSource {
+    Plan,
+    Backlog,
+    Governance,
+}
+
+impl PlanningAnalysisSource {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Plan => "plan",
+            Self::Backlog => "backlog",
+            Self::Governance => "governance",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlanningAnalysisFinding {
+    pub severity: PlanningAnalysisSeverity,
+    pub source: PlanningAnalysisSource,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct PlanningAnalysisCoverage {
+    pub success_criteria_total: usize,
+    pub success_criteria_covered: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backlog_task_count: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mapped_plan_task_count: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlanningAnalysisProjection {
+    pub state: PlanningAnalysisState,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub findings: Vec<PlanningAnalysisFinding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coverage: Option<PlanningAnalysisCoverage>,
+}
+
+impl Default for PlanningAnalysisProjection {
+    fn default() -> Self {
+        Self { state: PlanningAnalysisState::Clean, findings: Vec::new(), coverage: None }
+    }
+}
+
 /// A single planned task in a goal-derived plan.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlannedTask {
@@ -471,6 +610,10 @@ pub struct GoalPlan {
     pub planning_rationale: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub verification_strategy: Option<String>,
+    #[serde(default)]
+    pub plan_quality: PlanQualityAssessment,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub planning_analysis: Option<PlanningAnalysisProjection>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub flow: Option<InferredFlow>,
     #[serde(default)]
@@ -514,7 +657,7 @@ impl GoalPlan {
         goal_text: impl Into<String>,
         tasks: Vec<PlannedTask>,
     ) -> Result<Self, GoalPlanError> {
-        let plan = Self {
+        let mut plan = Self {
             plan_id: Uuid::new_v4().to_string(),
             goal_text: goal_text.into(),
             negotiation_goal_summary: None,
@@ -527,6 +670,8 @@ impl GoalPlan {
             routing_policy_summary: None,
             planning_rationale: None,
             verification_strategy: None,
+            plan_quality: PlanQualityAssessment::default(),
+            planning_analysis: None,
             flow: None,
             flow_skipped: false,
             workflow_progress: None,
@@ -544,6 +689,7 @@ impl GoalPlan {
             created_at: current_timestamp_millis(),
             status: GoalPlanStatus::Draft,
         };
+        plan.refresh_plan_quality();
         plan.validate()?;
         Ok(plan)
     }
@@ -651,6 +797,7 @@ impl GoalPlan {
 
     pub fn with_planning_rationale(mut self, planning_rationale: impl Into<String>) -> Self {
         self.planning_rationale = Some(planning_rationale.into());
+        self.refresh_plan_quality();
         self
     }
 
@@ -664,7 +811,190 @@ impl GoalPlan {
 
     pub fn with_verification_strategy(mut self, verification_strategy: impl Into<String>) -> Self {
         self.verification_strategy = Some(verification_strategy.into());
+        self.refresh_plan_quality();
         self
+    }
+
+    pub fn plan_quality_state(&self) -> Option<String> {
+        Some(self.plan_quality_assessment().state.as_str().to_string())
+    }
+
+    pub fn plan_quality_findings(&self) -> Option<Vec<String>> {
+        let assessment = self.plan_quality_assessment();
+        (!assessment.findings.is_empty()).then_some(assessment.findings)
+    }
+
+    pub fn plan_quality_assumptions(&self) -> Option<Vec<String>> {
+        let assessment = self.plan_quality_assessment();
+        (!assessment.assumptions.is_empty()).then_some(assessment.assumptions)
+    }
+
+    pub fn plan_quality_assessment(&self) -> PlanQualityAssessment {
+        self.assess_plan_quality()
+    }
+
+    pub fn planning_analysis_projection(
+        &self,
+        backlog_quality: &BacklogQualityAssessment,
+        backlog_documents: &[String],
+    ) -> PlanningAnalysisProjection {
+        let success_criteria_total = self.tasks.len();
+        let success_criteria_covered = self
+            .tasks
+            .iter()
+            .filter(|task| {
+                task.expected_outcome.as_deref().is_some_and(|outcome| !outcome.trim().is_empty())
+            })
+            .count();
+        let combined_backlog = backlog_documents.join("\n");
+        let mapped_task_ids = self
+            .tasks
+            .iter()
+            .filter(|task| combined_backlog.contains(task.task_id.as_str()))
+            .map(|task| task.task_id.clone())
+            .collect::<Vec<_>>();
+        let coverage = PlanningAnalysisCoverage {
+            success_criteria_total,
+            success_criteria_covered,
+            backlog_task_count: backlog_quality.task_count,
+            mapped_plan_task_count: backlog_quality.task_count.map(|_| mapped_task_ids.len()),
+        };
+        let mut findings = Vec::new();
+
+        if !backlog_quality.unmapped_items.is_empty() {
+            findings.push(PlanningAnalysisFinding {
+                severity: PlanningAnalysisSeverity::Critical,
+                source: PlanningAnalysisSource::Backlog,
+                message: format!(
+                    "{PLANNING_ANALYSIS_MESSAGE_UNMAPPED_ITEMS}: {}",
+                    backlog_quality.unmapped_items.join(", ")
+                ),
+            });
+        }
+
+        if matches!(backlog_quality.state, BacklogQualityState::Ready)
+            && backlog_quality.task_count.is_some()
+        {
+            if mapped_task_ids.is_empty() {
+                findings.push(PlanningAnalysisFinding {
+                    severity: PlanningAnalysisSeverity::Critical,
+                    source: PlanningAnalysisSource::Backlog,
+                    message: PLANNING_ANALYSIS_MESSAGE_NO_BACKLOG_MAPPING.to_string(),
+                });
+            } else if mapped_task_ids.len() < self.tasks.len() {
+                let missing_task_ids = self
+                    .tasks
+                    .iter()
+                    .filter(|task| !mapped_task_ids.contains(&task.task_id))
+                    .map(|task| task.task_id.clone())
+                    .collect::<Vec<_>>();
+                findings.push(PlanningAnalysisFinding {
+                    severity: PlanningAnalysisSeverity::High,
+                    source: PlanningAnalysisSource::Backlog,
+                    message: format!(
+                        "{PLANNING_ANALYSIS_MESSAGE_MISSING_BACKLOG_MAPPING}: {}",
+                        missing_task_ids.join(", ")
+                    ),
+                });
+            }
+        }
+
+        let tasks_missing_expected_outcomes = self
+            .tasks
+            .iter()
+            .filter(|task| {
+                task.expected_outcome.as_deref().map(str::trim).unwrap_or_default().is_empty()
+            })
+            .map(|task| task.task_id.clone())
+            .collect::<Vec<_>>();
+        if !tasks_missing_expected_outcomes.is_empty() {
+            findings.push(PlanningAnalysisFinding {
+                severity: PlanningAnalysisSeverity::Medium,
+                source: PlanningAnalysisSource::Plan,
+                message: format!(
+                    "{PLANNING_ANALYSIS_MESSAGE_MISSING_EXPECTED_OUTCOMES}: {}",
+                    tasks_missing_expected_outcomes.join(", ")
+                ),
+            });
+        }
+
+        PlanningAnalysisProjection {
+            state: if findings
+                .iter()
+                .any(|finding| matches!(finding.severity, PlanningAnalysisSeverity::Critical))
+            {
+                PlanningAnalysisState::Blocked
+            } else if findings.is_empty() {
+                PlanningAnalysisState::Clean
+            } else {
+                PlanningAnalysisState::Findings
+            },
+            findings,
+            coverage: Some(coverage),
+        }
+    }
+
+    pub fn planning_analysis_state(&self) -> Option<String> {
+        self.planning_analysis.as_ref().map(|projection| projection.state.as_str().to_string())
+    }
+
+    pub fn planning_analysis_findings(&self) -> Option<Vec<PlanningAnalysisFinding>> {
+        self.planning_analysis.as_ref().and_then(|projection| {
+            (!projection.findings.is_empty()).then_some(projection.findings.clone())
+        })
+    }
+
+    pub fn planning_analysis_coverage(&self) -> Option<PlanningAnalysisCoverage> {
+        self.planning_analysis.as_ref().and_then(|projection| projection.coverage.clone())
+    }
+
+    fn refresh_plan_quality(&mut self) {
+        self.plan_quality = self.assess_plan_quality();
+    }
+
+    fn assess_plan_quality(&self) -> PlanQualityAssessment {
+        let mut findings = Vec::new();
+        let mut assumptions = Vec::new();
+
+        if self.routing_policy_summary.is_none() {
+            assumptions.push(PLAN_QUALITY_ASSUMPTION_DEFAULT_ROUTE_OVERRIDE.to_string());
+        }
+
+        if let Some(context_pack) = &self.context_pack {
+            match context_pack.credibility {
+                ContextPackCredibility::Insufficient => {
+                    findings.push(PLAN_QUALITY_FINDING_CONTEXT_PACK_INSUFFICIENT.to_string());
+                }
+                ContextPackCredibility::Stale => {
+                    findings.push(PLAN_QUALITY_FINDING_CONTEXT_PACK_STALE.to_string());
+                }
+                ContextPackCredibility::Credible => {}
+            }
+        }
+
+        if self.planning_rationale.as_deref().map(str::trim).unwrap_or_default().is_empty() {
+            findings.push(PLAN_QUALITY_FINDING_PLANNING_RATIONALE.to_string());
+        }
+        if self.verification_strategy.as_deref().map(str::trim).unwrap_or_default().is_empty() {
+            findings.push(PLAN_QUALITY_FINDING_VERIFICATION_STRATEGY.to_string());
+        }
+        PlanQualityAssessment {
+            state: if findings.iter().any(|finding| {
+                matches!(
+                    finding.as_str(),
+                    PLAN_QUALITY_FINDING_CONTEXT_PACK_INSUFFICIENT
+                        | PLAN_QUALITY_FINDING_CONTEXT_PACK_STALE
+                )
+            }) {
+                PlanQualityState::Blocked
+            } else if findings.is_empty() {
+                PlanQualityState::Ready
+            } else {
+                PlanQualityState::ClarificationRequired
+            },
+            findings,
+            assumptions,
+        }
     }
 
     /// Returns the next monotonically increasing proposal revision number.

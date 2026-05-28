@@ -2163,6 +2163,254 @@ impl PacketReuseBindingReason {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum BacklogQualityState {
+    #[default]
+    Ready,
+    ClarificationRequired,
+    Blocked,
+}
+
+impl BacklogQualityState {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Ready => "ready",
+            Self::ClarificationRequired => "clarification_required",
+            Self::Blocked => "blocked",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BacklogQualityAssessment {
+    pub state: BacklogQualityState,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub findings: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_count: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mvp_scope: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unmapped_items: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BacklogQualitySnapshot {
+    pub assessment: BacklogQualityAssessment,
+    pub document_bodies: Vec<String>,
+}
+
+pub fn assess_backlog_quality(
+    readiness: Option<PacketReadiness>,
+    document_refs: &[String],
+    missing_sections: &[String],
+    document_bodies: &[String],
+) -> BacklogQualityAssessment {
+    let mut findings = Vec::new();
+
+    if matches!(readiness, Some(PacketReadiness::Incomplete | PacketReadiness::Rejected)) {
+        findings.push("backlog_packet_not_reusable".to_string());
+    }
+    if matches!(readiness, Some(PacketReadiness::Pending)) {
+        findings.push("backlog_packet_pending".to_string());
+    }
+    findings.extend(
+        missing_sections
+            .iter()
+            .filter(|section| !section.trim().is_empty())
+            .map(|section| format!("missing_section:{}", normalize_backlog_label(section))),
+    );
+    if document_refs.is_empty() {
+        findings.push("missing_backlog_document".to_string());
+    }
+
+    let combined = document_bodies.join("\n");
+    let task_count = count_backlog_tasks(&combined);
+    if !combined.trim().is_empty() && task_count == 0 {
+        findings.push("missing_stable_task_ids".to_string());
+    }
+    if task_count > 0 && !backlog_mentions_dependency_order(&combined) {
+        findings.push("missing_dependency_order".to_string());
+    }
+    let mvp_scope = extract_backlog_mvp_scope(&combined);
+    if task_count > 0 && mvp_scope.is_none() {
+        findings.push("missing_mvp_scope".to_string());
+    }
+
+    let state = if findings.iter().any(|finding| {
+        finding == "backlog_packet_not_reusable" || finding == "missing_stable_task_ids"
+    }) {
+        BacklogQualityState::Blocked
+    } else if findings.is_empty() {
+        BacklogQualityState::Ready
+    } else {
+        BacklogQualityState::ClarificationRequired
+    };
+
+    BacklogQualityAssessment {
+        state,
+        findings,
+        task_count: (task_count > 0).then_some(task_count),
+        mvp_scope,
+        unmapped_items: extract_backlog_unmapped_items(&combined),
+    }
+}
+
+pub fn backlog_quality_snapshot_for_lifecycle(
+    lifecycle: &GovernedSessionLifecycle,
+    workspace_path: &Path,
+) -> Option<BacklogQualitySnapshot> {
+    let backlog_stage_key = planning_stage_key_for_mode(CanonMode::Backlog)?;
+    let backlog_record =
+        lifecycle.stage_records.iter().rev().find(|record| record.stage_key == backlog_stage_key);
+    let backlog_documents = lifecycle
+        .accumulated_context
+        .iter()
+        .filter(|document| {
+            document.stage_key == backlog_stage_key || document.canon_mode == CanonMode::Backlog
+        })
+        .collect::<Vec<_>>();
+
+    if backlog_record.is_none() && backlog_documents.is_empty() {
+        if lifecycle.selected_mode_sequence.contains(&CanonMode::Backlog)
+            && lifecycle.current_stage_index >= backlog_stage_sequence_index()
+        {
+            return Some(BacklogQualitySnapshot {
+                assessment: assess_backlog_quality(Some(PacketReadiness::Pending), &[], &[], &[]),
+                document_bodies: Vec::new(),
+            });
+        }
+        return None;
+    }
+
+    if let Some(record) = backlog_record
+        && matches!(
+            record.lifecycle_state,
+            GovernanceLifecycleState::Blocked | GovernanceLifecycleState::Failed
+        )
+    {
+        return Some(BacklogQualitySnapshot {
+            assessment: BacklogQualityAssessment {
+                state: BacklogQualityState::Blocked,
+                findings: vec![
+                    record
+                        .blocked_reason
+                        .clone()
+                        .unwrap_or_else(|| "backlog_packet_blocked".to_string()),
+                ],
+                task_count: None,
+                mvp_scope: None,
+                unmapped_items: Vec::new(),
+            },
+            document_bodies: Vec::new(),
+        });
+    }
+
+    let document_refs = backlog_documents
+        .iter()
+        .filter_map(|document| document.document_path.clone())
+        .collect::<Vec<_>>();
+    let document_bodies = document_refs
+        .iter()
+        .filter_map(|document_ref| {
+            fs::read_to_string(resolve_backlog_document_path(workspace_path, document_ref)).ok()
+        })
+        .collect::<Vec<_>>();
+    let readiness =
+        if backlog_documents.iter().any(|document| document.readiness == PacketReadiness::Reusable)
+        {
+            Some(PacketReadiness::Reusable)
+        } else if backlog_record.is_some() {
+            Some(PacketReadiness::Pending)
+        } else {
+            None
+        };
+
+    Some(BacklogQualitySnapshot {
+        assessment: assess_backlog_quality(readiness, &document_refs, &[], &document_bodies),
+        document_bodies,
+    })
+}
+
+fn count_backlog_tasks(content: &str) -> usize {
+    content
+        .lines()
+        .filter(|line| {
+            let trimmed = line.trim_start();
+            trimmed.starts_with("- [ ]")
+                || trimmed.starts_with("- [x]")
+                || trimmed.starts_with("- [X]")
+        })
+        .flat_map(|line| line.split_whitespace())
+        .filter(|token| {
+            is_stable_backlog_task_id(
+                token.trim_matches(|c: char| matches!(c, '[' | ']' | '(' | ')' | ',' | ':' | ';')),
+            )
+        })
+        .count()
+}
+
+const fn backlog_stage_sequence_index() -> usize {
+    2
+}
+
+fn resolve_backlog_document_path(workspace_path: &Path, document_ref: &str) -> PathBuf {
+    let path = Path::new(document_ref);
+    if path.is_absolute() { path.to_path_buf() } else { workspace_path.join(path) }
+}
+
+fn is_stable_backlog_task_id(token: &str) -> bool {
+    let Some(digits) = token.strip_prefix('T') else {
+        return false;
+    };
+    digits.len() == 3 && digits.chars().all(|ch| ch.is_ascii_digit())
+}
+
+fn backlog_mentions_dependency_order(content: &str) -> bool {
+    let lower = content.to_ascii_lowercase();
+    lower.contains("dependencies")
+        || lower.contains("dependency graph")
+        || lower.contains("dependency order")
+        || lower.contains("execution order")
+}
+
+fn extract_backlog_mvp_scope(content: &str) -> Option<String> {
+    content.lines().find_map(|line| {
+        let trimmed = line.trim();
+        let lower = trimmed.to_ascii_lowercase();
+        if !(lower.starts_with("mvp:") || lower.starts_with("mvp scope:")) {
+            return None;
+        }
+        trimmed
+            .split_once(':')
+            .map(|(_, value)| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+    })
+}
+
+fn extract_backlog_unmapped_items(content: &str) -> Vec<String> {
+    content
+        .lines()
+        .filter_map(|line| {
+            let trimmed = line.trim();
+            let lower = trimmed.to_ascii_lowercase();
+            if !lower.starts_with("unmapped:") {
+                return None;
+            }
+            trimmed.split_once(':').map(|(_, value)| value.trim())
+        })
+        .flat_map(|value| value.split(','))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+fn normalize_backlog_label(value: &str) -> String {
+    value.trim().to_ascii_lowercase().replace(' ', "_")
+}
+
 impl std::fmt::Display for PacketReuseBindingReason {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.as_str())

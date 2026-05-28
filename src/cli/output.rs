@@ -1015,6 +1015,7 @@ mod tests {
             delight_feedback: None,
             next_command: None,
             explanation: "session is invalid".to_string(),
+            ..SessionStatusView::default()
         };
 
         let text = render_session_status(&view);
@@ -1817,6 +1818,7 @@ mod tests {
             delight_feedback: None,
             next_command: Some("boundline step".to_string()),
             explanation: "review is in progress".to_string(),
+            ..SessionStatusView::default()
         };
 
         let text = render_session_status(&view);
