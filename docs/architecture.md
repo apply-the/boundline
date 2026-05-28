@@ -1,166 +1,112 @@
 # Boundline Advanced Architecture
 
-This document is the second read level for Boundline. Read it after the quick path
-in the README and [getting-started.md](getting-started.md) if you need the
-deeper product model.
+Read this after the README and [getting-started.md](getting-started.md) when you
+need the product boundary rather than the first-run workflow.
 
-For the product-level project-scale loop, read
-[delivery-model.md](delivery-model.md) first.
+For the project-scale delivery model, read [delivery-model.md](delivery-model.md).
 
 ## Boundline Versus Canon
 
 Keep this boundary explicit:
 
-- Boundline owns orchestration, bounded planning, execution, validation, session
-  continuity, and the primary operator-facing CLI.
-- Canon owns governed stages, approvals, structured governed artifacts, and the
-  machine-facing governance adapter when a Boundline route explicitly enables it.
+- Boundline owns orchestration, bounded planning, execution, validation,
+  session continuity, traces, and the primary operator-facing CLI.
+- Canon owns governed stages, approvals, governed artifacts, and the
+  machine-facing governance adapter when a Boundline route explicitly enables
+  it.
 
-Canon is not the orchestrator and not the product entrypoint. A Boundline install
-can be perfectly usable without Canon when you stay on the default local and
-session-native routes.
+Canon is not the orchestrator and not the product entrypoint. A Boundline
+install can stay fully usable without Canon on the default local path.
 
-The current Boundline adapter documents Canon `0.60.0` support for the
+The current Boundline adapter documents Canon `0.61.0` support for the
 `canon governance start|refresh|capabilities --json` `v1` surface. That is a
 bounded compatibility target, not a claim of total Canon feature parity.
 
-The same boundary now applies to Canon-promoted repo-visible knowledge.
-Boundline can read compatible `docs/project/*.md` surfaces plus supporting
-`docs/evidence/...` roots, but it still treats Canon as the producer of
-promotion facts. Boundline only applies consumer policy on top of those facts:
-`compatible` when project memory is reusable, `warning` when Canon knowledge is
-partial or stale, and `unsupported` when Canon reports blocked governance,
-missing required approval, missing required source artifacts, or an unsupported
-contract line. When evidence files contain shared `project-memory:managed`
-blocks, Boundline preserves producer plus `source_ref` attribution instead of
-flattening Canon and Boundline contributions together.
-
 ## Primary Runtime Model
 
-The primary operator journey is still session-native:
+The normal operator path is goal-first:
 
-1. `start`
-2. `capture`
+1. `init`
+2. `goal`
 3. `plan`
 4. `run`
 5. `status`
 6. `next`
 7. `inspect`
 
-Boundline persists that story in workspace-local state under `.boundline/` and keeps
-traces alongside the same session model. `run`, `status`, `next`, and
-`inspect` project the same route, follow-through, and evidence story instead of
-making the operator infer state from logs.
+Boundline persists that story in workspace-local state under `.boundline/` and
+keeps traces beside the same session model.
+
+`run --goal "..."` remains an explicit fast path, but it does not replace the
+primary product story above.
+
+## Preflight Surfaces
+
+Two read-side surfaces sit in front of the main runtime loop when you need
+them:
+
+- `boundline models auth ...` for user-scoped provider credential setup
+- `boundline probe` for a read-only readiness answer before orchestration
+
+`probe` is intentionally non-mutating. It helps operators and assistant hosts
+decide whether the next honest step is bootstrap, repair, or session work.
+
+Planning and execution can also stop explicitly. The runtime may surface
+planning gates such as `goal_quality_state`, `plan_quality_state`,
+`backlog_quality_state`, and `planning_analysis_state`, plus structured host
+handoffs such as `phase_request`, `assistant_resume_command`, and
+`assistant_next_command`.
 
 ## Host Surface Boundary
 
 The CLI and generated assistant command packs are thin shells over the same
-primary runtime. `status`, `next`, and `inspect` expose runtime projections,
-while `start`, `goal`, `plan`, and `run` remain the state-changing commands.
+runtime.
 
-These surfaces may show session summaries, timelines, plan and evidence views,
-findings, checkpoints, diagnostics, and read-only governed references, but
-they do not own delivery state. They read `.boundline/session.json`, existing
-traces, and already exposed projections, and they point degraded or unavailable
-paths back to normal commands. It must not introduce independent init,
-configuration, governance, hidden background progression, or a separate
-workflow engine.
+- `init`, `goal`, `plan`, and `run` are the main state-changing commands.
+- `status`, `next`, `inspect`, and `probe` are read-side runtime projections.
+- Host packages must read `.boundline/session.json`, traces, and CLI output
+  rather than treating chat history as authoritative state.
 
-## Implemented Algorithms
+These surfaces may render summaries, evidence, findings, checkpoints, and
+read-only governed references, but they do not own delivery state.
 
-Boundline currently ships two runtime-owned algorithm families:
+## Planning, Guidance, And Traceability
 
-- review-council assembly, independence guarding, vote resolution, and bounded adjudication projection. See [review-council-algorithms.md](review-council-algorithms.md).
-- reasoning-profile activation, independence assessment, bounded profile outcomes, and confidence handoff. See [reasoning-profile-algorithms.md](reasoning-profile-algorithms.md).
+Planning in Boundline is evidence-driven:
 
-The concrete reasoning algorithms implemented in the current product line are:
+- `goal` persists the bounded session objective from authored goals and briefs.
+- `plan` builds one bounded context pack from workspace evidence, recent traces,
+  and compatible Canon inputs.
+- `run` executes bounded actions on that same session-owned runtime.
+- `status`, `next`, and `inspect` project the persisted route, context,
+  follow-through, and findings instead of recomputing a new story.
 
-- `bounded_self_consistency`
-- `independent_pair_review`
-- `heterogeneous_security_review`
-- `bounded_reflexion`
-- debate as bounded substrate rather than a standalone shipped profile
-- adjudication as a shared primitive rather than a standalone shipped profile
+The same context pack also drives guidance and guardian selection. Capability
+precedence, loaded and skipped sources, validation findings, and blocking
+outcomes stay traceable through the runtime outputs.
 
-```mermaid
-flowchart LR
-  Capture[capture and plan] --> Run[run]
-  Run --> Stage{governance stage}
-  Stage -->|no extra challenge| Execute[bounded stage execution]
-  Stage -->|review vote required| Council[review-council algorithms]
-  Stage -->|reasoning challenge required| Reasoning[reasoning-profile algorithms]
-  Execute --> Session[(.boundline/session.json)]
-  Council --> Session
-  Reasoning --> Session
-  Council --> Trace[(.boundline/traces/)]
-  Reasoning --> Trace
-  Session --> Surfaces[status, next, inspect]
-  Trace --> Surfaces
-```
+## Review And Reasoning Boundaries
 
-```mermaid
-flowchart TD
-  Trigger[Canon posture, governance escalation, or operator policy] --> Select[resolve typed profile definition]
-  Select --> Participants[assign participant roles to effective routes]
-  Participants --> Independence[assess requested independence floor]
-  Independence -->|passed| Success[attach profile-specific bounded outcome]
-  Independence -->|degraded| Warn[degraded outcome plus explicit caution]
-  Independence -->|failed| Block[blocked outcome plus remediation]
-  Success --> Persist[persist session state, confidence, and trace events]
-  Warn --> Persist
-  Block --> Persist
-  Persist --> Project[run, status, and inspect projection]
-```
+Boundline currently exposes two runtime-owned algorithm families:
+
+- review-council assembly, independence guarding, vote resolution, and bounded
+  adjudication projection
+- reasoning-profile activation, independence assessment, bounded profile
+  outcomes, and confidence handoff
+
+These are part of the same session runtime. They do not create a second
+orchestration system.
 
 ## Compatibility Path
 
 Boundline still supports explicit compatibility behavior, but it is subordinate.
-Use it when you intentionally want a manifest-backed execution profile. Do not
-treat it as the default product path.
+Use it when you intentionally want a manifest-backed execution profile:
 
-That is why the quick path centers on `doctor -> start -> capture -> plan ->
-run` rather than `init` or `.boundline/execution.json` authoring.
+```bash
+boundline run --compatibility --goal "..."
+```
 
-## Planning And Bounded Context
-
-Planning in Boundline is evidence-driven:
-
-- `capture` persists negotiated delivery state from authored goals and optional briefs.
-- `plan` builds one bounded context pack from workspace evidence, authored input,
-  recent traces, and any reusable Canon artifacts.
-- authored brief file refs, failing validation paths, recent changed files, and
-  other explicit evidence anchors are causal inputs; broad path similarity is
-  only a bounded tie-breaker.
-- Planning stops explicitly when the negotiation result or bounded context is
-  not credible enough to support a real bounded change.
-
-That explicit stop behavior is a feature, not an inconvenience. Boundline should
-stop rather than pretend a plan is credible when the evidence is weak.
-
-## Guidance And Guardian Capability Layer
-
-The same bounded context pack also drives guidance and guardian selection.
-
-- `plan` resolves capability sources once per lifecycle phase and persists the authority story: workspace overrides under `.boundline/guidance/`, optional Canon guidance under `.canon/boundline/guidance/`, bundled assistant packs under `assistant/packs/`, and built-ins as the final fallback.
-- Bundled assistant packs can now be either legacy flat `.toml` manifests or directory-based catalog packs such as `assistant/packs/guidance-catalog/`. The catalog path adds explicit `pack.toml`, `catalog-manifest.toml`, guidance-index, and guardian-index contracts plus validation findings when the pack shape drifts.
-- Bundled packs now reuse shared capability ids across technology clusters. Boundline keeps shared engineering guidance in `assistant/guidance/`, then selects the best matching Rust, JavaScript or TypeScript, Python, JVM, .NET, Go, PHP or Ruby, mobile, systems, or shell pack from runtime evidence instead of loading one Rust-only surface everywhere.
-- `run` executes guardians on the same session-owned route. Deterministic guardians run first; hybrid and LLM guardians reuse the existing planning, implementation, verification, or review slot and degrade explicitly when the declared route cannot validate.
-- `status`, `next`, and `inspect` do not recompute that story. They project the persisted guidance summary, loaded and skipped sources, loaded and skipped packs, catalog validation findings, guardian timeline, findings summary, degradations, and blocking outcome from session state and traces.
-
-To add new languages, guardians, or rules to the bundled catalog, see [guides/extending-guidance-catalog.md](guides/extending-guidance-catalog.md).
-
-## Risk Review Boundaries
-
-Boundline can require review voting at risky stage boundaries without turning
-every step into a council process. High-impact architecture, high-risk change,
-validation-exhausted implementation, PR-ready diff, security, supply-chain,
-migration, and incident boundaries can persist voting state in
-`.boundline/session.json`.
-
-Low-risk local changes and preserved-behavior refactors should not be burdened
-by voting by default. When voting is active, `status`, `next`, and `inspect`
-surface the trigger, result, blocking state, adjudication state, reviewed
-evidence, and next action. See [review-voting.md](review-voting.md).
+That path is explicit. It is not the default product story.
 
 ## Routing, Workflows, And Clusters
 
@@ -177,41 +123,22 @@ These are product layers over one runtime, not separate products.
 
 ## Distribution And Update Model
 
-The `0.64.0` release keeps the repo-managed distribution surface introduced in
-`0.39.0`, carries the same Boundline-plus-Canon pairing metadata, and keeps
-Canon-ready setup, verification, governed runs, and the assistant-delight
-follow-through surfaces on the same primary operator path:
+The release surface keeps Boundline and Canon pairing metadata explicit.
 
-- `distribution/channel-metadata.toml` pins the release-aligned Boundline plus Canon pairing and the tap-facing Homebrew channel metadata.
-- `scripts/sync-distribution-metadata.sh` regenerates the tap-ready Homebrew formula and the winget manifests.
-- `.github/workflows/sync-homebrew-tap.yml` syncs the generated Homebrew formula into `apply-the/homebrew-boundline`.
-- `.github/workflows/release-windows-distribution.yml` builds the Windows release bundle that still carries both `boundline` and `canon` for the winget package surface.
-- `boundline doctor --install` verifies the installed Boundline version, the supported Canon target, and the current pairing state.
-- `boundline init`, `config show`, `config set-canon`, and the assistant command packs keep Canon mode-selection and governed entry guidance aligned with the CLI.
-- `.boundline/checkpoints/` keeps local rollback manifests for mutating `run` and `step` without making Git a prerequisite.
+- `distribution/channel-metadata.toml` carries the release-aligned pairing.
+- generated Homebrew and winget artifacts stay aligned to the same metadata.
+- `boundline doctor --install` verifies the running Boundline version, the
+  supported Canon target, and the current pairing state.
 
-The supported pairing states are explicit:
+The pairing states stay explicit: `ready`, `already_satisfied`, `blocked`, or
+repair-needed.
 
-- `ready`: bundled Canon matches the documented support target.
-- `already_satisfied`: a compatible Canon was already present on PATH.
-- `blocked`: Boundline cannot determine a safe supported state.
-- `repair_needed`: the machine is close to usable but the user needs to repair
-  the Canon pairing or reinstall through the supported path.
+## When To Read More
 
-Source install remains the fallback path when Homebrew or winget is not the
-right fit for the current machine.
-
-## Why The Docs Split Matters
-
-The quick path exists so operators can install Boundline, verify the pairing, and
-run one bounded session without absorbing the entire architecture first.
-
-This document exists so advanced readers can understand the deeper model
-without blurring the boundary between:
-
-- first-run operator guidance
-- bounded routing and follow-through design
-- Canon as the governed companion rather than the orchestrator
-
-When those layers blur, the product becomes harder to adopt and harder to
-explain. The split is deliberate.
+- [configuration.md](configuration.md) for config precedence and auth/profile
+  scope
+- [assistant/README.md](../assistant/README.md) for assistant command-pack
+  behavior
+- [review-voting.md](review-voting.md) for review-council follow-through
+- [reasoning-profile-algorithms.md](reasoning-profile-algorithms.md) for
+  reasoning-profile behavior

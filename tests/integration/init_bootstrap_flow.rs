@@ -4,8 +4,8 @@ use std::path::Path;
 use serde_json::Value;
 
 use crate::workspace_fixture::{
-    TempGitWorkspace, run_boundline_in, run_boundline_in_with_env, temp_git_workspace,
-    terminal_text,
+    TempGitWorkspace, run_boundline_in, run_boundline_in_with_env, supported_canon_path,
+    temp_git_workspace, terminal_text,
 };
 
 fn empty_workspace(prefix: &str) -> TempGitWorkspace {
@@ -733,8 +733,9 @@ fn init_requires_non_interactive_flag_when_guided_values_need_a_tty() {
 #[test]
 fn init_writes_canon_preferences_when_flags_are_supplied() {
     let workspace = empty_workspace("boundline-init-canon");
+    let canon_path = supported_canon_path();
 
-    let init = run_init_in(
+    let init = run_init_in_with_env(
         &workspace,
         &[
             "init",
@@ -749,6 +750,7 @@ fn init_writes_canon_preferences_when_flags_are_supplied() {
             "--owner",
             "platform",
         ],
+        &[("PATH", canon_path.as_str())],
     );
     let init_text = terminal_text(&init);
     assert_eq!(init.status.code(), Some(0), "{init_text}");
@@ -765,8 +767,9 @@ fn init_writes_canon_preferences_when_flags_are_supplied() {
 #[test]
 fn init_writes_canon_preferences_and_model_routes_when_flags_are_supplied() {
     let workspace = empty_workspace("boundline-init-canon-routes");
+    let canon_path = supported_canon_path();
 
-    let init = run_init_in(
+    let init = run_init_in_with_env(
         &workspace,
         &[
             "init",
@@ -781,6 +784,7 @@ fn init_writes_canon_preferences_and_model_routes_when_flags_are_supplied() {
             "--route",
             "implementation=codex:o4-mini",
         ],
+        &[("PATH", canon_path.as_str())],
     );
     let init_text = terminal_text(&init);
     assert_eq!(init.status.code(), Some(0), "{init_text}");

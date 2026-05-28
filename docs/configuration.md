@@ -1,243 +1,155 @@
 # Configuration in Boundline 0.64.0
 
-Boundline `0.64.0` keeps a user-friendly setup and routing configuration surface
-for the session-native runtime plus explicit compatibility/bootstrap workflows.
+This page covers the operator-facing configuration surface. Keep one rule in
+mind: configuration declares defaults and policy; the runtime still owns
+session state, planning gates, traces, and follow-through.
 
-The `0.64.0` release keeps configuration behavior stable while preserving the
-same governed routing defaults across earlier `bug-fix:investigate` work,
-later verify-stage `security-assessment`, workflow-aware projection of the
-same bounded governance state, continuity-aware read-side follow-up, the
-broader bounded adaptive repair slice, the clustered multi-workspace delivery
-path, the new negotiated delivery projection, and the new domain-template
-surface. Negotiation still does not
-introduce a separate config file or routing key: capture derives acceptance
-boundaries from direct goals, authored briefs, and governance intent, while
-`run`, `status`, `next`, and `inspect` simply project the resulting packet.
+## What Config Is For
 
-The new authority-zoned council slice still follows the same rule: council
-profile, review independence, and review stop semantics are runtime-owned
-projection fields, not user-authored configuration keys.
-Context assembly also stays runtime-owned and inspectable rather than
-configuration-driven: planning derives one bounded context pack from workspace
-signals and persisted session evidence, while `run`, `status`, `next`, and
-`inspect` simply project the resulting context summary, credibility, primary
-inputs, provenance, and any staleness reason. The same remains true for the
-Canon-grounded memory slice: capability snapshots, compact Canon memory,
-governed artifact refs, and recommended next actions are runtime-owned
-planning inputs rather than configuration keys. The same remains true for the
-new planning lifecycle: default `plan` proposes one bounded evidence-driven
-goal plan, session-native `run` applies approval when execution is allowed, and
-neither step introduces a new config key or routing slot.
-Decision-driven selector choice is also runtime-owned rather than
-configuration-driven: the native loop can choose `read`, `search`, `modify`,
-`test`, `ask`, or `replan` from current evidence without introducing a new
-config key or route slot.
-Runtime capability profiles and slot effort policies are the new explicit
-exception: operators can now declare what each assistant family credibly
-supports and how much effort each routed slot should prefer, while the runtime
-continues to own the resulting delegation or stop semantics.
-The same remains true for support modes and delight follow-through: Cursor or
-Gemini parity expectations, reasoning-profile disclosure, inspect closures, and
-delight usefulness signals are runtime-owned projections or metadata surfaces,
-not new operator-authored config keys.
-The CLI and assistant surfaces follow the same rule: they can select a
-workspace and render projections, but session state, diagnostics, and degraded
-fallbacks remain projections over existing session, trace, and runtime surfaces
-rather than new configuration keys.
-Domain templates extend that same explicit config surface: operators can now
-declare active domain families, layered standards, and optional or required
-external context bindings per scope, while the runtime still owns target
-selection, credibility checks, and blocked-domain stop conditions.
-Direct `run --goal` now boots the native session path without requiring a
-workspace execution profile, while `run --compatibility --goal ...` remains the
-manifest-backed opt-in.
-Workflow discovery and follow-through now use the same primary product story as
-direct native execution; compatibility remains explicit and subordinate rather
-than a hidden default.
-Bug-fix and change completion credibility is now stricter on that same runtime
-surface, but it does not introduce a new routing slot, governance flag, or
-configuration file key: Boundline simply requires a material diff plus passed
-validation evidence before those bounded paths can finish successfully.
-Adaptive repair still lives in the explicit compatibility execution manifest;
-there is no separate routing knob for mutation-family selection, credibility
-ranking, explicit adaptive exhaustion, or negotiation-state overrides.
+Use configuration to control:
 
-## What changed
+- routing defaults
+- assistant bindings
+- runtime capability profiles
+- slot effort policies
+- Canon workspace preferences
+- domain-template defaults
+- project-memory roots
+- workflow registry references
 
-- `boundline init` bootstraps an optional compatibility workspace profile and local config under `.boundline/`, and when Canon is selected it also writes the executable `governance.canon` runtime scaffold into `.boundline/execution.json`
-- `boundline init --export-docs` can also mirror stable repo-local Canon and selected assistant reference docs under `docs/boundline/`; that export is create-only by default, `--refresh` enables in-place updates, `--diff` previews changes without writing, and `--to <path>` switches the export root
-- `boundline init` can also infer or accept active domain families and seed scoped domain-template defaults plus optional external context bindings
-- `boundline init --ide <ide>` can scaffold IDE setup metadata; VS Code receives managed terminal auto-approval settings, while Cursor, Antigravity, and JetBrains receive managed guidance until stable project-scoped approval schemas exist
-- `boundline update --target ide` refreshes previously tracked IDE setup from the scaffold manifest
-- direct `boundline run --goal` is native-first; add `--compatibility` only when the manifest-backed route is intentional
-- default `boundline plan` now creates one evidence-driven proposal and session-native `boundline run` applies approval when execution should continue; planning lifecycle state is session-owned rather than config-owned
-- bounded `bug-fix` and `change` completion now requires both material change evidence and passed validation on the native and governed session path
-- `boundline config` manages runtime/model routing defaults, runtime capability profiles, slot effort policy, and domain-template settings for planning, implementation, verification, review, and other bounded slots
-- advisory terminal chat can now use an explicit `routing.chat` route when operators want a dedicated conversational model instead of inheriting the normal slot fallback order
-- `boundline config show` now also surfaces the effective advanced-context retrieval policy used by the baseline local SQLite + FTS5 retrieval path plus the dedicated `semantic_acceleration` opt-in for local semantic expansion
-- `boundline cluster` registers bounded multi-workspace membership and aggregated inspection
-- negotiated delivery modeling stays session-owned and trace-projected; there is no new negotiation-specific key in `config.toml` or `.boundline/execution.json`
-- context-pack assembly and credibility projection stay session-owned and trace-projected; there is no new context-specific key in `config.toml` or `.boundline/execution.json`
-- repo-visible `project.boundline.toml` can override the default Canon knowledge roots through `[docs] project_memory = "..."` and `evidence = "..."`; Boundline still defaults to `docs/project/` and `docs/evidence/` when the repo does not override them
-- Canon project-memory continue, warning, and hard-stop outcomes stay runtime-owned, but `plan`, `status`, `next`, and `inspect` now project the resulting compatibility state, Canon refs, and any producer-attributed managed-block summaries discovered under `docs/evidence/`
-- session-native commands can use `--cluster <primary-workspace>` to keep one authoritative primary-owned session while traversing cluster members sequentially
-- continuity between explicit compatibility traces and read-side commands is projected by the CLI surfaces, not by a new config key
-- adaptive validation-guided repair remains configured in `.boundline/execution.json`, not in `config.toml`
-- broader adaptive mutation families and explicit exhaustion behavior are still
-  configured by the execution manifest, not by new config keys
-- routing values can be global, cluster-scoped, workspace-local, or command-specific
-- review councils and adjudication can use distinct routing defaults
-- `config show --scope effective` now exposes the resolved slot route, source,
-	assistant binding, declared runtime capability summary, and declared effort
-	policy for each bounded slot
+Use runtime commands to observe or act on session state:
 
-When you already run Boundline inside the target repository, you can usually
-omit `--workspace`: the CLI prefers the nearest initialized `.boundline/`
-ancestor, then the nearest `.git/` root, and only then falls back to the
-current working directory. Keep `--workspace <path>` for commands that intentionally
-target another repository or a primary cluster workspace.
-- `config show --scope effective` now also exposes active domain templates,
-	winning standards layers, and bound external context references with their
-	source authority
-- `run`, `status`, `next`, and `inspect` now surface effective routing plus
-	assistant bindings, and native or compatibility traces persist the route
-	snapshot used during execution
-- workspace-local `.boundline/guidance/` and `.boundline/guardians/` can now
-	override bundled capability packs with explicit loaded and skipped-source
-	disclosure; capability precedence remains runtime-owned rather than a new
-	config key
-- bundled assistant guidance can now also arrive through directory-based catalog
-	packs under `assistant/packs/`, with `loaded_packs`, `skipped_packs`, and
-	`catalog_validation_findings` projected by `plan`, `status`, `next`, and
-	`inspect` instead of being hidden loader detail
-- `plan`, `run`, `status`, `next`, and `inspect` now surface selected domain
-	family, winning standards source, and any required external-input blocking
-	reason inside the bounded context story
-- `status`, `next`, and `inspect` now also surface guided follow-through fields
-	when persisted session or trace evidence can explain one concrete next
-	bounded action or explicit stop condition
-- when `assistant_runtimes` is non-empty or a declared runtime capability marks
-	continuation or validation unsupported, native execution now stops at an
-	explicit delegation boundary instead of silently falling back
+- `boundline goal`
+- `boundline plan`
+- `boundline run`
+- `boundline status`
+- `boundline next`
+- `boundline inspect`
+- `boundline probe`
 
-## Config locations
-
-For a procedural view of init, IDE setup, docs export, and update refreshes,
-see [guides/init-and-update.md](guides/init-and-update.md).
+## Config Locations
 
 - Workspace-local: `<workspace>/.boundline/config.toml`
 - Cluster-scoped: `<primary-workspace>/.boundline/cluster.toml`
 - User-global: `$XDG_CONFIG_HOME/boundline/config.toml`
 - User-global fallback: `$HOME/.config/boundline/config.toml`
 
-## Advanced Context Policy
+When you already run Boundline inside the target repository, you can usually
+omit `--workspace`: the CLI prefers the nearest initialized `.boundline/`
+ancestor, then the nearest `.git/` root, and only then falls back to the
+current working directory.
 
-Advanced context remains runtime-owned, but Boundline `0.58.0` adds one typed
-policy block under routing precedence so operators can disable the feature or
-keep it explicitly local-first:
+## Resolution Precedence
 
-```toml
-[routing.advanced_context]
-retrieval_mode = "local"
-remote_policy = "local_only"
+Boundline resolves most runtime values in this order:
 
-[routing.advanced_context.budgets]
-refinement_budget = 2
-refresh_budget = 1
-depth_limit = 12
-expansion_limit = 8
-traversal_limit = 8
-evidence_limit = 6
+1. explicit CLI input
+2. workspace config
+3. cluster config
+4. user-global config
+5. built-in defaults
+
+Inspect the effective result with:
+
+```bash
+boundline config show --scope effective
 ```
 
-- `retrieval_mode = "disabled"` preserves the structured-only path and records
-	an explicit disabled terminal reason in the advanced-context projection.
-- `retrieval_mode = "local"` enables the baseline workspace-local SQLite + FTS5
-	retrieval baseline.
-- Remote retrieval and remote transmission remain unsupported in the baseline local mode and are
-	rejected during config validation rather than silently downgraded.
-- `boundline config show --scope effective` renders the resolved advanced-
-	context policy alongside route, capability, and effort precedence.
+## What Stays Runtime-Owned
 
-## Semantic Acceleration Policy
+These surfaces are not configuration keys:
 
-Semantic acceleration stays additive to the V1 advanced-context baseline. The
-new policy does not replace `advanced_context` and does not reinterpret the V1
-retrieval mode. Instead, it records a separate opt-in that the runtime can use
-to attempt local semantic expansion or reranking while still falling back to
-the V1 path when needed.
+- `.boundline/session.json`
+- `.boundline/traces/`
+- planning gates such as `goal_quality_state`, `plan_quality_state`,
+  `backlog_quality_state`, and `planning_analysis_state`
+- host handoffs such as `phase_request`, `assistant_resume_command`, and
+  `assistant_next_command`
+- read-only readiness output from `boundline probe`
 
-```toml
-[routing.semantic_acceleration]
-policy = "disabled"
+If those fields change, the runtime decided something from current evidence.
+
+## Workspace Bootstrap
+
+`boundline init` creates or updates the workspace-facing config surface.
+
+Common examples:
+
+```bash
+boundline init --assistant codex
 ```
 
-- `policy = "disabled"` is the safe built-in default when no explicit opt-in
-	exists.
-- `policy = "local"` enables the local semantic-acceleration path for the
-	resolved scope without changing the V1 `advanced_context` baseline.
-- `boundline config set-semantic-acceleration --scope workspace --policy local`
-	updates the dedicated semantic policy surface.
-- `boundline config show --scope effective` renders the resolved semantic
-	acceleration policy and its winning precedence source beside the V1 advanced-
-	context policy.
+```bash
+boundline init \
+  --assistant copilot \
+  --route planning=copilot:gpt-4o \
+  --route implementation=codex:o3
+```
+
+`init` can also:
+
+- seed domain defaults
+- write Canon preferences
+- scaffold IDE metadata
+- export repo-local reference docs
+
+For the full bootstrap and refresh flow, see
+[guides/init-and-update.md](guides/init-and-update.md).
+
+## Provider Auth Profiles
+
+Provider auth is adjacent to config but separate from it.
+
+```bash
+boundline models auth login --provider github-copilot
+boundline models auth status
+boundline models auth remove --provider github-copilot
+```
+
+- Auth profiles are user-scoped.
+- They live beside the user-global config in `auth-profiles.json`.
+- They are not written into `.boundline/config.toml` or `.boundline/session.json`.
+- In the current public slice, the login surface supports `github-copilot`.
+
+Treat these profiles as operator credentials, not repository configuration.
+
+## Routing And Assistant Setup
+
+Assistant package setup and slot routing are related but different:
+
+- `boundline init --assistant <host>` generates repo-local assistant surfaces.
+- `boundline config` decides which runtime or model owns planning,
+  implementation, verification, review, and other slots.
+
+Use `config show --scope effective` when a route behaves differently from what
+you expected.
 
 ## Canon Workspace Preferences
 
-Canon-default behavior is workspace-local. `boundline init` can write the
-`[canon]` section directly:
+Canon defaults are workspace-local when governed delivery is expected.
 
 ```bash
 boundline init \
   --canon-mode-selection auto-confirm \
   --risk medium \
   --zone engineering \
-  --owner platform \
-  --assistant copilot \
-  --route planning=copilot:gpt-4o
+  --owner platform
 ```
 
-The resulting config stores:
-
-```toml
-[canon]
-mode_selection = "auto-confirm"
-default_risk = "medium"
-default_zone = "engineering"
-default_owner = "platform"
-```
-
-When Canon is selected, init also backfills missing Canon defaults with the
-built-in bounded values `medium`, `engineering`, and `platform`, then writes a
-matching Canon runtime scaffold under `<workspace>/.boundline/execution.json`.
-That scaffold is what planning and governed compatibility execution actually
-consume on the first run.
-
-If Canon is selected but the local Canon CLI is missing or does not expose the
-required governance surface, `boundline init` stops with a blocked result and
-repair actions instead of silently writing a workspace that would fall back to
-local-only planning.
-
-Change the preference later with:
+You can also inspect or adjust Canon defaults directly:
 
 ```bash
-boundline config set-canon --scope workspace --mode-selection auto
 boundline config show --scope workspace
+boundline config set-canon --workspace . --mode-selection auto-confirm
 ```
 
-Valid mode-selection values are `manual`, `auto-confirm`, and `auto`. The
-setting controls whether `boundline run --mode <canon-mode>` is required, whether
-Boundline asks before using an inferred mode, or whether it can proceed when its
-mode inference is high confidence.
+The current release documents Canon `0.61.0` support for the machine-facing
+`canon governance start|refresh|capabilities --json` `v1` surface.
 
-Workflow definitions are separate from routing config:
+## Workflow Registry Boundaries
 
-- Workspace-local workflow registry: `<workspace>/.boundline/workflows.toml`
-
-That file declares named bounded workflows. It does not participate in runtime
-or model-routing precedence; it is consumed only by `boundline workflow ...`.
-
-Optional workflow-discovery metadata lives in the same registry file:
+Authored workflows stay intentionally narrow. They describe one bounded route,
+not a hidden workflow engine.
 
 ```toml
 [workflow.governed-delivery]
@@ -254,327 +166,39 @@ review = "review_triggered"
 governance = "governance_required"
 ```
 
-Use `boundline workflow list` to render the discovered
-workflow names, phase chains, summary text, and invocation guidance. If
-`summary` or `recommended_when` are omitted, Boundline falls back to the workflow
-name plus declared phases. The registry remains bounded: no branching, loops,
-fan-out, fan-in, hidden background progression, or Canon-owned workflow control
-are supported.
+The supported authored shape has no branching, loops, fan-out, fan-in, hidden background progression, or Canon-owned workflow control. Workflows provide named entrypoints over the same runtime; governance still remains explicit and route-driven.
 
-## Resolution precedence
+## Advanced Context And Semantic Acceleration
 
-Boundline resolves each routing slot with this order:
-
-1. explicit CLI input
-2. workspace config
-3. cluster config
-4. global config
-5. built-in defaults
-
-Use `boundline config show --scope effective --cluster <primary-workspace>` to inspect
-resolved values and their source.
-
-## Advisory Chat Route
-
-The terminal advisory chat keeps two configuration layers:
-
-1. legacy chat overrides through `BOUNDLINE_CHAT_ENDPOINT`, `BOUNDLINE_CHAT_MODEL`, and `BOUNDLINE_CHAT_API_KEY`, or the `[chat]` section in `.boundline/config.toml`
-2. the normal provider-routing surface through `routing.chat`
-
-When a legacy chat override is present, the terminal keeps using that explicit
-OpenAI-compatible endpoint. When no legacy override is present, advisory chat
-now checks `routing.chat` first and treats it as authoritative when configured.
-If `routing.chat` is absent, the terminal preserves the existing fallback over
-the bounded slot routes (`planning`, then `review`, then `implementation`, then
-`verification`).
-
-Use `routing.chat` when you want advisory conversation to stay on a dedicated
-provider/model pair without changing planning, review, or implementation
-routing for the Boundline runtime itself.
+Two optional policy surfaces remain explicit:
 
 ```toml
-[routing]
-chat = { runtime = "codex", model = "openai/gpt-5.4" }
-planning = { runtime = "codex", model = "o4-mini" }
-review = { runtime = "claude", model = "sonnet-4" }
+[routing.advanced_context]
+retrieval_mode = "local"
+remote_policy = "local_only"
+
+[routing.semantic_acceleration]
+policy = "disabled"
 ```
 
-You can manage the same route through the CLI:
+- `advanced_context` controls the baseline local retrieval path.
+- `semantic_acceleration` is an additive opt-in for local semantic expansion.
+- Neither surface replaces the normal routing precedence rules.
 
-```bash
-boundline config set --scope workspace --chat --runtime codex --model openai/gpt-5.4
-boundline config show --scope effective
-boundline config unset --scope workspace --chat
-```
-
-If `routing.chat` is configured but the required provider credentials are not
-available, advisory chat stays unavailable instead of silently switching to a
-different routed slot.
-
-The effective view is now the operator-facing source of truth for backend
-ownership: it shows the resolved route for each slot, the source that won
-precedence, and the assistant binding implied by that route.
-
-When follow-up commands already know which route owns the current work,
-Boundline reuses that information and projects only the routing/config facts that
-materially explain the current state. In practice, `route_config_projection`
-may include persisted `effective_routing`, `assistant_bindings`,
-`runtime_capabilities`, `slot_effort_policies`,
-workspace-local routing defaults, workflow cues, or requested governance
-intent; it intentionally does not dump every possible config value.
-
-## Guidance And Guardian Overrides
-
-Guidance and guardian selection is mostly runtime-owned, but two repository-local
-inputs can change the capability set that `plan`, `run`, `status`, `next`, and
-`inspect` report:
-
-- `.boundline/guidance/*.md` adds high-precedence guidance overrides.
-- `.boundline/guardians/*.toml` adds high-precedence guardian overrides.
-
-These files are not a second routing layer. Boundline resolves them per lifecycle
-phase alongside optional Canon guidance and bundled `assistant/packs/*.toml`, then
-persists which sources loaded and which were skipped.
-
-Semantic guardians reuse the existing effective slot for the active phase:
-
-- planning and architecture use the planning slot
-- implementation uses the implementation slot
-- testing and verification use the verification slot
-- review uses the review slot
-
-If the winning route lacks validation support, Boundline records an explicit
-guardian degradation instead of silently skipping the check.
-
-## Cluster workflow
-
-```bash
-boundline cluster init \
-	--workspace <primary-workspace> \
-	--cluster-id delivery-a \
-	--member <primary-workspace> \
-	--member <secondary-workspace>
-
-boundline cluster status --workspace <primary-workspace>
-boundline cluster inspect --workspace <primary-workspace>
-```
-
-The primary workspace owns `.boundline/cluster.toml` and remains the authoritative
-owner of the active clustered session in `<primary-workspace>/.boundline/session.json`.
-Member workspaces keep their own `.boundline/traces/` and local `.boundline/config.toml`
-files so terminal evidence stays local to the workspace that executed the
-bounded handoff.
-
-Session-native clustered delivery uses the same bounded commands through the
-primary workspace:
-
-```bash
-boundline goal --cluster <primary-workspace> --goal "Fix the failing add test"
-boundline plan --cluster <primary-workspace>
-boundline run --cluster <primary-workspace>
-boundline status --cluster <primary-workspace>
-boundline inspect --cluster <primary-workspace>
-```
-
-## Init workflow
-
-```bash
-boundline init
-boundline doctor
-```
-
-Install-wide plus workspace override bootstrap:
-
-```bash
-boundline init --scope global --assistant copilot
-boundline init --scope both --workspace <workspace> --assistant codex
-boundline doctor --install
-boundline doctor --workspace <workspace>
-```
-
-Optional domain bootstrap:
-
-```bash
-boundline init \
-	--assistant codex \
-	--domain systems \
-	--domain react \
-	--domain-standard "react=follow the shared UI system" \
-	--context-binding "react|design-system|mcp:design-system" \
-	--required-context-binding "react|design-reference|design/reference.md"
-```
-
-Assistant bootstrap accepts Claude, Copilot, Codex, and Antigravity. If no
-explicit `--route` values are supplied, init seeds planning, implementation,
-verification, and review from the selected provider-backed assistant host's
-maintained default model catalog and reports the result in `route_setup`,
-including seeded slots, explicit overrides, and
-`inspect_or_edit: boundline config show..`. Explicit routes remain
-authoritative for their slots, and missing slots are still backfilled from
-assistant defaults when a selected host can supply them. Antigravity scaffolds
-its repo-local package surface but does not imply a provider runtime by itself,
-so use explicit `--route` values or pair it with another provider-backed host
-when seeded defaults are required. Guided init now lists supported slots inline,
-explains that blank input is allowed when assistant defaults can seed the
-remaining slots, and shows a valid example such as `planning=copilot:gpt-4o`.
-When a selected runtime cannot provide the missing defaults on the current
-machine, init falls back to another selected available assistant and marks the
-seeded line with `fallback-from=<runtime>-unavailable`; if no selected runtime
-can fill the remaining slots, init stops with an actionable error instead of
-persisting broken defaults.
-
-`boundline init --scope global` writes install-wide defaults under the Boundline
-global config directory and now scaffolds a provider env template beside the
-global config. `--scope workspace` keeps the repo-local behavior, and
-`--scope both` writes both the install-wide defaults and a workspace override.
-Provider secrets and endpoints stay env-only: Boundline loads process env
-first, then `<workspace>/.env.local`, then `<workspace>/.env`, then the global
-`providers.env` file. `boundline doctor --install` and `boundline doctor
---workspace <workspace>` now surface those template and env-file paths
-explicitly.
-
-Domain bootstrap can also seed bounded hygiene defaults. Boundline writes
-merge-only ignore entries when selected domain families or repository cues make
-them credible: universal Git patterns, technology patterns for active domain
-families, and tool-specific files such as `.dockerignore`, `.prettierignore`,
-`.eslintignore`, `.terraformignore`, or `.helmignore` only when those tools are
-present. Legacy ESLint workspaces can receive a merge-only `.eslintignore`, and
-Kubernetes cues such as `kustomization.yaml` or `k8s/` append bounded
-Kubernetes-related exclusions to `.gitignore`. Existing operator-authored lines
-are preserved.
-
-When init would overwrite existing files, Boundline shows a preview and requires
-`--force` to apply destructive updates.
-
-You do not need `boundline init` to use the primary session-native workflow. Use it when you want scaffolded compatibility defaults or assistant setup.
-
-## Init templates
-
-`boundline init` works without a template flag. If you omit `--template`, Boundline
-defaults to `bug-fix`.
-
-Available starting templates:
-
-- `bug-fix`: small targeted repair
-- `change`: bounded implementation change
-- `delivery`: broader delivery update
-
-Templates are only starting points for the generated compatibility execution profile.
-
-- Need a different starting point later: rerun `boundline init --force --template <bug-fix|change|delivery>`
-- Need another task of the same type: do not rerun init; start a new session and capture a new goal
-- Need something custom: edit `<workspace>/.boundline/execution.json` directly when you intentionally want compatibility behavior
-
-`init` template and `flow` are separate concerns: `init` bootstraps the
-optional compatibility profile, while `boundline flow` selects the current session-native run shape.
-
-## Config commands
-
-### Show
+Inspect both through:
 
 ```bash
 boundline config show --scope effective
-boundline config show --scope workspace
-boundline config show --cluster <primary-workspace> --scope cluster
-boundline config show --scope global
 ```
 
-### Set delivery-stage routes
+## Safe Defaults
 
-```bash
-boundline config set --scope global --slot planning --runtime codex --model o3
-boundline config set --cluster <primary-workspace> --scope cluster --slot planning --runtime codex --model o3
-boundline config set --scope workspace --slot verification --runtime copilot --model gpt-4o
-```
+Use these defaults unless there is a clear reason not to:
 
-### Set review-role routes
-
-```bash
-boundline config set --scope workspace --reviewer safety --runtime claude --model sonnet-4
-boundline config set --scope workspace --adjudicator --runtime codex --model o3
-```
-
-### Set runtime capability profiles
-
-```bash
-boundline config set-capability --scope workspace --runtime claude --continuation unsupported --resume unsupported --validation supported --handoff-target unsupported --escalation-context supported --notes "requires a handoff for bounded continuation"
-```
-
-### Set slot effort policy
-
-```bash
-boundline config set-effort --scope workspace --slot implementation --level high --fallback preserve --rationale "keep implementation on the highest-effort bounded path"
-```
-
-### Set domain templates
-
-```bash
-boundline config set-domain --scope workspace --family react --enable --standards "follow the shared UI system"
-boundline config set-domain --cluster <primary-workspace> --scope cluster --family systems --enable
-boundline config unset-domain --scope workspace --family react
-```
-
-### Bind external context inputs
-
-```bash
-boundline config bind-context --scope workspace --family react --kind design-system --reference mcp:design-system --required
-boundline config bind-context --scope workspace --family react --kind design-reference --reference design/reference.md
-boundline config unbind-context --scope workspace --family react --kind design-system --reference mcp:design-system
-```
-
-### Unset values
-
-```bash
-boundline config unset --scope workspace --slot planning
-boundline config unset --cluster <primary-workspace> --scope cluster --slot planning
-boundline config unset --scope workspace --reviewer safety
-boundline config unset-domain --scope workspace --family react
-```
-
-## Runtime support
-
-Assistant host support for init and repo-local package setup:
-
-- Claude
-- Codex
-- Copilot
-- Antigravity
-
-Runtime support for routing and capability enforcement:
-
-- Claude
-- Codex
-- Copilot
-- Gemini
-
-Gemini remains a valid runtime and provider route even though it is no longer a
-repo-local assistant host package. If a workspace declares
-`assistant_runtimes` and the active implementation or verification route
-chooses a runtime outside that capability list, native execution stops with an
-explicit delegation packet instead of an opaque assistant-binding error.
-
-Direct provider execution now stays compatible with that runtime catalog by
-keeping the runtime slot semantics (`claude`, `codex`, `copilot`, `gemini`)
-while allowing the model id to select a provider namespace when needed. The
-plain catalog ids still use the configured runtime backend, but you can route a
-slot to an explicit provider by prefixing the model id:
-
-```text
-planning=copilot:gpt-5.4
-implementation=codex:openai/gpt-5.4
-implementation=copilot:deepseek/deepseek-chat
-verification=copilot:groq/llama-3.3-70b-versatile
-review=claude:anthropic/sonnet-4.6
-implementation=codex:ollama/qwen3:32b
-```
-
-Supported direct-provider namespaces in this slice are `openai`, `codex`,
-`copilot`, `deepseek`, `grok`, `groq`, `ollama`, `anthropic` or `claude`, and
-`gemini`. Boundline resolves provider credentials from the env layer rather than
-storing secrets in TOML. In the current native slice, direct-provider execution
-is wired into synthetic goal-plan planning, implementation, and review steps,
-plus review councils in existing execution profiles when a reviewer resolves to
-an explicit namespaced provider route. Generic runtime ids such as
-`claude:sonnet-4` or `copilot:gpt-5.4` keep using the existing runtime surface;
-workspace validation still runs through the real workspace command configured in
-the execution profile.
+- keep normal local delivery on the session-native path
+- use `run --compatibility` only when the manifest-backed route is intentional
+- treat blocked context, failed validation, and blocked governance as real stop
+  conditions
+- prefer workspace overrides for local engineering rules
+- prefer Canon only when governed standards or governed project memory are
+  intentionally part of the delivery path

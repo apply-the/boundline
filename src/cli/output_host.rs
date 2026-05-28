@@ -162,3 +162,145 @@ pub(crate) fn push_output_section(
     lines.push(format!("{title}:"));
     lines.extend(section_lines);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        CommandExitStatus, DeveloperCommand, OrchestrateEventEnvelope, OutputPresentation,
+        command_name, push_output_section, render_host_command_json, render_orchestrate_event_json,
+        render_orchestrate_stream_json, stdout_presentation,
+    };
+    use crate::domain::configuration::InitConfigScope;
+
+    fn minimal_event(kind: &str, msg: &str) -> OrchestrateEventEnvelope {
+        OrchestrateEventEnvelope {
+            event_id: "evt-001".to_string(),
+            timestamp_ms: 0,
+            event_kind: kind.to_string(),
+            audit: None,
+            actor_kind: None,
+            actor_name: None,
+            runtime_kind: None,
+            provider: None,
+            route_slot: None,
+            model_name: None,
+            decision_family: None,
+            review_step: None,
+            vote_summary: None,
+            adjudication_summary: None,
+            governance_mode: None,
+            session_ref: None,
+            phase_kind: None,
+            stage_key: None,
+            message: msg.to_string(),
+            artifact: None,
+            phase_request: None,
+            instruction: None,
+            resume_command: None,
+            assistant_resume_command: None,
+            next_command: None,
+            assistant_next_command: None,
+            session_status: None,
+            trace_summary: None,
+        }
+    }
+
+    #[test]
+    fn render_host_command_json_produces_valid_json_with_all_fields() {
+        let json = render_host_command_json(
+            "orchestrate",
+            CommandExitStatus::Succeeded,
+            "done",
+            Some("/tmp/trace.json"),
+            None,
+            None,
+        );
+        assert!(json.contains("\"command_name\""));
+        assert!(json.contains("orchestrate"));
+        assert!(json.contains("succeeded"));
+    }
+
+    #[test]
+    fn render_orchestrate_event_json_produces_valid_json_for_event() {
+        let event = minimal_event("session_start", "Session started");
+        let json = render_orchestrate_event_json(&event);
+        assert!(json.contains("session_start"));
+        assert!(json.contains("Session started"));
+    }
+
+    #[test]
+    fn render_orchestrate_stream_json_joins_events_with_newlines() {
+        let events =
+            vec![minimal_event("step_start", "step a"), minimal_event("step_done", "step b")];
+        let output = render_orchestrate_stream_json(&events);
+        assert!(output.contains('\n'));
+        assert!(output.contains("step_start"));
+        assert!(output.contains("step_done"));
+    }
+
+    #[test]
+    fn command_name_returns_continue_for_continue_variant() {
+        let cmd = DeveloperCommand::Continue { workspace: None, cluster: None, session: None };
+        assert_eq!(command_name(&cmd), "continue");
+    }
+
+    #[test]
+    fn command_name_returns_init_for_init_variant() {
+        let cmd = DeveloperCommand::Init {
+            scope: InitConfigScope::Workspace,
+            workspace: "/tmp/ws".into(),
+            non_interactive: false,
+            template: None,
+            assistant: Vec::new(),
+            ide: Vec::new(),
+            auto_approve: None,
+            domain: Vec::new(),
+            domain_standard: Vec::new(),
+            context_binding: Vec::new(),
+            required_context_binding: Vec::new(),
+            canon_mode_selection: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            export_docs: false,
+            refresh: false,
+            diff: false,
+            to: None,
+            route: Vec::new(),
+            force: false,
+        };
+        assert_eq!(command_name(&cmd), "init");
+    }
+
+    #[test]
+    fn stdout_presentation_returns_a_valid_variant() {
+        let p = stdout_presentation();
+        assert!(p == OutputPresentation::Plain || p == OutputPresentation::Rich);
+    }
+
+    #[test]
+    fn push_output_section_inserts_blank_line_separator_in_rich_mode() {
+        let mut lines = vec!["existing line".to_string()];
+        push_output_section(
+            &mut lines,
+            OutputPresentation::Rich,
+            "Section",
+            vec!["content".to_string()],
+        );
+        assert!(lines.contains(&String::new()), "expected blank line separator in rich output");
+        assert!(lines.iter().any(|l| l.contains("Section:")));
+    }
+
+    #[test]
+    fn push_output_section_skips_blank_separator_when_lines_is_empty() {
+        let mut lines: Vec<String> = Vec::new();
+        push_output_section(
+            &mut lines,
+            OutputPresentation::Rich,
+            "Section",
+            vec!["content".to_string()],
+        );
+        assert!(!lines.contains(&String::new()), "no blank separator when starting fresh");
+        assert_eq!(lines[0], "Section:");
+    }
+}

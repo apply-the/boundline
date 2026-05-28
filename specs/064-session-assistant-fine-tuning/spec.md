@@ -1,169 +1,141 @@
-# Feature Specification: Session, Assistant, and Audit Fine-Tuning
+# Feature Specification: Provider Auth, Probe Readiness, and Assistant Handoff Fine-Tuning
 
-**Feature Branch**: `064-session-assistant-fine-tuning`  
-**Created**: 2026-05-25  
-**Status**: Implemented (Retrospective)  
-**Input**: User description: "crea una spec 064 in stile speckit per le feature implementate, relativa al fine tuning"
+**Feature Branch**: `064-session-assistant-fine-tuning`
+**Created**: 2026-05-25
+**Updated**: 2026-05-28
+**Status**: Implemented (Retrospective Updated)
+**Input**: Retrospective update for commits `cad1675`, `9ba0b21`, and `6182711`
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - Readable Session References (Priority: P1)
+### User Story 1 - Provider Authentication Lifecycle (Priority: P1)
 
-As an operator running multiple sessions per day, I want session references that are date-ordered and human-readable, so I can quickly identify, compare, and communicate sessions without opaque suffixes.
+As an operator using provider-backed Boundline routes, I want device-flow login, status, and removal commands for stored model-provider credentials, so I can authenticate GitHub Copilot once and reuse that access across CLI and assistant-host flows.
 
-**Why this priority**: Session references are operator-visible across the full workflow and directly affect traceability and support operations.
+**Why this priority**: Provider authentication is a hard prerequisite for Copilot-backed runtime work; without it, later assistant and execution surfaces degrade immediately.
 
-**Independent Test**: Create multiple sessions in the same day and verify each generated reference follows `YYYYMMDD-NNN-slug` with a monotonically increasing daily sequence.
+**Independent Test**: Run the `boundline models auth` lifecycle for `github-copilot` and verify login stores credentials, status reports the provider without exposing secrets, and remove clears the stored entry.
 
 **Acceptance Scenarios**:
 
-1. **Given** a new session initialized with a goal slug, **When** Boundline generates a session reference, **Then** it returns `YYYYMMDD-NNN-slug` and preserves slug normalization constraints.
-2. **Given** an existing set of same-day sessions, **When** another session is created, **Then** the sequence increments by one and remains zero-padded.
-3. **Given** a day boundary change, **When** the first session of the new day is created, **Then** sequence numbering restarts from `001` for the new date prefix.
+1. **Given** no stored provider auth, **When** `boundline models auth login --provider github-copilot` completes device flow, **Then** Boundline persists a token-backed auth profile and reports the profile storage path.
+2. **Given** one or more stored provider entries, **When** `boundline models auth status` runs, **Then** it lists authenticated providers and the auth profile path without printing token or API key values.
+3. **Given** a stored provider entry, **When** `boundline models auth remove --provider github-copilot` runs, **Then** the provider is deleted from the auth profile store and later status output no longer lists it.
 
 ---
 
-### User Story 2 - Reliable Local Install Refresh (Priority: P2)
+### User Story 2 - Planning Gates and Assistant-Safe Handoffs (Priority: P1)
 
-As a maintainer testing local CLI changes, I want a single local install script, so I can rebuild and refresh the active Homebrew binary quickly and consistently.
+As an assistant host or operator reading Boundline session output, I want goal, plan, backlog, and planning-analysis gate state surfaced together with assistant-safe follow-up commands, so I can stop on real runtime gates instead of improvising the next step from chat context.
 
-**Why this priority**: Local install friction slows validation loops and increases risk of testing stale binaries.
+**Why this priority**: The runtime already owns planning readiness; exposing those gates and handoffs accurately prevents hosts from continuing into invalid execution states.
 
-**Independent Test**: Run the script on macOS with a valid Homebrew installation and verify the target `boundline` binary is updated from a fresh release build.
+**Independent Test**: Run the planning gate and host output contract tests and verify `goal_quality_state`, `plan_quality_state`, `backlog_quality_state`, `planning_analysis_state`, `assistant_resume_command`, and `assistant_next_command` are preserved where applicable.
 
 **Acceptance Scenarios**:
 
-1. **Given** the workspace compiles successfully, **When** the install script runs, **Then** it builds release output and copies the resulting binary into the active Homebrew keg path.
-2. **Given** the install script completes, **When** the operator runs the installed `boundline`, **Then** the execution reflects the freshly built local version.
+1. **Given** a goal or plan that still needs clarification, **When** session or host JSON output is rendered, **Then** the relevant quality state is surfaced and the reported assistant-safe continuation overrides a default next step.
+2. **Given** a governed or bounded session blocked on backlog or planning analysis, **When** `run`, `status`, or `next` is evaluated, **Then** Boundline reports the blocking state and does not continue into execution.
+3. **Given** a structured `phase_request`, **When** assistant-facing output is emitted, **Then** the response preserves `phase_request`, `assistant_resume_command`, and `assistant_next_command` semantics instead of flattening them into plain CLI advice.
 
 ---
 
-### User Story 3 - Two-Button Assistant Routing (Priority: P1)
+### User Story 3 - Probe Preflight Readiness (Priority: P1)
 
-As an assistant user in Copilot chat, I want a consistent primary and conditional secondary action pattern, so I can advance quickly while still having an explicit refine or inspect option when needed.
+As an assistant host deciding whether to initialize, doctor, or continue a workspace, I want a read-only `boundline probe` command, so I can detect bootstrap, provider, and session readiness before running orchestration.
 
-**Why this priority**: Next-action UX is part of the main operator loop and affects completion speed and error recovery.
+**Why this priority**: Hosts need a cheap readiness check that does not mutate workspace state and does not invent repo-local handoffs when only global bootstrap is valid.
 
-**Independent Test**: Open each updated prompt command and verify the response guidance always presents one primary action and only shows the secondary action when its condition is met.
+**Independent Test**: Run the probe command contract tests and verify bootstrap, doctor, current-workspace resolution, and host-envelope JSON cases all route correctly.
 
 **Acceptance Scenarios**:
 
-1. **Given** normal progression with no refine condition, **When** the assistant renders next actions, **Then** only the primary action is shown.
-2. **Given** a refine, inspect, or reset condition, **When** the assistant renders next actions, **Then** the secondary action is shown with its documented condition.
-3. **Given** an emitted `phase_request.assistant_resume_command`, **When** next actions are rendered, **Then** the emitted resume command overrides the primary path.
+1. **Given** an uninitialized workspace, **When** `boundline probe` runs, **Then** it recommends `boundline init`, omits any assistant handoff, and returns no repo-local recovery route.
+2. **Given** an initialized workspace with missing provider credentials, **When** `boundline probe` runs, **Then** it recommends `boundline doctor` and surfaces `/boundline-doctor` as the assistant-safe handoff.
+3. **Given** an initialized workspace with healthy provider credentials but no active session, **When** `boundline probe` runs, **Then** it recommends `boundline goal` and surfaces `/boundline-goal` as the assistant-safe handoff.
+4. **Given** `boundline probe --json`, **When** the command succeeds, **Then** it emits the standard host envelope and includes the rendered probe report JSON in `rendered_output`.
 
 ---
 
-### User Story 4 - Prompt and CLI Behavior Alignment (Priority: P2)
+### User Story 4 - Cross-Host Assistant Contract Parity (Priority: P2)
 
-As a maintainer, I want prompt contracts and runtime behavior aligned with corrected tests, so assistant guidance and CLI output semantics remain consistent.
+As a maintainer shipping assistant assets across Copilot, Claude, Codex, and Antigravity, I want prompt sections, next-step routing, and host-native action syntax kept consistent, so contract tests stay green and each host preserves the same runtime authority.
 
-**Why this priority**: Mismatch between tests, prompt contracts, and runtime semantics causes regressions and operator confusion.
+**Why this priority**: Assistant assets drift easily. Cross-host parity and explicit contract coverage keep prompt guidance from diverging from runtime behavior or from each other.
 
-**Independent Test**: Run lint and test gates and confirm no assertion or contract mismatch remains for the adjusted behavior.
-
-**Acceptance Scenarios**:
-
-1. **Given** updated runtime semantics for clarification requests, **When** tests execute, **Then** expectations match emitted behavior.
-2. **Given** updated prompt routing sections, **When** commands are exercised, **Then** allowed follow-up boundaries remain intact.
-
----
-
-### User Story 5 - Session Audit Attribution Projection (Priority: P1)
-
-As an operator inspecting review, governance, or reasoning activity, I want the session audit projection to preserve algorithm, event, actor, outcome, and mixed-route reviewer attribution, so I can explain exactly who decided what and through which routes.
-
-**Why this priority**: Audit explainability is now part of the operator control loop and directly affects trust in governed or multi-actor execution.
-
-**Independent Test**: Produce a session audit projection containing a mixed-route review vote and verify the projection preserves `participant_routes`, `mixed_routes`, and the explicit algorithm-to-event-to-actor-to-outcome mapping.
+**Independent Test**: Run the assistant command pack and definition contract suites and verify the touched assets satisfy required sections, routing semantics, probe preflight guidance, and host-specific action syntax.
 
 **Acceptance Scenarios**:
 
-1. **Given** a review council event with multiple completed reviewer routes, **When** Boundline projects the trace event into session audit, **Then** the audit actor retains the participant route list and marks the attribution as mixed-route.
-2. **Given** an orchestrated phase with matching session audit entries, **When** Boundline emits NDJSON event envelopes, **Then** each envelope includes an explicit audit projection for the latest compatible audit event.
-3. **Given** an inspect summary with session audit data, **When** the operator reads the human-facing output, **Then** the projection exposes the ordered audit mapping and any mixed reviewer routes without collapsing them to one route.
-
----
-
-### User Story 6 - Audit-Focused Inspect Surface (Priority: P2)
-
-As an operator debugging a session, I want a dedicated `inspect --audit` surface, so I can review the full session audit log without unrelated trace detail.
-
-**Why this priority**: Deep trace inspection is a frequent recovery and explanation task; a bounded audit-first view speeds diagnosis without expanding the runtime model.
-
-**Independent Test**: Run `boundline inspect --audit` against a session with persisted audit entries and verify the output shows audit counts, rollups, session reference, latest event, and the ordered timeline.
-
-**Acceptance Scenarios**:
-
-1. **Given** a trace with persisted session audit entries, **When** `inspect --audit` runs, **Then** the command renders the audit rollups and ordered timeline as the primary output.
-2. **Given** a trace without persisted session audit entries, **When** `inspect --audit` runs, **Then** the command reports the absence of audit entries cleanly without failing the inspect command.
-3. **Given** assistant command-pack guidance for inspect, **When** the user asks specifically for the audit trail, **Then** the documented shell path and output interpretation route to `inspect --audit` and preserve audit-specific fields.
+1. **Given** a Copilot action prompt, **When** it renders an assistant-safe next step, **Then** it uses `command:github.copilot.chat.execute` links instead of plain text shell recommendations.
+2. **Given** a Claude, Codex, or Antigravity command asset, **When** it describes the next step, **Then** it preserves host-native `/boundline:*` routing instead of Copilot-specific command URIs.
+3. **Given** readiness-sensitive commands such as goal, plan, status, or recover, **When** the user starts from an uncertain workspace, **Then** the assistant guidance instructs the host to run `boundline probe --workspace <workspace> --json` and to respect bootstrap-only or doctor-only outcomes.
 
 ## Edge Cases
 
-- Session sequence counting must ignore non-session files and malformed filenames.
-- Two sessions created close together must still produce deterministic sequence values.
-- Goal prompts with active inline question gates must not hide the required direct question behind action links.
-- Status and next prompts must avoid suggesting inspect or goal reset paths when no qualifying condition exists.
-- Local install refresh must fail clearly when the Homebrew destination path is unavailable.
-- Review council events may aggregate multiple effective reviewer routes and must not lose that distinction in audit projections or assistant summaries.
-- `inspect --audit` must degrade gracefully when the session has no persisted audit entries yet.
+- Unsupported providers must fail `models auth login` with a clear unsupported-provider error rather than silently falling back.
+- `models auth status` must never print stored token or API key values.
+- Removing a provider that is not present must return a non-success report without corrupting the auth profile store.
+- Probe must not invent an assistant route for bootstrap-only work; uninitialized workspaces must stay on `boundline init --assistant <host>` or the host-global bootstrap surface.
+- Probe path reporting must remain stable across macOS temp-directory normalization differences such as `/var` versus `/private/var`.
+- Planning-gate precedence must remain deterministic: plan-quality and backlog-quality stops must surface before execution continues, and blocked planning analysis must prevent `run` from advancing.
+- Copilot prompts must not use host-native `/boundline:*` syntax as their only action mechanism, and non-Copilot assets must not emit Copilot-specific command URIs.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: The system MUST generate session references in `YYYYMMDD-NNN-slug` format.
-- **FR-002**: The system MUST derive the date prefix from runtime time state using deterministic calendar conversion.
-- **FR-003**: The system MUST assign a daily sequence that increments from existing same-date session references.
-- **FR-004**: The system MUST keep slug normalization and max-length constraints for session references.
-- **FR-005**: The CLI session initialization paths MUST use the same session reference contract.
-- **FR-006**: The repository MUST provide a local install script that rebuilds and installs the release binary into the active Homebrew path.
-- **FR-007**: The seven Copilot prompt files in scope MUST use a two-action next-step pattern: one always-visible primary and one conditionally-visible secondary action.
-- **FR-008**: Prompt routing rules MUST preserve `phase_request.assistant_resume_command` override behavior.
-- **FR-009**: Prompt routing rules MUST preserve each command's allowed follow-up safety boundary.
-- **FR-010**: Runtime and tests MUST stay aligned for clarification semantics and answer typing.
-- **FR-011**: Changes MUST pass formatting, linting, and representative test validation before closeout.
-- **FR-012**: Session audit actors MUST preserve multi-route reviewer attribution through explicit `participant_routes` and `mixed_routes` fields when more than one reviewer route contributed to an outcome.
-- **FR-013**: `orchestrate --json-stream` event envelopes MUST expose an explicit audit projection containing the authoritative event, algorithm, actor, outcome, and message when a compatible session audit entry exists.
-- **FR-014**: The CLI MUST support an `inspect --audit` mode that renders the session audit projection as the primary operator view.
-- **FR-015**: Assistant inspect command packs and prompts MUST route audit-trail requests to the dedicated `inspect --audit` surface.
-- **FR-016**: Human-readable inspect output MUST preserve mixed-route reviewer attribution rather than flattening it to a single route.
+- **FR-001**: The CLI MUST expose `boundline models auth login`, `boundline models auth status`, and `boundline models auth remove` subcommands.
+- **FR-002**: `boundline models auth login` MUST support device-flow authentication for `github-copilot`.
+- **FR-003**: Stored provider authentication MUST use a versioned auth profile store with typed token or API-key entries and persisted token acquisition timestamps.
+- **FR-004**: `boundline models auth status` MUST list authenticated providers and the auth profile storage path without exposing secret values.
+- **FR-005**: `boundline models auth remove` MUST delete stored auth for the requested provider and return a non-success report when no stored auth exists.
+- **FR-006**: Provider runtime authentication resolution MUST consult stored auth profiles alongside existing environment-based credentials where the touched adapters support them.
+- **FR-007**: Goal, plan, run, status, and next session outputs MUST surface runtime gate projections such as `goal_quality_state`, `plan_quality_state`, `backlog_quality_state`, and `planning_analysis_state` when available.
+- **FR-008**: Boundline MUST stop execution handoff on clarification-required or blocked planning gates instead of advancing into run-time execution.
+- **FR-009**: Assistant-facing session flows MUST preserve `phase_request`, `assistant_resume_command`, and `assistant_next_command` semantics without flattening them to generic text.
+- **FR-010**: The CLI MUST expose a read-only `boundline probe` command with optional workspace resolution from the current directory.
+- **FR-011**: Probe output MUST report workspace initialization, config presence, execution profile presence, session state, provider health, Canon readiness, runtime capabilities, `recommended_next`, and optional `recommended_handoffs`.
+- **FR-012**: Probe MUST omit repo-local assistant routing when bootstrap is the only valid next step; uninitialized workspaces MUST recommend `boundline init` without assistant handoffs.
+- **FR-013**: `boundline probe --json` MUST emit the standard host envelope with `command_name = probe`, `exit_status`, and the rendered probe report JSON in `rendered_output`.
+- **FR-014**: Readiness-sensitive assistant assets for goal, plan, status, and recover MUST use probe as the documented preflight readiness check and MUST route bootstrap outcomes to `boundline init --assistant <host>` or the host-global bootstrap surface.
+- **FR-015**: Copilot action prompts MUST render assistant-safe next steps as `command:github.copilot.chat.execute` links.
+- **FR-016**: Claude, Codex, and Antigravity assets MUST preserve host-native `/boundline:*` routing and MUST NOT emit Copilot-specific command URIs.
+- **FR-017**: Assistant prompt assets across Copilot, Claude, Codex, and Antigravity MUST include required sections, `Next-Step Routing`, and runtime precedence rules validated by contract tests.
+- **FR-018**: Goal, plan, run, status, inspect, and follow-up assistant assets MUST document relevant goal-quality, plan-quality, backlog-quality, planning-analysis, and follow-through stop conditions where those runtime projections are part of the touched flow.
+- **FR-019**: Release-facing documentation MUST describe probe as a helper surface for assistant hosts rather than as a repo-local `/boundline:*` command.
 
 ### Scope Boundaries *(mandatory)*
 
-- **In Scope**: session reference readability and sequencing; local install helper script; two-button routing updates for the seven Copilot prompt files; session audit actor attribution refinement; audit-first assistant envelope alignment; dedicated `inspect --audit` output; test and semantic alignment required by these updates.
-- **Out of Scope**: new orchestration phases; changes to Canon contracts; replacing traces as the authoritative execution source; introducing a second telemetry or audit runtime; redesign of the full command-pack architecture.
+- **In Scope**: GitHub Copilot device-flow auth lifecycle; versioned auth profile storage; runtime auth-profile consumption in the touched provider adapters; planning-gate and assistant-safe handoff propagation; read-only `boundline probe`; readiness-sensitive prompt updates; cross-host prompt parity and contract closure; representative docs and tests for these surfaces.
+- **Out of Scope**: additional provider-specific OAuth flows beyond the current `github-copilot` surface; a remote credential vault; replacement of environment credentials as a supported path; redesign of the broader assistant package architecture; new Canon contract surfaces.
 
 ### Key Entities *(include if feature involves data)*
 
-- **Session Reference**: Human-readable identifier with date prefix, daily sequence, and normalized slug.
-- **Daily Session Sequence**: Per-day counter used to disambiguate session references.
-- **Routing Action Pair**: Prompt-level next-step policy with one primary action and one conditional secondary action.
-- **Local Install Refresh Script**: Maintainer utility that rebuilds and replaces the installed local binary.
-- **Session Audit Projection**: Session-scoped, append-only projection of lifecycle and trace events into explicit audit entries and rollups.
-- **Audit Actor Attribution**: Structured actor identity containing runtime, provider, route slot, and mixed reviewer route information.
-- **Orchestrate Audit Projection**: Event-level NDJSON shape that surfaces the latest compatible audit event for assistant hosts.
-- **Audit Inspect Surface**: Dedicated `inspect --audit` renderer focused on audit rollups and the ordered timeline.
+- **AuthProfileStore**: Versioned global JSON store for persisted provider authentication entries.
+- **ProviderAuthEntry**: Typed auth record containing provider identity plus either a token with `obtained_at` or an API key.
+- **ModelsAuthReport**: CLI result model for auth login, status, and removal commands.
+- **Planning Gate Projection**: Runtime-visible bundle of `goal_quality_state`, `plan_quality_state`, `backlog_quality_state`, and `planning_analysis_state` data used to decide whether execution can continue.
+- **ProbeReport**: Read-only workspace readiness projection containing workspace, session, provider, Canon, capability, and next-step signals.
+- **RecommendedNext**: Probe-level CLI and optional assistant-safe next action chosen from current readiness state.
+- **RecommendedHandoff**: Probe-level assistant-host button or action recommendation.
+- **Assistant Handoff Definition**: Prompt-side routing contract expressed through frontmatter, `Next-Step Routing`, and host-specific action syntax.
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: 100% of newly created session references match `YYYYMMDD-NNN-slug` in representative tests.
-- **SC-002**: For same-day session creation scenarios, sequence continuity is preserved with no duplicate `NNN` values in representative tests.
-- **SC-003**: All seven in-scope Copilot prompts expose the two-button routing structure with explicit primary and conditional secondary behavior.
-- **SC-004**: Linting and tests used for this slice complete cleanly with no failures introduced by these changes.
-- **SC-005**: Maintainers can refresh local installation from one script invocation without manual copy steps.
-- **SC-006**: Mixed-route review events preserve reviewer route lists and `mixed_routes=true` in persisted and rendered audit projections.
-- **SC-007**: Assistant-visible orchestrate events carry an explicit audit projection whenever compatible audit data exists.
-- **SC-008**: `inspect --audit` exposes audit rollups and the ordered session audit timeline in representative validation.
+- **SC-001**: Representative provider-auth validation demonstrates successful `login`, `status`, and `remove` flows for `github-copilot` without exposing token values in status output.
+- **SC-002**: Representative host command and planning-gate contract tests surface gate projections and block execution on invalid planning readiness states.
+- **SC-003**: Probe contract coverage passes for bootstrap-only, doctor-required, goal-ready, current-workspace-resolution, and host-envelope JSON scenarios.
+- **SC-004**: Assistant command pack and definition contract suites pass for the touched Copilot, Claude, Codex, and Antigravity assets.
+- **SC-005**: Focused lint and behavioral validation for the touched slices complete cleanly without introducing regressions.
+- **SC-006**: Readiness-sensitive assistant prompts consistently steer bootstrap to init, unhealthy providers to doctor, and session-ready workspaces to assistant-safe repo-local handoffs.
 
 ## Assumptions
 
-- Existing workspace session files remain the authoritative source for deriving same-day sequence counts.
-- The install helper targets Apple Silicon Homebrew layout in the current maintainer environment.
-- Prompt changes are guidance-contract updates and do not require Rust runtime changes by themselves.
-- Persisted traces remain the authoritative source for audit projection; the session audit surface is a projection over recorded lifecycle and trace events, not a parallel execution engine.
-- Assistant guidance updates remain bounded to touched inspect and Copilot pack assets for this slice.
-- This specification documents and consolidates already-implemented fine-tuning work for traceability.
+- The global Boundline config directory remains the correct persistence root for `auth-profiles.json`.
+- `github-copilot` is the only provider that needs device-flow login in this slice.
+- Existing environment-based provider credentials remain supported; stored auth profiles are additive, not a replacement path.
+- Prompt and command-pack edits remain bounded to the touched host assets and their contract coverage.
+- This retrospective update should describe the behavior that actually landed in commits `cad1675`, `9ba0b21`, and `6182711`, even when earlier 064 draft content covered different fine-tuning work.

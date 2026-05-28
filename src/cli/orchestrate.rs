@@ -2605,14 +2605,109 @@ fn parse_slot_binding_entry(entry: &str) -> Option<(String, String)> {
 mod tests {
     use serde_json::json;
 
-    use super::{PHASE_KIND_EXECUTION, event_metadata};
+    use super::{
+        OrchestrateIntent, OrchestratePhaseRequestExpectedAnswer, PHASE_KIND_EXECUTION,
+        PhaseRequestOption, event_metadata, planning_stage_question_options,
+    };
     use crate::domain::audit::{
         SessionAuditActor, SessionAuditActorKind, SessionAuditAlgorithm, SessionAuditEntry,
         SessionAuditEntryKind, SessionAuditIdentity, SessionAuditOutcome,
         SessionAuditOutcomeStatus, SessionAuditPhase, SessionAuditProjection, SessionAuditSource,
         SessionAuditSourceKind,
     };
+    use crate::domain::governance::{CompactedCanonMemory, MemoryCredibilityState};
     use crate::domain::trace::TraceSummaryView;
+
+    fn stale_canon_memory() -> CompactedCanonMemory {
+        CompactedCanonMemory {
+            headline: "stale memory".to_string(),
+            credibility: MemoryCredibilityState::Stale,
+            stage_key: None,
+            run_ref: None,
+            packet_ref: None,
+            reason_code: None,
+            artifact_refs: Vec::new(),
+            mode_summary: None,
+            possible_actions: Vec::new(),
+            recommended_next_action: None,
+            evidence_summary: None,
+            authority_provenance_lines: Vec::new(),
+            adaptive_provenance_lines: Vec::new(),
+            semantic_provenance_lines: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn orchestrate_intent_as_cli_arg_returns_plan_for_plan_only() {
+        assert_eq!(OrchestrateIntent::PlanOnly.as_cli_arg(), "plan");
+    }
+
+    #[test]
+    fn orchestrate_intent_as_cli_arg_returns_terminal_for_continue_until_terminal() {
+        assert_eq!(OrchestrateIntent::ContinueUntilTerminal.as_cli_arg(), "terminal");
+    }
+
+    #[test]
+    fn phase_request_expected_answer_free_text_sets_type() {
+        let answer = OrchestratePhaseRequestExpectedAnswer::free_text();
+        assert_eq!(answer.answer_type, "free_text");
+        assert!(answer.options.is_empty());
+    }
+
+    #[test]
+    fn phase_request_expected_answer_single_choice_stores_options() {
+        let options = vec![
+            PhaseRequestOption { label: "yes".to_string(), value: "yes".to_string() },
+            PhaseRequestOption { label: "no".to_string(), value: "no".to_string() },
+        ];
+        let answer = OrchestratePhaseRequestExpectedAnswer::single_choice(options.clone());
+        assert_eq!(answer.answer_type, "single_choice");
+        assert_eq!(answer.options, options);
+    }
+
+    #[test]
+    fn planning_stage_question_options_returns_incomplete_discovery_options_when_memory_is_stale() {
+        let memory = stale_canon_memory();
+        let options = planning_stage_question_options(Some(&memory), "plan:discovery");
+        assert!(!options.is_empty(), "expected non-empty options for incomplete discovery stage");
+        assert!(
+            options.iter().any(|o| o.label.contains("fill discovery gaps")),
+            "expected 'fill discovery gaps' option in: {options:?}"
+        );
+    }
+
+    #[test]
+    fn planning_stage_question_options_returns_complete_discovery_options_when_no_memory() {
+        let options = planning_stage_question_options(None, "plan:discovery");
+        assert!(
+            options.iter().any(|o| o.label.contains("scope confirmed")),
+            "expected 'scope confirmed' option in: {options:?}"
+        );
+    }
+
+    #[test]
+    fn planning_stage_question_options_returns_incomplete_system_shaping_options_when_memory_is_stale()
+     {
+        let memory = stale_canon_memory();
+        let options = planning_stage_question_options(Some(&memory), "plan:system-shaping");
+        assert!(
+            !options.is_empty(),
+            "expected non-empty options for incomplete system-shaping stage"
+        );
+        assert!(
+            options.iter().any(|o| o.label.contains("fill domain model")),
+            "expected 'fill domain model' option in: {options:?}"
+        );
+    }
+
+    #[test]
+    fn planning_stage_question_options_returns_complete_system_shaping_options_when_no_memory() {
+        let options = planning_stage_question_options(None, "plan:system-shaping");
+        assert!(
+            options.iter().any(|o| o.label.contains("domain model approved")),
+            "expected 'domain model approved' option in: {options:?}"
+        );
+    }
 
     #[test]
     fn event_metadata_prefers_latest_matching_audit_actor() {

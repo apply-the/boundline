@@ -21,9 +21,20 @@ Highlights:
 
 - Retired the unshipped terminal UI planning artifacts and removed the related
   product-line references from the active roadmap.
+- Added `boundline models auth login|status|remove` so provider-backed routes
+  can reuse user-scoped authentication outside any one repository; the current
+  public login surface supports `github-copilot`.
+- Aligned runtime planning handoffs around explicit gate and follow-up outputs,
+  including planning-quality projections and assistant-safe resume or next
+  commands instead of implicit host continuation.
 - Added the read-only `boundline probe` preflight surface, plus bootstrap-safe
   assistant guidance and contract coverage so goal and plan hosts can detect
   init versus doctor versus session-ready states before orchestration.
+- Closed the remaining cross-host assistant contract gaps so Copilot prompt
+  packs and repo-local Claude, Codex, and Antigravity command surfaces describe
+  the same probe and follow-through behavior.
+- Realigned the active Canon compatibility boundary and related reasoning
+  contracts to Canon `0.61.0`.
 
 ## [0.64.0] - 2026-05-20
 
@@ -37,7 +48,7 @@ Highlights:
   governed-reference projections.
 - Added initial release documentation for dashboard launch, snapshot JSON
   validation, degraded mode, and terminal-safe `boundline` wordmark branding.
-- Bumped release metadata to Boundline `0.64.0`, Canon `0.60.0`, and refreshed
+- Bumped release metadata to Boundline `0.64.0`, Canon `0.61.0`, and refreshed
   the bundled assistant model catalog from current provider documentation.
 
 Validation notes:

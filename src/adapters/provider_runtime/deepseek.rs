@@ -39,3 +39,26 @@ pub(super) fn execute_chat(
 ) -> Result<String, ProviderRuntimeError> {
     openai_compatible::execute_chat(client, route, messages, max_tokens, route.api_key.clone(), &[])
 }
+
+#[cfg(test)]
+mod tests {
+    use reqwest::blocking::Client;
+
+    use super::{ProviderChatMessage, ProviderNamespace, ResolvedProviderRoute, execute_chat};
+
+    #[test]
+    fn execute_chat_propagates_network_error_when_endpoint_is_unreachable() {
+        unsafe { std::env::set_var("BOUNDLINE_TEST_DISABLE_RETRIES", "1") };
+        let client = Client::new();
+        let route = ResolvedProviderRoute {
+            namespace: ProviderNamespace::DeepSeek,
+            model_id: "deepseek-chat".to_string(),
+            base_url: "http://127.0.0.1:1".to_string(),
+            api_key: Some("sk-test".to_string()),
+        };
+        let messages: Vec<ProviderChatMessage> = Vec::new();
+        let result = execute_chat(&client, &route, &messages, None);
+        unsafe { std::env::remove_var("BOUNDLINE_TEST_DISABLE_RETRIES") };
+        assert!(result.is_err());
+    }
+}

@@ -7,7 +7,7 @@ runtime does with them.
 This adaptive-governance slice keeps the primary operator path unchanged:
 
 ```text
-start -> capture -> plan -> run -> status -> next -> inspect
+init -> goal -> plan -> run -> status -> next -> inspect
 ```
 
 Control graduation is therefore not a second orchestration system. It is a

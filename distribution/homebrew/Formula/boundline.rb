@@ -12,7 +12,7 @@ class Boundline < Formula
   depends_on "rustup" => :build
 
   resource "canon-source" do
-    url "https://github.com/apply-the/canon", using: :git, tag: "0.60.0"
+    url "https://github.com/apply-the/canon", using: :git, tag: "0.61.0"
   end
 
   def install
@@ -45,13 +45,13 @@ class Boundline < Formula
 
   def caveats
     <<~EOS
-      Run boundline doctor --install after install or upgrade to verify the Boundline 0.64.0 + Canon 0.60.0 pairing.
+      Run boundline doctor --install after install or upgrade to verify the Boundline 0.64.0 + Canon 0.61.0 pairing.
     EOS
   end
 
   test do
     assert_match version.to_s, shell_output("#{bin}/boundline --version")
-    assert_match "0.60.0", shell_output("#{bin}/canon --version")
+    assert_match "0.61.0", shell_output("#{bin}/canon --version")
   end
 
   private

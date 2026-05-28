@@ -1,6 +1,9 @@
 use std::fs;
 
-use crate::workspace_fixture::{TempGitWorkspace, run_boundline_in, terminal_text};
+use crate::workspace_fixture::{
+    TempGitWorkspace, run_boundline_in, run_boundline_in_with_env, supported_canon_path,
+    terminal_text,
+};
 
 fn empty_workspace(prefix: &str) -> TempGitWorkspace {
     TempGitWorkspace::with_initializer(prefix, |workspace| {
@@ -104,8 +107,9 @@ fn config_set_show_and_unset_workspace_slot() {
 #[test]
 fn config_set_canon_updates_workspace_mode_selection() {
     let workspace = empty_workspace("boundline-config-canon");
+    let canon_path = supported_canon_path();
 
-    let init = run_boundline_in(
+    let init = run_boundline_in_with_env(
         &workspace,
         &[
             "init",
@@ -115,6 +119,7 @@ fn config_set_canon_updates_workspace_mode_selection() {
             "--canon-mode-selection",
             "auto-confirm",
         ],
+        &[("PATH", canon_path.as_str())],
     );
     assert_eq!(init.status.code(), Some(0), "{}", terminal_text(&init));
 

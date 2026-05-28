@@ -239,7 +239,7 @@ fn contract_drift_reasoning_profile() -> ProfileActivationRecord {
                 boundline_min: "0.62.0".to_string(),
                 boundline_max_exclusive: "0.63.0".to_string(),
                 canon_min: "0.59.0".to_string(),
-                canon_max_exclusive: "0.60.0".to_string(),
+                canon_max_exclusive: "0.61.0".to_string(),
                 contract_line: DRIFTED_REASONING_POSTURE_CONTRACT_LINE.to_string(),
             },
             required_profile_family: Some(ReasoningProfileFamily::SelfConsistency),

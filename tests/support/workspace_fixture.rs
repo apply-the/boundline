@@ -9,10 +9,13 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::{Mutex, MutexGuard};
 
+use boundline::SUPPORTED_CANON_VERSION;
 use boundline::adapters::config_store::FileConfigStore;
 use boundline::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
 use serde::de::DeserializeOwned;
 use uuid::Uuid;
+
+const FULL_CANON_CAPABILITIES: &str = include_str!("../fixtures/canon_capabilities_full.json");
 
 const FIXTURE_CARGO_TOML: &str = concat!(
     "[package]\n",
@@ -455,6 +458,41 @@ pub fn run_boundline_in_with_env(workspace: &Path, args: &[&str], envs: &[(&str,
         command.env(key, value);
     }
     command.output().unwrap()
+}
+
+pub fn supported_canon_path() -> String {
+    path_with_fake_canon(SUPPORTED_CANON_VERSION)
+}
+
+pub fn path_with_fake_canon(version: &str) -> String {
+    let canon_dir = fake_canon_directory(version);
+    match std::env::var_os("PATH") {
+        Some(existing) if !existing.is_empty() => {
+            format!("{}:{}", canon_dir.display(), existing.to_string_lossy())
+        }
+        _ => canon_dir.display().to_string(),
+    }
+}
+
+pub fn fake_canon_directory(version: &str) -> PathBuf {
+    fake_canon_directory_with_capabilities(version, FULL_CANON_CAPABILITIES)
+}
+
+pub fn fake_canon_directory_with_capabilities(version: &str, capabilities: &str) -> PathBuf {
+    let directory = target_test_dir(&format!("boundline-fake-canon-{}", Uuid::new_v4()));
+    let canon = directory.join("canon");
+    fs::write(
+        &canon,
+        format!(
+            "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  printf 'canon version {version}\\n'\n  exit 0\nfi\nif [ \"$1\" = \"governance\" ] && [ \"$2\" = \"capabilities\" ]; then\n  printf '%s' '{}'\n  exit 0\nfi\nif [ \"$1\" = \"init\" ]; then\n  shift\n  ai=''\n  while [ \"$#\" -gt 0 ]; do\n    case \"$1\" in\n      --ai)\n        ai=\"$2\"\n        shift 2\n        ;;\n      --output)\n        shift 2\n        ;;\n      *)\n        shift\n        ;;\n    esac\n  done\n  methods_materialized=16\n  policies_materialized=5\n  if [ -d .canon ]; then\n    methods_materialized=0\n    policies_materialized=0\n  else\n    mkdir -p .canon\n  fi\n  skills_materialized=0\n  if [ -n \"$ai\" ]; then\n    if [ -d .agents/skills ]; then\n      skills_materialized=0\n    else\n      mkdir -p .agents/skills\n      skills_materialized=36\n    fi\n  fi\n  claude_md_created=false\n  if [ \"$ai\" = \"claude\" ]; then\n    claude_md_created=true\n  fi\n  pwd_path=$(pwd)\n  printf '{{\"repo_root\":\"%s\",\"canon_root\":\"%s/.canon\",\"methods_materialized\":%s,\"policies_materialized\":%s,\"skills_materialized\":%s,\"claude_md_created\":%s}}' \"$pwd_path\" \"$pwd_path\" \"$methods_materialized\" \"$policies_materialized\" \"$skills_materialized\" \"$claude_md_created\"\n  exit 0\nfi\nexit 1\n",
+            capabilities
+        ),
+    )
+    .unwrap();
+    let mut permissions = fs::metadata(&canon).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&canon, permissions).unwrap();
+    directory
 }
 
 pub fn write_markdown_brief(

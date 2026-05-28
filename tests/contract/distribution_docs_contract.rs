@@ -9,12 +9,12 @@ fn docs_split_quick_path_and_advanced_architecture_explicitly() {
     let architecture = fs::read_to_string(repo_root.join("docs/architecture.md")).unwrap();
     let assistant = fs::read_to_string(repo_root.join("assistant/README.md")).unwrap();
 
-    assert!(readme.contains("## Quick Path Brutale"));
+    assert!(readme.contains("## Quick Start"));
     assert!(readme.contains("boundline doctor --install"));
     assert!(readme.contains("planning=copilot:gpt-4o"));
     assert!(readme.contains("docs/architecture.md"));
 
-    assert!(getting_started.contains("## Quick Path Brutale"));
+    assert!(getting_started.contains("## Quick Start"));
     assert!(getting_started.contains("## When Canon Matters"));
     assert!(getting_started.contains("boundline doctor --install"));
     assert!(getting_started.contains("boundline config show --workspace <workspace>"));

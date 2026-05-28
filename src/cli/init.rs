@@ -5562,13 +5562,13 @@ mod tests {
         blocked_status.state = crate::domain::distribution::CompanionState::RepairNeeded;
         blocked_status.message = "Canon governance surface is unavailable".to_string();
         blocked_status.suggested_actions =
-            vec!["install or repair Canon 0.60.0 before rerunning init".to_string()];
+            vec!["install or repair Canon 0.61.0 before rerunning init".to_string()];
         if let Some(surface) = blocked_status.surface_verification.as_mut() {
             surface.ready = false;
             surface.operations_verified = false;
             surface.missing_operations = vec!["start".to_string(), "refresh".to_string()];
             surface.repair_actions =
-                vec!["install or repair Canon 0.60.0 before rerunning init".to_string()];
+                vec!["install or repair Canon 0.61.0 before rerunning init".to_string()];
         }
 
         let report = with_canon_install_override(blocked_status, || {
@@ -5612,7 +5612,7 @@ mod tests {
             report.terminal_output
         );
         assert!(
-            report.terminal_output.contains("install or repair Canon 0.60.0 before rerunning init"),
+            report.terminal_output.contains("install or repair Canon 0.61.0 before rerunning init"),
             "{}",
             report.terminal_output
         );

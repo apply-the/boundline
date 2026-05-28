@@ -469,3 +469,157 @@ fn exchange_session_token(
 
     Ok(token)
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Mutex, OnceLock};
+
+    use reqwest::blocking::Client;
+
+    use super::{
+        ProviderChatMessage, ProviderNamespace, ResolvedProviderRoute, SESSION_TOKEN_CACHE,
+        cached_session_auth, execute_chat, execute_chat_with_exchange,
+        execute_chat_with_exchange_and_bootstrap, execute_prompt, store_session_auth,
+    };
+
+    static TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    fn test_lock() -> &'static Mutex<()> {
+        TEST_LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    fn clear_session_cache() {
+        if let Ok(mut guard) = SESSION_TOKEN_CACHE.lock() {
+            *guard = None;
+        }
+    }
+
+    fn make_route(base_url: &str) -> ResolvedProviderRoute {
+        ResolvedProviderRoute {
+            namespace: ProviderNamespace::Copilot,
+            model_id: "gpt-4o".to_string(),
+            base_url: base_url.to_string(),
+            api_key: Some("ghu_test_token".to_string()),
+        }
+    }
+
+    fn with_retries_disabled<F: FnOnce() -> R, R>(f: F) -> R {
+        unsafe { std::env::set_var("BOUNDLINE_TEST_DISABLE_RETRIES", "1") };
+        let result = f();
+        unsafe { std::env::remove_var("BOUNDLINE_TEST_DISABLE_RETRIES") };
+        result
+    }
+
+    #[test]
+    fn cached_session_auth_returns_none_when_cache_is_empty() {
+        let _guard = test_lock().lock().ok();
+        clear_session_cache();
+        assert!(cached_session_auth().is_none());
+    }
+
+    #[test]
+    fn store_and_retrieve_session_auth_with_future_expiry() {
+        let _guard = test_lock().lock().ok();
+        clear_session_cache();
+
+        let future_exp: u64 = 4_000_000_000;
+        let token = format!("session-token;exp={future_exp};");
+        store_session_auth(&token, "https://api.example.com");
+
+        let auth = cached_session_auth();
+        assert!(auth.is_some(), "expected cached auth after store");
+        let auth = auth.expect("auth must be Some");
+        assert_eq!(auth.base_url, "https://api.example.com");
+        assert_eq!(auth.bearer_token, token);
+
+        clear_session_cache();
+    }
+
+    #[test]
+    fn cached_session_auth_returns_none_when_stored_token_is_expired() {
+        let _guard = test_lock().lock().ok();
+        clear_session_cache();
+
+        let past_exp: u64 = 1;
+        let token = format!("session-token;exp={past_exp};");
+        store_session_auth(&token, "https://api.example.com");
+
+        assert!(cached_session_auth().is_none(), "expired token should not be returned");
+
+        clear_session_cache();
+    }
+
+    #[test]
+    fn store_session_auth_uses_default_expiry_when_token_has_no_exp_segment() {
+        let _guard = test_lock().lock().ok();
+        clear_session_cache();
+
+        store_session_auth("simple-bearer-token", "https://api.example.com");
+        let auth = cached_session_auth();
+        assert!(auth.is_some(), "freshly stored token with default expiry should be cached");
+
+        clear_session_cache();
+    }
+
+    #[test]
+    fn execute_chat_with_exchange_and_bootstrap_returns_error_on_unreachable_exchange() {
+        let _guard = test_lock().lock().ok();
+        clear_session_cache();
+        let client = Client::new();
+        let route = make_route("http://127.0.0.1:1");
+        let messages: Vec<ProviderChatMessage> = Vec::new();
+        let result = with_retries_disabled(|| {
+            execute_chat_with_exchange_and_bootstrap(
+                &client,
+                &route,
+                &messages,
+                None,
+                "http://127.0.0.1:1/exchange",
+                "http://127.0.0.1:1/user",
+            )
+        });
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn execute_prompt_returns_error_on_unreachable_exchange() {
+        let _guard = test_lock().lock().ok();
+        clear_session_cache();
+        let client = Client::new();
+        let route = make_route("http://127.0.0.1:1");
+        let result = with_retries_disabled(|| {
+            execute_prompt(&client, &route, "system-prompt", "user-prompt")
+        });
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn execute_chat_returns_error_on_unreachable_exchange() {
+        let _guard = test_lock().lock().ok();
+        clear_session_cache();
+        let client = Client::new();
+        let route = make_route("http://127.0.0.1:1");
+        let messages: Vec<ProviderChatMessage> = Vec::new();
+        let result = with_retries_disabled(|| execute_chat(&client, &route, &messages, None));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn execute_chat_with_exchange_returns_error_on_unreachable_exchange() {
+        let _guard = test_lock().lock().ok();
+        clear_session_cache();
+        let client = Client::new();
+        let route = make_route("http://127.0.0.1:1");
+        let messages: Vec<ProviderChatMessage> = Vec::new();
+        let result = with_retries_disabled(|| {
+            execute_chat_with_exchange(
+                &client,
+                &route,
+                &messages,
+                None,
+                "http://127.0.0.1:1/exchange",
+            )
+        });
+        assert!(result.is_err());
+    }
+}
