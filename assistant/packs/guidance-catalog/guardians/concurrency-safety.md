@@ -19,6 +19,11 @@ Long-running operations must respect cancellation signals (context cancellation 
 
 Triggers: Go functions that accept `context.Context` but never check `ctx.Done()`, .NET async methods without `CancellationToken` parameter, spawned tasks without abort handling.
 
+### prefer-message-passing
+Avoid sharing mutable state through highly-contended locks. Prefer message-passing (channels, actor models) or immutable data snapshots to share state across concurrent boundaries.
+
+Triggers: excessive use of nested locks, returning locked references across await points, architectures that rely heavily on global synchronized state instead of worker queues or actor models.
+
 ## Disposition
 
 Default: `concern` (raise for discussion, do not block).

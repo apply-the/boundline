@@ -64,4 +64,9 @@ and AI-authored changes.
 - **File Size and Responsibilities**: Do not generate gigantic monolithic files. Extract complex logic, internal algorithms, state transitions, and UI/CLI formatters into private helper modules (`pub(crate)` or private). Each file and module should have a single, cohesive responsibility.
 - **Design Patterns**: Avoid massive inline match statements or monolithic functions. Use appropriate design patterns (e.g., Builder, Strategy, Dependency Injection, State Machine) and separate I/O from business logic.
 - **Magic Strings and Numbers**: Zero tolerance for magic values. Every repeated string literal, timeout, retry count, or protocol boundary value must be extracted into a `const` or a typed `enum`.
-- **Helpers**: Whenever a function exceeds standard readable length or mixes levels of abstraction, proactively extract the lower-level steps into isolated, well-named helper functions.
+- **Helpers**: Aim for <50 lines per function. Whenever a function exceeds this or you need a comment to explain the middle of a function, proactively extract the lower-level steps into isolated, well-named helper functions.
+- **No Dead Code**: Remove all commented-out code, unused variables, and unreachable branches immediately. `git` remembers.
+- **Why Not What**: Documentation and comments must explain the *why*, business constraints, and invariants, not narrate the *what*.
+- **Comprehensive Documentation**: Every module or folder must have a module-level doc comment (`//!` in the module file, e.g., `module.rs` or `mod.rs`) explaining the module's purpose. These docs MUST be kept up to date with code changes. Furthermore, all structs, enums, constants, and public functions must be documented with clear, up-to-date doc comments (`///`).
+- **Logging & Secrets**: Log at major state-transition decision points using structured `tracing` spans/events. Always include reproducible context (IDs) but NEVER log secrets, tokens, or PII.
+- **Concurrency**: Avoid `Arc<Mutex<T>>` lock-contention. Prefer message-passing (channels) or immutable data snapshots to share state across async boundaries.

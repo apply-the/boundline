@@ -19,6 +19,11 @@ Logs must be structured (key-value or JSON) for machine parsing. Unstructured st
 
 Triggers: `println!` or `console.log` with string formatting, log messages without severity levels, log messages without structured context fields.
 
+### no-secrets-in-logs
+Log streams must never contain secrets, passwords, complete authentication tokens, or personally identifiable information (PII). Redact or hash sensitive fields before structured logging.
+
+Triggers: logging raw request headers containing Authorization, logging entire user/session objects with passwords/tokens, logging raw credit card numbers or unmasked PII.
+
 ## Disposition
 
 Default: `concern` (raise for discussion, do not block).

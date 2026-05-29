@@ -11,6 +11,7 @@ target
 *.log
 .env
 .canon/
+.boundline/
 
 # MSVC Windows builds of rustc generate these, which store debugging information
 *.pdb
