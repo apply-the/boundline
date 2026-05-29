@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use uuid::Uuid;
 
+use crate::adapters::audit_store::{FileSessionAuditStore, SessionAuditStore};
 use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
 use crate::cli::{CommandExitStatus, workspace as cli_workspace};
 use crate::domain::distribution::SUPPORTED_CANON_VERSION;
@@ -155,6 +156,8 @@ pub fn execute_govern(request: GovernRequest<'_>) -> Result<GovernCommandReport,
     record.updated_at = crate::domain::trace::current_timestamp_millis();
     store.persist(&record).map_err(GovernError::SessionStore)?;
 
+    sync_audit_cursor_for_non_terminal(&workspace, &record);
+
     Ok(GovernCommandReport {
         exit_status: CommandExitStatus::Succeeded,
         terminal_output: format!(
@@ -299,6 +302,24 @@ fn current_canon_capability_snapshot() -> CanonCapabilitySnapshot {
         packet_readiness_values: vec!["reusable".to_string(), "incomplete".to_string()],
         compatibility_notes: vec!["boundline-stage-boundary-routing".to_string()],
     }
+}
+
+/// Clears the `session_end_recorded` flag on the audit cursor when the session
+/// is non-terminal.  This compensates for `execute_govern` persisting the
+/// session without going through the full `sync_session_audit_lifecycle` path.
+fn sync_audit_cursor_for_non_terminal(workspace: &Path, session: &ActiveSessionRecord) {
+    if session.latest_status.is_terminal() {
+        return;
+    }
+    let audit_store = FileSessionAuditStore::for_session(workspace, &session.session_id);
+    let Ok(mut cursor) = audit_store.load_cursor() else {
+        return;
+    };
+    if !cursor.session_end_recorded {
+        return;
+    }
+    cursor.session_end_recorded = false;
+    let _ = audit_store.persist_cursor(&cursor);
 }
 
 #[derive(Debug, Error)]
@@ -491,5 +512,71 @@ mod tests {
             Some(VotingBoundaryTrigger::Incident)
         );
         assert_eq!(voting_stage_for_mode(CanonMode::Backlog), None);
+    }
+
+    #[test]
+    fn execute_govern_clears_stale_session_end_recorded_flag() {
+        use crate::adapters::audit_store::{
+            FileSessionAuditStore, SessionAuditCursor, SessionAuditStore,
+        };
+
+        let workspace = temp_workspace("audit-cursor-clear");
+
+        // Create a session at GoalCaptured (non-terminal) but with a stale
+        // session_end_recorded cursor from a previous terminal state.
+        let session_id = format!("govern-audit-{}", Uuid::new_v4());
+        let record = ActiveSessionRecord {
+            session_id: session_id.clone(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: Some("Previous goal".to_string()),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::GoalCaptured,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 1,
+            updated_at: 1,
+            governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
+            delight_feedback: None,
+        };
+        FileSessionStore::for_workspace(&workspace).persist(&record).unwrap();
+
+        // Write an audit cursor with session_end_recorded = true.
+        let audit_store = FileSessionAuditStore::for_session(&workspace, &session_id);
+        let cursor = SessionAuditCursor {
+            last_sequence: 5,
+            session_start_recorded: true,
+            session_end_recorded: true,
+            latest_session_status: Some("blocked".to_string()),
+            projected_trace_events: Default::default(),
+        };
+        let cursor_path = audit_store.cursor_path().to_path_buf();
+        fs::create_dir_all(cursor_path.parent().unwrap()).unwrap();
+        fs::write(&cursor_path, serde_json::to_string_pretty(&cursor).unwrap()).unwrap();
+
+        // Execute govern, which transitions the session to non-terminal.
+        let report = execute_govern(request_for_mode(
+            Some(workspace.as_path()),
+            CanonMode::Architecture,
+            Some("New governed architecture"),
+            None,
+        ))
+        .unwrap();
+        assert_eq!(report.exit_status, CommandExitStatus::Succeeded);
+
+        // Verify the audit cursor was updated: session_end_recorded should be cleared.
+        let updated_cursor = audit_store.load_cursor().unwrap();
+        assert!(
+            !updated_cursor.session_end_recorded,
+            "session_end_recorded should be cleared after govern transitions to non-terminal"
+        );
     }
 }

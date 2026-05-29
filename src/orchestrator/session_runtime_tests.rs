@@ -5386,3 +5386,493 @@ fn prepare_checkpoint_for_mutation_creates_grouped_cluster_checkpoints() {
     assert_eq!(primary_manifests.len(), 1);
     assert_eq!(member_manifests.len(), 1);
 }
+
+#[cfg(unix)]
+#[test]
+fn reset_planning_governance_clears_blocked_records_on_retry_with_same_fingerprint() {
+    let workspace = temp_workspace("boundline-runtime-reset-planning-blocked");
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::create_dir_all(workspace.join("tests")).unwrap();
+    fs::write(
+        workspace.join("src/lib.rs"),
+        "pub fn add(left: i32, right: i32) -> i32 { left + right }\n",
+    )
+    .unwrap();
+    fs::write(
+        workspace.join("brief.md"),
+        "Deliver the feature through requirements and architecture for src/lib.rs.\n",
+    )
+    .unwrap();
+
+    let canon_command = write_fake_canon_command(&workspace);
+    fs::write(
+        workspace.join(".boundline/execution.json"),
+        serde_json::to_string_pretty(&WorkspaceExecutionProfile {
+            name: "reset-planning-profile".to_string(),
+            read_targets: vec!["src/lib.rs".to_string()],
+            validation_command: ExecutionCommand {
+                program: "cargo".to_string(),
+                args: vec!["test".to_string(), "--quiet".to_string()],
+            },
+            attempts: vec![ExecutionAttemptDefinition {
+                attempt_id: "plan-execution".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left + right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+            adaptive: None,
+            limits: RunLimits::default(),
+            governance: Some(GovernanceProfile {
+                default_runtime: GovernanceRuntimeKind::Canon,
+                canon: Some(CanonRuntimeConfig {
+                    command: canon_command.to_string_lossy().into_owned(),
+                    default_owner: Some("platform".to_string()),
+                    default_risk: Some("medium".to_string()),
+                    default_zone: Some("engineering".to_string()),
+                    default_system_context: Some(SystemContextBinding::Existing),
+                }),
+                stages: Vec::new(),
+            }),
+            review: None,
+            legacy_source: None,
+        })
+        .unwrap(),
+    )
+    .unwrap();
+
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut session = ActiveSessionRecord {
+        session_id: "session-reset-blocked".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: None,
+        authored_brief: Some(
+            normalize_inputs_with_governance(
+                &workspace,
+                Some("Deliver a governed feature"),
+                &[PathBuf::from("brief.md")],
+                Some(GovernanceIntent {
+                    requested: true,
+                    runtime_preference: Some(GovernanceRuntimeKind::Canon),
+                    risk: Some("medium".to_string()),
+                    zone: Some("engineering".to_string()),
+                    owner: Some("platform".to_string()),
+                    explicit_mode: None,
+                    explicit_no_canon: false,
+                }),
+            )
+            .unwrap(),
+        ),
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: None,
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Initialized,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 10,
+        governance_lifecycle: Some(GovernedSessionLifecycle {
+            governance_runtime: GovernanceRuntimeKind::Canon,
+            explicit_opt_out: false,
+            mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+            selected_mode: None,
+            selected_mode_sequence: Vec::new(),
+            latest_reasoning_profile: None,
+            current_stage_index: 0,
+            stage_records: Vec::new(),
+            accumulated_context: Vec::new(),
+            terminal_reason: None,
+            planning_input_fingerprint: None,
+        }),
+        project_scale: None,
+        delight_feedback: None,
+        latest_voting: None,
+    };
+
+    runtime.capture_goal(&mut session, "Deliver a governed feature").unwrap();
+    runtime.select_flow(&mut session, "delivery").unwrap();
+    runtime.plan_task(&mut session, None, false).unwrap();
+
+    // All 4 stages should be GovernedReady.
+    let lifecycle = session.governance_lifecycle.as_ref().unwrap();
+    assert_eq!(lifecycle.stage_records.len(), 4);
+    assert!(lifecycle.planning_input_fingerprint.is_some());
+
+    // Simulate a blocked stage: mark first two as Blocked while keeping fingerprint unchanged.
+    let lifecycle = session.governance_lifecycle.as_mut().unwrap();
+    lifecycle.stage_records[0].lifecycle_state = GovernanceLifecycleState::Blocked;
+    lifecycle.stage_records[0].blocked_reason = Some("Canon rejected packet".to_string());
+    lifecycle.stage_records[1].lifecycle_state = GovernanceLifecycleState::Blocked;
+    lifecycle.stage_records[1].blocked_reason = Some("Canon rejected packet".to_string());
+
+    // Re-plan with same fingerprint: blocked records should be cleared and re-executed.
+    runtime.plan_task(&mut session, None, false).unwrap();
+
+    let lifecycle = session.governance_lifecycle.as_ref().unwrap();
+    assert_eq!(lifecycle.stage_records.len(), 4);
+    assert_eq!(
+        lifecycle.stage_records[0].lifecycle_state,
+        GovernanceLifecycleState::GovernedReady,
+        "previously blocked stage should be re-executed and now GovernedReady"
+    );
+    assert_eq!(
+        lifecycle.stage_records[1].lifecycle_state,
+        GovernanceLifecycleState::GovernedReady,
+        "previously blocked stage should be re-executed and now GovernedReady"
+    );
+    assert_eq!(lifecycle.stage_records[2].lifecycle_state, GovernanceLifecycleState::GovernedReady);
+    assert_eq!(lifecycle.stage_records[3].lifecycle_state, GovernanceLifecycleState::GovernedReady);
+}
+
+#[cfg(unix)]
+#[test]
+fn reset_planning_governance_preserves_completed_records_when_others_are_blocked() {
+    let workspace = temp_workspace("boundline-runtime-reset-planning-mixed");
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::create_dir_all(workspace.join("tests")).unwrap();
+    fs::write(
+        workspace.join("src/lib.rs"),
+        "pub fn add(left: i32, right: i32) -> i32 { left + right }\n",
+    )
+    .unwrap();
+    fs::write(
+        workspace.join("brief.md"),
+        "Deliver the feature through requirements and architecture for src/lib.rs.\n",
+    )
+    .unwrap();
+
+    let canon_command = write_fake_canon_command(&workspace);
+    fs::write(
+        workspace.join(".boundline/execution.json"),
+        serde_json::to_string_pretty(&WorkspaceExecutionProfile {
+            name: "reset-planning-mixed".to_string(),
+            read_targets: vec!["src/lib.rs".to_string()],
+            validation_command: ExecutionCommand {
+                program: "cargo".to_string(),
+                args: vec!["test".to_string(), "--quiet".to_string()],
+            },
+            attempts: vec![ExecutionAttemptDefinition {
+                attempt_id: "plan-execution".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left + right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+            adaptive: None,
+            limits: RunLimits::default(),
+            governance: Some(GovernanceProfile {
+                default_runtime: GovernanceRuntimeKind::Canon,
+                canon: Some(CanonRuntimeConfig {
+                    command: canon_command.to_string_lossy().into_owned(),
+                    default_owner: Some("platform".to_string()),
+                    default_risk: Some("medium".to_string()),
+                    default_zone: Some("engineering".to_string()),
+                    default_system_context: Some(SystemContextBinding::Existing),
+                }),
+                stages: Vec::new(),
+            }),
+            review: None,
+            legacy_source: None,
+        })
+        .unwrap(),
+    )
+    .unwrap();
+
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut session = ActiveSessionRecord {
+        session_id: "session-reset-mixed".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: None,
+        authored_brief: Some(
+            normalize_inputs_with_governance(
+                &workspace,
+                Some("Deliver a governed feature"),
+                &[PathBuf::from("brief.md")],
+                Some(GovernanceIntent {
+                    requested: true,
+                    runtime_preference: Some(GovernanceRuntimeKind::Canon),
+                    risk: Some("medium".to_string()),
+                    zone: Some("engineering".to_string()),
+                    owner: Some("platform".to_string()),
+                    explicit_mode: None,
+                    explicit_no_canon: false,
+                }),
+            )
+            .unwrap(),
+        ),
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: None,
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Initialized,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 10,
+        governance_lifecycle: Some(GovernedSessionLifecycle {
+            governance_runtime: GovernanceRuntimeKind::Canon,
+            explicit_opt_out: false,
+            mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+            selected_mode: None,
+            selected_mode_sequence: Vec::new(),
+            latest_reasoning_profile: None,
+            current_stage_index: 0,
+            stage_records: Vec::new(),
+            accumulated_context: Vec::new(),
+            terminal_reason: None,
+            planning_input_fingerprint: None,
+        }),
+        project_scale: None,
+        delight_feedback: None,
+        latest_voting: None,
+    };
+
+    runtime.capture_goal(&mut session, "Deliver a governed feature").unwrap();
+    runtime.select_flow(&mut session, "delivery").unwrap();
+    runtime.plan_task(&mut session, None, false).unwrap();
+
+    // Mark first two stages as Completed, third as Blocked.
+    let lifecycle = session.governance_lifecycle.as_mut().unwrap();
+    lifecycle.stage_records[0].lifecycle_state = GovernanceLifecycleState::Completed;
+    lifecycle.stage_records[1].lifecycle_state = GovernanceLifecycleState::Completed;
+    lifecycle.stage_records[2].lifecycle_state = GovernanceLifecycleState::Blocked;
+    lifecycle.stage_records[2].blocked_reason = Some("Canon rejected packet".to_string());
+
+    // Re-plan: completed records stay, blocked record is cleared and retried.
+    runtime.plan_task(&mut session, None, false).unwrap();
+
+    let lifecycle = session.governance_lifecycle.as_ref().unwrap();
+    assert_eq!(lifecycle.stage_records.len(), 4);
+    assert_eq!(
+        lifecycle.stage_records[0].lifecycle_state,
+        GovernanceLifecycleState::Completed,
+        "completed stage should be preserved"
+    );
+    assert_eq!(
+        lifecycle.stage_records[1].lifecycle_state,
+        GovernanceLifecycleState::Completed,
+        "completed stage should be preserved"
+    );
+    assert_eq!(
+        lifecycle.stage_records[2].lifecycle_state,
+        GovernanceLifecycleState::GovernedReady,
+        "previously blocked stage should be re-executed and now GovernedReady"
+    );
+    assert_eq!(lifecycle.stage_records[3].lifecycle_state, GovernanceLifecycleState::GovernedReady);
+}
+
+#[cfg(unix)]
+#[test]
+fn prepare_planning_requests_uses_refresh_when_stage_has_existing_run_ref() {
+    use crate::domain::governance::CanonCapabilitySnapshot;
+
+    let workspace = temp_workspace("boundline-runtime-planning-refresh");
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::create_dir_all(workspace.join("tests")).unwrap();
+    fs::write(
+        workspace.join("src/lib.rs"),
+        "pub fn add(left: i32, right: i32) -> i32 { left + right }\n",
+    )
+    .unwrap();
+    fs::write(
+        workspace.join("brief.md"),
+        "Deliver the feature through requirements and architecture for src/lib.rs.\n",
+    )
+    .unwrap();
+
+    let canon_command = write_fake_canon_command(&workspace);
+    fs::write(
+        workspace.join(".boundline/execution.json"),
+        serde_json::to_string_pretty(&WorkspaceExecutionProfile {
+            name: "planning-refresh-profile".to_string(),
+            read_targets: vec!["src/lib.rs".to_string()],
+            validation_command: ExecutionCommand {
+                program: "cargo".to_string(),
+                args: vec!["test".to_string(), "--quiet".to_string()],
+            },
+            attempts: vec![ExecutionAttemptDefinition {
+                attempt_id: "plan-execution".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left + right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+            adaptive: None,
+            limits: RunLimits::default(),
+            governance: Some(GovernanceProfile {
+                default_runtime: GovernanceRuntimeKind::Canon,
+                canon: Some(CanonRuntimeConfig {
+                    command: canon_command.to_string_lossy().into_owned(),
+                    default_owner: Some("platform".to_string()),
+                    default_risk: Some("medium".to_string()),
+                    default_zone: Some("engineering".to_string()),
+                    default_system_context: Some(SystemContextBinding::Existing),
+                }),
+                stages: Vec::new(),
+            }),
+            review: None,
+            legacy_source: None,
+        })
+        .unwrap(),
+    )
+    .unwrap();
+
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut session = ActiveSessionRecord {
+        session_id: "session-planning-refresh".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: None,
+        authored_brief: Some(
+            normalize_inputs_with_governance(
+                &workspace,
+                Some("Deliver a governed feature"),
+                &[PathBuf::from("brief.md")],
+                Some(GovernanceIntent {
+                    requested: true,
+                    runtime_preference: Some(GovernanceRuntimeKind::Canon),
+                    risk: Some("medium".to_string()),
+                    zone: Some("engineering".to_string()),
+                    owner: Some("platform".to_string()),
+                    explicit_mode: None,
+                    explicit_no_canon: false,
+                }),
+            )
+            .unwrap(),
+        ),
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: None,
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Initialized,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 10,
+        governance_lifecycle: Some(GovernedSessionLifecycle {
+            governance_runtime: GovernanceRuntimeKind::Canon,
+            explicit_opt_out: false,
+            mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+            selected_mode: None,
+            selected_mode_sequence: Vec::new(),
+            latest_reasoning_profile: None,
+            current_stage_index: 0,
+            stage_records: Vec::new(),
+            accumulated_context: Vec::new(),
+            terminal_reason: None,
+            planning_input_fingerprint: None,
+        }),
+        project_scale: None,
+        delight_feedback: None,
+        latest_voting: None,
+    };
+
+    runtime.capture_goal(&mut session, "Deliver a governed feature").unwrap();
+    runtime.select_flow(&mut session, "delivery").unwrap();
+    runtime.plan_task(&mut session, None, false).unwrap();
+
+    // First plan produces GovernedReady with canon_run_ref from the fake Canon.
+    let lifecycle = session.governance_lifecycle.as_ref().unwrap();
+    assert_eq!(lifecycle.stage_records.len(), 4);
+    let first_run_ref = lifecycle.stage_records[0].canon_run_ref.clone();
+    assert!(first_run_ref.is_some(), "fake Canon should have set canon_run_ref");
+
+    // Mark first stage as Blocked (simulating a Canon rejection after a prior start).
+    let lifecycle = session.governance_lifecycle.as_mut().unwrap();
+    lifecycle.stage_records[0].lifecycle_state = GovernanceLifecycleState::Blocked;
+    lifecycle.stage_records[0].blocked_reason = Some("Canon rejected packet".to_string());
+
+    // Set up canon_capability_snapshot with "refresh" in operations via active_task context.
+    let snapshot = CanonCapabilitySnapshot {
+        canon_version: "0.45.0".to_string(),
+        supported_schema_versions: vec!["2026-02-01".to_string()],
+        operations: vec!["capabilities".to_string(), "start".to_string(), "refresh".to_string()],
+        supported_modes: vec![
+            CanonMode::Requirements,
+            CanonMode::SystemShaping,
+            CanonMode::Architecture,
+            CanonMode::Backlog,
+        ],
+        status_values: Vec::new(),
+        approval_state_values: Vec::new(),
+        packet_readiness_values: Vec::new(),
+        compatibility_notes: Vec::new(),
+    };
+    let mut task_context = TaskContext::new(
+        "session-planning-refresh".to_string(),
+        workspace.to_string_lossy().into_owned(),
+        RunLimits::default(),
+        Map::new(),
+    );
+    task_context.set_latest_canon_capability_snapshot(&snapshot).unwrap();
+    session.active_task = Some(Task {
+        id: "refresh-probe".to_string(),
+        goal: "Deliver a governed feature".to_string(),
+        input: json!({}),
+        context: task_context,
+        plan: Plan {
+            revision: 0,
+            steps: Vec::new(),
+            current_step_index: 0,
+            status: crate::domain::plan::PlanStatus::Active,
+        },
+        status: TaskStatus::Running,
+        limits: RunLimits::default(),
+        terminal_reason: None,
+        retry_count: 0,
+        replan_count: 0,
+        total_step_attempts: 0,
+    });
+
+    let goal = session.goal.clone().unwrap();
+    let context_sources = runtime.planning_context_sources(&session, &goal);
+    assert!(
+        context_sources.canon_capability_snapshot.is_some(),
+        "capability snapshot must be available for refresh test"
+    );
+
+    let goal_plan = session.goal_plan.as_ref().unwrap().clone();
+    let requests = runtime
+        .prepare_planning_governance_requests(&mut session, &goal_plan, &context_sources)
+        .unwrap();
+
+    // The first stage should use Refresh (it has an existing canon_run_ref).
+    assert_eq!(requests[0].request.stage_key, "plan:requirements");
+    assert_eq!(
+        requests[0].request.request_kind,
+        super::GovernanceRequestKind::Refresh,
+        "retrying a blocked stage with existing run_ref should use Refresh"
+    );
+    assert_eq!(
+        requests[0].request.run_ref.as_ref(),
+        first_run_ref.as_ref(),
+        "refresh request should carry the previous canon_run_ref"
+    );
+
+    // Stages without prior canon_run_ref should use Start.
+    // Stages 1-3 were GovernedReady (which means they already have run refs too from the first
+    // plan_task), so they may also use Refresh. The second stage should show Refresh as well.
+    assert_eq!(
+        requests[1].request.request_kind,
+        super::GovernanceRequestKind::Refresh,
+        "stage with existing run_ref and refresh capability should use Refresh"
+    );
+}

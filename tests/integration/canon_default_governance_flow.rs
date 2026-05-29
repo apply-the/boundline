@@ -905,3 +905,108 @@ fn run_with_incomplete_canon_response_surfaces_clarification() {
         let _ = fs::remove_dir_all(&bin_dir);
     });
 }
+
+/// Blocked planning stage is retried with `refresh` on next `plan` invocation and
+/// progresses to subsequent stages after Canon returns `governed_ready`.
+#[test]
+#[cfg(unix)]
+fn blocked_planning_stage_retries_with_refresh_and_progresses() {
+    with_scripted_openai_reviews(6, || {
+        let workspace = temp_canon_default_workspace("blocked-retry-refresh");
+        seed_planning_reviewer_routes(&workspace);
+        let docs_dir = workspace.join("docs");
+        fs::create_dir_all(&docs_dir).unwrap();
+        fs::write(
+            docs_dir.join("prd.md"),
+            format!(
+                "# PRD\n\n{}",
+                planning_ready_brief(
+                    "Deliver a governed planning flow that retries after a block.",
+                    "deliver a governed requirements packet that passes on retry",
+                    "requirements_packet, planning_stage, retry_outcome",
+                    "capture requirements, approve planning artifact, record retry outcome",
+                    "cargo test --quiet",
+                )
+            ),
+        )
+        .unwrap();
+
+        // First Canon response: incomplete (blocked) — includes a run_ref.
+        let incomplete_response = r#"{"status":"incomplete","approval_state":"not_needed","run_ref":"run-blocked-001","packet_ref":".canon/runs/run-blocked-001","expected_document_refs":[".canon/runs/run-blocked-001/requirements.md"],"document_refs":[],"packet_readiness":"incomplete","missing_sections":["Domain Model"],"headline":"Requirements incomplete","message":"Missing Domain Model section"}"#;
+        let bin_dir =
+            write_capturing_canon_on_path("blocked-retry-refresh", &workspace, incomplete_response);
+        write_canon_execution_profile(&workspace, &bin_dir.join("canon"));
+
+        // First run: Canon blocks at the first planning stage with incomplete.
+        let output = run_boundline_in_with_path(
+            &workspace,
+            &["run", "--goal", "Deliver governed planning that retries", "--brief", "docs/prd.md"],
+            &bin_dir,
+        );
+        let text = terminal_text(&output);
+        assert!(!output.status.success(), "first run should block: {text}");
+
+        // Verify session shows blocked stage with a canon_run_ref.
+        let session_raw =
+            fs::read_to_string(workspace.join(".boundline/session.json")).unwrap_or_default();
+        assert!(
+            session_raw.contains("\"canon_run_ref\": \"run-blocked-001\"")
+                || session_raw.contains(r#""canon_run_ref":"run-blocked-001""#),
+            "expected canon_run_ref from first incomplete response: {session_raw}"
+        );
+
+        // Now swap Canon to return governed_ready on the retry.
+        let packet_dir = workspace.join(".canon/runs/run-blocked-001");
+        fs::create_dir_all(&packet_dir).unwrap();
+        fs::write(
+            packet_dir.join("requirements.md"),
+            "# Requirements\n\nGoverned requirements context ready on retry.\n",
+        )
+        .unwrap();
+        let ready_response = governed_ready_response(
+            "run-blocked-001",
+            ".canon/runs/run-blocked-001",
+            ".canon/runs/run-blocked-001/requirements.md",
+            "requirements ready on retry",
+            "Canon completed requirements after refresh",
+        );
+        // Overwrite fake Canon with one that returns success and captures the request.
+        let _ = fs::remove_dir_all(&bin_dir);
+        let bin_dir =
+            write_capturing_canon_on_path("blocked-retry-refresh", &workspace, &ready_response);
+
+        // Second run: plan again — retry should use refresh (existing run_ref) and succeed.
+        let output2 = run_boundline_in_with_path(&workspace, &["plan"], &bin_dir);
+        let text2 = terminal_text(&output2);
+
+        // The retry should have completed the previously-blocked stage.
+        assert!(
+            text2.contains("requirements ready on retry") || text2.contains("governance_completed"),
+            "expected governance completion after retry: {text2}"
+        );
+
+        // Verify the retry Canon request used refresh with the existing run_ref.
+        let captured =
+            fs::read_to_string(workspace.join(".boundline/canon-request.json")).unwrap_or_default();
+        assert!(
+            captured.contains(r#""request_kind":"refresh""#),
+            "retry should use refresh request kind: {captured}"
+        );
+        assert!(
+            captured.contains(r#""run_ref":"run-blocked-001""#),
+            "retry should carry the previous canon_run_ref: {captured}"
+        );
+
+        // Session should now show the stage as governed_ready, not blocked.
+        let session_after =
+            fs::read_to_string(workspace.join(".boundline/session.json")).unwrap_or_default();
+        assert!(
+            session_after.contains("\"lifecycle_state\": \"governed_ready\"")
+                || session_after.contains(r#""lifecycle_state":"governed_ready""#),
+            "stage should be governed_ready after successful retry: {session_after}"
+        );
+
+        let _ = fs::remove_dir_all(&workspace);
+        let _ = fs::remove_dir_all(&bin_dir);
+    });
+}

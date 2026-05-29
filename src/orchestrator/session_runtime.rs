@@ -739,6 +739,11 @@ impl SessionRuntime {
             audit_store.append(&entry).map_err(SessionRuntimeError::SessionAuditStore)?;
             cursor.session_end_recorded = true;
             cursor_dirty = true;
+        } else if !session.latest_status.is_terminal() && cursor.session_end_recorded {
+            // The session has transitioned out of a terminal state (e.g. resumed after a block).
+            // We must clear the session_end_recorded flag so a future termination will be logged.
+            cursor.session_end_recorded = false;
+            cursor_dirty = true;
         }
 
         if cursor_dirty {
@@ -1421,12 +1426,39 @@ impl SessionRuntime {
             return;
         };
 
-        if lifecycle.planning_input_fingerprint.as_deref() == Some(new_fingerprint)
-            && lifecycle
+        if lifecycle.planning_input_fingerprint.as_deref() == Some(new_fingerprint) {
+            let all_planning_stages_clear = lifecycle
                 .stage_records
                 .iter()
-                .any(|record| planning_canon_mode_for_stage_key(&record.stage_key).is_some())
-        {
+                .filter(|record| planning_canon_mode_for_stage_key(&record.stage_key).is_some())
+                .all(|record| {
+                    matches!(
+                        record.lifecycle_state,
+                        GovernanceLifecycleState::GovernedReady
+                            | GovernanceLifecycleState::Completed
+                    )
+                });
+            if all_planning_stages_clear {
+                return;
+            }
+            // Fingerprint matches but at least one planning stage is blocked or
+            // failed — reset non-ready planning records to PendingSelection so
+            // they can be retried while preserving stages that already passed
+            // and retaining canon_run_ref for refresh requests.
+            for record in lifecycle.stage_records.iter_mut() {
+                if planning_canon_mode_for_stage_key(&record.stage_key).is_some()
+                    && !matches!(
+                        record.lifecycle_state,
+                        GovernanceLifecycleState::GovernedReady
+                            | GovernanceLifecycleState::Completed
+                    )
+                {
+                    record.lifecycle_state = GovernanceLifecycleState::PendingSelection;
+                    record.blocked_reason = None;
+                }
+            }
+            lifecycle.current_stage_index = 0;
+            lifecycle.terminal_reason = None;
             return;
         }
 
@@ -1921,9 +1953,12 @@ impl SessionRuntime {
             goal_plan.compacted_canon_memory.as_ref(),
         );
 
+        let (request_kind, run_ref, packet_ref) =
+            self.resolve_planning_request_kind(session, stage_key, context_sources);
+
         Ok(PreparedPlanningGovernanceRequest {
             request: GovernanceRuntimeRequest {
-                request_kind: GovernanceRequestKind::Start,
+                request_kind,
                 governance_attempt_id: Uuid::new_v4().to_string(),
                 stage_key: stage_key.to_string(),
                 goal: goal_plan.goal_text.clone(),
@@ -1934,8 +1969,8 @@ impl SessionRuntime {
                 risk: Some(defaults.risk),
                 zone: Some(defaults.zone),
                 owner: Some(defaults.owner),
-                run_ref: None,
-                packet_ref: None,
+                run_ref,
+                packet_ref,
                 bounded_context: crate::adapters::governance_runtime::GovernanceBoundedContext {
                     read_targets: self.planning_governance_read_targets(goal_plan, context_sources),
                     stage_brief_ref: Some(stage_brief_ref),
@@ -1945,6 +1980,26 @@ impl SessionRuntime {
             },
             stage_council,
         })
+    }
+
+    fn resolve_planning_request_kind(
+        &self,
+        session: &ActiveSessionRecord,
+        stage_key: &str,
+        _context_sources: &PlanningContextSources,
+    ) -> (GovernanceRequestKind, Option<String>, Option<String>) {
+        let existing_record = session.governance_lifecycle.as_ref().and_then(|lifecycle| {
+            lifecycle.stage_records.iter().find(|record| record.stage_key == stage_key)
+        });
+
+        let Some(record) = existing_record else {
+            return (GovernanceRequestKind::Start, None, None);
+        };
+        let Some(run_ref) = record.canon_run_ref.as_ref().filter(|r| !r.is_empty()) else {
+            return (GovernanceRequestKind::Start, None, None);
+        };
+
+        (GovernanceRequestKind::Refresh, Some(run_ref.clone()), record.packet_ref.clone())
     }
 
     fn resolve_planning_governance_defaults(
