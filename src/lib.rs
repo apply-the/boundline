@@ -1,3 +1,16 @@
+//! Boundline: local delivery orchestrator for bounded engineering work.
+//!
+//! This root crate re-exports the workspace member crates into a unified
+//! public surface:
+//!
+//! - [`domain`] -- Pure domain model (value objects, aggregates, algorithms)
+//! - [`adapters`] -- Infrastructure I/O adapters (stores, runtimes, env)
+//! - [`orchestrator`] -- Session-native orchestration engine
+//! - [`cli`] -- User-facing CLI command surface
+//! - [`registry`] -- Agent and tool adapter registries
+//! - [`fixture`] -- Test fixtures and execution-profile loaders
+//! - [`assistant_plugin_validation`] -- Plugin package validation
+
 pub mod assistant_plugin_validation;
 
 pub use boundline_adapters::adapters;

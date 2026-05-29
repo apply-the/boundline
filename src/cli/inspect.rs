@@ -1,37 +1,47 @@
 //! Trace inspection and summary rehydration for operator-facing CLI output.
 
+#[path = "inspect/projections.rs"]
+mod projections;
+#[path = "inspect/resolve.rs"]
+mod resolve;
+#[path = "inspect/timeline.rs"]
+mod timeline;
+
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::adapters::audit_store::{
-    FileSessionAuditStore, SessionAuditStore, SessionAuditStoreError,
-};
-use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
+use crate::adapters::audit_store::SessionAuditStoreError;
+use crate::adapters::session_store::SessionStoreError;
 use crate::adapters::trace_store::{FileTraceStore, TraceStore, TraceStoreError};
 use crate::cli::CommandExitStatus;
 use crate::cli::output;
-use crate::domain::audit::SessionAuditProjection;
 use crate::domain::cluster::ClusterDeliveryStory;
 use crate::domain::context_intelligence::AdvancedContextProjection;
 use crate::domain::goal_plan::GoalPlanFlowState;
-use crate::domain::guidance::{GuardianFinding, GuidanceGuardianProjection};
-use crate::domain::limits::TerminalCondition;
+use crate::domain::guidance::GuidanceGuardianProjection;
 use crate::domain::reasoning::ProfileActivationRecord;
 use crate::domain::routing_decision::RoutingDecisionProjection;
+use crate::domain::session::governance_next_action_for_state;
 use crate::domain::session::{DelightFeedbackSignal, RoutingMode, RoutingOutcome, RoutingSource};
-use crate::domain::session::{
-    governance_next_action_for_state, governance_packet_provenance_text, session_goal_brief_ref,
-    session_plan_brief_ref, session_run_brief_ref,
-};
 use crate::domain::step::{StepKind, StepStatus};
 use crate::domain::task::{TaskStatus, TerminalReason};
-use crate::domain::tool_result::ToolResult;
 use crate::domain::trace::{
-    ExecutionTrace, InspectClosureKind, InspectClosureView, TraceEventType, TraceRecoveryEvent,
-    TraceStepSummary, TraceSummaryView,
+    ExecutionTrace, InspectClosureKind, InspectClosureView, TraceEvent, TraceEventType,
+    TraceRecoveryEvent, TraceStepSummary, TraceSummaryView,
+};
+
+use self::projections::{
+    TraceContextProjection, TraceGovernanceProjection, TraceInputProjection,
+    merge_guidance_projection_from_payload,
+};
+use self::resolve::{ResolvedTraceArtifacts, load_trace, resolve_trace_artifacts};
+use self::timeline::{
+    adaptive_evidence_lines, decision_failure_evidence, decision_timeline_lines, failure_headline,
+    governance_timeline_line, review_timeline_line, success_headline,
+    synthesized_in_progress_reason,
 };
 
 const UNKNOWN_VALIDATION_EXIT_CODE: i64 = -1;
@@ -52,33 +62,6 @@ const KEY_REVIEWER_ROLE: &str = "reviewer_role";
 const KEY_SUMMARY: &str = "summary";
 const KEY_TARGET: &str = "target";
 const KEY_VOTE_RESOLUTION: &str = "vote_resolution";
-
-fn trace_workspace_root(trace_ref: &Path) -> Option<PathBuf> {
-    let mut current = trace_ref.parent()?;
-    loop {
-        if current.file_name().and_then(|name| name.to_str()) == Some(".boundline") {
-            return current.parent().map(Path::to_path_buf);
-        }
-        current = current.parent()?;
-    }
-}
-
-fn persisted_session_brief_ref(workspace: &Path, brief_ref: &str) -> Option<String> {
-    workspace.join(brief_ref).is_file().then(|| brief_ref.to_string())
-}
-
-fn load_session_audit_projection(
-    workspace: &Path,
-    session_id: &str,
-) -> Result<Option<SessionAuditProjection>, TraceSummaryError> {
-    let store = FileSessionAuditStore::for_session(workspace, session_id);
-    let entries = store.load_all().map_err(TraceSummaryError::SessionAuditStore)?;
-    if entries.is_empty() {
-        return Ok(None);
-    }
-
-    Ok(Some(SessionAuditProjection::from_entries(session_id.to_string(), entries)))
-}
 
 /// Result returned by `inspect` after loading a trace, summarizing it, and
 /// rendering the terminal-facing output.
@@ -215,40 +198,39 @@ pub fn render_inspection_routing_summary(
     lines
 }
 
-/// Rehydrates a persisted trace into the flattened `TraceSummaryView` consumed
-/// by CLI output. The function prefers persisted projection fields over
-/// recomputation so inspect explains exactly what the run recorded.
-pub fn summarize_trace(
-    trace_ref: impl AsRef<Path>,
-    trace: &ExecutionTrace,
-) -> Result<TraceSummaryView, TraceSummaryError> {
-    let persisted_terminal_status = trace.terminal_status;
-    let persisted_terminal_reason = trace.terminal_reason.clone();
-    let mut input_projection = TraceInputProjection::default();
-    let mut cluster_delivery_story: Option<ClusterDeliveryStory> = None;
-    let mut routing_summary: Option<String> = None;
-    let mut routing_projection = RoutingDecisionProjection::default();
-    let mut goal_plan_summary: Option<String> = None;
-    let mut advanced_context: Option<AdvancedContextProjection> = None;
-    let mut context_projection = TraceContextProjection::default();
-    let mut guidance_guardian = GuidanceGuardianProjection::default();
-    let mut governance_projection = TraceGovernanceProjection::default();
-    let mut decision_timeline: Vec<String> = Vec::new();
-    let mut failure_evidence: Vec<String> = Vec::new();
-    let mut adaptive_evidence: Vec<String> = Vec::new();
-    let mut latest_checkpoint_id: Option<String> = None;
-    let mut latest_checkpoint_scope: Option<String> = None;
-    let mut latest_checkpoint_restore_command: Option<String> = None;
-    let mut delegation: Option<crate::domain::session::DelegationStatusView> = None;
-    let mut saw_native_routing_signal = false;
-    let mut step_indexes: HashMap<String, usize> = HashMap::new();
-    let mut executed_steps: Vec<TraceStepSummary> = Vec::new();
-    let mut recovery_events: Vec<TraceRecoveryEvent> = Vec::new();
-    let mut review_timeline: Vec<String> = Vec::new();
-    let mut reasoning_profile: Option<ProfileActivationRecord> = None;
-    let mut delight_feedback: Option<DelightFeedbackSignal> = None;
+#[derive(Debug, Default)]
+struct TraceSummaryFold {
+    input_projection: TraceInputProjection,
+    cluster_delivery_story: Option<ClusterDeliveryStory>,
+    routing_summary: Option<String>,
+    routing_projection: RoutingDecisionProjection,
+    goal_plan_summary: Option<String>,
+    advanced_context: Option<AdvancedContextProjection>,
+    context_projection: TraceContextProjection,
+    guidance_guardian: GuidanceGuardianProjection,
+    governance_projection: TraceGovernanceProjection,
+    decision_timeline: Vec<String>,
+    failure_evidence: Vec<String>,
+    adaptive_evidence: Vec<String>,
+    latest_checkpoint_id: Option<String>,
+    latest_checkpoint_scope: Option<String>,
+    latest_checkpoint_restore_command: Option<String>,
+    delegation: Option<crate::domain::session::DelegationStatusView>,
+    saw_native_routing_signal: bool,
+    step_indexes: HashMap<String, usize>,
+    executed_steps: Vec<TraceStepSummary>,
+    recovery_events: Vec<TraceRecoveryEvent>,
+    review_timeline: Vec<String>,
+    reasoning_profile: Option<ProfileActivationRecord>,
+    delight_feedback: Option<DelightFeedbackSignal>,
+}
 
-    for event in &trace.events {
+impl TraceSummaryFold {
+    fn merge_event(
+        &mut self,
+        event: &TraceEvent,
+        trace_goal: &str,
+    ) -> Result<(), TraceSummaryError> {
         if let Some(signal) = event
             .payload
             .get(KEY_DELIGHT_FEEDBACK)
@@ -256,7 +238,7 @@ pub fn summarize_trace(
             .and_then(|value| serde_json::from_value::<DelightFeedbackSignal>(value).ok())
             .filter(|signal| signal.validate().is_ok())
         {
-            delight_feedback = Some(signal);
+            self.delight_feedback = Some(signal);
         }
 
         if let Some(record) = event
@@ -265,22 +247,22 @@ pub fn summarize_trace(
             .cloned()
             .and_then(|value| serde_json::from_value(value).ok())
         {
-            reasoning_profile = Some(record);
+            self.reasoning_profile = Some(record);
         }
 
         // Guidance and guardian projection is persisted incrementally across
         // planning, execution, and verification events; inspect rebuilds the
         // latest authoritative view by folding those payload snapshots.
-        merge_guidance_projection_from_payload(&mut guidance_guardian, &event.payload);
+        merge_guidance_projection_from_payload(&mut self.guidance_guardian, &event.payload);
 
-        if routing_projection.is_empty()
+        if self.routing_projection.is_empty()
             && let Some(projection) = RoutingDecisionProjection::from_event_payload(&event.payload)
         {
-            routing_projection = projection;
+            self.routing_projection = projection;
         }
 
-        if delegation.is_none() {
-            delegation = event
+        if self.delegation.is_none() {
+            self.delegation = event
                 .payload
                 .get("delegation")
                 .cloned()
@@ -288,16 +270,16 @@ pub fn summarize_trace(
         }
 
         if event.event_type.is_decision_loop_event() {
-            saw_native_routing_signal = true;
+            self.saw_native_routing_signal = true;
         }
 
         match event.event_type {
             TraceEventType::TaskStarted => {
-                input_projection.merge_task_started_payload(&event.payload);
-                context_projection.merge_task_started_payload(&event.payload);
+                self.input_projection.merge_task_started_payload(&event.payload);
+                self.context_projection.merge_task_started_payload(&event.payload);
             }
             TraceEventType::TerminalRecorded => {
-                cluster_delivery_story = event
+                self.cluster_delivery_story = event
                     .payload
                     .get("cluster_delivery_story")
                     .cloned()
@@ -305,27 +287,27 @@ pub fn summarize_trace(
             }
             TraceEventType::ReviewerStarted => {}
             TraceEventType::CheckpointCreated => {
-                latest_checkpoint_id = event
+                self.latest_checkpoint_id = event
                     .payload
                     .get("checkpoint_id")
                     .and_then(Value::as_str)
                     .map(str::to_string)
-                    .or(latest_checkpoint_id);
-                latest_checkpoint_scope = event
+                    .or(self.latest_checkpoint_id.take());
+                self.latest_checkpoint_scope = event
                     .payload
                     .get("checkpoint_scope")
                     .and_then(Value::as_str)
                     .map(str::to_string)
-                    .or(latest_checkpoint_scope);
-                latest_checkpoint_restore_command = event
+                    .or(self.latest_checkpoint_scope.take());
+                self.latest_checkpoint_restore_command = event
                     .payload
                     .get("checkpoint_restore_command")
                     .and_then(Value::as_str)
                     .map(str::to_string)
-                    .or(latest_checkpoint_restore_command);
+                    .or(self.latest_checkpoint_restore_command.take());
             }
             TraceEventType::FlowSelected => {
-                recovery_events.push(TraceRecoveryEvent {
+                self.recovery_events.push(TraceRecoveryEvent {
                     event_type: event.event_type,
                     trigger: format!(
                         "{} @ {}",
@@ -344,7 +326,7 @@ pub fn summarize_trace(
                 });
             }
             TraceEventType::StageTransitioned => {
-                recovery_events.push(TraceRecoveryEvent {
+                self.recovery_events.push(TraceRecoveryEvent {
                     event_type: event.event_type,
                     trigger: format!(
                         "{} -> {}",
@@ -375,11 +357,11 @@ pub fn summarize_trace(
                         .ok_or_else(|| TraceSummaryError::MissingStepKind(step_id.clone()))?,
                 )?;
 
-                if let Some(index) = step_indexes.get(&step_id) {
-                    executed_steps[*index].attempts += 1;
+                if let Some(index) = self.step_indexes.get(&step_id) {
+                    self.executed_steps[*index].attempts += 1;
                 } else {
-                    step_indexes.insert(step_id.clone(), executed_steps.len());
-                    executed_steps.push(TraceStepSummary {
+                    self.step_indexes.insert(step_id.clone(), self.executed_steps.len());
+                    self.executed_steps.push(TraceStepSummary {
                         step_id,
                         step_kind,
                         attempts: 1,
@@ -404,23 +386,24 @@ pub fn summarize_trace(
                     _ => StepStatus::Running,
                 };
 
-                let index = *step_indexes
+                let index = *self
+                    .step_indexes
                     .get(&step_id)
                     .ok_or_else(|| TraceSummaryError::MissingStartedStep(step_id.clone()))?;
                 let headline = match final_status {
                     StepStatus::Succeeded => {
-                        success_headline(&event.payload, executed_steps[index].attempts)
+                        success_headline(&event.payload, self.executed_steps[index].attempts)
                     }
                     StepStatus::Failed => {
-                        failure_headline(&event.payload, executed_steps[index].attempts)
+                        failure_headline(&event.payload, self.executed_steps[index].attempts)
                     }
                     _ => "completed".to_string(),
                 };
-                executed_steps[index].final_status = final_status;
-                executed_steps[index].headline = headline;
+                self.executed_steps[index].final_status = final_status;
+                self.executed_steps[index].headline = headline;
                 for line in adaptive_evidence_lines(&event.payload) {
-                    if !adaptive_evidence.contains(&line) {
-                        adaptive_evidence.push(line);
+                    if !self.adaptive_evidence.contains(&line) {
+                        self.adaptive_evidence.push(line);
                     }
                 }
             }
@@ -429,7 +412,7 @@ pub fn summarize_trace(
             | TraceEventType::Replanned
             | TraceEventType::StageReplanned
             | TraceEventType::StageFailed => {
-                recovery_events.push(TraceRecoveryEvent {
+                self.recovery_events.push(TraceRecoveryEvent {
                     event_type: event.event_type,
                     trigger: event
                         .payload
@@ -447,11 +430,11 @@ pub fn summarize_trace(
             | TraceEventType::GovernanceCompleted
             | TraceEventType::GovernanceBlocked
             | TraceEventType::GovernancePacketRejected => {
-                saw_native_routing_signal = true;
-                governance_projection.merge_event(
+                self.saw_native_routing_signal = true;
+                self.governance_projection.merge_event(
                     event.event_type,
                     &event.payload,
-                    &mut context_projection,
+                    &mut self.context_projection,
                 );
             }
             TraceEventType::ReviewStarted
@@ -463,18 +446,18 @@ pub fn summarize_trace(
             | TraceEventType::ReviewAdjudicated
             | TraceEventType::ReviewTerminalRecorded => {
                 if let Some(line) = review_timeline_line(event.event_type, &event.payload) {
-                    review_timeline.push(line);
+                    self.review_timeline.push(line);
                 }
             }
             TraceEventType::GoalPlanCreated => {
-                if routing_summary.is_none() {
-                    routing_summary = Some(output::render_route_outcome(&RoutingOutcome {
+                if self.routing_summary.is_none() {
+                    self.routing_summary = Some(output::render_route_outcome(&RoutingOutcome {
                         mode: RoutingMode::Native,
                         source: RoutingSource::GoalPlan,
                         reason: "goal plan trace came from the session-native runtime".to_string(),
                     }));
                 }
-                if goal_plan_summary.is_none() {
+                if self.goal_plan_summary.is_none() {
                     let task_count = event
                         .payload
                         .get("task_count")
@@ -484,7 +467,7 @@ pub fn summarize_trace(
                         .payload
                         .get("goal")
                         .and_then(|value| value.as_str())
-                        .unwrap_or(&trace.goal);
+                        .unwrap_or(trace_goal);
                     let state_suffix = event
                         .payload
                         .get("goal_plan_state")
@@ -500,8 +483,10 @@ pub fn summarize_trace(
                             )
                         })
                         .unwrap_or_default();
-                    advanced_context =
-                        advanced_context.or_else(|| advanced_context_from_payload(&event.payload));
+                    self.advanced_context = self
+                        .advanced_context
+                        .take()
+                        .or_else(|| advanced_context_from_payload(&event.payload));
                     let flow_suffix = event
                         .payload
                         .get("flow_state")
@@ -522,18 +507,18 @@ pub fn summarize_trace(
                         .and_then(|value| value.as_str())
                         .map(|planning_rationale| format!(" | rationale: {planning_rationale}"))
                         .unwrap_or_default();
-                    goal_plan_summary = Some(format!(
+                    self.goal_plan_summary = Some(format!(
                         "{task_count} bounded task(s) for {goal}{state_suffix}{flow_suffix}{verification_suffix}{rationale_suffix}"
                     ));
                 }
-                input_projection.merge_goal_plan_payload(&event.payload);
-                context_projection.merge_goal_plan_payload(&event.payload);
+                self.input_projection.merge_goal_plan_payload(&event.payload);
+                self.context_projection.merge_goal_plan_payload(&event.payload);
             }
             TraceEventType::FlowInferred => {
                 if let Some(flow_name) =
                     event.payload.get("flow_name").and_then(|value| value.as_str())
                 {
-                    decision_timeline.push(format!("flow_inferred: {flow_name}"));
+                    self.decision_timeline.push(format!("flow_inferred: {flow_name}"));
                 }
             }
             TraceEventType::DecisionCreated
@@ -541,7 +526,7 @@ pub fn summarize_trace(
             | TraceEventType::DecisionVerified
             | TraceEventType::DecisionFailed
             | TraceEventType::DecisionRecovered => {
-                decision_timeline.extend(decision_timeline_lines(
+                self.decision_timeline.extend(decision_timeline_lines(
                     event.event_type,
                     event.step_id.as_deref(),
                     &event.payload,
@@ -550,7 +535,7 @@ pub fn summarize_trace(
                     && let Some(evidence) =
                         decision_failure_evidence(event.step_id.as_deref(), &event.payload)
                 {
-                    failure_evidence.push(evidence);
+                    self.failure_evidence.push(evidence);
                 }
             }
             TraceEventType::ReasoningProfileActivated
@@ -568,7 +553,53 @@ pub fn summarize_trace(
             | TraceEventType::ProjectScaleStageTransitioned
             | TraceEventType::VotingDecisionRecorded => {}
         }
+
+        Ok(())
     }
+}
+
+fn fold_trace_events(trace: &ExecutionTrace) -> Result<TraceSummaryFold, TraceSummaryError> {
+    let mut fold = TraceSummaryFold::default();
+    for event in &trace.events {
+        fold.merge_event(event, &trace.goal)?;
+    }
+    Ok(fold)
+}
+
+/// Rehydrates a persisted trace into the flattened `TraceSummaryView` consumed
+/// by CLI output. The function prefers persisted projection fields over
+/// recomputation so inspect explains exactly what the run recorded.
+pub fn summarize_trace(
+    trace_ref: impl AsRef<Path>,
+    trace: &ExecutionTrace,
+) -> Result<TraceSummaryView, TraceSummaryError> {
+    let persisted_terminal_status = trace.terminal_status;
+    let persisted_terminal_reason = trace.terminal_reason.clone();
+    let TraceSummaryFold {
+        input_projection,
+        cluster_delivery_story,
+        mut routing_summary,
+        routing_projection,
+        goal_plan_summary,
+        advanced_context,
+        context_projection,
+        guidance_guardian,
+        governance_projection,
+        decision_timeline,
+        failure_evidence,
+        adaptive_evidence,
+        latest_checkpoint_id,
+        latest_checkpoint_scope,
+        latest_checkpoint_restore_command,
+        delegation,
+        saw_native_routing_signal,
+        executed_steps,
+        recovery_events,
+        review_timeline,
+        reasoning_profile,
+        delight_feedback,
+        ..
+    } = fold_trace_events(trace)?;
 
     if routing_summary.is_none() {
         routing_summary = Some(output::render_route_outcome(&RoutingOutcome {
@@ -590,75 +621,40 @@ pub fn summarize_trace(
         }));
     }
 
-    let (terminal_status, terminal_reason) =
-        match (persisted_terminal_status, persisted_terminal_reason) {
-            (Some(terminal_status), Some(terminal_reason)) => (terminal_status, terminal_reason),
-            (None, None) => {
-                if governance_projection.latest_state.is_some() {
-                    (
-                        TaskStatus::Running,
-                        synthesized_in_progress_reason(
-                            governance_projection.latest_state.as_deref(),
-                        ),
-                    )
-                } else {
-                    return Err(TraceSummaryError::MissingTerminalStatus);
-                }
-            }
-            (None, Some(_)) => return Err(TraceSummaryError::MissingTerminalStatus),
-            (Some(_), None) => return Err(TraceSummaryError::MissingTerminalReason),
-        };
+    let ResolvedTraceTerminal { terminal_status, terminal_reason, governance_next_action } =
+        resolve_trace_terminal(
+            persisted_terminal_status,
+            persisted_terminal_reason,
+            &governance_projection,
+        )?;
 
     let governance_timeline = governance_projection.timeline;
     let governance_runtime_state = governance_projection.runtime_state;
     let governance_rollout_profile = governance_projection.rollout_profile;
     let governance_reason = governance_projection.reason;
     let governance_approval_provenance = governance_projection.approval_provenance;
-    let governance_next_action = governance_projection.next_action.or_else(|| {
-        governance_next_action_for_state(governance_projection.latest_state.as_deref())
-    });
     let terminal_projection = InspectTerminalProjection {
         terminal_status,
         terminal_reason: &terminal_reason,
         next_action: governance_next_action.as_deref(),
     };
-    let inspect_context = Some(build_inspect_context_view(
-        context_projection.summary.as_deref(),
-        context_projection.credibility.as_deref(),
-        &context_projection.primary_inputs,
-        &context_projection.provenance,
-        context_projection.staleness_reason.as_deref(),
-        terminal_projection,
-    ));
-    let inspect_council = Some(build_inspect_council_view(
-        &review_timeline,
-        &governance_timeline,
-        reasoning_profile.as_ref(),
-        terminal_projection,
-    ));
-    let inspect_timeline = Some(build_inspect_timeline_view(
-        &decision_timeline,
-        &review_timeline,
-        &governance_timeline,
-        &executed_steps,
-        &recovery_events,
-        terminal_projection,
-    ));
-    let workspace_root = trace_workspace_root(trace_ref.as_ref());
-    let goal_brief_ref = workspace_root.as_ref().and_then(|workspace| {
-        persisted_session_brief_ref(workspace, &session_goal_brief_ref(&trace.session_id))
-    });
-    let session_plan_brief_ref = workspace_root.as_ref().and_then(|workspace| {
-        persisted_session_brief_ref(workspace, &session_plan_brief_ref(&trace.session_id))
-    });
-    let run_brief_ref = workspace_root.as_ref().and_then(|workspace| {
-        persisted_session_brief_ref(workspace, &session_run_brief_ref(&trace.session_id))
-    });
-    let session_audit = workspace_root
-        .as_ref()
-        .map(|workspace| load_session_audit_projection(workspace, &trace.session_id))
-        .transpose()?
-        .flatten();
+    let InspectSummaryViews { inspect_context, inspect_council, inspect_timeline } =
+        build_inspect_summary_views(InspectSummaryInputs {
+            context_projection: &context_projection,
+            review_timeline: &review_timeline,
+            governance_timeline: &governance_timeline,
+            reasoning_profile: reasoning_profile.as_ref(),
+            decision_timeline: &decision_timeline,
+            executed_steps: &executed_steps,
+            recovery_events: &recovery_events,
+            terminal: terminal_projection,
+        });
+    let ResolvedTraceArtifacts {
+        goal_brief_ref,
+        session_plan_brief_ref,
+        run_brief_ref,
+        session_audit,
+    } = resolve_trace_artifacts(trace_ref.as_ref(), &trace.session_id)?;
 
     Ok(TraceSummaryView {
         trace_ref: trace_ref.as_ref().to_string_lossy().into_owned(),
@@ -707,9 +703,9 @@ pub fn summarize_trace(
         governance_next_action,
         reasoning_profile,
         delegation,
-        inspect_context,
-        inspect_council,
-        inspect_timeline,
+        inspect_context: Some(inspect_context),
+        inspect_council: Some(inspect_council),
+        inspect_timeline: Some(inspect_timeline),
         review_timeline,
         session_audit,
         delight_feedback,
@@ -724,6 +720,103 @@ struct InspectTerminalProjection<'a> {
     terminal_status: TaskStatus,
     terminal_reason: &'a TerminalReason,
     next_action: Option<&'a str>,
+}
+
+struct InspectSummaryViews {
+    inspect_context: InspectClosureView,
+    inspect_council: InspectClosureView,
+    inspect_timeline: InspectClosureView,
+}
+
+struct InspectSummaryInputs<'a> {
+    context_projection: &'a TraceContextProjection,
+    review_timeline: &'a [String],
+    governance_timeline: &'a [String],
+    reasoning_profile: Option<&'a ProfileActivationRecord>,
+    decision_timeline: &'a [String],
+    executed_steps: &'a [TraceStepSummary],
+    recovery_events: &'a [TraceRecoveryEvent],
+    terminal: InspectTerminalProjection<'a>,
+}
+
+struct ResolvedTraceTerminal {
+    terminal_status: TaskStatus,
+    terminal_reason: TerminalReason,
+    governance_next_action: Option<String>,
+}
+
+/// Resolves the terminal projection for inspect, synthesizing a running state
+/// when a governed trace paused before persisting a terminal snapshot.
+fn resolve_trace_terminal(
+    persisted_terminal_status: Option<TaskStatus>,
+    persisted_terminal_reason: Option<TerminalReason>,
+    governance_projection: &TraceGovernanceProjection,
+) -> Result<ResolvedTraceTerminal, TraceSummaryError> {
+    let (terminal_status, terminal_reason) =
+        match (persisted_terminal_status, persisted_terminal_reason) {
+            (Some(terminal_status), Some(terminal_reason)) => (terminal_status, terminal_reason),
+            (None, None) => {
+                if governance_projection.latest_state.is_some() {
+                    (
+                        TaskStatus::Running,
+                        synthesized_in_progress_reason(
+                            governance_projection.latest_state.as_deref(),
+                        ),
+                    )
+                } else {
+                    return Err(TraceSummaryError::MissingTerminalStatus);
+                }
+            }
+            (None, Some(_)) => return Err(TraceSummaryError::MissingTerminalStatus),
+            (Some(_), None) => return Err(TraceSummaryError::MissingTerminalReason),
+        };
+
+    Ok(ResolvedTraceTerminal {
+        terminal_status,
+        terminal_reason,
+        governance_next_action: governance_projection.next_action.clone().or_else(|| {
+            governance_next_action_for_state(governance_projection.latest_state.as_deref())
+        }),
+    })
+}
+
+/// Builds the operator-facing closure views that `inspect` renders alongside
+/// the raw trace summary fields.
+fn build_inspect_summary_views(input: InspectSummaryInputs<'_>) -> InspectSummaryViews {
+    let InspectSummaryInputs {
+        context_projection,
+        review_timeline,
+        governance_timeline,
+        reasoning_profile,
+        decision_timeline,
+        executed_steps,
+        recovery_events,
+        terminal,
+    } = input;
+    InspectSummaryViews {
+        inspect_context: build_inspect_context_view(
+            context_projection.summary.as_deref(),
+            context_projection.credibility.as_deref(),
+            &context_projection.primary_inputs,
+            &context_projection.provenance,
+            context_projection.staleness_reason.as_deref(),
+            terminal,
+        ),
+        inspect_council: build_inspect_council_view(
+            review_timeline,
+            governance_timeline,
+            reasoning_profile,
+            terminal,
+        ),
+        inspect_timeline: build_inspect_timeline_view(
+            decision_timeline,
+            review_timeline,
+            governance_timeline,
+            executed_steps,
+            recovery_events,
+            terminal,
+        ),
+    }
 }
 
 fn build_inspect_context_view(
@@ -924,544 +1017,6 @@ fn step_status_label(step_status: StepStatus) -> &'static str {
     }
 }
 
-// Fold one event payload into the flattened guidance/guardian projection.
-// Planning-era fields latch on first value; execution-era fields are refreshed
-// whenever a later event publishes a newer non-empty snapshot.
-fn merge_guidance_projection_from_payload(
-    projection: &mut GuidanceGuardianProjection,
-    payload: &Value,
-) {
-    let Some(object) = payload.as_object() else {
-        return;
-    };
-
-    if projection.capability_resolution_summary.is_none() {
-        projection.capability_resolution_summary = object
-            .get("capability_resolution_summary")
-            .and_then(|value| value.as_str().map(str::to_string));
-    }
-    if projection.loaded_packs.is_empty() {
-        projection.loaded_packs = string_array_field(object, "loaded_packs");
-    }
-    if projection.skipped_packs.is_empty() {
-        projection.skipped_packs = string_array_field(object, "skipped_packs");
-    }
-    if projection.catalog_validation_findings.is_empty() {
-        projection.catalog_validation_findings =
-            string_array_field(object, "catalog_validation_findings");
-    }
-    if projection.loaded_guidance_sources.is_empty() {
-        projection.loaded_guidance_sources = string_array_field(object, "loaded_guidance_sources");
-    }
-    if projection.skipped_guidance_sources.is_empty() {
-        projection.skipped_guidance_sources =
-            string_array_field(object, "skipped_guidance_sources");
-    }
-
-    let loaded_guardian_sources = string_array_field(object, "loaded_guardian_sources");
-    if !loaded_guardian_sources.is_empty() {
-        projection.loaded_guardian_sources = loaded_guardian_sources;
-    }
-
-    let skipped_guardian_sources = string_array_field(object, "skipped_guardian_sources");
-    if !skipped_guardian_sources.is_empty() {
-        projection.skipped_guardian_sources = skipped_guardian_sources;
-    }
-
-    let guardian_timeline = string_array_field(object, "guardian_timeline");
-    if !guardian_timeline.is_empty() {
-        projection.guardian_timeline = guardian_timeline;
-    }
-
-    if let Some(summary) =
-        object.get("guardian_findings_summary").and_then(|value| value.as_str().map(str::to_string))
-    {
-        projection.guardian_findings_summary = Some(summary);
-    }
-
-    if let Some(findings) = object
-        .get("guardian_findings")
-        .cloned()
-        .and_then(|value| serde_json::from_value::<Vec<GuardianFinding>>(value).ok())
-        && !findings.is_empty()
-    {
-        projection.guardian_findings = findings;
-    }
-
-    let guardian_degradations = string_array_field(object, "guardian_degradations");
-    if !guardian_degradations.is_empty() {
-        projection.guardian_degradations = guardian_degradations;
-    }
-
-    if let Some(outcome) =
-        object.get("guardian_blocking_outcome").and_then(|value| value.as_str().map(str::to_string))
-    {
-        projection.guardian_blocking_outcome = Some(outcome);
-    }
-}
-
-#[derive(Debug, Default)]
-struct TraceInputProjection {
-    authored_input_summary: Option<String>,
-    authored_input_sources: Vec<String>,
-    authored_input_deduplicated_sources: Vec<String>,
-    clarification_headline: Option<String>,
-    clarification_prompt: Option<String>,
-    clarification_missing_fields: Vec<String>,
-    requested_governance_runtime: Option<String>,
-    requested_governance_risk: Option<String>,
-    requested_governance_zone: Option<String>,
-    requested_governance_owner: Option<String>,
-    negotiation_goal_summary: Option<String>,
-    negotiation_resolution: Option<String>,
-    negotiation_acceptance_boundary: Option<String>,
-}
-
-impl TraceInputProjection {
-    fn merge_task_started_payload(&mut self, payload: &Value) {
-        if self.authored_input_summary.is_none() {
-            self.authored_input_summary =
-                nested_payload_string(payload, "input", "authored_input_summary");
-        }
-        if self.authored_input_sources.is_empty() {
-            self.authored_input_sources =
-                nested_payload_string_array(payload, "input", "authored_input_sources");
-        }
-        if self.authored_input_deduplicated_sources.is_empty() {
-            self.authored_input_deduplicated_sources = nested_payload_string_array(
-                payload,
-                "input",
-                "authored_input_deduplicated_sources",
-            );
-        }
-        if self.clarification_headline.is_none() {
-            self.clarification_headline =
-                nested_payload_string(payload, "input", "clarification_headline");
-        }
-        if self.clarification_prompt.is_none() {
-            self.clarification_prompt =
-                nested_payload_string(payload, "input", "clarification_prompt");
-        }
-        if self.clarification_missing_fields.is_empty() {
-            self.clarification_missing_fields =
-                nested_payload_string_array(payload, "input", "clarification_missing_fields");
-        }
-        if self.requested_governance_runtime.is_none() {
-            self.requested_governance_runtime =
-                nested_payload_string(payload, "input", "requested_governance_runtime");
-        }
-        if self.requested_governance_risk.is_none() {
-            self.requested_governance_risk =
-                nested_payload_string(payload, "input", "requested_governance_risk");
-        }
-        if self.requested_governance_zone.is_none() {
-            self.requested_governance_zone =
-                nested_payload_string(payload, "input", "requested_governance_zone");
-        }
-        if self.requested_governance_owner.is_none() {
-            self.requested_governance_owner =
-                nested_payload_string(payload, "input", "requested_governance_owner");
-        }
-        if self.negotiation_goal_summary.is_none() {
-            self.negotiation_goal_summary =
-                nested_payload_string(payload, "input", "negotiation_goal_summary");
-        }
-        if self.negotiation_resolution.is_none() {
-            self.negotiation_resolution =
-                nested_payload_string(payload, "input", "negotiation_resolution");
-        }
-        if self.negotiation_acceptance_boundary.is_none() {
-            self.negotiation_acceptance_boundary =
-                nested_payload_string(payload, "input", "negotiation_acceptance_boundary");
-        }
-    }
-
-    fn merge_goal_plan_payload(&mut self, payload: &Value) {
-        if self.negotiation_goal_summary.is_none() {
-            self.negotiation_goal_summary = payload_string(payload, "negotiation_goal_summary");
-        }
-        if self.negotiation_resolution.is_none() {
-            self.negotiation_resolution = payload_string(payload, "negotiation_resolution");
-        }
-        if self.negotiation_acceptance_boundary.is_none() {
-            self.negotiation_acceptance_boundary =
-                payload_string(payload, "negotiation_acceptance_boundary");
-        }
-    }
-}
-
-#[derive(Debug, Default)]
-struct TraceContextProjection {
-    summary: Option<String>,
-    credibility: Option<String>,
-    primary_inputs: Vec<String>,
-    provenance: Vec<String>,
-    staleness_reason: Option<String>,
-}
-
-impl TraceContextProjection {
-    fn merge_task_started_payload(&mut self, payload: &Value) {
-        if self.summary.is_none() {
-            self.summary = nested_payload_string(payload, "input", "context_summary");
-        }
-        if self.credibility.is_none() {
-            self.credibility = nested_payload_string(payload, "input", "context_credibility");
-        }
-        if self.primary_inputs.is_empty() {
-            self.primary_inputs =
-                nested_payload_string_array(payload, "input", "context_primary_inputs");
-        }
-        if self.provenance.is_empty() {
-            self.provenance = nested_payload_string_array(payload, "input", "context_provenance");
-        }
-        if self.staleness_reason.is_none() {
-            self.staleness_reason =
-                nested_payload_string(payload, "input", "context_staleness_reason");
-        }
-    }
-
-    fn merge_goal_plan_payload(&mut self, payload: &Value) {
-        if self.summary.is_none() {
-            self.summary = payload_string(payload, "context_summary");
-        }
-        if self.credibility.is_none() {
-            self.credibility = payload_string(payload, "context_credibility");
-        }
-        if self.primary_inputs.is_empty() {
-            self.primary_inputs = payload_string_array(payload, "context_primary_inputs");
-        }
-        if self.provenance.is_empty() {
-            self.provenance = payload_string_array(payload, "context_provenance");
-        }
-        if self.staleness_reason.is_none() {
-            self.staleness_reason = payload_string(payload, "context_staleness_reason");
-        }
-    }
-
-    fn merge_governance_payload(&mut self, payload: &Value) {
-        if self.summary.is_none() {
-            self.summary = payload_string(payload, "canon_memory_summary");
-        }
-        if self.credibility.is_none() {
-            self.credibility = payload_string(payload, "canon_memory_credibility");
-        }
-        if self.primary_inputs.is_empty() {
-            self.primary_inputs = payload_string_array(payload, "document_refs");
-        }
-
-        self.push_optional_line(
-            payload_string(payload, "canon_memory_summary")
-                .map(|value| format!("canon_memory: {value}")),
-        );
-        self.push_optional_line(
-            payload_string(payload, "canon_memory_compatibility")
-                .map(|value| format!("canon_memory_compatibility: {value}")),
-        );
-        self.push_optional_line(
-            payload_string(payload, "canon_memory_run_ref")
-                .or_else(|| payload_string(payload, "run_ref"))
-                .map(|value| format!("canon_memory_run_ref: {value}")),
-        );
-        self.push_optional_line(
-            payload_string(payload, "canon_memory_packet_ref")
-                .or_else(|| payload_string(payload, "packet_ref"))
-                .map(|value| format!("canon_memory_packet: {value}")),
-        );
-        self.push_optional_line(
-            payload_string(payload, "canon_memory_reason_code")
-                .map(|value| format!("canon_memory_reason: {value}")),
-        );
-        self.push_optional_line(
-            payload_string(payload, "canon_next_action")
-                .map(|value| format!("canon_memory_next_action: {value}")),
-        );
-
-        for line in payload_string_array(payload, "authority_provenance_lines") {
-            self.push_line(line);
-        }
-        for line in payload_string_array(payload, "adaptive_provenance_lines") {
-            self.push_line(line);
-        }
-
-        if self.staleness_reason.is_none()
-            && payload_string(payload, "canon_memory_credibility")
-                .is_some_and(|credibility| credibility != "credible")
-        {
-            self.staleness_reason = payload_string(payload, "reason")
-                .or_else(|| payload_string(payload, "canon_memory_summary"));
-        }
-    }
-
-    fn push_optional_line(&mut self, line: Option<String>) {
-        if let Some(line) = line {
-            self.push_line(line);
-        }
-    }
-
-    fn push_line(&mut self, line: String) {
-        if !self.provenance.contains(&line) {
-            self.provenance.push(line);
-        }
-    }
-}
-
-#[derive(Debug, Default)]
-struct TraceGovernanceProjection {
-    latest_state: Option<String>,
-    next_action: Option<String>,
-    runtime_state: Option<String>,
-    rollout_profile: Option<String>,
-    reason: Option<String>,
-    approval_provenance: Option<String>,
-    timeline: Vec<String>,
-}
-
-impl TraceGovernanceProjection {
-    fn merge_event(
-        &mut self,
-        event_type: TraceEventType,
-        payload: &Value,
-        context_projection: &mut TraceContextProjection,
-    ) {
-        match event_type {
-            TraceEventType::GovernanceAwaitingApproval => {
-                self.latest_state = Some("awaiting_approval".to_string());
-            }
-            TraceEventType::GovernanceCompleted => {
-                self.latest_state = Some("governed_ready".to_string());
-            }
-            TraceEventType::GovernanceBlocked | TraceEventType::GovernancePacketRejected => {
-                self.latest_state = Some("blocked".to_string());
-            }
-            _ => {}
-        }
-
-        context_projection.merge_governance_payload(payload);
-
-        if self.next_action.is_none() {
-            self.next_action = payload_string(payload, "canon_next_action");
-        }
-        if self.runtime_state.is_none() {
-            self.runtime_state = payload_string(payload, "latest_governance_runtime_state");
-        }
-        if self.rollout_profile.is_none() {
-            self.rollout_profile = payload_string(payload, "latest_governance_rollout_profile");
-        }
-        if self.reason.is_none() {
-            self.reason = payload_string(payload, "latest_governance_reason");
-        }
-        if self.approval_provenance.is_none() {
-            self.approval_provenance =
-                payload_string(payload, "latest_governance_approval_provenance");
-        }
-        if let Some(line) = governance_timeline_line(event_type, payload) {
-            self.timeline.push(line);
-        }
-    }
-}
-
-fn payload_string(payload: &Value, key: &str) -> Option<String> {
-    payload.get(key).and_then(|value| value.as_str().map(str::to_string))
-}
-
-fn payload_string_array(payload: &Value, key: &str) -> Vec<String> {
-    payload
-        .get(key)
-        .and_then(Value::as_array)
-        .map(|items| {
-            items.iter().filter_map(|item| item.as_str().map(str::to_string)).collect::<Vec<_>>()
-        })
-        .unwrap_or_default()
-}
-
-fn nested_payload_string(payload: &Value, container: &str, key: &str) -> Option<String> {
-    payload
-        .get(container)
-        .and_then(|value| value.get(key))
-        .and_then(|value| value.as_str().map(str::to_string))
-}
-
-fn nested_payload_string_array(payload: &Value, container: &str, key: &str) -> Vec<String> {
-    payload
-        .get(container)
-        .and_then(|value| value.get(key))
-        .and_then(Value::as_array)
-        .map(|items| {
-            items.iter().filter_map(|item| item.as_str().map(str::to_string)).collect::<Vec<_>>()
-        })
-        .unwrap_or_default()
-}
-
-// Extract a string array from a JSON payload without failing the overall
-// inspection path when older or partial payloads omit the key.
-fn string_array_field(object: &serde_json::Map<String, Value>, key: &str) -> Vec<String> {
-    object
-        .get(key)
-        .and_then(Value::as_array)
-        .map(|items| {
-            items.iter().filter_map(|item| item.as_str().map(str::to_string)).collect::<Vec<_>>()
-        })
-        .unwrap_or_default()
-}
-
-// Normalize decision-loop events into human-readable timeline lines while
-// preserving the persisted decision id, target, rationale, and evidence refs.
-fn decision_timeline_lines(
-    event_type: TraceEventType,
-    decision_id: Option<&str>,
-    payload: &serde_json::Value,
-) -> Vec<String> {
-    let decision_id = decision_id.unwrap_or("unknown-decision");
-    let status = payload.get("status").and_then(|value| value.as_str()).unwrap_or("unknown");
-
-    match event_type {
-        TraceEventType::DecisionCreated => {
-            let selector = payload.get("selector").and_then(|value| value.as_str());
-            let decision_type =
-                payload.get("decision_type").and_then(|value| value.as_str()).unwrap_or("unknown");
-            let target =
-                payload.get("target").and_then(|value| value.as_str()).unwrap_or("unknown");
-            let mut lines = vec![match selector {
-                Some(selector) => {
-                    format!(
-                        "decision: {decision_id} {selector} ({decision_type}) -> {target} [{status}]"
-                    )
-                }
-                None => format!("decision: {decision_id} {decision_type} -> {target} [{status}]"),
-            }];
-
-            if let Some(selector) = selector {
-                lines.push(format!("selector: {selector}"));
-            }
-
-            if let Some(rationale) = payload.get("rationale").and_then(|value| value.as_str()) {
-                lines.push(format!("rationale: {rationale}"));
-            }
-            if let Some(expected_outcome) =
-                payload.get("expected_outcome").and_then(|value| value.as_str())
-            {
-                lines.push(format!("expected_outcome: {expected_outcome}"));
-                lines.push(format!("verification_intent: {expected_outcome}"));
-            }
-            if let Some(inputs) = payload.get("evidence_inputs").and_then(|value| value.as_array())
-            {
-                let inputs = inputs.iter().filter_map(format_evidence_input).collect::<Vec<_>>();
-                if !inputs.is_empty() {
-                    lines.push(format!("evidence_inputs: {}", inputs.join(", ")));
-                }
-            }
-
-            lines
-        }
-        TraceEventType::DecisionDispatched => {
-            vec![format!("decision_status: {decision_id} {status}")]
-        }
-        TraceEventType::DecisionVerified | TraceEventType::DecisionFailed => {
-            vec![format!("decision_status: {decision_id} {status}")]
-        }
-        TraceEventType::DecisionRecovered => {
-            let recovery_decision_id = payload
-                .get("recovery_decision_id")
-                .and_then(|value| value.as_str())
-                .unwrap_or("unknown-decision");
-            vec![format!("decision_status: {decision_id} {status} via {recovery_decision_id}")]
-        }
-        _ => Vec::new(),
-    }
-}
-
-fn decision_failure_evidence(
-    decision_id: Option<&str>,
-    payload: &serde_json::Value,
-) -> Option<String> {
-    let decision_id = decision_id.unwrap_or(UNKNOWN_DECISION_ID);
-    let target = payload.get(KEY_TARGET).and_then(|value| value.as_str()).unwrap_or(UNKNOWN_TARGET);
-    let action_result = payload.get(KEY_ACTION_RESULT)?;
-    let typed_result = serde_json::from_value::<ToolResult>(action_result.clone()).ok();
-    let message = typed_result
-        .as_ref()
-        .and_then(|tool_result| {
-            first_non_empty(&[Some(tool_result.stderr.as_str()), Some(tool_result.stdout.as_str())])
-        })
-        .or_else(|| {
-            first_non_empty(&[
-                action_result.get("stderr").and_then(|value| value.as_str()),
-                action_result.get("stdout").and_then(|value| value.as_str()),
-            ])
-        })?;
-
-    Some(format!("{decision_id} {target}: {message}"))
-}
-
-fn first_non_empty<'a>(values: &[Option<&'a str>]) -> Option<&'a str> {
-    values.iter().filter_map(|value| *value).find(|value| !value.trim().is_empty())
-}
-
-fn format_evidence_input(value: &serde_json::Value) -> Option<String> {
-    let kind = value.get("kind")?.as_str()?;
-    let reference = value.get("reference")?.as_str()?;
-    Some(format!("{kind}:{reference}"))
-}
-
-// Load the requested trace using explicit trace path first, then active-session
-// trace ref, then the latest workspace trace.
-fn load_trace(
-    trace: Option<&Path>,
-    workspace: Option<&Path>,
-    session_id: Option<&str>,
-) -> Result<(TraceResolutionTarget, PathBuf, ExecutionTrace), InspectCommandError> {
-    let session_trace_ref = workspace
-        .map(|workspace_path| resolve_session_trace_ref(workspace_path, session_id))
-        .transpose()?
-        .flatten();
-    let (target, trace_path) = resolve_trace_path(trace, workspace, session_trace_ref.as_deref())?;
-
-    let trace = match target {
-        TraceResolutionTarget::LatestWorkspaceTrace => {
-            let Some(workspace_path) = workspace else {
-                return Err(InspectCommandError::MissingTraceReference);
-            };
-            let store = FileTraceStore::for_workspace(workspace_path);
-            store.load(&trace_path)?
-        }
-        TraceResolutionTarget::ExplicitTrace | TraceResolutionTarget::SessionTraceRef => {
-            let store = FileTraceStore::new(trace_path.parent().unwrap_or_else(|| Path::new(".")));
-            store.load(&trace_path)?
-        }
-    };
-
-    Ok((target, trace_path, trace))
-}
-
-fn resolve_session_trace_ref(
-    workspace: &Path,
-    session_id: Option<&str>,
-) -> Result<Option<String>, InspectCommandError> {
-    let store = FileSessionStore::for_workspace(workspace);
-    match session_id {
-        Some(session_id) => match store.load_session(session_id) {
-            Ok(Some(record)) => Ok(record.latest_trace_ref),
-            Ok(None) => Err(InspectCommandError::UnknownSession(session_id.to_string())),
-            Err(SessionStoreError::InvalidRecord(message)) => {
-                Err(InspectCommandError::InvalidSession(format!(
-                    "session `{session_id}` is invalid: {message}"
-                )))
-            }
-            Err(error) => Err(InspectCommandError::SessionStore(error)),
-        },
-        None => match store.load() {
-            Ok(Some(record)) => Ok(record.latest_trace_ref),
-            Ok(None) => Ok(None),
-            Err(SessionStoreError::InvalidRecord(message)) => {
-                Err(InspectCommandError::InvalidSession(format!(
-                    "active session is invalid: {message}"
-                )))
-            }
-            Err(error) => Err(InspectCommandError::SessionStore(error)),
-        },
-    }
-}
-
 /// Resolves which trace path `inspect` should open. Precedence is explicit
 /// `--trace`, then the active session trace ref, then the latest workspace trace.
 pub fn resolve_trace_path(
@@ -1505,321 +1060,6 @@ fn corrected_command(inspection_target: TraceResolutionTarget) -> &'static str {
         }
         TraceResolutionTarget::LatestWorkspaceTrace => "boundline inspect --workspace <workspace>",
     }
-}
-
-fn review_timeline_line(event_type: TraceEventType, payload: &serde_json::Value) -> Option<String> {
-    match event_type {
-        TraceEventType::ReviewStarted => payload
-            .get(KEY_REVIEW_TRIGGER)
-            .and_then(|value| value.as_str())
-            .map(|trigger| format!("review_trigger: {trigger}")),
-        TraceEventType::ReviewTriggerIgnored => payload
-            .get(KEY_REVIEW_TRIGGER)
-            .and_then(|value| value.as_str())
-            .map(|trigger| format!("review_trigger_ignored: {trigger}")),
-        TraceEventType::ReviewerCompleted => reviewer_line(payload),
-        TraceEventType::ReviewCouncilAssembled => payload
-            .get("selection_summary")
-            .and_then(|value| value.as_str())
-            .map(|summary| format!("review_council: {summary}"))
-            .or_else(|| {
-                payload
-                    .get("council_profile")
-                    .and_then(|value| value.as_str())
-                    .map(|profile| format!("review_council: {profile}"))
-            }),
-        TraceEventType::ReviewStopSemanticsRecorded => payload
-            .get("stop_semantics")
-            .and_then(|value| value.as_str())
-            .map(|stop_semantics| format!("review_stop_semantics: {stop_semantics}")),
-        TraceEventType::ReviewVoteResolved => payload
-            .get(KEY_SUMMARY)
-            .and_then(|value| value.as_str())
-            .map(|summary| format!("review_vote: {summary}"))
-            .or_else(|| {
-                payload.get(KEY_VOTE_RESOLUTION).map(|resolution| {
-                    format!(
-                        "review_vote: {}",
-                        serde_json::to_string(resolution).unwrap_or_default()
-                    )
-                })
-            }),
-        TraceEventType::ReviewAdjudicated => {
-            reviewer_line(payload).map(|line| format!("review_adjudication: {line}"))
-        }
-        TraceEventType::ReviewTerminalRecorded => payload
-            .get(KEY_REVIEW_OUTCOME)
-            .and_then(|value| value.as_str())
-            .map(|outcome| format!("review_outcome: {outcome}"))
-            .or_else(|| {
-                payload
-                    .get(KEY_FAILURE_REASON)
-                    .and_then(|value| value.as_str())
-                    .map(|reason| format!("review_reason: {reason}"))
-            }),
-        _ => None,
-    }
-}
-
-fn governance_timeline_line(
-    event_type: TraceEventType,
-    payload: &serde_json::Value,
-) -> Option<String> {
-    match event_type {
-        TraceEventType::GovernanceSelected => Some(format!(
-            "governance_selected: {} -> {}",
-            payload.get("stage_key").and_then(|value| value.as_str()).unwrap_or("unknown-stage"),
-            payload
-                .get("selected_runtime")
-                .and_then(|value| value.as_str())
-                .unwrap_or("unknown-runtime")
-        )),
-        TraceEventType::GovernanceStarted => Some(format!(
-            "governance_started: {}{}{}{}",
-            payload.get("stage_key").and_then(|value| value.as_str()).unwrap_or("unknown-stage"),
-            payload
-                .get("canon_mode")
-                .and_then(|value| value.as_str())
-                .map(|mode| format!(" ({mode})"))
-                .unwrap_or_default(),
-            payload
-                .get("run_ref")
-                .and_then(|value| value.as_str())
-                .map(|run_ref| format!(" [{run_ref}]"))
-                .unwrap_or_default(),
-            governance_packet_provenance_suffix(payload)
-        )),
-        TraceEventType::GovernanceDecisionRecorded => payload
-            .get("selected_action")
-            .and_then(|value| value.as_str())
-            .map(|selected_action| format!("governance_decision: {selected_action}"))
-            .or_else(|| {
-                payload
-                    .get("blocked_reason")
-                    .and_then(|value| value.as_str())
-                    .map(|reason| format!("governance_decision_blocked: {reason}"))
-            }),
-        TraceEventType::GovernanceAwaitingApproval => Some(format!(
-            "governance_awaiting_approval: {} ({}){}{}",
-            payload.get("stage_key").and_then(|value| value.as_str()).unwrap_or("unknown-stage"),
-            payload.get("approval_state").and_then(|value| value.as_str()).unwrap_or("unknown"),
-            payload
-                .get("run_ref")
-                .and_then(|value| value.as_str())
-                .map(|run_ref| format!(" [{run_ref}]"))
-                .unwrap_or_default(),
-            governance_packet_provenance_suffix(payload)
-        )),
-        TraceEventType::GovernanceCompleted => Some(format!(
-            "governance_completed: {}{}{}",
-            payload
-                .get("headline")
-                .and_then(|value| value.as_str())
-                .unwrap_or("governed packet ready"),
-            payload
-                .get("packet_ref")
-                .and_then(|value| value.as_str())
-                .map(|packet_ref| format!(" [{packet_ref}]"))
-                .unwrap_or_default(),
-            governance_packet_provenance_suffix(payload)
-        )),
-        TraceEventType::GovernanceBlocked => Some(format!(
-            "governance_blocked: {}{}",
-            payload.get("reason").and_then(|value| value.as_str()).unwrap_or("blocked"),
-            governance_packet_provenance_suffix(payload)
-        )),
-        TraceEventType::GovernancePacketRejected => Some(format!(
-            "governance_packet_rejected: {}{}",
-            payload.get("reason").and_then(|value| value.as_str()).unwrap_or("packet rejected"),
-            governance_packet_provenance_suffix(payload)
-        )),
-        _ => None,
-    }
-}
-
-fn governance_packet_provenance_suffix(payload: &serde_json::Value) -> String {
-    governance_packet_provenance_text(
-        payload.get("packet_source_stage").and_then(|value| value.as_str()),
-        payload.get("packet_binding_reason").and_then(|value| value.as_str()),
-    )
-    .map(|provenance| format!(" from {provenance}"))
-    .unwrap_or_default()
-}
-
-fn reviewer_line(payload: &serde_json::Value) -> Option<String> {
-    let reviewer_id = payload.get(KEY_REVIEWER_ID).and_then(|value| value.as_str())?;
-
-    if let Some(finding) = payload.get(KEY_FINDING) {
-        let disposition =
-            finding.get("disposition").and_then(|value| value.as_str()).unwrap_or("unknown");
-        let summary =
-            finding.get("summary").and_then(|value| value.as_str()).unwrap_or("review finding");
-        let role = payload.get(KEY_REVIEWER_ROLE).and_then(|value| value.as_str());
-        return Some(match role {
-            Some(role) => format!("reviewer {reviewer_id} ({role}) {disposition}: {summary}"),
-            None => format!("reviewer {reviewer_id} {disposition}: {summary}"),
-        });
-    }
-
-    payload
-        .get(KEY_FAILURE_REASON)
-        .and_then(|value| value.as_str())
-        .map(|reason| format!("reviewer {reviewer_id} failed: {reason}"))
-}
-
-fn synthesized_in_progress_reason(latest_governance_state: Option<&str>) -> TerminalReason {
-    let message = match latest_governance_state {
-        Some("awaiting_approval") => "governance approval is still pending",
-        Some("blocked") => "governed work is blocked pending intervention",
-        Some("governed_ready") => "governed work is ready for the next bounded step",
-        _ => "trace is still in progress",
-    };
-
-    TerminalReason::new(TerminalCondition::NoCredibleNextStep, message, None)
-}
-
-fn success_headline(payload: &serde_json::Value, attempts: usize) -> String {
-    let selection_reason = adaptive_selection_reason(payload);
-    if let Some(headline) = payload
-        .get("output")
-        .and_then(|output| output.get("workspace_slice"))
-        .and_then(|slice| slice.get("headline"))
-        .and_then(|value| value.as_str())
-    {
-        return selection_reason.map_or_else(
-            || format!("adaptive slice {headline}"),
-            |reason| format!("adaptive slice {headline}: {reason}"),
-        );
-    }
-
-    if let Some(change) = payload
-        .get("output")
-        .and_then(|output| output.get("change_evidence"))
-        .and_then(|value| value.as_array())
-        .and_then(|items| items.first())
-    {
-        let path = change.get("path").and_then(|value| value.as_str()).unwrap_or("workspace");
-        let before =
-            change.get("before_excerpt").and_then(|value| value.as_str()).unwrap_or("before");
-        let after = change.get("after_excerpt").and_then(|value| value.as_str()).unwrap_or("after");
-        return format!("updated {path} from {before} to {after} after {attempts} attempt(s)");
-    }
-
-    if let Some(changed_files) = payload
-        .get("output")
-        .and_then(|output| output.get("changed_files"))
-        .and_then(|value| value.as_array())
-    {
-        let changed_files =
-            changed_files.iter().filter_map(|item| item.as_str()).collect::<Vec<_>>();
-        if !changed_files.is_empty() {
-            return format!("updated {} after {attempts} attempt(s)", changed_files.join(", "));
-        }
-    }
-
-    if let Some(validation) = payload
-        .get("output")
-        .and_then(|output| output.get("validation"))
-        .or_else(|| payload.get("evidence").and_then(|evidence| evidence.get("validation_record")))
-    {
-        let command =
-            validation.get("command").and_then(|value| value.as_str()).unwrap_or("validation");
-        let succeeded =
-            validation.get("succeeded").and_then(|value| value.as_bool()).unwrap_or(false);
-        return format!(
-            "validation {} after {attempts} attempt(s) via {command}",
-            if succeeded { "passed" } else { "failed" }
-        );
-    }
-
-    format!("succeeded after {attempts} attempt(s)")
-}
-
-fn failure_headline(payload: &serde_json::Value, attempts: usize) -> String {
-    if let Some(exhaustion_reason) = payload
-        .get("evidence")
-        .and_then(|evidence| evidence.get("exhaustion_reason"))
-        .and_then(|value| value.as_str())
-    {
-        return format!(
-            "adaptive repair exhausted after {attempts} attempt(s): {exhaustion_reason}"
-        );
-    }
-
-    if let Some(validation) =
-        payload.get("evidence").and_then(|evidence| evidence.get("validation_record"))
-    {
-        let command =
-            validation.get("command").and_then(|value| value.as_str()).unwrap_or("validation");
-        let exit_code = validation
-            .get("exit_code")
-            .and_then(|value| value.as_i64())
-            .unwrap_or(UNKNOWN_VALIDATION_EXIT_CODE);
-        return adaptive_selection_reason(payload).map_or_else(
-            || {
-                format!(
-                    "validation failed after {attempts} attempt(s) via {command} (exit_code={exit_code})"
-                )
-            },
-            |reason| {
-                format!(
-                    "validation failed after {attempts} attempt(s) via {command} (exit_code={exit_code}) while {reason}"
-                )
-            },
-        );
-    }
-
-    format!("failed after {attempts} attempt(s)")
-}
-
-fn adaptive_selection_reason(payload: &serde_json::Value) -> Option<String> {
-    payload
-        .get("output")
-        .and_then(|output| output.get("selection_evidence"))
-        .or_else(|| payload.get("evidence").and_then(|evidence| evidence.get("selection_evidence")))
-        .and_then(|selection| selection.get("reason"))
-        .and_then(|value| value.as_str().map(str::to_string))
-}
-
-fn adaptive_evidence_lines(payload: &serde_json::Value) -> Vec<String> {
-    let mut lines = Vec::new();
-    let selection =
-        payload.get("output").and_then(|output| output.get("selection_evidence")).or_else(|| {
-            payload.get("evidence").and_then(|evidence| evidence.get("selection_evidence"))
-        });
-
-    if let Some(selection) = selection {
-        if let Some(candidate_family) =
-            selection.get("candidate_family").and_then(|value| value.as_str())
-        {
-            lines.push(format!("candidate_family: {candidate_family}"));
-        }
-
-        if let Some(reason) = selection.get("reason").and_then(|value| value.as_str()) {
-            lines.push(format!("selection_reason: {reason}"));
-        }
-
-        if let Some(rejected_candidates) =
-            selection.get("rejected_candidates").and_then(|value| value.as_array())
-        {
-            lines.extend(
-                rejected_candidates
-                    .iter()
-                    .filter_map(|item| item.as_str())
-                    .map(|item| format!("rejected_candidate: {item}")),
-            );
-        }
-    }
-
-    if let Some(exhaustion_reason) = payload
-        .get("evidence")
-        .and_then(|evidence| evidence.get("exhaustion_reason"))
-        .and_then(|value| value.as_str())
-    {
-        lines.push(format!("adaptive_exhaustion: {exhaustion_reason}"));
-    }
-
-    lines
 }
 
 fn parse_step_kind(raw: &str) -> Result<StepKind, TraceSummaryError> {
@@ -1877,13 +1117,15 @@ mod tests {
     use serde_json::json;
     use uuid::Uuid;
 
+    use super::projections::string_array_field;
+    use super::resolve::resolve_session_trace_ref;
+    use super::timeline::reviewer_line;
     use super::{
         InspectCommandError, TraceResolutionTarget, TraceSummaryError, adaptive_evidence_lines,
         corrected_command, decision_failure_evidence, decision_timeline_lines, failure_headline,
         governance_timeline_line, inspection_target_for, merge_guidance_projection_from_payload,
-        parse_step_kind, render_error, resolve_session_trace_ref, resolve_trace_path,
-        review_timeline_line, reviewer_line, string_array_field, success_headline, summarize_trace,
-        synthesized_in_progress_reason,
+        parse_step_kind, render_error, resolve_trace_path, review_timeline_line, success_headline,
+        summarize_trace, synthesized_in_progress_reason,
     };
     use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
     use crate::adapters::trace_store::{FileTraceStore, TraceStore};

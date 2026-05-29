@@ -1,3 +1,31 @@
+//! Pure domain model: value objects, aggregates, and deterministic algorithms.
+//!
+//! This module contains no I/O; all types are serializable and all functions
+//! are side-effect-free. The domain layer defines the vocabulary used by
+//! adapters, orchestrator, and CLI.
+//!
+//! # Key submodules
+//!
+//! | Module | Responsibility |
+//! |--------|----------------|
+//! | [`session`] | `ActiveSessionRecord`, `SessionStatus`, storage paths |
+//! | [`task`] | `Task`, `TaskStatus`, run requests/responses |
+//! | [`step`] | `Step`, `StepKind`, execution requests/results |
+//! | [`goal_plan`] | `GoalPlan`, context packs, planning projections |
+//! | [`governance`] | Canon modes, governed stages, lifecycle states |
+//! | [`configuration`] | Routing, runtime kinds, effort policies |
+//! | [`trace`] | `ExecutionTrace`, `TraceEvent`, event types |
+//! | [`audit`] | Audit entries, actors, algorithms, outcomes |
+//! | [`flow`] | Built-in flow definitions and step metadata |
+//! | [`review`] | Council profiles, vote rules, stop semantics |
+//! | [`reasoning`] | Reasoning profiles, debate, confidence levels |
+//! | [`cluster`] | Multi-workspace clusters and delivery stories |
+//! | [`brief`] | Authored brief normalization and ingestion |
+//! | [`project_memory`] | Governed evidence and contribution summaries |
+//! | [`context_intelligence`] | Retrieval candidates and semantic states |
+//! | [`guidance`] | Guidance/guardian capabilities and findings |
+//! | [`limits`] | Run budgets and terminal conditions |
+
 pub mod audit;
 pub mod auth_profile;
 pub mod brief;

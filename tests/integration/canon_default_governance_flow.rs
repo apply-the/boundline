@@ -109,6 +109,19 @@ fn governed_ready_response(
     .to_string()
 }
 
+fn write_packet_metadata(workspace: &Path, packet_ref: &str) {
+    fs::write(
+        workspace.join(packet_ref).join("packet-metadata.json"),
+        serde_json::to_string_pretty(&serde_json::json!({
+            "metadata": {
+                "publication_target_class": "evidence-bundle"
+            }
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+}
+
 fn request_headers_complete(buffer: &[u8]) -> Option<usize> {
     buffer.windows(4).position(|window| window == b"\r\n\r\n").map(|index| index + 4)
 }
@@ -845,6 +858,98 @@ fn multi_stage_canon_run_reuses_prior_governed_packet() {
             fs::read_to_string(workspace.join(".boundline/session.json")).unwrap_or_default();
         assert!(session.contains(r#""accumulated_context""#), "{session}");
         assert!(session.contains("discovery.md"), "{session}");
+
+        let _ = fs::remove_dir_all(&workspace);
+        let _ = fs::remove_dir_all(&canon_path);
+    });
+}
+
+#[test]
+#[cfg(unix)]
+fn governed_ready_packet_is_promoted_to_docs_evidence() {
+    with_scripted_openai_reviews(6, || {
+        let workspace = temp_canon_default_workspace("evidence-promotion");
+        seed_planning_reviewer_routes(&workspace);
+        let docs_dir = workspace.join("docs");
+        fs::create_dir_all(&docs_dir).unwrap();
+        fs::write(
+            docs_dir.join("prd.md"),
+            format!(
+                "# PRD\n\n{}",
+                planning_ready_brief(
+                    "Capture a governed discovery artifact and promote it as durable evidence.",
+                    "deliver one governed discovery packet and preserve it under docs/evidence",
+                    "discovery_packet, evidence_bundle, packet_lineage",
+                    "capture discovery context, record governed packet, preserve evidence bundle",
+                    "cargo test --quiet",
+                )
+            ),
+        )
+        .unwrap();
+
+        let packet_ref = ".canon/runs/run-evidence-001";
+        let document_ref = ".canon/runs/run-evidence-001/discovery.md";
+        let response = governed_ready_response(
+            "run-evidence-001",
+            packet_ref,
+            document_ref,
+            "discovery packet ready",
+            "Canon completed discovery",
+        );
+        let packet_dir = workspace.join(packet_ref);
+        fs::create_dir_all(&packet_dir).unwrap();
+        let source_doc = packet_dir.join("discovery.md");
+        fs::write(&source_doc, "# Discovery\n\nPromoted evidence bundle.\n").unwrap();
+        write_packet_metadata(&workspace, packet_ref);
+
+        let canon_path = write_capturing_canon_on_path("evidence-promotion", &workspace, &response);
+        write_canon_execution_profile(&workspace, &canon_path.join("canon"));
+
+        let output = run_boundline_in_with_path(
+            &workspace,
+            &["run", "--goal", "Capture governed discovery evidence", "--brief", "docs/prd.md"],
+            &canon_path,
+        );
+        let text = terminal_text(&output);
+        assert!(
+            text.contains("governance_completed: discovery packet ready"),
+            "expected governed discovery completion before asserting promotion: {text}"
+        );
+
+        let promoted_doc = workspace.join("docs/evidence/discovery/run-evidence-001/discovery.md");
+        let promoted_sidecar = workspace
+            .join("docs/evidence/discovery/run-evidence-001/discovery.packet-metadata.json");
+        assert!(
+            promoted_doc.is_file(),
+            "expected promoted evidence document at {}",
+            promoted_doc.display()
+        );
+        assert!(
+            promoted_sidecar.is_file(),
+            "expected promoted evidence sidecar at {}",
+            promoted_sidecar.display()
+        );
+        assert_eq!(
+            fs::read_to_string(&promoted_doc).unwrap(),
+            fs::read_to_string(&source_doc).unwrap()
+        );
+
+        let sidecar = fs::read_to_string(&promoted_sidecar).unwrap();
+        assert!(
+            sidecar.contains("\"source_ref\": \"canon-run:run-evidence-001\"")
+                || sidecar.contains(r#""source_ref":"canon-run:run-evidence-001""#),
+            "expected synthesized lineage source_ref in evidence sidecar: {sidecar}"
+        );
+        assert!(
+            sidecar.contains("\"promotion_state\": \"evidence-only\"")
+                || sidecar.contains(r#""promotion_state":"evidence-only""#),
+            "expected evidence-only promotion state in evidence sidecar: {sidecar}"
+        );
+        assert!(
+            sidecar.contains("\"publication_target_class\": \"evidence-bundle\"")
+                || sidecar.contains(r#""publication_target_class":"evidence-bundle""#),
+            "expected packet metadata to flow into promoted evidence sidecar: {sidecar}"
+        );
 
         let _ = fs::remove_dir_all(&workspace);
         let _ = fs::remove_dir_all(&canon_path);

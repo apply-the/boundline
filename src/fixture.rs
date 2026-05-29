@@ -1,3 +1,9 @@
+//! Test fixture utilities and execution-profile loaders.
+//!
+//! Shared between integration tests and the legacy compatibility layer for
+//! loading workspace execution profiles, bootstrapping fixture workspaces,
+//! and driving the compatibility execution engine.
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};

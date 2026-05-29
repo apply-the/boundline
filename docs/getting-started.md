@@ -79,6 +79,13 @@ Use `init` when you want Boundline to bootstrap workspace-local state, route
 defaults, and repo-local assistant surfaces. The authoritative session state
 still lives under `.boundline/`, especially `.boundline/session.json`.
 
+Init also creates the default repo-visible document roots `docs/project/` and
+`docs/evidence/`. Use `docs/project/` for stable reusable inputs, and use
+`docs/evidence/` for durable feature outputs that should remain in the
+repository after a delivery slice completes. See
+[project-memory-and-evidence-structure.md](project-memory-and-evidence-structure.md)
+for the ownership model.
+
 If you do not need a repo-local assistant surface yet, you can still run:
 
 ```bash

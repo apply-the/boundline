@@ -1,3 +1,9 @@
+#[path = "init/preview.rs"]
+mod preview;
+
+#[path = "init/report.rs"]
+mod report;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{self, IsTerminal, Write};
@@ -42,11 +48,24 @@ use crate::domain::domain_templates::{
 };
 use crate::domain::governance::CanonModeSelectionPreference;
 use crate::domain::governance::CanonRiskClass;
+use crate::domain::project_index::{ProjectDocRoots, resolve_project_doc_roots};
 use crate::domain::scaffold_manifest::{
     IdeSetupSelection, SCAFFOLD_MANIFEST_FILE_NAME, ScaffoldManifest, ScaffoldManifestEntry,
     ScaffoldOwnershipMode, ScaffoldTarget,
 };
 use crate::domain::workspace_hygiene::{merge_hygiene_content, plan_hygiene_defaults};
+
+use self::preview::{
+    InitPlannedChangesInput, WorkspaceInitPreview, build_init_planned_changes,
+    prepare_workspace_init_preview,
+};
+use self::report::{
+    render_cancelled_init_report, render_canon_workspace_bootstrap_failure_report,
+    render_guided_summary, render_init_canon_bootstrap_blocked_report,
+    render_init_preview_only_report, render_successful_init_report,
+    render_update_adopt_required_report, render_update_applied_report, render_update_diff_report,
+    render_update_force_required_report, render_update_preview_report, render_update_status_report,
+};
 
 const INIT_ROUTE_EXAMPLE: &str = "planning=copilot:gpt-4.1";
 const BUNDLED_MODEL_CATALOG: &str = include_str!("../../assistant/catalog/model-catalog.toml");
@@ -67,6 +86,8 @@ const DEFAULT_CANON_SYSTEM_CONTEXT: &str = "existing";
 const BOUNDLINE_DIR_RELATIVE: &str = ".boundline";
 const EXECUTION_PROFILE_FILE_NAME: &str = "execution.json";
 const BOUNDLINE_VERSION: &str = env!("CARGO_PKG_VERSION");
+const PROJECT_MEMORY_ROOT_README: &str = "# Project Memory\n\nUse this folder for stable repo-visible inputs that Boundline and Canon can reuse across planning and delivery. Keep curated project context here, such as domain language, architecture maps, operating constraints, and other maintained reference material.\n\nDo not store transient runtime artifacts here. Boundline runtime state stays under `.boundline/`, and raw Canon packets stay under `.canon/`.\n";
+const EVIDENCE_ROOT_README: &str = "# Evidence\n\nUse this folder for consolidated repo-visible feature outputs and evidence bundles that should remain readable after a delivery cycle completes. A typical layout is `docs/evidence/<feature-slug>/...`.\n\nDo not treat this folder as raw runtime storage. Boundline keeps transient governance artifacts under `.boundline/`, and Canon keeps raw run packets under `.canon/`.\n";
 #[cfg(not(test))]
 const CANON_INIT_SUBCOMMAND: &str = "init";
 #[cfg(not(test))]
@@ -787,6 +808,197 @@ impl UpdatePlan {
     }
 }
 
+#[derive(Debug)]
+struct InitApplyInputs<'a> {
+    scope: InitConfigScope,
+    template: InitTemplate,
+    interactive_terminal: bool,
+    workspace: Option<&'a Path>,
+    planned_changes: &'a [String],
+    workspace_canon_selected: bool,
+    canon_init_assistant: Option<CanonInitAssistantHost>,
+    global_env_template_path: Option<&'a Path>,
+    global_env_template_contents: Option<&'a str>,
+    global_config: Option<&'a ConfigFile>,
+    execution_path: Option<&'a Path>,
+    execution_contents: Option<&'a str>,
+    local_config: Option<&'a ConfigFile>,
+    local_env_template_path: Option<&'a Path>,
+    local_env_template_contents: Option<&'a str>,
+    assistant_assets: &'a [AssistantAsset],
+    docs_plan: &'a [DocsExportPlanEntry],
+    hygiene_plan: &'a [PlannedHygieneEntry],
+    ide_plan: &'a [PlannedIdeEntry],
+    manifest_path: Option<&'a Path>,
+    manifest_contents: Option<&'a str>,
+}
+
+#[derive(Debug, Default)]
+struct InitApplyOutcome {
+    project_doc_roots: Option<ProjectDocRoots>,
+    hygiene_actions: Vec<HygieneInitAction>,
+    assistant_actions: Vec<AssistantInitAction>,
+    docs_actions: Vec<DocsInitAction>,
+    ide_actions: Vec<IdeInitAction>,
+    canon_workspace_bootstrap: Option<CanonWorkspaceBootstrapReport>,
+}
+
+enum InitApplyExit {
+    Applied(InitApplyOutcome),
+    Report(InitCommandReport),
+}
+
+struct InitSuccessReportInputs<'a> {
+    scope: InitConfigScope,
+    export_docs: bool,
+    docs_output_dir: Option<&'a Path>,
+    resolved: &'a ResolvedInitInputs,
+    workspace: Option<&'a Path>,
+    global_config_path: Option<&'a Path>,
+    global_env_template_path: Option<&'a Path>,
+    execution_path: Option<&'a Path>,
+    local_config_path: Option<&'a Path>,
+    local_env_template_path: Option<&'a Path>,
+    manifest_path: Option<&'a Path>,
+    project_doc_roots: Option<&'a ProjectDocRoots>,
+    local_config: Option<&'a ConfigFile>,
+    global_config: Option<&'a ConfigFile>,
+    canon_bootstrap: Option<&'a CanonBootstrapReadiness>,
+    canon_workspace_bootstrap: Option<&'a CanonWorkspaceBootstrapReport>,
+    canon_init_assistant: Option<CanonInitAssistantHost>,
+    assistant_actions: &'a [AssistantInitAction],
+    docs_actions: &'a [DocsInitAction],
+    ide_actions: &'a [IdeInitAction],
+    hygiene_actions: &'a [HygieneInitAction],
+}
+
+/// Applies the scaffold changes after `execute_init` has already completed all
+/// preview-only and blocked guards.
+///
+/// The helper returns either the collected action summaries for final output or
+/// an already-rendered stop report when Canon workspace bootstrap fails.
+fn apply_init_scaffold_changes(
+    inputs: InitApplyInputs<'_>,
+) -> Result<InitApplyExit, InitCommandError> {
+    let InitApplyInputs {
+        scope,
+        template,
+        interactive_terminal,
+        workspace,
+        planned_changes,
+        workspace_canon_selected,
+        canon_init_assistant,
+        global_env_template_path,
+        global_env_template_contents,
+        global_config,
+        execution_path,
+        execution_contents,
+        local_config,
+        local_env_template_path,
+        local_env_template_contents,
+        assistant_assets,
+        docs_plan,
+        hygiene_plan,
+        ide_plan,
+        manifest_path,
+        manifest_contents,
+    } = inputs;
+    let mut outcome = InitApplyOutcome::default();
+
+    if let Some(workspace) = workspace
+        && workspace_canon_selected
+    {
+        let bootstrap_result =
+            run_init_activity("bootstrapping Canon workspace", interactive_terminal, || {
+                materialize_canon_workspace(workspace, canon_init_assistant)
+                    .map_err(InitCommandError::CanonWorkspaceBootstrap)
+            });
+        match bootstrap_result {
+            Ok(report) => outcome.canon_workspace_bootstrap = Some(report),
+            Err(InitCommandError::CanonWorkspaceBootstrap(detail)) => {
+                return Ok(InitApplyExit::Report(render_canon_workspace_bootstrap_failure_report(
+                    scope,
+                    workspace,
+                    template,
+                    &detail,
+                    planned_changes,
+                )));
+            }
+            Err(error) => return Err(error),
+        }
+    }
+
+    if let (Some(path), Some(contents)) = (global_env_template_path, global_env_template_contents) {
+        run_init_activity("writing global provider env template", interactive_terminal, || {
+            write_scaffold_file(path, contents)
+        })?;
+    }
+
+    if let Some(config) = global_config {
+        run_init_activity("writing global config", interactive_terminal, || {
+            FileConfigStore::save_global(config)?;
+            Ok(())
+        })?;
+    }
+
+    if let Some(workspace) = workspace {
+        let boundline_dir = workspace.join(BOUNDLINE_DIR_RELATIVE);
+        fs::create_dir_all(&boundline_dir).map_err(|source| InitCommandError::WriteFile {
+            path: boundline_dir.clone(),
+            source,
+        })?;
+        outcome.project_doc_roots = Some(ensure_workspace_project_doc_roots(workspace)?);
+        outcome.hygiene_actions = apply_workspace_hygiene_plan(workspace, hygiene_plan)?;
+
+        if let (Some(path), Some(contents)) = (execution_path, execution_contents) {
+            run_init_activity("writing execution profile", interactive_terminal, || {
+                fs::write(path, contents).map_err(|source| InitCommandError::WriteFile {
+                    path: path.to_path_buf(),
+                    source,
+                })
+            })?;
+        }
+
+        if let Some(local) = local_config {
+            let store = FileConfigStore::for_workspace(workspace);
+            run_init_activity("writing workspace config", interactive_terminal, || {
+                store.save_local(local)?;
+                Ok(())
+            })?;
+        }
+
+        if let (Some(path), Some(contents)) = (local_env_template_path, local_env_template_contents)
+        {
+            run_init_activity(
+                "writing workspace provider env template",
+                interactive_terminal,
+                || write_scaffold_file(path, contents),
+            )?;
+        }
+
+        outcome.assistant_actions =
+            run_init_activity("scaffolding assistant packs", interactive_terminal, || {
+                apply_assistant_assets(workspace, assistant_assets)
+            })?;
+        outcome.docs_actions =
+            run_init_activity("exporting repo-local docs", interactive_terminal, || {
+                apply_docs_plan(workspace, docs_plan)
+            })?;
+        outcome.ide_actions =
+            run_init_activity("scaffolding IDE setup", interactive_terminal, || {
+                apply_ide_setup(workspace, ide_plan)
+            })?;
+
+        if let (Some(path), Some(contents)) = (manifest_path, manifest_contents) {
+            run_init_activity("writing scaffold manifest", interactive_terminal, || {
+                write_scaffold_file(path, contents)
+            })?;
+        }
+    }
+
+    Ok(InitApplyExit::Applied(outcome))
+}
+
 pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, InitCommandError> {
     validate_docs_export_options(&request)?;
 
@@ -850,159 +1062,41 @@ pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, I
     let mut local_config_path = None;
     let mut local_env_template_path = None;
     let mut local_env_template_contents = None;
-    let mut local_env_template_status = None;
     let mut execution_path = None;
     let mut execution_contents = None;
-    let mut execution_status = None;
-    let mut config_status = None;
     let mut assistant_assets = Vec::new();
-    let mut assistant_actions_preview = Vec::new();
-    let mut docs_assets = Vec::new();
     let mut docs_plan = Vec::new();
     let mut hygiene_plan = Vec::new();
     let mut ide_plan = Vec::new();
     let mut manifest_path = None;
     let mut manifest_contents = None;
-    let mut manifest_status = None;
+    let mut workspace_preview = None;
 
     if let Some(workspace) = workspace {
-        let store = FileConfigStore::for_workspace(workspace);
-        let boundline_dir = workspace.join(BOUNDLINE_DIR_RELATIVE);
-        let current_execution_path = boundline_dir.join(EXECUTION_PROFILE_FILE_NAME);
-        let current_local_config_path = store.local_config_path();
-        let current_local_env_template_path = provider_workspace_env_template_path(workspace);
-        let existing_manifest = load_scaffold_manifest(workspace)?;
-        let ide_setup =
-            resolve_ide_setup(request.ide, request.auto_approve, existing_manifest.as_ref());
-        let existing_local = store.load_local()?;
-        let mut local = existing_local.clone().unwrap_or_default();
-        apply_init_preferences(
-            &mut local,
-            &resolved.catalog,
-            &resolved.effective_assistants,
-            &resolved.effective_routes,
-            InitPreferenceOverrides {
-                seed_canon_reviewer_routes: resolved.effective_canon_mode_selection.is_some(),
-                canon_mode_selection: resolved.effective_canon_mode_selection,
-                risk: request.risk,
-                zone: request.zone,
-                owner: request.owner,
-            },
-        );
-        apply_requested_domain_templates(
-            &mut local.routing.domain_templates,
-            resolved.requested_domain_templates.clone(),
-        );
-        local
-            .routing
-            .validate()
-            .map_err(|source| InitCommandError::InvalidDomainTemplate(source.to_string()))?;
-        let active_domains = local
-            .routing
-            .domain_templates
-            .iter()
-            .filter_map(
-                |(family, settings)| {
-                    if settings.enabled.unwrap_or(false) { Some(*family) } else { None }
-                },
-            )
-            .collect::<BTreeSet<_>>();
+        let preview = prepare_workspace_init_preview(workspace, &request, &resolved)?;
 
-        let current_local_config_contents = toml::to_string_pretty(&local).map_err(|source| {
-            InitCommandError::SerializeConfigPreview {
-                path: current_local_config_path.clone(),
-                source,
-            }
-        })?;
-
-        let current_execution_contents =
-            render_execution_profile_contents(resolved.template, local.canon.as_ref())?;
-        let current_execution_status =
-            scaffold_file_status(&current_execution_path, &current_execution_contents)?;
-        let current_config_status = match existing_local.as_ref() {
-            Some(saved) if saved == &local => ScaffoldFileStatus::Unchanged,
-            Some(_) => ScaffoldFileStatus::Update,
-            None => ScaffoldFileStatus::Create,
-        };
-        let current_local_env_template_contents =
-            render_provider_env_template(ProviderEnvTemplateScope::Workspace);
-        let current_local_env_template_status = scaffold_file_status(
-            &current_local_env_template_path,
-            &current_local_env_template_contents,
-        )?;
-
-        assistant_assets = assets_for_assistants(&resolved.effective_assistants);
-        assistant_actions_preview = summarize_assistant_assets(workspace, &assistant_assets)?;
-        hygiene_plan = plan_workspace_hygiene_defaults(workspace, &active_domains)?;
-        ide_plan = plan_ide_setup(workspace, &ide_setup)?;
-
-        if request.export_docs {
-            docs_assets = match request.docs_output_dir {
-                Some(docs_root) => {
-                    docs_assets_for_assistants_under(&resolved.effective_assistants, docs_root)
-                }
-                None => docs_assets_for_assistants(&resolved.effective_assistants),
-            };
-            docs_plan = plan_docs_export(workspace, &docs_assets)?;
-
-            if request.docs_diff {
-                return Ok(InitCommandReport::new(
-                    CommandExitStatus::Succeeded,
-                    render_docs_export_diff_report(request.docs_output_dir, &docs_plan),
-                ));
-            }
-
-            if !request.docs_refresh
-                && !request.force
-                && docs_plan.iter().any(|entry| entry.status != DocsExportFileStatus::Create)
-            {
-                return Ok(InitCommandReport::new(
-                    CommandExitStatus::NonSuccess,
-                    render_docs_export_conflict_report(request.docs_output_dir, &docs_plan),
-                ));
-            }
+        if request.docs_diff {
+            return Ok(InitCommandReport::new(
+                CommandExitStatus::Succeeded,
+                render_docs_export_diff_report(request.docs_output_dir, &preview.docs_plan),
+            ));
         }
 
-        let current_manifest_path = scaffold_manifest_path(workspace);
-        let current_manifest = build_workspace_scaffold_manifest(
-            existing_manifest.as_ref(),
-            Some(resolved.template),
-            &collect_workspace_scaffold_artifacts(
-                workspace,
-                Some((&current_local_config_path, current_local_config_contents.as_str())),
-                Some((
-                    &current_local_env_template_path,
-                    current_local_env_template_contents.as_str(),
-                )),
-                Some((&current_execution_path, current_execution_contents.as_str())),
-                &assistant_assets,
-                &docs_assets,
-                &hygiene_plan,
-                &ide_plan,
-            ),
-            &ide_setup,
-        );
-        let current_manifest_contents =
-            serialize_scaffold_manifest(&current_manifest, &current_manifest_path)?;
-        let current_manifest_status =
-            scaffold_file_status(&current_manifest_path, &current_manifest_contents)?;
+        if !request.docs_refresh && !request.force && preview.has_docs_refresh_conflicts() {
+            return Ok(InitCommandReport::new(
+                CommandExitStatus::NonSuccess,
+                render_docs_export_conflict_report(request.docs_output_dir, &preview.docs_plan),
+            ));
+        }
 
-        local_config = Some(local);
-        local_config_path = Some(current_local_config_path);
-        local_env_template_path = Some(current_local_env_template_path);
-        local_env_template_contents = Some(current_local_env_template_contents);
-        local_env_template_status = Some(current_local_env_template_status);
-        execution_path = Some(current_execution_path);
-        execution_contents = Some(current_execution_contents);
-        execution_status = Some(current_execution_status);
-        config_status = Some(current_config_status);
-        manifest_path = Some(current_manifest_path);
-        manifest_contents = Some(current_manifest_contents);
-        manifest_status = Some(current_manifest_status);
+        workspace_preview = Some(preview);
     }
 
     let workspace_canon_selected = scope_includes_workspace(request.scope)
-        && canon_selected_for_init(local_config.as_ref(), global_config.as_ref());
+        && canon_selected_for_init(
+            workspace_preview.as_ref().map(|preview| &preview.local_config),
+            global_config.as_ref(),
+        );
     let canon_init_assistant = workspace_canon_selected
         .then(|| {
             preferred_canon_init_assistant(
@@ -1012,142 +1106,81 @@ pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, I
         })
         .flatten();
 
-    let mut planned = Vec::new();
-    if let (Some(status), Some(path)) = (global_status, global_config_path.as_ref())
-        && status != ScaffoldFileStatus::Unchanged
-    {
-        planned.push(format!("- {} {}", status.label(), path.display()));
-    }
-    if let (Some(status), Some(path)) =
-        (global_env_template_status, global_env_template_path.as_ref())
-        && status != ScaffoldFileStatus::Unchanged
-    {
-        planned.push(format!("- {} {}", status.label(), path.display()));
-    }
-    if let (Some(status), Some(path)) = (execution_status, execution_path.as_ref())
-        && status != ScaffoldFileStatus::Unchanged
-    {
-        planned.push(format!("- {} {}", status.label(), path.display()));
-    }
-    if let (Some(status), Some(path)) = (config_status, local_config_path.as_ref())
-        && status != ScaffoldFileStatus::Unchanged
-    {
-        planned.push(format!("- {} {}", status.label(), path.display()));
-    }
-    if let (Some(status), Some(path)) =
-        (local_env_template_status, local_env_template_path.as_ref())
-        && status != ScaffoldFileStatus::Unchanged
-    {
-        planned.push(format!("- {} {}", status.label(), path.display()));
-    }
-    if let (Some(status), Some(path)) = (manifest_status, manifest_path.as_ref())
-        && status != ScaffoldFileStatus::Unchanged
-    {
-        planned.push(format!("- {} {}", status.label(), path.display()));
-    }
-    if scope_includes_workspace(request.scope) {
-        if resolved.requested_domain_templates.is_empty() {
-            planned.push("- leave domain templates unseeded".to_string());
-        } else {
-            planned.push(format!(
-                "- seed {} domain template(s)",
-                resolved.requested_domain_templates.len()
-            ));
-        }
+    let planned = build_init_planned_changes(InitPlannedChangesInput {
+        scope: request.scope,
+        requested_domain_template_count: resolved.requested_domain_templates.len(),
+        workspace,
+        workspace_preview: workspace_preview.as_ref(),
+        global_status,
+        global_config_path: global_config_path.as_deref(),
+        global_env_template_status,
+        global_env_template_path: global_env_template_path.as_deref(),
+        workspace_canon_selected,
+        canon_init_assistant,
+    });
 
-        if assistant_assets.is_empty() {
-            planned.push("- skip assistant command-pack scaffolding".to_string());
-        } else {
-            planned.extend(plan_assistant_setup(&assistant_actions_preview));
-        }
-        if !docs_plan.is_empty() {
-            planned.extend(plan_docs_setup(&docs_plan));
-        }
-        if !ide_plan.is_empty() {
-            planned.extend(ide_plan.iter().map(|entry| {
-                format!(
-                    "- scaffold {} IDE {} ({})",
-                    entry.action.ide, entry.action.setup_kind, entry.action.path
-                )
-            }));
-        }
-        if let Some(workspace) = workspace
-            && workspace_canon_selected
-        {
-            planned.extend(canon_workspace_planned_changes(workspace, canon_init_assistant));
-        }
-    } else {
-        planned.push("- leave workspace artifacts unchanged".to_string());
-    }
-
-    let canon_bootstrap = canon_bootstrap_readiness(local_config.as_ref(), global_config.as_ref());
+    let canon_bootstrap = canon_bootstrap_readiness(
+        workspace_preview.as_ref().map(|preview| &preview.local_config),
+        global_config.as_ref(),
+    );
     if let Some(canon_bootstrap) = canon_bootstrap.as_ref()
         && !canon_bootstrap.ready
     {
-        let mut lines = vec![
-            "init: blocked - Canon surface not ready".to_string(),
-            format!("scope: {}", request.scope),
-        ];
-        if scope_includes_workspace(request.scope) {
-            lines.push(format!("template: {}", template_label(resolved.template)));
-        }
-        lines.push(format!("canon_bootstrap: {}", canon_bootstrap.state));
-        lines.push(format!("canon_surface: {}", canon_bootstrap.detail));
-        lines.push("repair_actions:".to_string());
-        if canon_bootstrap.repair_actions.is_empty() {
-            lines.push("- verify the Canon installation and rerun init".to_string());
-        } else {
-            lines.extend(canon_bootstrap.repair_actions.iter().map(|action| format!("- {action}")));
-        }
-        lines.push("planned_changes:".to_string());
-        if planned.is_empty() {
-            lines.push("- none".to_string());
-        } else {
-            lines.extend(planned.iter().cloned());
-        }
-        lines.push("next_steps:".to_string());
-        lines.push("- repair Canon and rerun the same init command".to_string());
-        if let Some(workspace) = workspace {
-            lines.push(format!("- verify workspace: {}", init_doctor_command(workspace)));
-        }
-        if scope_includes_global(request.scope) {
-            lines.push(format!("- verify install: {}", init_install_doctor_command()));
-        }
-        return Ok(InitCommandReport::new(CommandExitStatus::NonSuccess, lines.join("\n")));
+        return Ok(render_init_canon_bootstrap_blocked_report(
+            &request,
+            workspace,
+            resolved.template,
+            canon_bootstrap,
+            &planned,
+        ));
     }
 
     let scaffold_updates_pending = global_status == Some(ScaffoldFileStatus::Update)
         || global_env_template_status == Some(ScaffoldFileStatus::Update)
-        || execution_status == Some(ScaffoldFileStatus::Update)
-        || config_status == Some(ScaffoldFileStatus::Update)
-        || local_env_template_status == Some(ScaffoldFileStatus::Update)
-        || assistant_actions_preview.iter().any(|action| action.updated_files > 0);
+        || workspace_preview.as_ref().is_some_and(WorkspaceInitPreview::scaffold_updates_pending);
 
     if scaffold_updates_pending && !request.force {
-        let mut lines = vec![
-            "init: preview only - existing Boundline files would be updated".to_string(),
-            format!("scope: {}", request.scope),
-            "why_stopped:".to_string(),
-            "- existing Boundline configuration or selected scaffold outputs are already present"
-                .to_string(),
-            "- rerun the same command with --force to apply updates".to_string(),
-            "planned_changes:".to_string(),
-        ];
-        if scope_includes_workspace(request.scope) {
-            lines.insert(2, format!("template: {}", template_label(resolved.template)));
-        }
-        lines.extend(planned.iter().cloned());
-        lines.push("next_steps:".to_string());
-        lines.push("- rerun the same command with --force".to_string());
-        if scope_includes_workspace(request.scope)
-            && let Some(workspace) = workspace
-        {
-            lines.push(format!("- inspect current config: {}", init_inspect_command(workspace)));
-        }
-        if scope_includes_global(request.scope) {
-            lines.push(format!("- inspect global config: {}", init_global_inspect_command()));
-        }
-        return Ok(InitCommandReport::new(CommandExitStatus::NonSuccess, lines.join("\n")));
+        return Ok(render_init_preview_only_report(
+            &request,
+            workspace,
+            resolved.template,
+            &planned,
+        ));
+    }
+
+    if let Some(preview) = workspace_preview {
+        let WorkspaceInitPreview {
+            local_config: preview_local_config,
+            local_config_path: preview_local_config_path,
+            local_env_template_path: preview_local_env_template_path,
+            local_env_template_contents: preview_local_env_template_contents,
+            local_env_template_status: _,
+            execution_path: preview_execution_path,
+            execution_contents: preview_execution_contents,
+            execution_status: _,
+            config_status: _,
+            assistant_assets: preview_assistant_assets,
+            assistant_actions_preview: _,
+            docs_plan: preview_docs_plan,
+            hygiene_plan: preview_hygiene_plan,
+            ide_plan: preview_ide_plan,
+            manifest_path: preview_manifest_path,
+            manifest_contents: preview_manifest_contents,
+            manifest_status: _,
+        } = preview;
+
+        local_config = Some(preview_local_config);
+        local_config_path = Some(preview_local_config_path);
+        local_env_template_path = Some(preview_local_env_template_path);
+        local_env_template_contents = Some(preview_local_env_template_contents);
+        execution_path = Some(preview_execution_path);
+        execution_contents = Some(preview_execution_contents);
+        assistant_assets = preview_assistant_assets;
+        docs_plan = preview_docs_plan;
+        hygiene_plan = preview_hygiene_plan;
+        ide_plan = preview_ide_plan;
+        manifest_path = Some(preview_manifest_path);
+        manifest_contents = Some(preview_manifest_contents);
     }
 
     let mut default_interactor: Box<dyn InitInteractor> = Box::new(DialoguerInitInteractor);
@@ -1181,313 +1214,64 @@ pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, I
         }
     }
 
-    let mut hygiene_actions = Vec::new();
-    let mut assistant_actions = Vec::new();
-    let mut docs_actions = Vec::new();
-    let mut ide_actions = Vec::new();
-    let mut canon_workspace_bootstrap = None;
-
-    if let Some(workspace) = workspace
-        && workspace_canon_selected
-    {
-        let bootstrap_result = run_init_activity(
-            "bootstrapping Canon workspace",
-            resolved.interactive_terminal,
-            || {
-                materialize_canon_workspace(workspace, canon_init_assistant)
-                    .map_err(InitCommandError::CanonWorkspaceBootstrap)
-            },
-        );
-        match bootstrap_result {
-            Ok(report) => canon_workspace_bootstrap = Some(report),
-            Err(InitCommandError::CanonWorkspaceBootstrap(detail)) => {
-                return Ok(render_canon_workspace_bootstrap_failure_report(
-                    request.scope,
-                    workspace,
-                    resolved.template,
-                    &detail,
-                    &planned,
-                ));
-            }
-            Err(error) => return Err(error),
-        }
-    }
-
-    if let (Some(path), Some(contents)) =
-        (global_env_template_path.as_ref(), global_env_template_contents.as_ref())
-    {
-        run_init_activity(
-            "writing global provider env template",
-            resolved.interactive_terminal,
-            || write_scaffold_file(path, contents),
-        )?;
-    }
-
-    if let Some(config) = global_config.as_ref() {
-        run_init_activity("writing global config", resolved.interactive_terminal, || {
-            FileConfigStore::save_global(config)?;
-            Ok(())
-        })?;
-    }
-
-    if let Some(workspace) = workspace {
-        let boundline_dir = workspace.join(BOUNDLINE_DIR_RELATIVE);
-        fs::create_dir_all(&boundline_dir).map_err(|source| InitCommandError::WriteFile {
-            path: boundline_dir.clone(),
-            source,
-        })?;
-        hygiene_actions = apply_workspace_hygiene_plan(workspace, &hygiene_plan)?;
-
-        if let (Some(path), Some(contents)) = (execution_path.as_ref(), execution_contents.as_ref())
-        {
-            run_init_activity("writing execution profile", resolved.interactive_terminal, || {
-                fs::write(path, contents)
-                    .map_err(|source| InitCommandError::WriteFile { path: path.clone(), source })
-            })?;
-        }
-
-        if let Some(local) = local_config.as_ref() {
-            let store = FileConfigStore::for_workspace(workspace);
-            run_init_activity("writing workspace config", resolved.interactive_terminal, || {
-                store.save_local(local)?;
-                Ok(())
-            })?;
-        }
-
-        if let (Some(path), Some(contents)) =
-            (local_env_template_path.as_ref(), local_env_template_contents.as_ref())
-        {
-            run_init_activity(
-                "writing workspace provider env template",
-                resolved.interactive_terminal,
-                || write_scaffold_file(path, contents),
-            )?;
-        }
-
-        assistant_actions = run_init_activity(
-            "scaffolding assistant packs",
-            resolved.interactive_terminal,
-            || apply_assistant_assets(workspace, &assistant_assets),
-        )?;
-        docs_actions =
-            run_init_activity("exporting repo-local docs", resolved.interactive_terminal, || {
-                apply_docs_plan(workspace, &docs_plan)
-            })?;
-        ide_actions =
-            run_init_activity("scaffolding IDE setup", resolved.interactive_terminal, || {
-                apply_ide_setup(workspace, &ide_plan)
-            })?;
-
-        if let (Some(path), Some(contents)) = (manifest_path.as_ref(), manifest_contents.as_ref()) {
-            run_init_activity("writing scaffold manifest", resolved.interactive_terminal, || {
-                write_scaffold_file(path, contents)
-            })?;
-        }
-    }
-
-    let capabilities = resolved
-        .effective_assistants
-        .iter()
-        .map(|assistant| {
-            format!("- {}: {}", assistant.as_str(), assistant_host_capability_line(*assistant))
-        })
-        .collect::<Vec<_>>();
-
-    let summary_line = match request.scope {
-        InitConfigScope::Global => "init: global configuration initialized",
-        InitConfigScope::Workspace => "init: workspace initialized",
-        InitConfigScope::Both => "init: configuration initialized",
+    let InitApplyOutcome {
+        project_doc_roots: apply_project_doc_roots,
+        hygiene_actions,
+        assistant_actions,
+        docs_actions,
+        ide_actions,
+        canon_workspace_bootstrap,
+    } = match apply_init_scaffold_changes(InitApplyInputs {
+        scope: request.scope,
+        template: resolved.template,
+        interactive_terminal: resolved.interactive_terminal,
+        workspace,
+        planned_changes: &planned,
+        workspace_canon_selected,
+        canon_init_assistant,
+        global_env_template_path: global_env_template_path.as_deref(),
+        global_env_template_contents: global_env_template_contents.as_deref(),
+        global_config: global_config.as_ref(),
+        execution_path: execution_path.as_deref(),
+        execution_contents: execution_contents.as_deref(),
+        local_config: local_config.as_ref(),
+        local_env_template_path: local_env_template_path.as_deref(),
+        local_env_template_contents: local_env_template_contents.as_deref(),
+        assistant_assets: &assistant_assets,
+        docs_plan: &docs_plan,
+        hygiene_plan: &hygiene_plan,
+        ide_plan: &ide_plan,
+        manifest_path: manifest_path.as_deref(),
+        manifest_contents: manifest_contents.as_deref(),
+    })? {
+        InitApplyExit::Applied(outcome) => outcome,
+        InitApplyExit::Report(report) => return Ok(report),
     };
-    let mut lines = vec![summary_line.to_string(), format!("scope: {}", request.scope)];
-    if scope_includes_workspace(request.scope) {
-        lines.push(format!("template: {}", template_label(resolved.template)));
-    }
-    if let Some(path) = global_config_path.as_ref() {
-        lines.push(format!("global_config: {}", path.display()));
-    }
-    if let Some(path) = global_env_template_path.as_ref() {
-        lines.push(format!("global_provider_env_template: {}", path.display()));
-    }
-    if let Some(path) = execution_path.as_ref() {
-        lines.push(format!("execution_profile: {}", path.display()));
-    }
-    if let Some(path) = local_config_path.as_ref() {
-        lines.push(format!("workspace_config: {}", path.display()));
-    }
-    if let Some(path) = local_env_template_path.as_ref() {
-        lines.push(format!("workspace_provider_env_template: {}", path.display()));
-    }
-    if let Some(path) = manifest_path.as_ref() {
-        lines.push(format!("workspace_scaffold_manifest: {}", path.display()));
-    }
+    let project_doc_roots = apply_project_doc_roots;
 
-    if !capabilities.is_empty() {
-        lines.push("runtime_capabilities:".to_string());
-        lines.extend(capabilities);
-    }
-
-    lines.push("route_setup:".to_string());
-    lines.extend(route_setup_lines(
-        &resolved.catalog,
-        &resolved.effective_assistants,
-        resolved.guided_answers.as_ref(),
-        &resolved.explicit_routes,
-        &resolved.guided_routes,
-        &resolved.seeded_routes,
-        scope_includes_workspace(request.scope)
-            .then(|| workspace.map(init_inspect_command))
-            .flatten()
-            .unwrap_or_else(init_global_inspect_command),
-    ));
-
-    if let Some(canon) = local_config
-        .as_ref()
-        .and_then(|config| config.canon.as_ref())
-        .or_else(|| global_config.as_ref().and_then(|config| config.canon.as_ref()))
-    {
-        lines.push(format!("canon_mode_selection: {}", canon.mode_selection));
-        if let Some(canon_bootstrap) = canon_bootstrap.as_ref() {
-            lines.push(format!("canon_bootstrap: {}", canon_bootstrap.state));
-            lines.push(format!("canon_surface: {}", canon_bootstrap.detail));
-        }
-        if let Some(canon_workspace_bootstrap) = canon_workspace_bootstrap.as_ref() {
-            lines.push(format!("{CANON_BOOTSTRAP_NOTE_LABEL}:"));
-            lines.push(format!("- canon_root: {}", canon_workspace_bootstrap.canon_root.display()));
-            if let Some(assistant) = canon_init_assistant {
-                lines.push(format!("- ai: {}", assistant.as_str()));
-            }
-            lines.push(format!(
-                "- methods_materialized: {}",
-                canon_workspace_bootstrap.methods_materialized
-            ));
-            lines.push(format!(
-                "- policies_materialized: {}",
-                canon_workspace_bootstrap.policies_materialized
-            ));
-            lines.push(format!(
-                "- skills_materialized: {}",
-                canon_workspace_bootstrap.skills_materialized
-            ));
-            lines.push(format!(
-                "- claude_md_created: {}",
-                canon_workspace_bootstrap.claude_md_created
-            ));
-        }
-    }
-
-    if scope_includes_workspace(request.scope) {
-        if assistant_actions.is_empty() {
-            lines.push("assistant_setup: none".to_string());
-        } else {
-            lines.push("assistant_package_scope: repo-local".to_string());
-            lines.push(
-                "assistant_global_bootstrap: use `boundline assistant install --host <host> --scope user` before workspace init"
-                    .to_string(),
-            );
-            lines.push("assistant_setup:".to_string());
-            lines.extend(assistant_actions.iter().map(|action| {
-                format!(
-                    "- {}: {} created, {} updated, {} unchanged",
-                    action.surface.plan_label(),
-                    action.created_files,
-                    action.updated_files,
-                    action.unchanged_files
-                )
-            }));
-        }
-
-        if request.export_docs {
-            if docs_actions.is_empty() {
-                lines.push("docs_export: none".to_string());
-            } else {
-                lines.push("docs_export:".to_string());
-                lines
-                    .push(format!("- root: {}", docs_export_root_display(request.docs_output_dir)));
-                lines.extend(docs_actions.iter().map(|action| {
-                    format!(
-                        "- {}: {} created, {} updated, {} unchanged",
-                        action.surface.plan_label(),
-                        action.created_files,
-                        action.updated_files,
-                        action.unchanged_files
-                    )
-                }));
-            }
-        }
-
-        if ide_actions.is_empty() {
-            lines.push("ide_setup: none".to_string());
-        } else {
-            lines.push("ide_setup:".to_string());
-            lines.extend(ide_actions.iter().map(|action| {
-                format!(
-                    "- {}: {} {} path={}",
-                    action.ide, action.setup_kind, action.status, action.path
-                )
-            }));
-        }
-
-        if let Some(local) = local_config.as_ref() {
-            if local.routing.domain_templates.is_empty() {
-                lines.push("domain_templates: none".to_string());
-            } else {
-                lines.push("domain_templates:".to_string());
-                for (family, settings) in &local.routing.domain_templates {
-                    lines.push(format!(
-                        "- {}: enabled={}",
-                        family.as_str(),
-                        settings.enabled.unwrap_or(false)
-                    ));
-                    if let Some(standards) = settings.standards.as_deref().map(str::trim)
-                        && !standards.is_empty()
-                    {
-                        lines.push(format!("  standards: {standards}"));
-                    }
-                    if !settings.external_context_bindings.is_empty() {
-                        lines.push(format!(
-                            "  external_context_bindings: {}",
-                            settings.external_context_bindings.len()
-                        ));
-                    }
-                }
-            }
-        }
-
-        if hygiene_actions.is_empty() {
-            lines.push("workspace_hygiene: none".to_string());
-        } else {
-            lines.push("workspace_hygiene:".to_string());
-            lines.extend(hygiene_actions.iter().map(|action| {
-                let sources = if action.sources.is_empty() {
-                    "none".to_string()
-                } else {
-                    action.sources.join(",")
-                };
-                format!(
-                    "- {}: {} added={} preserved={} sources={}",
-                    action.path,
-                    action.status,
-                    action.added_patterns,
-                    action.preserved_custom_lines,
-                    sources
-                )
-            }));
-        }
-    } else {
-        lines.push("workspace_artifacts: skipped in global scope".to_string());
-    }
-
-    lines.push("next_steps:".to_string());
-    if let Some(workspace) = workspace {
-        lines.push(format!("- inspect effective config: {}", init_inspect_command(workspace)));
-        lines.push(format!("- verify workspace: {}", init_doctor_command(workspace)));
-    }
-    if scope_includes_global(request.scope) {
-        lines.push(format!("- inspect global config: {}", init_global_inspect_command()));
-        lines.push(format!("- verify install: {}", init_install_doctor_command()));
-    }
-
-    Ok(InitCommandReport::new(CommandExitStatus::Succeeded, lines.join("\n")))
+    Ok(render_successful_init_report(InitSuccessReportInputs {
+        scope: request.scope,
+        export_docs: request.export_docs,
+        docs_output_dir: request.docs_output_dir,
+        resolved: &resolved,
+        workspace,
+        global_config_path: global_config_path.as_deref(),
+        global_env_template_path: global_env_template_path.as_deref(),
+        execution_path: execution_path.as_deref(),
+        local_config_path: local_config_path.as_deref(),
+        local_env_template_path: local_env_template_path.as_deref(),
+        manifest_path: manifest_path.as_deref(),
+        project_doc_roots: project_doc_roots.as_ref(),
+        local_config: local_config.as_ref(),
+        global_config: global_config.as_ref(),
+        canon_bootstrap: canon_bootstrap.as_ref(),
+        canon_workspace_bootstrap: canon_workspace_bootstrap.as_ref(),
+        canon_init_assistant,
+        assistant_actions: &assistant_actions,
+        docs_actions: &docs_actions,
+        ide_actions: &ide_actions,
+        hygiene_actions: &hygiene_actions,
+    }))
 }
 
 pub fn execute_update(request: UpdateRequest<'_>) -> Result<UpdateCommandReport, InitCommandError> {
@@ -1685,6 +1469,7 @@ pub fn execute_update(request: UpdateRequest<'_>) -> Result<UpdateCommandReport,
         ));
     }
 
+    ensure_workspace_project_doc_roots(&workspace)?;
     apply_update_plan(&workspace, &plan, &desired_artifacts)?;
     write_scaffold_file(&manifest_path, &manifest_contents)?;
 
@@ -1765,326 +1550,6 @@ fn workspace_has_exported_docs(workspace: &Path, assistants: &[AssistantHostKind
         .any(|path| path.is_file())
 }
 
-fn collect_update_entries(plan: &UpdatePlan, action: UpdatePlanAction) -> Vec<&UpdatePlanEntry> {
-    plan.entries.iter().filter(|entry| entry.action == action).collect()
-}
-
-fn render_update_plan_entry(entry: &UpdatePlanEntry) -> String {
-    format!("- [{}] {}: {}", entry.action.label(), entry.path, entry.detail)
-}
-
-fn append_update_summary(lines: &mut Vec<String>, plan: &UpdatePlan) {
-    lines.push("summary:".to_string());
-    let mut emitted = false;
-    for action in [
-        UpdatePlanAction::Create,
-        UpdatePlanAction::Replace,
-        UpdatePlanAction::Merge,
-        UpdatePlanAction::Adopt,
-        UpdatePlanAction::AdoptCurrent,
-        UpdatePlanAction::Orphaned,
-        UpdatePlanAction::Remove,
-        UpdatePlanAction::Conflict,
-    ] {
-        let count = plan.count_by_action(action);
-        if count > 0 {
-            emitted = true;
-            lines.push(format!("- {}: {}", action.label(), count));
-        }
-    }
-    if !emitted {
-        lines.push("- unchanged: all managed scaffold artifacts are current".to_string());
-    }
-}
-
-fn append_update_section(lines: &mut Vec<String>, heading: &str, entries: &[&UpdatePlanEntry]) {
-    if entries.is_empty() {
-        return;
-    }
-
-    lines.push(format!("{heading}:"));
-    lines.extend(entries.iter().map(|entry| render_update_plan_entry(entry)));
-}
-
-fn render_update_manifest_state(
-    existing_manifest: Option<&ScaffoldManifest>,
-    plan: &UpdatePlan,
-) -> &'static str {
-    if existing_manifest.is_none() {
-        "missing"
-    } else if plan.requires_adopt() {
-        "adoption_required"
-    } else if plan.requires_force() {
-        "drifted"
-    } else if plan.count_by_action(UpdatePlanAction::Orphaned) > 0 {
-        "orphaned"
-    } else {
-        "present"
-    }
-}
-
-fn render_update_preview_report(
-    workspace: &Path,
-    targets: &BTreeSet<UpdateTarget>,
-    plan: &UpdatePlan,
-    manifest_path: &Path,
-    manifest_status: ScaffoldFileStatus,
-) -> String {
-    let mut lines = vec![
-        if plan.has_changes() || manifest_status != ScaffoldFileStatus::Unchanged {
-            "update: preview only - workspace-managed scaffold changes detected".to_string()
-        } else {
-            "update: preview only - workspace-managed scaffold is current".to_string()
-        },
-        format!("workspace: {}", workspace.display()),
-        format!("targets: {}", render_update_targets(targets)),
-        format!("manifest: {}", if plan.manifest_present { "present" } else { "missing" }),
-    ];
-    append_update_summary(&mut lines, plan);
-    if manifest_status != ScaffoldFileStatus::Unchanged {
-        lines.push("manifest_changes:".to_string());
-        lines.push(format!("- [{}] {}", manifest_status.label(), manifest_path.display()));
-    }
-    let change_entries =
-        plan.entries.iter().filter(|entry| entry.action.is_change()).collect::<Vec<_>>();
-    append_update_section(&mut lines, "planned_changes", &change_entries);
-    lines.push("next_steps:".to_string());
-    if plan.requires_adopt() {
-        lines.push(
-            "- rerun with --adopt --force --apply to baseline conflicting untracked managed files"
-                .to_string(),
-        );
-    } else if plan.requires_force() {
-        lines.push(
-            "- rerun with --force --apply to overwrite changed tracked managed files".to_string(),
-        );
-    } else if plan.has_changes() || manifest_status != ScaffoldFileStatus::Unchanged {
-        lines.push("- rerun with --apply to write the planned updates".to_string());
-        if plan.count_by_action(UpdatePlanAction::Orphaned) > 0 {
-            lines.push(
-                "- rerun with --prune --apply to remove orphaned managed artifacts".to_string(),
-            );
-        }
-    } else {
-        lines.push("- no action required".to_string());
-    }
-    lines.join("\n")
-}
-
-fn render_update_status_report(
-    workspace: &Path,
-    targets: &BTreeSet<UpdateTarget>,
-    existing_manifest: Option<&ScaffoldManifest>,
-    plan: &UpdatePlan,
-    manifest_path: &Path,
-    manifest_status: ScaffoldFileStatus,
-) -> String {
-    let mut lines = vec![
-        format!("update_status: {}", render_update_manifest_state(existing_manifest, plan)),
-        format!("workspace: {}", workspace.display()),
-        format!("targets: {}", render_update_targets(targets)),
-        format!("manifest: {}", if plan.manifest_present { "present" } else { "missing" }),
-        format!(
-            "tracked_artifacts: {}",
-            existing_manifest.map_or(0, |manifest| manifest.entries.len())
-        ),
-    ];
-    append_update_summary(&mut lines, plan);
-    if manifest_status != ScaffoldFileStatus::Unchanged {
-        lines.push("manifest_changes:".to_string());
-        lines.push(format!("- [{}] {}", manifest_status.label(), manifest_path.display()));
-    }
-    append_update_section(
-        &mut lines,
-        "adoptions",
-        &[
-            collect_update_entries(plan, UpdatePlanAction::Adopt),
-            collect_update_entries(plan, UpdatePlanAction::AdoptCurrent),
-        ]
-        .concat(),
-    );
-    append_update_section(
-        &mut lines,
-        "updates",
-        &[
-            collect_update_entries(plan, UpdatePlanAction::Create),
-            collect_update_entries(plan, UpdatePlanAction::Replace),
-            collect_update_entries(plan, UpdatePlanAction::Merge),
-        ]
-        .concat(),
-    );
-    append_update_section(
-        &mut lines,
-        "orphaned_artifacts",
-        &[
-            collect_update_entries(plan, UpdatePlanAction::Orphaned),
-            collect_update_entries(plan, UpdatePlanAction::Remove),
-        ]
-        .concat(),
-    );
-    append_update_section(
-        &mut lines,
-        "conflicts",
-        &collect_update_entries(plan, UpdatePlanAction::Conflict),
-    );
-    lines.push("next_steps:".to_string());
-    if plan.requires_adopt() {
-        lines.push(
-            "- rerun with --adopt --force --apply to baseline conflicting untracked managed files"
-                .to_string(),
-        );
-    } else if plan.requires_force() {
-        lines.push(
-            "- rerun with --force --apply to overwrite changed tracked managed files".to_string(),
-        );
-    } else if plan.count_by_action(UpdatePlanAction::Orphaned) > 0 {
-        lines.push("- rerun with --prune --apply to remove orphaned managed artifacts".to_string());
-    } else if plan.has_changes() || manifest_status != ScaffoldFileStatus::Unchanged {
-        lines.push("- rerun with --apply to write the planned updates".to_string());
-    } else {
-        lines.push("- no action required".to_string());
-    }
-    lines.join("\n")
-}
-
-fn render_update_adopt_required_report(
-    workspace: &Path,
-    targets: &BTreeSet<UpdateTarget>,
-    plan: &UpdatePlan,
-    manifest_path: &Path,
-    manifest_status: ScaffoldFileStatus,
-) -> String {
-    let mut lines = vec![
-        "update: blocked - conflicting untracked managed files require --adopt".to_string(),
-        format!("workspace: {}", workspace.display()),
-        format!("targets: {}", render_update_targets(targets)),
-    ];
-    append_update_summary(&mut lines, plan);
-    if manifest_status != ScaffoldFileStatus::Unchanged {
-        lines.push("manifest_changes:".to_string());
-        lines.push(format!("- [{}] {}", manifest_status.label(), manifest_path.display()));
-    }
-    append_update_section(
-        &mut lines,
-        "conflicts",
-        &collect_update_entries(plan, UpdatePlanAction::Conflict),
-    );
-    lines.push("next_steps:".to_string());
-    lines.push(
-        "- rerun with --adopt --force --apply to baseline conflicting untracked managed files"
-            .to_string(),
-    );
-    lines.push("- rerun with --status to inspect the full scaffold health report".to_string());
-    lines.join("\n")
-}
-
-fn render_update_force_required_report(
-    workspace: &Path,
-    targets: &BTreeSet<UpdateTarget>,
-    plan: &UpdatePlan,
-    manifest_path: &Path,
-    manifest_status: ScaffoldFileStatus,
-) -> String {
-    let mut lines = vec![
-        "update: blocked - changed replace-owned managed files require --force".to_string(),
-        format!("workspace: {}", workspace.display()),
-        format!("targets: {}", render_update_targets(targets)),
-    ];
-    append_update_summary(&mut lines, plan);
-    if manifest_status != ScaffoldFileStatus::Unchanged {
-        lines.push("manifest_changes:".to_string());
-        lines.push(format!("- [{}] {}", manifest_status.label(), manifest_path.display()));
-    }
-    append_update_section(
-        &mut lines,
-        "force_required",
-        &plan.entries.iter().filter(|entry| entry.requires_force).collect::<Vec<_>>(),
-    );
-    lines.push("next_steps:".to_string());
-    lines.push(
-        "- rerun with --force --apply to overwrite changed managed scaffold files".to_string(),
-    );
-    lines.push("- rerun without --apply to inspect the preview again".to_string());
-    lines.join("\n")
-}
-
-fn render_update_applied_report(
-    workspace: &Path,
-    targets: &BTreeSet<UpdateTarget>,
-    plan: &UpdatePlan,
-    manifest_path: &Path,
-    manifest_status: ScaffoldFileStatus,
-) -> String {
-    let mut lines = vec![
-        "update: workspace scaffold refreshed".to_string(),
-        format!("workspace: {}", workspace.display()),
-        format!("targets: {}", render_update_targets(targets)),
-    ];
-    append_update_summary(&mut lines, plan);
-    if manifest_status != ScaffoldFileStatus::Unchanged {
-        lines.push("manifest_changes:".to_string());
-        lines.push(format!("- [{}] {}", manifest_status.label(), manifest_path.display()));
-    }
-    append_update_section(
-        &mut lines,
-        "applied_changes",
-        &plan
-            .entries
-            .iter()
-            .filter(|entry| {
-                matches!(
-                    entry.action,
-                    UpdatePlanAction::Create
-                        | UpdatePlanAction::Replace
-                        | UpdatePlanAction::Merge
-                        | UpdatePlanAction::Adopt
-                        | UpdatePlanAction::AdoptCurrent
-                        | UpdatePlanAction::Remove
-                )
-            })
-            .collect::<Vec<_>>(),
-    );
-    lines.join("\n")
-}
-
-fn render_update_diff_report(
-    workspace: &Path,
-    targets: &BTreeSet<UpdateTarget>,
-    plan: &UpdatePlan,
-    manifest_path: &Path,
-    manifest_status: ScaffoldFileStatus,
-) -> String {
-    let mut lines = vec![
-        "update: workspace scaffold diff".to_string(),
-        format!("workspace: {}", workspace.display()),
-        format!("targets: {}", render_update_targets(targets)),
-    ];
-    append_update_summary(&mut lines, plan);
-    if manifest_status != ScaffoldFileStatus::Unchanged {
-        lines.push("manifest_changes:".to_string());
-        lines.push(format!("- [{}] {}", manifest_status.label(), manifest_path.display()));
-    }
-    append_update_section(
-        &mut lines,
-        "workspace_diff",
-        &plan.entries.iter().filter(|entry| entry.action.is_change()).collect::<Vec<_>>(),
-    );
-    lines.push("next_steps:".to_string());
-    if plan.requires_adopt() {
-        lines.push(
-            "- rerun with --adopt --force --apply to baseline conflicting untracked managed files"
-                .to_string(),
-        );
-    } else if plan.requires_force() {
-        lines.push(
-            "- rerun with --force --apply to overwrite changed tracked managed files".to_string(),
-        );
-    } else {
-        lines.push("- rerun with --apply to write the planned updates".to_string());
-    }
-    lines.join("\n")
-}
-
 fn apply_update_plan(
     workspace: &Path,
     plan: &UpdatePlan,
@@ -2125,10 +1590,6 @@ fn apply_update_plan(
     }
 
     Ok(())
-}
-
-fn render_update_targets(targets: &BTreeSet<UpdateTarget>) -> String {
-    targets.iter().map(|target| target.label()).collect::<Vec<_>>().join(", ")
 }
 
 fn render_execution_profile_contents(
@@ -3262,37 +2723,6 @@ fn canon_workspace_planned_changes(
     planned
 }
 
-fn render_canon_workspace_bootstrap_failure_report(
-    scope: InitConfigScope,
-    workspace: &Path,
-    template: InitTemplate,
-    detail: &str,
-    planned_changes: &[String],
-) -> InitCommandReport {
-    let mut lines = vec![
-        "init: blocked - Canon workspace bootstrap failed".to_string(),
-        format!("scope: {scope}"),
-    ];
-    if scope_includes_workspace(scope) {
-        lines.push(format!("template: {}", template_label(template)));
-    }
-    lines.push("canon_bootstrap: blocked".to_string());
-    lines.push(format!("{CANON_BOOTSTRAP_NOTE_LABEL}: {detail}"));
-    lines.push("planned_changes:".to_string());
-    if planned_changes.is_empty() {
-        lines.push("- none".to_string());
-    } else {
-        lines.extend(planned_changes.iter().cloned());
-    }
-    lines.push("next_steps:".to_string());
-    lines.push(
-        "- inspect `canon init --output json` in the workspace and rerun the same init command"
-            .to_string(),
-    );
-    lines.push(format!("- verify workspace: {}", init_doctor_command(workspace)));
-    InitCommandReport::new(CommandExitStatus::NonSuccess, lines.join("\n"))
-}
-
 fn materialize_canon_workspace(
     workspace: &Path,
     assistant: Option<CanonInitAssistantHost>,
@@ -3828,6 +3258,35 @@ fn write_scaffold_file(path: &Path, contents: &str) -> Result<(), InitCommandErr
 
     fs::write(path, contents)
         .map_err(|source| InitCommandError::WriteFile { path: path.to_path_buf(), source })
+}
+
+fn ensure_workspace_project_doc_roots(
+    workspace: &Path,
+) -> Result<crate::domain::project_index::ProjectDocRoots, InitCommandError> {
+    let doc_roots = resolve_project_doc_roots(workspace).unwrap_or_default();
+    for root in [doc_roots.project_memory_dir(workspace), doc_roots.evidence_dir(workspace)] {
+        fs::create_dir_all(&root)
+            .map_err(|source| InitCommandError::WriteFile { path: root.clone(), source })?;
+    }
+
+    write_scaffold_file_if_missing(
+        &doc_roots.project_memory_dir(workspace).join("README.md"),
+        PROJECT_MEMORY_ROOT_README,
+    )?;
+    write_scaffold_file_if_missing(
+        &doc_roots.evidence_dir(workspace).join("README.md"),
+        EVIDENCE_ROOT_README,
+    )?;
+
+    Ok(doc_roots)
+}
+
+fn write_scaffold_file_if_missing(path: &Path, contents: &str) -> Result<(), InitCommandError> {
+    if path.exists() {
+        return Ok(());
+    }
+
+    write_scaffold_file(path, contents)
 }
 
 fn resolve_workspace_root(workspace: &Path) -> Result<PathBuf, InitCommandError> {
@@ -4767,74 +4226,6 @@ fn render_guided_route_review(
     lines.join("\n")
 }
 
-fn render_guided_summary(
-    scope: InitConfigScope,
-    template: InitTemplate,
-    canon_mode_selection: Option<CanonModeSelectionPreference>,
-    assistants: &[AssistantHostKind],
-    routes: &[GuidedRouteSelection],
-    catalog: &BundledModelCatalog,
-    planned_changes: &[String],
-) -> String {
-    let mut lines = vec![
-        "Summary".to_string(),
-        format!("Scope: {}", scope),
-        format!("Template: {}", template_label(template)),
-        format!("Catalog: {}", catalog.summary_label()),
-        format!(
-            "Canon approval mode: {}",
-            canon_mode_selection.unwrap_or(CanonModeSelectionPreference::AutoConfirm)
-        ),
-    ];
-    if assistants.is_empty() {
-        lines.push("Assistant surfaces: none selected".to_string());
-    } else {
-        lines.push(format!("Assistant surfaces: {}", format_assistant_host_list(assistants)));
-    }
-    lines.push("Model routes:".to_string());
-    lines.extend(routes.iter().map(|selection| format!("- {}", selection.display_line().trim())));
-    lines.push("Planned changes:".to_string());
-    lines.extend(planned_changes.iter().cloned());
-    lines.push(WRITE_CONFIGURATION_PROMPT.to_string());
-    lines.join("\n")
-}
-
-fn render_cancelled_init_report(
-    scope: InitConfigScope,
-    workspace: Option<&Path>,
-    template: InitTemplate,
-    canon_mode_selection: Option<CanonModeSelectionPreference>,
-    assistants: &[AssistantHostKind],
-    routes: &[GuidedRouteSelection],
-    catalog: &BundledModelCatalog,
-) -> String {
-    let mut lines = vec![
-        "init: canceled before write".to_string(),
-        format!("scope: {}", scope),
-        format!("template: {}", template_label(template)),
-        format!("catalog: {}", catalog.summary_label()),
-        format!(
-            "canon_mode_selection: {}",
-            canon_mode_selection.unwrap_or(CanonModeSelectionPreference::AutoConfirm)
-        ),
-    ];
-    if assistants.is_empty() {
-        lines.push("assistant_surfaces: none selected".to_string());
-    } else {
-        lines.push(format!("assistant_surfaces: {}", format_assistant_host_list(assistants)));
-    }
-    lines.push("route_setup:".to_string());
-    lines.extend(routes.iter().map(|selection| format!("- {}", selection.display_line().trim())));
-    lines.push("next_steps:".to_string());
-    let mut rerun = format!("boundline init --scope {scope}");
-    if scope_includes_workspace(scope) {
-        let workspace = workspace.unwrap_or_else(|| Path::new("."));
-        rerun.push_str(&format!(" --workspace {}", workspace.display()));
-    }
-    lines.push(format!("- rerun {rerun} to confirm and write the configuration"));
-    lines.join("\n")
-}
-
 fn run_init_activity<T, F>(
     label: &str,
     interactive_terminal: bool,
@@ -5202,8 +4593,9 @@ mod tests {
         CANON_MAINTAINABILITY_REVIEWER_ROLE_ID, CANON_SAFETY_REVIEWER_ROLE_ID,
         EXECUTION_PROFILE_FILE_NAME, GuidedRouteSource, InitCommandError, InitInteractor,
         InitRequest, UpdateRequest, UpdateTarget, canon_reviewer_route_readiness,
-        collect_guided_init_answers_with_interactor, command_in_path, execute_init, execute_update,
-        execution_template, format_runtime_list, format_slot_list, initial_guided_route_selections,
+        collect_guided_init_answers_with_interactor, command_in_path,
+        ensure_workspace_project_doc_roots, execute_init, execute_update, execution_template,
+        format_runtime_list, format_slot_list, initial_guided_route_selections,
         parse_canon_mode_selection, parse_context_binding, parse_domain_family,
         parse_domain_standard, parse_external_context_kind, parse_model_route,
         render_guided_route_review, resolve_seeded_routes, resolve_workspace_root,
@@ -5233,21 +4625,23 @@ mod tests {
         workspace
     }
 
-    fn initialize_workspace_for_update(workspace: &Path) {
-        execute_init(InitRequest {
+    // Keeps per-test overrides focused on the behavior under test instead of
+    // repeating the default workspace init boilerplate in every case.
+    fn base_init_request<'a>(workspace: &'a Path) -> InitRequest<'a> {
+        InitRequest {
             workspace,
             scope: InitConfigScope::Workspace,
             non_interactive: true,
             interactive_terminal_override: None,
             interactor: None,
-            template: Some(InitTemplate::BugFix),
-            assistants: &[crate::domain::configuration::AssistantHostKind::Copilot],
+            template: None,
+            assistants: &[],
             routes: &[],
             domains: &[],
             domain_standards: &[],
             context_bindings: &[],
             required_context_bindings: &[],
-            canon_mode_selection: Some(CanonModeSelectionPreference::AutoConfirm),
+            canon_mode_selection: None,
             risk: None,
             zone: None,
             owner: None,
@@ -5258,8 +4652,41 @@ mod tests {
             docs_diff: false,
             docs_output_dir: None,
             force: true,
-        })
-        .unwrap();
+        }
+    }
+
+    fn copilot_canon_init_request<'a>(
+        workspace: &'a Path,
+        template: InitTemplate,
+    ) -> InitRequest<'a> {
+        InitRequest {
+            template: Some(template),
+            assistants: &[crate::domain::configuration::AssistantHostKind::Copilot],
+            canon_mode_selection: Some(CanonModeSelectionPreference::AutoConfirm),
+            ..base_init_request(workspace)
+        }
+    }
+
+    // Mirrors `base_init_request` for update tests so each case can override
+    // only the few flags that matter to the scenario under test.
+    fn base_update_request<'a>(workspace: &'a Path) -> UpdateRequest<'a> {
+        UpdateRequest {
+            workspace,
+            targets: &[],
+            ide: &[],
+            auto_approve: None,
+            template: None,
+            diff: false,
+            apply: false,
+            adopt: false,
+            prune: false,
+            status: false,
+            force: false,
+        }
+    }
+
+    fn initialize_workspace_for_update(workspace: &Path) {
+        execute_init(copilot_canon_init_request(workspace, InitTemplate::BugFix)).unwrap();
     }
 
     fn load_workspace_scaffold_manifest(workspace: &Path) -> ScaffoldManifest {
@@ -5480,29 +4907,12 @@ mod tests {
         fs::create_dir_all(workspace.join("design")).unwrap();
 
         let report = execute_init(InitRequest {
-            workspace: &workspace,
-            scope: InitConfigScope::Workspace,
-            non_interactive: true,
-            interactive_terminal_override: None,
-            interactor: None,
-            template: None,
-            assistants: &[crate::domain::configuration::AssistantHostKind::Copilot],
-            routes: &[],
-            domains: &[],
             domain_standards: &["react=workspace react rules".to_string()],
             context_bindings: &["react|design_system|mcp:design-system".to_string()],
             required_context_bindings: &["react|design_reference|design/reference.md".to_string()],
+            assistants: &[crate::domain::configuration::AssistantHostKind::Copilot],
             canon_mode_selection: Some(CanonModeSelectionPreference::AutoConfirm),
-            risk: None,
-            zone: None,
-            owner: None,
-            ide: &[],
-            auto_approve: None,
-            export_docs: false,
-            docs_refresh: false,
-            docs_diff: false,
-            docs_output_dir: None,
-            force: true,
+            ..base_init_request(&workspace)
         })
         .unwrap();
 
@@ -5523,29 +4933,8 @@ mod tests {
         let workspace = temp_workspace("boundline-init-domain-invalid");
 
         let error = execute_init(InitRequest {
-            workspace: &workspace,
-            scope: InitConfigScope::Workspace,
-            non_interactive: true,
-            interactive_terminal_override: None,
-            interactor: None,
-            template: None,
-            assistants: &[],
-            routes: &[],
-            domains: &[],
-            domain_standards: &[],
             context_bindings: &["react|design_system".to_string()],
-            required_context_bindings: &[],
-            canon_mode_selection: None,
-            risk: None,
-            zone: None,
-            owner: None,
-            ide: &[],
-            auto_approve: None,
-            export_docs: false,
-            docs_refresh: false,
-            docs_diff: false,
-            docs_output_dir: None,
-            force: true,
+            ..base_init_request(&workspace)
         })
         .unwrap_err();
 
@@ -5560,29 +4949,9 @@ mod tests {
         FileConfigStore::for_workspace(&workspace).save_local(&Default::default()).unwrap();
 
         let report = execute_init(InitRequest {
-            workspace: &workspace,
-            scope: InitConfigScope::Workspace,
-            non_interactive: true,
-            interactive_terminal_override: None,
-            interactor: None,
             template: Some(InitTemplate::Delivery),
-            assistants: &[],
-            routes: &[],
-            domains: &[],
-            domain_standards: &[],
-            context_bindings: &[],
-            required_context_bindings: &[],
-            canon_mode_selection: None,
-            risk: None,
-            zone: None,
-            owner: None,
-            ide: &[],
-            auto_approve: None,
-            export_docs: false,
-            docs_refresh: false,
-            docs_diff: false,
-            docs_output_dir: None,
             force: false,
+            ..base_init_request(&workspace)
         })
         .unwrap();
 
@@ -5654,20 +5023,31 @@ mod tests {
         );
     }
 
+    fn blocked_canon_install_status(
+        message: &str,
+        repair_action: &str,
+    ) -> crate::domain::distribution::CanonInstallStatus {
+        let mut blocked_status = super::default_test_canon_install_status();
+        blocked_status.state = crate::domain::distribution::CompanionState::RepairNeeded;
+        blocked_status.message = message.to_string();
+        blocked_status.suggested_actions = vec![repair_action.to_string()];
+        if let Some(surface) = blocked_status.surface_verification.as_mut() {
+            surface.ready = false;
+            surface.repair_actions = vec![repair_action.to_string()];
+        }
+        blocked_status
+    }
+
     #[test]
     fn execute_init_blocks_when_canon_surface_is_unavailable() {
         let workspace = temp_workspace("boundline-init-canon-blocked");
-        let mut blocked_status = super::default_test_canon_install_status();
-        blocked_status.state = crate::domain::distribution::CompanionState::RepairNeeded;
-        blocked_status.message = "Canon governance surface is unavailable".to_string();
-        blocked_status.suggested_actions =
-            vec!["install or repair Canon 0.61.0 before rerunning init".to_string()];
+        let mut blocked_status = blocked_canon_install_status(
+            "Canon governance surface is unavailable",
+            "install or repair Canon 0.61.0 before rerunning init",
+        );
         if let Some(surface) = blocked_status.surface_verification.as_mut() {
-            surface.ready = false;
             surface.operations_verified = false;
             surface.missing_operations = vec!["start".to_string(), "refresh".to_string()];
-            surface.repair_actions =
-                vec!["install or repair Canon 0.61.0 before rerunning init".to_string()];
         }
 
         let report = with_canon_install_override(blocked_status, || {
@@ -5724,15 +5104,12 @@ mod tests {
         // prompts but before any config loading or asset computation: the output
         // must say "blocked before planning" and no workspace files must exist.
         let workspace = temp_workspace("boundline-init-canon-preflight");
-        let mut blocked_status = super::default_test_canon_install_status();
-        blocked_status.state = crate::domain::distribution::CompanionState::RepairNeeded;
-        blocked_status.message =
-            "Canon 0.10.0 is present but version 0.61.0 is required".to_string();
-        blocked_status.suggested_actions = vec!["upgrade Canon to 0.61.0 or later".to_string()];
+        let mut blocked_status = blocked_canon_install_status(
+            "Canon 0.10.0 is present but version 0.61.0 is required",
+            "upgrade Canon to 0.61.0 or later",
+        );
         if let Some(surface) = blocked_status.surface_verification.as_mut() {
-            surface.ready = false;
             surface.version_compatible = false;
-            surface.repair_actions = vec!["upgrade Canon to 0.61.0 or later".to_string()];
         }
 
         let report = with_canon_install_override(blocked_status, || {
@@ -6783,29 +6160,11 @@ mod tests {
         };
 
         let report = execute_init(InitRequest {
-            workspace: &workspace,
-            scope: InitConfigScope::Workspace,
             non_interactive: false,
             interactive_terminal_override: Some(true),
             interactor: Some(Box::new(interactor)),
             template: Some(InitTemplate::BugFix),
-            assistants: &[],
-            routes: &[],
-            domains: &[],
-            domain_standards: &[],
-            context_bindings: &[],
-            required_context_bindings: &[],
-            canon_mode_selection: None,
-            risk: None,
-            zone: None,
-            owner: None,
-            ide: &[],
-            auto_approve: None,
-            export_docs: false,
-            docs_refresh: false,
-            docs_diff: false,
-            docs_output_dir: None,
-            force: true,
+            ..base_init_request(&workspace)
         })
         .unwrap();
 
@@ -6832,29 +6191,10 @@ mod tests {
 
         with_global_config_env(Some(&xdg_home), None, || {
             let report = execute_init(InitRequest {
-                workspace: &workspace,
                 scope: InitConfigScope::Global,
-                non_interactive: true,
-                interactive_terminal_override: None,
-                interactor: None,
-                template: None,
                 assistants: &[crate::domain::configuration::AssistantHostKind::Copilot],
-                routes: &[],
-                domains: &[],
-                domain_standards: &[],
-                context_bindings: &[],
-                required_context_bindings: &[],
                 canon_mode_selection: Some(CanonModeSelectionPreference::AutoConfirm),
-                risk: None,
-                zone: None,
-                owner: None,
-                ide: &[],
-                auto_approve: None,
-                export_docs: false,
-                docs_refresh: false,
-                docs_diff: false,
-                docs_output_dir: None,
-                force: true,
+                ..base_init_request(&workspace)
             })
             .unwrap();
 
@@ -6881,29 +6221,11 @@ mod tests {
 
         with_global_config_env(Some(&xdg_home), None, || {
             let report = execute_init(InitRequest {
-                workspace: &workspace,
                 scope: InitConfigScope::Both,
-                non_interactive: true,
-                interactive_terminal_override: None,
-                interactor: None,
                 template: Some(InitTemplate::Change),
                 assistants: &[crate::domain::configuration::AssistantHostKind::Copilot],
-                routes: &[],
-                domains: &[],
-                domain_standards: &[],
-                context_bindings: &[],
-                required_context_bindings: &[],
                 canon_mode_selection: Some(CanonModeSelectionPreference::AutoConfirm),
-                risk: None,
-                zone: None,
-                owner: None,
-                ide: &[],
-                auto_approve: None,
-                export_docs: false,
-                docs_refresh: false,
-                docs_diff: false,
-                docs_output_dir: None,
-                force: true,
+                ..base_init_request(&workspace)
             })
             .unwrap();
 
@@ -7020,29 +6342,8 @@ mod tests {
     fn execute_init_uses_spinner_path_when_interactive_terminal_override_is_true() {
         let workspace = temp_workspace("boundline-init-spinner");
         let report = execute_init(InitRequest {
-            workspace: &workspace,
-            scope: InitConfigScope::Workspace,
-            non_interactive: true,
             interactive_terminal_override: Some(true),
-            interactor: None,
-            template: Some(InitTemplate::Change),
-            assistants: &[crate::domain::configuration::AssistantHostKind::Copilot],
-            routes: &[],
-            domains: &[],
-            domain_standards: &[],
-            context_bindings: &[],
-            required_context_bindings: &[],
-            canon_mode_selection: Some(CanonModeSelectionPreference::AutoConfirm),
-            risk: None,
-            zone: None,
-            owner: None,
-            ide: &[],
-            auto_approve: None,
-            export_docs: false,
-            docs_refresh: false,
-            docs_diff: false,
-            docs_output_dir: None,
-            force: true,
+            ..copilot_canon_init_request(&workspace, InitTemplate::Change)
         })
         .unwrap();
         assert_eq!(report.exit_status, crate::cli::CommandExitStatus::Succeeded);
@@ -7161,29 +6462,11 @@ mod tests {
         };
 
         let report = execute_init(InitRequest {
-            workspace: &workspace,
-            scope: InitConfigScope::Workspace,
             non_interactive: false,
             interactive_terminal_override: Some(true),
             interactor: Some(Box::new(interactor)),
             template: Some(InitTemplate::BugFix),
-            assistants: &[],
-            routes: &[],
-            domains: &[],
-            domain_standards: &[],
-            context_bindings: &[],
-            required_context_bindings: &[],
-            canon_mode_selection: None,
-            risk: None,
-            zone: None,
-            owner: None,
-            ide: &[],
-            auto_approve: None,
-            export_docs: false,
-            docs_refresh: false,
-            docs_diff: false,
-            docs_output_dir: None,
-            force: true,
+            ..base_init_request(&workspace)
         })
         .unwrap();
 
@@ -7221,29 +6504,11 @@ mod tests {
         store.save_local(&existing).unwrap();
 
         let report = execute_init(InitRequest {
-            workspace: &workspace,
-            scope: InitConfigScope::Workspace,
             non_interactive: false,
             interactive_terminal_override: Some(true),
             interactor: Some(Box::new(ScriptedInteractor::default())),
             template: Some(InitTemplate::BugFix),
-            assistants: &[],
-            routes: &[],
-            domains: &[],
-            domain_standards: &[],
-            context_bindings: &[],
-            required_context_bindings: &[],
-            canon_mode_selection: None,
-            risk: None,
-            zone: None,
-            owner: None,
-            ide: &[],
-            auto_approve: None,
-            export_docs: false,
-            docs_refresh: false,
-            docs_diff: false,
-            docs_output_dir: None,
-            force: true,
+            ..base_init_request(&workspace)
         })
         .unwrap();
 
@@ -7272,37 +6537,13 @@ mod tests {
         let workspace = repo_root.join("tmp");
         fs::create_dir_all(&workspace).unwrap();
 
-        let report = execute_init(InitRequest {
-            workspace: &workspace,
-            scope: InitConfigScope::Workspace,
-            non_interactive: true,
-            interactive_terminal_override: None,
-            interactor: None,
-            template: Some(InitTemplate::BugFix),
-            assistants: &[crate::domain::configuration::AssistantHostKind::Copilot],
-            routes: &[],
-            domains: &[],
-            domain_standards: &[],
-            context_bindings: &[],
-            required_context_bindings: &[],
-            canon_mode_selection: Some(CanonModeSelectionPreference::AutoConfirm),
-            risk: None,
-            zone: None,
-            owner: None,
-            ide: &[],
-            auto_approve: None,
-            export_docs: false,
-            docs_refresh: false,
-            docs_diff: false,
-            docs_output_dir: None,
-            force: true,
-        })
-        .unwrap();
+        let report =
+            execute_init(copilot_canon_init_request(&workspace, InitTemplate::BugFix)).unwrap();
 
         assert_eq!(report.exit_status, CommandExitStatus::NonSuccess);
         assert!(report.terminal_output.contains("Canon workspace bootstrap failed"));
         assert!(report.terminal_output.contains(repo_root.display().to_string().as_str()));
-        assert!(!workspace.join(".canon").exists());
+        assert_init_workspace_artifacts_absent(&workspace);
     }
 
     #[test]
@@ -7313,45 +6554,15 @@ mod tests {
         fs::create_dir_all(&workspace).unwrap();
         let _current_dir_guard = CurrentDirGuard::change_to(&workspace);
 
-        let report = execute_init(InitRequest {
-            workspace: Path::new("."),
-            scope: InitConfigScope::Workspace,
-            non_interactive: true,
-            interactive_terminal_override: None,
-            interactor: None,
-            template: Some(InitTemplate::BugFix),
-            assistants: &[crate::domain::configuration::AssistantHostKind::Copilot],
-            routes: &[],
-            domains: &[],
-            domain_standards: &[],
-            context_bindings: &[],
-            required_context_bindings: &[],
-            canon_mode_selection: Some(CanonModeSelectionPreference::AutoConfirm),
-            risk: None,
-            zone: None,
-            owner: None,
-            ide: &[],
-            auto_approve: None,
-            export_docs: false,
-            docs_refresh: false,
-            docs_diff: false,
-            docs_output_dir: None,
-            force: true,
-        })
-        .unwrap();
+        let report =
+            execute_init(copilot_canon_init_request(Path::new("."), InitTemplate::BugFix)).unwrap();
 
         assert_eq!(report.exit_status, CommandExitStatus::NonSuccess);
         assert!(report.terminal_output.contains("Canon workspace bootstrap failed"));
         assert!(report.terminal_output.contains(repo_root.display().to_string().as_str()));
         assert!(report.terminal_output.contains(workspace.display().to_string().as_str()));
-        assert!(!repo_root.join(".boundline/execution.json").exists());
-        assert!(!repo_root.join(".boundline/config.toml").exists());
-        assert!(!repo_root.join(".env.template").exists());
-        assert!(!repo_root.join(".canon").exists());
-        assert!(!workspace.join(".boundline/execution.json").exists());
-        assert!(!workspace.join(".boundline/config.toml").exists());
-        assert!(!workspace.join(".env.template").exists());
-        assert!(!workspace.join(".canon").exists());
+        assert_init_workspace_artifacts_absent(&repo_root);
+        assert_init_workspace_artifacts_absent(&workspace);
     }
 
     #[test]
@@ -7415,29 +6626,11 @@ mod tests {
         };
 
         let report = execute_init(InitRequest {
-            workspace: Path::new("."),
-            scope: InitConfigScope::Workspace,
             non_interactive: false,
             interactive_terminal_override: Some(true),
             interactor: Some(Box::new(interactor)),
             template: Some(InitTemplate::BugFix),
-            assistants: &[],
-            routes: &[],
-            domains: &[],
-            domain_standards: &[],
-            context_bindings: &[],
-            required_context_bindings: &[],
-            canon_mode_selection: None,
-            risk: None,
-            zone: None,
-            owner: None,
-            ide: &[],
-            auto_approve: None,
-            export_docs: false,
-            docs_refresh: false,
-            docs_diff: false,
-            docs_output_dir: None,
-            force: true,
+            ..base_init_request(Path::new("."))
         })
         .unwrap();
 
@@ -7461,29 +6654,11 @@ mod tests {
         };
 
         let report = execute_init(InitRequest {
-            workspace: &workspace,
-            scope: InitConfigScope::Workspace,
             non_interactive: false,
             interactive_terminal_override: Some(true),
             interactor: Some(Box::new(interactor)),
             template: Some(InitTemplate::BugFix),
-            assistants: &[],
-            routes: &[],
-            domains: &[],
-            domain_standards: &[],
-            context_bindings: &[],
-            required_context_bindings: &[],
-            canon_mode_selection: None,
-            risk: None,
-            zone: None,
-            owner: None,
-            ide: &[],
-            auto_approve: None,
-            export_docs: false,
-            docs_refresh: false,
-            docs_diff: false,
-            docs_output_dir: None,
-            force: true,
+            ..base_init_request(&workspace)
         })
         .unwrap();
 
@@ -7504,20 +6679,7 @@ mod tests {
         let original = fs::read_to_string(&config_path).unwrap();
         fs::write(&config_path, format!("{original}\n# local drift\n")).unwrap();
 
-        let report = execute_update(UpdateRequest {
-            workspace: &workspace,
-            targets: &[],
-            ide: &[],
-            auto_approve: None,
-            template: None,
-            diff: false,
-            apply: false,
-            adopt: false,
-            prune: false,
-            status: false,
-            force: false,
-        })
-        .unwrap();
+        let report = execute_update(base_update_request(&workspace)).unwrap();
 
         assert_eq!(report.exit_status, CommandExitStatus::Succeeded);
         assert!(
@@ -7542,20 +6704,9 @@ mod tests {
         let original = fs::read_to_string(&config_path).unwrap();
         fs::write(&config_path, format!("{original}\n# local drift\n")).unwrap();
 
-        let report = execute_update(UpdateRequest {
-            workspace: &workspace,
-            targets: &[],
-            ide: &[],
-            auto_approve: None,
-            template: None,
-            diff: false,
-            apply: true,
-            adopt: false,
-            prune: false,
-            status: false,
-            force: false,
-        })
-        .unwrap();
+        let report =
+            execute_update(UpdateRequest { apply: true, ..base_update_request(&workspace) })
+                .unwrap();
 
         assert_eq!(report.exit_status, CommandExitStatus::NonSuccess);
         assert!(report.terminal_output.contains("require --force"), "{}", report.terminal_output);
@@ -7575,53 +6726,34 @@ mod tests {
             .unwrap();
 
         let error = execute_update(UpdateRequest {
-            workspace: &workspace,
             targets: &[UpdateTarget::Execution],
-            ide: &[],
-            auto_approve: None,
-            template: None,
-            diff: false,
-            apply: false,
-            adopt: false,
-            prune: false,
-            status: false,
-            force: false,
+            ..base_update_request(&workspace)
         })
         .unwrap_err();
 
         assert!(matches!(error, InitCommandError::UpdateExecutionTemplateRequired));
     }
 
+    fn assert_workspace_project_doc_roots_exist(workspace: &Path) {
+        assert!(workspace.join("docs/project").is_dir());
+        assert!(workspace.join("docs/evidence").is_dir());
+        assert!(workspace.join("docs/project/README.md").is_file());
+        assert!(workspace.join("docs/evidence/README.md").is_file());
+    }
+
+    fn assert_init_workspace_artifacts_absent(workspace: &Path) {
+        assert!(!workspace.join(".boundline/execution.json").exists());
+        assert!(!workspace.join(".boundline/config.toml").exists());
+        assert!(!workspace.join(".env.template").exists());
+        assert!(!workspace.join(".canon").exists());
+    }
+
     #[test]
     fn execute_init_writes_workspace_scaffold_manifest() {
         let workspace = temp_workspace("boundline-init-manifest");
 
-        let report = execute_init(InitRequest {
-            workspace: &workspace,
-            scope: InitConfigScope::Workspace,
-            non_interactive: true,
-            interactive_terminal_override: None,
-            interactor: None,
-            template: Some(InitTemplate::Change),
-            assistants: &[crate::domain::configuration::AssistantHostKind::Copilot],
-            routes: &[],
-            domains: &[],
-            domain_standards: &[],
-            context_bindings: &[],
-            required_context_bindings: &[],
-            canon_mode_selection: Some(CanonModeSelectionPreference::AutoConfirm),
-            risk: None,
-            zone: None,
-            owner: None,
-            ide: &[],
-            auto_approve: None,
-            export_docs: false,
-            docs_refresh: false,
-            docs_diff: false,
-            docs_output_dir: None,
-            force: true,
-        })
-        .unwrap();
+        let report =
+            execute_init(copilot_canon_init_request(&workspace, InitTemplate::Change)).unwrap();
 
         let manifest = load_workspace_scaffold_manifest(&workspace);
         assert_eq!(report.exit_status, CommandExitStatus::Succeeded);
@@ -7632,6 +6764,44 @@ mod tests {
         assert!(manifest.entries.iter().any(|entry| entry.path == ".boundline/config.toml"));
         assert!(manifest.entries.iter().any(|entry| entry.path == ".boundline/execution.json"));
         assert!(manifest.entries.iter().any(|entry| entry.path == "assistant/README.md"));
+        assert_workspace_project_doc_roots_exist(&workspace);
+        assert!(report.terminal_output.contains("project_memory_root: docs/project"));
+        assert!(report.terminal_output.contains("evidence_root: docs/evidence"));
+    }
+
+    #[test]
+    fn execute_update_recreates_project_doc_roots_when_missing() {
+        let workspace = temp_workspace("boundline-update-project-doc-roots");
+        initialize_workspace_for_update(&workspace);
+        fs::remove_dir_all(workspace.join("docs/project")).unwrap();
+        fs::remove_dir_all(workspace.join("docs/evidence")).unwrap();
+
+        let report =
+            execute_update(UpdateRequest { apply: true, ..base_update_request(&workspace) })
+                .unwrap();
+
+        assert_eq!(report.exit_status, CommandExitStatus::Succeeded);
+        assert_workspace_project_doc_roots_exist(&workspace);
+    }
+
+    #[test]
+    fn ensure_workspace_project_doc_roots_preserves_existing_readmes() {
+        let workspace = temp_workspace("boundline-project-doc-roots-existing-readmes");
+        let project_root = workspace.join("docs/project");
+        let evidence_root = workspace.join("docs/evidence");
+        fs::create_dir_all(&project_root).unwrap();
+        fs::create_dir_all(&evidence_root).unwrap();
+        let project_readme = project_root.join("README.md");
+        let evidence_readme = evidence_root.join("README.md");
+        fs::write(&project_readme, "# Existing Project Memory\n").unwrap();
+        fs::write(&evidence_readme, "# Existing Evidence\n").unwrap();
+
+        let doc_roots = ensure_workspace_project_doc_roots(&workspace).unwrap();
+
+        assert_eq!(doc_roots.project_memory_dir(&workspace), project_root);
+        assert_eq!(doc_roots.evidence_dir(&workspace), evidence_root);
+        assert_eq!(fs::read_to_string(&project_readme).unwrap(), "# Existing Project Memory\n");
+        assert_eq!(fs::read_to_string(&evidence_readme).unwrap(), "# Existing Evidence\n");
     }
 
     #[test]
@@ -7642,40 +6812,16 @@ mod tests {
             workspace.join(BOUNDLINE_DIR_RELATIVE).join(SCAFFOLD_MANIFEST_FILE_NAME);
         fs::remove_file(&manifest_path).unwrap();
 
-        let preview = execute_update(UpdateRequest {
-            workspace: &workspace,
-            targets: &[],
-            ide: &[],
-            auto_approve: None,
-            template: None,
-            diff: false,
-            apply: false,
-            adopt: false,
-            prune: false,
-            status: false,
-            force: false,
-        })
-        .unwrap();
+        let preview = execute_update(base_update_request(&workspace)).unwrap();
         assert!(
             preview.terminal_output.contains(SCAFFOLD_MANIFEST_FILE_NAME),
             "{}",
             preview.terminal_output
         );
 
-        let report = execute_update(UpdateRequest {
-            workspace: &workspace,
-            targets: &[],
-            ide: &[],
-            auto_approve: None,
-            template: None,
-            diff: false,
-            apply: true,
-            adopt: false,
-            prune: false,
-            status: false,
-            force: false,
-        })
-        .unwrap();
+        let report =
+            execute_update(UpdateRequest { apply: true, ..base_update_request(&workspace) })
+                .unwrap();
 
         assert_eq!(report.exit_status, CommandExitStatus::Succeeded);
         assert!(manifest_path.is_file());
@@ -7684,47 +6830,14 @@ mod tests {
     #[test]
     fn execute_update_infers_execution_template_from_existing_profile() {
         let workspace = temp_workspace("boundline-update-execution-inference");
-        execute_init(InitRequest {
-            workspace: &workspace,
-            scope: InitConfigScope::Workspace,
-            non_interactive: true,
-            interactive_terminal_override: None,
-            interactor: None,
-            template: Some(InitTemplate::Delivery),
-            assistants: &[crate::domain::configuration::AssistantHostKind::Copilot],
-            routes: &[],
-            domains: &[],
-            domain_standards: &[],
-            context_bindings: &[],
-            required_context_bindings: &[],
-            canon_mode_selection: Some(CanonModeSelectionPreference::AutoConfirm),
-            risk: None,
-            zone: None,
-            owner: None,
-            ide: &[],
-            auto_approve: None,
-            export_docs: false,
-            docs_refresh: false,
-            docs_diff: false,
-            docs_output_dir: None,
-            force: true,
-        })
-        .unwrap();
+        execute_init(copilot_canon_init_request(&workspace, InitTemplate::Delivery)).unwrap();
         fs::remove_file(workspace.join(BOUNDLINE_DIR_RELATIVE).join(SCAFFOLD_MANIFEST_FILE_NAME))
             .unwrap();
 
         let report = execute_update(UpdateRequest {
-            workspace: &workspace,
             targets: &[UpdateTarget::Execution],
-            ide: &[],
-            auto_approve: None,
-            template: None,
-            diff: false,
             apply: true,
-            adopt: false,
-            prune: false,
-            status: false,
-            force: false,
+            ..base_update_request(&workspace)
         })
         .unwrap();
 
@@ -7748,17 +6861,11 @@ mod tests {
         .unwrap();
 
         let report = execute_update(UpdateRequest {
-            workspace: &workspace,
             targets: &[UpdateTarget::Execution],
-            ide: &[],
-            auto_approve: None,
             template: Some(InitTemplate::Change),
-            diff: false,
             apply: true,
-            adopt: false,
-            prune: false,
-            status: false,
             force: true,
+            ..base_update_request(&workspace)
         })
         .unwrap();
 
@@ -7782,17 +6889,9 @@ mod tests {
             .unwrap();
 
         let preview = execute_update(UpdateRequest {
-            workspace: &workspace,
             targets: &[UpdateTarget::Config],
-            ide: &[],
-            auto_approve: None,
-            template: None,
             diff: true,
-            apply: false,
-            adopt: false,
-            prune: false,
-            status: false,
-            force: false,
+            ..base_update_request(&workspace)
         })
         .unwrap();
         assert!(
@@ -7802,17 +6901,9 @@ mod tests {
         );
 
         let blocked = execute_update(UpdateRequest {
-            workspace: &workspace,
             targets: &[UpdateTarget::Config],
-            ide: &[],
-            auto_approve: None,
-            template: None,
-            diff: false,
             apply: true,
-            adopt: false,
-            prune: false,
-            status: false,
-            force: false,
+            ..base_update_request(&workspace)
         })
         .unwrap();
         assert_eq!(blocked.exit_status, CommandExitStatus::NonSuccess);
@@ -7833,17 +6924,11 @@ mod tests {
             .unwrap();
 
         let report = execute_update(UpdateRequest {
-            workspace: &workspace,
             targets: &[UpdateTarget::Config],
-            ide: &[],
-            auto_approve: None,
-            template: None,
-            diff: false,
             apply: true,
             adopt: true,
-            prune: false,
-            status: false,
             force: true,
+            ..base_update_request(&workspace)
         })
         .unwrap();
 
@@ -7871,17 +6956,9 @@ mod tests {
         store.save_local(&config).unwrap();
 
         let status = execute_update(UpdateRequest {
-            workspace: &workspace,
             targets: &[UpdateTarget::Assistant],
-            ide: &[],
-            auto_approve: None,
-            template: None,
-            diff: false,
-            apply: false,
-            adopt: false,
-            prune: false,
             status: true,
-            force: false,
+            ..base_update_request(&workspace)
         })
         .unwrap();
         assert!(
@@ -7896,17 +6973,10 @@ mod tests {
         );
 
         let report = execute_update(UpdateRequest {
-            workspace: &workspace,
             targets: &[UpdateTarget::Assistant],
-            ide: &[],
-            auto_approve: None,
-            template: None,
-            diff: false,
             apply: true,
-            adopt: false,
             prune: true,
-            status: false,
-            force: false,
+            ..base_update_request(&workspace)
         })
         .unwrap();
 

@@ -93,6 +93,13 @@ boundline init \
 - scaffold IDE metadata
 - export repo-local reference docs
 
+By default, workspace bootstrap also ensures the repo-visible document roots
+`docs/project/` and `docs/evidence/` exist. Config can remap project-memory
+roots when needed, but the default operator contract stays anchored on those
+two paths. See
+[project-memory-and-evidence-structure.md](project-memory-and-evidence-structure.md)
+for the ownership boundary.
+
 For the full bootstrap and refresh flow, see
 [guides/init-and-update.md](guides/init-and-update.md).
 

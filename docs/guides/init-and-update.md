@@ -19,6 +19,8 @@ Init can write:
   preferences.
 - `.boundline/execution.json` when a compatibility execution template is
   selected.
+- `docs/project/` and `docs/evidence/` as the default repo-visible document
+  roots, including a small README in each folder.
 - Repo-local assistant packs selected with `--assistant <host>`.
 - Optional docs export under `docs/boundline/` with `--export-docs`.
 - Optional IDE setup selected with `--ide <ide>`.
@@ -27,6 +29,13 @@ Init can write:
 Assistant packs and IDE setup are independent. Use `--assistant` when you want
 repo-local chat command surfaces, and use `--ide` when you want editor or IDE
 setup guidance.
+
+The document roots are separate from generated docs export. `docs/project/`
+holds stable reusable inputs, and `docs/evidence/` holds durable delivery
+outputs. Generated reference docs remain opt-in under `docs/boundline/` when
+`--export-docs` is selected. See
+[../project-memory-and-evidence-structure.md](../project-memory-and-evidence-structure.md)
+for the ownership model.
 
 ## IDE Setup
 
@@ -102,3 +111,7 @@ boundline update --target ide --ide vscode --auto-approve trusted
 
 If no `--target` is provided, update refreshes the default managed surfaces and
 includes IDE setup when the scaffold manifest already tracks IDE artifacts.
+
+When `--apply` is used, update also recreates the default project-memory and
+evidence roots if they are missing so the repo-visible document contract stays
+discoverable.

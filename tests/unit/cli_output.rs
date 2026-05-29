@@ -563,14 +563,39 @@ fn render_error_with_summary_failure_uses_summary_terminal_reason() {
 }
 
 fn minimal_trace(task_id: &str) -> ExecutionTrace {
-    let mut trace = ExecutionTrace::new(task_id, "session-unit", "Unit test goal");
-    trace.terminal_status = Some(TaskStatus::Succeeded);
-    trace.terminal_reason = Some(TerminalReason::new(
+    trace_with_terminal(
+        task_id,
+        "session-unit",
+        "Unit test goal",
+        TaskStatus::Succeeded,
         TerminalCondition::GoalSatisfied,
         "goal satisfied in unit test",
-        None,
-    ));
+    )
+}
+
+fn trace_with_terminal(
+    task_id: &str,
+    session_id: &str,
+    goal: &str,
+    status: TaskStatus,
+    condition: TerminalCondition,
+    reason_msg: &str,
+) -> ExecutionTrace {
+    let mut trace = ExecutionTrace::new(task_id, session_id, goal);
+    trace.terminal_status = Some(status);
+    trace.terminal_reason = Some(TerminalReason::new(condition, reason_msg, None));
     trace
+}
+
+fn succeeded_trace(task_id: &str, goal: &str, reason_msg: &str) -> ExecutionTrace {
+    trace_with_terminal(
+        task_id,
+        "session",
+        goal,
+        TaskStatus::Succeeded,
+        TerminalCondition::GoalSatisfied,
+        reason_msg,
+    )
 }
 
 fn minimal_response(status: TaskStatus, reason_msg: &str) -> TaskRunResponse {
@@ -602,10 +627,7 @@ fn render_run_trace_includes_next_command_and_trace_fields() {
 
 #[test]
 fn render_run_trace_with_trace_events_includes_retry_and_replan_lines() {
-    let mut trace = ExecutionTrace::new("task-events", "session", "Goal with events");
-    trace.terminal_status = Some(TaskStatus::Succeeded);
-    trace.terminal_reason =
-        Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None));
+    let mut trace = succeeded_trace("task-events", "Goal with events", "done");
     trace.events.push(TraceEvent {
         event_id: "e1".to_string(),
         event_type: TraceEventType::RetryScheduled,
@@ -633,10 +655,7 @@ fn render_run_trace_with_trace_events_includes_retry_and_replan_lines() {
 
 #[test]
 fn render_run_trace_surfaces_goal_plan_negotiation_projection() {
-    let mut trace = ExecutionTrace::new("task-negotiation", "session", "Goal with negotiation");
-    trace.terminal_status = Some(TaskStatus::Succeeded);
-    trace.terminal_reason =
-        Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None));
+    let mut trace = succeeded_trace("task-negotiation", "Goal with negotiation", "done");
     trace.events.push(TraceEvent {
         event_id: "e1".to_string(),
         event_type: TraceEventType::GoalPlanCreated,
@@ -671,10 +690,7 @@ fn render_run_trace_surfaces_goal_plan_negotiation_projection() {
 
 #[test]
 fn render_run_trace_surfaces_task_started_negotiation_projection() {
-    let mut trace = ExecutionTrace::new("task-negotiation-compat", "session", "Compat goal");
-    trace.terminal_status = Some(TaskStatus::Succeeded);
-    trace.terminal_reason =
-        Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None));
+    let mut trace = succeeded_trace("task-negotiation-compat", "Compat goal", "done");
     trace.events.push(TraceEvent {
         event_id: "e1".to_string(),
         event_type: TraceEventType::TaskStarted,
@@ -710,10 +726,7 @@ fn render_run_trace_surfaces_task_started_negotiation_projection() {
 
 #[test]
 fn render_run_trace_surfaces_context_projection() {
-    let mut trace = ExecutionTrace::new("task-context", "session", "Context goal");
-    trace.terminal_status = Some(TaskStatus::Succeeded);
-    trace.terminal_reason =
-        Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None));
+    let mut trace = succeeded_trace("task-context", "Context goal", "done");
     trace.events.push(TraceEvent {
         event_id: "e1".to_string(),
         event_type: TraceEventType::GoalPlanCreated,
@@ -745,10 +758,7 @@ fn render_run_trace_surfaces_context_projection() {
 
 #[test]
 fn render_run_trace_surfaces_security_assessment_packet_provenance() {
-    let mut trace = ExecutionTrace::new("task-governance", "session", "Governed goal");
-    trace.terminal_status = Some(TaskStatus::Succeeded);
-    trace.terminal_reason =
-        Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None));
+    let mut trace = succeeded_trace("task-governance", "Governed goal", "done");
     trace.events.push(TraceEvent {
         event_id: "e1".to_string(),
         event_type: TraceEventType::GovernanceStarted,
@@ -967,10 +977,7 @@ fn execute_inspect_surfaces_task_started_negotiation_projection() {
 
 #[test]
 fn summarize_trace_handles_tool_and_decision_step_kinds() {
-    let mut trace = ExecutionTrace::new("task-steps", "session", "Steps test");
-    trace.terminal_status = Some(TaskStatus::Succeeded);
-    trace.terminal_reason =
-        Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "all steps done", None));
+    let mut trace = succeeded_trace("task-steps", "Steps test", "all steps done");
     trace.events.push(TraceEvent {
         event_id: "e1".to_string(),
         event_type: TraceEventType::StepStarted,
@@ -1015,10 +1022,7 @@ fn summarize_trace_handles_tool_and_decision_step_kinds() {
 
 #[test]
 fn summarize_trace_with_unknown_step_status_yields_running_final_status_and_completed_headline() {
-    let mut trace = ExecutionTrace::new("task-unk", "session", "Unknown status test");
-    trace.terminal_status = Some(TaskStatus::Succeeded);
-    trace.terminal_reason =
-        Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None));
+    let mut trace = succeeded_trace("task-unk", "Unknown status test", "done");
     trace.events.push(TraceEvent {
         event_id: "e1".to_string(),
         event_type: TraceEventType::StepStarted,
@@ -1522,10 +1526,7 @@ fn summarize_trace_errors_on_unknown_step_kind() {
     use boundline::domain::trace::TraceEvent;
     use serde_json::json;
 
-    let mut trace = ExecutionTrace::new("task-badkind", "session", "Bad kind test");
-    trace.terminal_status = Some(TaskStatus::Succeeded);
-    trace.terminal_reason =
-        Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None));
+    let mut trace = succeeded_trace("task-badkind", "Bad kind test", "done");
     trace.events.push(TraceEvent {
         event_id: "e1".to_string(),
         event_type: TraceEventType::StepStarted,
@@ -1544,10 +1545,7 @@ fn summarize_trace_errors_when_step_kind_payload_is_missing() {
     use boundline::domain::trace::TraceEvent;
     use serde_json::json;
 
-    let mut trace = ExecutionTrace::new("task-nokind", "session", "Missing kind test");
-    trace.terminal_status = Some(TaskStatus::Succeeded);
-    trace.terminal_reason =
-        Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None));
+    let mut trace = succeeded_trace("task-nokind", "Missing kind test", "done");
     trace.events.push(TraceEvent {
         event_id: "e1".to_string(),
         event_type: TraceEventType::StepStarted,
@@ -1729,10 +1727,7 @@ fn summarize_trace_reports_no_council_activity_without_review_evidence() {
 fn summarize_trace_extracts_advanced_context_from_goal_plan_payload() {
     use boundline::domain::trace::TraceEvent;
 
-    let mut trace = ExecutionTrace::new("task-advanced-context", "session", "Inspect summary");
-    trace.terminal_status = Some(TaskStatus::Succeeded);
-    trace.terminal_reason =
-        Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "completed", None));
+    let mut trace = succeeded_trace("task-advanced-context", "Inspect summary", "completed");
     trace.events.push(TraceEvent {
         event_id: "goal-plan".to_string(),
         event_type: TraceEventType::GoalPlanCreated,

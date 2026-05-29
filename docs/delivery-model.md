@@ -34,6 +34,12 @@ Update context: persist session state, trace events, checkpoint references,
 Canon packet refs, voting refs, next command, and any clarification or approval
 requirement.
 
+Curated reusable inputs should remain repo-visible under `docs/project/`.
+Durable delivery outputs should be consolidated under `docs/evidence/` rather
+than mixed into `.boundline/` or `.canon/` runtime state. See
+[project-memory-and-evidence-structure.md](project-memory-and-evidence-structure.md)
+for the folder contract.
+
 ## Operator Surfaces
 
 The CLI and generated assistant command packs present this loop without

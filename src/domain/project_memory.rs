@@ -2,14 +2,22 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
-use crate::domain::governance::CanonSemanticArtifactDescriptorV1Envelope;
+use crate::domain::governance::{
+    ApprovalState, CanonMode, CanonSemanticArtifactDescriptorV1Envelope, PacketReadiness,
+};
 use crate::domain::project_index::{ProjectDocRoots, resolve_project_doc_roots};
 
 /// Supported contract line for this Boundline integration slice.
 const SUPPORTED_CONTRACT_MAJOR: u64 = 1;
 const PROFILE_METADATA_FILE_SUFFIX: &str = ".packet-metadata.json";
 const LEGACY_LINEAGE_FILE_SUFFIX: &str = ".lineage.json";
+const CANON_PACKET_METADATA_FILE_NAME: &str = "packet-metadata.json";
+const CANON_LINEAGE_CONTRACT_VERSION: &str = "v1";
+const CANON_SOURCE_REF_PREFIX: &str = "canon-run:";
+const EVIDENCE_ONLY_PROMOTION_STATE: &str = "evidence-only";
+const EVIDENCE_PROMOTION_PROFILE: &str = "evidence-bundle";
 const MANAGED_BLOCK_START_MARKER: &str = "<!-- project-memory:managed:start";
 const CANON_PROJECT_SURFACES: [&str; 11] = [
     "overview.md",
@@ -186,7 +194,7 @@ fn normalized_metadata_value(raw: Option<&str>) -> Option<String> {
     raw.map(str::trim).filter(|value| !value.is_empty()).map(|value| value.to_ascii_lowercase())
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct CanonSurfaceMetadata {
     #[serde(default)]
     lineage: Option<LineageRef>,
@@ -225,6 +233,73 @@ pub struct CanonSemanticArtifactSurface {
     pub publication_target_class: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub semantic_descriptor: Option<CanonSemanticArtifactDescriptorV1Envelope>,
+}
+
+pub struct GovernedEvidencePromotionRequest<'a> {
+    pub canon_mode: CanonMode,
+    pub stage_key: &'a str,
+    pub run_ref: &'a str,
+    pub approval_state: ApprovalState,
+    pub packet_readiness: PacketReadiness,
+    pub packet_ref: &'a str,
+    pub document_refs: &'a [String],
+}
+
+#[derive(Debug, Error)]
+pub enum GovernedEvidencePromotionError {
+    #[error("failed to read Canon packet metadata at {path}: {source}")]
+    ReadPacketMetadata {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("failed to parse Canon packet metadata at {path}: {source}")]
+    ParsePacketMetadata {
+        path: PathBuf,
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error("failed to create evidence root {path}: {source}")]
+    CreateEvidenceRoot {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("failed to copy Canon artifact from {source_path} to {target_path}: {source}")]
+    CopyArtifact {
+        source_path: PathBuf,
+        target_path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("failed to serialize evidence metadata for {path}: {source}")]
+    SerializeEvidenceMetadata {
+        path: PathBuf,
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error("failed to write evidence metadata at {path}: {source}")]
+    WriteEvidenceMetadata {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+struct CanonPacketPromotionEnvelope {
+    #[serde(default)]
+    metadata: CanonPacketPromotionMetadata,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+struct CanonPacketPromotionMetadata {
+    #[serde(default)]
+    publication_target_class: Option<String>,
+    #[serde(default)]
+    semantic_descriptor: Option<CanonSemanticArtifactDescriptorV1Envelope>,
+    #[serde(default)]
+    expertise_input: Option<ExpertiseInputRef>,
 }
 
 /// Result of checking a Canon `contract_version` against the Boundline
@@ -726,6 +801,162 @@ pub fn read_canon_semantic_artifact_surface(
         ),
         semantic_descriptor: metadata.semantic_descriptor,
     })
+}
+
+pub fn promote_governed_evidence_bundle(
+    workspace_root: &Path,
+    request: GovernedEvidencePromotionRequest<'_>,
+) -> Result<Vec<PathBuf>, GovernedEvidencePromotionError> {
+    let GovernedEvidencePromotionRequest {
+        canon_mode,
+        stage_key,
+        run_ref,
+        approval_state,
+        packet_readiness,
+        packet_ref,
+        document_refs,
+    } = request;
+    let normalized_run_ref = run_ref.trim();
+    if normalized_run_ref.is_empty() || document_refs.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let source_artifacts = document_refs
+        .iter()
+        .filter_map(|document_ref| {
+            Path::new(document_ref)
+                .file_name()
+                .and_then(|value| value.to_str())
+                .map(|value| value.to_string())
+        })
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    if source_artifacts.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let lineage = LineageRef {
+        contract_version: CANON_LINEAGE_CONTRACT_VERSION.to_string(),
+        producer: default_canon_producer(),
+        source_ref: format!("{CANON_SOURCE_REF_PREFIX}{normalized_run_ref}"),
+        source_artifacts,
+        mode: Some(canon_mode.to_string()),
+        promotion_state: EVIDENCE_ONLY_PROMOTION_STATE.to_string(),
+        approval_state: Some(approval_state_text(approval_state).to_string()),
+        stage: (!stage_key.trim().is_empty()).then(|| stage_key.to_string()),
+        owner: None,
+        risk: None,
+        zone: None,
+        promoted_at: String::new(),
+        content_digest: String::new(),
+        packet_readiness: Some(packet_readiness_text(packet_readiness).to_string()),
+        promotion_profile: Some(EVIDENCE_PROMOTION_PROFILE.to_string()),
+    };
+    let evidence_root = evidence_root_for_lineage(workspace_root, &lineage);
+    std::fs::create_dir_all(&evidence_root).map_err(|source| {
+        GovernedEvidencePromotionError::CreateEvidenceRoot { path: evidence_root.clone(), source }
+    })?;
+
+    let packet_metadata = read_packet_promotion_metadata(workspace_root, packet_ref)?;
+    let evidence_metadata = CanonSurfaceMetadata {
+        lineage: Some(lineage),
+        publication_target_class: packet_metadata
+            .as_ref()
+            .and_then(|metadata| metadata.publication_target_class.clone()),
+        semantic_descriptor: packet_metadata
+            .as_ref()
+            .and_then(|metadata| metadata.semantic_descriptor.clone()),
+        expertise_input: packet_metadata.and_then(|metadata| metadata.expertise_input),
+    };
+
+    let mut promoted_refs = Vec::new();
+    for document_ref in document_refs {
+        let source_path = workspace_root.join(document_ref);
+        if !source_path.is_file() {
+            continue;
+        }
+
+        let Some(file_name) = source_path.file_name() else {
+            continue;
+        };
+        let target_path = evidence_root.join(file_name);
+        std::fs::copy(&source_path, &target_path).map_err(|source| {
+            GovernedEvidencePromotionError::CopyArtifact {
+                source_path: source_path.clone(),
+                target_path: target_path.clone(),
+                source,
+            }
+        })?;
+
+        let metadata_path = packet_metadata_sidecar_path(&target_path);
+        let metadata_json = serde_json::to_string_pretty(&evidence_metadata).map_err(|source| {
+            GovernedEvidencePromotionError::SerializeEvidenceMetadata {
+                path: metadata_path.clone(),
+                source,
+            }
+        })?;
+        std::fs::write(&metadata_path, metadata_json).map_err(|source| {
+            GovernedEvidencePromotionError::WriteEvidenceMetadata {
+                path: metadata_path.clone(),
+                source,
+            }
+        })?;
+
+        promoted_refs.push(
+            target_path.strip_prefix(workspace_root).unwrap_or(target_path.as_path()).to_path_buf(),
+        );
+    }
+
+    Ok(promoted_refs)
+}
+
+fn read_packet_promotion_metadata(
+    workspace_root: &Path,
+    packet_ref: &str,
+) -> Result<Option<CanonPacketPromotionMetadata>, GovernedEvidencePromotionError> {
+    let normalized_packet_ref = packet_ref.trim();
+    if normalized_packet_ref.is_empty() {
+        return Ok(None);
+    }
+
+    let metadata_path =
+        workspace_root.join(normalized_packet_ref).join(CANON_PACKET_METADATA_FILE_NAME);
+    if !metadata_path.is_file() {
+        return Ok(None);
+    }
+
+    let content = std::fs::read_to_string(&metadata_path).map_err(|source| {
+        GovernedEvidencePromotionError::ReadPacketMetadata { path: metadata_path.clone(), source }
+    })?;
+    let envelope: CanonPacketPromotionEnvelope =
+        serde_json::from_str(&content).map_err(|source| {
+            GovernedEvidencePromotionError::ParsePacketMetadata {
+                path: metadata_path.clone(),
+                source,
+            }
+        })?;
+
+    Ok(Some(envelope.metadata))
+}
+
+fn approval_state_text(state: ApprovalState) -> &'static str {
+    match state {
+        ApprovalState::NotNeeded => "not_needed",
+        ApprovalState::Requested => "requested",
+        ApprovalState::Granted => "granted",
+        ApprovalState::Rejected => "rejected",
+        ApprovalState::Expired => "expired",
+    }
+}
+
+fn packet_readiness_text(readiness: PacketReadiness) -> &'static str {
+    match readiness {
+        PacketReadiness::Pending => "pending",
+        PacketReadiness::Incomplete => "incomplete",
+        PacketReadiness::Reusable => "reusable",
+        PacketReadiness::Rejected => "rejected",
+    }
 }
 
 fn packet_metadata_sidecar_path(artifact_path: &Path) -> PathBuf {

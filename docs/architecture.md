@@ -40,6 +40,22 @@ keeps traces beside the same session model.
 `run --goal "..."` remains an explicit fast path, but it does not replace the
 primary product story above.
 
+## Repo-Visible Document Boundary
+
+Boundline keeps runtime state and repo-visible delivery knowledge separate:
+
+- `.boundline/` owns session state, traces, checkpoints, and transient
+  governance artifacts.
+- `.canon/` owns raw Canon run packets and Canon runtime payloads.
+- `docs/project/` owns stable repo-visible project memory that planning and
+  governed delivery can reuse.
+- `docs/evidence/` owns durable feature outputs and evidence bundles that
+  should remain readable after a bounded delivery slice completes.
+
+See
+[project-memory-and-evidence-structure.md](project-memory-and-evidence-structure.md)
+for the operator-facing folder contract.
+
 ## Preflight Surfaces
 
 Two read-side surfaces sit in front of the main runtime loop when you need
