@@ -34,7 +34,7 @@ Highlights:
   packs and repo-local Claude, Codex, and Antigravity command surfaces describe
   the same probe and follow-through behavior.
 - Realigned the active Canon compatibility boundary and related reasoning
-  contracts to Canon `0.61.0`.
+  contracts to Canon `0.62.0`.
 
 ## [0.64.0] - 2026-05-20
 

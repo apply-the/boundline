@@ -119,7 +119,7 @@ The CLI remains the primary product surface. In session-native: start a session 
   <host>` and surface the same session-native runtime.
 - Global assistant bootstrap surfaces are limited to readiness and init-style
   commands.
-- The current release documents Canon `0.61.0` support for the machine-facing
+- The current release documents Canon `0.62.0` support for the machine-facing
   `canon governance start|refresh|capabilities --json` `v1` adapter surface.
 
 ## Read More

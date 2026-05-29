@@ -63,7 +63,7 @@ Read the output literally:
   ready, already satisfied, blocked, or repair-needed.
 - `actions` tells you the next repair or follow-up step.
 
-The current release documents Canon `0.61.0` support for the machine-facing
+The current release documents Canon `0.62.0` support for the machine-facing
 `canon governance start|refresh|capabilities --json` `v1` surface.
 
 ## 3. Initialize The Workspace

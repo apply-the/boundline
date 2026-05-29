@@ -150,7 +150,7 @@ boundline config show --scope workspace
 boundline config set-canon --workspace . --mode-selection auto-confirm
 ```
 
-The current release documents Canon `0.61.0` support for the machine-facing
+The current release documents Canon `0.62.0` support for the machine-facing
 `canon governance start|refresh|capabilities --json` `v1` surface.
 
 ## Workflow Registry Boundaries
