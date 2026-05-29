@@ -987,7 +987,7 @@ mod tests {
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::sync::mpsc;
-    use std::sync::{Mutex, MutexGuard, OnceLock};
+    use std::sync::{Mutex, MutexGuard};
     use std::thread;
     use std::time::Duration;
 
@@ -1018,8 +1018,6 @@ mod tests {
         route_uses_explicit_provider_namespace,
     };
 
-    static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-
     struct EnvRestore<'a> {
         saved: BTreeMap<&'static str, Option<OsString>>,
         _lock: MutexGuard<'a, ()>,
@@ -1039,7 +1037,7 @@ mod tests {
     }
 
     fn with_env_test<T>(tracked_keys: &[&'static str], action: impl FnOnce() -> T) -> T {
-        let lock_result = ENV_LOCK.get_or_init(|| Mutex::new(())).lock();
+        let lock_result = super::super::SHARED_ENV_LOCK.get_or_init(|| Mutex::new(())).lock();
         let lock = match lock_result {
             Ok(lock) => lock,
             Err(poisoned) => poisoned.into_inner(),

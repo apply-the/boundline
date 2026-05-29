@@ -278,7 +278,7 @@ mod tests {
     use std::ffi::OsString;
     use std::fs;
     use std::path::{Path, PathBuf};
-    use std::sync::{Mutex, MutexGuard, OnceLock};
+    use std::sync::{Mutex, MutexGuard};
 
     use uuid::Uuid;
 
@@ -289,8 +289,6 @@ mod tests {
         ProviderEnvTemplateScope, load_provider_environment, provider_environment_status,
         render_provider_env_template,
     };
-
-    static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
     struct EnvRestore<'a> {
         saved: BTreeMap<&'static str, Option<OsString>>,
@@ -326,7 +324,10 @@ mod tests {
         home: Option<&Path>,
         action: impl FnOnce() -> T,
     ) -> T {
-        let lock = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+        let lock = super::super::SHARED_ENV_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
         let saved =
             tracked_keys.iter().map(|key| (*key, env::var_os(key))).collect::<BTreeMap<_, _>>();
         let restore = EnvRestore {

@@ -35,3 +35,10 @@ pub mod provider_runtime;
 pub mod session_store;
 pub mod tool;
 pub mod trace_store;
+
+/// Single process-wide mutex serialising all tests that mutate environment
+/// variables. Shared across `env_layer` and `provider_runtime` test modules so
+/// they cannot race on `OPENAI_API_KEY`, `XDG_CONFIG_HOME`, etc.
+#[cfg(test)]
+pub(crate) static SHARED_ENV_LOCK: std::sync::OnceLock<std::sync::Mutex<()>> =
+    std::sync::OnceLock::new();
