@@ -18,12 +18,12 @@ functions grew beyond maintainable thresholds. This document records the current
 hotspot state, establishes a reduction order, and keeps the structural-debt
 watchlist local to the Boundline roadmap.
 
-Last verified: 2026-05-19 against the Boundline `0.63.0` worktree after the
-`session_runtime` checkpoint, reasoning, and test-module split plus the
-`output.rs` run-trace, session-status, trace-summary, explanation, context,
-routing/execution, events/diagnostics, delight/inspect-closure, cluster, and
-compatibility plus reasoning/adaptive runtime, host-envelope/presentation, and
-event-adapter plus support-helper and route/config façade extraction.
+Last verified: 2026-05-29 against the Boundline `064-session-assistant-fine-tuning` worktree after the
+`session_runtime` production-file split down to 681 lines, continued growth in
+`init.rs`, `cli.rs`, `session.rs`, and the `session_runtime_tests.rs` sibling
+harness, resolution of `summarize_trace` and `advance_workflow`, and the
+addition of `orchestrate.rs`, `provider_runtime.rs`, and `session_cli_runtime.rs`
+as new tracked surfaces.
 
 ---
 
@@ -33,23 +33,26 @@ event-adapter plus support-helper and route/config façade extraction.
 
 | File | Total Lines | Notes |
 |---|---|---|
-| `src/fixture.rs` | 5 519 | Fixture harness; mostly test-support debt, not production runtime debt |
-| `src/domain/session.rs` | 4 394 | Domain model plus grouped status-view validation |
-| `src/orchestrator/session_runtime.rs` | 4 118 | Checkpoint, reasoning, and tests moved out; core runtime orchestration is still too large |
-| `src/cli/init.rs` | 3 660 | Init subcommand logic |
-| `src/orchestrator/goal_planner.rs` | 3 424 | Goal planning and Canon input disposition logic |
-| `src/orchestrator/session_runtime_tests.rs` | 3 297 | Extracted test-support debt from `session_runtime`; not production runtime debt |
-| `src/cli/output.rs` | 2 525 | Run-trace, session-status, trace-summary, explanation, context, routing/execution, events/diagnostics, delight, cluster, compatibility, runtime, host/presentation, and support helpers moved to sibling modules; root file remains oversized |
-| `src/orchestrator/context_intelligence.rs` | 2 988 | Context-intelligence orchestration |
-| `src/cli/inspect.rs` | 2 941 | Trace inspect and summary rendering |
-| `src/cli/session.rs` | 2 936 | Session CLI projection and rendering |
-| `src/domain/governance.rs` | 2 881 | Governance domain; better target for module split than small extraction |
-| `src/cli.rs` | 2 700 | CLI routing grouped by concern |
-| `tests/unit/cli_output.rs` | 2 570 | Large unit-test harness that mirrors the CLI output hotspot |
-| `src/orchestrator/engine.rs` | 2 312 | Orchestrator engine runtime flow |
-| `src/orchestrator/guidance_runtime.rs` | 2 154 | Guidance and guardian runtime flow |
-| `src/cli/config.rs` | 2 140 | Config command surface |
-| `src/orchestrator/governance.rs` | 1 961 | Governance orchestration |
+| `src/cli/init.rs` | 6 988 | Init and update subcommand logic; grown significantly with `execute_update` and guided-init additions |
+| `src/fixture.rs` | 6 631 | Fixture harness; mostly test-support debt, not production runtime debt |
+| `src/orchestrator/session_runtime_tests.rs` | 5 878 | Extracted test-support debt from `session_runtime`; continues to grow as runtime behavior expands |
+| `src/cli.rs` | 5 192 | CLI routing grouped by concern; major growth since last measurement |
+| `src/cli/session.rs` | 5 097 | Session CLI projection and rendering; major growth since last measurement |
+| `src/domain/session.rs` | 4 963 | Domain model plus grouped status-view validation |
+| `tests/unit/cli_output.rs` | 3 756 | Large unit-test harness that mirrors the CLI output hotspot |
+| `src/orchestrator/goal_planner.rs` | 3 624 | Goal planning and Canon input disposition logic |
+| `src/domain/governance.rs` | 3 366 | Governance domain; better target for module split than small extraction |
+| `src/orchestrator/context_intelligence.rs` | 3 005 | Context-intelligence orchestration |
+| `src/cli/output.rs` | 2 960 | Sibling output modules extracted; root file still carries validation, status-text helpers, and a large inline test module |
+| `src/cli/orchestrate.rs` | 2 777 | Orchestrate subcommand surface; new hotspot |
+| `src/cli/inspect.rs` | 2 382 | Trace inspect and summary rendering |
+| `src/orchestrator/engine.rs` | 2 365 | Orchestrator engine runtime flow |
+| `src/cli/config.rs` | 2 255 | Config command surface |
+| `src/orchestrator/guidance_runtime.rs` | 2 232 | Guidance and guardian runtime flow |
+| `src/adapters/provider_runtime.rs` | 2 087 | Provider runtime adapter; new hotspot |
+| `src/orchestrator/governance.rs` | 2 005 | Governance orchestration |
+| `tests/unit/session_cli_runtime.rs` | 2 034 | Test harness for session CLI runtime; new test-support debt |
+| `src/orchestrator/session_runtime.rs` | 681 | Production core split complete; checkpoint, reasoning, and tests are in sibling modules |
 
 Measurement command:
 
@@ -57,11 +60,10 @@ Measurement command:
 find src tests -type f -name '*.rs' -exec wc -l {} +
 ```
 
-This file-count table was refreshed after the `session_runtime` split and the
-`output.rs` run-trace/session-status/trace-summary plus explanation, context,
-routing/execution, events/diagnostics, delight/inspect-closure, cluster, and
-compatibility plus reasoning/adaptive runtime, host-envelope/presentation, and
-event-adapter plus support-helper and route/config façade extraction. The
+This file-count table was refreshed against the `064-session-assistant-fine-tuning`
+worktree. Notable movements: `session_runtime.rs` production core dropped from
+4 118 to 681 lines; `init.rs`, `cli.rs`, and `session.rs` each grew substantially;
+`orchestrate.rs` and `provider_runtime.rs` surfaced as new tracked files. The
 function table below reflects the current module locations for the extracted
 output renderers.
 
@@ -69,12 +71,12 @@ output renderers.
 
 | Function | File | Lines | Priority |
 |---|---|---|---|
-| `render_run_trace` | `src/cli/output_run_trace.rs` | 628 | P2 |
-| `summarize_trace` | `src/cli/inspect.rs` | 479 | P2 - regressed above target |
-| `render_session_status` | `src/cli/output_session_status.rs` | 482 | P2 |
-| `render_trace_summary` | `src/cli/output_trace_summary.rs` | 262 | P2 |
-| `execute_init` | `src/cli/init.rs` | 443 | P2 |
-| `advance_workflow` | `src/cli/workflow.rs` | 350 | P3 |
+| `render_run_trace` | `src/cli/output_run_trace.rs` | 608 | P1 - still well above 200-line target |
+| `render_session_status` | `src/cli/output_session_status.rs` | 547 | P1 - regressed further above target |
+| `render_trace_summary` | `src/cli/output_trace_summary.rs` | 282 | P2 |
+| `execute_init` | `src/cli/init.rs` | 275 | P2 - improved but still above target |
+| `summarize_trace` | `src/cli/inspect.rs` | 178 | Resolved - under 200-line target |
+| `advance_workflow` | `src/cli/workflow.rs` | 145 | Resolved - under 200-line target |
 
 ---
 
@@ -82,63 +84,70 @@ output renderers.
 
 ## `session_runtime.rs`
 
-The in-file tests are gone, and checkpoint plus reasoning concerns now live in
-focused sibling modules. That reduced the root production file to 4 118 lines,
-with `session_runtime_checkpoint.rs` at 285 lines and
-`session_runtime_reasoning.rs` at 976 lines. The remaining issue is still
-scope: the core runtime file owns too many orchestration concerns, so the next
-intervention should continue splitting by lifecycle boundary rather than fall
-back to small helper extraction.
+The production core split is largely complete. Checkpoint, reasoning, and all
+in-file tests now live in focused sibling modules, bringing the root production
+file down to 681 lines. The remaining risk is that `session_runtime_tests.rs`
+grew to 5 878 lines as new session-runtime behavior was tested inline; the test
+file should be split along behavioral boundaries the next time session-runtime
+behavior is touched in depth. Item 19 in the work order can be moved to Completed
+for the production file; the test-file split is tracked separately.
 
 ## `session_runtime_tests.rs`
 
-Extracting the test module removed a major source of production-file inflation,
-but it created a 3 297-line sibling test file. Treat this as secondary,
-test-support debt: it is healthier than keeping the tests inline, but it should
-still be split the next time session-runtime behavior is touched in depth.
+The test module is now 5 878 lines, up from 3 297 at the last measurement. It is
+test-support debt, not production runtime debt, but the maintenance cost is
+significant. The next session-runtime behavioral touch should split this file by
+lifecycle phase.
 
 ## `src/cli/output.rs`
 
-The renderer split is progressing into a helper-layer split. `render_run_trace`,
-`render_session_status`, and `render_trace_summary` now live in
-`output_run_trace.rs` (628 lines), `output_session_status.rs` (482 lines), and
-`output_trace_summary.rs` (262 lines), while explanation projection/rendering
-logic now lives in `output_explanation.rs` (985 lines), context/semantic
-formatting now lives in `output_context.rs` (161 lines), routing plus execution
-condition logic now lives in `output_routing.rs` (674 lines), event plus
-diagnostics formatting now lives in `output_events.rs` (232 lines), delight and
-inspect-closure helpers now live in `output_delight.rs` (145 lines), cluster
-renderers and shared cluster-delivery projection helpers now live in
-`output_cluster.rs` (140 lines), and compatibility follow-up helpers now live
-in `output_compatibility.rs` (47 lines). Reasoning-profile projection and
-adaptive runtime summaries now live in `output_runtime.rs` (156 lines), while
-command naming, host envelopes, and presentation helpers now live in
-`output_host.rs` (141 lines), and checkpoint/error/guidance/next-command helpers
-now live in `output_support.rs` (153 lines). Direct event-adapter calls now
-import the events module without façade wrappers, and the route/config helper
-calls now import `output_routing.rs` directly without local forwarding wrappers.
-That drops the root file to 2 525 lines without changing the public API. The
-remaining issue is still scope: the root file still carries validation and
-status-text helpers, a few thin public route/support façades preserved for
-external call sites, and a large inline test module, while
-`tests/unit/cli_output.rs` remains a separate maintenance hotspot.
+The sibling-module split is complete for all named renderer and helper concerns.
+The root file currently sits at 2 960 lines; it still carries validation helpers,
+status-text helpers, a few public façades preserved for external call sites, and
+a large inline test module. The extracted sibling modules have themselves become
+hotspots: `output_session_status.rs` is 1 150 lines and `render_session_status`
+alone spans 547 lines, while `output_run_trace.rs` is 630 lines and
+`render_run_trace` spans 608 lines. The next intervention on this surface should
+target those two renderer functions rather than the root façade.
 
 ## `src/cli/inspect.rs`
 
-`summarize_trace` was previously marked done, but the current measurement is 479
-lines. Treat the earlier extraction as incomplete or regressed and re-open the
-item.
+`summarize_trace` is now 178 lines, which is under the 200-line target. Mark
+item 2 in the work order as Completed.
+
+## `src/cli/init.rs`
+
+The file grew to 6 988 lines, more than doubling since the last measurement.
+The addition of `execute_update` and guided-init helpers accounts for the bulk
+of the growth. This is now the single largest production file. The phase-helper
+extraction for `execute_init` (item 17) needs to be extended to cover
+`execute_update` as well, and the file should be split into focused submodules
+by command concern.
+
+## `src/cli.rs` and `src/cli/session.rs`
+
+Both files grew substantially: `cli.rs` from 2 700 to 5 192 lines and
+`session.rs` from 2 936 to 5 097 lines. These are the two largest non-fixture,
+non-init production CLI files and should be split by routing concern in the
+next planned intervention.
+
+## `src/cli/orchestrate.rs`
+
+A new file at 2 777 lines that was not previously tracked. Add to the work
+order as a module-split target once the higher-priority `init.rs` and
+`cli.rs`/`session.rs` items are addressed.
 
 ## `src/fixture.rs`
 
-This file is a fixture harness, not production runtime debt. It still affects
-maintenance cost and should be split opportunistically when fixture behavior is
-changed.
+Now at 6 631 lines. It remains fixture harness debt, not production runtime debt,
+but the file has grown significantly. Split opportunistically when fixture
+behavior is next changed.
 
 ## `governance.rs` files
 
-Both the domain and orchestration governance files are large. The intervention
-is a module split by concern rather than a broad helper extraction pass.
+Both the domain and orchestration governance files remain large (3 366 and 2 005
+lines respectively). The intervention is a module split by concern rather than a
+broad helper extraction pass.
 
 ---
 
@@ -147,7 +156,7 @@ is a module split by concern rather than a broad helper extraction pass.
 | Step | Item | Status |
 |---|---|---|
 | 1 | Extract `render_run_trace` from `output.rs` into a focused sibling module | Completed |
-| 2 | Re-split `summarize_trace` in `inspect.rs` below the 200-line target | Pending |
+| 2 | Re-split `summarize_trace` in `inspect.rs` below the 200-line target | Completed |
 | 3 | Extract `render_session_status` from `output.rs` into a focused sibling module | Completed |
 | 4 | Extract `render_trace_summary` from `output.rs` into a focused sibling module | Completed |
 | 5 | Extract explanation projection and rendering helpers from `output.rs` into a sibling module | Completed |
@@ -162,12 +171,17 @@ is a module split by concern rather than a broad helper extraction pass.
 | 14 | Remove validation and event-adapter wrappers from `output.rs` by importing the events module directly at call sites | Completed |
 | 15 | Extract checkpoint, error-rendering, guidance-projection, and next-command helpers from `output.rs` into a sibling module | Completed |
 | 16 | Remove route/config forwarding wrappers from `output.rs` by importing `output_routing.rs` directly at internal call sites | Completed |
-| 17 | Extract phase helpers from `execute_init` in `init.rs` | Pending |
-| 18 | Split `advance_workflow` into phase-specific helpers | Pending |
-| 19 | Continue module-splitting `session_runtime.rs` by concern after the checkpoint, reasoning, and test extraction | In Progress |
+| 17 | Extract phase helpers from `execute_init` and `execute_update` in `init.rs`; split `init.rs` into focused submodules by command concern | Pending |
+| 18 | Split `advance_workflow` into phase-specific helpers | Completed |
+| 19 | Continue module-splitting `session_runtime.rs` production core by concern | Completed |
 | 20 | Module-split large context and planning orchestration files by concern | Pending |
 | 21 | Module-split `governance.rs` files by concern | Pending |
 | 22 | Split `src/fixture.rs` when fixture behavior is next touched | Pending |
+| 23 | Split `session_runtime_tests.rs` by lifecycle phase when session-runtime behavior is next touched in depth | Pending |
+| 24 | Reduce `render_run_trace` (608 lines) in `output_run_trace.rs` below 200-line target by extracting stage-rendering helpers | Pending |
+| 25 | Reduce `render_session_status` (547 lines) in `output_session_status.rs` below 200-line target by extracting section-rendering helpers | Pending |
+| 26 | Module-split `src/cli.rs` (5 192 lines) and `src/cli/session.rs` (5 097 lines) by routing concern | Pending |
+| 27 | Module-split `src/cli/orchestrate.rs` (2 777 lines) by subcommand concern | Pending |
 
 ---
 

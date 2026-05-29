@@ -19,21 +19,25 @@ a companion dependency that Boundline consumes through stable contracts.
 
 ## Priority Order
 
-| Priority | Feature | Boundline Position | Notes |
-|---|---|---|---|
-| A1 | Large Codebase Context Hardening | Extend delivered S5/S5.v2 work | Add hard read limits, paged reads, patch-safe editing, omitted-context inspection, and huge artifact hash refs. |
-| A2 | External Capability Provider Protocol | New architecture feature | Boundline-owned permissioned provider contract before one-off adapters, including open-model adapters. |
-| A3 | Evals And Runtime Observability | New quality layer | Local eval corpus, JSONL trace export, and regression checks for runtime behavior. |
-| A4 | Boundline Help-Next And Documentation Architecture | Operator UX feature | `boundline help-next`, state-aware docs links, and Diataxis-style Boundline docs. |
-| A5 | Constitution Command And Standards Surface | New planning and standards feature | Add `boundline constitution create` and `boundline constitution update` as follow-on commands that create repo-visible standards, support scoped principles, and later let planning or status remind operators when no constitution exists. This remains a follow-up to planning-UX work and is not scaffolded by `init`. |
-| A6 | Guidance Catalog Operational Hardening | Extend delivered S2.1/S055 work | Stronger selective activation, skipped-guidance explanations, and budget admission. |
-| B1 | Review Council Hardening | Extend delivered S3/S056 work | Make councils more measurable, cost-bounded, and tied to findings and zones. |
-| B2 | Adaptive Governance Calibration Hardening | Extend delivered S4/S057 work | Promote controls from advisory to catch, rule, or hook based on evidence. |
-| B3 | Sandboxed Execution And Secret Inheritance | New safety feature | Local sandbox modes, write scopes, secret handles, artifact capture, commit/rollback. |
-| B4 | MCP Adapters And Server Surfaces | Adapter layer after provider protocol | Boundline consumes MCP tools as providers and exposes read-only inspection first. |
-| B5 | AI Gateway And Inference Economics | Scale feature | Cost budgets, route health, local routes, fallback policy, and eval-gated route changes. |
-| B6 | Browser And Visual Testing Provider | Provider feature | Browser automation through the provider protocol, not core runtime. |
-| B7 | Session Memory And Repository Knowledge Distillation | Memory hygiene feature | Trace-linked, confirmation-first repository knowledge with Canon promotion path for governed knowledge. |
+All roadmap work is now tracked in dedicated spec files under `features/`.
+
+| Priority | Feature Spec | Boundline Position |
+|---|---|---|
+| **01** | [sqlite-vec-activation-and-db-merge-strategy.md](features/01-sqlite-vec-activation-and-db-merge-strategy.md) | Advanced context substrate execution |
+| **02** | [agentic-framework-integration.md](features/02-agentic-framework-integration.md) | Architecture for external harness adapters |
+| **03** | [plan-quality-contract.md](features/03-plan-quality-contract.md) | Planning UX - plan readiness gate |
+| **04** | [backlog-contract.md](features/04-backlog-contract.md) | Planning UX - backlog execution gate |
+| **05** | [plan-analysis-contract.md](features/05-plan-analysis-contract.md) | Planning UX - cross-artifact analysis |
+| **06** | [large-codebase-context-substrate.md](features/06-large-codebase-context-substrate.md) | Long-term context handling limits |
+| **07** | [external-capability-provider-protocol.md](features/07-external-capability-provider-protocol.md) | Native provider contract (replaces MCP) |
+| **08** | [evals-and-runtime-observability.md](features/08-evals-and-runtime-observability.md) | Local quality and regression layer |
+| **09** | [contextual-help-and-documentation-architecture.md](features/09-contextual-help-and-documentation-architecture.md) | Operator UX feature |
+| **10** | [review-councils-and-role-gated-governance.md](features/10-review-councils-and-role-gated-governance.md) | Extend delivered S3/S056 work |
+| **11** | [adaptive-governance-calibration.md](features/11-adaptive-governance-calibration.md) | Extend delivered S4/S057 work |
+| **12** | [sandboxed-execution-and-secret-inheritance.md](features/12-sandboxed-execution-and-secret-inheritance.md) | Local safety boundaries |
+| **13** | [ai-gateway-and-inference-economics.md](features/13-ai-gateway-and-inference-economics.md) | Scale and route health feature |
+| **14** | [browser-and-visual-testing-provider.md](features/14-browser-and-visual-testing-provider.md) | Provider via protocol |
+| **15** | [session-memory-and-repository-knowledge-distillation.md](features/15-session-memory-and-repository-knowledge-distillation.md) | Memory hygiene feature |
 
 ## Canon Companion Dependencies
 
@@ -41,7 +45,6 @@ The following work is intentionally outside the Boundline roadmap:
 
 - Canon mode templates and packet quality validation.
 - Canon `help-next` and Canon wiki restructuring.
-- Canon MCP server implementation beyond any Boundline-side consumer contract.
 - Canon project-memory promotion rules.
 
 Boundline should consume those surfaces only through stable, versioned metadata:
@@ -207,19 +210,6 @@ V1 should support:
 - patch/artifact/log/evidence bundle output
 - explicit commit or rollback
 
-### MCP Adapters And Server Surfaces
-
-MCP is valuable as an adapter layer after Boundline has provider permissions and
-stable schemas.
-
-Order:
-
-1. Boundline MCP client adapter through the provider abstraction.
-2. Boundline read-only MCP server for inspect/session/context/finding queries.
-3. Mutating MCP operations only after explicit permission and trace semantics.
-
-Canon MCP server work is a Canon roadmap item, not a Boundline feature.
-
 ### AI Gateway And Inference Economics
 
 The gateway layer should make model selection operational rather than
@@ -250,7 +240,7 @@ These remain out of scope until the visible trust roadmap is credible:
 - zero-trust federation
 - full client-server platform
 - advanced multi-agent reasoning profiles beyond governed councils
-- model marketplace or forced MCP-first architecture
+- model marketplace
 
 ## Hard Rule
 

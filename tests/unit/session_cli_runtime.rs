@@ -1,6 +1,7 @@
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use boundline::adapters::config_store::FileConfigStore;
 use boundline::adapters::env_layer::{OPENAI_API_KEY_ENV, OPENAI_BASE_URL_ENV};
@@ -89,19 +90,31 @@ fn temp_workspace(prefix: &str) -> PathBuf {
     workspace
 }
 
+// Serializes all tests that mutate or observe environment variables so that
+// concurrent threads in the same test binary cannot interfere with each other.
+static TEST_ENV_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
+
+fn acquire_test_env_lock() -> MutexGuard<'static, ()> {
+    TEST_ENV_MUTEX.get_or_init(|| Mutex::new(())).lock().unwrap()
+}
+
 struct EnvVarGuard {
     saved: Vec<(&'static str, Option<std::ffi::OsString>)>,
+    // Held until the env vars are fully restored in Drop so no other thread
+    // observes the temporary mutation.
+    _lock: MutexGuard<'static, ()>,
 }
 
 impl EnvVarGuard {
     fn set(pairs: &[(&'static str, &'static str)]) -> Self {
+        let _lock = acquire_test_env_lock();
         let saved = pairs.iter().map(|(key, _)| (*key, std::env::var_os(key))).collect::<Vec<_>>();
         unsafe {
             for (key, value) in pairs {
                 std::env::set_var(key, value);
             }
         }
-        Self { saved }
+        Self { saved, _lock }
     }
 }
 
@@ -115,6 +128,8 @@ impl Drop for EnvVarGuard {
                 }
             }
         }
+        // _lock is released here (after Drop::drop completes) because it is a
+        // struct field, not a local, so it drops after the function body.
     }
 }
 
@@ -877,18 +892,24 @@ fn native_direct_run_reuses_existing_initialized_session() {
         .persist(&build_started_session(&workspace))
         .unwrap();
 
-    let report = execute_native_direct_run(
-        &workspace,
-        Some("Fix the failing add test"),
-        &[],
-        None,
-        None,
-        None,
-        None,
-        None,
-        false,
-    )
-    .unwrap();
+    // Hold the env lock for the entire run so that a concurrent test using
+    // EnvVarGuard cannot inject API-key env vars that cause route_is_available
+    // to return true, which would register AI agents that fail at connection time.
+    let report = {
+        let _env_lock = acquire_test_env_lock();
+        execute_native_direct_run(
+            &workspace,
+            Some("Fix the failing add test"),
+            &[],
+            None,
+            None,
+            None,
+            None,
+            None,
+            false,
+        )
+        .unwrap()
+    };
 
     assert_eq!(report.exit_status, CommandExitStatus::Succeeded);
     assert!(report.terminal_output.contains("routing: native (goal_plan)"));
@@ -1612,7 +1633,14 @@ fn session_runtime_runs_successful_terminal_and_replanned_execution_profiles() {
     let runtime = SessionRuntime::for_workspace(&success_workspace);
     let mut session = build_goal_captured_session(&success_workspace);
     runtime.plan_task(&mut session, Some("bug-fix"), false).unwrap();
-    let response = runtime.run_to_terminal(&mut session).unwrap();
+    // Hold the env lock so a concurrent EnvVarGuard cannot inject API-key env
+    // vars that make route_is_available return true inside
+    // build_fixture_runtime_for_goal_plan, which would swap the fixture agent
+    // for an AI agent that fails at the connection step.
+    let response = {
+        let _env_lock = acquire_test_env_lock();
+        runtime.run_to_terminal(&mut session).unwrap()
+    };
     assert_eq!(response.terminal_status, TaskStatus::Succeeded);
     assert_eq!(session.latest_status, SessionStatus::Succeeded);
     assert!(session.latest_trace_ref.is_some());
@@ -1627,7 +1655,10 @@ fn session_runtime_runs_successful_terminal_and_replanned_execution_profiles() {
     let replan_runtime = SessionRuntime::for_workspace(&replan_workspace);
     let mut replan_session = build_goal_captured_session(&replan_workspace);
     replan_runtime.plan_task(&mut replan_session, Some("bug-fix"), false).unwrap();
-    let replan_response = replan_runtime.run_to_terminal(&mut replan_session).unwrap();
+    let replan_response = {
+        let _env_lock = acquire_test_env_lock();
+        replan_runtime.run_to_terminal(&mut replan_session).unwrap()
+    };
     assert_eq!(replan_response.terminal_status, TaskStatus::Succeeded);
     assert_eq!(replan_session.latest_status, SessionStatus::Succeeded);
 }
