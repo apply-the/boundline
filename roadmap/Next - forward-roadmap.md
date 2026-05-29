@@ -17,11 +17,15 @@ owner or the feature changes a Boundline-owned operator surface.
 Canon-exclusive work is not a Boundline roadmap item. It can appear here only as
 a companion dependency that Boundline consumes through stable contracts.
 
-## Priority Order
+## Feature Seeds
 
-All roadmap work is now tracked in dedicated spec files under `features/`.
+All roadmap work is now tracked in dedicated seed files under `features/`.
+These are not Speckit specs. Use
+[features/README.md](features/README.md) for conversion rules, sequencing,
+MVP slices, dependencies, and duplication ownership before creating a real
+feature under `specs/`.
 
-| Priority | Feature Spec | Boundline Position |
+| Priority | Feature Seed | Boundline Position |
 |---|---|---|
 | **01** | [sqlite-vec-activation-and-db-merge-strategy.md](features/01-sqlite-vec-activation-and-db-merge-strategy.md) | Advanced context substrate execution |
 | **02** | [agentic-framework-integration.md](features/02-agentic-framework-integration.md) | Architecture for external harness adapters |

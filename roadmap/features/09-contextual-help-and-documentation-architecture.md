@@ -8,6 +8,16 @@ Canon and Boundline
 
 A-level product adoption feature
 
+## Speckit Seed Notes
+
+- Seed role: operator discoverability and recovery guidance.
+- First slice: implement `boundline help-next` for uninitialized, initialized,
+  active-session, blocked, and failed Boundline states.
+- Depends on: existing readiness/probe/session status surfaces.
+- De-duplication: Canon `help-next`, Canon wiki paths, and Canon mode
+  documentation must become Canon Speckit work; this seed should not rewrite
+  README or wiki content before the runtime command exists.
+
 ## Strategic Role
 
 This feature makes the system teachable.

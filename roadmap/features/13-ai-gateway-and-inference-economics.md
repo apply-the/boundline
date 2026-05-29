@@ -8,6 +8,18 @@ Boundline
 
 B-level, after evals and provider protocol
 
+## Speckit Seed Notes
+
+- Seed role: route economics and health policy after provider and eval
+  primitives exist.
+- First slice: record route latency/cost telemetry and enforce one session cost
+  budget without changing model-selection defaults.
+- Depends on: provider capability metadata from seed 07 and event schema from
+  seed 08.
+- De-duplication: provider metadata belongs to the provider protocol, trace
+  schema belongs to evals/observability, and this seed owns budget and route
+  decision policy only.
+
 ## Strategic Role
 
 This feature keeps governed delivery affordable, reliable, and provider-agnostic.

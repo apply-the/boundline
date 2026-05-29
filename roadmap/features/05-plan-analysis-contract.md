@@ -6,6 +6,17 @@ Add a read-only planning analysis pass at the end of Boundline planning. This is
 
 The analysis is part of `/boundline-plan` in v1. A separate command can be considered later only if runtime usage shows a need.
 
+## Speckit Seed Notes
+
+- Seed role: final planning-readiness consistency check after plan and backlog
+  quality are known.
+- First slice: report one success-criteria coverage gap and block execution
+  without mutating plan, backlog, or Canon packets.
+- Depends on: plan quality and backlog quality fields from the earlier planning
+  gate slices.
+- De-duplication: reuse the planning-gate stop and finding model; this seed adds
+  cross-artifact analysis, not a standalone Speckit hook runner.
+
 ## Public And Runtime Interface Changes
 
 Add optional planning analysis fields to session status, orchestrate snapshots, and rendered output:

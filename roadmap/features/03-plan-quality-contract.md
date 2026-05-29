@@ -6,6 +6,16 @@ Add a Speckit-inspired quality contract to Boundline planning without turning Bo
 
 This follows the same shape as the goal quality contract: additive runtime fields, concise findings, accepted assumptions, assistant-safe routing, and one interactive gate at a time.
 
+## Speckit Seed Notes
+
+- Seed role: first planning-readiness gate in the Speckit analogue sequence.
+- First slice: expose `plan_quality_state` and block execution for one missing
+  validation-strategy case while preserving `phase_request` routing.
+- Depends on: existing goal-quality gate and assistant-safe handoff fields.
+- De-duplication: shared gate rendering, `phase_request` handling, and
+  assistant routing should be reused by backlog and analysis gates rather than
+  restated in separate implementations.
+
 ## Public And Runtime Interface Changes
 
 Add these optional fields to session status, orchestrate session snapshots, and rendered status output when a plan exists or planning is blocked:

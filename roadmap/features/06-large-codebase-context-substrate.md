@@ -8,6 +8,16 @@ Boundline
 
 Required before stronger autonomy
 
+## Speckit Seed Notes
+
+- Seed role: repository-scale safety substrate for context selection and edits.
+- First slice: refuse unsafe huge full-file reads, add paged reads with stable
+  digests, and show omitted context plus skip reasons in `inspect`.
+- Depends on: current local context-intelligence baseline and trace/status
+  projection surfaces.
+- De-duplication: sqlite-vec activation belongs to seed 01; provider-supplied
+  context belongs to seed 07; this seed owns local large-repository behavior.
+
 ## Strategic Role
 
 This feature makes Boundline credible on real repositories.

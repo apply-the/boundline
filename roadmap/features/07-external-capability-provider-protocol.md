@@ -8,6 +8,16 @@ Boundline
 
 High-priority architecture feature
 
+## Speckit Seed Notes
+
+- Seed role: native capability boundary for external systems.
+- First slice: implement discovery, `health`, `prepare`, and one read-only
+  `execute` path for a provider that returns findings and evidence only.
+- Depends on: event/trace schema from evals and observability, or a deliberately
+  minimal trace projection if this seed lands first.
+- De-duplication: permission envelope lives here; sandbox enforcement lives in
+  seed 12; browser behavior lives in seed 14; route economics lives in seed 13.
+
 ## Strategic Role
 
 This feature makes Boundline framework-agnostic without turning it into an uncontrolled plugin runner.

@@ -8,6 +8,17 @@ Boundline, Canon policy-aware
 
 B-level, after S15
 
+## Speckit Seed Notes
+
+- Seed role: adaptive-governance hardening over existing runtime confidence and
+  control-graduation behavior.
+- First slice: make one control-level decision fully inspectable, including
+  confidence input, override policy, degradation, and terminal outcome.
+- Depends on: existing adaptive governance, control graduation, degradation,
+  escalation, and runtime confidence docs.
+- De-duplication: do not create a second trust model or a new policy engine;
+  future specs must refine the existing runtime-owned calibration path.
+
 ## Strategic Role
 
 This feature makes governance adoptable in real teams.

@@ -8,6 +8,16 @@ Boundline
 
 B-level, after provider permissions are defined
 
+## Speckit Seed Notes
+
+- Seed role: local execution isolation for risky or provider-backed commands.
+- First slice: add one local test sandbox mode that captures command output and
+  artifacts without applying workspace mutations or inheriting secrets.
+- Depends on: provider permission vocabulary from seed 07, or an explicitly
+  bounded local-only permission subset if implemented earlier.
+- De-duplication: this seed enforces path, network, secret, and artifact policy;
+  it should not redefine the provider protocol or AI route policy.
+
 ## Strategic Role
 
 This feature makes high-risk mutation safer.

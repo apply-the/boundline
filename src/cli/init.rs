@@ -4584,8 +4584,7 @@ mod tests {
     use std::ffi::OsString;
     use std::fs;
     use std::path::{Path, PathBuf};
-    use std::sync::{Mutex, MutexGuard, OnceLock};
-
+    use std::sync::MutexGuard;
     use uuid::Uuid;
 
     use super::{
@@ -4615,9 +4614,7 @@ mod tests {
         INITIAL_SCAFFOLD_EPOCH, SCAFFOLD_MANIFEST_FILE_NAME, SCAFFOLD_MANIFEST_VERSION,
         ScaffoldManifest,
     };
-    use crate::test_support::CurrentDirGuard;
-
-    static GLOBAL_CONFIG_ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    use crate::test_support::{CurrentDirGuard, acquire_process_state_lock};
 
     fn temp_workspace(prefix: &str) -> PathBuf {
         let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
@@ -4701,18 +4698,13 @@ mod tests {
     }
 
     impl PwdEnvGuard {
-        fn set(path: &Path) -> Self {
+        fn set(path: Option<&Path>) -> Self {
             let original = std::env::var_os("PWD");
             unsafe {
-                std::env::set_var("PWD", path);
-            }
-            Self { original }
-        }
-
-        fn remove() -> Self {
-            let original = std::env::var_os("PWD");
-            unsafe {
-                std::env::remove_var("PWD");
+                match path {
+                    Some(path) => std::env::set_var("PWD", path),
+                    None => std::env::remove_var("PWD"),
+                };
             }
             Self { original }
         }
@@ -4757,7 +4749,7 @@ mod tests {
         home: Option<&Path>,
         action: impl FnOnce() -> T,
     ) -> T {
-        let lock = GLOBAL_CONFIG_ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+        let lock = acquire_process_state_lock();
         let restore = GlobalConfigEnvGuard {
             old_xdg: std::env::var_os("XDG_CONFIG_HOME"),
             old_home: std::env::var_os("HOME"),
@@ -6584,7 +6576,7 @@ mod tests {
         let broken_workspace = temp_workspace("boundline-init-broken-cwd");
         let _current_dir_guard = CurrentDirGuard::change_to(&broken_workspace);
         fs::remove_dir_all(&broken_workspace).unwrap();
-        let _pwd_guard = PwdEnvGuard::set(&fallback_workspace);
+        let _pwd_guard = PwdEnvGuard::set(Some(&fallback_workspace));
 
         let resolved = resolve_workspace_root(Path::new(".")).unwrap();
 
@@ -6597,7 +6589,7 @@ mod tests {
         let broken_workspace = temp_workspace("boundline-init-broken-cwd-error");
         let _current_dir_guard = CurrentDirGuard::change_to(&broken_workspace);
         fs::remove_dir_all(&broken_workspace).unwrap();
-        let _pwd_guard = PwdEnvGuard::remove();
+        let _pwd_guard = PwdEnvGuard::set(None);
 
         let error = resolve_workspace_root(Path::new(".")).unwrap_err();
 

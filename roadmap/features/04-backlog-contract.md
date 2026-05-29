@@ -6,6 +6,17 @@ Define the Speckit tasks analogue as a Boundline validation contract over Canon 
 
 If implementation requires any Canon output or schema change, stop Boundline work and create a Canon Speckit feature in `/Users/rt/workspace/apply-the/canon`: branch, spec, plan, tasks, then implement Canon changes.
 
+## Speckit Seed Notes
+
+- Seed role: planning-readiness gate for task/backlog executability.
+- First slice: validate existing Canon backlog packet fields for stable task IDs,
+  dependency order, and MVP marker; do not require Canon schema changes.
+- Depends on: plan quality projection and the shared planning-gate handoff
+  contract from the plan-quality slice.
+- De-duplication: this seed should not define a new task command or duplicate
+  plan-analysis coverage checks; it only decides whether backlog material is
+  executable enough for Boundline to continue.
+
 ## Public And Runtime Interface Changes
 
 Add optional backlog projection fields to session status, orchestrate snapshots, and rendered output when a backlog packet is expected or available:

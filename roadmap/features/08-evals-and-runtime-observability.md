@@ -8,6 +8,17 @@ Boundline and Canon
 
 Required early, before advanced autonomy
 
+## Speckit Seed Notes
+
+- Seed role: measurement and trace substrate for later AI behavior changes.
+- First slice: add a stable local event schema, JSONL export, and a tiny golden
+  eval corpus for planning gates and context selection.
+- Depends on: existing trace surfaces; can run before provider protocol if it
+  starts with runtime-owned events only.
+- De-duplication: this seed owns event vocabulary and eval fixtures; gateway
+  cost policy belongs to seed 13, and provider-specific artifacts belong to the
+  concrete provider seeds.
+
 ## Strategic Role
 
 This feature makes quality measurable.

@@ -8,6 +8,17 @@ Boundline via External Capability Provider Protocol
 
 B-level, after S10
 
+## Speckit Seed Notes
+
+- Seed role: concrete validation provider built on the external capability
+  protocol.
+- First slice: Playwright-backed provider invocation that captures screenshot,
+  console errors, and a normalized evidence packet for one bounded URL check.
+- Depends on: provider protocol from seed 07 and trace/event projection from
+  seed 08; sandbox/network policy from seed 12 can be added later.
+- De-duplication: this seed must not define provider lifecycle, permission
+  schema, route economics, or visual-diff policy beyond the first provider need.
+
 ## Strategic Role
 
 This feature adds validation surfaces that code-only inspection cannot cover.
