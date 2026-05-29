@@ -803,6 +803,10 @@ pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, I
     let workspace = workspace_root.as_deref();
     let resolved = resolve_init_inputs(&mut request, workspace)?;
 
+    if let Some(preflight_report) = canon_surface_preflight(&request, &resolved, workspace)? {
+        return Ok(preflight_report);
+    }
+
     let global_config_path =
         scope_includes_global(request.scope).then(FileConfigStore::global_config_path);
     let global_env_template_path =
@@ -2983,6 +2987,101 @@ fn apply_missing_canon_defaults(canon: &mut CanonPreferences) {
 
 fn canon_preference_or_default<'a>(value: Option<&'a str>, fallback: &'static str) -> &'a str {
     value.map(str::trim).filter(|entry| !entry.is_empty()).unwrap_or(fallback)
+}
+
+/// Early pre-flight check for the Canon surface. Runs immediately after guided
+/// prompts complete (inside `resolve_init_inputs`) but before any config loading
+/// or asset computation. Returns a blocking report if Canon is selected but the
+/// binary or surface is not ready; returns `None` when Canon is not selected or
+/// the surface is healthy.
+fn canon_surface_preflight(
+    request: &InitRequest<'_>,
+    resolved: &ResolvedInitInputs,
+    workspace: Option<&Path>,
+) -> Result<Option<InitCommandReport>, InitCommandError> {
+    if resolved.effective_canon_mode_selection.is_none() {
+        return Ok(None);
+    }
+
+    let current_exe = match std::env::current_exe() {
+        Ok(current_exe) => current_exe,
+        Err(error) => {
+            let detail = format!(
+                "Boundline could not determine the current executable before checking Canon: {error}"
+            );
+            return Ok(Some(render_canon_surface_preflight_failure(
+                request,
+                workspace,
+                resolved,
+                "blocked",
+                &detail,
+                std::slice::from_ref(&detail),
+            )));
+        }
+    };
+
+    let status = evaluate_init_canon_install(&current_exe);
+    let surface_ready = status.surface_verification.as_ref().is_some_and(|surface| surface.ready);
+    if surface_ready {
+        return Ok(None);
+    }
+
+    let repair_actions = if let Some(surface) = status.surface_verification.as_ref() {
+        if surface.repair_actions.is_empty() {
+            status.suggested_actions.clone()
+        } else {
+            surface.repair_actions.clone()
+        }
+    } else if status.suggested_actions.is_empty() {
+        vec![status.message.clone()]
+    } else {
+        status.suggested_actions.clone()
+    };
+
+    Ok(Some(render_canon_surface_preflight_failure(
+        request,
+        workspace,
+        resolved,
+        "blocked",
+        &status.message,
+        &repair_actions,
+    )))
+}
+
+fn render_canon_surface_preflight_failure(
+    request: &InitRequest<'_>,
+    workspace: Option<&Path>,
+    resolved: &ResolvedInitInputs,
+    state: &str,
+    detail: &str,
+    repair_actions: &[String],
+) -> InitCommandReport {
+    let mut lines = vec![
+        "init: blocked - Canon surface not ready".to_string(),
+        format!("scope: {}", request.scope),
+    ];
+    if scope_includes_workspace(request.scope) {
+        lines.push(format!("template: {}", template_label(resolved.template)));
+    }
+    lines.push(format!("canon_bootstrap: {state}"));
+    lines.push(format!("canon_surface: {detail}"));
+    lines.push("repair_actions:".to_string());
+    if repair_actions.is_empty() {
+        lines.push("- verify the Canon installation and rerun init".to_string());
+    } else {
+        lines.extend(repair_actions.iter().map(|action| format!("- {action}")));
+    }
+    lines.push("planned_changes:".to_string());
+    lines.push("- none (blocked before planning)".to_string());
+    lines.push("next_steps:".to_string());
+    lines.push("- repair Canon and rerun the same init command".to_string());
+    if let Some(workspace) = workspace {
+        lines.push(format!("- verify workspace: {}", init_doctor_command(workspace)));
+    }
+    if scope_includes_global(request.scope) {
+        lines.push(format!("- verify install: {}", init_install_doctor_command()));
+    }
+    InitCommandReport::new(CommandExitStatus::NonSuccess, lines.join("\n"))
 }
 
 fn canon_bootstrap_readiness(
@@ -5620,6 +5719,68 @@ mod tests {
     }
 
     #[test]
+    fn execute_init_fails_fast_before_planning_when_canon_surface_is_unavailable() {
+        // Verifies that the Canon surface pre-flight fires immediately after guided
+        // prompts but before any config loading or asset computation: the output
+        // must say "blocked before planning" and no workspace files must exist.
+        let workspace = temp_workspace("boundline-init-canon-preflight");
+        let mut blocked_status = super::default_test_canon_install_status();
+        blocked_status.state = crate::domain::distribution::CompanionState::RepairNeeded;
+        blocked_status.message =
+            "Canon 0.10.0 is present but version 0.61.0 is required".to_string();
+        blocked_status.suggested_actions = vec!["upgrade Canon to 0.61.0 or later".to_string()];
+        if let Some(surface) = blocked_status.surface_verification.as_mut() {
+            surface.ready = false;
+            surface.version_compatible = false;
+            surface.repair_actions = vec!["upgrade Canon to 0.61.0 or later".to_string()];
+        }
+
+        let report = with_canon_install_override(blocked_status, || {
+            execute_init(InitRequest {
+                workspace: &workspace,
+                scope: InitConfigScope::Workspace,
+                non_interactive: true,
+                interactive_terminal_override: None,
+                interactor: None,
+                template: Some(InitTemplate::Change),
+                assistants: &[],
+                routes: &[],
+                domains: &[],
+                domain_standards: &[],
+                context_bindings: &[],
+                required_context_bindings: &[],
+                canon_mode_selection: Some(CanonModeSelectionPreference::AutoConfirm),
+                risk: None,
+                zone: None,
+                owner: None,
+                ide: &[],
+                auto_approve: None,
+                export_docs: false,
+                docs_refresh: false,
+                docs_diff: false,
+                docs_output_dir: None,
+                force: true,
+            })
+            .unwrap()
+        });
+
+        assert_eq!(report.exit_status, CommandExitStatus::NonSuccess);
+        assert!(
+            report.terminal_output.contains("init: blocked - Canon surface not ready"),
+            "{}",
+            report.terminal_output
+        );
+        assert!(
+            report.terminal_output.contains("blocked before planning"),
+            "expected 'blocked before planning' in output to confirm fail-fast path;\n{}",
+            report.terminal_output
+        );
+        assert!(report.terminal_output.contains("0.61.0"), "{}", report.terminal_output);
+        // No workspace files must be created by the blocked run.
+        assert!(!workspace.join(".boundline").exists());
+    }
+
+    #[test]
     fn execute_init_seeds_missing_routes_from_selected_assistant_defaults() {
         let workspace = temp_workspace("boundline-init-default-routes");
 
@@ -6989,7 +7150,7 @@ mod tests {
 
         // Scripted answers:
         //   select_canon_mode          → 0 (AutoConfirm)
-        //   select_assistants          → [0] (Copilot)
+        //   select_assistants          → [0] (Claude, index 0 in INIT_ASSISTANT_HOSTS)
         //   review_routes accept       → 0 (Accept current routes)
         //   confirm summary            → true (write)
         let interactor = ScriptedInteractor {
@@ -7032,7 +7193,7 @@ mod tests {
             "{}",
             report.terminal_output
         );
-        assert!(report.terminal_output.contains("copilot"), "{}", report.terminal_output);
+        assert!(report.terminal_output.contains("claude"), "{}", report.terminal_output);
         // Suppress unused variable warning — copilot_models is needed to check catalog health
         let _ = copilot_models;
     }
