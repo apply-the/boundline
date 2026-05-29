@@ -58,3 +58,10 @@ and AI-authored changes.
 - Reviewers and implementers should treat newly introduced magic literals or
   stable-shape ad hoc map/json serialization outside `main.rs` and test code
   as policy violations.
+
+## Clean Code & Modularity
+
+- **File Size and Responsibilities**: Do not generate gigantic monolithic files. Extract complex logic, internal algorithms, state transitions, and UI/CLI formatters into private helper modules (`pub(crate)` or private). Each file and module should have a single, cohesive responsibility.
+- **Design Patterns**: Avoid massive inline match statements or monolithic functions. Use appropriate design patterns (e.g., Builder, Strategy, Dependency Injection, State Machine) and separate I/O from business logic.
+- **Magic Strings and Numbers**: Zero tolerance for magic values. Every repeated string literal, timeout, retry count, or protocol boundary value must be extracted into a `const` or a typed `enum`.
+- **Helpers**: Whenever a function exceeds standard readable length or mixes levels of abstraction, proactively extract the lower-level steps into isolated, well-named helper functions.

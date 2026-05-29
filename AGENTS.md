@@ -162,4 +162,11 @@ Before 1.0.0, breaking changes MAY occur in minor versions.
 
 
 <!-- MANUAL ADDITIONS START -->
+
+## Clean Code & Modularity (Strict Enforcement)
+- **NO GIGANTIC FILES**: Do not dump all logic into a single massive file. If a module grows complex, extract helpers, algorithms, and state transitions into private submodules (`pub(crate)`).
+- **APPLY DESIGN PATTERNS**: Do not use monolithic match statements or procedural god-functions. Extract responsibilities using appropriate design patterns (e.g. Builder, Strategy, Dependency Injection). Keep business logic strictly isolated from I/O and HTTP/CLI transport boundaries.
+- **ZERO MAGIC STRINGS/NUMBERS**: You MUST NOT use magic numbers, timeouts, retry limits, or repeated raw strings inline. Extract them into named `const` items or typed `enum`s.
+- **EXTRACT HELPERS PROACTIVELY**: If you are writing a function that is getting long or doing multiple things, STOP and extract the steps into well-named helper functions.
+
 <!-- MANUAL ADDITIONS END -->
