@@ -4687,9 +4687,13 @@ mod tests {
             execute_successful_init(copilot_canon_init_request(workspace, InitTemplate::BugFix));
     }
 
-    fn execute_successful_init(request: InitRequest<'_>) -> super::InitCommandReport {
+    fn execute_locked_init(request: InitRequest<'_>) -> super::InitCommandReport {
         let _lock = acquire_process_state_lock();
-        let report = execute_init(request).unwrap();
+        execute_init(request).unwrap()
+    }
+
+    fn execute_successful_init(request: InitRequest<'_>) -> super::InitCommandReport {
+        let report = execute_locked_init(request);
         assert_eq!(report.exit_status, CommandExitStatus::Succeeded);
         report
     }
@@ -6538,7 +6542,7 @@ mod tests {
         fs::create_dir_all(&workspace).unwrap();
 
         let report =
-            execute_init(copilot_canon_init_request(&workspace, InitTemplate::BugFix)).unwrap();
+            execute_locked_init(copilot_canon_init_request(&workspace, InitTemplate::BugFix));
 
         assert_eq!(report.exit_status, CommandExitStatus::NonSuccess);
         assert!(report.terminal_output.contains("Canon workspace bootstrap failed"));
@@ -6555,7 +6559,7 @@ mod tests {
         let _current_dir_guard = CurrentDirGuard::change_to(&workspace);
 
         let report =
-            execute_init(copilot_canon_init_request(Path::new("."), InitTemplate::BugFix)).unwrap();
+            execute_locked_init(copilot_canon_init_request(Path::new("."), InitTemplate::BugFix));
 
         assert_eq!(report.exit_status, CommandExitStatus::NonSuccess);
         assert!(report.terminal_output.contains("Canon workspace bootstrap failed"));
